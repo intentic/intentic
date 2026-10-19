@@ -315,17 +315,20 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         terms: () => [t(`sandbox.keyrings.pair`), t(`sandbox.search.secretsKeyrings`)],
     },
 
-    // Access: who may come in, what they are told, how they prove it, what programs hold, which sandboxes may hand this
-    // one work, and the browsers still signed in. A member sees People and Passkeys; the rest is a maintainer's.
+    // Access: who may come in and what they are told (People, the page's default part, which writes no param), how they
+    // prove it (Sign-in), and what programs and other sandboxes hold (Programs). A member sees People and Passkeys; the
+    // rest is a maintainer's. Allowed has no card: it is a list, found by the page's own words.
     {
         id: `access-people`,
         slug: `access`,
+        partLabel: () => t(`sandbox.sandboxAccess.partPeople`),
         title: () => t(`sandbox.sandboxAccess.people`),
         terms: () => [t(`sandbox.sandboxAccess.addPerson`), t(`sandbox.search.accessPeople`)],
     },
     {
         id: `access-ai-notice`,
         slug: `access`,
+        partLabel: () => t(`sandbox.sandboxAccess.partPeople`),
         title: () => t(`sandbox.sandboxAccess.aiNotice`),
         terms: () => [t(`sandbox.search.accessAiNotice`)],
         shown: (reader) => reader.canShip,
@@ -333,12 +336,25 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
     {
         id: `access-passkeys`,
         slug: `access`,
+        part: `sign-in`,
+        partLabel: () => t(`sandbox.sandboxAccess.partSignIn`),
         title: () => t(`sandbox.passkeysSection.passkeys`),
         terms: () => [t(`sandbox.words.addPasskey`), t(`sandbox.passkeysSection.requirePasskeyToOpen`), t(`sandbox.search.accessPasskeys`)],
     },
     {
+        id: `access-signed-in-browsers`,
+        slug: `access`,
+        part: `sign-in`,
+        partLabel: () => t(`sandbox.sandboxAccess.partSignIn`),
+        title: () => t(`sandbox.sandboxAccess.signedInBrowsers`),
+        terms: () => [t(`sandbox.sandboxAccess.signOutEverywhere`), t(`sandbox.search.accessSignedInBrowsers`)],
+        shown: (reader) => reader.canShip,
+    },
+    {
         id: `access-api-tokens`,
         slug: `access`,
+        part: `programs`,
+        partLabel: () => t(`sandbox.sandboxAccess.partPrograms`),
         title: () => t(`shared.apiTokens`),
         terms: () => [t(`sandbox.controlTokensSection.mintToken`), t(`sandbox.search.accessApiTokens`)],
         shown: (reader) => reader.canShip,
@@ -346,15 +362,10 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
     {
         id: `access-linked-sandboxes`,
         slug: `access`,
+        part: `programs`,
+        partLabel: () => t(`sandbox.sandboxAccess.partPrograms`),
         title: () => t(`sandbox.linkedSandboxes.title`),
         terms: () => [t(`sandbox.linkedSandboxes.newLink`), t(`sandbox.search.accessLinkedSandboxes`)],
-        shown: (reader) => reader.canShip,
-    },
-    {
-        id: `access-signed-in-browsers`,
-        slug: `access`,
-        title: () => t(`sandbox.sandboxAccess.signedInBrowsers`),
-        terms: () => [t(`sandbox.sandboxAccess.signOutEverywhere`), t(`sandbox.search.accessSignedInBrowsers`)],
         shown: (reader) => reader.canShip,
     },
 

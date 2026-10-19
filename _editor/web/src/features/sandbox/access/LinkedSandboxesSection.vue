@@ -13,6 +13,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useMintedTokens } from "../../../workbench/operations/useMintedTokens";
 import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
 import { LINKED_SANDBOXES_ANCHOR } from "../../../models/sandbox/sandboxNav";
+import { inboundLinksChanged } from "../../../models/sandbox/useInboundLinks";
 
 // INBOUND LINKS: the owner's other sandboxes allowed to hand this one tasks. Each link's terms are written here and
 // enforced here: the persona its tasks wear, whether each waits for the owner, how many turns an hour it may start. A task
@@ -41,10 +42,12 @@ const {
     list: async () => (await sandboxRaw(`GET /system/links`)).links,
     mint: async ({ label, terms }: MintRequest) => {
         const { token } = await sandboxRaw(`POST /system/links`, { input: { label, terms } });
+        void inboundLinksChanged();
         return { token, label };
     },
     revoke: async (id) => {
         await sandboxRaw(`DELETE /system/links/{id}`, { params: { id } });
+        void inboundLinksChanged();
         return undefined;
     },
     owner: () => active.value?.id,
@@ -75,6 +78,8 @@ const settle = async (id: string, answer: () => Promise<InboundLinkSummary>, fai
     try {
         const link = await answer();
         replaced.value = { ...replaced.value, [id]: link };
+        // The count on the Programs tab and the Map's lines read the shared entry, which this answer just made stale.
+        void inboundLinksChanged();
     } catch (caught) {
         rowNotice.value = noticeFrom(caught, failed);
     }
@@ -137,7 +142,13 @@ const save = async (link: InboundLinkSummary): Promise<void> => {
     editing.value = undefined;
 };
 
-// A link minted by hand, for a sandbox the editor cannot pair from here.
+// A link minted by hand, for a sandbox the editor cannot pair from here: asked for with the group's New link, since most
+// links are made by pairing from the other side, and closed on a mint, whose token then stands in its place.
+const creating = ref(false);
+const startCreate = (): void => {
+    forgetMinted();
+    creating.value = true;
+};
 const label = ref(``);
 const actsAs = ref<string | undefined>(NO_PERSONA);
 const approve = ref(true);
@@ -151,7 +162,10 @@ const submit = async (): Promise<void> => {
         terms.actsAs = actsAs.value;
     }
     await mint({ label: named, terms });
-    label.value = ``;
+    if (minted.value !== undefined) {
+        label.value = ``;
+        creating.value = false;
+    }
 };
 const address = computed(() => daemonUrl.value ?? ``);
 </script>
@@ -168,6 +182,71 @@ const address = computed(() => daemonUrl.value ?? ``);
                     <span class="block text-xs text-content">{{ t(`sandbox.linkedSandboxes.explain`) }}</span>
                 </InfoHint>
             </template>
+            <template #actions>
+                <Button v-if="!creating" :label="t(`sandbox.linkedSandboxes.newLink`)" size="small" tier="boring" @click="startCreate">
+                    <template #icon><Icon name="plus" /></template>
+                </Button>
+            </template>
+
+            <!-- What was asked for sits first, under the press that asked: the form, then the token it minted, shown once. -->
+            <RowNote v-if="creating || minted || notice" variant="block">
+                <div class="flex flex-col gap-3">
+                    <Notice v-if="notice" :of="notice" />
+                    <form v-if="creating" class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
+                        <input
+                            v-model="label"
+                            type="text"
+                            autocomplete="off"
+                            autofocus
+                            :placeholder="t(`sandbox.linkedSandboxes.labelPlaceholder`)"
+                            :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
+                        />
+                        <Picker
+                            v-model="actsAs"
+                            :options="personaOptions"
+                            variant="input"
+                            :aria-label="t(`sandbox.linkedSandboxes.persona`)"
+                            :header="t(`sandbox.linkedSandboxes.persona`)"
+                            class="ui-field-sm w-44"
+                        />
+                        <label class="flex items-center gap-2 text-xs text-content">
+                            <ToggleSwitch v-model="approve" class="ui-switch-sm" />
+                            {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
+                        </label>
+                        <div class="ml-auto flex items-center gap-2">
+                            <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="minting" @click="creating = false" />
+                            <Button
+                                type="submit"
+                                :label="t(`sandbox.linkedSandboxes.createLink`)"
+                                size="small"
+                                :loading="minting"
+                                :disabled="minting || label.trim() === ``"
+                            >
+                                <template #icon><Icon name="link" /></template>
+                            </Button>
+                        </div>
+                    </form>
+                    <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
+                        <div class="flex items-start gap-2">
+                            <p class="flex-1 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.shownOnce`) }}</p>
+                            <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)" @click="forgetMinted">
+                                {{ t(`ui.action.done`) }}
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-20 shrink-0 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.address`) }}</span>
+                            <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ address }}</code>
+                            <CopyButton :text="address" :label="t(`ui.action.copy`)" />
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-20 shrink-0 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.token`) }}</span>
+                            <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
+                            <CopyButton :text="minted.token" :label="t(`ui.action.copy`)" />
+                        </div>
+                    </div>
+                </div>
+            </RowNote>
+
             <template v-for="link in shown" :key="link.id">
                 <Row icon="link" :title="link.label" :description="describe(link)">
                     <template v-if="link.requests.length > 0" #meta>
@@ -214,7 +293,7 @@ const address = computed(() => daemonUrl.value ?? ``);
                                 class="ui-field-sm w-48"
                             />
                             <label class="flex items-center gap-2 text-sm text-content">
-                                <ToggleSwitch v-model="draft.approve" />
+                                <ToggleSwitch v-model="draft.approve" class="ui-switch-sm" />
                                 {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
                             </label>
                             <label class="flex items-center gap-2 text-sm text-content">
@@ -233,59 +312,10 @@ const address = computed(() => daemonUrl.value ?? ``);
                 </RowNote>
             </template>
 
-            <RowNote variant="block">
-                <div class="flex flex-col gap-3">
-                    <Notice v-if="rowNotice ?? notice" :of="(rowNotice ?? notice)!" />
-                    <form class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
-                        <input
-                            v-model="label"
-                            type="text"
-                            autocomplete="off"
-                            :placeholder="t(`sandbox.linkedSandboxes.labelPlaceholder`)"
-                            :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
-                        />
-                        <Picker
-                            v-model="actsAs"
-                            :options="personaOptions"
-                            variant="input"
-                            :aria-label="t(`sandbox.linkedSandboxes.persona`)"
-                            :header="t(`sandbox.linkedSandboxes.persona`)"
-                            class="ui-field-sm w-44"
-                        />
-                        <label class="flex items-center gap-2 text-xs text-content">
-                            <ToggleSwitch v-model="approve" />
-                            {{ t(`sandbox.linkedSandboxes.askMeFirst`) }}
-                        </label>
-                        <Button
-                            type="submit"
-                            :label="t(`sandbox.linkedSandboxes.newLink`)"
-                            size="small"
-                            :loading="minting"
-                            :disabled="minting || label.trim() === ``"
-                        >
-                            <template #icon><Icon name="link" /></template>
-                        </Button>
-                    </form>
-                    <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
-                        <div class="flex items-start gap-2">
-                            <p class="flex-1 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.shownOnce`) }}</p>
-                            <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)" @click="forgetMinted">
-                                {{ t(`ui.action.done`) }}
-                            </button>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="w-20 shrink-0 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.address`) }}</span>
-                            <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ address }}</code>
-                            <CopyButton :text="address" :label="t(`ui.action.copy`)" />
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="w-20 shrink-0 text-2xs text-subtle">{{ t(`sandbox.linkedSandboxes.token`) }}</span>
-                            <code class="min-w-0 flex-1 truncate font-mono text-xs text-content">{{ minted.token }}</code>
-                            <CopyButton :text="minted.token" :label="t(`ui.action.copy`)" />
-                        </div>
-                    </div>
-                </div>
-            </RowNote>
+            <!-- An answer on a link's row that was refused (new terms, a task let through or declined), under the rows. -->
+            <RowNote v-if="rowNotice" variant="block"><Notice :of="rowNotice" /></RowNote>
+            <!-- No link, and none being made: how one is usually made, so the empty card is not a blank. -->
+            <RowNote v-if="shown.length === 0 && !creating && !minted" variant="empty">{{ t(`sandbox.linkedSandboxes.empty`) }}</RowNote>
         </RowGroup>
     </section>
 </template>

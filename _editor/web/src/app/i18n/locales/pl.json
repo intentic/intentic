@@ -5740,7 +5740,9 @@
             "tokenExpiry": "Wygaśnięcie tokenu",
             "tokenScope": "Zakres tokenu",
             "usedAgo": "użyty {ago}",
-            "zedSettingsJsonJetbrains": "Zed → settings.json (JetBrains bierze to samo polecenie + środowisko)"
+            "zedSettingsJsonJetbrains": "Zed → settings.json (JetBrains bierze to samo polecenie + środowisko)",
+            "newToken": "Nowy token",
+            "empty": "Brak tokenów API. Token pozwala skryptowi, zadaniu CI lub edytorowi pracować w tym sandboxie bez logowania."
         },
         "desktopSyncCard": {
             "agentMutagenCloudflaredUnder": "Agent, Mutagen i cloudflared w",
@@ -6837,7 +6839,6 @@
             "nameOne": "Utwórz jeden",
             "noAreasToGrant": "Nie ma jeszcze obszarów.",
             "noAssistantWorksHere": "W tych obszarach nie pracuje żaden asystent.",
-            "noOneElseConnected": "W tej chwili nikt inny nie jest podłączony.",
             "onlySandboxOwnerInvite": "Tylko właściciel sandboxa może zapraszać ludzi albo zmieniać role.",
             "otherWaysIn": "Inne drogi wejścia",
             "owner": "właściciel",
@@ -6862,9 +6863,6 @@
             "webhooksLine": "{count} automatyzacja zdarzeń, każda z własnym adresem webhooka i tokenem. Wymień albo usuń ją w jej wierszu w Automatyzacjach. | {count} automatyzacje zdarzeń, każda z własnym adresem webhooka i tokenem. Wymień albo usuń którąś w jej wierszu w Automatyzacjach. | {count} automatyzacji zdarzeń, każda z własnym adresem webhooka i tokenem. Wymień albo usuń którąś w jej wierszu w Automatyzacjach.",
             "gatesLine": "{count} przepływ pracy z bramką, każdy odpowiada pipeline'owi pod własnym adresem i tokenem. Zarządzasz nimi w panelu bramek projektanta przepływów. | {count} przepływy pracy z bramką, każdy odpowiada pipeline'owi pod własnym adresem i tokenem. Zarządzasz nimi w panelu bramek projektanta przepływów. | {count} przepływów pracy z bramką, każdy odpowiada pipeline'owi pod własnym adresem i tokenem. Zarządzasz nimi w panelu bramek projektanta przepływów.",
             "ciLine": "{count} repozytorium podpięte do serwisu git, w tym {hooked} z webhookiem, który sandbox zarejestrował i podpisuje własnym sekretem. Pozostałe są odpytywane. Szczegóły w Pipeline'ach. | {count} repozytoria podpięte do serwisu git, w tym {hooked} z webhookiem, który sandbox zarejestrował i podpisuje własnym sekretem. Pozostałe są odpytywane. Szczegóły w Pipeline'ach. | {count} repozytoriów podpiętych do serwisu git, w tym {hooked} z webhookiem, który sandbox zarejestrował i podpisuje własnym sekretem. Pozostałe są odpytywane. Szczegóły w Pipeline'ach.",
-            "statusMember": "członek",
-            "statusPending": "oczekuje",
-            "statusExpired": "wygasło",
             "couldntReadMemberAreas": "Nie udało się odczytać, co może każda osoba, więc niczyjego dostępu nie da się zmienić, dopóki sandbox nie odpowie.",
             "couldntLoadAccessList": "Nie udało się wczytać listy dostępu.",
             "deliveryUnconfigured": "Zaproszono. Na tej platformie nie skonfigurowano e-maila, więc wyślij ten link samodzielnie:",
@@ -6945,7 +6943,14 @@
             "addPersonSub": "Na start tylko podgląd",
             "addPersonKeys": "Enter zaprasza, Esc anuluje",
             "inviteExpired": "Zaproszenie wygasło",
-            "aiNotice": "Informacja o AI"
+            "aiNotice": "Informacja o AI",
+            "parts": "Część dostępu",
+            "partPeople": "Osoby",
+            "partSignIn": "Logowanie",
+            "partPrograms": "Programy",
+            "partAllowed": "Dozwolone",
+            "allowedEmpty": "Nic nie wykracza teraz poza reguły",
+            "allowedEmptyLine": "Gdy pozwolisz rozmowie wyjść poza jej personę lub obszar albo zezwolisz na coś z karty dla całego sandboxa, pojawi się to tutaj, aby można było to cofnąć."
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Kategoria ustawień agenta",
@@ -9145,7 +9150,9 @@
             "newLink": "Nowe połączenie",
             "shownOnce": "Pokazane raz. Wklej oba w kartę Połączony sandbox w drugim sandboxie.",
             "address": "Adres",
-            "token": "Token"
+            "token": "Token",
+            "createLink": "Utwórz połączenie",
+            "empty": "Brak połączonych sandboxów. Sparuj jeden z karty Połączony sandbox w drugim sandboxie albo utwórz połączenie tutaj ręcznie."
         },
         "linkedSandboxRows": {
             "title": "Połączone sandboxy",
@@ -9265,7 +9272,7 @@
                 "overview": "start, stan, wersja, URL, adres, informacje",
                 "usage": "koszt, wydatki, tokeny, rozliczenia, limity, przydział, godziny, oszczędności",
                 "secrets": "zmienne środowiskowe, klucze API, hasła, dane logowania",
-                "access": "członkowie, zaproś, udostępnij, współpracownicy, zespół, role, klucze dostępu, tokeny",
+                "access": "członkowie, zaproś, udostępnij, współpracownicy, zespół, role, klucze dostępu, tokeny, logowanie, uprawnienia, dozwolone, połączone sandboxy",
                 "areas": "foldery, zakresy, uprawnienia, ogranicz, nowy obszar",
                 "personas": "tożsamości, konta, e-mail, konta online, dodaj personę",
                 "map": "diagram, przegląd, połączenia, kto do czego sięga, graf",

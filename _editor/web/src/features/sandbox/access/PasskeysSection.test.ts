@@ -145,6 +145,20 @@ it(`adds a passkey through the ceremony, sends the label, and keeps the upgraded
     expect(state.adopted).toEqual([[`s1`, { token: `sess-up`, expiresAt: 1, email: `owner@example.com` }]]);
 });
 
+// Once the reader has one, the form is asked for: the list is what the section is read for from then on.
+it(`keeps the form behind Add a passkey once the reader has one of their own`, async () => {
+    state.list = { passkeys: [OWN], required: false, recovery: undefined };
+    await mount();
+    expect(document.body.querySelector(`input[type=text]`)).toBeNull();
+
+    buttonLabelled(`Add a passkey`)?.click();
+    await nextTick();
+    expect(document.body.querySelector(`input[type=text]`)).not.toBeNull();
+    buttonLabelled(`Cancel`)?.click();
+    await nextTick();
+    expect(document.body.querySelector(`input[type=text]`)).toBeNull();
+});
+
 it(`says so, and disables adding, in a browser without WebAuthn`, async () => {
     state.supported = false;
     await mount();

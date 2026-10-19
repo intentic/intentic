@@ -40,7 +40,8 @@ silence them like any other app's.
 
 ## Other people
 
-**Sandbox ▸ Access** (`/sandbox/access`) shows **People** as tiles, the way Personas and Models do: the owner first,
+**Sandbox ▸ Access** (`/sandbox/access`) has four tabs: **People**, **Sign-in**, **Programs** and **Allowed**,
+each at its own `?section=`. **People** (the first) shows everyone as tiles, the way Personas and Models do: the owner first,
 then one tile per person with a word for what they can do (Can see, Runs agents, Edits, Chats, Manages) and a dot while
 their invite is out. **Add person** asks for an email address alone. The person starts read-only: they see the
 workspace, run no agents and may use no connection or secret, and the invite goes out at once. Their panel then opens
@@ -66,8 +67,13 @@ A sandbox older than email sign-in says it needs an update before it accepts one
 the app suggests a passkey: passkeys belong to the sandbox itself and keep working while app.intentic.dev is down,
 which email sign-in does not.
 
-The same tab holds **Require a passkey to open this sandbox**, API tokens (**Mint token**), the list of signed-in
-browsers with **Sign out everywhere**, and who is connected right now.
+**People** also holds the AI notice and, while anyone else is connected, who is here now. **Sign-in**
+(`?section=sign-in`) holds passkeys, **Require a passkey to open this sandbox** and its recovery codes, and the
+signed-in browsers with **Sign out everywhere**. **Programs** (`?section=programs`) holds API tokens (**New token**),
+linked sandboxes (**New link**, and the Allow or Decline of a task one handed over, counted on the tab), and a count
+of the other ways in (webhooks, gated workflows, CI, paired machines). **Allowed** (`?section=allowed`) lists what
+conversations were allowed past their persona or area and the sandbox-wide yeses, each with its own Revoke, counted
+on the tab. A member below maintainer sees People and Sign-in only.
 
 ## Not a way into the workspace
 

@@ -38,12 +38,21 @@ const describe = (passkey: PasskeySummary): string =>
         passkey.rpId,
     ].join(` · `);
 
+// The form stands open while the reader has no passkey of their own, as adding one is what they came for; once they have
+// one it is asked for with the group's Add a passkey, and closes again on the next one added.
+const asked = ref(false);
+const formOpen = computed(() => asked.value || ownCount.value === 0);
+
 const submit = async (): Promise<void> => {
     if (busy.value || !supported) {
         return;
     }
+    const before = ownCount.value;
     await add(label.value);
-    label.value = ``;
+    if (ownCount.value > before) {
+        label.value = ``;
+        asked.value = false;
+    }
 };
 
 // Switching on needs a passkey of the owner's own to open the door with; the button says so rather than 409ing.
@@ -58,22 +67,17 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
         :label="t(`sandbox.passkeysSection.passkeys`)"
         :count="list.passkeys.length === 0 ? undefined : list.passkeys.length"
     >
-        <Row v-for="passkey in list.passkeys" :key="passkey.id" icon="key" :title="passkey.label" :description="describe(passkey)">
-            <template #meta>
-                <!-- Another member's passkey, in the owner's list: named so a reset removes the right one. -->
-                <StatusBadge v-if="!mine(passkey)" variant="neutral" :label="passkey.email" size="xs" />
-                <StatusBadge v-if="passkey.backedUp" variant="info" :label="t(`sandbox.passkeysSection.synced`)" size="xs" />
-            </template>
-            <template #control>
-                <Button :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" @click="remove(passkey.id)" />
-            </template>
-        </Row>
+        <template #actions>
+            <Button v-if="!formOpen" :label="t(`sandbox.words.addPasskey`)" size="small" tier="boring" :disabled="!supported" @click="asked = true">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
+        </template>
 
-        <RowNote variant="block">
+        <RowNote v-if="formOpen || unread || notice || !supported" variant="block">
             <div class="flex flex-col gap-3">
                 <Notice v-if="unread" :of="unread" />
                 <Notice v-if="notice" :of="notice" />
-                <form class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
+                <form v-if="formOpen" class="flex flex-wrap items-center gap-2" @submit.prevent="submit">
                     <input
                         v-model="label"
                         type="text"
@@ -81,6 +85,7 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                         :placeholder="t(`sandbox.words.nameEGWork`)"
                         :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
                     />
+                    <Button v-if="asked" :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="busy" @click="asked = false" />
                     <Button
                         type="submit"
                         :label="t(`sandbox.words.addPasskey`)"
@@ -95,6 +100,17 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
                 <span v-if="!supported" class="text-2xs text-subtle">{{ t(`sandbox.passkeysSection.browserCantCreatePasskeys`) }}</span>
             </div>
         </RowNote>
+
+        <Row v-for="passkey in list.passkeys" :key="passkey.id" icon="key" :title="passkey.label" :description="describe(passkey)">
+            <template #meta>
+                <!-- Another member's passkey, in the owner's list: named so a reset removes the right one. -->
+                <StatusBadge v-if="!mine(passkey)" variant="neutral" :label="passkey.email" size="xs" />
+                <StatusBadge v-if="passkey.backedUp" variant="info" :label="t(`sandbox.passkeysSection.synced`)" size="xs" />
+            </template>
+            <template #control>
+                <Button :label="t(`ui.action.remove`)" size="small" tier="quiet" tone="danger" @click="remove(passkey.id)" />
+            </template>
+        </Row>
 
         <!-- Unread, the rule could be on or off: drawn from the empty list it would read "Off" about a sandbox that may require it. -->
         <template v-if="isOwner && unread === undefined">

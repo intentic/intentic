@@ -171,7 +171,8 @@ const startTurn = async (deps: LinkTaskDeps, link: ResolvedLink, task: StoredLin
 const heldNotice = (link: ResolvedLink, task: StoredLinkTask, words: string): PushNotification => ({
     title: `${link.label} asks to run a task here`,
     body: (task.title ?? words).replace(/\s+/g, " ").trim().slice(0, 120),
-    url: "/sandbox/access?section=links",
+    // Access ▸ Programs, scrolled to the link's row, where the task's Allow and Decline are (editor sandboxNav.ts).
+    url: "/sandbox/access?section=programs#linked-sandboxes",
     tag: `link-${task.requestId}`,
     requireInteraction: true,
 });

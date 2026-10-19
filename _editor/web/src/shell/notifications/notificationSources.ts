@@ -12,6 +12,7 @@ import { hold, type NotificationInput, type NotificationTone } from "../../workb
 import { onScreen } from "../../workbench/window/onScreen";
 import { type SandboxAvailability, sandboxRequiresGate } from "../../features/sandbox/overview/availability";
 import { RESTART_PATIENCE_MS, restartExpected, type RestartWork } from "../../models/sandbox/live/sandboxRestart";
+import { accessPath } from "../../models/sandbox/sandboxNav";
 import { useLocalShortcut } from "../../client/endpoint/localShortcut";
 import { useEndpoint } from "../../client/endpoint/useEndpoint";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -346,7 +347,7 @@ export const startNotificationSources = (): void => {
                     label: t(`shell.notificationSources.passkeyNudgeAdd`),
                     run: async () => {
                         dismissPasskeyNudge();
-                        await router.push(`/sandbox/access`);
+                        await router.push(accessPath(`sign-in`));
                     },
                 },
             ],

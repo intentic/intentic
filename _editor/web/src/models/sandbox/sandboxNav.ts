@@ -179,7 +179,7 @@ export const sandboxEmbedOf = (slug: string): string | undefined => builtInSecti
  */
 export const sandboxKeyAllowed = (key: string): boolean => !sandboxBuiltInSlugs().has(key);
 
-/** The one section a guest member has business in: their own passkeys, and giving their grant back. */
+/** The one section a guest member has business in: their own card and their own passkeys (Access ▸ People, Sign-in). */
 export const GUEST_SECTION = `access`;
 
 /**
@@ -201,10 +201,27 @@ export const sandboxSectionPath = (slug: string): string => (slug === SANDBOX_DE
  */
 export const sandboxHubPath = (guest: boolean): string => (guest ? sandboxSectionPath(GUEST_SECTION) : `/sandbox`);
 
+/**
+ * Access's parts (features/sandbox/access/SandboxAccess.vue), drawn as tabs and kept in the query as Agent's and
+ * Activity's are; the first writes no param. Who may come in and what they are told, how they prove it, what reaches the
+ * box with nobody signing in, and what conversations were allowed past their persona or area. One page of ten groups until
+ * 2026-10-19, which read as one long list of everything that has to do with getting in.
+ */
+export const ACCESS_PARTS = [`people`, `sign-in`, `programs`, `allowed`] as const;
+export type AccessPart = (typeof ACCESS_PARTS)[number];
+
+/** The parts drawn below maintainer: the reader's own card, the people here now, and their own passkeys. */
+export const MEMBER_ACCESS_PARTS: readonly AccessPart[] = [`people`, `sign-in`];
+
+/** One part of Access by address; People, the first, writes no param. */
+export const accessPath = (part: AccessPart = `people`): string =>
+    part === `people` ? sandboxSectionPath(`access`) : `${sandboxSectionPath(`access`)}?${new URLSearchParams({ section: part }).toString()}`;
+
 // Where a sandbox's Linked sandboxes section is reached from outside the Access page: the hash marks a reader who came
-// for it, as a task handed over from another sandbox and waiting for its owner's yes sends them here.
+// for it, as a task handed over from another sandbox and waiting for its owner's yes sends them here. The page opens the
+// part that holds it for this hash alone too, since a link made before the parts had none.
 export const LINKED_SANDBOXES_ANCHOR = `linked-sandboxes`;
 
 /** That section on the named sandbox's own Access page, the switch to that sandbox included (router/sandboxArrival.ts). */
 export const linkedSandboxesHref = (sandboxId: string): string =>
-    `${sandboxSectionPath(`access`)}?${new URLSearchParams({ sandbox: sandboxId }).toString()}#${LINKED_SANDBOXES_ANCHOR}`;
+    `${sandboxSectionPath(`access`)}?${new URLSearchParams({ section: `programs` satisfies AccessPart, sandbox: sandboxId }).toString()}#${LINKED_SANDBOXES_ANCHOR}`;

@@ -76,7 +76,6 @@
     "_editor/web/src/features/chat/transcript/attachments/ChatAudioChip.vue": 1,
     "_editor/web/src/features/chat/transcript/notices/NoticeLandHold.vue": 1,
     "_editor/web/src/features/preview/previewLane.ts": 1,
-    "_editor/web/src/features/sandbox/access/SandboxAccess.vue": 1,
     "_editor/web/src/features/sandbox/environment/rebuild/useDevRebuild.ts": 1,
     "_editor/web/src/features/sandbox/environment/useEngines.ts": 1,
     "_editor/web/src/features/sandbox/overview/offerTimezone.ts": 1,

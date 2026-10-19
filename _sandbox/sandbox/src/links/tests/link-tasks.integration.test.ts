@@ -110,7 +110,7 @@ test("a link whose terms want the owner holds each task, tells the owner, and ru
     const held = ok(await askTask(deps, link, asked("r1")));
     expect(held.state).toBe("held");
     expect(said).toHaveLength(0);
-    expect(notices[0]).toMatchObject({ title: "dev asks to run a task here", url: "/sandbox/access?section=links", requireInteraction: true });
+    expect(notices[0]).toMatchObject({ title: "dev asks to run a task here", url: "/sandbox/access?section=programs#linked-sandboxes", requireInteraction: true });
     const started = await decideTask(deps, link, "r1", true);
     expect(started).toMatchObject({ state: "running" });
     expect(said[0]?.turn.prompt).toContain("Check the error rate for r1.");

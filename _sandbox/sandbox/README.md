@@ -98,7 +98,7 @@ flowchart LR
   `agent/providers/project-installs.ts`), from what `agent/run/turn/turn-safety.ts` set on the turn. Its judge reads
   the owner's own `.intentic/config/safety.md` and then the lines a person allowed with a card's Always
   (`personas/owner-grants.ts`). Those lines live on the auth root, which a turn cannot write. They are listed under
-  Sandbox-wide permissions on the Access tab and are never shipped in a definition export.
+  Sandbox-wide permissions on Access ▸ Allowed and are never shipped in a definition export.
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
 - A conversation's results, the documents its calls recorded writing (Word, OpenDocument, RTF, PDF, decks, sheets, web
   pages), are listed at `GET /agents/{id}/documents` and served as bytes at `GET /agents/{id}/documents/raw?path=`

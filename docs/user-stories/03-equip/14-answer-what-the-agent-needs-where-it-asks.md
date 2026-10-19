@@ -21,4 +21,4 @@ I should not have to answer at all where nobody needs to decide. A secret the ta
 - [ ] Everything waiting on me badges the rail tile of the place I answer it (an agent's ask on Agents, an approval on Approvals), with a notification when I am away; a conversation that came from Slack, Telegram or Discord hears the ask in its channel, with a warning not to paste a secret there
 - [ ] A plan the agent presents lists what it still needs from me, so I answer everything in one sitting
 - [ ] A secret the task can make for itself is generated and stored by the sandbox with nobody asked, and never shown
-- [ ] Every standing grant and credential release is listed on the Access tab with who allowed it, and taking one back applies from the conversation's next turn
+- [ ] Every standing grant and credential release is listed on Access ▸ Allowed with who allowed it, and taking one back applies from the conversation's next turn

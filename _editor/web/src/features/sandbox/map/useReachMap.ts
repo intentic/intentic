@@ -11,7 +11,8 @@ import { useRole } from "../../../client/sandbox/useRole";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
-import { CONTROL_TOKENS, INBOUND_LINKS, SANDBOX_INVITES } from "../../../lib/queryKeys";
+import { useInboundLinks } from "../../../models/sandbox/useInboundLinks";
+import { CONTROL_TOKENS, SANDBOX_INVITES } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { apiClient } from "../../../lib/useApi";
 import { type ConnectionSources, connectionRow } from "../../capabilities/model/connectionRows";
@@ -132,11 +133,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
         queryFn: async () => (await sandboxRaw(`GET /system/control/tokens`)).tokens,
         enabled: canShip,
     });
-    const inbound = useSandboxQuery({
-        queryKey: INBOUND_LINKS.of(),
-        queryFn: async () => (await sandboxRaw(`GET /system/links`)).links,
-        enabled: canShip,
-    });
+    const inbound = useInboundLinks(canShip);
     const invites = useQuery(
         {
             queryKey: computed(() => SANDBOX_INVITES.of()),

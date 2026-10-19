@@ -99,15 +99,29 @@ const label = ref(``);
 const scope = ref<ControlScope | undefined>(SCOPES[0]);
 const expiry = ref<Expiry | undefined>(DEFAULT_EXPIRY);
 
+// What the picked rung can do, said under the form: the picker shows it only while open, and a token is minted closed.
+const scopeHint = computed(() => scopeOptions.value.find((option) => option.value === scope.value)?.hint ?? ``);
+
 const expiresAtOf = (choice: Expiry | undefined): number | undefined =>
     choice === undefined || choice === `never` ? undefined : Date.now() + Number(choice) * 24 * 60 * 60 * 1000;
+
+// The form is asked for (the group's New token), not standing open over the list: most visits here are to read or revoke
+// what is already minted. It closes on a mint, whose value then stands in its place until put away.
+const creating = ref(false);
+const startCreate = (): void => {
+    forgetMinted();
+    creating.value = true;
+};
 
 const submit = async (): Promise<void> => {
     if (scope.value === undefined || minting.value) {
         return;
     }
     await mint({ label: label.value, scope: scope.value, expiresAt: expiresAtOf(expiry.value) });
-    label.value = ``;
+    if (minted.value !== undefined) {
+        label.value = ``;
+        creating.value = false;
+    }
 };
 
 // The paste-ready forms
@@ -198,28 +212,25 @@ const describe = (token: ControlTokenSummary): string =>
 </script>
 
 <template>
-    <RowGroup v-if="canShip" data-setting="access-api-tokens" :label="t(`shared.apiTokens`)">
-        <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
-            <!-- Same pill the member roster uses for the same word, so "expired" doesn't get two spellings. -->
-            <template v-if="expired(token)" #meta>
-                <StatusBadge variant="danger" :label="t(`sandbox.controlTokensSection.expired`)" size="xs" />
-            </template>
-            <template #control>
-                <Button :label="t(`ui.action.revoke`)" size="small" tier="quiet" tone="danger" @click="revoke(token.id)" />
-            </template>
-        </Row>
+    <RowGroup v-if="canShip" data-setting="access-api-tokens" :label="t(`shared.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
+        <template #actions>
+            <Button v-if="!creating" :label="t(`sandbox.controlTokensSection.newToken`)" size="small" tier="boring" @click="startCreate">
+                <template #icon><Icon name="plus" /></template>
+            </Button>
+        </template>
 
-        <RowNote variant="block">
+        <!-- What was asked for sits first, under the press that asked: the form, then the value it minted, shown once. -->
+        <RowNote v-if="creating || notice || minted" variant="block">
             <div class="flex flex-col gap-3">
                 <Notice v-if="notice" :of="notice" />
-                <form class="flex flex-col gap-2" @submit.prevent="submit">
+                <form v-if="creating" class="flex flex-col gap-2" @submit.prevent="submit">
                     <!-- Token rows wrap to the column, including when chat is docked. -->
-                    <!-- Compact spacing keeps revoke rows aligned with the invite form. -->
                     <div class="flex flex-wrap items-center gap-2">
                         <input
                             v-model="label"
                             type="text"
                             autocomplete="off"
+                            autofocus
                             :placeholder="t(`sandbox.controlTokensSection.labelEGNightly`)"
                             :class="ui.input({ size: `sm` }, `min-w-48 flex-1`)"
                         />
@@ -242,20 +253,23 @@ const describe = (token: ControlTokenSummary): string =>
                                 :header="t(`sandbox.controlTokensSection.expires`)"
                                 class="ui-field-sm w-32"
                             />
-                            <Button
-                                type="submit"
-                                :label="t(`sandbox.controlTokensSection.mintToken`)"
-                                size="small"
-                                :loading="minting"
-                                :disabled="minting || scope === undefined"
-                                class="shrink-0"
-                            >
-                                <template #icon><Icon name="key" /></template>
-                            </Button>
                         </div>
                     </div>
                     <!-- The cost of the rung, in the picker's own words, under the form where the choice is made. -->
-                    <p v-if="scopeOptions.length === 1 && scopeOptions[0]" class="text-2xs text-subtle">{{ scopeOptions[0].hint }}</p>
+                    <div class="flex flex-wrap items-center justify-end gap-2">
+                        <p class="mr-auto min-w-0 text-2xs text-subtle">{{ scopeHint }}</p>
+                        <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" :disabled="minting" @click="creating = false" />
+                        <Button
+                            type="submit"
+                            :label="t(`sandbox.controlTokensSection.mintToken`)"
+                            size="small"
+                            :loading="minting"
+                            :disabled="minting || scope === undefined"
+                            class="shrink-0"
+                        >
+                            <template #icon><Icon name="key" /></template>
+                        </Button>
+                    </div>
                 </form>
 
                 <div v-if="minted" class="flex flex-col gap-2 rounded-lg bg-canvas p-3">
@@ -292,5 +306,17 @@ const describe = (token: ControlTokenSummary): string =>
                 </div>
             </div>
         </RowNote>
+
+        <Row v-for="token in tokens" :key="token.id" icon="key" :title="token.label" :description="describe(token)">
+            <!-- Same pill the member roster uses for the same word, so "expired" doesn't get two spellings. -->
+            <template v-if="expired(token)" #meta>
+                <StatusBadge variant="danger" :label="t(`sandbox.controlTokensSection.expired`)" size="xs" />
+            </template>
+            <template #control>
+                <Button :label="t(`ui.action.revoke`)" size="small" tier="quiet" tone="danger" @click="revoke(token.id)" />
+            </template>
+        </Row>
+        <!-- No token, and none being made: what one is for, so the empty card is not a blank. -->
+        <RowNote v-if="tokens.length === 0 && !creating && !minted" variant="empty">{{ t(`sandbox.controlTokensSection.empty`) }}</RowNote>
     </RowGroup>
 </template>

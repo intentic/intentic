@@ -14,7 +14,7 @@ describe(`linkedConversationHref`, () => {
 
     // 2026-10-15: a task waited on the far sandbox's Access page, and nothing on its row here said where.
     it(`opens the far sandbox's Linked sandboxes section while the task waits for its owner's yes`, () => {
-        expect(linkedConversationHref({ kind: `linked`, status: `pending`, linked })).toBe(`/sandbox/access?sandbox=sbx+1#linked-sandboxes`);
+        expect(linkedConversationHref({ kind: `linked`, status: `pending`, linked })).toBe(`/sandbox/access?section=programs&sandbox=sbx+1#linked-sandboxes`);
     });
 
     it(`has no address for a spawned or in-process row, or for a link card that never learned its sandbox's id`, () => {

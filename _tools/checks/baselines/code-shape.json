@@ -600,10 +600,6 @@
         "count": 26,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/sandbox/access/SandboxAccess.vue": {
-        "count": 782,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/features/sandbox/access/usePasskeys.ts#usePasskeys#lines": {
         "count": 115,
         "why": "standing when the check arrived (2026-10-16)"

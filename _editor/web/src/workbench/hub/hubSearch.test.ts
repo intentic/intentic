@@ -76,6 +76,7 @@ describe(`the index and the cards`, () => {
     it(`names only categories the page reads, under the key it reads them from`, () => {
         const reads = new Map([
             [`agent`, { file: `features/sandbox/overview/SandboxAgent.vue`, key: `section` }],
+            [`access`, { file: `features/sandbox/access/SandboxAccess.vue`, key: `section` }],
             [`data-protection`, { file: `features/sandbox/data-protection/SandboxDataProtection.vue`, key: `step` }],
         ]);
         const wrong = entries.flatMap((entry) => {

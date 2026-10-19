@@ -1,6 +1,6 @@
 import type { GrantRevoke, OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
-import { computed } from "vue";
+import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { rpcKey, rpcPrefix } from "../../../lib/queryKeys";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
@@ -15,9 +15,14 @@ export const standingGrantsKey = rpcKey(`needs.grants`);
 
 type StandingConversation = StandingGrants["conversations"][number];
 
-export function useStandingGrants() {
+// `enabled` holds the read for a reader the daemon refuses it to (below maintainer), for a caller drawn whoever reads.
+export function useStandingGrants(enabled: MaybeRefOrGetter<boolean> = true) {
     const queryClient = useQueryClient();
-    const { query, error } = useSandboxQuery({ queryKey: standingGrantsKey, queryFn: () => sandboxRpc.needs.grants() });
+    const { query, error } = useSandboxQuery({
+        queryKey: standingGrantsKey,
+        queryFn: () => sandboxRpc.needs.grants(),
+        enabled: computed(() => toValue(enabled)),
+    });
     const conversations = computed<readonly StandingConversation[]>(() => query.data.value?.conversations ?? []);
     // The yeses that name no conversation, newest first, and the kinds of them this sandbox could not read.
     const ownerWide = computed<readonly OwnerGrant[]>(() => query.data.value?.ownerWide ?? []);

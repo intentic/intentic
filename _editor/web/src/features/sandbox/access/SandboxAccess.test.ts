@@ -1,11 +1,12 @@
 // Access tab's rendered text after an invite: which of its two writes (daemon grant, platform record/email) failed, and
-// refusal vs silence, must all read differently on screen.
+// refusal vs silence, must all read differently on screen. The page is four parts drawn as tabs (People, Sign-in,
+// Programs, Allowed); a test about one opens it as a reader would, by its tab.
 import "@intentic/testing/dom";
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import type { OwnerGrant, OwnerGrantKind, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
 import PrimeVue from "primevue/config";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
-import { createMemoryHistory, createRouter } from "vue-router";
+import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import { waitFor } from "@intentic/testing/bun";
 import { IconStub } from "@intentic/ui/testing";
 import { formatDate } from "@intentic/ui/format";
@@ -28,6 +29,8 @@ const quiet = (path: unknown) => {
             return { ok: true };
         case `/system/runners`:
             return { runners: [] };
+        case `/system/links`:
+            return { links: [] };
         default:
             return { members: [] };
     }
@@ -131,6 +134,7 @@ const { queryClient } = await import("../../../lib/queryPersistence");
 queryClient.setDefaultOptions({ queries: { ...queryClient.getDefaultOptions().queries, retry: false } });
 
 let app: App | undefined;
+let router: Router | undefined;
 const mount = (): void => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -139,8 +143,15 @@ const mount = (): void => {
     app.directive(`tooltip`, {});
     app.use(PrimeVue);
     // The area picker links to the pages that fix what it reports (Areas, Personas); any path resolves.
-    app.use(createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: { render: () => null } }] }));
+    router = createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: { render: () => null } }] });
+    app.use(router);
     app.mount(el);
+};
+// Mounted on an address of its own, as a link from somewhere else opens the page.
+const mountAt = async (address: string): Promise<void> => {
+    mount();
+    await router?.push(address);
+    await settle();
 };
 
 const shown = (): string => document.body.textContent ?? ``;
@@ -174,6 +185,17 @@ const panel = (): HTMLElement | null => document.body.querySelector(`section[ari
 // One part of the open panel, by the label over it.
 const part = (label: string): HTMLElement | undefined =>
     [...(panel()?.querySelectorAll<HTMLElement>(`div`) ?? [])].find((block) => block.firstElementChild?.textContent?.trim() === label);
+// The page's own tabs, by name (a count on one rides after its name), and one pressed: its part replaces the one open.
+const pageTabs = (): string[] =>
+    [...document.body.querySelectorAll<HTMLButtonElement>(`[role=tablist][aria-label="Part of Access"] [role=tab]`)].map((button) =>
+        (button.textContent ?? ``).replace(/\d+$/u, ``).trim(),
+    );
+const openPart = async (label: string): Promise<void> => {
+    [...document.body.querySelectorAll<HTMLButtonElement>(`[role=tablist][aria-label="Part of Access"] [role=tab]`)]
+        .find((button) => button.textContent?.trim().startsWith(label))
+        ?.click();
+    await settle();
+};
 const tab = async (label: string, within?: HTMLElement): Promise<void> => {
     [...(within ?? document.body).querySelectorAll<HTMLButtonElement>(`[role=tab]`)].find((button) => button.textContent?.trim() === label)?.click();
     await nextTick();
@@ -304,7 +326,7 @@ it(`shows what the mail provider said when it refused`, async () => {
 
 it(`names this browser and nothing it cannot list`, async () => {
     mount();
-    await nextTick();
+    await openPart(`Sign-in`);
 
     expect(shown()).toContain(`This browser`);
     // The date is formatted through the kit, in the READER's zone, so a fixture at 12:00Z prints as the 24th in
@@ -318,7 +340,7 @@ it(`names this browser and nothing it cannot list`, async () => {
 it(`says only that this browser is signed in when there is no pass to date`, async () => {
     sessionExpiresAt.value = undefined;
     mount();
-    await nextTick();
+    await openPart(`Sign-in`);
 
     expect(shown()).toContain(`owner@example.com · signed in`);
     expect(shown()).not.toMatch(/signed in until/);
@@ -326,7 +348,7 @@ it(`says only that this browser is signed in when there is no pass to date`, asy
 
 it(`arms sign-out-everywhere before firing it, and says who it hits`, async () => {
     mount();
-    await nextTick();
+    await openPart(`Sign-in`);
 
     buttonLabelled(`Sign out all browsers`)?.click();
     await nextTick();
@@ -340,7 +362,7 @@ it(`arms sign-out-everywhere before firing it, and says who it hits`, async () =
 
 it(`revokes only on the confirming click, then reports it`, async () => {
     mount();
-    await nextTick();
+    await openPart(`Sign-in`);
 
     buttonLabelled(`Sign out all browsers`)?.click();
     await nextTick();
@@ -368,10 +390,15 @@ it(`mints an API token as the owner and shows it once with its snippet`, async (
         return quiet(path);
     });
     mount();
+    await openPart(`Programs`);
     await waitFor(() => expect(shown()).toContain(`nightly CI`));
     expect(shown()).toContain(`API tokens`);
     expect(shown()).toContain(`never used`);
+    // The form is asked for, not standing open over the list.
+    expect(buttonLabelled(`Mint token`)).toBeUndefined();
 
+    buttonLabelled(`New token`)?.click();
+    await nextTick();
     buttonLabelled(`Mint token`)?.click();
     await waitFor(() => expect(shown()).toContain(`ict_shown-once`));
     expect(shown()).toContain(`Shown once`);
@@ -384,6 +411,21 @@ it(`mints an API token as the owner and shows it once with its snippet`, async (
     const body = JSON.parse((mintCall[1] as { body: string }).body) as { scope: string; expiresAt?: number };
     expect(body.scope).toBe(`read`);
     expect(body.expiresAt).toBeGreaterThan(Date.now());
+    // Minted, the form gives way to the value it made, and New token is offered again.
+    expect(buttonLabelled(`Mint token`)).toBeUndefined();
+    expect(buttonLabelled(`New token`)?.disabled).toBe(false);
+});
+
+it(`says what a token is for when there is none, rather than drawing an empty card`, async () => {
+    mount();
+    await openPart(`Programs`);
+    await waitFor(() => expect(shown()).toContain(`No API tokens.`));
+    buttonLabelled(`New token`)?.click();
+    await nextTick();
+    expect(shown()).not.toContain(`No API tokens.`);
+    buttonLabelled(`Cancel`)?.click();
+    await nextTick();
+    expect(buttonLabelled(`Mint token`)).toBeUndefined();
 });
 
 // The daemon's POST /members bodies, in order.
@@ -564,10 +606,18 @@ it(`names each person by what they can do`, async () => {
 it(`keeps the token surfaces off the tab of a member below maintainer`, async () => {
     role.value = `writer`;
     mount();
-    await nextTick();
-    expect(shown()).not.toContain(`API tokens`);
+    await settle();
+    // Their own card and their own passkeys: Programs and Allowed are not theirs to open.
+    expect(pageTabs()).toEqual([`People`, `Sign-in`]);
+    await openPart(`Sign-in`);
+    expect(shown()).toContain(`Passkeys`);
     expect(shown()).not.toContain(`Signed-in browsers`);
-    expect(shown()).not.toContain(`Other ways in`);
+    // An address naming a part they are not drawn opens their first.
+    app?.unmount();
+    document.body.innerHTML = ``;
+    await mountAt(`/?section=programs`);
+    expect(shown()).not.toContain(`API tokens`);
+    expect(shown()).toContain(`Only the sandbox owner can invite people or change roles.`);
 });
 
 // A maintainer holds the owner's operating authority, so the credential and door surfaces are theirs as well. The
@@ -577,15 +627,19 @@ it(`gives a maintainer the token, sign-out and door surfaces, and keeps the rost
     mount();
     await settle();
 
-    expect(shown()).toContain(`API tokens`);
-    expect(buttonLabelled(`Mint token`)?.disabled).toBe(false);
-    expect(shown()).toContain(`Signed-in browsers`);
-    expect(buttonLabelled(`Sign out all browsers`)?.disabled).toBe(false);
-    expect(shown()).toContain(`Other ways in`);
-
+    expect(pageTabs()).toEqual([`People`, `Sign-in`, `Programs`, `Allowed`]);
     expect(list).not.toHaveBeenCalled();
     expect(document.body.querySelector(`input[type=email]`)).toBeNull();
     expect(shown()).toContain(`Only the sandbox owner can invite people or change roles.`);
+
+    await openPart(`Programs`);
+    expect(shown()).toContain(`API tokens`);
+    expect(buttonLabelled(`New token`)?.disabled).toBe(false);
+    expect(shown()).toContain(`Other ways in`);
+
+    await openPart(`Sign-in`);
+    expect(shown()).toContain(`Signed-in browsers`);
+    expect(buttonLabelled(`Sign out all browsers`)?.disabled).toBe(false);
 });
 
 // Every door read answers "none in use": a zero is a door nobody opened, so the group has nothing to say and is not drawn.
@@ -596,9 +650,10 @@ it(`leaves out the other ways in when no door is in use`, async () => {
     doorReads.devices.mockResolvedValue({ devices: [] });
     sandboxJson.mockImplementation(async (path: unknown) => quiet(path));
     mount();
+    await openPart(`Programs`);
     await settle();
 
-    expect(shown()).toContain(`Signed-in browsers`);
+    expect(shown()).toContain(`API tokens`);
     expect(shown()).not.toContain(`Other ways in`);
 });
 
@@ -610,6 +665,7 @@ it(`lists only the doors in use, with paired machines counted`, async () => {
     doorReads.devices.mockResolvedValue({ devices: [{ key: `laptop`, label: `laptop` }, { key: `desk`, label: `desk` }] });
     sandboxJson.mockImplementation(async (path: unknown) => quiet(path));
     mount();
+    await openPart(`Programs`);
     await settle();
 
     expect(shown()).toContain(`Other ways in`);
@@ -624,8 +680,10 @@ it(`lists only the doors in use, with paired machines counted`, async () => {
 // Needs you inbox's Allowed tab until 2026-10-12. Nothing standing draws nothing.
 it(`lists what conversations were allowed past their persona, each with Revoke`, async () => {
     mount();
-    await settle();
+    await openPart(`Allowed`);
     expect(shown()).not.toContain(`Conversation permissions`);
+    // Nothing standing is said, not drawn as a blank part.
+    expect(shown()).toContain(`Nothing is allowed past the rules`);
     app?.unmount();
     document.body.innerHTML = ``;
 
@@ -633,8 +691,9 @@ it(`lists what conversations were allowed past their persona, each with Revoke`,
         { conversationId: `c1`, capabilities: [`github`], folders: [], shelves: [], installs: false, secrets: [], everything: false, rules: [], releases: [] },
     ];
     mount();
-    await settle();
+    await openPart(`Allowed`);
 
+    expect(shown()).not.toContain(`Nothing is allowed past the rules`);
     expect(shown()).toContain(`Conversation permissions`);
     expect(shown()).toContain(`May use github, which its persona leaves out`);
     expect(buttonLabelled(`Revoke`)?.disabled).toBe(false);
@@ -652,7 +711,7 @@ it(`lists the owner-wide yeses above the conversations, and takes each back by i
     ];
     standing.value = [{ conversationId: `c1`, capabilities: [`github`], folders: [], shelves: [], installs: false, secrets: [], everything: false, rules: [], releases: [] }];
     mount();
-    await settle();
+    await openPart(`Allowed`);
 
     expect(shown()).toContain(`Sandbox-wide permissions`);
     expect(shown()).toContain(`Conversation permissions`);
@@ -680,7 +739,7 @@ it(`lists the owner-wide yeses above the conversations, and takes each back by i
 it(`says which owner-wide records could not be read, and draws the list for them alone`, async () => {
     unreadable.value = [`hook-set`, `extension`];
     mount();
-    await settle();
+    await openPart(`Allowed`);
     expect(shown()).toContain(`Sandbox-wide permissions`);
     expect(shown()).not.toContain(`Conversation permissions`);
     expect(shown()).toContain(`none of it stands until the file is fixed: hook sets, extensions.`);
@@ -718,4 +777,67 @@ it(`changes a person's email sign-in with the rest of their access kept, at the 
         { email: `guest@example.com`, role: `collaborator`, emailSignIn: true, agents: `run`, areas: [`support`], credentials: `all` },
     ]);
     expect(setRole).not.toHaveBeenCalled();
+});
+
+/* THE PARTS: People opens first, every other part is a tab and an address, and the links made before the parts had names
+   still land where they meant. */
+
+it(`opens on People, and keeps the part it was switched to in the address`, async () => {
+    mount();
+    await settle();
+    expect(pageTabs()).toEqual([`People`, `Sign-in`, `Programs`, `Allowed`]);
+    expect(shown()).toContain(`Add person`);
+    expect(shown()).not.toContain(`Passkeys`);
+
+    await openPart(`Sign-in`);
+    expect(router?.currentRoute.value.query[`section`]).toBe(`sign-in`);
+    expect(shown()).toContain(`Passkeys`);
+    expect(shown()).not.toContain(`Add person`);
+
+    // Back on the first part, the address names none.
+    await openPart(`People`);
+    expect(router?.currentRoute.value.query[`section`]).toBeUndefined();
+});
+
+it(`lands on Programs from a waiting linked task's address, old and new`, async () => {
+    await mountAt(`/?sandbox=s1#linked-sandboxes`);
+    expect(shown()).toContain(`API tokens`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    await mountAt(`/?section=links`);
+    expect(shown()).toContain(`API tokens`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    await mountAt(`/?section=programs&sandbox=s1#linked-sandboxes`);
+    expect(shown()).toContain(`API tokens`);
+});
+
+// A task a linked sandbox handed over waits for the owner's Allow on Programs; the count says so from People.
+it(`counts the linked tasks waiting for a yes on the Programs tab`, async () => {
+    const link = {
+        id: `l1`,
+        label: `support-desk`,
+        terms: { approve: true, turnsPerHour: 20 },
+        createdAt: Date.parse(`2026-09-01T00:00:00Z`),
+        conversations: 0,
+        requests: [{ id: `r1`, conversationId: `c9`, task: `Draft the refund macro`, askedAt: Date.now() - 60_000 }],
+    };
+    sandboxJson.mockImplementation(async (path: unknown) => (path === `/system/links` ? { links: [link] } : quiet(path)));
+    mount();
+    await waitFor(() =>
+        expect([...document.body.querySelectorAll(`[role=tab]`)].find((button) => button.textContent?.trim().startsWith(`Programs`))?.textContent?.trim()).toBe(
+            `Programs1`,
+        ),
+    );
+});
+
+it(`counts what stands on the Allowed tab, so it is seen from any part`, async () => {
+    ownerWide.value = [{ kind: `command-policy`, line: `Deleting build directories under /work is fine.`, at: Date.now() - 120_000, by: `ada@acme.dev` }];
+    standing.value = [{ conversationId: `c1`, capabilities: [`github`], folders: [], shelves: [], installs: false, secrets: [], everything: false, rules: [], releases: [] }];
+    mount();
+    await settle();
+    const allowed = [...document.body.querySelectorAll(`[role=tab]`)].find((button) => button.textContent?.trim().startsWith(`Allowed`));
+    expect(allowed?.textContent?.trim()).toBe(`Allowed2`);
 });

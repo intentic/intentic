@@ -6211,7 +6211,9 @@
             "tokenExpiry": "Token expiry",
             "tokenScope": "Token scope",
             "usedAgo": "used {ago}",
-            "zedSettingsJsonJetbrains": "Zed → settings.json (JetBrains takes the same command + env)"
+            "zedSettingsJsonJetbrains": "Zed → settings.json (JetBrains takes the same command + env)",
+            "newToken": "New token",
+            "empty": "No API tokens. A token lets a script, a CI job or an editor work this sandbox without signing in."
         },
         "desktopSyncCard": {
             "agentMutagenCloudflaredUnder": "The agent, Mutagen, and cloudflared under",
@@ -7296,7 +7298,6 @@
             "everyBrowserSignedOut": "Every browser has been signed out. Any device still holding a pass is locked out now.",
             "idle": "idle",
             "maintainer": "Maintainer",
-            "noOneElseConnected": "No one else is connected right now.",
             "onlySandboxOwnerInvite": "Only the sandbox owner can invite people or change roles.",
             "otherWaysIn": "Other ways in",
             "owner": "owner",
@@ -7327,9 +7328,6 @@
             "webhooksLine": "{count} event automation, each with its own webhook URL and token. Rotate or remove one on its row in Automations. | {count} event automations, each with its own webhook URL and token. Rotate or remove one on its row in Automations.",
             "gatesLine": "{count} gated workflow, each answering a pipeline at its own URL and token. Managed in the workflow designer's gate panel. | {count} gated workflows, each answering a pipeline at its own URL and token. Managed in the workflow designer's gate panel.",
             "ciLine": "{count} repository wired to a forge, {hooked} with a webhook the sandbox registered and signs with a per-sandbox secret. The rest are polled. Details on Pipelines. | {count} repositories wired to a forge, {hooked} with a webhook the sandbox registered and signs with a per-sandbox secret. The rest are polled. Details on Pipelines.",
-            "statusMember": "member",
-            "statusPending": "pending",
-            "statusExpired": "expired",
             "couldntReadMemberAreas": "Couldn't read what each person may do, so nobody's access can be changed until the sandbox answers.",
             "couldntLoadAccessList": "Couldn't load the access list.",
             "deliveryUnconfigured": "Invited. Email isn't set up on this platform, so send them this link yourself:",
@@ -7410,7 +7408,14 @@
             "addPersonSub": "Starts read-only",
             "addPersonKeys": "Enter to invite, Esc to cancel",
             "inviteExpired": "Invite expired",
-            "aiNotice": "AI notice"
+            "aiNotice": "AI notice",
+            "parts": "Part of Access",
+            "partPeople": "People",
+            "partSignIn": "Sign-in",
+            "partPrograms": "Programs",
+            "partAllowed": "Allowed",
+            "allowedEmpty": "Nothing is allowed past the rules",
+            "allowedEmptyLine": "When you let a conversation past its persona or area, or allow something for the whole sandbox from a card, it is listed here to take back."
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Agent settings category",
@@ -9616,7 +9621,9 @@
             "newLink": "New link",
             "shownOnce": "Shown once. Paste both into the Linked sandbox card on the other sandbox.",
             "address": "Address",
-            "token": "Token"
+            "token": "Token",
+            "createLink": "Create link",
+            "empty": "No linked sandboxes. Pair one from the other sandbox's Linked sandbox card, or make a link here by hand."
         },
         "linkedSandboxRows": {
             "title": "Linked sandboxes",
@@ -9736,7 +9743,7 @@
                 "overview": "home, status, version, url, address, info",
                 "usage": "cost, spend, tokens, billing, limits, quota, hours, savings",
                 "secrets": "env vars, environment variables, api keys, passwords, credentials",
-                "access": "members, invite, share, collaborators, team, roles, passkeys, tokens",
+                "access": "members, invite, share, collaborators, team, roles, passkeys, tokens, sign in, permissions, allowed, linked sandboxes",
                 "areas": "folders, scopes, permissions, restrict, new area",
                 "personas": "identities, accounts, email, online accounts, add persona",
                 "map": "diagram, overview, connections, who can reach, graph",

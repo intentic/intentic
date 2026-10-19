@@ -69,4 +69,4 @@ and the hourly limit on the card, and one press links them. It reaches this conv
 you no longer need goes the same way: `capabilities request <name> --remove --why "…"`.
 
 A task waiting for that sandbox's owner to allow it shows as pending under your card; its row opens the Linked
-sandboxes section of that sandbox's Access page, where the Allow is.
+sandboxes section of that sandbox's Access ▸ Programs, where the Allow is.
