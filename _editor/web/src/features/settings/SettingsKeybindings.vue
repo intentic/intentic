@@ -132,7 +132,7 @@ onUnmounted(stopRecording);
         </template>
 
         <template #lead>
-            <FilterBar v-model="query" :placeholder="t(`settings.settingsKeybindings.filterCommands`)" :count="rows.length" />
+            <FilterBar v-model="query" :placeholder="t(`settings.settingsKeybindings.filterCommands`)" />
         </template>
 
         <!-- Compact tier: a long list of commands read by scanning. -->

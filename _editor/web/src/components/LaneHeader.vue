@@ -1,4 +1,4 @@
-<!-- A lane's header: its mark, its name and how many it holds, then its own bulk act. The one drawing of it, for the
+<!-- A lane's header: its mark, its name, then its own bulk act. The one drawing of it, for the
      fleet board's columns, the chat rail and the subagent list alike (RailLane wraps it). Paints nothing and sets no
      horizontal padding: the board's cards run edge to edge under `px-1`, a rail's are inset by its lane, and each caller
      insets the header to sit 4px inside its cards. -->
@@ -8,7 +8,6 @@ import type { IconName } from "@intentic/ui";
 defineProps<{
     label?: string;
     icon?: IconName;
-    count?: string | number;
 }>();
 </script>
 
@@ -19,7 +18,6 @@ defineProps<{
             <Icon v-if="icon !== undefined" :name="icon" class="shrink-0 text-2xs text-subtle" />
             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ label }}</span>
         </slot>
-        <span v-if="count !== undefined" data-lane-count class="text-2xs tabular-nums text-subtle">{{ count }}</span>
         <span class="flex-1"></span>
         <!-- The lane's own bulk act, where the lane is the target: "Clear". -->
         <slot name="actions" />

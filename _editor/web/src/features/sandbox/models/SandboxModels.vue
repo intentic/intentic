@@ -484,7 +484,6 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                 :tile="tile"
                 :selected="selected === tile"
                 :line="tileFacts[tile]?.line"
-                :count="tileFacts[tile]?.count"
                 :standing="tileFacts[tile]?.standing"
                 :controls="panelId"
                 @select="select(tile)"

@@ -18,8 +18,6 @@ const {
     filterable?: boolean;
     stickyHeadings?: boolean;
     placeholder?: string;
-    /** Shown beside the filter while a query is active. */
-    count?: number;
 }>();
 
 /* The model stays unnamed so generic threading remains intact. */
@@ -41,7 +39,6 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 bg-canv
                 variant="field"
                 clearable
                 :placeholder="placeholder ?? t(`ui.action.filter`)"
-                :count="count"
                 class="shrink-0"
             />
             <div v-if="$slots[`pinned`]"><slot name="pinned" /></div>
@@ -59,7 +56,6 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 bg-canv
                         aria-hidden="true"
                     ></span>
                     <span :class="ui.sectionLabel({ size: `xs` }, `min-w-0 truncate`)">{{ group.label }}</span>
-                    <span v-if="group.count !== undefined" class="ml-auto shrink-0 text-2xs tabular-nums text-subtle">{{ group.count }}</span>
                 </h3>
                 <!-- A HAIRLINE BETWEEN ROWS, because these rows are ROUNDED AND TINTED. -->
                 <div class="flex flex-col gap-0.5">

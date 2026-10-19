@@ -12,8 +12,6 @@ const {
     clearable = true,
 } = defineProps<{
     placeholder?: string;
-    /** Shown at the field's trailing edge while a query is active: "how much did I just narrow this to". */
-    count?: number;
     /** The answer is in flight: for a bar whose list is fetched rather than filtered in the page. */
     busy?: boolean;
     /** Offer a clear affordance, and let Escape take the query back. On unless a caller's own Escape means something else. */
@@ -34,7 +32,6 @@ const query = defineModel<string>({ required: true });
             :placeholder="placeholder ?? t(`ui.action.filter`)"
             :busy="busy"
             :clearable="clearable"
-            :count="count"
             :aria-label="ariaLabel"
             class="min-w-[min(100%,14rem)] flex-1"
         />

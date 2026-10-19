@@ -175,7 +175,6 @@ const address = computed(() => daemonUrl.value ?? ``);
         <RowGroup
             data-setting="access-linked-sandboxes"
             :label="t(`sandbox.linkedSandboxes.title`)"
-            :count="shown.length === 0 ? undefined : shown.length"
         >
             <template #info>
                 <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.linkedSandboxes.title`) })">

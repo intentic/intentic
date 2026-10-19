@@ -98,7 +98,6 @@ const inDesktopApp = desktopApp() !== undefined;
                     v-model="query"
                     :placeholder="t(`sandbox.deviceBoard.filterByDeviceSandbox`)"
                     :aria-label="t(`sandbox.deviceBoard.filterDevices`)"
-                    :count="shown.length"
                     :clearable="true"
                 >
                     <template v-if="mixed" #controls>

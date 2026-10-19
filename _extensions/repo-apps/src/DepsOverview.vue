@@ -106,7 +106,6 @@ const usageTable = computed(() =>
                 v-for="finding in findings"
                 :key="`${finding.kind}:${finding.areas?.join(`>`) ?? ``}`"
                 :label="findingTitle(finding)"
-                :count="finding.edges.length"
                 :caption="findingCaption(finding)"
             >
                 <Row
@@ -179,7 +178,7 @@ const usageTable = computed(() =>
                     </tbody>
                 </table>
             </div>
-            <RowGroup density="dense" v-if="openCell !== undefined" class="mt-2" :label="cellTitle" :count="cellEdges.length">
+            <RowGroup density="dense" v-if="openCell !== undefined" class="mt-2" :label="cellTitle">
                 <Row
                     v-for="edge in cellEdges"
                     :key="`${edge.from}>${edge.to}:${edge.type}`"

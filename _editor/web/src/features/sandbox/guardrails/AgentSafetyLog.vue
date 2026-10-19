@@ -173,7 +173,6 @@ const commandSummary = (program: string): string => {
             v-if="entries.length > 0"
             v-model="query"
             :placeholder="t(`sandbox.agentSafetyLog.filterDecisionsByCommand`)"
-            :count="filteredEntries.length"
             clearable
         >
             <template #controls>

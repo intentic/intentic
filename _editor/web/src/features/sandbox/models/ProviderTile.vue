@@ -7,18 +7,16 @@ import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import type { ModelSourceStanding } from "./modelSources";
 import { isFreeTile, LOCAL_TILE, type TileKey, type TileTone } from "./providerGrid";
 
-// One tile of Sandbox ▸ Models' grid: a provider's mark (or this machine's), its name, a count in the corner when it
-// holds any, and a status line only while something is happening with it. Pressing it opens its panel below the grid,
+// One tile of Sandbox ▸ Models' grid: a provider's mark (or this machine's), its name, and a status line only while
+// something is happening with it. Pressing it opens its panel below the grid,
 // as a persona's tile opens its editor; pressing the open one closes it.
 
 const t = useT();
 
-const { tile, selected, line, count, standing, controls } = defineProps<{
+const { tile, selected, line, standing, controls } = defineProps<{
     tile: TileKey;
     selected: boolean;
     line: { readonly text: string; readonly tone: TileTone } | undefined;
-    // Accounts held or models served; the number alone, top-right.
-    count: number | undefined;
     // What its connections are in, drawn as a dot on the mark; nothing connected, no dot.
     standing: ModelSourceStanding | undefined;
     // The panel this tile opens, for assistive tech.
@@ -53,23 +51,10 @@ const LINE = {
         :aria-controls="controls"
         @click="emit(`select`)"
     >
-        <!-- Corner labels sit in the tile's top padding, so every tile keeps the same layout whether it has them or not. -->
-        <div v-if="isFreeTile(tile) || count !== undefined" class="absolute inset-x-1.5 top-1.5 h-4">
-            <span
-                v-if="isFreeTile(tile)"
-                :class="toneWash(`success`, `absolute left-0 top-0 rounded px-1 text-[0.6rem] font-medium leading-4`)"
-                >{{ t(`connect.connect.free`) }}</span
-            >
-            <span
-                v-if="count !== undefined"
-                class="absolute right-0 top-0 text-[0.65rem] font-medium leading-4 tabular-nums text-subtle"
-                :aria-label="
-                    tile === LOCAL_TILE
-                        ? t(`connect.providerGrid.models`, { count }, count)
-                        : t(`connect.modelSources.accounts`, { count }, count)
-                "
-                >{{ count }}</span
-            >
+        <div v-if="isFreeTile(tile)" class="absolute inset-x-1.5 top-1.5 h-4">
+            <span :class="toneWash(`success`, `absolute left-0 top-0 rounded px-1 text-[0.6rem] font-medium leading-4`)">{{
+                t(`connect.connect.free`)
+            }}</span>
         </div>
         <!-- The mark itself, no plate: the provider's logo is what the tile is recognised by. -->
         <span

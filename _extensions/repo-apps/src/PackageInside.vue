@@ -134,7 +134,6 @@ const imprint = computed(() => `repo-apps.package-inside:${props.repo}/${props.n
                     density="dense"
                     class="min-w-72 flex-1"
                     :label="t(`dependenciesView.inside.imports`, { unit: picked })"
-                    :count="links.out.length"
                 >
                     <Row
                         v-for="edge in links.out"
@@ -154,7 +153,6 @@ const imprint = computed(() => `repo-apps.package-inside:${props.repo}/${props.n
                     density="dense"
                     class="min-w-72 flex-1"
                     :label="t(`dependenciesView.inside.importedBy`, { unit: picked })"
-                    :count="links.in.length"
                 >
                     <Row
                         v-for="edge in links.in"
@@ -177,7 +175,6 @@ const imprint = computed(() => `repo-apps.package-inside:${props.repo}/${props.n
                     density="dense"
                     v-if="stack.upward.length > 0"
                     :label="t(`dependenciesView.inside.upward`)"
-                    :count="stack.upward.length"
                     :caption="t(`dependenciesView.inside.upwardCaption`)"
                 >
                     <Row
@@ -199,7 +196,6 @@ const imprint = computed(() => `repo-apps.package-inside:${props.repo}/${props.n
                     v-for="(cycle, at) in stack.cycles"
                     :key="cycle.units.join(`,`)"
                     :label="t(`dependenciesView.inside.cycle`, { n: at + 1 })"
-                    :count="cycle.units.length"
                     :caption="cycle.units.join(` · `)"
                 >
                     <Row

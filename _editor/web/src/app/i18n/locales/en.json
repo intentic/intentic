@@ -468,7 +468,7 @@
             "noAgentYoursMentions": "No agent of yours mentions \"{trim}\". This searches the titles and what either side said in the chat.",
             "noAgentsWorkingStart": "No agents working. Start one and delegate.",
             "noMatchesInLane": "No matches in this lane.",
-            "needYouElsewhere": "{count} needs you in other projects | {count} need you in other projects",
+            "needYouElsewhere": "Needs you in other projects",
             "showThem": "Show",
             "nothingArchivedYetFinished": "Nothing archived yet. Finished agents land here on their own after a few quiet days.",
             "nothingNeedsRightNow": "Nothing needs you right now.",
@@ -3832,7 +3832,7 @@
             "showOlder": "Show {hidden} older",
             "showOlderModels": "Show {hidden} older {label} models",
             "unavailable": "Unavailable",
-            "addAnotherProvider": "Add another provider ({count})"
+            "addAnotherProvider": "Add another provider"
         },
         "modelPickerState": {
             "useCustomModelId": "use as custom model id"

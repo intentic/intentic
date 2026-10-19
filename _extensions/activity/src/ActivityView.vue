@@ -81,7 +81,7 @@ const voiceSpeakers = computed(() => {
         </div>
 
         <!-- All three filters narrow the feed, so all three live in the instrument, ordered who, when, what. -->
-        <FilterBar v-model="search" :placeholder="t(`filter`)" :count="visible.length" :busy="isLoading">
+        <FilterBar v-model="search" :placeholder="t(`filter`)" :busy="isLoading">
             <template #controls>
                 <SourceFilter v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
                 <span class="h-4 w-px bg-line" aria-hidden="true"></span>

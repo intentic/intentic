@@ -383,7 +383,7 @@
             "noAgentYoursMentions": "Ningún agente tuyo menciona «{trim}». Esto busca en los títulos y en lo que dijo cada parte en el chat.",
             "noAgentsWorkingStart": "Ningún agente trabajando. Inicia uno y delega.",
             "noMatchesInLane": "Sin coincidencias en este carril.",
-            "needYouElsewhere": "{count} te necesita en otros proyectos | {count} te necesitan en otros proyectos",
+            "needYouElsewhere": "Te necesitan en otros proyectos",
             "showThem": "Mostrar",
             "nothingArchivedYetFinished": "Todavía no hay nada archivado. Los agentes terminados llegan aquí solos tras unos días tranquilos.",
             "nothingNeedsRightNow": "Ahora mismo no te necesita nada.",

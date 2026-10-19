@@ -70,14 +70,7 @@ const groups = computed((): NavGroup<Entry>[] => {
                 :aria-current="item.key === current ? `page` : undefined"
                 class="w-full rounded-lg"
                 @click="emit(`pick`, item.key)"
-            >
-                <template v-if="item.count > 0" #meta>
-                    <span
-                        class="rounded-full px-1.5 text-2xs tabular-nums"
-                        :class="item.loud ? `bg-primary-fill font-semibold text-fill-content` : `text-subtle`"
-                    >{{ item.count }}</span>
-                </template>
-            </Row>
+            />
         </template>
     </NavRail>
 </template>

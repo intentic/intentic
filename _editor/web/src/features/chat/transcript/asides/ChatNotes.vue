@@ -39,7 +39,6 @@ const body = (text: string): string => text.replace(/^#{1,6} .*(\n|$)/, ``).trim
         <div class="chat-spine-bar">
             <ChatSpineNode
                 icon="paperclip"
-                :count="notes.length > 1 ? notes.length : undefined"
                 :open="open"
                 :label="t(`chat.chatNotes.sentMessage`)"
                 :tip="{ title: t(`chat.chatNotes.addedContext`), note: t(`chat.chatNotes.sentMessage`) }"

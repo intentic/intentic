@@ -303,7 +303,6 @@ const dismissWork = (notice: NoticeModel): void => {
             :placeholder="
                 view === `installed` ? t(`sandbox.sandboxExtensions.nameContribution`) : t(`sandbox.sandboxExtensions.namePublisherWhatDoes`)
             "
-            :count="matched"
             :aria-label="
                 view === `installed`
                     ? t(`sandbox.sandboxExtensions.filterInstalledExtensions`)

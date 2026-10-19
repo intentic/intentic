@@ -18,7 +18,6 @@ const {
     icon = `search`,
     clearable = false,
     busy = false,
-    count,
     shortcut,
 } = defineProps<{
     placeholder?: string;
@@ -32,9 +31,6 @@ const {
     clearable?: boolean;
     /** Spin the magnifier: results are on screen and a slower source is still answering. */
     busy?: boolean;
-    /** How many rows the query narrowed the list to, said at the trailing edge while there is a query: a number, or a
-     * formatted one (`1.2k`, `200+`). */
-    count?: number | string;
     /** One key that reaches the field from anywhere on the page (`/`), drawn as a keycap while the field is idle. */
     shortcut?: string;
     /** Names the field for assistive tech. A panel's bar is named by its panel; a standalone one needs its own. */
@@ -163,7 +159,6 @@ onBeforeUnmount(() => listen(false));
             :aria-keyshortcuts="shortcut"
             @keydown.esc="clearable && clear()"
         />
-        <span v-if="count !== undefined && searching" class="shrink-0 px-1 text-2xs tabular-nums text-subtle" aria-live="polite">{{ count }}</span>
         <!-- `mousedown` is suppressed on every control here so a press keeps the caret in the field rather than stealing it; click still fires for keyboard activation. -->
         <div v-if="$slots[`controls`] || matchCase !== undefined" class="flex shrink-0 items-center gap-0.5" @mousedown.prevent>
             <slot name="controls" />

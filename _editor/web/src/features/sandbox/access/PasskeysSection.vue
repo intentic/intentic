@@ -65,7 +65,6 @@ const codesText = computed(() => (codes.value ?? []).join(`\n`));
     <RowGroup
         data-setting="access-passkeys"
         :label="t(`sandbox.passkeysSection.passkeys`)"
-        :count="list.passkeys.length === 0 ? undefined : list.passkeys.length"
     >
         <template #actions>
             <Button v-if="!formOpen" :label="t(`sandbox.words.addPasskey`)" size="small" tier="boring" :disabled="!supported" @click="asked = true">

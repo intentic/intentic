@@ -290,7 +290,7 @@ const compare = async (event: Event): Promise<void> => {
         </RowGroup>
 
         <!-- Download and delete use the same compact icon affordance. -->
-        <RowGroup v-if="exports.length > 0" flat :label="t(`sandbox.words.exports`)" :count="exports.length">
+        <RowGroup v-if="exports.length > 0" flat :label="t(`sandbox.words.exports`)">
             <Row v-for="entry in exports" :key="entry.name">
                 <template #title
                     ><span class="block truncate font-mono text-2xs">{{ entry.name }}</span></template
@@ -337,7 +337,7 @@ const compare = async (event: Event): Promise<void> => {
             <div v-if="diff.differences.length === 0" class="flex items-center gap-2">
                 <StatusBadge variant="success" :label="t(`sandbox.moveOutPanel.inAgreement`)" dot />
             </div>
-            <RowGroup v-else flat :label="t(`sandbox.moveOutPanel.differences`)" :count="diff.differences.length">
+            <RowGroup v-else flat :label="t(`sandbox.moveOutPanel.differences`)">
                 <Row
                     v-for="difference in diff.differences"
                     :key="difference.subject + difference.detail"

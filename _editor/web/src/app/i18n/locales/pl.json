@@ -468,7 +468,7 @@
             "noAgentYoursMentions": "Żaden Twój agent nie wspomina „{trim}”. To przeszukuje tytuły i to, co obie strony powiedziały na czacie.",
             "noAgentsWorkingStart": "Żaden agent nie pracuje. Uruchom jednego i deleguj.",
             "noMatchesInLane": "Brak trafień na tym torze.",
-            "needYouElsewhere": "{count} sprawa czeka na Ciebie w innych projektach | {count} sprawy czekają na Ciebie w innych projektach | {count} spraw czeka na Ciebie w innych projektach",
+            "needYouElsewhere": "Sprawy czekają na Ciebie w innych projektach",
             "showThem": "Pokaż",
             "nothingArchivedYetFinished": "Nic jeszcze nie zarchiwizowano. Skończone agenty lądują tu same po kilku spokojnych dniach.",
             "nothingNeedsRightNow": "W tej chwili nic Cię nie potrzebuje.",
@@ -3832,7 +3832,7 @@
             "notConnected": "niepodłączony",
             "older": "starsza",
             "olderThan": "starsza wersja, {newer} jest nowszy",
-            "addAnotherProvider": "Dodaj innego dostawcę ({count})"
+            "addAnotherProvider": "Dodaj innego dostawcę"
         },
         "modelPickerState": {
             "useCustomModelId": "użyj jako własnego id modelu"

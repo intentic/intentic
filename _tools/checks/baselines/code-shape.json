@@ -753,7 +753,7 @@
         "count": 184,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/workspace/home/HomeView.vue": 715,
+    "_editor/web/src/features/workspace/home/HomeView.vue": 714,
     "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue": 1080,
     "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue#<anonymous>#lines": {
         "count": 129,
@@ -913,7 +913,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/approvals/src/ApprovalsView.vue": {
-        "count": 847,
+        "count": 842,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/automations/src/AutomationFields.vue": {

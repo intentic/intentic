@@ -222,7 +222,6 @@ const pushToCi = async (): Promise<void> => {
                     v-if="filterable"
                     v-model="query"
                     :placeholder="t(`sandbox.sandboxSecrets.keyAccountWhatUses`)"
-                    :count="matches.length"
                     class="min-w-0 flex-1"
                 >
                     <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
@@ -245,7 +244,7 @@ const pushToCi = async (): Promise<void> => {
             </div>
 
             <!-- Shown only while something is owed: the rows themselves, not a count of them. -->
-            <RowGroup v-if="attention.length > 0" :label="t(`sandbox.words.needsAttention`)" :count="attention.length">
+            <RowGroup v-if="attention.length > 0" :label="t(`sandbox.words.needsAttention`)">
                 <SecretEntryRow
                     v-for="row in attention"
                     :key="row.entry.key"
@@ -260,7 +259,6 @@ const pushToCi = async (): Promise<void> => {
                 <RowGroup
                     v-if="devopsActive && groupVisible(required)"
                     :label="t(`sandbox.sandboxSecrets.requiredByIntent`)"
-                    :count="required.length"
                 >
                     <RowNote v-if="required.length === 0">{{ t(`sandbox.sandboxSecrets.intentDeclaresNoUser`) }}</RowNote>
                     <SecretEntryRow
@@ -337,7 +335,6 @@ const pushToCi = async (): Promise<void> => {
                 <RowGroup
                     v-if="devopsActive && groupVisible(generated)"
                     :label="t(`sandbox.sandboxSecrets.generatedByIntentic`)"
-                    :count="generated.length"
                 >
                     <RowNote v-if="generated.length === 0">{{ t(`sandbox.sandboxSecrets.nothingGeneratedYetAppear`) }}</RowNote>
                     <SecretEntryRow

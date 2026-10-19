@@ -427,7 +427,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
 
                 <div v-else v-skeleton-source="`approvals.queue`" class="flex flex-col gap-6">
                     <!-- Broken first: the only state where the queue already tried and stopped. -->
-                    <RowGroup v-if="failed.length > 0" :label="t(`approvalsView.failed`)" :count="failed.length">
+                    <RowGroup v-if="failed.length > 0" :label="t(`approvalsView.failed`)">
                         <Row v-for="item in failed" :key="item.id">
                             <template #lead>
                                 <BrandMark v-if="isPost(item)" :size="28" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
@@ -494,7 +494,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                         </Row>
                     </RowGroup>
 
-                    <RowGroup v-if="needsReview.length > 0" :label="t(`approvalsView.needsReview`)" :count="needsReview.length">
+                    <RowGroup v-if="needsReview.length > 0" :label="t(`approvalsView.needsReview`)">
                         <template v-if="needsReview.length > 1" #actions>
                             <button
                                 v-if="canShip"
@@ -587,7 +587,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     </RowGroup>
 
                     <!-- Found by a turn, not proposed by one: until the owner says yes to this exact set, turns run with every hook off. -->
-                    <RowGroup v-if="hooksVisible.length > 0" :label="t(`approvalsView.hooksWaiting`)" :count="hooksVisible.length">
+                    <RowGroup v-if="hooksVisible.length > 0" :label="t(`approvalsView.hooksWaiting`)">
                         <Row v-for="request in hooksVisible" :key="request.digest" :title="t(`approvalsView.hookSetTitle`, { count: hookSetSize(request) }, hookSetSize(request))">
                             <template #lead>
                                 <span :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="shield" /></span>
@@ -624,7 +624,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     </RowGroup>
 
                     <!-- One section for both hold shapes, since the reader's question is the same: run it, or not? -->
-                    <RowGroup v-if="heldVisible.length > 0" :label="t(`approvalsView.automationsHeld`)" :count="heldVisible.length">
+                    <RowGroup v-if="heldVisible.length > 0" :label="t(`approvalsView.automationsHeld`)">
                         <Row v-for="wake in heldVisible" :key="wake.id" :title="wakeName(wake)">
                             <template #lead>
                                 <span :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="clock" /></span>
@@ -670,7 +670,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     </RowGroup>
 
                     <!-- Approved rows remain directly below the review queue. -->
-                    <RowGroup v-if="goingAhead.length > 0" :label="t(`approvalsView.goingAhead`)" :count="goingAhead.length">
+                    <RowGroup v-if="goingAhead.length > 0" :label="t(`approvalsView.goingAhead`)">
                         <Row v-for="item in goingAhead" :key="item.id" density="compact">
                             <template #lead>
                                 <BrandMark v-if="isPost(item)" :size="22" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
@@ -712,7 +712,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     </RowGroup>
 
                     <!-- Approved with time to spare; quiet by design, since the decision is made and the row need only say when. -->
-                    <RowGroup v-if="scheduled.length > 0" :label="t(`approvalsView.scheduled`)" :count="scheduled.length">
+                    <RowGroup v-if="scheduled.length > 0" :label="t(`approvalsView.scheduled`)">
                         <Row v-for="item in scheduled" :key="item.id" density="compact">
                             <template #lead>
                                 <BrandMark v-if="isPost(item)" :size="22" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
@@ -754,7 +754,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                     </RowGroup>
 
                     <!-- History: nothing here can be acted on, so the row shows only what happened, where, when, and its result. -->
-                    <RowGroup v-if="done.length > 0" :label="t(`approvalsView.done`)" :count="done.length">
+                    <RowGroup v-if="done.length > 0" :label="t(`approvalsView.done`)">
                         <Row v-for="item in done" :key="item.id" density="compact">
                             <template #lead>
                                 <BrandMark v-if="isPost(item)" :size="22" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" :idle="true" />

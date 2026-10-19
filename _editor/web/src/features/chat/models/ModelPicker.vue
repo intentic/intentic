@@ -581,7 +581,7 @@ onMounted(() => {
                             <Icon name="spinner" spin /> {{ t(`chat.modelPicker.loadingModels`) }}
                         </div>
                     </template>
-                    <PickerFoldRow v-if="section.key === foldAfter" v-model="othersOpen" :count="fold.folded.length" />
+                    <PickerFoldRow v-if="section.key === foldAfter" v-model="othersOpen" />
                 </template>
                 <div v-if="searching && flat.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
                     <p>{{ t(`chat.modelPicker.noModelsMatch`) }}</p>

@@ -379,7 +379,7 @@
             "noAgentYoursMentions": "Aucun de vos agents ne mentionne « {trim} ». La recherche porte sur les titres et sur ce que les deux côtés ont dit dans le chat.",
             "noAgentsWorkingStart": "Aucun agent au travail. Lancez-en un et déléguez.",
             "noMatchesInLane": "Aucune correspondance dans ce couloir.",
-            "needYouElsewhere": "{count} a besoin de vous dans d'autres projets | {count} ont besoin de vous dans d'autres projets",
+            "needYouElsewhere": "On a besoin de vous dans d'autres projets",
             "showThem": "Afficher",
             "nothingArchivedYetFinished": "Rien d'archivé pour l'instant. Les agents terminés atterrissent ici tout seuls après quelques jours calmes.",
             "nothingNeedsRightNow": "Rien n'a besoin de vous en ce moment.",

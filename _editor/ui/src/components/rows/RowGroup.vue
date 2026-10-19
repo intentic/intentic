@@ -1,4 +1,4 @@
-<!-- Grouped-list section: an optional uppercase label (with a count/`#actions`) above one bordered surface of hairline-divided rows. -->
+<!-- Grouped-list section: an optional uppercase label (with `#actions`) above one bordered surface of hairline-divided rows. -->
 <script setup lang="ts">
 import { computed } from "vue";
 import { ui } from "../../lib/ui.js";
@@ -20,7 +20,6 @@ import { provideRowDensity, provideRowFlushInline, type RowDensity } from "./row
 // the rows sliding under it show through its own text.
 const { density = `compact`, flat } = defineProps<{
     label?: string;
-    count?: string | number;
     caption?: string;
     flat?: boolean;
     undivided?: boolean;
@@ -49,7 +48,6 @@ provideRowFlushInline(onDialog);
             >
             <!-- Info controls stay attached to the group label. -->
             <slot name="info" />
-            <span v-if="count !== undefined" class="text-2xs font-medium text-subtle">{{ count }}</span>
             <span v-if="caption !== undefined" class="min-w-0 text-2xs text-subtle">{{ caption }}</span>
             <div v-if="$slots[`actions`]" class="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">
                 <slot name="actions" />

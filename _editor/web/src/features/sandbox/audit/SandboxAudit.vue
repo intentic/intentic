@@ -280,7 +280,6 @@ const rowTone = (entry: AuditEntry): `default` | `warning` | `danger` => {
         <FilterBar
             v-model="actorQuery"
             :placeholder="t(`sandbox.sandboxAudit.filterPlaceholder`)"
-            :count="records.length"
             :busy="isLoading"
             clearable
         >

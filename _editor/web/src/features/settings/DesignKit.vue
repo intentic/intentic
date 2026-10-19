@@ -464,7 +464,7 @@ const pickedTier = ref(`collaborator`);
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">Rows</h2>
                 <div class="grid gap-4 md:grid-cols-2">
-                    <RowGroup v-skeleton-source="`kit.rows`" label="States" :count="4">
+                    <RowGroup v-skeleton-source="`kit.rows`" label="States">
                         <Row title="Plain row" description="A title and its description" />
                         <Row title="With facts" description="Facts are muted and never focusable">
                             <template #meta><span class="text-2xs text-subtle">3 files</span><DiffStat :additions="12" :deletions="4" /></template>
@@ -562,7 +562,7 @@ const pickedTier = ref(`collaborator`);
             <section class="flex flex-col gap-4">
                 <h2 :class="ui.sectionLabel()">A device's agent and its sandboxes</h2>
                 <DeviceAgentGroup :panel="KIT_AGENT" subject="this device" />
-                <RowGroup label="Sandboxes on this device" :count="KIT_SANDBOXES.length" :flat="true" :undivided="true">
+                <RowGroup label="Sandboxes on this device" :flat="true" :undivided="true">
                     <div class="flex flex-col">
                         <DeviceDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES">
                             <template #actions="{ group }">
@@ -817,7 +817,7 @@ const pickedTier = ref(`collaborator`);
                     </div>
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">SearchBar · field, `/` shortcut</span>
-                        <SearchBar v-model="query" variant="field" shortcut="/" clearable :count="query === `` ? undefined : 7" placeholder="Search settings" />
+                        <SearchBar v-model="query" variant="field" shortcut="/" clearable placeholder="Search settings" />
                     </div>
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">SearchBar · dense, switches, busy</span>
@@ -832,7 +832,7 @@ const pickedTier = ref(`collaborator`);
                     </div>
                     <div class="flex flex-col gap-1">
                         <span class="ui-field-label">FilterBar · count, controls</span>
-                        <FilterBar v-model="filter" placeholder="Filter…" :count="7">
+                        <FilterBar v-model="filter" placeholder="Filter…">
                             <template #controls>
                                 <Picker v-model="pickedTier" :options="PICKER_HINTED" variant="ghost" aria-label="Access tier" />
                             </template>

@@ -383,7 +383,6 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
             <RowGroup
                 v-if="hosted"
                 :label="t(`settings.settingsBilling.hostedSandboxes`)"
-                :count="t(`settings.settingsBilling.slotsUsed`, { used: machines.length, count: slots }, slots)"
             >
                 <!-- The one state where cancelling is the advice, not the door. -->
                 <RowNote v-if="planWithoutMachine" variant="block">

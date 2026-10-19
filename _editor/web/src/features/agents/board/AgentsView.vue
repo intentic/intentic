@@ -440,7 +440,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             </Button>
                         </template>
                     </LaneHeader>
-                    <AttentionElsewhere v-if="lane.key === 'attention' && !view.archive && attentionElsewhere > 0" :count="attentionElsewhere" />
+                    <AttentionElsewhere v-if="lane.key === 'attention' && !view.archive && attentionElsewhere > 0" />
                     <!-- Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything running below it; Attention lane only. -->
                     <div v-if="lane.key === 'attention' && !view.archive && scopedHeld.length > 0" class="flex flex-col gap-3.5 pb-2.5">
                         <HeldWakeCard
@@ -623,7 +623,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
             <!-- Padded by the found card's halo (a 2px outline 2px out), which the scroll box would otherwise clip. -->
             <div v-if="view.beyond" class="-mx-1 mt-2 flex min-h-0 flex-col gap-3 overflow-auto px-1 pb-1">
                 <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-3.5">
-                    <LaneHeader :label="t(`agents.agentsView.inArchive`)" icon="box" :count="archivedHits.length" class="px-1" />
+                    <LaneHeader :label="t(`agents.agentsView.inArchive`)" icon="box" class="px-1" />
                     <!-- Archived agents retain the branch, diff, and transcript actions. -->
                     <div class="grid gap-3.5" :class="narrow ? '' : paired ? 'grid-cols-2 items-start lg:gap-4.5' : 'grid-cols-3 items-start lg:gap-4.5'">
                         <AgentCard
@@ -649,7 +649,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     </div>
                 </section>
                 <section v-if="sessionMatches.length > 0" class="flex min-w-0 flex-col gap-1">
-                    <LaneHeader :label="t(`agents.agentsView.inEarlierChats`)" icon="history" :count="sessionMatches.length" class="px-1" />
+                    <LaneHeader :label="t(`agents.agentsView.inEarlierChats`)" icon="history" class="px-1" />
                     <!-- Conversations no agent entry owns; with no card to draw, they read as history rows and open as tabs, the same act the History menu performs. -->
                     <button
                         v-for="session in sessionMatches"

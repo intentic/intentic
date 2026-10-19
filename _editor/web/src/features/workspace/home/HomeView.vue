@@ -535,7 +535,6 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                         dense
                         clearable
                         :busy="searching"
-                        :count="resultCount"
                         :placeholder="placeholder"
                         :aria-label="placeholder"
                         class="w-52 min-w-24 shrink"
