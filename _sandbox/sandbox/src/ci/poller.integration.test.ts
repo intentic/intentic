@@ -76,6 +76,8 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
+        // The automation inboxes (durable/inbox-store.ts) live beside the holds.
+        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
         // Repair off: with it on, main's failures are its fix agent's and wake no automation (events.ts), and these tests
         // are about what an automation hears.

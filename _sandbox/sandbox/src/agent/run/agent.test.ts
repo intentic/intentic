@@ -1604,9 +1604,9 @@ test("a rate_limit_event with only a status omits the optional usage fields", as
 // The turn ran on a stored account's OAuth token, so plan limits are readable at settle.
 const oauthRequest: HarnessRequest = { ...request, credential: { kind: "claude-oauth", token: "oat-1" } };
 // Fakes the OAuth usage endpoint; the daemon reads it directly since the CLI reports rate limits only for a profile it
-// signed in itself.
+// signed in itself. A real Response, so the reader can take the body however it reads it (claude-usage.ts reads text).
 const usageEndpoint = (body: unknown, ok = true): typeof fetch =>
-    (() => Promise.resolve({ ok, json: () => Promise.resolve(body) })) as unknown as typeof fetch;
+    (() => Promise.resolve(new Response(JSON.stringify(body), { status: ok ? 200 : 401 }))) as unknown as typeof fetch;
 
 test("a settled turn re-reads EVERY plan-limit pool, not just whichever one was binding", async () => {
     const events = await collect(

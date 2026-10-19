@@ -69,6 +69,8 @@ const harness = async (
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
+        // The automation inboxes (durable/inbox-store.ts) live beside the holds.
+        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ autoRepair }) }),
         ciRuns: createRunsCache(60_000),
@@ -261,6 +263,8 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
+        // The automation inboxes (durable/inbox-store.ts) live beside the holds.
+        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),

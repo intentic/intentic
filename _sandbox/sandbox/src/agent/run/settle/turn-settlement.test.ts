@@ -131,6 +131,7 @@ describe("a finished turn", () => {
             contextTokens: 1_000,
             contextWindow: 200_000,
             searchCalls: 0,
+            iqSearches: 0,
             openingSearches: 0,
             openingListings: 0,
             failedCalls: 0,

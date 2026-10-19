@@ -529,8 +529,7 @@ const commitGroups = computed<readonly RepoTarget[]>(() =>
     stagesFirst.value ? scannable.value.map((repo) => ({ repo: repo.repo })) : stagedRepos.value.map((repo) => ({ repo })),
 );
 const commitTarget = computed(() => commitGroups.value.map((group) => group.repo));
-// Any repo's unresolved conflict blocks the whole button: a commit spans repos sharing one message, and git would
-// refuse mid-batch.
+// Any repo's unresolved conflict blocks the whole button: a commit spans repos sharing one message, and git would refuse mid-batch.
 const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.conflicted.length > 0));
 // Reads the daemon's own "committing" flag (unioned with this tab's in-flight batch), narrowed to the
 // repos this box would actually commit — a run in a repo the filter excludes isn't this button's concern.
@@ -638,8 +637,7 @@ const commitBlocker = computed<string | undefined>(() => {
     if (blockedByConflicts.value) {
         return t(`workspace.reviewPanel.blockedByConflicts`);
     }
-    // Checked ahead of "nothing to commit": mid-commit the rows are still listed, so this is the honest reason, not a
-    // count about to change.
+    // Checked ahead of "nothing to commit": mid-commit the rows are still listed, so this is the honest reason, not a count about to change.
     if (commitRunning.value) {
         return t(`workspace.reviewPanel.stillCommitting`, { repos: committingNow.value.join(`, `) });
     }
