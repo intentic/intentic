@@ -1,0 +1,94 @@
+{
+  "conversation": "cnv_soft_deletes",
+  "addition": "\nWhat changed in step {index}:\n\n- The `users` table gains `deleted_at`, nullable.\n- Every read goes through `liveUsers()`.\n\n| file | change |\n| --- | --- |\n| schema.ts | +3 |\n\n```ts\nexport const liveUsers = () => db.select().from(users).where(isNull(users.deletedAt));\nexport const retire = async (id: string) => {\n    await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, id));\n};\n```\n",
+  "stream": {
+    "prose": "Reading the handler first, since the route and the job have to agree on what a deleted user is.\n\n- `liveUsers()` now filters on `deleted_at`, so every read path skips a retired row.\n- The purge job takes rows older than **30 days** and removes them for good.\n\n```ts\nexport const purge = (before: Date) => db.delete(users).where(lt(users.deletedAt, before));\n```\n\nNext I run the tests for the users module, then the migration against a copy of the schema.",
+    "chunk": 24,
+    "everyMs": 16,
+    "tools": [
+      "Read",
+      "Bash"
+    ],
+    "toolMs": 50,
+    "gapMs": 30
+  },
+  "rows": [
+    {
+      "role": "user",
+      "text": "Migrate the users table to soft deletes. Nothing should hard-delete a user row again, reads filter the retired ones out.",
+      "tools": []
+    },
+    {
+      "role": "assistant",
+      "text": "Three places touch users directly: the schema, the delete route, and the web client's typed row. I'll start with the schema and let the rest follow from it.",
+      "tools": [
+        {
+          "name": "Read",
+          "summary": ""
+        },
+        {
+          "name": "Grep",
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "text": "Schema first, the column plus a `liveUsers()` helper, so filtering is one import rather than a rule everyone has to remember.",
+      "tools": [
+        {
+          "name": "Edit",
+          "summary": ""
+        },
+        {
+          "name": "Write",
+          "summary": ""
+        },
+        {
+          "name": "Edit",
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "role": "notice",
+      "text": "Background job: Typecheck the web client against the new row",
+      "tools": []
+    },
+    {
+      "role": "assistant",
+      "text": "The purge job is the one place a hard delete still belongs, it runs on rows retired more than 30 days ago, so I left it alone and covered it with a test instead.",
+      "tools": [
+        {
+          "name": "Bash",
+          "summary": ""
+        }
+      ]
+    },
+    {
+      "role": "notice",
+      "text": "Background job: Run the web e2e suite",
+      "tools": []
+    },
+    {
+      "role": "assistant",
+      "text": "Done, **4 files, +210 / −55**, held on `agent/soft-deletes`.\n\nOne thing to decide when you read it: the API still returns retired users to admin tokens (that's what the `includeRetired` flag does). If you'd rather they were invisible everywhere, say so and I'll drop the flag.",
+      "tools": []
+    },
+    {
+      "role": "user",
+      "text": "/code-review high",
+      "tools": []
+    },
+    {
+      "role": "assistant",
+      "text": "Reviewed the branch at high effort: two findings survived verification, and one is worth fixing before this lands.",
+      "tools": [
+        {
+          "name": "ReportFindings",
+          "summary": ""
+        }
+      ]
+    }
+  ]
+}

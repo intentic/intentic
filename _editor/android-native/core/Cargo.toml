@@ -1,0 +1,39 @@
+[package]
+name = "intentic-mobile-core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "What the native Android client keeps out of Kotlin: the transcript, its markdown, its highlighting and the streamed turn."
+
+[lib]
+name = "intentic_mobile_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jni = "0.21"
+pulldown-cmark = { version = "0.13", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Oniguruma (built from C by cc), not the pure-Rust engine: the first fenced block of a language compiles its
+# grammar's regexes. With fancy-regex that took 32ms on the sandbox and held a Galaxy S10's cold start for about
+# 110ms; with Oniguruma it takes 2ms on the sandbox.
+syntect = { version = "5", default-features = false, features = ["default-onig"] }
+# Arm C, the transcript drawn by the GPU onto a SurfaceView (`surface` feature, src/surface/).
+glyphon = { version = "0.12", optional = true }
+log = { version = "0.4", optional = true }
+pollster = { version = "0.4", optional = true }
+wgpu = { version = "30", optional = true, default-features = false, features = ["std", "parking_lot", "vulkan", "gles", "wgsl"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = { version = "0.15", optional = true, default-features = false }
+env_filter = { version = "0.1", optional = true, default-features = false }
+ndk = { version = "0.9", optional = true, default-features = false, features = ["api-level-23", "rwh_06"] }
+
+[features]
+surface = ["dep:glyphon", "dep:log", "dep:pollster", "dep:wgpu", "dep:android_logger", "dep:env_filter", "dep:ndk"]
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+opt-level = 3

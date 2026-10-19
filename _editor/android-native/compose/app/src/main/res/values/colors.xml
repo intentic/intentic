@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Arm A's canvas (android/app/src/main/res/values/colors.xml); the rest of the palette lives in Look.kt. -->
+    <color name="canvas">#FF15171C</color>
+</resources>

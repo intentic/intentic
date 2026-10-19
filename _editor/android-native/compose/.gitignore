@@ -1,0 +1,6 @@
+# Gradle's and Kotlin's build state, and the machine's own SDK path.
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties

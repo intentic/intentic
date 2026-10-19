@@ -1,0 +1,26 @@
+name: intentic_spike_flutter
+description: "Arm B of the native Android spike: the Flutter control."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_markdown_plus: ^1.0.12
+  markdown: ^7.3.1
+  re_highlight: ^0.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    # A symlink to ../fixture/soft-deletes.json: Flutter only bundles assets under the package root.
+    - assets/soft-deletes.json

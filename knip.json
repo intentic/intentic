@@ -56,9 +56,21 @@
                 "_tools/nav/**/*.mjs",
                 "_tools/oxlint/*.mjs",
                 "_tools/turbo-cache/*.mjs",
-                ".githooks/*"
+                ".githooks/*",
+                // The native Android spike is a Gradle, Cargo and Flutter tree with no package.json; its bench and
+                // fixture writer are scripts run by hand with node and bun.
+                "_editor/android-native/bench/bench.ts",
+                "_editor/android-native/bench/*.test.ts",
+                "_editor/android-native/fixture/make-fixture.ts"
             ],
-            "ignore": ["desired-state/**", "intent/**", "_tools/extension-example/seed/**", "_editor/ios-app/**", "_editor/android-app/**"]
+            "ignore": [
+                "desired-state/**",
+                "intent/**",
+                "_tools/extension-example/seed/**",
+                "_editor/ios-app/**",
+                "_editor/android-app/**",
+                "_editor/android-native/**/build/**"
+            ]
         },
         "_editor/web": {
             "entry": [

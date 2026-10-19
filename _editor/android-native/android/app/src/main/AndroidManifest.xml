@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Only the web baseline uses the network, and only the phone's loopback (network_security_config.xml). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="false"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:label="Spike Native"
+        android:supportsRtl="true"
+        android:theme="@style/Spike">
+
+        <!-- Arm A: the transcript as RecyclerView rows of text laid out off the main thread. -->
+        <activity
+            android:name=".ConversationActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Arm C: the same screen with the transcript drawn by the Rust core on the GPU, onto a SurfaceView. -->
+        <activity
+            android:name=".SurfaceConversationActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- The baseline: today's web editor in a WebView, served by the bench over `adb reverse`, so plain HTTP
+             to the phone's own loopback. -->
+        <activity
+            android:name=".WebConversationActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
+</manifest>

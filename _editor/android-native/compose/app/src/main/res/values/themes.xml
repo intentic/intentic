@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The window behind the first Compose frame: the editor's canvas, so a start never flashes white. -->
+    <style name="Spike" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/canvas</item>
+    </style>
+</resources>
