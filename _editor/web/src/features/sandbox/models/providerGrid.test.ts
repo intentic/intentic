@@ -59,8 +59,11 @@ test("a tile's one line says what is happening, else that this computer has it; 
 });
 
 // The chat's "Finish sign-in" landed on a page with nothing open, and the sign-in it pointed at was nowhere in sight.
-test("on arrival the tile whose turn it is opens, and nothing opens for its own sake", () => {
-    expect(arrivalTile({})).toBeUndefined();
+// With nothing asking, the page still opens a tile: an empty detail pane read as a page that had not finished loading.
+test("on arrival the tile whose turn it is opens, else a connected one, else the first", () => {
+    expect(arrivalTile({})).toBe(MODEL_TILES[0]!);
+    expect(arrivalTile({ connected: `gemini` })).toBe(`gemini`);
+    expect(arrivalTile({ needing: `codex`, connected: `gemini` })).toBe(`codex`);
     expect(arrivalTile({ needing: `codex` })).toBe(`codex`);
     expect(arrivalTile({ failed: `kimi`, needing: `codex` })).toBe(`kimi`);
     expect(arrivalTile({ live: `cursor`, failed: `kimi`, needing: `codex` })).toBe(`cursor`);

@@ -66,19 +66,21 @@ export const tileLine = (_key: TileKey, facts: TileFacts): { readonly text: stri
 export const tileCount = (facts: TileFacts): number | undefined => (facts.count > 0 ? facts.count : undefined);
 
 /**
- * The tile open on arrival, when one is worth opening: the provider a link named, the sign-in in flight or the one that
- * just failed (it is the reader's turn), else whatever needs a person. Nothing else: an open panel the reader did not ask
- * for is a pitch, and the grid alone already says what is here.
+ * The tile open on arrival. The provider a link named, the sign-in in flight or the one that just failed (it is the
+ * reader's turn), else whatever needs a person; failing those, the first provider already connected, else the grid's
+ * first tile. Some tile is always open, as every master/detail view here arrives with one selected (personas does the
+ * same): a grid with an empty detail pane reads as a page that has not finished loading.
  */
 export const arrivalTile = (facts: {
     readonly asked?: AgentProvider;
     readonly live?: AgentProvider;
     readonly failed?: AgentProvider;
     readonly needing?: AgentProvider;
-}): TileKey | undefined =>
-    [facts.asked, facts.live, facts.failed, facts.needing]
+    readonly connected?: AgentProvider;
+}): TileKey =>
+    [facts.asked, facts.live, facts.failed, facts.needing, facts.connected]
         .map((provider) => (provider === undefined ? undefined : tileOf(provider)))
-        .find((key) => key !== undefined);
+        .find((key) => key !== undefined) ?? MODEL_TILES[0]!;
 
 /**
  * What a link naming a provider (`?provider=`: the chat's Try again, a picker row, a job whose model is missing) does:

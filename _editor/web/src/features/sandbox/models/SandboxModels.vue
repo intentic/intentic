@@ -180,8 +180,8 @@ const tileFacts = computed(() =>
 
 // ARRIVAL: `?provider=` continues a press made elsewhere (a picker row, a trial strip, the chat's "Try again"): open its
 // tile, and start its sign-in when nothing of it is connected yet (linkArrival). Without one, the tile whose turn it is:
-// the sign-in waiting on the reader, the one that just failed, else whatever needs a person (arrivalTile). Otherwise
-// nothing opens: the grid says what is here, and an open panel nobody asked for is a pitch.
+// the sign-in waiting on the reader, the one that just failed, else whatever needs a person, else the first connected
+// provider, else the grid's first tile (arrivalTile): the page always arrives with a tile open, as personas does.
 let arrived = false;
 const settleArrival = (): void => {
     if (!accessKnown.value) {
@@ -211,6 +211,7 @@ const settleArrival = (): void => {
         live: live.value?.provider,
         failed: signInFailure.value?.provider,
         needing: sources.value.find((source) => source.standing === `attention` || source.standing === `blocked`)?.provider,
+        connected: sources.value.find((source) => source.kind !== `trial` && source.standing === `ready`)?.provider,
     });
 };
 
