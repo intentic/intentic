@@ -4921,7 +4921,7 @@
             "runs": "{count} uruchomienie | {count} uruchomienia | {count} uruchomień"
         },
         "agentToolLoading": {
-            "group": "Co niesie każde zapytanie",
+            "group": "Oszczędzanie tokenów",
             "onDemand": "Wczytuj podłączone narzędzia na żądanie",
             "onDemandDescription": "Nie wysyłaj opisów narzędzi przeglądarek, urządzeń, kont i telefonów z każdym zapytaniem, dopóki agent ich nie wyszuka. Narzędzia, których używa w każdej turze, zostają wczytane.",
             "onDemandShort": "Na żądanie",
@@ -9253,7 +9253,7 @@
             "agentDocumentSearch": "pdf, word, docx, excel, xlsx, arkusz kalkulacyjny, powerpoint, pliki, dokumenty",
             "agentRepoChecks": "lint, linter, sprawdzanie typów, typecheck, testy, hooki, weryfikacja",
             "agentCommandOutput": "tokeny, przycinanie, logi, kompresja, szum, skróć wynik",
-            "agentToolLoading": "narzędzia, wyszukiwanie narzędzi, schematy, odroczone, rozmiar promptu, tokeny, MCP, pamięć podręczna, stały prompt, instrukcje",
+            "agentToolLoading": "oszczędzanie tokenów, narzędzia, wyszukiwanie narzędzi, schematy, odroczone, rozmiar promptu, tokeny, MCP, pamięć podręczna, stały prompt, instrukcje, przycinanie, wyniki narzędzi",
             "agentChatPages": "html, wykres, makieta, mockup, diagram, artefakt, strona w czacie, wizualizacja",
             "agentVoice": "tts, synteza mowy, tekst na mowę, czytaj na głos, mów, bez użycia rąk, odpowiedzi głosowe, tempo mowy",
             "agentSpeechProvider": "elevenlabs, openai, dostawca tts, api głosowe, klucz api, api key",

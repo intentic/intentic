@@ -5392,7 +5392,7 @@
             "runs": "{count} run | {count} runs"
         },
         "agentToolLoading": {
-            "group": "What each request carries",
+            "group": "Token savings",
             "onDemand": "Load connected tools on demand",
             "onDemandDescription": "Keep the descriptions of browser, device, account and phone tools out of every request until the agent looks one up. The tools it uses every turn stay loaded.",
             "onDemandShort": "On demand",
@@ -9724,7 +9724,7 @@
             "agentDocumentSearch": "pdf, word, docx, excel, xlsx, spreadsheet, powerpoint, files",
             "agentRepoChecks": "lint, linter, typecheck, tests, hooks, verify, end of turn checks",
             "agentCommandOutput": "tokens, truncate, logs, compress, noise, shorten output",
-            "agentToolLoading": "tools, tool search, schemas, deferred, prompt size, tokens, MCP, cache, stable prompt, instructions",
+            "agentToolLoading": "token savings, tools, tool search, schemas, deferred, prompt size, tokens, MCP, cache, stable prompt, instructions, trim, tool output",
             "agentChatPages": "html, chart, mockup, diagram, artifact, inline page, visual",
             "agentVoice": "tts, text to speech, speak, read aloud, talk, hands-free, spoken replies, speech speed",
             "agentSpeechProvider": "elevenlabs, openai, tts provider, voice api, speech api key",
