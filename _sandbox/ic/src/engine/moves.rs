@@ -30,6 +30,9 @@ use serde_json::{json, Value};
 use super::{paths, Kind};
 use crate::docker::{self, Target};
 use crate::logfile::Log;
+use crate::sandbox::at_rest::key_file;
+#[cfg(test)]
+use crate::sandbox::at_rest::windows_path_of;
 use crate::sandbox::{self, side, CONTAINER_PREFIX, DIND_PREFIX, MOVED_SUFFIX, TUNNEL_PREFIX};
 use crate::ui;
 use crate::util::{bail, Fail, Result};
@@ -1738,33 +1741,6 @@ fn named_volumes(inspect: &Value) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
-/// The at-rest key file the sandbox mounts (sandbox/at_rest.rs), as a path on this machine. The placeholder a move
-/// recreates from carries named volumes only, and a reshape that finds no key mounted can recover only ic's own key,
-/// and only from the home it runs with: an operator's file, or a key made under another home, would stop the move with
-/// "given an at-rest key that it no longer mounts" (the desktop-windows smoke, 2026-10-18). Read from
-/// `HostConfig.Binds` first, then the effective bind mounts (a container made with `--mount` has no Binds). Docker
-/// Desktop can name the source through its Linux drive mount, including after a recreate replays `.Mounts.Source`.
-/// All those spellings must name the same Windows file, even when this run uses a different ic home. Pure.
-fn key_file(inspect: &Value) -> Option<std::path::PathBuf> {
-    let marker = format!(":{}", sandbox::at_rest::KEY_MOUNT);
-    strings(&inspect["HostConfig"]["Binds"])
-        .iter()
-        .find_map(|bind| {
-            let at = bind.rfind(&marker)?;
-            let after = &bind[at + marker.len()..];
-            (after.is_empty() || after.starts_with(':')).then(|| bind[..at].to_string())
-        })
-        .or_else(|| {
-            inspect["Mounts"].as_array()?.iter().find_map(|mount| {
-                (mount["Type"] == "bind" && mount["Destination"] == sandbox::at_rest::KEY_MOUNT)
-                    .then(|| mount["Source"].as_str().map(str::to_string))
-                    .flatten()
-            })
-        })
-        .map(|source| windows_path_of(&source))
-        .map(std::path::PathBuf::from)
-}
-
 /// Refuse a missing mounted key while planning, before stopping any sandbox. Docker's `-v` would otherwise create a
 /// directory at its missing source, and neither that directory nor a newly generated key can read the old stores.
 fn mounted_key_file(inspect: &Value) -> Result<Option<std::path::PathBuf>> {
@@ -1792,28 +1768,6 @@ fn with_key_file<T>(key: Option<&std::path::Path>, work: impl FnOnce() -> Result
     let result = work();
     std::env::remove_var(name);
     result
-}
-
-/// A drive path from our WSL engine or Docker Desktop as Windows names it (`C:\Users\x`); anything else as it is. Pure.
-fn windows_path_of(source: &str) -> String {
-    let Some(rest) = [
-        intentic_docker_host::wsl_path::DRIVES_ROOT,
-        "/run/desktop/mnt/host/",
-        "/host_mnt/",
-        "/",
-    ]
-    .iter()
-    .find_map(|prefix| source.strip_prefix(prefix)) else {
-        return source.to_string();
-    };
-    let mut parts = rest.split('/');
-    match parts.next() {
-        Some(drive) if drive.len() == 1 && drive.chars().all(|c| c.is_ascii_alphabetic()) => {
-            let tail: Vec<&str> = parts.filter(|part| !part.is_empty()).collect();
-            format!("{}:\\{}", drive.to_ascii_uppercase(), tail.join("\\"))
-        }
-        _ => source.to_string(),
-    }
 }
 
 /// The sandbox, created stopped on the other engine with what the reshape reads off it: its env (the shape and the

@@ -119,6 +119,9 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
         }
     }
     remember_key(&slug, &container);
+    if power != Power::Stop {
+        refuse_lost_key(&slug, &container)?;
+    }
     let tunnel = format!("{TUNNEL_PREFIX}{slug}");
     // Optional: a sandbox reached over the owner's own proxy has none.
     let sidecar = docker::container_exists(&tunnel).then_some(tunnel.as_str());
@@ -190,6 +193,21 @@ fn asked(power: Power, by: By) -> String {
             power.verb()
         ),
         By::Keeper => format!("the keeper's repair chose to {} it.", power.verb()),
+    }
+}
+
+/// A start that would only end in docker's "not a directory" mount error, refused with what it means and the way on:
+/// the key its stores are encrypted with is gone (at_rest.rs lost_key), so neither a start nor the recreate a saved
+/// shape asks for can bring it up. An inspect that answers nothing leaves the start to say what docker says.
+fn refuse_lost_key(slug: &str, container: &str) -> Result<()> {
+    let Some(inspect) = docker::inspect(container, "{{json .}}")
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+    else {
+        return Ok(());
+    };
+    match crate::sandbox::at_rest::lost_key(&inspect) {
+        Some(key) => bail!("{}", crate::sandbox::at_rest::lost_key_message(slug, &key)),
+        None => Ok(()),
     }
 }
 

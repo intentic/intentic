@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use serde_json::Value;
+
 use crate::docker;
 use crate::logfile::intentic_home;
 use crate::sandbox::{container_of, is_slug, slugs_of};
@@ -417,9 +419,178 @@ pub fn forget_with_data(slug: &str) {
     }
 }
 
+/// The at-rest key file the sandbox mounts (this file), as a path on this machine. The placeholder a move
+/// recreates from carries named volumes only, and a reshape that finds no key mounted can recover only ic's own key,
+/// and only from the home it runs with: an operator's file, or a key made under another home, would stop the move with
+/// "given an at-rest key that it no longer mounts" (the desktop-windows smoke, 2026-10-18). Read from
+/// `HostConfig.Binds` first, then the effective bind mounts (a container made with `--mount` has no Binds). Docker
+/// Desktop can name the source through its Linux drive mount, including after a recreate replays `.Mounts.Source`.
+/// All those spellings must name the same Windows file, even when this run uses a different ic home. Shared with the
+/// engine move (engine/moves.rs) and `ic sandbox start` (power.rs), which both refuse a key that is gone. Pure.
+pub(crate) fn key_file(inspect: &Value) -> Option<PathBuf> {
+    let marker = format!(":{}", KEY_MOUNT);
+    inspect["HostConfig"]["Binds"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .find_map(|bind| {
+            let at = bind.rfind(&marker)?;
+            let after = &bind[at + marker.len()..];
+            (after.is_empty() || after.starts_with(':')).then(|| bind[..at].to_string())
+        })
+        .or_else(|| {
+            inspect["Mounts"].as_array()?.iter().find_map(|mount| {
+                (mount["Type"] == "bind" && mount["Destination"] == KEY_MOUNT)
+                    .then(|| mount["Source"].as_str().map(str::to_string))
+                    .flatten()
+            })
+        })
+        .map(|source| windows_path_of(&source))
+        .map(PathBuf::from)
+}
+
+/// A drive path from our WSL engine or Docker Desktop as Windows names it (`C:\Users\x`); anything else as it is. Pure.
+pub(crate) fn windows_path_of(source: &str) -> String {
+    let Some(rest) = [
+        intentic_docker_host::wsl_path::DRIVES_ROOT,
+        "/run/desktop/mnt/host/",
+        "/host_mnt/",
+        "/",
+    ]
+    .iter()
+    .find_map(|prefix| source.strip_prefix(prefix)) else {
+        return source.to_string();
+    };
+    let mut parts = rest.split('/');
+    match parts.next() {
+        Some(drive) if drive.len() == 1 && drive.chars().all(|c| c.is_ascii_alphabetic()) => {
+            let tail: Vec<&str> = parts.filter(|part| !part.is_empty()).collect();
+            format!("{}:\\{}", drive.to_ascii_uppercase(), tail.join("\\"))
+        }
+        _ => source.to_string(),
+    }
+}
+
+/// A Windows path (`C:\\Users\\x`) as this machine can open it: itself on Windows, WSL's drive mount anywhere else, where
+/// a drive that is not mounted is simply a path that is not there. Anything else as it is. Pure.
+pub(crate) fn local_path_of(path: &Path) -> PathBuf {
+    if cfg!(windows) {
+        return path.to_path_buf();
+    }
+    let text = path.to_string_lossy();
+    let mut chars = text.chars();
+    match (chars.next(), chars.next(), chars.next()) {
+        (Some(drive), Some(':'), Some('\\')) if drive.is_ascii_alphabetic() => {
+            let tail: Vec<&str> = text[3..]
+                .split('\\')
+                .filter(|part| !part.is_empty())
+                .collect();
+            PathBuf::from(format!(
+                "{}{}/{}",
+                intentic_docker_host::wsl_path::DRIVES_ROOT,
+                drive.to_ascii_lowercase(),
+                tail.join("/")
+            ))
+        }
+        _ => path.to_path_buf(),
+    }
+}
+
+/// The key a container mounts when it is GONE from this machine: a directory stands where the file was (Docker makes
+/// one at a bind source that went missing, then refuses to mount it onto a file), or nothing does while the folder
+/// it lived in is there. Undefined when it is a file, when nothing is mounted, and when this machine cannot see that
+/// folder at all, so a check run from the wrong side of WSL never calls a key lost that is merely out of its sight.
+pub(crate) fn lost_key(inspect: &Value) -> Option<PathBuf> {
+    let key = key_file(inspect)?;
+    let local = local_path_of(&key);
+    let gone = local.is_dir() || (!local.exists() && local.parent().is_some_and(Path::is_dir));
+    gone.then_some(key)
+}
+
+/// What `ic sandbox start` says instead of docker's mount error when a sandbox's key is gone (`lost_key`). A runner's
+/// stores hold only its pairing with the sandbox it works for, so a fresh one costs nothing; any other sandbox's
+/// encrypted secrets are readable with the original key and nothing else. Pure.
+pub(crate) fn lost_key_message(slug: &str, key: &Path) -> String {
+    let headline = format!(
+        "{slug} cannot start: the at-rest key its stores are encrypted with is gone from {}.",
+        key.display()
+    );
+    match slug.strip_prefix("runner-") {
+        Some(name) => ui::explain(
+            &headline,
+            Some("a runner's stores hold only its pairing, which no new key can read, so it cannot pair again as it is."),
+            Some(&format!(
+                "remove it and add it again from the sandbox it works for (Devices, this machine, its runner), or here: ic runner remove {name}"
+            )),
+        ),
+        None => ui::explain(
+            &headline,
+            Some("its secrets, credentials and privacy vault can be read with that key and no other."),
+            Some("put the original key file back at that path (from wherever it was copied), then start it again."),
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn mounting(source: &Path) -> Value {
+        serde_json::json!({ "Mounts": [{
+            "Type": "bind", "Source": source.to_str().unwrap(), "Destination": KEY_MOUNT,
+        }] })
+    }
+
+    /// runner-omen, 2026-10-18: a smoke run recreated it under a temporary ic home, the home was wiped, and Docker put
+    /// a directory where its key had been. Every start then ended in "not a directory".
+    #[test]
+    fn a_key_is_lost_when_a_directory_or_nothing_stands_in_its_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("at-rest-runner-omen.key");
+        let inspect = mounting(&key);
+        assert_eq!(lost_key(&inspect), Some(key.clone()));
+        std::fs::create_dir(&key).unwrap();
+        assert_eq!(lost_key(&inspect), Some(key.clone()));
+        std::fs::remove_dir(&key).unwrap();
+        std::fs::write(&key, [7u8; KEY_LEN]).unwrap();
+        assert_eq!(lost_key(&inspect), None);
+        assert_eq!(lost_key(&serde_json::json!({})), None);
+    }
+
+    /// A key in a folder this machine cannot see (the other side of WSL, an unmounted drive) is out of sight, not lost.
+    #[test]
+    fn a_key_whose_folder_this_machine_cannot_see_is_not_called_lost() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("no-such-folder").join("key");
+        assert_eq!(lost_key(&mounting(&key)), None);
+    }
+
+    #[test]
+    fn a_windows_key_path_is_opened_through_wsls_drive_mount_off_windows() {
+        let path = PathBuf::from(r"C:\Users\me\.intentic\keys\at-rest-a.key");
+        let expected = if cfg!(windows) {
+            path.clone()
+        } else {
+            PathBuf::from("/mnt/c/Users/me/.intentic/keys/at-rest-a.key")
+        };
+        assert_eq!(local_path_of(&path), expected);
+        assert_eq!(
+            local_path_of(Path::new("/srv/keys/a.key")),
+            PathBuf::from("/srv/keys/a.key")
+        );
+    }
+
+    #[test]
+    fn a_lost_key_says_a_runner_is_re_added_and_a_sandbox_needs_its_key_back() {
+        let key = Path::new("/keys/k");
+        let runner = lost_key_message("runner-omen", key);
+        assert!(runner.starts_with("runner-omen cannot start: the at-rest key"));
+        assert!(runner.contains("ic runner remove omen"));
+        let sandbox = lost_key_message("work", key);
+        assert!(sandbox.contains("put the original key file back"));
+        assert!(!sandbox.contains("ic runner remove"));
+    }
 
     fn facts<'a>(own: &'a Path) -> Facts<'a> {
         Facts {
