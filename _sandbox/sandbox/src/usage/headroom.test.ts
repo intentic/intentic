@@ -134,6 +134,46 @@ test("two triggers landing together cost one read, and a failed read leaves the 
     expect(recorded["a"]).toEqual({ ...known, unread: { since: expect.any(Number), reason: "the provider gave no reading" } });
 });
 
+// More accounts than a sweep reads at once: a second trigger arriving while the first still has some queued decided
+// they were due too, and read them itself. The first must not read them again once it gets there: those reads began
+// after it decided. The second caller still waits for every read it counted as due.
+test("two sweeps that meet read each due account once, and each waits for the reads it counted as due", async () => {
+    const { store, recorded } = memoryStore();
+    const releases = new Map<string, () => void>();
+    // Each account's first read waits to be let go; any read after it answers at once.
+    const gated = (key: string) => (): Promise<HeadroomReading> =>
+        releases.has(key)
+            ? Promise.resolve(WINDOWS)
+            : new Promise<HeadroomReading>((resolve) => {
+                  releases.set(key, () => resolve(WINDOWS));
+              });
+    const keys = ["a", "b", "c", "d", "e", "f"];
+    const { source: claude, reads } = source(keys.map((key) => ({ key, provider: "claude" as const, answer: gated(key) })));
+    const service = createHeadroomService({ store, parks: memoryUsageParkStore(), sources: [claude], logger: silent });
+    const tick = (): Promise<void> => new Promise<void>((resolve) => setTimeout(resolve, 5));
+
+    const first = service.refresh();
+    await tick();
+    expect(Object.keys(reads).toSorted()).toEqual(["a", "b", "c", "d"]);
+    let secondDone = false;
+    const second = service.refresh().then(() => {
+        secondDone = true;
+    });
+    await tick();
+    // The second sweep took the two the first had queued; they land before the first reaches them.
+    expect(Object.keys(reads).toSorted()).toEqual(keys);
+    releases.get("e")?.();
+    releases.get("f")?.();
+    await second;
+    expect(secondDone).toBe(true);
+    for (const key of ["a", "b", "c", "d"]) {
+        releases.get(key)?.();
+    }
+    await first;
+    expect(reads).toEqual(Object.fromEntries(keys.map((key) => [key, 1])));
+    expect(Object.keys(recorded).toSorted()).toEqual(keys);
+});
+
 test("a target's own read budget outranks any freshness a trigger asks for, and only a watched re-measure spends it early", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(NOW);

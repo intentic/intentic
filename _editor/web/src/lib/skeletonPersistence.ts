@@ -217,6 +217,14 @@ const sandboxScope = (): string => activeSandboxId.value ?? `none`;
 export const installSkeletonPersistence = (): void => configureSkeletonSnapshots({ scope: sandboxScope, persistence });
 
 /**
+ * Starts reading the active sandbox's imprints at boot, on a browser that had one open, so the guard's restore below
+ * finds the read under way rather than starting it after the session check. The same memoised read, of the same scope.
+ */
+export const readImprintsEarly = (): void => {
+    void loadImprintScope(sandboxScope());
+};
+
+/**
  * Reads the active sandbox's imprints before the first route mounts, within a budget, then sweeps every sandbox's at
  * the first idle moment. Awaited beside the query cache's restore, so it adds no wait unless the disk is slower.
  */

@@ -1,7 +1,8 @@
 import { loadChunk, Notice, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
-import { type Component, computed, defineComponent, h, ref, shallowRef, withDirectives } from "vue";
+import { type Component, computed, defineComponent, h, nextTick, onMounted, ref, shallowRef, watch, withDirectives } from "vue";
 import { useRouter } from "vue-router";
 import { t } from "@intentic/ui/i18n";
+import { finishBoot } from "../app/perf/boot";
 
 // Wraps a route's `() => import(...)` so navigation completes immediately; `outline` shows only past the same
 // reveal-delay thresholds data skeletons use. Owns the failure path, invisible to router.onError once navigation lands:
@@ -25,11 +26,21 @@ export interface ViewLoader {
 const registered: ViewLoader[] = [];
 export const viewLoaders: readonly ViewLoader[] = registered;
 
+// Each wrapper's own loader, by the component it returned, so a navigation can ask for the chunk of the view it is about
+// to show while its guards still run (router/index.ts). The same shared fetch, so the mount that follows finds it done.
+const loaderOf = new WeakMap<Component, () => Promise<void>>();
+
+/** Starts fetching an asyncView's chunk ahead of its mount; anything else is ignored. A failure is left to the mount. */
+export const warmView = (component: Component): void => {
+    // allow(silent-catch): a warm that fails is retried by the mount, which owns the failure path (loadChunk, notice).
+    loaderOf.get(component)?.().catch(() => undefined);
+};
+
 export const asyncView = (load: Loader, outline?: Component, options: { readonly mobile?: MobilePrefetch } = {}): Component => {
     // One fetch shared by the prefetcher and every mount; survives unmounts, so a revisit renders synchronously.
     const resolved = shallowRef<Component | undefined>(undefined);
-    let inflight: Promise<unknown> | undefined;
-    const start = (): Promise<unknown> => {
+    let inflight: Promise<void> | undefined;
+    const start = (): Promise<void> => {
         inflight ??= load()
             .then((module) => {
                 resolved.value = module.default;
@@ -41,10 +52,10 @@ export const asyncView = (load: Loader, outline?: Component, options: { readonly
             });
         return inflight;
     };
-    const fetchChunk = (): Promise<unknown> => start();
+    const fetchChunk = (): Promise<void> => start();
     registered.push(options.mobile === undefined ? { load: fetchChunk } : { load: fetchChunk, mobile: options.mobile });
 
-    return defineComponent({
+    const wrapper = defineComponent({
         name: `AsyncView`,
         setup() {
             const router = useRouter();
@@ -67,6 +78,18 @@ export const asyncView = (load: Loader, outline?: Component, options: { readonly
                     });
             };
             attempt();
+            // The page load ends where its first view has drawn (app/perf/boot.ts; a no-op after the first).
+            const drawn = (): void => finishBoot(String(router.currentRoute.value.name ?? router.currentRoute.value.path));
+            onMounted(() => {
+                if (resolved.value !== undefined) {
+                    drawn();
+                }
+            });
+            watch(resolved, (shown) => {
+                if (shown !== undefined) {
+                    void nextTick(drawn);
+                }
+            });
             // One loader per wrapper: one subject per wait, so the label can stay empty.
             const revealed = useLoadingReveal(
                 loading,
@@ -96,4 +119,6 @@ export const asyncView = (load: Loader, outline?: Component, options: { readonly
             };
         },
     });
+    loaderOf.set(wrapper, fetchChunk);
+    return wrapper;
 };

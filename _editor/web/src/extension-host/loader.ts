@@ -15,6 +15,8 @@ import { readFailure } from "../client/sandbox/useDaemonRoutes";
 import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
 import { bundleLinkProblem } from "./bundleLinks";
+import { type BundlePass, bundleModule, bundlePass, type Linked } from "./bundleCache";
+import { activeSandboxId } from "../app/storage/activeSandbox";
 import { codeRevisionOf } from "../features/extensions/codeRevision";
 import { LOCAL_EXTENSIONS, localFace } from "../app/environments/local";
 import { type ReportFields, reportClient } from "../app/clientDiagnostics";
@@ -23,7 +25,8 @@ import { type ReportFields, reportClient } from "../app/clientDiagnostics";
 // git-installed alike): owner's switch, then engines check, then the bundle's imports against what the host exports
 // (bundleLinks.ts), then code.
 // A daemon-fetched bundle goes through Blob URL import() (bare import() can't carry the Bearer header), which forces
-// single-file ESM bundles.
+// single-file ESM bundles. One whose revision names its bytes exactly is kept in Cache Storage and imported from there on
+// the next load (bundleCache.ts).
 // Each extension's failure is contained and recorded on a status the Extensions tab renders; the shell never crashes on
 // a bad bundle or silently drops one. What each one came to is recorded in extensionStatuses (features/extensions).
 
@@ -116,7 +119,15 @@ const importBundle = async (source: string): Promise<ExtensionModule> => {
     }
 };
 
-const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn: number): Promise<ExtensionHostStatus> => {
+// Before import(): a name the host does not export, any more or yet, fails the link in the browser's own words, which
+// name neither the extension nor the fix. Its engines range passed, so the range is not saying what the bundle was built
+// against.
+const linkAndImport = async (source: string): Promise<Linked<ExtensionModule>> => {
+    const unlinked = bundleLinkProblem(source);
+    return unlinked === undefined ? { module: await importBundle(source) } : { unlinked };
+};
+
+const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn: number, bundles: BundlePass): Promise<ExtensionHostStatus> => {
     const extensionId = extensionIdOf(summary.manifest);
     const status = { id: summary.id, extensionId };
     // Checked first: a disabled extension must cost neither an engines check nor a bundle fetch.
@@ -144,17 +155,13 @@ const loadOne = async (summary: ExtensionSummary, host: HostBindings, startedIn:
     try {
         let module: ExtensionModule | undefined = compiled;
         if (module === undefined) {
-            const source = await fetchBundle(summary);
-            // Before import(): a name the host does not export, any more or yet, fails the link in the browser's own
-            // words, which name neither the extension nor the fix. Its engines range passed, so the range is not saying
-            // what the bundle was built against.
-            const unlinked = bundleLinkProblem(source);
-            if (unlinked !== undefined) {
-                const stale: ExtensionHostStatus = { ...ran, state: `incompatible`, detail: unlinked };
+            const linked = await bundleModule(bundles, summary, async () => fetchBundle(summary), linkAndImport);
+            if (`unlinked` in linked) {
+                const stale: ExtensionHostStatus = { ...ran, state: `incompatible`, detail: linked.unlinked };
                 reportLoadFailure(stale, summary.source);
                 return stale;
             }
-            module = await importBundle(source);
+            module = linked.module;
         }
         await runActivate(summary, host, module, startedIn);
         return { ...ran, state: `active` };
@@ -201,6 +208,9 @@ export const retireExtensions = (): void => {
 
 const loadPass = async (host: HostBindings): Promise<void> => {
     const startedIn = scope;
+    // The sandbox this pass's list and bundles come from: the bundle cache is keyed by it, and a pass it no longer is
+    // reads and writes none.
+    const sandboxId = activeSandboxId.value;
     // Only fetch caught rather than thrown: on failure, run what's compiled in rather than show nothing.
     let summaries: readonly ExtensionSummary[] = [];
     let listFailure: string | undefined;
@@ -219,8 +229,9 @@ const loadPass = async (host: HostBindings): Promise<void> => {
         reportClient(`extension.listFailed`, listFailure, { level: `warn` });
     }
     const listed = new Set(summaries.map((summary) => extensionIdOf(summary.manifest)));
+    const bundles = bundlePass(sandboxId, () => startedIn === scope && activeSandboxId.value === sandboxId);
     const [listedStatuses, unlistedStatuses] = await Promise.all([
-        Promise.all(summaries.map((summary) => loadOne(summary, host, startedIn))),
+        Promise.all(summaries.map((summary) => loadOne(summary, host, startedIn, bundles))),
         loadUnlisted(
             listed,
             host,
@@ -244,6 +255,8 @@ const loadPass = async (host: HostBindings): Promise<void> => {
     loadedCommits.value = new Map(summaries.map((summary) => [summary.id, codeRevisionOf(summary)]));
     loadedListAt.value = listedAt;
     extensionsLoaded.value = true;
+    // A pinned bundle fetched this pass is kept once the list, read again, still names the commit it was fetched for.
+    void bundles.settle(async () => (await sandboxRpc.extensions.list(undefined, { context: { at: sandboxId, background: true } })).extensions);
 };
 
 // One pass over the daemon's list, flagged on extensionsReconciling for as long as it runs.

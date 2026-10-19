@@ -40,7 +40,6 @@ import {
     type Composition,
     endingStatus,
     type Identity,
-    type IsolatedAgent,
     isIsolated,
     type Landing,
     type PersistedAgent,
@@ -52,8 +51,9 @@ import {
     type Totals,
 } from "./agents-store.js";
 import type { LandOutcome } from "../land/land.js";
-import { type LandedPresence, type LandedPresences, removerKey } from "../land/landed-presence.js";
+import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
+import { landingInputs, mainTreeWriters, readsMainFiles, renamedRemovers, type StandingChange } from "../land/standing-probe.js";
 import { subagentCountsOf } from "../actor/subagent-roster.js";
 
 // The persisted half of the fleet: the in-memory entry list (loaded once, written through on persisted mutations), the
@@ -599,8 +599,9 @@ export interface AgentsRegistry {
     // changed outside the daemon. Once a feed is watched, free when nothing moved: no git runs at all.
     readonly refreshStandings: () => Promise<void>;
     // What can move a standing from outside the registry: a ref, or a file in a main checkout. Once given, a refresh
-    // re-reads git only after the feed reported something or an agent's own landing record changed; until then, always.
-    readonly watchStandings: (changes: (changed: () => void) => () => void) => () => void;
+    // re-reads git only after the feed reported something the last probe read or an agent's own landing record changed;
+    // until then, always.
+    readonly watchStandings: (changes: (changed: (what: StandingChange) => void) => () => void) => () => void;
     // Stamps/clears the archive marker; the caller must have already retired or restored the checkout
     // (conversations/archive.ts owns that order).
     readonly setArchived: (ids: readonly string[], now: number) => Promise<void>;
@@ -634,33 +635,6 @@ export const ROSTER_WINDOW_MS = 100;
 // How long a change the feed reports waits before a refusing card is re-probed: long enough for a commit's burst of
 // ref and file events to arrive as one, short enough that the card moves while the person is still looking.
 export const REFUSAL_RECHECK_MS = 1_000;
-
-// The agents that can take landed work out of the main tree by their own hand, the ones working in it: a main-tree
-// conversation whose turn runs now or that did something since `since`. What the presence probe reads a removal off,
-// beside the people noted as they discard (landed-presence.ts).
-const mainTreeWriters = (entries: readonly PersistedAgent[], conversations: Pick<ConversationActors, "state">, since: number): Remover[] =>
-    entries
-        .filter((entry) => entry.placement.kind === "main" && entry.archivedAt === undefined)
-        .filter((entry) => entry.updatedAt >= since || conversations.state(entry.id)?.phase.kind === "running")
-        .map((entry) => ({ kind: "agent", id: entry.id }));
-
-// The records a probe's names move: each agent it read whose record names someone else, or no one where the probe now
-// names nobody (a reading that found nothing missing). Read from the entry as it is now, since a land may have replaced
-// it mid-probe.
-const renamedRemovers = (
-    read: readonly IsolatedAgent[],
-    entryOf: (id: string) => PersistedAgent | undefined,
-    presences: Pick<LandedPresences, "of" | "measured">,
-): PersistedAgent[] =>
-    read.flatMap(({ id }) => {
-        const entry = entryOf(id);
-        const named = presences.of(id)?.removedBy;
-        if (entry === undefined || !isIsolated(entry) || !presences.measured(id) || removerKey(named) === removerKey(entry.landing.removedBy)) {
-            return [];
-        }
-        const { removedBy: _was, ...landing } = entry.landing;
-        return [{ ...entry, landing: { ...landing, ...opt("removedBy", named) } }];
-    });
 
 // A reading as a card names it: an agent by its title too, read off the record, archived ones included.
 const presenceOnCard = (
@@ -822,10 +796,9 @@ export const createFleet = (
     // exists at all, without which nothing could keep a reading fresh honestly.
     let watched = false;
     const probed = freshness({ maxAgeMs: STANDINGS_MAX_MS });
-    // The live agents' own landing inputs as the last probe saw them; a change here moves a standing with no ref moving.
+    // The live agents' landing inputs as the last probe saw them, and whether it read files (readsMainFiles).
     let probedInputs = ``;
-    const landingInputs = (live: readonly IsolatedAgent[]): string =>
-        JSON.stringify(live.map((entry) => [entry.id, entry.placement.branch, entry.placement.repos, entry.landing.conflicts ?? []]));
+    let probedFiles = true;
 
     // Two independent, best-effort readings (standing, landed presence) run together rather than chained, and must
     // never throw: a settle waits on this. `allSettled`, so a failing half costs only its own reading.
@@ -833,6 +806,7 @@ export const createFleet = (
         const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
         probed.taken();
         probedInputs = landingInputs(live);
+        probedFiles = readsMainFiles(live);
         // Who worked in the main tree since the last probe, read before this one moves the mark.
         const writers = mainTreeWriters(entries, conversations, probedAt);
         probedAt = Date.now();
@@ -880,6 +854,9 @@ export const createFleet = (
     const refreshStandings = async (): Promise<void> => {
         const live = entries.filter(isIsolated).filter((entry) => entry.archivedAt === undefined);
         if (watched && probed.fresh() && landingInputs(live) === probedInputs) {
+            // Fresh counts from the start of the probe under way, which nothing has moved since: its answer is this
+            // caller's, and the standings it is replacing may be from before the change it was started for.
+            await probing;
             return;
         }
         if (await reprobe()) {
@@ -1149,7 +1126,10 @@ export const createFleet = (
         watchStandings: (changes) => {
             watched = true;
             probed.changed();
-            const stop = changes(() => {
+            const stop = changes((what) => {
+                if (what === "files" && !probedFiles) {
+                    return;
+                }
                 probed.changed();
                 recheckRefusals();
             });

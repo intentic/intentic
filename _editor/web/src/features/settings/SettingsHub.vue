@@ -1,3 +1,37 @@
+<script lang="ts">
+import type { Component } from "vue";
+import { lazySection } from "../../workbench/hub/lazySection";
+import type { SettingsPartSlug, SettingsSlug } from "./settingsNav";
+
+// Each section's code, and each part's, is a chunk of its own, fetched when it is first drawn, so a reload of one page
+// does not pay for all of them (workbench/hub/lazySection.ts); the rest are warmed at idle once the open one has drawn.
+// Module scope, not setup: a stand-in made once keeps its landed chunk across the hub's remounts, so a section drawn
+// once draws at once from then on.
+const SettingsProfile = lazySection(() => import("./SettingsProfile.vue"));
+const SettingsBilling = lazySection(() => import("./SettingsBilling.vue"));
+const SettingsAppearance = lazySection(() => import("./SettingsAppearance.vue"));
+const SettingsNotifications = lazySection(() => import("./SettingsNotifications.vue"));
+const SettingsKeybindings = lazySection(() => import("./SettingsKeybindings.vue"));
+const SettingsTokens = lazySection(() => import("./SettingsTokens.vue"));
+const OrgConsole = lazySection(() => import("../organisations/OrgConsole.vue"));
+const SettingsVoice = lazySection(() => import("./SettingsVoice.vue"));
+const SettingsData = lazySection(() => import("./SettingsData.vue"));
+
+// The same, by the slug the index names each under: what the hub fetches ahead and warms. The template's chain is what
+// draws them.
+const SECTIONS = {
+    profile: SettingsProfile,
+    billing: SettingsBilling,
+    organisation: OrgConsole,
+    appearance: SettingsAppearance,
+    notifications: SettingsNotifications,
+    keybindings: SettingsKeybindings,
+    tokens: SettingsTokens,
+    voice: SettingsVoice,
+    data: SettingsData,
+} satisfies Record<SettingsSlug | SettingsPartSlug, Component>;
+</script>
+
 <script setup lang="ts">
 import { type NavGroup, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -9,15 +43,7 @@ import { computed, nextTick, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useAudience } from "../../app/useAudience";
 import { useHostedPlan } from "../../models/hosted-plan/useHostedPlan";
-import SettingsAppearance from "./SettingsAppearance.vue";
-import SettingsBilling from "./SettingsBilling.vue";
-import SettingsData from "./SettingsData.vue";
-import SettingsKeybindings from "./SettingsKeybindings.vue";
-import SettingsNotifications from "./SettingsNotifications.vue";
-import SettingsProfile from "./SettingsProfile.vue";
-import SettingsTokens from "./SettingsTokens.vue";
-import OrgConsole from "../organisations/OrgConsole.vue";
-import SettingsVoice from "./SettingsVoice.vue";
+import { fetchSections, sectionLanded, useSectionWarmup } from "../../workbench/hub/lazySection";
 import { SETTINGS_DEFAULT_SECTION, type SettingsPart, settingsGroups, settingsSections } from "./settingsNav";
 
 // Personal preferences for the signed-in account, cross-sandbox; reached from the account avatar. Built on the same
@@ -61,15 +87,45 @@ const GROUPS = computed<readonly NavGroup<HubTab>[]>(() =>
     })),
 );
 
-const partsOf = (slug: string): readonly SettingsPart[] => sections.value.find((section) => section.slug === slug)?.within ?? [];
+const sectionOf = (slug: string) => sections.value.find((section) => section.slug === slug);
+
+// A page's code: its section's and its parts'.
+const pageOf = (slug: string): readonly Component[] => {
+    const section = sectionOf(slug);
+    return section === undefined ? [] : [SECTIONS[section.slug], ...(section.within ?? []).map((part) => SECTIONS[part.slug])];
+};
+
+// A part waits for its section's code: drawn first, it would be pushed down the page when the section landed above it.
+const partsOf = (slug: string): readonly SettingsPart[] => {
+    const section = sectionOf(slug);
+    return section !== undefined && sectionLanded(SECTIONS[section.slug]) ? (section.within ?? []) : [];
+};
+
+// The page the address names, or the default page for an address that names none of this reader's (a param-less one,
+// or Billing on a cold load, which the index lists only once the plan read answers and which then fetches its own).
+const openSlug = computed(() => sectionOf(String(route.params[`tab`] ?? ``))?.slug ?? DEFAULT);
+
+// The open page's parts are fetched with its section, not once the section has landed and drawn them.
+watch(
+    () => pageOf(openSlug.value),
+    (page) => void fetchSections(page),
+    { immediate: true },
+);
 
 // A part's address is its section's page with the part's anchor (`/settings/notifications#voice`). The router scrolls
-// only to an anchor already drawn, and the page is drawn after the navigation settles, so the hub scrolls once it is.
+// only to an anchor already drawn, and the page is drawn after the navigation settles and its code has landed, so the
+// hub scrolls once both have: before the section above it is drawn, the part sits where the section will be.
 watch(
     () => [route.hash, route.params[`tab`]] as const,
     ([hash]) => {
         if (hash.length > 1) {
-            void nextTick(() => document.getElementById(hash.slice(1))?.scrollIntoView({ block: `start`, behavior: `smooth` }));
+            void fetchSections(pageOf(openSlug.value))
+                .then(() => nextTick())
+                .then(() => {
+                    if (route.hash === hash) {
+                        document.getElementById(hash.slice(1))?.scrollIntoView({ block: `start`, behavior: `smooth` });
+                    }
+                });
         }
     },
     { immediate: true, flush: `post` },
@@ -77,6 +133,9 @@ watch(
 
 // Finds a page or a single setting here or on the sandbox hub, by name (useHubSearchPanel.ts).
 const search = useHubSearchPanel(HUB);
+
+// Warms the pages this reader's index offers, in its order, after the open one.
+useSectionWarmup(() => sections.value.flatMap((section) => pageOf(section.slug)));
 </script>
 
 <template>

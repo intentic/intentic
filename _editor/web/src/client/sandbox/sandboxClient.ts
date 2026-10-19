@@ -1,11 +1,11 @@
 import { parseJsonOr } from "@intentic/base/json";
-import { sandboxRouteName } from "@intentic/sandbox-contract";
 import type { output, ZodType } from "zod";
 import { t } from "@intentic/ui/i18n";
 import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
 import { trackPerf } from "../../app/perf/perf";
 import { CHUNK_BYTES } from "../../lib/files/uploadChunking";
 import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
+import { loadContract } from "./daemon/contract";
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
 import { useSandboxSession } from "../session/sandboxSession";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
@@ -36,7 +36,7 @@ export async function sandboxRequest(path: string, init?: RequestInit): Promise<
 // otherwise: a 404 on an unadvertised contract route, or a 400 on one with a disagreed shape, gets a drift message.
 // Still read here because an extension reaches contract routes through api.sandbox.json.
 export async function sandboxError(response: Response, request?: { method: string; path: string }): Promise<SandboxHttpError> {
-    const route = request === undefined ? undefined : sandboxRouteName(request.method, request.path);
+    const route = request === undefined ? undefined : (await loadContract()).sandboxRouteName(request.method, request.path);
     if (route !== undefined) {
         const reason = response.status === 404 ? staleDaemonReason(route) : response.status === 400 ? driftedRouteReason(route) : undefined;
         if (reason !== undefined) {

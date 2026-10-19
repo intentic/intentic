@@ -8,7 +8,7 @@ import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settin
 import { unstubbed } from "@intentic/testing";
 import { beginTurn } from "../conversations/actor/conversation-actors.testing.js";
 import { fleetStoreOver, memoryFleet } from "../conversations/registry/agents-registry.testing.js";
-import { noPresences } from "../conversations/land/landed-presence.testing.js";
+import { noPresences } from "../conversations/land/tests/landed-presence.testing.js";
 import { memoryAutomationsStore } from "../automations/automations-slice.testing.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import { automationRecord } from "../harness/route-stores.testing.js";

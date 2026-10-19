@@ -141,10 +141,44 @@ const devSource = (): Plugin => ({
     },
 });
 
+// SERVE ONLY: the project's JSON as one compact `JSON.parse` with no sourcemap. Vite serves a JSON import as a module its
+// own JSON plugin writes, last of all plugins, with no map, so the dev server then attaches a fallback map that carries
+// the whole module again, base64 and token by token: the app's English catalog came to 3.3-5 MB per reload, most of it a
+// map leading from a string back to the same text, which no debugger has any use for. Written here instead (`load`, as a
+// JS module, with an explicitly empty map, which is what tells the server to attach none), it is 0.6 MB: the file
+// minus its indentation. The module keeps the file's own id, so an edit invalidates and reloads exactly as before. A
+// query (`?raw`, `?url`, `?inline`) and anything under node_modules are left to Vite, and so is a file that does not
+// parse, so its error reads as it always has.
+const compactDevJson = (): Plugin => ({
+    name: `intentic-compact-dev-json`,
+    apply: `serve`,
+    enforce: `pre`,
+    load(id) {
+        const file = /^([^?]+\.json)(?:\?import)?$/.exec(id)?.[1];
+        if (file === undefined || file.includes(`/node_modules/`)) {
+            return undefined;
+        }
+        let text: string;
+        try {
+            text = JSON.stringify(JSON.parse(readFileSync(file, `utf8`)));
+        } catch {
+            // allow(silent-catch): Vite reads the file itself and reports the parse error in its own words.
+            return undefined;
+        }
+        return { code: `export default JSON.parse(${JSON.stringify(text)});`, moduleType: `js`, map: { mappings: `` } };
+    },
+});
+
 export const MONACO_WORKER = `monaco-editor-core/esm/vs/editor/editor.worker.start.js`;
 
 export const shared = {
-    plugins: [vue(), tailwindcss(), stableDevStyles(), devSource()],
+    plugins: [vue(), tailwindcss(), stableDevStyles(), devSource(), compactDevJson()],
+    // Every JSON import as one `JSON.parse` of a string, not an object literal with a named export per top-level key.
+    // The app's English catalog is 0.75 MB: as 26 named exports it was a 3.25 MB module in dev (the literal plus an
+    // inline sourcemap of it) on every reload, and an object literal is slower to parse than JSON in production too.
+    // Nothing imports a JSON file's keys by name, which is all `namedExports: false` gives up; both flags are needed,
+    // since Vite keeps the named exports (and the literal) while `namedExports` is on.
+    json: { namedExports: false, stringify: true },
     // ES workers, since the code highlighter's worker (ui/src/markdown/highlightWorker.ts) loads each grammar as its
     // own chunk on first use, which an IIFE worker cannot split.
     worker: { format: `es` as const },

@@ -10,7 +10,7 @@ import { beginTurn } from "../actor/conversation-actors.testing.js";
 import { fleetStoreOver } from "./agents-registry.testing.js";
 import { isolatedAgent } from "./agents-store.testing.js";
 import { noIsolation } from "../worktrees/isolation.testing.js";
-import { noPresences } from "../land/landed-presence.testing.js";
+import { noPresences } from "../land/tests/landed-presence.testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";

@@ -3,7 +3,7 @@ import { turnJournalRows } from "../../store/journals/turn-journal.js";
 import { type ConversationsDb, openConversationsDb } from "../../store/conversations-db.js";
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import type { ConversationEvent } from "../actor/conversation-decide.js";
-import { noPresences } from "../land/landed-presence.testing.js";
+import { noPresences } from "../land/tests/landed-presence.testing.js";
 import { createFleet, type Fleet, type FleetStore } from "./agents-registry.js";
 import { sqliteAgentsStore } from "./agents-store.js";
 

@@ -1,6 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import { ciContract } from "@intentic/sandbox-contract/contracts/ci.contract";
-import type { CiRepo } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { implement, ORPCError } from "@orpc/server";
 import { areasOf } from "../auth/principal.js";
 import { speakerOf, spokenBy } from "../seams/turn-speaker.js";
@@ -14,6 +14,7 @@ import { fixPressed, mainFailures, streakFixerFor } from "./main-fixer.js";
 import { createCiFailureLog } from "./logs/ci-failure-log.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
+import type { RunsCache } from "./runs-cache.js";
 
 // Backend for the Pipelines rail: reads serve the webhook-freshened cache, backfilled from the vendor's REST API when
 // stale. Actions re-resolve repo -> project per call, since a stale card must not act on a project the workspace no
@@ -30,10 +31,53 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
     }
 };
 
+// One list call per project in flight, shared by every board that finds the picture stale while it runs, where each
+// used to ask the vendor itself. Joined only while it began within the cache's TTL of the caller asking: its runs then
+// land after the caller asked, read no earlier than the oldest sweep the TTL rule would have served it. Keyed by the
+// account too, so a caller after a token change never joins a call made with the one before. Never rejects: a failing
+// vendor drops just its own repos, not the whole view.
+const sharedRunLists = (
+    cache: () => Pick<RunsCache, "ttlMs">,
+    fetchFn: FetchFn,
+    backfill: ReturnType<typeof createCiFailureLog>,
+): ((project: CiProject) => Promise<PipelineRun[]>) => {
+    const listing = new Map<string, { readonly begun: number; readonly runs: Promise<PipelineRun[]> }>();
+    return (project) => {
+        const key = [project.account.apiBase, project.account.token, project.project, project.repo].join("\n");
+        const held = listing.get(key);
+        if (held !== undefined && Date.now() - held.begun <= cache().ttlMs) {
+            return held.runs;
+        }
+        const flight = {
+            begun: Date.now(),
+            runs: ciClientFor(project.account.provider, fetchFn)
+                .listRuns(project, RUNS_PER_PROJECT)
+                .then(
+                    (runs) => {
+                        backfill.succeeded(project.repo);
+                        return runs;
+                    },
+                    (error: unknown) => {
+                        backfill.failed(project.repo, error);
+                        return [];
+                    },
+                )
+                .finally(() => {
+                    if (listing.get(key) === flight) {
+                        listing.delete(key);
+                    }
+                }),
+        };
+        listing.set(key, flight);
+        return flight.runs;
+    };
+};
+
 export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => {
     const i = implement(ciContract).$context<OrpcContext>();
     // Every open Pipelines board re-lists on a stale cache, so a dead token used to write this line on each read.
     const backfill = createCiFailureLog(services.logger, "ci: runs backfill failed", "ci: runs backfill works again");
+    const listRuns = sharedRunLists(() => services.ciRuns, fetchFn, backfill);
     const resolve = async (repo: string): Promise<CiProject> => {
         const project = (await ciProjects(services)).find((candidate) => candidate.repo === repo);
         if (project === undefined) {
@@ -63,23 +107,7 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
             if (cached !== undefined) {
                 return { repos, runs: cached, failures };
             }
-            // One list call per project; a failing vendor drops just its own repos, not the whole view.
-            const listed = await Promise.all(
-                projects.map((project) =>
-                    ciClientFor(project.account.provider, fetchFn)
-                        .listRuns(project, RUNS_PER_PROJECT)
-                        .then(
-                            (runs) => {
-                                backfill.succeeded(project.repo);
-                                return runs;
-                            },
-                            (error: unknown) => {
-                                backfill.failed(project.repo, error);
-                                return [];
-                            },
-                        ),
-                ),
-            );
+            const listed = await Promise.all(projects.map(listRuns));
             return { repos, runs: services.ciRuns.replace(listed.flat()), failures };
         }),
         rerun: i.rerun.handler(async ({ input }) => {

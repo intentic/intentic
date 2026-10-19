@@ -126,6 +126,22 @@ describe("bundleImportedNames", () => {
         expect(Object.fromEntries(bundleImportedNames(source, { leading: true }))).toEqual({ x: ["a"], y: ["b"] });
         expect(Object.fromEntries(bundleImportedNames(source))).toEqual({ x: ["a"], y: ["b"], z: ["c"] });
     });
+
+    // The head of a bundle built with whitespace minified (rolldown `output.minify: true`): every import and the code
+    // after them on one line, with no break for leading to stop at, and an `import(` later in the code.
+    test("leading reads a whitespace-minified bundle's imports off its one line and stops at its code", () => {
+        const source =
+            `import{hostSlot as e}from"@intentic/extension-api";import{computed as n,ref as d}from"vue";` +
+            `import{Notice as ee,ui as E}from"@intentic/extension-ui";import{useQuery as O}from"@tanstack/vue-query";` +
+            `var k=Object.defineProperty,A=(e,t,n)=>()=>{if(n)throw n[0];return t};import{late}from"vue";const m=import("x");`;
+        expect(Object.fromEntries(bundleImportedNames(source, { leading: true }))).toEqual({
+            "@intentic/extension-api": ["hostSlot"],
+            vue: ["computed", "ref"],
+            "@intentic/extension-ui": ["Notice", "ui"],
+            "@tanstack/vue-query": ["useQuery"],
+        });
+        expect(missingImports(source, { "@intentic/extension-ui": ["ui"] }, { leading: true })).toEqual([{ specifier: "@intentic/extension-ui", names: ["Notice"] }]);
+    });
 });
 
 describe("missingImports", () => {

@@ -19,8 +19,12 @@ it(`pulls every registered view once, at idle, and survives a loader that fails`
     // Nothing before idle: the walk must not compete with whatever the mounting view is fetching.
     expect(first).not.toHaveBeenCalled();
 
-    // jsdom has no requestIdleCallback, so the setTimeout fallback is the scheduled path.
-    await advanceTimersByTimeAsync(2_000);
+    // jsdom has no requestIdleCallback, so the setTimeout fallback is the scheduled path. One view per idle moment: the
+    // first idle moment pulls the first view only, and the rest follow one yield apart.
+    await advanceTimersByTimeAsync(1_500);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(failing).not.toHaveBeenCalled();
+    await advanceTimersByTimeAsync(500);
     expect(first).toHaveBeenCalledTimes(1);
     expect(failing).toHaveBeenCalledTimes(1);
     expect(last).toHaveBeenCalledTimes(1);

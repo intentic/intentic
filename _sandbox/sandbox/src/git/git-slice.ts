@@ -19,6 +19,7 @@ import {
 } from "@intentic/base/git";
 import { defineSlice } from "../seams/slice.js";
 import { changedFiles } from "./changes/changes.js";
+import { readOnFeed } from "./feed/checkout-feed.js";
 import {
     type ActionResult,
     checkoutRef,
@@ -166,8 +167,12 @@ const createGitSlice = (): GitSlice => ({
         commitAll: gitCommitAll,
         clone: gitClone,
         checkout: gitCheckout,
-        head: gitHead,
-        fullHead: gitFullHead,
+        // Kept per generation of the checkout (git/feed): its HEAD file, the ref it names and packed-refs all move the
+        // count. Every caller reads an installed extension's or plugin's own checkout, which the extensions list, each
+        // bundle and each capability status ask after on every read; an update's swap is a new checkout at the path,
+        // which the feed tells apart.
+        head: (dir) => readOnFeed("head-short", dir, defaultGit, () => gitHead(dir)),
+        fullHead: (dir) => readOnFeed("head-full", dir, defaultGit, () => gitFullHead(dir)),
         sync: gitSync,
         changedFiles,
         stagePaths,

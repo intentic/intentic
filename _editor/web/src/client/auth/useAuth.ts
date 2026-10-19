@@ -19,6 +19,7 @@ import { invalidatePlatformAuth, onPlatformAuthInvalidated } from "../../lib/aut
 import { apiClient } from "../../lib/useApi";
 import { forgetAccount } from "../directory/deviceDirectory";
 import { directMode } from "../directory/directState";
+import { markBoot } from "../../app/perf/boot";
 
 // Module-level Better Auth client, pointed at the API origin; callbackURL still returns to the SPA's own origin. The
 // email-OTP plugin is the second way in: one mailed code, typed here or followed from the mail's link (/login/confirm).
@@ -74,8 +75,11 @@ onPlatformAuthInvalidated(async () => {
     announceDesktopRoster([]);
     // The remembered loading imprints are the account's sandboxes' too: how many secrets, rows, agents each one held. So
     // is everything the account left in storage (open chats, drafts, recent prompts, the transcript mirror, which
-    // sandbox was open); a device preference (theme, language, layout) stays. lib/browserStorage.ts declares which.
-    await Promise.all([clearPersistedQueries(), clearImprints(), clearAccountStorage()]);
+    // sandbox was open); a device preference (theme, language, layout) stays. lib/browserStorage.ts declares which. So
+    // are the extension bundles kept per sandbox (extension-host/bundleCache.ts), deleted by name: this layer may not import the host.
+    // allow(silent-catch): a page with no Cache Storage (an insecure context, storage denied) kept no bundles to delete
+    const bundles = (async () => caches.delete(`intentic.extensionBundles`))().catch(() => false);
+    await Promise.all([clearPersistedQueries(), clearImprints(), clearAccountStorage(), bundles]);
     // Module state that belongs to one sandbox (the open tabs, the roster, set-aside drafts, extensions' badges) is
     // emptied last, so what refills it on its next read finds the storage already cleared.
     resetSandboxScope();
@@ -84,6 +88,8 @@ onPlatformAuthInvalidated(async () => {
 const refresh = async (): Promise<User | null> => {
     const pending = (refreshing ??= (async () => {
         const { data, error } = await client.getSession();
+        // The platform's answer to the start's session check (app/perf/boot.ts; only the first one counts).
+        markBoot(`session`);
         if (error) {
             throw new Error(error.message ?? t(`auth.useAuth.sessionCheckFailed`));
         }

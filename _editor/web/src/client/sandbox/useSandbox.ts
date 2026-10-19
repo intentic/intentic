@@ -17,6 +17,7 @@ import { daemonReady } from "./useDaemonBoot";
 import { forgetAddress } from "../directory/deviceDirectory";
 import { directMode } from "../directory/directState";
 import type { LeaveOutcome } from "./leaveSandbox";
+import { markBoot } from "../../app/perf/boot";
 
 // Browser's view of the user's sandboxes, as a module singleton. The registry (sandbox.list) is the source of
 // truth for each daemon's URL/lastSeenAt; `reachable` stays browser-owned since only this browser knows if it
@@ -86,8 +87,12 @@ const reconcileActive = (live: SandboxSummary[]): SandboxSummary[] => {
 // Loads sandboxes through the shared cache: concurrent callers coalesce to one request, and a call within
 // staleTime serves from cache. Opened directly (recovery/directMode.ts), the list is the one this device remembers and
 // the platform is not asked: it is down, and a navigation a minute in must not send the reader back to say so.
-const list = async (): Promise<SandboxSummary[]> =>
-    reconcileActive(directMode.value ? sandboxes.value : await queryClient.fetchQuery(sandboxListQuery));
+const list = async (): Promise<SandboxSummary[]> => {
+    const rows = directMode.value ? sandboxes.value : await queryClient.fetchQuery(sandboxListQuery);
+    // The sandbox list the shell's gate waits on, as the start's timeline counts it (app/perf/boot.ts; the first only).
+    markBoot(`list`);
+    return reconcileActive(rows);
+};
 
 // Forces a fresh list past staleTime, single-flighted so overlapping callers (onboarding, invite accept,
 // liveness recovery) share one round-trip.

@@ -15,11 +15,14 @@ import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
 // (`truncated`), not enumerated rows. Kept beside the scan, which counts lines only for the untracked files it can ship.
 export const MAX_REPO_CHANGES = 500;
 
-// HEAD's sha; undefined when git answers with an exit status (unborn HEAD, no repository at `dir`). A git that never
-// answered (spawn failure, kill, a dead forker) throws: read as unborn, a discard would untrack and clean every file.
-export const headSha = async (dir: string, git: GitRunner = defaultGit): Promise<string | undefined> => {
+const readHead = async (dir: string, git: GitRunner): Promise<string> => (await git(dir, ["rev-parse", "-q", "--verify", "HEAD"])).stdout.trim();
+
+// HEAD's sha as `read` takes it; undefined when git answers with an exit status (unborn HEAD, no repository at `dir`).
+// A git that never answered (spawn failure, kill, a dead forker) throws: read as unborn, a discard would untrack and
+// clean every file.
+const verifiedHead = async (read: () => Promise<string>): Promise<string | undefined> => {
     try {
-        return (await git(dir, ["rev-parse", "-q", "--verify", "HEAD"])).stdout.trim();
+        return await read();
     } catch (error) {
         if (typeof (error as { code?: unknown }).code === "number") {
             return undefined;
@@ -27,6 +30,14 @@ export const headSha = async (dir: string, git: GitRunner = defaultGit): Promise
         throw error;
     }
 };
+
+export const headSha = (dir: string, git: GitRunner = defaultGit): Promise<string | undefined> => verifiedHead(() => readHead(dir, git));
+
+// The same answer, read once per change netd counted in the checkout (git/feed): HEAD, the branch it names and
+// packed-refs all move the count. For a reader that asks every repo on every pass (the land-standing probe on each
+// roster read). Only a sha is kept: an unborn HEAD is a failed read, so the next ask goes to git again.
+export const feedHeadSha = (dir: string, git: GitRunner = defaultGit): Promise<string | undefined> =>
+    verifiedHead(() => readOnFeed("head-sha", dir, git, () => readHead(dir, git)));
 
 // Merges per-file +/- counts from `--numstat -z` onto a change list; `scope` matches the name-status list's own diff.
 // No numstat entry (binary, or a skipped conflict) keeps counts undefined; untracked is withUntrackedLineStats's job.

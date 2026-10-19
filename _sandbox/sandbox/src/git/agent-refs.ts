@@ -1,4 +1,5 @@
 import type { GitRunner } from "@intentic/base/git";
+import { readOnFeed } from "./feed/checkout-feed.js";
 
 // Archived agents keep their branch but move it off `refs/heads/` onto a shelf, `refs/agent/<id>`, since git resolves a
 // bare name against `refs/<name>` before `refs/heads/<name>`, so `entry.branch` keeps naming the same commit whether
@@ -18,11 +19,15 @@ export const branchSha = async (main: string, branch: string, git: GitRunner): P
 };
 
 // All agent branch tips in this repo in one spawn, keyed by branch name; the parked spelling wins on a collision, and
-// an unreadable repo returns empty rather than throwing.
-export const agentBranchTips = async (main: string, git: GitRunner): Promise<Map<string, string>> => {
-    const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname) %(refname)", `${HEADS}${AGENT}`, parkedRef(AGENT)]).catch(() => ({
-        stdout: "",
-    }));
+// an unreadable repo returns empty rather than throwing. Read once per change netd counted in the checkout
+// (git/feed): every directory under the common dir's refs and its packed-refs move the count. Only a read that
+// worked is kept, so an empty answer for a repo git could not read is never served again.
+export const agentBranchTips = (main: string, git: GitRunner): Promise<Map<string, string>> =>
+    // allow(silent-catch): an unreadable repo has no agent tips to name, as before; the next pass asks git again.
+    readOnFeed("agent-tips", main, git, () => readAgentTips(main, git)).catch(() => new Map<string, string>());
+
+const readAgentTips = async (main: string, git: GitRunner): Promise<Map<string, string>> => {
+    const { stdout } = await git(main, ["for-each-ref", "--format=%(objectname) %(refname)", `${HEADS}${AGENT}`, parkedRef(AGENT)]);
     const tips = new Map<string, string>();
     for (const line of stdout.split("\n")) {
         const [sha, ref] = line.split(" ");

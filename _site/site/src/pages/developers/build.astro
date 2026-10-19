@@ -76,6 +76,9 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
 const viteConfig = `import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
+// @intentic/sandbox-contract and the @intentic packages it brings in: schemas and constants, nothing that runs on import.
+const SIDE_EFFECT_FREE = /[\\\\/]node_modules[\\\\/]@intentic[\\\\/](?:sandbox-contract|base|constants)[\\\\/]/;
+
 export default defineConfig({
     plugins: [vue()],
     build: {
@@ -84,8 +87,11 @@ export default defineConfig({
         rollupOptions: {
             // The host supplies these at runtime. Bundling your own copy forks reactivity and the query cache.
             external: ["vue", "@tanstack/vue-query", "@intentic/extension-api", "@intentic/extension-ui"],
+            // Keeps only the contract modules you import, not every contract and its schemas.
+            treeshake: { moduleSideEffects: (id: string) => (SIDE_EFFECT_FREE.test(id) ? false : undefined) },
             // One file, no chunks: the loader imports the bundle from a blob URL, where relative chunks break.
-            output: { inlineDynamicImports: true },
+            // minify: whitespace too, which a library build otherwise keeps (Vite 8; Vite 7 has no switch for it).
+            output: { inlineDynamicImports: true, minify: true },
         },
     },
 });`;

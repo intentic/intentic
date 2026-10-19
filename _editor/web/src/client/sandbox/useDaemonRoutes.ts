@@ -1,10 +1,10 @@
 import { errorMessage } from "@intentic/base/errors";
 import { sandboxRef } from "@intentic/extension-api";
 import type { Hello } from "@intentic/sandbox-contract/events/system-events";
-import { RAW_ROUTE_NAMES, rawRouteFingerprints, SANDBOX_ROUTE_NAMES, sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { z } from "zod";
+import { contractModule } from "./daemon/contract";
 import { contractUncompiled } from "./contractFreshness";
 import { routeArea } from "./daemon/routeAreas";
 
@@ -80,24 +80,37 @@ export const supportsRoute = (name: string): boolean => {
 export const advertisedRouteCount = computed<number | undefined>(() =>
     advertised.value === undefined ? undefined : advertised.value.size + (advertisedRaw.value?.size ?? 0),
 );
-export const ourRouteCount = SANDBOX_ROUTE_NAMES.length + RAW_ROUTE_NAMES.length;
+// This build's own route names, as lists and sets, for the two directions of comparison below. They come with the
+// contract, which loads beside the start (daemon/contract.ts): until it lands there are none, and every comparison below then
+// answers as it does for a daemon that has said nothing — no evidence either way, never "behind" — and answers again
+// when it lands.
+const ownRoutes = computed(() => {
+    const contract = contractModule.value;
+    return contract === undefined
+        ? undefined
+        : {
+              names: contract.SANDBOX_ROUTE_NAMES,
+              rawNames: contract.RAW_ROUTE_NAMES,
+              set: new Set(contract.SANDBOX_ROUTE_NAMES),
+              rawSet: new Set(contract.RAW_ROUTE_NAMES),
+          };
+});
 
-// This build's own route names, as sets, for the two directions of comparison below.
-const OURS: ReadonlySet<string> = new Set(SANDBOX_ROUTE_NAMES);
-const OURS_RAW: ReadonlySet<string> = new Set(RAW_ROUTE_NAMES);
+export const ourRouteCount = computed(() => (ownRoutes.value === undefined ? 0 : ownRoutes.value.names.length + ownRoutes.value.rawNames.length));
 
 // How far behind the sandbox is; empty when the daemon is level or newer (extra daemon routes are never asked about).
 // Each kind is read off its own field, so a daemon that advertises procedures and not raw routes is checked on
 // procedures and assumed level on the rest, rather than reading as missing every raw route there is.
 export const missingRoutes = computed<string[]>(() => {
-    if (folderSurface.value) {
+    const own = ownRoutes.value;
+    if (folderSurface.value || own === undefined) {
         return [];
     }
     const known = advertised.value;
     const knownRaw = advertisedRaw.value;
     return [
-        ...(known === undefined ? [] : SANDBOX_ROUTE_NAMES.filter((name) => !known.has(name))),
-        ...(knownRaw === undefined ? [] : RAW_ROUTE_NAMES.filter((name) => !knownRaw.has(name))),
+        ...(known === undefined ? [] : own.names.filter((name) => !known.has(name))),
+        ...(knownRaw === undefined ? [] : own.rawNames.filter((name) => !knownRaw.has(name))),
     ];
 });
 
@@ -108,14 +121,15 @@ export const daemonBehind = computed(() => missingRoutes.value.length > 0);
 // on its own — a tab left open across a sandbox update is exactly this — so it never raises a warning by itself. It
 // only says which way a disagreement leans once something else has already proved there is one.
 export const unknownDaemonRoutes = computed<string[]>(() => {
-    if (folderSurface.value) {
+    const own = ownRoutes.value;
+    if (folderSurface.value || own === undefined) {
         return [];
     }
     const known = advertised.value;
     const knownRaw = advertisedRaw.value;
     return [
-        ...(known === undefined ? [] : [...known].filter((name) => !OURS.has(name))),
-        ...(knownRaw === undefined ? [] : [...knownRaw].filter((name) => !OURS_RAW.has(name))),
+        ...(known === undefined ? [] : [...known].filter((name) => !own.set.has(name))),
+        ...(knownRaw === undefined ? [] : [...knownRaw].filter((name) => !own.rawSet.has(name))),
     ].toSorted();
 });
 
@@ -123,7 +137,10 @@ export const appBehind = computed(() => unknownDaemonRoutes.value.length > 0);
 
 // Both kinds of route under one name → fingerprint map, which is what the comparison below reads: the kinds disagree
 // the same way and are read off the same evidence, so only the two hellos' fields keep them apart.
-const ourFingerprints = () => ({ ...sandboxRouteFingerprints(), ...rawRouteFingerprints() });
+const ourFingerprints = (): Readonly<Record<string, string>> => {
+    const contract = contractModule.value;
+    return contract === undefined ? {} : { ...contract.sandboxRouteFingerprints(), ...contract.rawRouteFingerprints() };
+};
 const theirFingerprints = computed<Readonly<Record<string, string>> | undefined>(() =>
     advertisedShapes.value === undefined && advertisedRawPrints.value === undefined
         ? undefined

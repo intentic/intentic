@@ -1,6 +1,7 @@
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import type { Logger } from "pino";
-import { headSha } from "../../git/changes/changes.js";
+import { feedHeadSha } from "../../git/changes/changes.js";
+import { readOnFeed } from "../../git/feed/checkout-feed.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { checkpointOf } from "./agent-changes.js";
 import type { IsolatedAgent, Remover } from "../registry/agents-store.js";
@@ -112,6 +113,27 @@ const readingMoved = (before: LandedPresence | undefined, reading: LandedPresenc
 // parent's own land is what brings it there (land-target.ts).
 const landedInMainTree = (entry: IsolatedAgent): boolean => entry.placement.landedInto === undefined;
 
+// A repo's landing still counted against the main checkout's files: one recorded through the door that records it and
+// not yet marked absorbed (markLandingAbsorbed), past which history alone answers.
+const unabsorbed = (composed: IsolatedAgent["placement"]["repos"][number]): boolean =>
+    composed.landedTip !== undefined && composed.landedHead !== undefined && composed.absorbed === undefined;
+
+// Whether a reading of this agent reads the main checkout's files: only a land into the main tree some repo has not
+// absorbed yet. Every other agent's reading is answered by its record and history, which no file changing can move.
+export const presenceReadsFiles = (entry: IsolatedAgent): boolean => landedInMainTree(entry) && entry.placement.repos.some(unabsorbed);
+
+// The main checkout's uncommitted paths as a landing is counted against them: tracked paths diffed against HEAD (a
+// staged landed path counts, a rename is both its names) and the untracked files beside them. Kept per generation of
+// the checkout (git/feed), which every input here moves: HEAD, the index and the tree.
+const uncommittedPaths = (dir: string, git: GitRunner): Promise<ReadonlySet<string>> =>
+    readOnFeed("landed-dirty", dir, git, async (): Promise<ReadonlySet<string>> => {
+        const [tracked, untracked] = await Promise.all([
+            git(dir, ["diff", "--name-only", "--no-renames", "-z", "HEAD"]),
+            git(dir, ["ls-files", "--others", "--exclude-standard", "-z"]),
+        ]);
+        return new Set([...tracked.stdout.split("\0"), ...untracked.stdout.split("\0")].filter((path) => path !== ""));
+    });
+
 export const createLandedPresences = (
     worktrees: AgentWorktrees,
     logger: Logger,
@@ -171,18 +193,12 @@ export const createLandedPresences = (
             // The window closes here: a note arriving while this reads belongs to the next one.
             const sole = soleRemover([...noted.values(), ...(active ?? [])]);
             noted = new Map();
-            // Tracked paths diff HEAD (catches a staged landed path); untracked come from the file walk instead.
+            // Read once per repo in a pass, and across passes once per generation of the checkout.
             const dirty = new Map<string, Promise<ReadonlySet<string>>>();
             const dirtyIn = (repo: string, dir: string): Promise<ReadonlySet<string>> => {
                 let paths = dirty.get(repo);
                 if (paths === undefined) {
-                    paths = (async () => {
-                        const [tracked, untracked] = await Promise.all([
-                            git(dir, ["diff", "--name-only", "--no-renames", "-z", "HEAD"]),
-                            git(dir, ["ls-files", "--others", "--exclude-standard", "-z"]),
-                        ]);
-                        return new Set([...tracked.stdout.split("\0"), ...untracked.stdout.split("\0")].filter((path) => path !== ""));
-                    })();
+                    paths = uncommittedPaths(dir, git);
                     dirty.set(repo, paths);
                 }
                 return paths;
@@ -191,7 +207,7 @@ export const createLandedPresences = (
             const headOf = (repo: string, dir: string): Promise<string | undefined> => {
                 let head = heads.get(repo);
                 if (head === undefined) {
-                    head = headSha(dir, git);
+                    head = feedHeadSha(dir, git);
                     heads.set(repo, head);
                 }
                 return head;

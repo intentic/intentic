@@ -53,7 +53,22 @@ export default defineConfig({
     // App's own public dir (assets, ext-shims/); the demo serves the app, so nothing of its own belongs here.
     publicDir: fromRoot(`_editor/web/public`),
     // 127.0.0.1, not localhost: Node resolves that to ::1, and the site's dev proxy targets 127.0.0.1.
-    server: { host: `127.0.0.1`, port: 47146, strictPort: true },
+    server: {
+        host: `127.0.0.1`,
+        port: 47146,
+        strictPort: true,
+        // The app's start, transformed as the server comes up (see the app's own vite.config.ts): the demo's entry, and
+        // the app's, which it imports dynamically after installing its fakes, so no crawl from the first reaches it.
+        warmup: {
+            clientFiles: [
+                here(`src/main.ts`),
+                fromRoot(`_editor/web/src/main.ts`),
+                fromRoot(`_editor/web/src/shell/WorkspaceShell.vue`),
+                fromRoot(`_editor/web/src/shell/ShellDesktop.vue`),
+                fromRoot(`_editor/web/src/shell/ShellMobile.vue`),
+            ],
+        },
+    },
     build: {
         outDir: fromRoot(`_site/site/public/demo`),
         emptyOutDir: true,

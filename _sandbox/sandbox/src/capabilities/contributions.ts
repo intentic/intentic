@@ -43,8 +43,9 @@ const buildRegistry = async (host: ExtensionHost): Promise<ReadonlyMap<string, R
 // One inventory per capability store and workspace, kept until something it was read from changes: every turn, every
 // door request and every capabilities list reads it, and each build reads and parses every installed manifest. The
 // daemon calls invalidateContributions when an extension's source, the enablement file or the capability manifest is
-// written (bootstrap/change-reactions.ts, composition.ts) and whenever the extension set moves, which is every call of
-// the backend supervisor's restart (an install, a toggle, a removal, an approval). Keyed by
+// written (bootstrap/change-reactions.ts, composition.ts), from the enablement and approval stores' own writers the
+// moment they write (extension-inventory/), and whenever the extension set moves, which is every call of the backend
+// supervisor's restart (an install, a toggle, a removal, an approval). Keyed by
 // the store object too, so two stores over one root (a test's, the daemon's raw and vaulted ones) never share.
 interface Cached {
     readonly generation: number;

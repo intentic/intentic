@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { REQUEST_ID_HEADER } from "@intentic/sandbox-contract/protocol/headers";
-import { sandboxAnswerSchema, sandboxContract } from "@intentic/sandbox-contract";
-import { createORPCClient, type InferClientInputs, type InferClientOutputs, ORPCError } from "@orpc/client";
+import type { sandboxContract } from "@intentic/sandbox-contract";
+import { type ClientContext, type ClientLink, createORPCClient, type InferClientInputs, type InferClientOutputs, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
 import { trackPerf } from "../../app/perf/perf";
@@ -10,6 +10,7 @@ import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
+import { type ContractModule, loadContract } from "./daemon/contract";
 
 // The typed oRPC client for the sandbox daemons, the one way the app calls a contract procedure. A call's context
 // aims and paces it; a refusal reads as a SandboxHttpError in the daemon's words, and an answer arrives parsed by the
@@ -117,27 +118,48 @@ const answered: NonNullable<OpenAPILinkOptions<SandboxCallContext>[`interceptors
     const answer = await next().catch((error: unknown) => {
         throw refusalOf(error, context.at === undefined ? path.join(`.`) : undefined);
     });
-    const schema = sandboxAnswerSchema(path);
+    const schema = (await loadContract()).sandboxAnswerSchema(path);
     return schema === undefined ? answer : schema.parse(answer);
 };
 
+// A link over the contract that is still loading (daemon/contract.ts): each call waits for it, which at the start is the import
+// main.ts already began and after that a settled promise, then goes through one OpenAPILink built from it, the link a
+// static import of the contract would have built.
+const onceLoaded = <T extends ClientContext>(build: (contract: ContractModule) => ClientLink<T>): ClientLink<T> => {
+    let link: ClientLink<T> | undefined;
+    return {
+        call: async (path, input, options) => {
+            link ??= build(await loadContract());
+            return link.call(path, input, options);
+        },
+    };
+};
+
 // The app's own client, ungated, since the app is the host itself.
-export const sandboxRpc: SandboxRpc = createORPCClient(new OpenAPILink(sandboxContract, { ...linkOptions, interceptors: [answered] }));
+export const sandboxRpc: SandboxRpc = createORPCClient(
+    onceLoaded((contract) => new OpenAPILink(contract.sandboxContract, { ...linkOptions, interceptors: [answered] })),
+);
 
 // One client per extension, gated at the procedure rather than the request: the gate sees the named procedure
-// and input directly, and throws to refuse before anything is sent.
-export const gatedSandboxRpc = (gate: (procedure: readonly string[], input: unknown) => void): ContractRouterClient<typeof sandboxContract> =>
+// and input directly, and throws to refuse before anything is sent. It is handed the contract the call is made against,
+// which by then has loaded, to read the procedure's route off.
+export const gatedSandboxRpc = (
+    gate: (procedure: readonly string[], input: unknown, contract: ContractModule) => void,
+): ContractRouterClient<typeof sandboxContract> =>
     createORPCClient(
-        new OpenAPILink(sandboxContract, {
-            ...linkOptions,
-            interceptors: [
-                ({ path, input, next }) => {
-                    gate(path, input);
-                    return next();
-                },
-                answered,
-            ],
-        }),
+        onceLoaded(
+            (contract) =>
+                new OpenAPILink(contract.sandboxContract, {
+                    ...linkOptions,
+                    interceptors: [
+                        ({ path, input, next }) => {
+                            gate(path, input, contract);
+                            return next();
+                        },
+                        answered,
+                    ],
+                }),
+        ),
     );
 
 // The HTTP status behind a failed call, or undefined when it never got an answer (DNS, TLS, a dead tunnel, an

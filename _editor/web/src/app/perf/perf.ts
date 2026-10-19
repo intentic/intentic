@@ -27,6 +27,9 @@ const SLOW_MS: Readonly<Record<string, number>> = {
     "chat.persist": 300,
     // Dehydrating and writing the whole vue-query cache to IndexedDB, a structured clone of megabytes.
     "query.persist": 500,
+    // A page load, from the browser's navigation start to the first view drawn (boot.ts). A reload past this is one a
+    // reader waits through, and its phases say which part of the start they waited on.
+    boot: 2_500,
 };
 
 // Ring buffer size: enough to cover the seconds around a stall, small enough to stay free.

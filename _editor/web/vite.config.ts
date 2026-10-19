@@ -70,6 +70,10 @@ export default defineConfig(({ command }) => ({
         // Must stay 47145: CORS, Better Auth's WEB_ORIGIN, and Google's OAuth client all trust this exact origin.
         port: 47145,
         strictPort: true,
+        // The start's own modules, transformed as the server comes up rather than while the first page waits on them:
+        // after a restart every module is untransformed, and the boot graph is what a reload asks for first. Only the
+        // transform cache is filled, which the watcher invalidates exactly as it does for a module a page asked for.
+        warmup: { clientFiles: [`./src/main.ts`, `./src/shell/WorkspaceShell.vue`, `./src/shell/ShellDesktop.vue`, `./src/shell/ShellMobile.vue`] },
         // Shares the API's local dev cert, so the two origins keep one trust chain and the session cookie carries with
         // no mixed-content warnings. Minted by `pnpm install`, trusted by `pnpm cert:trust`; path is per-user
         // (_tools/localhost-https).

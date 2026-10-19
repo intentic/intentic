@@ -41,7 +41,7 @@ import { spawnServices } from "../../harness/spawn-services.testing.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
 import { drivenBy, fakeTurns } from "../../seams/turn-starter.testing.js";
 import { fleetStoreOver } from "../registry/agents-registry.testing.js";
-import { noPresences } from "../land/landed-presence.testing.js";
+import { noPresences } from "../land/tests/landed-presence.testing.js";
 import type { LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
 import { openConversationsDb } from "../../store/conversations-db.js";

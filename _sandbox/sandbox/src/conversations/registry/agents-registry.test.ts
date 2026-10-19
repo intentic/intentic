@@ -10,7 +10,7 @@ import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-messag
 import { beginTurn } from "../actor/conversation-actors.testing.js";
 import { conversationEntry, isolatedAgent } from "./agents-store.testing.js";
 import { fleetStoreOver } from "./agents-registry.testing.js";
-import { noPresences } from "../land/landed-presence.testing.js";
+import { noPresences } from "../land/tests/landed-presence.testing.js";
 import type { BeginOutcome, BeginTurn } from "../actor/conversation-decide.js";
 import { openConversationsDb } from "../../store/conversations-db.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";
@@ -145,7 +145,7 @@ describe("agents registry", () => {
 
         let report: (() => void) | undefined;
         registry.watchStandings((changed) => {
-            report = changed;
+            report = () => changed("refs");
             return () => undefined;
         });
         await registry.refreshStandings();
@@ -156,6 +156,127 @@ describe("agents registry", () => {
         report?.();
         await registry.refreshStandings();
         expect(probes).toBe(watched + 1);
+    });
+
+    // A file batch arrives every few seconds while agents write; it can move a standing only through a stored
+    // `workspace` blocker or a land the main tree has not absorbed, so for a board with neither it is no reason to re-read
+    // git. A ref moving still always is.
+    it("re-derives on a file batch only while the last probe read some main checkout's files, and on a ref always", async () => {
+        const probesOf = async (entry: PersistedAgent): Promise<{ files: number; refs: number }> => {
+            let probes = 0;
+            const counted = {
+                ...standings(),
+                refresh: async () => {
+                    probes += 1;
+                    return false;
+                },
+            };
+            const { agents: registry } = createFleet(memoryStore([entry]), counted, presences());
+            await registry.init();
+            let report: ((what: "refs" | "files") => void) | undefined;
+            registry.watchStandings((changed) => {
+                report = changed;
+                return () => undefined;
+            });
+            await registry.refreshStandings();
+            const settled = probes;
+            report?.("files");
+            await registry.refreshStandings();
+            const files = probes - settled;
+            report?.("refs");
+            await registry.refreshStandings();
+            return { files, refs: probes - settled - files };
+        };
+        const repo = { repo: "intentic", base: "b0" };
+        // Nothing landed, nothing refused: no reading looks at a file.
+        expect(await probesOf(isolatedAgent([repo]))).toEqual({ files: 0, refs: 1 });
+        // A refusal whose only premise is a sha stands or falls with the refs.
+        const diverged = { conflicts: [{ repo: "intentic", paths: [{ path: "a.ts", reason: "diverged" as const }], clean: 0 }] };
+        expect(await probesOf(isolatedAgent([repo], { landing: diverged }))).toEqual({ files: 0, refs: 1 });
+        // A `workspace` blocker is premised on the user's uncommitted edits.
+        const blocked = { conflicts: [{ repo: "intentic", paths: [{ path: "a.ts", reason: "workspace" as const }], clean: 0 }] };
+        expect(await probesOf(isolatedAgent([repo], { landing: blocked }))).toEqual({ files: 1, refs: 1 });
+        // A land the main tree has not absorbed is counted against its files; an absorbed one, or one into a parent's
+        // checkout, is not.
+        const landed = { ...repo, landedTip: "t1", landedHead: "h1" };
+        expect(await probesOf(isolatedAgent([landed]))).toEqual({ files: 1, refs: 1 });
+        expect(await probesOf(isolatedAgent([{ ...landed, absorbed: 3 }]))).toEqual({ files: 0, refs: 1 });
+        const intoParent = isolatedAgent([landed]);
+        expect(await probesOf({ ...intoParent, placement: { ...intoParent.placement, landedInto: "parent" } })).toEqual({ files: 0, refs: 1 });
+    });
+
+    // The batch is weighed against what the last probe read: an agent that comes to read files (its land refused on the
+    // user's edits) changes the landing inputs, which probes anyway, and from that probe on a file batch counts.
+    it("probes again once an agent comes to read files, and from then on a file batch counts", async () => {
+        let probes = 0;
+        const counted = {
+            ...standings(),
+            refresh: async () => {
+                probes += 1;
+                return false;
+            },
+        };
+        const { agents: registry } = createFleet(memoryStore([isolatedAgent([{ repo: "intentic", base: "b0" }])]), counted, presences());
+        await registry.init();
+        let report: ((what: "refs" | "files") => void) | undefined;
+        registry.watchStandings((changed) => {
+            report = changed;
+            return () => undefined;
+        });
+        await registry.refreshStandings();
+        const settled = probes;
+        report?.("files");
+        await registry.refreshStandings();
+        expect(probes).toBe(settled);
+        await registry.recordLanded("c1", {
+            landed: false,
+            changed: false,
+            repos: [{ repo: "intentic", base: "b0" }],
+            conflicts: [{ repo: "intentic", paths: [{ path: "a.ts", reason: "workspace" }], clean: 0 }],
+            diff: { files: 0, insertions: 0, deletions: 0 },
+            adjudicated: true,
+        });
+        await registry.refreshStandings();
+        expect(probes).toBe(settled + 1);
+        report?.("files");
+        await registry.refreshStandings();
+        expect(probes).toBe(settled + 2);
+    });
+
+    // A probe under way began after every change the feed has reported since; the standings it is about to replace may
+    // be from before the change it was started for, so a roster read arriving now waits for it.
+    it("a roster read arriving mid-probe with nothing reported since waits for that probe's answer", async () => {
+        const verdicts = standings();
+        const releases: (() => void)[] = [];
+        const gated = {
+            ...verdicts,
+            refresh: async () => {
+                await new Promise<void>((resolve) => releases.push(resolve));
+                verdicts.set("c1", "ready");
+                return true;
+            },
+        };
+        const { agents: registry } = createFleet(memoryStore([isolatedAgent([{ repo: "intentic", base: "b0" }])]), gated, presences());
+        const loading = registry.init();
+        await waitFor(() => expect(releases).toHaveLength(1));
+        releases.shift()?.();
+        await loading;
+        registry.watchStandings((changed) => {
+            void changed;
+            return () => undefined;
+        });
+        verdicts.set("c1", "idle");
+        const first = registry.refreshStandings();
+        await waitFor(() => expect(releases).toHaveLength(1));
+        let answered = false;
+        const second = registry.refreshStandings().then(() => {
+            answered = true;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        expect(answered).toBe(false);
+        releases.shift()?.();
+        await Promise.all([first, second]);
+        expect(registry.get("c1")?.status).toBe("ready");
     });
 
     it("a watched standing is re-derived once it is a minute old, even with the feed silent", async () => {
@@ -208,7 +329,7 @@ describe("agents registry", () => {
         await waitFor(() => expect(probes).toBe(1));
         let report: (() => void) | undefined;
         registry.watchStandings((changed) => {
-            report = changed;
+            report = () => changed("refs");
             return () => undefined;
         });
         const frames: AgentSummary[][] = [];
@@ -238,7 +359,7 @@ describe("agents registry", () => {
         await waitFor(() => expect(probes).toBe(1));
         let report: (() => void) | undefined;
         registry.watchStandings((changed) => {
-            report = changed;
+            report = () => changed("refs");
             return () => undefined;
         });
         report?.();

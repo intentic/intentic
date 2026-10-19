@@ -4,6 +4,7 @@ import { defineDocument } from "../../store/evolution/documents.js";
 import type { JsonFile } from "../../store/json-file.js";
 import { openDocument } from "../../store/open-document.js";
 import { stateRelPath } from "../../state-paths.js";
+import { invalidateContributions } from "../contributions.js";
 
 // The owner's per-extension on/off switch (<workspace>/.intentic/config/extension-enablement.json), keyed by the
 // manifest-derived extension id (publisher.name), the same key extension-settings.json uses, so the choice
@@ -22,19 +23,29 @@ const enablementFile = (root: string): JsonFile<EnablementFile> =>
 
 export const readExtensionEnablement = async (root: string): Promise<EnablementFile> => enablementFile(root).read();
 
+// Each write moves the cached inventory itself, the moment it lands (contributions.ts): the watcher's batch for this
+// file comes a debounce later, and a turn composed in between would run on the switch as it was.
 export const writeExtensionEnablement = async (root: string, extensionId: string, enabled: boolean): Promise<void> => {
-    await enablementFile(root).update((all) => ({ ...all, [extensionId]: enabled }));
+    try {
+        await enablementFile(root).update((all) => ({ ...all, [extensionId]: enabled }));
+    } finally {
+        invalidateContributions();
+    }
 };
 
 // Drops the key entirely, which is not the same as writing `true`: a removed extension that is installed again later
 // must come back on the default (enabled), not on whatever the last owner of that id chose.
 export const forgetExtensionEnablement = async (root: string, extensionId: string): Promise<void> => {
-    await enablementFile(root).update((all) => {
-        if (!(extensionId in all)) {
-            // By reference, so jsonFile skips the write when there is nothing to drop.
-            return all;
-        }
-        const { [extensionId]: _dropped, ...rest } = all;
-        return rest;
-    });
+    try {
+        await enablementFile(root).update((all) => {
+            if (!(extensionId in all)) {
+                // By reference, so jsonFile skips the write when there is nothing to drop.
+                return all;
+            }
+            const { [extensionId]: _dropped, ...rest } = all;
+            return rest;
+        });
+    } finally {
+        invalidateContributions();
+    }
 };

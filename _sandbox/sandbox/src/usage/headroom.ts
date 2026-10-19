@@ -104,6 +104,29 @@ const CONCURRENCY = 4;
 // How often one account's one reason for an unread reading may be written while it stands.
 const FAILURE_LOG_EVERY_MS = 60 * 60_000;
 
+// Reads what one sweep found due, CONCURRENCY at a time. The count of reads `begun` per target is noted as the sweep
+// decides, and a read another sweep began after that moment began after this sweep's caller asked: its reading is this
+// caller's too, waited for while in flight and already answered once landed. Two sweeps that met (a screen arriving
+// beside a settled turn) each queued the same accounts, and the later one re-read every account the earlier had not
+// reached yet, right behind it, spending the endpoint's budget twice.
+const readDue = async (
+    due: readonly HeadroomTarget[],
+    reads: { readonly begun: ReadonlyMap<string, number>; readonly inFlight: SingleFlight<string, void>; readonly readOne: (target: HeadroomTarget) => Promise<void> },
+): Promise<void> => {
+    const decided = new Map(due.map((target) => [target.key, reads.begun.get(target.key) ?? 0]));
+    const pending = [...due];
+    const worker = async (): Promise<void> => {
+        for (let next = pending.shift(); next !== undefined; next = pending.shift()) {
+            if ((reads.begun.get(next.key) ?? 0) !== decided.get(next.key)) {
+                await reads.inFlight.joined(next.key);
+                continue;
+            }
+            await reads.readOne(next);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, worker));
+};
+
 type ChangeListener = (provider: AgentProvider, account: string, usage: AccountUsage | undefined) => void;
 
 interface ChangeFeed {
@@ -142,8 +165,9 @@ export const createHeadroomService = (deps: {
     // Endpoint's stay-away per target, honoured even by a watched trigger. Mirrors the park store so `held` can answer
     // without a round trip; the store is the authority across restarts.
     const blockedUntil = new Map<string, ParkedRead>();
-    // Read in flight per target, so concurrent triggers share one round-trip.
+    // Read in flight per target, so concurrent triggers share one round-trip; and how many each has begun (readDue).
     const inFlight = new SingleFlight<string, void>();
+    const begun = new Map<string, number>();
     const { announce, onChange } = changeListeners(deps.logger);
 
     // Reads the parks from disk once per process, before the first sweep decides anything: a boot sweep that ran ahead
@@ -215,6 +239,7 @@ export const createHeadroomService = (deps: {
     const readOne = (target: HeadroomTarget): Promise<void> =>
         inFlight.run(target.key, () =>
             (async (): Promise<void> => {
+                begun.set(target.key, (begun.get(target.key) ?? 0) + 1);
                 attemptedAt.set(target.key, Date.now());
                 const reading = await target.read();
                 if (reading.retryAfterMs !== undefined) {
@@ -284,13 +309,7 @@ export const createHeadroomService = (deps: {
                 // `>=`, so a bound of zero reads it regardless of the clock, as the caller meant.
                 now - Math.max(stored[target.key]?.measuredAt ?? 0, attemptedAt.get(target.key) ?? 0) >= bound(target),
         );
-        const pending = [...due];
-        const worker = async (): Promise<void> => {
-            for (let next = pending.shift(); next !== undefined; next = pending.shift()) {
-                await readOne(next);
-            }
-        };
-        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pending.length) }, worker));
+        await readDue(due, { begun, inFlight, readOne });
     };
 
     // Never rejects: an account list must not fail because a quota read did. Seeds before racing the caller's deadline,

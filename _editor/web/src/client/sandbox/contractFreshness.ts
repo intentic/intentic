@@ -1,5 +1,5 @@
-import { sandboxRouteFingerprints } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
+import { loadContract } from "./daemon/contract";
 
 // Why a dev sandbox drifts from a dev browser without either being "older": this app bundles the contract from its
 // TypeScript source, the daemon loads the compiled dist, and only the first of those follows an edit immediately. So an
@@ -42,7 +42,7 @@ export const readContractFreshness = async (): Promise<void> => {
                 return;
             }
             // Both directions: a route only source has is as much an uncompiled edit as one whose shape moved.
-            const ours = sandboxRouteFingerprints();
+            const ours = (await loadContract()).sandboxRouteFingerprints();
             const names = new Set([...Object.keys(ours), ...Object.keys(compiled)]);
             uncompiled.value = [...names].filter((name) => compiled[name] !== ours[name]).toSorted();
         } catch {

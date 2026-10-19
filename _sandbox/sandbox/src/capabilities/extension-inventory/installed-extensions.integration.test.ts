@@ -9,10 +9,11 @@ import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { listenerContribution } from "../../extensions/listener/listener.testing.js";
 import { testConfig } from "../../env.config.testing.js";
-import { invalidateContributions } from "../contributions.js";
+import { cachedEnabledExtensions, invalidateContributions } from "../contributions.js";
 import { extensionDir, workspaceExtensionsRoot } from "../extension-dirs.js";
 import { readWorkspaceFile } from "../../workspace/files/workspace-files.js";
-import { approveExtension, forgetExtensionApproval } from "./extension-approvals.js";
+import { approveExtension, forgetExtensionApproval, revokeExtensionApproval } from "./extension-approvals.js";
+import { forgetExtensionEnablement, writeExtensionEnablement } from "./extension-enablement.js";
 import { enabledExtensions, extensionBinDirsOf, extensionInventory, installedExtensions, listenerProvidersOf } from "./installed-extensions.js";
 
 const manifest = (publisher: string, name: string): object => ({
@@ -134,6 +135,32 @@ test("extensionBinDirsOf reads the cached inventory, which moves when it is inva
     expect(await extensionBinDirsOf(host)).toEqual([join(baked, "intentic.discord", "bin")]);
     invalidateContributions();
     expect((await extensionBinDirsOf(host)).toSorted()).toEqual([join(baked, "intentic.discord", "bin"), join(baked, "intentic.imap", "tools")]);
+});
+
+// The switch and the approval ledger are inputs of the cached inventory every turn reads, and their own writers move
+// it: the watcher hears of the switch a debounce later and never sees the ledger, which lives on the history root.
+test("the cached inventory moves the moment a switch or a yes is written", async () => {
+    const root = mkdtempSync(join(tmpdir(), "installed-work-"));
+    const baked = mkdtempSync(join(tmpdir(), "installed-baked-"));
+    await writeManifest(join(baked, "intentic.discord"), manifest("intentic", "discord"));
+    await writeManifest(join(workspaceExtensionsRoot(root), "notes"), manifest("acme", "notes"));
+    const host = services(root, baked, []);
+    const enabled = async (): Promise<string[]> => (await cachedEnabledExtensions(host)).map((extension) => extension.id);
+    expect(await enabled()).toEqual(["intentic.discord"]);
+
+    await writeExtensionEnablement(root, "intentic.discord", false);
+    expect(await enabled()).toEqual([]);
+    await forgetExtensionEnablement(root, "intentic.discord");
+    expect(await enabled()).toEqual(["intentic.discord"]);
+
+    await approveExtension(historyOf(root), "acme.notes", ExtensionManifestSchema.parse(manifest("acme", "notes")));
+    expect(await enabled()).toEqual(["intentic.discord", "acme.notes"]);
+    expect(await revokeExtensionApproval(historyOf(root), "acme.notes")).toBe(true);
+    expect(await enabled()).toEqual(["intentic.discord"]);
+    await approveExtension(historyOf(root), "acme.notes", ExtensionManifestSchema.parse(manifest("acme", "notes")));
+    expect(await enabled()).toEqual(["intentic.discord", "acme.notes"]);
+    await forgetExtensionApproval(historyOf(root), "acme.notes");
+    expect(await enabled()).toEqual(["intentic.discord"]);
 });
 
 // Write the owner's switch file the way the enablement store does: by publisher.name, not the capability id.

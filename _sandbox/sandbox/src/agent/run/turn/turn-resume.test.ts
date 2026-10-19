@@ -8,7 +8,7 @@ import { IN_MEMORY } from "@intentic/base/sqlite";
 import { pino } from "pino";
 import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
 import { fleetStoreOver } from "../../../conversations/registry/agents-registry.testing.js";
-import { noPresences } from "../../../conversations/land/landed-presence.testing.js";
+import { noPresences } from "../../../conversations/land/tests/landed-presence.testing.js";
 import { openConversationsDb } from "../../../store/conversations-db.js";
 import { createFleet } from "../../../conversations/registry/agents-registry.js";
 import type { LandStandings } from "../../../conversations/land/standing.js";

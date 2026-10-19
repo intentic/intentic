@@ -431,6 +431,33 @@ test("waits for the answer rather than serving a reading old enough to read as q
     expect((await devices(services))[0]?.report?.hostname).toBe("after");
 });
 
+// A pull that failed or ran out its deadline is an attempt like any other: the reading it established (offline) is
+// served as a fresh one is, at once and with no new pull, until the TTL since it landed passes. Only a machine with no
+// attempt inside the TTL is asked again, and one whose last reading is old enough to read as quiet is waited for.
+test("serves a machine whose last pull failed what that pull established, at once and without asking, inside the TTL", async () => {
+    jest.useFakeTimers();
+    let up = false;
+    const { services, calls } = fakeServices("timed-out-pc", async (call) => {
+        if (!up) {
+            throw new DOMException("no answer", "TimeoutError");
+        }
+        return call.tool === "report" ? report("back", { capturedAt: Date.now() }) : answer("[]");
+    });
+    expect((await devices(services))[0]?.gap).toBe("offline");
+    const asked = calls.length;
+
+    up = true;
+    jest.setSystemTime(Date.now() + 29_000);
+    // Fake timers: a reader that waited on the settle would never return here.
+    expect((await devices(services))[0]?.gap).toBe("offline");
+    expect(calls).toHaveLength(asked);
+
+    jest.setSystemTime(Date.now() + 2_000);
+    expect((await devices(services))[0]?.gap).toBe("offline");
+    await waitFor(() => expect(calls).toHaveLength(asked * 2));
+    expect((await devices(services))[0]?.report?.hostname).toBe("back");
+});
+
 // The browser maps `hosts` to its Devices read, so a machine that answers after the reader stopped waiting is on
 // screen in a second instead of at the next ten-second poll. Silent on a routine refresh: news it already has.
 test("announces only a landing that changes what the view says", async () => {

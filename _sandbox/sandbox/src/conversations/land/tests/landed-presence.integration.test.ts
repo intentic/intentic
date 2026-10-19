@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { defaultGit } from "@intentic/base/git";
+import { defaultGit, observeGitCommands } from "@intentic/base/git";
 import { ensureRootRepo } from "../../../git/remote/root-repo.js";
 import { discardPaths } from "../../../git/changes/changes-index.js";
 import { createLogger } from "../../../logger.js";
@@ -13,6 +13,7 @@ import { noIsolation } from "../../worktrees/isolation.testing.js";
 import { workspacePaths } from "../../../workspace/workspace.js";
 import { createExpiryTracker } from "../../registry/expiry.js";
 import { createLandedPresences } from "../landed-presence.js";
+import { useCheckoutFeed } from "../../../git/feed/checkout-feed.js";
 import { landAgent } from "../land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "../../worktrees/worktrees.js";
 
@@ -29,6 +30,8 @@ const edited = (line: number): string => `${LINES.map((text, index) => (index ==
 
 const tempDirs: string[] = [];
 afterEach(async () => {
+    useCheckoutFeed(undefined);
+    observeGitCommands(() => undefined);
     for (const dir of tempDirs.splice(0)) {
         await rm(dir, { recursive: true, force: true });
     }
@@ -95,6 +98,41 @@ test("discarding part of a land reads as the fraction that survived", async () =
     const presences = createLandedPresences(worktrees, logger, createExpiryTracker());
     await presences.refresh([entry]);
     expect(presences.of("c1")).toEqual({ landed: 2, present: 1 });
+});
+
+// Every roster read re-reads every unabsorbed landing against the main tree; its reads of that tree (HEAD, the paths
+// changed against it, the untracked files) are kept per generation of the checkout, so a reading over a checkout netd
+// counted as untouched spawns none of them and says what the one before said, and a counted discard is read at once.
+test("a reading over a main checkout whose count stood still spawns no git and answers as the last did", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), edited(1));
+    await writeFile(join(conversation.cwd, "other.ts"), edited(1));
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    const entry = isolatedAgent(landed.repos);
+    const generations = new Map([[work, 1]]);
+    useCheckoutFeed({ generation: async (dir) => generations.get(dir) });
+    const runs: string[] = [];
+    observeGitCommands(({ dir, args }) => {
+        if (dir === work) {
+            runs.push(args.join(" "));
+        }
+    });
+    const presences = createLandedPresences(worktrees, logger, createExpiryTracker());
+
+    await discardPaths(work, ["app.ts"]);
+    generations.set(work, 2);
+    runs.length = 0;
+    await presences.refresh([entry]);
+    expect(presences.of("c1")).toEqual({ landed: 2, present: 1 });
+    const read = runs.length;
+    expect(await presences.refresh([entry])).toBe(false);
+    expect(presences.of("c1")).toEqual({ landed: 2, present: 1 });
+    expect(runs).toHaveLength(read);
+
+    await discardPaths(work, ["other.ts"]);
+    generations.set(work, 3);
+    expect(await presences.refresh([entry])).toBe(true);
+    expect(presences.of("c1")).toEqual({ landed: 2, present: 0 });
 });
 
 test("committing the landed work is the strongest form of present, and never reported as missing", async () => {

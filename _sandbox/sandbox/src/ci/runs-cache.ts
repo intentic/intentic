@@ -8,6 +8,8 @@ const TTL_MS = 20_000;
 const RUNS_KEPT = 100;
 
 export interface RunsCache {
+    // How old a sweep may be and still be served: what a backfill already under way is held to as well (ci.routes.ts).
+    readonly ttlMs: number;
     // The cached picture, or undefined when no sweep landed within the TTL, time to backfill.
     readonly sweep: () => PipelineRun[] | undefined;
     readonly replace: (runs: PipelineRun[]) => PipelineRun[];
@@ -21,6 +23,7 @@ export const createRunsCache = (ttlMs = TTL_MS): RunsCache => {
     let runs: PipelineRun[] = [];
     let sweptAt = 0;
     return {
+        ttlMs,
         sweep: () => (Date.now() - sweptAt <= ttlMs ? runs : undefined),
         replace: (fresh) => {
             runs = newestFirst(fresh);

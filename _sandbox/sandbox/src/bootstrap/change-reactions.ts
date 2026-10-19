@@ -99,17 +99,18 @@ export const startChangeReactions = ({ logger, role, services, shutdown, traits 
     // A ref can move without a workspace byte changing, so only the ref feed can invalidate health.
     shutdown.push(subscribeRefChanges(() => services.iq.invalidateHealth()));
     // Everything a land standing is measured against outside the registry: refs (main's HEAD, agent tips) and the main
-    // checkouts' files (a landed path discarded, a blocking edit cleared).
+    // checkouts' files (a landed path discarded, a blocking edit cleared), told apart because only some standings read
+    // files at all.
     shutdown.push(
         services.agents.watchStandings((changed) => {
             const stops = [
-                subscribeRefChanges(changed),
+                subscribeRefChanges(() => changed("refs")),
                 subscribeWorkspaceChanges((paths) => {
                     if (batchMatters(paths, gitMatters)) {
-                        changed();
+                        changed("files");
                     }
                 }),
-                subscribeUnwatchedWrites(changed),
+                subscribeUnwatchedWrites(() => changed("files")),
             ];
             return () => {
                 for (const stop of stops) {

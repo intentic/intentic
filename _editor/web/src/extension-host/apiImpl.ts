@@ -7,7 +7,6 @@ import { useDevice, useTheme } from "@intentic/ui";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
 import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
-import { sandboxRequestFor } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { projectScope, setProjectScope, withinScope } from "../app/projectScope";
 import { useAudience } from "../app/useAudience";
@@ -219,8 +218,8 @@ export const createExtensionApi = (
     // The same gate for a typed call: turns the named procedure into its method and path, then applies the identical
     // allowlist and usage record. A procedure the contract doesn't declare is refused, since reaching it means a
     // hand-built path bypassed the manifest.
-    const rpc = gatedSandboxRpc((procedure, input) => {
-        const request = sandboxRequestFor(procedure, input);
+    const rpc = gatedSandboxRpc((procedure, input, contract) => {
+        const request = contract.sandboxRequestFor(procedure, input);
         if (request === undefined) {
             throw new Error(
                 `extension "${extensionId}" called sandbox procedure ${procedure.join(`.`)}, which this build's contract does not declare`,

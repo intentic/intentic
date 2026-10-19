@@ -4,7 +4,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { discoverRepos, isValidRepoId } from "../workspace/layout/repo-discovery.js";
-import { choreSignals } from "./chore-signals.js";
+import { sharedChoreSignals } from "./chore-signals.js";
 
 // `list` returns every repo's evidence in one read, since the rail badge polls all of it on a timer. No run-a-chore
 // route: a chore run is an ordinary isolated agent turn (POST /agent). No verdicts either: the daemon only serves
@@ -20,14 +20,17 @@ const knownRepo = async (services: Services, repo: string): Promise<boolean> =>
 
 export const createChoresRoutes = (services: Services) => {
     const i = implement(choresContract).$context<OrpcContext>();
+    // Readings shared between lists asked at once, never one begun before a caller asked (sharedChoreSignals).
+    const signals = sharedChoreSignals(services);
 
     return {
         list: i.list.handler(async () => {
+            const asked = signals.asked();
             const cache = await services.chores.probes();
             // Sequential, not Promise.all: fanning every repo at the resident iq engine would compete with live search.
             const repos = [];
             for (const repo of [REPO_ROOT, ...(await discoverRepos(services.workspace.root))]) {
-                repos.push({ repo, probes: Object.values(cache[repoDir(repo)] ?? {}), signals: await choreSignals(services, repoDir(repo)) });
+                repos.push({ repo, probes: Object.values(cache[repoDir(repo)] ?? {}), signals: await signals.of(repoDir(repo), asked) });
             }
             return {
                 repos,

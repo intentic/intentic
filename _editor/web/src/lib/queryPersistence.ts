@@ -8,6 +8,7 @@ import { reportClient } from "../app/clientDiagnostics";
 import { trackPerf } from "../app/perf/perf";
 import { throttleTrailing } from "./throttleTrailing";
 import { whenIdle } from "./whenIdle";
+import { markBoot } from "../app/perf/boot";
 
 // Persists the vue-query cache to IndexedDB so a reload paints the last-known workspace instantly, instead of blocking
 // on the daemon tunnel. Hydrated data is distrusted when the stream says so rather than permanently: applyHello
@@ -98,6 +99,22 @@ const drainPersist = (): void => {
 };
 const flushPersist = throttleTrailing(drainPersist, PERSIST_WINDOW_MS);
 
+// THE DISK READ, STARTED AT BOOT. Reading the snapshot back is a structured clone of megabytes out of IndexedDB, and it
+// used to begin only once the platform had answered the session check, one after the other on the first page's path.
+// main.ts starts it as soon as stored state is known good (after the self-heal purge), on a browser that had a sandbox
+// open; the guard's restore below then takes this read instead of starting its own. Taken once: the restore runs once per
+// window, and the buster and age checks are applied to it exactly as to a read made then.
+let earlyRead: Promise<PersistedClient | undefined> | undefined;
+export const readPersistedQueriesEarly = (): void => {
+    // allow(silent-catch): an unreadable store restores as empty, which is what the restore itself does with a failed read.
+    earlyRead ??= get<PersistedClient>(IDB_KEY).catch(() => undefined);
+};
+const takeEarlyRead = (): Promise<PersistedClient | undefined> => {
+    const read = earlyRead ?? get<PersistedClient>(IDB_KEY);
+    earlyRead = undefined;
+    return read;
+};
+
 // Called after auth resolves and before any route mounts, so hydration never races a fetch. `buster` combines the user
 // id and buildId(), so a different account or a new build starts from a clean cache.
 // The cache events a snapshot answers to, as the persistence library itself counts them: a query or mutation added,
@@ -115,7 +132,7 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
                 latestClient = client;
                 flushPersist();
             },
-            restoreClient: () => get<PersistedClient>(IDB_KEY),
+            restoreClient: takeEarlyRead,
             removeClient: () => del(IDB_KEY),
         },
         buster: `${userId}:${buildId()}`,
@@ -162,6 +179,7 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
     // The cache is only an optimization; a failed restore is empty and must never block the awaited navigation.
     // allow(silent-catch): A failed cache restore must not block navigation; live queries fill the empty cache.
     await persistQueryClientRestore(options).catch(() => undefined);
+    markBoot(`restore`);
     if (stopped) {
         return;
     }
@@ -178,6 +196,7 @@ export const restorePersistedQueries = async (userId: string): Promise<void> => 
 export const clearPersistedQueries = async (): Promise<void> => {
     uninstall?.();
     uninstall = undefined;
+    earlyRead = undefined;
     generation += 1;
     latestClient = undefined;
     await persisting;

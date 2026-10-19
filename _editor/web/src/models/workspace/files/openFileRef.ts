@@ -1,4 +1,4 @@
-import { STATE_DIR } from "@intentic/sandbox-contract";
+import { STATE_DIR } from "@intentic/constants";
 import type { WorkspaceResolve } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { navigation } from "../../../workbench/navigation/navigation";
 import { sectionReachable } from "../../../workbench/views/registry";

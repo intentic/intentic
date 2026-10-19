@@ -1,11 +1,10 @@
 import type { LandConflictReason } from "@intentic/sandbox-contract/schemas/agents";
 import { mapPool } from "@intentic/base/async";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import { headSha } from "../../git/changes/changes.js";
+import { feedHeadSha, statusPaths } from "../../git/changes/changes.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { anchorOf, carriesContent } from "./agent-changes.js";
 import { agentBranchTips } from "../../git/agent-refs.js";
-import { dirtyPaths } from "./land.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // Whether an agent has an outstanding delta, asked of git live, not remembered from the last land: a stored verdict has
@@ -58,12 +57,24 @@ const keyOf = (refusal: Refusal, repos: readonly RepoShas[]): string =>
 // Whether one path of the main checkout still holds uncommitted work; what a `workspace` blocker's premise amounts to.
 type DirtyRead = (path: string) => boolean;
 
-// One status read per repo turned into that question. A read that failed answers yes to everything: an unreadable tree
-// is no proof the user's edits went, and clearing a refusal on no evidence is the failure this whole module guards.
+// One status read per repo turned into that question: every path the status names, both names of a rename, the set a
+// land's own dirty check reads (land.ts dirtyPaths), kept per generation of the checkout (git/feed). A read that failed
+// answers yes to everything: an unreadable tree is no proof the user's edits went, and clearing a refusal on no
+// evidence is the failure this whole module guards.
 const readDirty = async (main: string, git: GitRunner): Promise<DirtyRead> => {
-    const paths = await dirtyPaths(main, git).catch(() => undefined);
-    return paths === undefined ? () => true : (path) => paths.has(path);
+    const listed = await statusPaths(main, git).catch(() => undefined);
+    if (listed === undefined) {
+        return () => true;
+    }
+    const paths = new Set(listed);
+    return (path) => paths.has(path);
 };
+
+// Whether this agent's standing reads the main checkout's files at all: only a stored `workspace` blocker does, whose
+// premise is the user's uncommitted edits (refusalOf). Every other input is a sha or the agent's own record, so a file
+// changing moves nothing here for an agent without one.
+export const standingReadsFiles = (entry: IsolatedAgent): boolean =>
+    (entry.landing.conflicts ?? []).some((conflict) => conflict.paths.some((blocked) => blocked.reason === "workspace"));
 
 // Which of a stored report's blockers still have their premise. `diverged` and `binary` are premised on the two shas
 // this standing already keys on, so they stand until a land re-judges them; a `workspace` blocker is premised on the
@@ -93,7 +104,8 @@ const refusalOf = async (entry: IsolatedAgent, dirtyAt: (repo: string, path: str
 
 // The per-repo reads one pass shares across the whole fleet, each spawned at most once: a fleet sees the same workspace
 // shas and the same branch-tip sweep, and the dirty read is reached only from a stored `workspace` blocker, so an
-// ordinary board never pays for it at all.
+// ordinary board never pays for it at all. Each is also kept across passes per generation of the main checkout
+// (git/feed), so a pass over repos nothing touched since spawns no git.
 const passReaders = (worktrees: AgentWorktrees, git: GitRunner) => {
     const heads = new Map<string, Promise<string | undefined>>();
     const sweeps = new Map<string, Promise<Map<string, string>>>();
@@ -107,7 +119,7 @@ const passReaders = (worktrees: AgentWorktrees, git: GitRunner) => {
         return held;
     };
     return {
-        headOf: (repo: string): Promise<string | undefined> => memo(heads, repo, () => headSha(worktrees.mainDir(repo), git)),
+        headOf: (repo: string): Promise<string | undefined> => memo(heads, repo, () => feedHeadSha(worktrees.mainDir(repo), git)),
         tipOf: async (repo: string, branch: string): Promise<string | undefined> =>
             (await memo(sweeps, repo, () => agentBranchTips(worktrees.mainDir(repo), git))).get(branch),
         dirtyAt: async (repo: string, path: string): Promise<boolean> =>

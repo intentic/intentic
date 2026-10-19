@@ -6,7 +6,7 @@ import { openConversationsDb } from "../../store/conversations-db.js";
 import { beginTurn } from "../actor/conversation-actors.testing.js";
 import { fakeTurns } from "../../seams/turn-starter.testing.js";
 import { fleetStoreOver } from "./agents-registry.testing.js";
-import { noPresences } from "../land/landed-presence.testing.js";
+import { noPresences } from "../land/tests/landed-presence.testing.js";
 import type { BeginTurn } from "../actor/conversation-decide.js";
 import { createFleet, type FleetStore } from "./agents-registry.js";
 import { type PersistedAgent, worktreeOf } from "./agents-store.js";

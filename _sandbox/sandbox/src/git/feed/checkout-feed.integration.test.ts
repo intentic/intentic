@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { FromNode } from "@intentic/sandbox-contract/netd-wire";
 import { defaultGit, type GitRunner, observeGitCommands } from "@intentic/base/git";
 import { statusPaths } from "../changes/changes.js";
+import { gitSlice } from "../git-slice.js";
 import { type CheckoutFeed, MAX_WATCHED, netdCheckoutFeed, readOnFeed, useCheckoutFeed } from "./checkout-feed.js";
 
 // The daemon's half of the change feed against a stand-in netd: which checkouts it names, how its questions batch,
@@ -99,6 +100,96 @@ test("lets the least recently read checkout go once more are watched than the ke
     }
     const [oldest] = dirs;
     expect(netd.told.filter((message) => message.kind === "unwatch")).toEqual([{ kind: "unwatch", dir: oldest ?? "" }]);
+});
+
+// netd's watches hold an inode: a checkout swapped out at its path (an extension update, a repository cloned again) is
+// not the one netd goes on counting, and netd counts a checkout watched again from zero.
+test("a checkout replaced at its path is watched afresh, and no generation handed out for the path repeats", async () => {
+    const parent = await tempDir();
+    const dir = await checkoutIn(parent, "ext");
+    const counts = new Map([[dir, 3]]);
+    const netd = standIn(counts);
+    const feed = netdCheckoutFeed(netd.link);
+    const first = await feed.generation(dir);
+    expect(first).toBe(3);
+
+    await rename(dir, join(parent, "ext.previous"));
+    await mkdir(join(dir, ".git"), { recursive: true });
+    // The caller that finds the swap gets no count; the watch it read is let go.
+    expect(await feed.generation(dir)).toBeUndefined();
+    expect(netd.told.filter((message) => message.kind === "unwatch")).toEqual([{ kind: "unwatch", dir }]);
+    // netd counts the new watch from scratch; what the feed hands out still climbs past everything said before.
+    counts.set(dir, 1);
+    const again = await feed.generation(dir);
+    expect(netd.told.filter((message) => message.kind === "watch")).toHaveLength(2);
+    expect(again).toBeGreaterThan(first ?? Number.POSITIVE_INFINITY);
+});
+
+test("a checkout let go for room and watched again never repeats a generation it was read at", async () => {
+    const parent = await tempDir();
+    const dirs = await Promise.all(Array.from({ length: MAX_WATCHED + 1 }, (_, index) => checkoutIn(parent, `c${String(index)}`)));
+    const [oldest] = dirs;
+    const counts = new Map(dirs.map((dir) => [dir, 2]));
+    const feed = netdCheckoutFeed(standIn(counts).link);
+    const before = await feed.generation(oldest ?? "");
+    for (const dir of dirs.slice(1)) {
+        await feed.generation(dir);
+    }
+    // Let go past the ceiling, then read again: netd's count for it starts over and lands on the same number.
+    expect(await feed.generation(oldest ?? "")).not.toBe(before);
+});
+
+test("a reading kept for a checkout is not served for the one that replaced it, though netd's count lands on the same number", async () => {
+    const parent = await tempDir();
+    const dir = await checkoutIn(parent, "repo");
+    const counts = new Map([[dir, 5]]);
+    useCheckoutFeed(netdCheckoutFeed(standIn(counts).link));
+    let reads = 0;
+    const read = async () => {
+        reads += 1;
+        return reads;
+    };
+    expect(await readOnFeed("kind", dir, defaultGit, read)).toBe(1);
+    expect(await readOnFeed("kind", dir, defaultGit, read)).toBe(1);
+    await rename(dir, join(parent, "repo.gone"));
+    await mkdir(join(dir, ".git"), { recursive: true });
+    expect(await readOnFeed("kind", dir, defaultGit, read)).toBe(2);
+    // Watched afresh, at netd's same count as the first watch: still a new reading, then held at it.
+    expect(await readOnFeed("kind", dir, defaultGit, read)).toBe(3);
+    expect(await readOnFeed("kind", dir, defaultGit, read)).toBe(3);
+});
+
+// An extension update or revert swaps checkouts by renaming them, so the install's path holds another checkout whose
+// HEAD netd never watched: the slice's HEAD read, kept per generation, must not answer with the one that left.
+test("an installed checkout's HEAD is read once while its count stands, and afresh for the checkout swapped in", async () => {
+    const parent = await tempDir();
+    const repoAt = async (name: string, content: string): Promise<{ dir: string; head: string }> => {
+        const dir = join(parent, name);
+        await mkdir(dir, { recursive: true });
+        await exec("git", ["-C", dir, "init", "-q"]);
+        await writeFile(join(dir, "a.txt"), content);
+        await exec("git", ["-C", dir, "add", "-A"]);
+        await exec("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", content]);
+        return { dir, head: (await exec("git", ["-C", dir, "rev-parse", "HEAD"])).stdout.trim() };
+    };
+    const live = await repoAt("ext", "one\n");
+    const staged = await repoAt("ext.staging", "two\n");
+    useCheckoutFeed(netdCheckoutFeed(standIn(new Map([[live.dir, 4]])).link));
+    // SAFETY: the git slice reads nothing of the core it is handed; every verb is a plain subprocess function.
+    const { git } = gitSlice.build({} as never);
+    const runs: string[] = [];
+    observeGitCommands(({ dir: at }) => {
+        if (at === live.dir) {
+            runs.push(at);
+        }
+    });
+    expect(await git.fullHead(live.dir)).toBe(live.head);
+    expect(await git.fullHead(live.dir)).toBe(live.head);
+    expect(runs).toHaveLength(1);
+
+    await rename(live.dir, join(parent, "ext.previous"));
+    await rename(staged.dir, live.dir);
+    expect(await git.fullHead(live.dir)).toBe(staged.head);
 });
 
 // A feed standing still at one generation per directory, until the test moves it.

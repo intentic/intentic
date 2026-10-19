@@ -17,6 +17,7 @@ import {
     unknownDaemonRoutes,
 } from "./useDaemonRoutes";
 import { resetContractFreshness } from "./contractFreshness";
+import { loadContract } from "./daemon/contract";
 
 // This browser's full route set, and the same set with vpn routes removed (an older daemon).
 const LEVEL = [...SANDBOX_ROUTE_NAMES];
@@ -26,7 +27,28 @@ const withoutVpn = LEVEL.filter((name) => !name.startsWith(`vpn.`));
 const SHAPES = { ...sandboxRouteFingerprints() };
 const reshaped = (...names: string[]): Record<string, string> => ({ ...SHAPES, ...Object.fromEntries(names.map((name) => [name, `different`])) });
 
+// The contract loads beside the start (daemon/contract.ts). Until it lands this build has no route names to compare, which must
+// read as no evidence in either direction, never as one side being behind; once it lands, the same hello reads as always.
+describe(`before the contract has landed`, () => {
+    beforeEach(() => resetSandboxScope());
+
+    it(`reads no drift either way, then reads the hello once the contract lands`, async () => {
+        setDaemonRoutes([...withoutVpn, `made.up`]);
+        expect(missingRoutes.value).toEqual([]);
+        expect(unknownDaemonRoutes.value).toEqual([]);
+        expect(appBehind.value).toBe(false);
+        expect(daemonBehind.value).toBe(false);
+
+        await loadContract();
+        expect(unknownDaemonRoutes.value).toEqual([`made.up`]);
+        expect(daemonBehind.value).toBe(true);
+    });
+});
+
 describe(`useDaemonRoutes`, () => {
+    beforeAll(async () => {
+        await loadContract();
+    });
     beforeEach(() => resetSandboxScope());
 
     it(`assumes every route is supported before the daemon has said anything`, () => {

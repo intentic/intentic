@@ -4,6 +4,7 @@
     "description": "oRPC wire contract for the intentic sandbox daemon, shared by the daemon and its browser client",
     "license": "MIT",
     "type": "module",
+    "sideEffects": false,
     "repository": {
         "type": "git",
         "url": "git+https://github.com/intentic/intentic.git",

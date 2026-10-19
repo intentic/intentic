@@ -15,13 +15,15 @@ import { useChat } from "../models/conversations/run/useChat";
 import { mobileChatPath } from "../lib/routes/tabRoots";
 import { useGuestFence } from "./guestFence";
 import SkipToContent from "./SkipToContent.vue";
+import { markBoot } from "../app/perf/boot";
+import { loadShellDesktop, loadShellMobile } from "./shellChunks";
 
 // Persistent post-login chrome, split by form factor: ShellDesktop (rail, side panel, terminal) under a
 // pointer, ShellMobile (tab bar, full-screen views) below 768px. State lives in module composables, so
 // the breakpoint swap doesn't restart it; liveness and the panels mount above the router (WorkspaceRuntime.vue).
 
-const ShellDesktop = defineAsyncComponent(() => loadChunk(() => import("./ShellDesktop.vue")));
-const ShellMobile = defineAsyncComponent(() => loadChunk(() => import("./ShellMobile.vue")));
+const ShellDesktop = defineAsyncComponent(() => loadChunk(loadShellDesktop));
+const ShellMobile = defineAsyncComponent(() => loadChunk(loadShellMobile));
 
 const { mobile } = useDevice();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
@@ -34,6 +36,7 @@ watchAgentsScope();
 watchDeviceReturns();
 // Pulls every view's chunk in the background once the shell is up (idempotent); see shell/prefetch/prefetch.ts.
 onMounted(prefetchViewsAtIdle);
+onMounted(() => markBoot(`shell`));
 const router = useRouter();
 const route = useRoute();
 

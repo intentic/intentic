@@ -4,6 +4,7 @@ import { repoRoot } from "@intentic/constants/node";
 import type { IntenticApi } from "@intentic/extension-api";
 import { type ExtensionManifest, ExtensionManifestSchema, extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { type ContractRoute, requestPathFor } from "@intentic/sandbox-contract/protocol/routes";
+import * as sandboxContractModule from "@intentic/sandbox-contract";
 import { SANDBOX_ROUTES } from "@intentic/sandbox-contract";
 
 // Conformance: every daemon route a first-party extension calls must be declared in its manifest's permissions.sandbox,
@@ -219,8 +220,9 @@ describe.each(declaringCallers)("%s declares every sandbox route it calls", (nam
 // What a gate that let a call through judged, in the evidence it records: the only trace a permission leaves.
 const judged = { calls: [] as string[] };
 
-// The extensions' typed client, reduced to its gate: a call runs the host's gate, and one let through is sent nowhere.
-const gatedClient = (gate: (procedure: readonly string[], input: unknown) => void): unknown =>
+// The extensions' typed client, reduced to its gate: a call runs the host's gate against the contract, as the real client
+// does once the contract has loaded, and one let through is sent nowhere.
+const gatedClient = (gate: (procedure: readonly string[], input: unknown, contract: typeof sandboxContractModule) => void): unknown =>
     new Proxy(
         {},
         {
@@ -229,7 +231,7 @@ const gatedClient = (gate: (procedure: readonly string[], input: unknown) => voi
                     {},
                     {
                         get: (_group, name: string) => async (input: unknown) => {
-                            gate([group, name], input);
+                            gate([group, name], input, sandboxContractModule);
                         },
                     },
                 ),

@@ -219,3 +219,49 @@ test("the runs list answers each failing main-line branch as a failure, with its
     ]);
     expect(Object.keys(answer)).toEqual(["repos", "runs", "failures"]);
 });
+
+// Every open Pipelines board re-lists a stale picture; boards asking at once used to ask the vendor once each. They share
+// one call per project now, joined only while it began within the cache's TTL: a call older than that is not joined, and
+// once the shared call has landed, the picture it filled is what the next board reads.
+test("boards that find the runs stale together share one vendor call per project, but never one older than the cache's TTL", async () => {
+    const { services } = await harness();
+    let lists = 0;
+    const releases: (() => void)[] = [];
+    const fetchFn: FetchFn = async (input) => {
+        if (!(input instanceof Request ? input.url : String(input)).includes("/actions/runs?")) {
+            return new Response(JSON.stringify(JOBS));
+        }
+        lists += 1;
+        await new Promise<void>((resolve) => releases.push(resolve));
+        return new Response(JSON.stringify({ workflow_runs: [] }));
+    };
+    // Never swept, so stale: every board below backfills.
+    const routes = createCiRoutes({ ...services, ciRuns: createRunsCache(20_000) }, fetchFn);
+
+    const boards = [call(routes.runs, undefined, { context }), call(routes.runs, undefined, { context }), call(routes.runs, undefined, { context })];
+    await waitFor(() => expect(lists).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(lists).toBe(1);
+    releases.shift()?.();
+    await Promise.all(boards);
+    // Landed and within the TTL: served from the picture, no call at all.
+    await call(routes.runs, undefined, { context });
+    expect(lists).toBe(1);
+
+    jest.useFakeTimers();
+    try {
+        jest.setSystemTime(Date.now() + 30_000);
+        const slow = call(routes.runs, undefined, { context });
+        await waitFor(() => expect(lists).toBe(2));
+        // The call under way began longer ago than the TTL allows a picture to be: a board now asks the vendor itself.
+        jest.setSystemTime(Date.now() + 20_001);
+        const late = call(routes.runs, undefined, { context });
+        await waitFor(() => expect(lists).toBe(3));
+        for (const release of releases.splice(0)) {
+            release();
+        }
+        await Promise.all([slow, late]);
+    } finally {
+        jest.useRealTimers();
+    }
+});

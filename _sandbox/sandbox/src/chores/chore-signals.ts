@@ -137,7 +137,7 @@ export const choreShape = (repoDir: string, workspaceRoot = false): ChoreShape =
     deps: declaredDeps(repoDir),
 });
 
-export const choreSignals = async (services: Pick<Services, "iq" | "workspace">, repo: string): Promise<ChoreSignals> => {
+const choreSignals = async (services: Pick<Services, "iq" | "workspace">, repo: string): Promise<ChoreSignals> => {
     const health = await services.iq.health({ scope: { repo }, limit: RANKING_LIMIT });
     const repoDir = join(services.workspace.root, repo);
     return {
@@ -148,5 +148,58 @@ export const choreSignals = async (services: Pick<Services, "iq" | "workspace">,
         totals: health.totals,
         // Only a fresh index may drive a verdict; "stale" (behind by a few files) is fine, "building" is not.
         indexed: health.freshness.state !== "building",
+    };
+};
+
+// One repo's reading in flight, the order it began in, and the reading queued behind it for callers that asked after.
+interface Flight {
+    readonly begun: number;
+    readonly reading: Promise<ChoreSignals>;
+    next?: Promise<ChoreSignals>;
+}
+
+export interface SharedChoreSignals {
+    // A caller's place in line, taken as it arrives, before it asks for any repo.
+    readonly asked: () => number;
+    // The repo's signals from a reading begun after `asked`: the one under way if it began later than that, else the
+    // one that begins once it is done, shared by everyone who asked meanwhile.
+    readonly of: (repo: string, asked: number) => Promise<ChoreSignals>;
+}
+
+// The rail badge and the panel ask at once, each walking every repo through one iq engine that answers them one by one,
+// so the second paid for every reading the first had just taken. A reading is shared only with callers that asked before
+// it began, which makes it as fresh for each of them as one of their own: a caller arriving mid-reading waits for the
+// next instead, which begins once that one is done and is shared in turn.
+export const sharedChoreSignals = (services: Pick<Services, "iq" | "workspace">): SharedChoreSignals => {
+    let clock = 0;
+    const flights = new Map<string, Flight>();
+    const begin = (repo: string): Promise<ChoreSignals> => {
+        const flight: Flight = { begun: (clock += 1), reading: choreSignals(services, repo) };
+        flights.set(repo, flight);
+        // Kept while a next reading is queued behind it, which takes its place as it begins.
+        const settled = (): void => {
+            if (flights.get(repo) === flight && flight.next === undefined) {
+                flights.delete(repo);
+            }
+        };
+        void flight.reading.then(settled, settled);
+        return flight.reading;
+    };
+    return {
+        asked: () => (clock += 1),
+        of: (repo, asked) => {
+            const flight = flights.get(repo);
+            if (flight === undefined) {
+                return begin(repo);
+            }
+            if (flight.begun > asked) {
+                return flight.reading;
+            }
+            flight.next ??= flight.reading.then(
+                () => begin(repo),
+                () => begin(repo),
+            );
+            return flight.next;
+        },
     };
 };

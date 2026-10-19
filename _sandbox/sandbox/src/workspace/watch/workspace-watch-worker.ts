@@ -4,6 +4,7 @@ import type { WorkspaceTreeDelta } from "@intentic/sandbox-contract/schemas/work
 import type { Logger } from "pino";
 import { post, serveCalls } from "@intentic/base/worker-calls";
 import { createResidentTree } from "../files/resident-tree.js";
+import { viewQueue } from "./view-queue.js";
 import { createWorkspaceWatch, type WatchAsk, type WatchNews } from "./workspace-watch.js";
 
 /* The recursive watcher's owner, and the resident tree's: every batch is re-listed here, off the daemon's loop. */
@@ -28,28 +29,26 @@ const announce = (delta: WorkspaceTreeDelta | undefined): void => {
 
 const watcher = createWorkspaceWatch(root, { warn: ({ err }: { err: unknown }) => report(err) } as unknown as Logger);
 
-// Batches and asks in arrival order, so an answer never shows half of a batch; the first waits for the first listing
-// and the armed watcher both, so a change made after any answer is one the tree will hear of.
-let queue: Promise<unknown> = Promise.all([tree.ready, watcher.ready]).catch(report);
-const after = <T>(step: () => Promise<T> | T): Promise<T> => {
-    const done = queue.then(step);
-    queue = done.catch(report);
-    return done;
-};
+// Batches and asks in arrival order (view-queue.ts); the first waits for the first listing and the armed watcher both,
+// so a change made after any answer is one the tree will hear of.
+const queue = viewQueue(Promise.all([tree.ready, watcher.ready]), () => tree.view(), (message) => news({ kind: "error", message }));
 watcher.subscribe((paths) => {
     news({ kind: "paths", paths });
-    void after(async () => announce(await tree.apply(paths)));
+    void queue.change(async () => announce(await tree.apply(paths)));
 });
-const reconcile = setInterval(() => void after(async () => announce(await tree.rebuild())), RECONCILE_MS).unref();
-serveCalls<WatchAsk & { readonly id: number }>(port, (ask) =>
-    after(async () => {
-        if (ask.kind === "close") {
-            clearInterval(reconcile);
-            await watcher.close();
-            return;
-        }
-        return ask.kind === "view" ? tree.view() : undefined;
-    }),
-);
+const reconcile = setInterval(() => void queue.change(async () => announce(await tree.rebuild())), RECONCILE_MS).unref();
+serveCalls<WatchAsk & { readonly id: number }>(port, (ask) => {
+    switch (ask.kind) {
+        case "view":
+            return queue.view();
+        case "close":
+            return queue.change(async () => {
+                clearInterval(reconcile);
+                await watcher.close();
+            });
+        case "ready":
+            return queue.settled();
+    }
+});
 
 port.on("close", () => void watcher.close());

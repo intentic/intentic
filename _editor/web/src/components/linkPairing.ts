@@ -1,8 +1,8 @@
 import { type InboundLinkMint, LINK_TURNS_PER_HOUR_DEFAULT, type LinkTerms } from "@intentic/sandbox-contract/schemas/links";
+import { loadContract } from "../client/sandbox/daemon/contract";
 import { procedurePath } from "@intentic/sandbox-contract/protocol/routes";
 import { RAW_JSON_ROUTES } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
 import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
-import { sandboxContract } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { sandboxJsonAt } from "../client/sandbox/sandboxClient";
 import { SandboxHttpError } from "../client/sandbox/sandboxHttpError";
@@ -27,7 +27,7 @@ export type FarPersona = z.infer<typeof PersonasAnswerSchema>["personas"][number
 
 /** The far sandbox's personas, read as the reader there. */
 export const personasAt = async (sandboxId: string): Promise<readonly FarPersona[]> =>
-    (await sandboxJsonAt(sandboxId, procedurePath(sandboxContract.personas.list), PersonasAnswerSchema)).personas;
+    (await sandboxJsonAt(sandboxId, procedurePath((await loadContract()).sandboxContract.personas.list), PersonasAnswerSchema)).personas;
 
 /** A card id from a sandbox's name: what the agent hands work `to`, within a capability id's alphabet. */
 export const linkCardId = (name: string): string => {

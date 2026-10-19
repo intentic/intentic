@@ -5,6 +5,7 @@ import { z } from "zod";
 import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openApprovalLedger } from "../../store/open-document.js";
+import { invalidateContributions } from "../contributions.js";
 
 /* The owner's yes to each workspace extension, pinned by its id and a digest of the powers it declared then. Kept under
  * the history root: an agent can write the extension's folder, so its approval must sit where no workspace write
@@ -52,20 +53,29 @@ export const extensionApprovals = async (historyRoot: string): Promise<(id: stri
 export const approveExtension = async (historyRoot: string, id: string, manifest: ExtensionManifest, now = Date.now()): Promise<void> => {
     const powers = powersOf(manifest);
     const pin = { digest: digestOf(powers), powers: Object.fromEntries(powers), approvedAt: now };
-    await ledgerOf(historyRoot).update((approved) => ({ ...approved, [id]: pin }));
+    try {
+        await ledgerOf(historyRoot).update((approved) => ({ ...approved, [id]: pin }));
+    } finally {
+        // The ledger lives on the history root, which no watcher reads: only its writers can move the cached inventory.
+        invalidateContributions();
+    }
     // It now stands among the yeses the owner can take back (needs/standing-grants.ts).
     publishRuntimeChange("grants");
 };
 
 // A removed extension written again later asks again, whatever it declares.
 export const forgetExtensionApproval = async (historyRoot: string, id: string): Promise<void> => {
-    await ledgerOf(historyRoot).update((approved) => {
-        if (!(id in approved)) {
-            return approved;
-        }
-        const { [id]: _forgotten, ...rest } = approved;
-        return rest;
-    });
+    try {
+        await ledgerOf(historyRoot).update((approved) => {
+            if (!(id in approved)) {
+                return approved;
+            }
+            const { [id]: _forgotten, ...rest } = approved;
+            return rest;
+        });
+    } finally {
+        invalidateContributions();
+    }
     publishRuntimeChange("grants");
 };
 
@@ -86,13 +96,17 @@ export const approvedExtensions = async (
 // exactly as it stood before it was approved.
 export const revokeExtensionApproval = async (historyRoot: string, id: string): Promise<boolean> => {
     let found = false;
-    await ledgerOf(historyRoot).update((approved) => {
-        if (!Object.hasOwn(approved, id)) {
-            return approved;
-        }
-        found = true;
-        return Object.fromEntries(Object.entries(approved).filter(([pinned]) => pinned !== id));
-    });
+    try {
+        await ledgerOf(historyRoot).update((approved) => {
+            if (!Object.hasOwn(approved, id)) {
+                return approved;
+            }
+            found = true;
+            return Object.fromEntries(Object.entries(approved).filter(([pinned]) => pinned !== id));
+        });
+    } finally {
+        invalidateContributions();
+    }
     if (found) {
         publishRuntimeChange("grants");
     }

@@ -19,10 +19,13 @@ import { postClientDiagnostics } from "./client/sandbox/clientReport";
 import { localFace } from "./app/environments/local";
 import { installDesktopLinks, installDesktopOpener } from "./app/environments/desktop";
 import { installPerfConsole, installPerfReporter, observeLongFrames } from "./app/perf/perf";
+import { markBoot } from "./app/perf/boot";
 import { watchStalledQueries } from "./app/perf/queryStalls";
 import { installRenderTrace } from "./app/perf/renderTrace";
-import { queryClient } from "./lib/queryPersistence";
-import { installSkeletonPersistence } from "./lib/skeletonPersistence";
+import { queryClient, readPersistedQueriesEarly } from "./lib/queryPersistence";
+import { installSkeletonPersistence, readImprintsEarly } from "./lib/skeletonPersistence";
+import { activeSandboxId } from "./app/storage/activeSandbox";
+import { loadContract } from "./client/sandbox/daemon/contract";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
 import { installDocumentAppearance } from "./features/settings/documentAppearance";
 import "./features/sandbox/switching/sandboxScope";
@@ -33,9 +36,13 @@ import { provideBuiltinViews } from "./workbench/views/registry";
 import { provideHubSources } from "./workbench/hub/useHubSearch";
 import { useHubSearchSources } from "./shell/hubSearchSources";
 import { openInPage, router } from "./router";
+import { installStartHooks } from "./router/startHooks";
 import { routePatternOf } from "./router/routePattern";
 import { installNotificationTaps } from "./workbench/notifications/notificationTaps";
 import "./styles.css";
+
+// The bundle has arrived and evaluated: everything above was a static import (boot.ts times the rest of the start).
+markBoot(`main`);
 
 installDevStyles();
 
@@ -53,8 +60,27 @@ if (localFace() === undefined) {
     sendClientDiagnosticsWith(postClientDiagnostics);
 }
 installClientDiagnostics();
+
+// A browser that had a sandbox open (the account's key, gone at sign-out) is about to open the shell, whose guard asks the
+// platform for the session first: asked now, its round trip runs beside everything below instead of after it, and the
+// guard joins it (refresh is single-flight; a settled answer is held as the user).
+const returning = activeSandboxId.value !== undefined;
+if (returning) {
+    const session = useAuth().refresh();
+    // allow(silent-catch): the guard asks again and owns the failure (the outage screen, or the sign-in page).
+    session.catch(() => undefined);
+    // The sandbox contract, which every daemon call waits on (client/sandbox/daemon/contract.ts): loading now, beside the
+    // session check, rather than at the shell's first call. A failure is retried by that call, which owns it.
+    // allow(silent-catch): as above.
+    loadContract().catch(() => undefined);
+}
+
 await purgeIfMarked();
 dropOutdatedMirrors(dropTranscriptStore);
+// The persisted cache's disk read, likewise begun now rather than after the session check (queryPersistence.ts).
+if (returning) {
+    readPersistedQueriesEarly();
+}
 
 // Runs in every window; must follow the purge, so a wipe here is never misread as a preference.
 installDocumentAppearance();
@@ -102,10 +128,14 @@ startAudienceSync();
 // same tick; on any other language it is one chunk, and paying for it here is what buys a first paint that is
 // already correct instead of one that corrects itself.
 await startAppI18n();
+markBoot(`i18n`);
 
 // Loading placeholders drawn in their content's last shape remember it per sandbox, in IndexedDB; before anything
 // mounts, so the first placeholder already reads the active sandbox's.
 installSkeletonPersistence();
+if (returning) {
+    readImprintsEarly();
+}
 
 // Minimal app-wide wiring: router, PrimeVue, vue-query; server state in useQuery, client state in composables.
 const app = createApp(App);
@@ -132,6 +162,8 @@ if (import.meta.env.DEV) {
     const render = installRenderTrace(app);
     void import("./shell/agentDevTools").then(({ installAgentDevTools }) => installAgentDevTools(render));
 }
+// Before the first navigation: the shell's chunks asked for while its guards run, and this load's timeline.
+installStartHooks(router);
 app.use(router);
 // Our own client so requireAuth can hydrate it from IndexedDB (per-user) before any route mounts.
 app.use(VueQueryPlugin, { queryClient });
@@ -139,3 +171,4 @@ installUi(app);
 // Every lazy chunk goes through `loadChunk`; this catches the preload Vite fails for one that doesn't.
 installChunkRecovery();
 app.mount("#app");
+markBoot(`mount`);

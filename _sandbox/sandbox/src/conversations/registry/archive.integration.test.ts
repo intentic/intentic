@@ -13,7 +13,7 @@ import { conversationUnits } from "../../store/conversation-units.js";
 import { type ConversationsDb, conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
 import { beginTurn } from "../actor/conversation-actors.testing.js";
 import { fleetStoreOver } from "./agents-registry.testing.js";
-import { noPresences } from "../land/landed-presence.testing.js";
+import { noPresences } from "../land/tests/landed-presence.testing.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { createFleet } from "./agents-registry.js";
 import { sqliteAgentsStore } from "./agents-store.js";

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { observeGitCommands } from "@intentic/base/git";
 import { isolatedAgent } from "../../registry/agents-store.testing.js";
 import { noIsolation } from "../../worktrees/isolation.testing.js";
 import { ensureRootRepo } from "../../../git/remote/root-repo.js";
@@ -12,6 +13,7 @@ import { workspacePaths } from "../../../workspace/workspace.js";
 import type { IsolatedAgent } from "../../registry/agents-store.js";
 import { landAgent } from "../land.js";
 import { createLandStandings } from "../standing.js";
+import { useCheckoutFeed } from "../../../git/feed/checkout-feed.js";
 import { syncConversation } from "../sync.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "../../worktrees/worktrees.js";
 
@@ -22,6 +24,8 @@ const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot:
 const perf = createPerfTracker(logger);
 const tempDirs: string[] = [];
 afterEach(async () => {
+    useCheckoutFeed(undefined);
+    observeGitCommands(() => undefined);
     for (const dir of tempDirs.splice(0)) {
         await rm(dir, { recursive: true, force: true });
     }
@@ -180,6 +184,48 @@ test("clearing the uncommitted edit a refusal named puts the card back to ready,
     expect(await standings.refresh([entry])).toBe(true);
     expect(standings.of("c1")).toBe("ready");
     expect(standings.causesOf("c1")).toEqual([]);
+});
+
+// Every roster read probes every live agent, and the probe's own reads (main's HEAD, the agent tips, the user's edits a
+// `workspace` blocker names) are kept per generation of the main checkout: a pass over a checkout netd counted as
+// untouched spawns none of them and answers exactly as the pass before, and once the count moves the next pass reads
+// git again and sees what changed.
+test("a pass over a main checkout whose count stood still reads no git of its own and answers as the last did", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    await writeFile(join(work, "app.ts"), "line one MINE\nline two\nline three\n");
+    const refused = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    const entry = isolatedAgent(refused.repos, { landing: { conflicts: refused.conflicts } });
+
+    const generations = new Map([[work, 1]]);
+    useCheckoutFeed({ generation: async (dir) => generations.get(dir) });
+    const probeReads: string[] = [];
+    observeGitCommands(({ dir, args }) => {
+        if (dir === work) {
+            probeReads.push(args.join(" "));
+        }
+    });
+    const standings = createLandStandings(worktrees);
+    const passOf = async (): Promise<{ standing: string; causes: readonly string[] }> => {
+        await standings.refresh([entry]);
+        return { standing: standings.of("c1"), causes: standings.causesOf("c1") };
+    };
+
+    const first = await passOf();
+    expect(first).toEqual({ standing: "conflict", causes: ["workspace"] });
+    const read = probeReads.length;
+    expect(read).toBeGreaterThan(0);
+    // The verdict is keyed on those reads, so with all three answered from memory the pass spawns no git at all.
+    expect(await passOf()).toEqual(first);
+    expect(probeReads).toHaveLength(read);
+
+    // The user clears their edit; netd counts the write, and the next pass reads the tree again.
+    await sh(work, "checkout", "--", "app.ts");
+    generations.set(work, 2);
+    expect(await passOf()).toEqual({ standing: "ready", causes: [] });
+    expect(probeReads.length).toBeGreaterThan(read);
 });
 
 // The conservative half of the same reading: a tidy tree is evidence about `workspace` blockers and nothing else, so a
