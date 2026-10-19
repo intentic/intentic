@@ -631,17 +631,6 @@
             "label": "Barre d'état",
             "close": "Fermer {title}"
         },
-        "cardSeal": {
-            "verified": "Sa vérification a réussi après la dernière modification",
-            "verifiedDetail": "L’agent a lancé une vérification après sa dernière modification du code, et elle a réussi.",
-            "failed": "Sa dernière vérification a échoué",
-            "failedDetail": "L’agent a lancé une vérification après sa dernière modification du code, et elle a échoué.",
-            "unproven": "Non testé après sa dernière modification",
-            "unprovenDetail": "L’agent a modifié du code sans lancer ensuite de tests, typecheck, lint ni build, ou celui qu’il a tenté n’a pas pu démarrer.",
-            "unviewedHead": "Interface modifiée sans regarder",
-            "unviewed": "A modifié {count} fichier d’interface sans regarder le résultat | A modifié {count} fichiers d’interface sans regarder le résultat",
-            "ran": "Lancé"
-        },
         "cardReach": {
             "installed": "A modifié la copie installée de {extension} : active tout de suite, non relue, perdue à sa prochaine mise à jour",
             "outside": "A écrit {count} fichier hors de sa branche : actif tout de suite, non relu | A écrit {count} fichiers hors de sa branche : actifs tout de suite, non relus",

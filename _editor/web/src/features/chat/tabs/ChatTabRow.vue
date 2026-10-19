@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
-import CardSeal from "../../../parts/fleet/CardSeal.vue";
-import { sealStandsIn } from "../../../models/fleet/board/proofSeal";
+import CardStamps from "../../../parts/fleet/CardStamps.vue";
 import ChildCount from "../../../parts/fleet/ChildCount.vue";
 import { boxNameOf } from "../../../models/fleet/fleetScope";
 import { editsRefusal } from "../../../models/agent-status/agentStatus-attention";
@@ -75,8 +74,6 @@ const settingsPages = useSettingsRefusal(
     () => props.agent !== undefined && props.agent.archivedAt === undefined && editsRefusal(props.agent),
 );
 const chip = computed(() => (props.agent === undefined ? props.view.chip : settingsChip(props.view.chip, props.agent, settingsPages.value)));
-// The seal takes the resting glyph's seat (landed, idle) exactly as on the board's card; a chip keeps its own seat either way.
-const sealYields = computed(() => chip.value === undefined && sealStandsIn(props.view.proof, props.agent?.status));
 
 // The unsent mark's words, read by the mark itself (UnsentMark): read here, in the #meta slot RailCard invokes, every
 // keystroke redrew the card and all it carries, which is the rail around the draft that chat-typing's budget keeps still.
@@ -104,7 +101,6 @@ const act = (event: Event, verb: "close" | "keep"): void => {
         :provider="props.agent?.provider ?? props.conversation.selection.provider.value"
         :status="props.view.status"
         :chip="chip"
-        :status-yields="sealYields"
         :rim="props.view.rim"
         :live="props.view.live"
         tight
@@ -150,10 +146,11 @@ const act = (event: Event, verb: "close" | "keep"): void => {
                 <Icon name="times" class="text-2xs" />
             </span>
         </template>
-        <!-- Its last turn's own proof as the board's one seal, in the board's seat: the corner's last mark, standing in for a resting glyph. -->
-        <template v-if="props.view.proof !== undefined" #corner>
+        <!-- The board card's stamps, in the board's seat left of the standing. The row is a button already, so here they open
+             their card on hover only, and three fit before the rest fold. -->
+        <template v-if="props.view.stamps.length > 0" #corner>
             <span class="flex h-4 shrink-0 items-center" data-corner>
-                <CardSeal :proof="props.view.proof" :status="sealYields ? props.view.status['aria-label'] : undefined" class="text-xs" />
+                <CardStamps :stamps="props.view.stamps" :agent="props.agent" :press="false" :max="3" class="text-xs" />
             </span>
         </template>
         <!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->

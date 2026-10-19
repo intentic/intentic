@@ -635,17 +635,6 @@
             "label": "Barra de estado",
             "close": "Cerrar {title}"
         },
-        "cardSeal": {
-            "verified": "Su comprobación pasó tras la última edición",
-            "verifiedDetail": "El agente ejecutó una comprobación tras su último cambio de código y pasó.",
-            "failed": "Su última comprobación falló",
-            "failedDetail": "El agente ejecutó una comprobación tras su último cambio de código y falló.",
-            "unproven": "Sin probar tras su última edición",
-            "unprovenDetail": "El agente cambió código y después no ejecutó tests, typecheck, lint ni build, o el que intentó no pudo arrancar.",
-            "unviewedHead": "Interfaz cambiada sin mirar",
-            "unviewed": "Cambió {count} archivo de interfaz sin mirar el resultado | Cambió {count} archivos de interfaz sin mirar el resultado",
-            "ran": "Ejecutó"
-        },
         "cardReach": {
             "installed": "Cambió la copia instalada de {extension}: activa ya, sin revisar, se perderá en su próxima actualización",
             "outside": "Escribió {count} archivo fuera de su rama: activo ya, sin revisar | Escribió {count} archivos fuera de su rama: activos ya, sin revisar",

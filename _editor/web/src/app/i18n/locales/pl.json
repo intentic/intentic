@@ -753,16 +753,31 @@
             "label": "Pasek stanu",
             "close": "Zamknij {title}"
         },
-        "cardSeal": {
-            "verified": "Jego sprawdzenie przeszło po ostatniej zmianie",
-            "verifiedDetail": "Agent uruchomił sprawdzenie po ostatniej zmianie kodu i przeszło.",
-            "failed": "Ostatnie sprawdzenie nie przeszło",
-            "failedDetail": "Agent uruchomił sprawdzenie po ostatniej zmianie kodu i nie przeszło.",
-            "unproven": "Nieprzetestowane po ostatniej zmianie",
-            "unprovenDetail": "Agent zmienił kod i nie uruchomił potem testów, typecheck, lint ani builda albo ten, który próbował uruchomić, nie wystartował.",
-            "unviewedHead": "Interfejs zmieniony bez podglądu",
+        "stamps": {
+            "heading": "Kontrole tej pracy",
+            "self": "Autokontrola",
+            "selfState": {
+                "passed": "przeszła po ostatniej zmianie",
+                "failed": "ostatnie uruchomienie nie przeszło"
+            },
+            "state": {
+                "passed": "bez uwag",
+                "handled": "{count} uwaga, obsłużona | {count} uwagi, wszystkie obsłużone | {count} uwag, wszystkie obsłużone",
+                "findings": "{count} otwarta uwaga | {count} otwarte uwagi | {count} otwartych uwag",
+                "someOpen": "otwarte {open} z {count} uwag",
+                "failed": "nie skończyła się",
+                "running": "trwa",
+                "done": "gotowe, raport jest w jej czacie"
+            },
+            "whereSelf": "Uruchomiona przez samego agenta",
+            "whereFresh": "W świeżej sesji",
+            "whereOwn": "We własnym czacie agenta",
+            "stale": "praca zmieniła się od tego czasu",
             "unviewed": "Zmienił {count} plik interfejsu bez obejrzenia wyniku | Zmienił {count} pliki interfejsu bez obejrzenia wyniku | Zmienił {count} plików interfejsu bez obejrzenia wyniku",
-            "ran": "Uruchomił"
+            "openTitle": "Otwórz czat",
+            "again": "Ponów",
+            "againTitle": "Uruchom ponownie",
+            "againNote": "Nowy czat, bez rozmowy"
         },
         "cardReach": {
             "installed": "Zmienił zainstalowaną kopię {extension}: działa od razu, bez przeglądu, zniknie przy następnej aktualizacji",
@@ -970,24 +985,6 @@
                 "ask": "Świeża sesja"
             },
             "menuItem": "Świeża sesja: {kind}"
-        },
-        "workAssurance": {
-            "marker": "{kind}: {state}",
-            "state": {
-                "running": "trwa",
-                "done": "gotowe",
-                "failed": "nie skończył się",
-                "clean": "bez uwag",
-                "findings": "{count} uwaga | {count} uwagi | {count} uwag",
-                "open": "otwarte {open} z {count}"
-            },
-            "stale": "praca zmieniła się od tego czasu",
-            "again": "Ponów",
-            "againTitle": "Uruchom ponownie",
-            "againNote": "Nowy czat, bez rozmowy",
-            "openTitle": "Otwórz",
-            "ownTip": "We własnym czacie",
-            "freshTip": "W świeżej sesji"
         }
     },
     "app": {

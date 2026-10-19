@@ -73,6 +73,7 @@ export const ICONS = {
     eye: NAVIGATION_GLYPHS[`eye`],
     "eye-slash": ACTION_GLYPHS[`eye-slash`],
     file: OBJECT_GLYPHS[`file`],
+    flask: OBJECT_GLYPHS[`flask`],
     "file-edit": OBJECT_GLYPHS[`file-edit`],
     "file-pdf": OBJECT_GLYPHS[`file-pdf`],
     "file-tree": OBJECT_GLYPHS[`file-tree`],

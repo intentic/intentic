@@ -39,11 +39,9 @@ import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status
 import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
 import { conflictIsYours, limited, limitScheduled, scheduledCount, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
 import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
-import CardSeal from "../../../../parts/fleet/CardSeal.vue";
-import WorkAssurance from "../../../../parts/fleet/WorkAssurance.vue";
-import { useWorkAssurance } from "../../../../models/fleet/board/workAssurance";
+import CardStamps from "../../../../parts/fleet/CardStamps.vue";
+import { useCardStamps } from "../../../../models/fleet/board/useCardStamps";
 import CardPermissionAsk from "./CardPermissionAsk.vue";
-import { sealStandsIn as standsIn } from "../../../../models/fleet/board/proofSeal";
 import { reachLine } from "../../../../models/fleet/board/reachLine";
 import KeepWarmPanel from "../../../../parts/fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
@@ -375,19 +373,15 @@ const cardRoot = useTemplateRef<HTMLElement>(`cardRoot`);
 // a coin toss of a label on forty receipts in a lane already named Finished, whose corner glyph says how each settled.
 const summary = computed(() => stats.value || rowDrill.value || rowChanges.value || resendable.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
-// What its last turn showed of its own work and what has checked it since (workAssurance.ts): said in words on a line of
-// its own (WorkAssurance), and by the corner's seal alone (`seal`) only where that line is not drawn.
-const { proof, checks, assured, seal } = useWorkAssurance(() => props.agent);
+// What vouches for its work, as stamps in its corner (useCardStamps.ts): its own last check, then each kind of check a
+// fresh session ran on it.
+const stamps = useCardStamps(() => props.agent);
 // What the card says of the failure it ended on: one line at rest, the words whole in its hover (cardFailure). A land
 // that broke keeps the line after the next turn cleared the turn's failure, since its work is still stuck.
 const failure = computed(() => cardFailure(props.agent));
 // Where its last turn put its work besides its branch (reachLine.ts): live files, a clone of its own, a push. Kept
-// while a new turn runs, unlike the seal: the work it names stays where it went until a turn puts it back.
+// while a new turn runs, unlike the stamps: the work it names stays where it went until a turn puts it back.
 const reach = computed(() => reachLine(props.agent.reach));
-// THE SEAL IS THE CORNER'S LAST MARK, beside the chip or the status glyph, never under either: a card whose turn just
-// ended is almost always unread, so a seal that gave way to "Updated" would hide exactly when its proof is news.
-// It STANDS IN for a resting glyph (proofSeal.sealStandsIn); its hover leads with the word the glyph wore.
-const sealStandsIn = computed(() => standsIn(seal.value, props.agent.status));
 // Either mark opens the same question the chat's status bar asks, answered for this card.
 const warmOpen = ref(false);
 const warmAnchor = ref<HTMLElement>();
@@ -672,6 +666,9 @@ const grab = (event: PointerEvent): void => {
                         <Icon name="ellipsis" class="text-sm" />
                     </button>
                 </span>
+                <!-- What vouches for its work, one stamp per check that ran (CardStamps), left of the standing so the standing keeps
+                     the card's right edge on every card. A step under the standing's size: the standing is the corner's main mark. -->
+                <CardStamps :stamps="stamps" :agent="agent" :quiet="receipt" class="text-sm" />
                 <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
                 <span
                     v-if="chip !== undefined"
@@ -683,7 +680,7 @@ const grab = (event: PointerEvent): void => {
                 <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
                 <!-- What the last turn left open is the tile rim's to say (tileRim): the checklist it drew here twice was one fact with two marks. -->
                 <Icon
-                    v-else-if="!sealStandsIn"
+                    v-else
                     :name="statusMeta.icon"
                     :spin="statusMeta.spin"
                     v-tooltip.top="statusMeta.label"
@@ -692,10 +689,6 @@ const grab = (event: PointerEvent): void => {
                     class="shrink-0 text-base"
                     :class="statusMeta.class"
                 />
-                <!-- What its last turn showed of its own work, one glyph, its words in its hover (CardSeal). The corner's marks are
-                     a step over the title's size, as the rail's are: a board card is bigger, its ring is 28px to the rail's
-                     24, and at the title's own size the two marks read as specks beside it. -->
-                <CardSeal v-if="seal !== undefined" :proof="seal" :quiet="receipt" :status="sealStandsIn ? statusMeta.label : undefined" class="text-base" />
             </span>
         </div>
         <p v-if="edit.error !== undefined" class="text-2xs text-danger">{{ edit.error }}</p>
@@ -756,9 +749,6 @@ const grab = (event: PointerEvent): void => {
                 <Icon :name="reach.tone === `warning` ? `exclamation-triangle` : `cloud-upload`" class="mt-px shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ reach.text }}</span>
             </p>
-
-            <!-- What has looked at its work, in words: its own last check, then the latest of each kind of check a fresh session ran. -->
-            <WorkAssurance v-if="assured" :agent="agent" :proof="proof" :checks="checks" :quiet="receipt" :class="dense ? 'w-full' : ''" />
 
             <!-- Provenance, ahead of the model/branch line: for an agent the user didn't start, whose it is outranks what it runs on. -->
             <OriginMark :origin="agent.origin" />

@@ -6,11 +6,12 @@ import { type StandingChip, standingChip } from "../../../models/agent-status/ag
 import { type TileRim, tileRim } from "../../../models/agent-status/agentStatus-lanes";
 import { activityIcon, activityLine, agentStatusMeta, cornerInk } from "../../../models/agent-status/agentStatus-meta";
 import { endingByHand, turnInFlight } from "../../../models/agent-status/agentStatus-standing";
-import { cardProof, type ProofMark } from "../../../models/fleet/board/proofSeal";
+import type { Stamp } from "../../../models/fleet/board/stamps";
+import { cardStampsOf } from "../../../models/fleet/board/useCardStamps";
 import { type ReachLine, reachLine } from "../../../models/fleet/board/reachLine";
 import { type CacheCooling, cacheCooling, type WarmMark, warmMark } from "../../../models/fleet/promptCache";
 import { snapshotFingerprint } from "../../../models/fleet/useAgents-registry";
-import type { FleetAgent } from "../../../models/fleet/useAgents-fleet";
+import { fleet, type FleetAgent } from "../../../models/fleet/useAgents-fleet";
 import { sandboxNow } from "../../../models/agent-status/sandboxClock";
 import { modelLabelFor } from "../../../models/providers/providerCatalog";
 import { statusIcon, statusLabel } from "../models/catalog";
@@ -39,8 +40,8 @@ export interface CardView {
     readonly cooling: CacheCooling | undefined;
     // A hold on the cache outranks the cooling glyph; the open chat's status bar is where it is changed.
     readonly warm: WarmMark | undefined;
-    // What its last turn showed of its own work (proofSeal.ts): plain data like everything here.
-    readonly proof: ProofMark | undefined;
+    // What vouches for its work, the board card's stamps (stamps.ts): plain data like everything here.
+    readonly stamps: Stamp[];
     // Where its last turn put its work besides its branch (reachLine.ts), the board card's line at rail width.
     readonly reach: ReachLine | undefined;
     readonly meta: boolean;
@@ -129,8 +130,8 @@ export const createCardViews = (): CardViews => {
     const held = new Map<string, { print: string; view: CardView }>();
     return {
         of: (entry, snippet, now) => {
-            // Only a roster agent has a turn that proved anything; an unfiled chat has none.
-            const proof = entry.agent === undefined ? undefined : cardProof(entry.agent, turnInFlight(entry.agent));
+            // Only a roster agent has work anything checked; an unfiled chat has none.
+            const stamps = entry.agent === undefined ? [] : cardStampsOf(entry.agent, fleet.value);
             const reach = entry.agent === undefined ? undefined : reachLine(entry.agent.reach);
             const view: CardView = {
                 status: statusOf(entry),
@@ -145,7 +146,7 @@ export const createCardViews = (): CardViews => {
                 model: modelOf(entry),
                 cooling: entry.agent === undefined ? undefined : cacheCooling(entry.agent, now),
                 warm: entry.agent === undefined || turnInFlight(entry.agent) ? undefined : warmMark(entry.agent),
-                proof,
+                stamps,
                 reach,
                 meta: hasMeta(entry, reach),
             };

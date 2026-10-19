@@ -1,6 +1,6 @@
-// A CARD SAYS WHAT ITS LAST TURN SHOWED OF ITS OWN WORK, NOW THAT NOTHING CHECKS IT FOR THE CONVERSATION: one seal on the
-// rail's row and the board's card alike, never the corner's word, which is the standing's (chatTabsStanding.test.ts).
-// Nothing is spelled out on the card, a failure included: every reading is the seal's hover.
+// A CARD STAMPS WHAT CHECKED ITS WORK: one glyph per check that ran, in the rail's row and the board's card alike, left of
+// the standing, which keeps the corner's right edge. Nothing is spelled out on the card: every stamp's words are its
+// card's (CardStamps), and its accessible name.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
@@ -103,36 +103,35 @@ afterEach(() => {
 });
 
 const rowOf = (el: HTMLElement, key: Seed): HTMLElement => el.querySelector<HTMLElement>(`[data-chat-tab="${SEEDS[key].id}"]`)!;
-const sealOf = (root: HTMLElement): HTMLElement | null => root.querySelector<HTMLElement>(`[data-seal]`);
-// The seal's hover, one reading per line; its accessible name is the same words.
-const readings = (seal: HTMLElement | null): string[] => seal?.getAttribute(`aria-label`)?.split(`\n`) ?? [];
+const stampsIn = (root: HTMLElement): HTMLElement | null => root.querySelector<HTMLElement>(`[data-stamps]`);
+// Each stamp drawn, as `kind:outcome` and the mark beside its glyph.
+const drawn = (root: HTMLElement): string[] =>
+    [...root.querySelectorAll<HTMLElement>(`[data-stamp]`)].map(
+        (stamp) => `${stamp.dataset[`stampKind`]}:${stamp.dataset[`stampOutcome`]}${stamp.textContent?.trim() ? ` ${stamp.textContent.trim()}` : ``}`,
+    );
+// The stamps' accessible name, one line each after the heading.
+const readings = (stamps: HTMLElement | null): string[] => stamps?.getAttribute(`aria-label`)?.split(`\n`).slice(1) ?? [];
 
-it(`leaves the seal's ring open on a row whose last turn proved nothing, its words in the hover alone`, async () => {
+// A dashed variant of a passing glyph was a difference nobody could read: work nothing checked has no stamp at all.
+it(`stamps nothing on a row whose last turn proved nothing, and keeps its standing glyph`, async () => {
     const row = rowOf(await mountRail(), `unproven`);
-    const seal = sealOf(row)!;
-    expect(seal.dataset[`sealKind`]).toBe(`open`);
-    expect(seal.textContent?.trim()).toBe(``);
-    // The row is a button of its own, and the seal is never a press.
-    expect(seal.tagName).toBe(`SPAN`);
-    // In the corner, as on the board's card, standing in for the landed glyph, whose word its hover leads with.
-    expect(readings(seal)).toEqual([`Landed`, `Not tested after its last edit`, `Changed 2 interface files without looking at the result`]);
-    expect(seal.closest(`[data-corner]`)).not.toBeNull();
-    // Not the corner: that stays the standing's, and a read, settled card has none to say.
-    expect(row.querySelector(`span.ui-status-pill`)).toBeNull();
+    expect(stampsIn(row)).toBeNull();
+    expect(row.querySelector(`[data-icon="check-circle"]`)).not.toBeNull();
 });
 
-it(`draws what the last turn showed of its own work as the seal alone, its words in the hover`, async () => {
+it(`stamps the agent's own check on a rail row, never as a press of its own`, async () => {
     const el = await mountRail();
-    const failing = sealOf(rowOf(el, `failing`))!;
-    expect(failing.dataset[`sealKind`]).toBe(`broke`);
-    expect(readings(failing)).toEqual([`Idle`, `Its last check failed`, `pnpm -C web e2e signup.spec.ts`]);
+    const failing = stampsIn(rowOf(el, `failing`))!;
+    expect(drawn(failing)).toEqual([`self:failed !`]);
+    expect(readings(failing)).toEqual([`Self-check: its last run failed`]);
+    // The row is a button already; a click on the stamps is the row's.
+    expect(failing.tagName).toBe(`SPAN`);
+    expect(failing.closest(`[data-corner]`)).not.toBeNull();
 
-    const proven = sealOf(rowOf(el, `proven`))!;
-    expect(proven.dataset[`sealKind`]).toBe(`closed`);
-    expect(readings(proven)).toEqual([`Landed`, `Its check passed after the last edit`, `pnpm -C api test`]);
-    // One glyph per row, whatever it has to say.
-    expect(rowOf(el, `unproven`).querySelectorAll(`[data-seal]`)).toHaveLength(1);
-    expect(el.querySelector(`[data-check]`)).toBeNull();
+    const proven = stampsIn(rowOf(el, `proven`))!;
+    expect(drawn(proven)).toEqual([`self:passed`]);
+    // The standing keeps its glyph beside the stamps: landed is not a verdict on the work.
+    expect(rowOf(el, `proven`).querySelector(`[data-icon="check-circle"]`)).not.toBeNull();
 });
 
 const mountCard = async (agent: FleetAgent): Promise<HTMLElement> => {
@@ -149,42 +148,61 @@ const mountCard = async (agent: FleetAgent): Promise<HTMLElement> => {
 
 const cardOf = (key: Seed): FleetAgent => ({ ...summary(key), open: false, unread: false, unsent: false });
 
-// A failure is the seal's to say on the board too: a red glyph whose words are its hover, and no line of the card's.
-it(`breaks the seal on a board card whose last check failed, with no words line`, async () => {
+it(`stamps a board card's own failed check in its corner, with no words line in the body`, async () => {
     const el = await mountCard(cardOf(`failing`));
-    const seal = sealOf(el)!;
-    expect([seal.tagName, seal.dataset[`sealKind`]]).toEqual([`SPAN`, `broke`]);
-    expect(readings(seal)).toEqual([`Idle`, `Its last check failed`, `pnpm -C web e2e signup.spec.ts`]);
+    const stamps = stampsIn(el)!;
+    expect(drawn(stamps)).toEqual([`self:failed !`]);
+    expect(stamps.tagName).toBe(`BUTTON`);
     expect(el.textContent).not.toContain(`signup.spec.ts`);
+    expect(el.querySelector(`[data-work-assurance]`)).toBeNull();
 });
 
-// A resting glyph says only that nothing is going on; the seal says that and more, so it takes the corner, and its hover
-// still leads with the word the glyph wore.
-it(`stands the seal in for a landed card's glyph`, async () => {
+it(`keeps a landed card's glyph as its standing, beside a passing stamp`, async () => {
     const el = await mountCard(cardOf(`proven`));
-    const seal = sealOf(el)!;
-    expect(seal.dataset[`sealKind`]).toBe(`closed`);
-    expect(readings(seal)).toEqual([`Landed`, `Its check passed after the last edit`, `pnpm -C api test`]);
-    expect(el.querySelector(`[data-icon="check-circle"]`)).toBeNull();
-    expect(el.querySelector(`[data-check]`)).toBeNull();
+    expect(drawn(stampsIn(el)!)).toEqual([`self:passed`]);
+    expect(el.querySelector(`[data-icon="check-circle"]`)).not.toBeNull();
+    // Left of the standing, so the standing keeps the card's right edge.
+    const corner = stampsIn(el)!.parentElement!;
+    expect(corner.lastElementChild?.getAttribute(`data-icon`)).toBe(`check-circle`);
 });
 
-it(`leaves the seal's ring open on a card that landed without proving anything`, async () => {
+it(`stamps nothing on a card that landed without proving anything`, async () => {
     const el = await mountCard({ ...cardOf(`proven`), proof: { at: 1_900, verification: `unproven` } });
-    expect(sealOf(el)?.dataset[`sealKind`]).toBe(`open`);
-    expect(readings(sealOf(el))).toEqual([`Landed`, `Not tested after its last edit`]);
+    expect(stampsIn(el)).toBeNull();
 });
 
-// "Updated" is the corner's word for a card whose turn just ended, which is exactly when its proof is news.
-it(`keeps the seal beside an unread card's chip rather than under it`, async () => {
+// "Updated" is the corner's word for a card whose turn just ended, which is exactly when its stamps are news.
+it(`keeps the stamps beside an unread card's chip rather than under it`, async () => {
     const el = await mountCard({ ...cardOf(`proven`), unread: true, seenAt: 1_000 });
     expect(el.querySelector(`span.ui-status-pill`)).not.toBeNull();
-    expect(sealOf(el)?.dataset[`sealKind`]).toBe(`closed`);
+    expect(drawn(stampsIn(el)!)).toEqual([`self:passed`]);
 });
 
-// A status that says something of its own keeps its glyph, and the seal rides beside it.
-it(`sets the seal beside a glyph that has something of its own to say`, async () => {
-    const el = await mountCard({ ...cardOf(`proven`), status: `ready` });
-    expect(el.querySelector(`[data-icon="download"]`)).not.toBeNull();
-    expect(readings(sealOf(el))).toEqual([`Its check passed after the last edit`, `pnpm -C api test`]);
+// The stamps are about the work as it was, so a turn redoing it hides them.
+it(`stamps nothing while a turn is redoing the work`, async () => {
+    const el = await mountCard({ ...cardOf(`proven`), status: `running` });
+    expect(stampsIn(el)).toBeNull();
+});
+
+// A fresh session's check is a stamp of its own kind beside the agent's own, in one order on every card.
+it(`stamps each kind of check a fresh session ran, after the agent's own`, async () => {
+    const origin = cardOf(`proven`);
+    const reviewer: AgentSummary = {
+        id: `reviewer`,
+        title: `Code review: Soft-delete the users table`,
+        status: `idle`,
+        updatedAt: 2_000,
+        seenAt: 2_000,
+        provider: `claude`,
+        harness: `native`,
+        attention: NO_ATTENTION,
+        turns: 1,
+        fresh: { of: origin.id, kind: `review`, at: 1_950 },
+        review: { at: 1_990, source: `claude`, findings: 3, open: 2 },
+    };
+    setAgents([summary(`proven`), reviewer], 100);
+    await settle();
+    const el = await mountCard(origin);
+    expect(drawn(stampsIn(el)!)).toEqual([`self:passed`, `review:findings 2`]);
+    expect(readings(stampsIn(el))).toEqual([`Self-check: passed after its last edit`, `Code review: 2 of 3 findings open`]);
 });

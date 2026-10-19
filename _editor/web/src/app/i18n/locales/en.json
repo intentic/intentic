@@ -753,16 +753,31 @@
             "label": "Status bar",
             "close": "Close {title}"
         },
-        "cardSeal": {
-            "verified": "Its check passed after the last edit",
-            "verifiedDetail": "The agent ran a check after its last code change, and it passed.",
-            "failed": "Its last check failed",
-            "failedDetail": "The agent ran a check after its last code change, and it failed.",
-            "unproven": "Not tested after its last edit",
-            "unprovenDetail": "The agent changed code and ran no test, typecheck, lint or build after it, or the one it tried could not start.",
-            "unviewedHead": "Interface changed unseen",
+        "stamps": {
+            "heading": "Checks on this work",
+            "self": "Self-check",
+            "selfState": {
+                "passed": "passed after its last edit",
+                "failed": "its last run failed"
+            },
+            "state": {
+                "passed": "no findings",
+                "handled": "{count} finding, handled | {count} findings, all handled",
+                "findings": "{count} finding open | {count} findings open",
+                "someOpen": "{open} of {count} findings open",
+                "failed": "didn't finish",
+                "running": "running now",
+                "done": "done, its report is in its chat"
+            },
+            "whereSelf": "Run by the agent itself",
+            "whereFresh": "In a fresh session",
+            "whereOwn": "In the agent's own chat",
+            "stale": "the work changed since",
             "unviewed": "Changed {count} interface file without looking at the result | Changed {count} interface files without looking at the result",
-            "ran": "Ran"
+            "openTitle": "Open chat",
+            "again": "Again",
+            "againTitle": "Run it again",
+            "againNote": "New chat, no conversation"
         },
         "cardReach": {
             "installed": "Changed the installed copy of {extension}: live now, not reviewed, lost on its next update",
@@ -970,24 +985,6 @@
                 "ask": "Fresh session"
             },
             "menuItem": "Fresh session: {kind}"
-        },
-        "workAssurance": {
-            "marker": "{kind}: {state}",
-            "state": {
-                "running": "running",
-                "done": "done",
-                "failed": "didn't finish",
-                "clean": "no findings",
-                "findings": "{count} finding | {count} findings",
-                "open": "{open} of {count} open"
-            },
-            "stale": "the work changed since",
-            "again": "Again",
-            "againTitle": "Run it again",
-            "againNote": "New chat, no conversation",
-            "openTitle": "Open it",
-            "ownTip": "In its own chat",
-            "freshTip": "In a fresh session"
         }
     },
     "app": {

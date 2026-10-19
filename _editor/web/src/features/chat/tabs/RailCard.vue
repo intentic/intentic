@@ -33,8 +33,6 @@ const props = defineProps<{
     // Why this row needs the reader, or that it has news: the corner's word, decided by agentStatus.standingChip so a
     // rail row and its board card say and tint the same thing. Takes the seat `status` would otherwise hold.
     chip?: StandingChip;
-    // True when the `corner` slot's mark (the board's seal) stands in for the resting status glyph (proofSeal.sealStandsIn).
-    statusYields?: boolean;
     // What the identity mark's rim draws: how far the session got, decided once by agentStatus.tileRim so this card and
     // the board's cannot disagree. Undefined for every row that isn't a session, which wears the empty rim instead.
     rim?: TileRim;
@@ -132,6 +130,8 @@ const chipHint = computed((): Tip | undefined =>
                     <span v-if="peek" class="sr-only">{{ t(`common.railCard.temporary`) }}</span>
                 </span>
                 <slot name="trailing" />
+                <!-- The corner's marks left of the standing, as on the board's card (its stamps). -->
+                <slot name="corner" />
                 <!-- THE CORNER SAYS IT IN WORDS WHEN THERE ARE WORDS, exactly as the board's card does: a glyph in this seat can say
      "something ended" but never "Usage limit", and the two surfaces drawing the same standing differently was the
      whole complaint. The resting glyph gets the seat back the moment there is nothing to say. -->
@@ -139,11 +139,9 @@ const chipHint = computed((): Tip | undefined =>
                     chip.label
                 }}</span>
                 <!-- Fixed-height box so a row's title never shifts between a spinning glyph and a resting one. -->
-                <span v-else-if="status !== undefined && !statusYields" class="flex h-4 shrink-0 items-center">
+                <span v-else-if="status !== undefined" class="flex h-4 shrink-0 items-center">
                     <Icon v-bind="status" />
                 </span>
-                <!-- The corner's last mark, beside the chip or the status glyph, as on the board's card (the seal). -->
-                <slot name="corner" />
             </span>
 
             <!-- Muted by default; these are reference numbers, not events, so colour here is reserved for what matters. -->

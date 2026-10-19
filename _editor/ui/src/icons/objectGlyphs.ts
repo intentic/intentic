@@ -23,6 +23,8 @@ export const OBJECT_GLYPHS = {
     "file-edit": { outline: `M4 3h10l6 6v12H4Z M14 3v6h6 M8 13h8 M8 17h5` },
     "file-pdf": { outline: `M4 3h10l6 6v12H4Z M14 3v6h6 M9 18v-7h3a2 2 0 0 1 0 4H9` },
     "file-tree": { outline: `M5 5v13h8 M5 10h8 M13 7h8v6h-8Z M13 16h8v6h-8Z`, solid: `M3 2h4v4H3Z` },
+    // A test, as every editor's test runner draws it: the flask, its liquid the solid that tells it from a bottle.
+    flask: { outline: `M8 3h8 M10 3v6l-6 10v2h16v-2l-6-10V3`, solid: `M6.4 15h11.2l2.4 4H4Z` },
     "folder-open": { outline: `M3 18V5h6l3 3h8v3 M3 11h19l-3 9H5Z` },
     gift: { outline: `M3 8h18v5H3Z M5 13v8h14v-8 M12 8v13 M12 8H8a3 3 0 1 1 3-3l1 3 1-3a3 3 0 1 1 3 3Z` },
     globe: { outline: `M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z M3 12h18 M12 3c-5 5-5 13 0 18 5-5 5-13 0-18Z` },

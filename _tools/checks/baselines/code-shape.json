@@ -369,7 +369,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/agents/board/cards/AgentCard.vue": {
-        "count": 986,
+        "count": 976,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/agents/board/useAgentFilter.ts#useAgentFilter#lines": {
