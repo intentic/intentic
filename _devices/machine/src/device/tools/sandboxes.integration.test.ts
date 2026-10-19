@@ -345,6 +345,14 @@ test("advertises background-prepare only when ic's prepare takes --auto, spelled
     expect(featuresFrom(undefined, undefined, "      --automatic")).toEqual([]);
 });
 
+// `sleep` is what a Devices row checks before it offers Sleep: an agent advertises it only when its ic has the verb.
+test("advertises sleep only when ic has `sandbox sleep`, read off its --idle spelled whole", () => {
+    const sleep = "Usage: ic sandbox sleep [OPTIONS] [SLUG]\n      --idle <MINUTES>\n      --json";
+    expect(featuresFrom(undefined, undefined, undefined, sleep)).toEqual(["sleep"]);
+    expect(featuresFrom(undefined, undefined, undefined, undefined)).toEqual([]);
+    expect(featuresFrom(undefined, undefined, undefined, "      --idleness <N>")).toEqual([]);
+});
+
 test("a background download runs ic's unattended prepare, the same argv as the machine's own timer", () => {
     expect(icBackgroundPrepareArgs("work")).toEqual(["sandbox", "prepare", "work", "--auto"]);
 });

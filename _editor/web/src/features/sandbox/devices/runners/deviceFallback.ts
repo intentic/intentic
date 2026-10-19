@@ -22,7 +22,7 @@ const LOG_LINES = 200;
 // The verbs `ic` owns: moving a sandbox between images, and its power, since a start or restart through ic applies
 // the shape saved for the next restart and a bare `docker restart` would not.
 const IC_VERB: Partial<Record<SandboxVerb, string>> = { update: `update`, rollback: `rollback`, remove: `remove` };
-const POWER = new Set<SandboxVerb>([`start`, `stop`, `restart`]);
+const POWER = new Set<SandboxVerb>([`start`, `stop`, `sleep`, `restart`]);
 
 // The shape as flags, for a machine whose `ic` predates `--set` (its agent advertises no `set-shape`, shapeFlow). That
 // machine is the one this line is most often printed for, and its ic refuses `--set`. `reshape` is the verb every such
@@ -68,7 +68,7 @@ export const sandboxFallback = (
         return verb === `rollback` && to !== undefined ? `ic sandbox rollback ${slug} --to ${to}` : `ic sandbox ${ic} ${slug}`;
     }
     if (POWER.has(verb)) {
-        return `ic ${icPowerArgs(verb as `start` | `stop` | `restart`, slug).join(` `)}`;
+        return `ic ${icPowerArgs(verb as `start` | `stop` | `sleep` | `restart`, slug).join(` `)}`;
     }
     if (verb === `logs`) {
         return `docker logs --tail ${LOG_LINES} ${CONTAINER}${slug}`;

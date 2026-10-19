@@ -6,6 +6,7 @@ import {
     DEVICE_FEATURE_ROLLBACK_TO,
     DEVICE_FEATURE_SET_SHAPE,
     DEVICE_FEATURE_BACKGROUND_PREPARE,
+    DEVICE_FEATURE_SLEEP,
     type DeviceFeature,
 } from "@intentic/sandbox-contract/schemas/hosts";
 import { archToken, downloadAsset, exe, osToken, releaseAssetUrl } from "../../release.js";
@@ -221,12 +222,14 @@ const helpLists = (help: string | undefined, flag: string): boolean =>
 // with `set-shape`'s `when` for every current page, and is still advertised only for pages and daemons from before
 // `set-shape` (v1.312.0 and older), which check it before sending a later-reshape: REMOVE IN v1.314.0, with the old
 // `reshape` op. `rollback-to` is a rollback's `to`, carried as `ic sandbox rollback <slug> --to <version>`.
-// `background-prepare` is the `prepare-background` op, which this agent runs only as `ic sandbox prepare --auto`. Pure
-// over the help, so the derivation is asserted without an ic.
-export const featuresFrom = (shapeHelp: string | undefined, rollbackHelp?: string, prepareHelp?: string): DeviceFeature[] => [
+// `background-prepare` is the `prepare-background` op, which this agent runs only as `ic sandbox prepare --auto`.
+// `sleep` is the `sleep` op, `ic sandbox sleep <slug>`, read off the verb's own `--idle`, which it has had from the start.
+// Pure over the help, so the derivation is asserted without an ic.
+export const featuresFrom = (shapeHelp: string | undefined, rollbackHelp?: string, prepareHelp?: string, sleepHelp?: string): DeviceFeature[] => [
     ...(helpLists(shapeHelp, "--set") ? [DEVICE_FEATURE_RESHAPE_LATER, DEVICE_FEATURE_SET_SHAPE] : []),
     ...(helpLists(rollbackHelp, "--to") ? [DEVICE_FEATURE_ROLLBACK_TO] : []),
     ...(helpLists(prepareHelp, "--auto") ? [DEVICE_FEATURE_BACKGROUND_PREPARE] : []),
+    ...(helpLists(sleepHelp, "--idle") ? [DEVICE_FEATURE_SLEEP] : []),
 ];
 
 // Asked once per process when it answers: the agent keeps its ic current before asking (ensureCurrentIc), so the answer
@@ -235,12 +238,13 @@ let features: Promise<DeviceFeature[]> | undefined;
 export const deviceFeatures = async (): Promise<DeviceFeature[]> => {
     features ??= (async () => {
         await ensureCurrentIc();
-        const [shapeHelp, rollbackHelp, prepareHelp] = await Promise.all([
+        const [shapeHelp, rollbackHelp, prepareHelp, sleepHelp] = await Promise.all([
             helpOf(["sandbox", "shape"]),
             helpOf(["sandbox", "rollback"]),
             helpOf(["sandbox", "prepare"]),
+            helpOf(["sandbox", "sleep"]),
         ]);
-        return featuresFrom(shapeHelp, rollbackHelp, prepareHelp);
+        return featuresFrom(shapeHelp, rollbackHelp, prepareHelp, sleepHelp);
     })();
     const answered = await features;
     if (answered.length === 0) {

@@ -6020,6 +6020,7 @@
             "workingRestart": "Restartowanie {name}",
             "workingResume": "Wznawianie synchronizacji plików",
             "workingRollback": "Cofanie {name}",
+            "workingSleep": "Usypianie {name}",
             "workingStart": "Uruchamianie {name}",
             "workingStop": "Zatrzymywanie {name}",
             "workingUnignore": "Przywracanie portu na localhost",
@@ -8385,6 +8386,7 @@
                 "runnerRemove": "usunięcie runnera",
                 "runnerUp": "uruchomienie runnera",
                 "setShape": "zmiana zasobów",
+                "sleep": "sleep",
                 "start": "uruchomienie",
                 "stop": "zatrzymanie",
                 "update": "aktualizacja"

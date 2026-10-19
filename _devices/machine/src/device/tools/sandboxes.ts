@@ -141,7 +141,8 @@ export const listSandboxes = async (scopes: DeviceScopes): Promise<string> => {
 
 // The ops themselves, in the one place that spells them: the MCP tool advertises this schema to the model and
 // checks an arriving call against it.
-export const SandboxOpSchema = z.enum(["start", "stop", "restart"]);
+// `sleep` is a stop the machine undoes by itself: ic records it asleep, and the next visit to its page starts it again.
+export const SandboxOpSchema = z.enum(["start", "stop", "restart", "sleep"]);
 export type SandboxOp = z.infer<typeof SandboxOpSchema>;
 
 // Which container the slug means, or the machine's own answer that it means none: one lookup for every op, so a
@@ -172,6 +173,9 @@ export const manageSandbox = async (
     const run = await icFlow(slug, icPowerArgs(op, slug), onLine, { moves: true });
     if (run.code !== 0) {
         throw new Error(`That ${op} failed on this device.\n\n${run.output}`);
+    }
+    if (op === "sleep") {
+        return `Put sandbox "${slug}" to sleep. It starts again by itself when somebody opens it.`;
     }
     const verb = { start: "Started", stop: "Stopped", restart: "Restarted" }[op];
     const applied = op !== "stop" && target.resources?.desired !== undefined;

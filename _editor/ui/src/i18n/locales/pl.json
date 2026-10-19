@@ -326,7 +326,9 @@
         "updateHeader": "Zaktualizować {name}?",
         "rollBackHeader": "Cofnąć {name} do poprzedniej wersji?",
         "hideLogs": "Ukryj logi",
-        "logs": "Logi"
+        "logs": "Logi",
+        "sleep": "Uśpij",
+        "sleepHint": "budzi się, gdy ktoś go otworzy"
     },
     "searchBar": {
         "aa": "Aa",

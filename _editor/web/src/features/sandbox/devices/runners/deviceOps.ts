@@ -43,6 +43,7 @@ import { type OpOutcome, syncSaid, verdictSaid } from "./opSaid";
 const OP: Record<SandboxVerb, DeviceSandboxOp> = {
     start: `start`,
     stop: `stop`,
+    sleep: `sleep`,
     restart: `restart`,
     update: `update`,
     rollback: `rollback`,
@@ -55,7 +56,7 @@ const OP: Record<SandboxVerb, DeviceSandboxOp> = {
 // the rest: it recreates the container, so the relay carrying the call dies with it and no result frame can
 // arrive. Its own dialog warns beforehand — a separate question from what a dropped stream MEANS afterwards,
 // and leaving it out made a reshape that worked report "Lost contact with that device".
-const SEVERING = new Set<DeviceSandboxOp>([`stop`, `restart`, `update`, `rebuild`, `rollback`, `remove`, `reshape`]);
+const SEVERING = new Set<DeviceSandboxOp>([`stop`, `sleep`, `restart`, `update`, `rebuild`, `rollback`, `remove`, `reshape`]);
 
 // Everything this page can do to one machine's file sync: the switches over a pairing that exists, and the one that
 // starts one. Enrolling belongs with them rather than in the add-a-device dialog — a folder on a machine already
@@ -118,26 +119,18 @@ const agentAsked = (op: DeviceAgentOp): string =>
 
 // What the Devices row and the machine's card say while one of these is out on a machine. `logs` is absent: reading a
 // tail is not work being done to anything, and a row that marks it would be marking almost every visit.
-const verbWorking = (verb: SandboxVerb, name: string): string | undefined => {
-    switch (verb) {
-        case `start`:
-            return t(`sandbox.deviceOps.workingStart`, { name });
-        case `stop`:
-            return t(`sandbox.deviceOps.workingStop`, { name });
-        case `restart`:
-            return t(`sandbox.deviceOps.workingRestart`, { name });
-        case `update`:
-            return t(`sandbox.deviceOps.workingUpdate`, { name });
-        case `rollback`:
-            return t(`sandbox.deviceOps.workingRollback`, { name });
-        case `resources`:
-            return t(`sandbox.deviceOps.workingResources`, { name });
-        case `remove`:
-            return t(`sandbox.deviceOps.workingRemove`, { name });
-        default:
-            return undefined;
-    }
-};
+const VERB_WORKING = {
+    start: (name) => t(`sandbox.deviceOps.workingStart`, { name }),
+    stop: (name) => t(`sandbox.deviceOps.workingStop`, { name }),
+    sleep: (name) => t(`sandbox.deviceOps.workingSleep`, { name }),
+    restart: (name) => t(`sandbox.deviceOps.workingRestart`, { name }),
+    update: (name) => t(`sandbox.deviceOps.workingUpdate`, { name }),
+    rollback: (name) => t(`sandbox.deviceOps.workingRollback`, { name }),
+    resources: (name) => t(`sandbox.deviceOps.workingResources`, { name }),
+    remove: (name) => t(`sandbox.deviceOps.workingRemove`, { name }),
+    logs: undefined,
+} satisfies Readonly<Record<SandboxVerb, ((name: string) => string) | undefined>>;
+const verbWorking = (verb: SandboxVerb, name: string): string | undefined => VERB_WORKING[verb]?.(name);
 
 // The same, over several rows at once: "Stopping 3 sandboxes".
 const batchWorking = (verb: Exclude<BatchVerb, `remove`>, count: number): string =>

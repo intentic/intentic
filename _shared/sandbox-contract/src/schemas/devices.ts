@@ -124,6 +124,7 @@ export const DeviceSandboxOpSchema = z.enum([
     "start",
     "stop",
     "restart",
+    "sleep",
     "prepare",
     // `prepare` under the unattended rules (`ic sandbox prepare --auto`): nobody pressed anything, so low disk is "not
     // now" and a pinned sandbox or the version it went back from is left alone. What the update card sends by itself
@@ -203,7 +204,7 @@ export const icShapeArgs = (slug: string, fields: SandboxShapeFields, when: Sand
 ];
 export const icForgetShapeArgs = (slug: string): string[] => ["sandbox", "shape", slug, "--forget"];
 // Power goes through ic too, so a Start or Restart from any door applies the shape saved for the next restart.
-export const icPowerArgs = (op: "start" | "stop" | "restart", slug: string): string[] => ["sandbox", op, slug];
+export const icPowerArgs = (op: "start" | "stop" | "restart" | "sleep", slug: string): string[] => ["sandbox", op, slug];
 // Adds the device id to the flow input; the daemon looks up machines by id. `resumeTurns` is the owner saying, as they
 // restart the sandbox relaying this, that the turns it cuts should run again once it is back; the daemon keeps it for
 // its next boot and never forwards it to the machine. A sandbox older than it ignores it, and the cut turns wait.

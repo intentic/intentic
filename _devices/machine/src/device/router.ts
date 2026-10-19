@@ -104,6 +104,11 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
         ({ slug }, scopes) =>
         async () =>
             await manageSandbox("stop", slug, scopes),
+    // The same stop, recorded as asleep: the machine starts it again when somebody opens it.
+    sleep:
+        ({ slug }, scopes) =>
+        async () =>
+            await manageSandbox("sleep", slug, scopes),
     restart:
         ({ slug }, scopes) =>
         async (onLine) =>

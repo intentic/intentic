@@ -591,6 +591,9 @@ it(`keeps the menu's vocabulary the same for both apps`, () => {
     expect(primaryVerb(false)).toBe(`start`);
     expect(menuVerbs(true)).toEqual([`restart`, `logs`, `resources`, `update`, `rollback`]);
     expect(menuVerbs(false)).toEqual([`logs`, `resources`, `update`, `rollback`]);
+    // Sleep only where the machine can do it, and only for a running sandbox, beside the Stop it varies.
+    expect(menuVerbs(true, true)).toEqual([`sleep`, `restart`, `logs`, `resources`, `update`, `rollback`]);
+    expect(menuVerbs(false, true)).toEqual([`logs`, `resources`, `update`, `rollback`]);
 });
 
 // The sandbox's share of the machine, and the Resources form that changes it (reshape carries only what changed).

@@ -6469,6 +6469,7 @@
             "workingRestart": "Restarting {name}",
             "workingResume": "Resuming file syncing",
             "workingRollback": "Rolling back {name}",
+            "workingSleep": "Putting {name} to sleep",
             "workingStart": "Starting {name}",
             "workingStop": "Stopping {name}",
             "workingUnignore": "Putting a port back on localhost",
@@ -8856,6 +8857,7 @@
                 "runnerRemove": "runner-remove",
                 "runnerUp": "runner-up",
                 "setShape": "set-shape",
+                "sleep": "sleep",
                 "start": "start",
                 "stop": "stop",
                 "update": "update"

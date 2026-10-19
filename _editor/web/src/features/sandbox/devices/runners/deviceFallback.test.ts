@@ -30,6 +30,7 @@ describe(`the power verbs, which go through ic too`, () => {
     test(`each is the ic verb of the same name, named by slug`, () => {
         expect(sandboxFallback(`start`, `work`)).toBe(`ic sandbox start work`);
         expect(sandboxFallback(`stop`, `work`)).toBe(`ic sandbox stop work`);
+        expect(sandboxFallback(`sleep`, `work`)).toBe(`ic sandbox sleep work`);
         expect(sandboxFallback(`restart`, `work`)).toBe(`ic sandbox restart work`);
     });
 

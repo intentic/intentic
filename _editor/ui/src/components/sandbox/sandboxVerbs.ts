@@ -3,16 +3,19 @@ import { t } from "../../i18n/index.js";
 // What can be done to one sandbox on one device, the vocabulary behind SandboxVerbs.vue. Structural
 // rather than the sandbox contract's own `DeviceSandboxOp`. `rebuild` is deliberately absent: it needs
 // the approved overlay's digest, only knowable from the Environment card.
-export type SandboxVerb = `start` | `stop` | `restart` | `update` | `rollback` | `resources` | `logs` | `remove`;
+// `sleep` is a stop the machine undoes by itself when somebody opens the sandbox, offered only where the caller says the
+// machine can do it.
+export type SandboxVerb = `start` | `stop` | `sleep` | `restart` | `update` | `rollback` | `resources` | `logs` | `remove`;
 
 // One button on the row, the rest behind a menu: the container's power state is what the row's dot is
 // about and what people reach for most; everything else is one click away. Start/Stop are one slot in
 // two states.
 export const primaryVerb = (running: boolean): Extract<SandboxVerb, `start` | `stop`> => (running ? `stop` : `start`);
 
-// The menu, in reading order: restart beside the power button it varies; the log tail, reached most;
+// The menu, in reading order: sleep and restart beside the power button they vary; the log tail, reached most;
 // then a reshape that keeps the image; then update/rollback, newest-first. Removal is last and alone.
-export const menuVerbs = (running: boolean): readonly SandboxVerb[] => [
+export const menuVerbs = (running: boolean, sleeps = false): readonly SandboxVerb[] => [
+    ...(running && sleeps ? ([`sleep`] as const) : []),
     ...(running ? ([`restart`] as const) : []),
     `logs`,
     `resources`,
@@ -32,6 +35,9 @@ export const VERB_LABEL: Readonly<Record<Exclude<SandboxVerb, `logs`>, string>> 
     },
     get stop() {
         return t(`ui.action.stop`);
+    },
+    get sleep() {
+        return t(`ui.sandboxSandboxVerbs.sleep`);
     },
     get restart() {
         return t(`ui.action.restart`);

@@ -326,7 +326,9 @@
         "updateHeader": "Update {name}?",
         "rollBackHeader": "Roll {name} back?",
         "hideLogs": "Hide logs",
-        "logs": "Logs"
+        "logs": "Logs",
+        "sleep": "Sleep",
+        "sleepHint": "wakes when someone opens it"
     },
     "searchBar": {
         "aa": "Aa",

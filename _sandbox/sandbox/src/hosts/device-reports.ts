@@ -14,14 +14,11 @@ import {
 } from "@intentic/sandbox-contract/schemas/devices";
 import {
     type HostSummary,
-    DEVICE_FEATURE_RESHAPE_LATER,
-    DEVICE_FEATURE_SET_SHAPE,
-    DEVICE_FEATURE_BACKGROUND_PREPARE,
-    deviceSupports,
     HOST_NATIVE_ENVIRONMENT,
 } from "@intentic/sandbox-contract/schemas/hosts";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
+import { refuseUnsupported } from "./device-feature-gates.js";
 import type { Services } from "../composition.js";
 import { approvedPath } from "../environment/environment.js";
 import type { SyncEnrollmentRow } from "../peers/desktop-sync.js";
@@ -484,26 +481,7 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
     if (client === undefined) {
         throw new ORPCError("CONFLICT", { message: services.hostHub.offline(id) });
     }
-    // The ops an agent can't do, refused here before anything reaches the machine. An agent that predates `later` drops
-    // it and reshapes at once, restarting the sandbox under everyone working in it: the opposite of what Save promised.
-    // One that predates `set-shape` refuses the op by name, so this only says why, and what to do, in words.
-    const facts = services.hostHub.state(id).facts;
-    if (input.op === "reshape" && input.later === true && !deviceSupports(facts, DEVICE_FEATURE_RESHAPE_LATER)) {
-        throw new ORPCError("CONFLICT", {
-            message: `The agent on "${id}" is too old to save a change for the next restart: it would restart the sandbox now instead. Nothing was changed. Update that device's agent, then save again.`,
-        });
-    }
-    if ((input.op === "set-shape" || input.op === "forget-shape") && !deviceSupports(facts, DEVICE_FEATURE_SET_SHAPE)) {
-        throw new ORPCError("CONFLICT", {
-            message: `The agent on "${id}" is too old to set a sandbox's shape through ic. Nothing was changed. Update that device's agent, then try again.`,
-        });
-    }
-    // An agent from before `prepare-background` refuses the op by name anyway; said here in words, like `set-shape`.
-    if (input.op === "prepare-background" && !deviceSupports(facts, DEVICE_FEATURE_BACKGROUND_PREPARE)) {
-        throw new ORPCError("CONFLICT", {
-            message: `The agent on "${id}" is too old to download an update in the background. Nothing was changed; its own timer still downloads updates every few hours.`,
-        });
-    }
+    refuseUnsupported(id, services.hostHub.state(id).facts, input);
     if (input.op === "set-shape" && (input.shape === undefined || input.when === undefined)) {
         throw new ORPCError("BAD_REQUEST", { message: "A shape is set whole, with when it takes effect: `shape` and `when` are both required." });
     }

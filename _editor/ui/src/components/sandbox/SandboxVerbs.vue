@@ -21,6 +21,7 @@ const {
     compact = false,
     container = true,
     rollbackChoices = [],
+    sleeps = false,
 } = defineProps<{
     /** The container's own state: it decides whether the row's button says Start or Stop. */
     running: boolean;
@@ -38,6 +39,9 @@ const {
     // The versions this machine kept, newest first, when it can go back to any of them: Roll back becomes one row per
     // version. Fewer than two is the plain verb, since there is nothing to choose between.
     rollbackChoices?: readonly RollbackChoice[] | undefined;
+    // Whether the machine can put this sandbox to sleep (stopped, and started again when somebody opens it): a running
+    // row then offers Sleep beside Stop.
+    sleeps?: boolean | undefined;
 }>();
 
 const emit = defineEmits<{ act: [verb: SandboxVerb]; rollbackTo: [choice: RollbackChoice] }>();
@@ -47,6 +51,7 @@ const emit = defineEmits<{ act: [verb: SandboxVerb]; rollbackTo: [choice: Rollba
 const VERB_ICON: Record<SandboxVerb, IconName> = {
     start: `play`,
     stop: `stop`,
+    sleep: `moon`,
     restart: `refresh`,
     update: `download`,
     rollback: `undo`,
@@ -62,7 +67,14 @@ const labelOf = (verb: SandboxVerb): string =>
 // What the ⋯ button shows while something runs: a menu verb has no button of its own to spin, so the
 // control that opened it takes the spinner.
 const menuBusy = computed(() => busy !== undefined && (compact || !container || busy !== power.value));
-const item = (verb: SandboxVerb): MenuItem => ({ label: labelOf(verb), icon: VERB_ICON[verb], command: () => emit(`act`, verb) });
+// Sleep says under its label what sets it apart from Stop, since the two look alike from here.
+const item = (verb: SandboxVerb): MenuItem => {
+    const row: MenuItem = { label: labelOf(verb), icon: VERB_ICON[verb], command: () => emit(`act`, verb) };
+    if (verb === `sleep`) {
+        row[`hint`] = t(`ui.sandboxSandboxVerbs.sleepHint`);
+    }
+    return row;
+};
 
 // Roll back as one row, or, with versions to choose between, one row per version this machine kept: the newest is the
 // plain rollback and the rest name their target. Rows of this list rather than a submenu, which the menu's own
@@ -87,7 +99,7 @@ const items = computed<MenuItem[]>(() => [
     ...(container
         ? [
               ...(compact ? [item(power.value)] : []),
-              ...menuVerbs(running).flatMap((verb) => (verb === `rollback` ? rollbackRows() : [item(verb)])),
+              ...menuVerbs(running, sleeps).flatMap((verb) => (verb === `rollback` ? rollbackRows() : [item(verb)])),
               { separator: true },
           ]
         : []),

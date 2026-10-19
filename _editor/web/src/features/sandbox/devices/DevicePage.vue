@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { deviceEnvironment } from "@intentic/sandbox-contract/schemas/devices";
-import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
+import { DEVICE_FEATURE_SLEEP, deviceSupports, HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
 import {
     BrandMark,
     Button,
@@ -416,9 +416,8 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                     <!-- One quiet ⋯ per row, the kit's own menu, so this page and the desktop app's manager window offer the
                          same verbs. A row whose container is elsewhere gets the same ⋯ holding the one act that applies. -->
                     <template #actions="{ group }">
-                        <!-- No `busy`: the row's own status glyph spins while it works (DeviceDetail `busy`), and a
-                             second spinner on the ⋯ beside it would say the same thing twice. -->
-                        <!-- Roll back offers each version this machine kept, where its agent can go back to any of them. -->
+                        <!-- No `busy`: the row's status glyph already spins (DeviceDetail `busy`). Roll back offers each version kept
+                             where the agent can go back to any; Sleep where it can sleep, never on this page's own sandbox (it would wake). -->
                         <SandboxVerbs
                             v-if="manager && manageable(manager.device, group)"
                             :compact="true"
@@ -426,6 +425,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                             :disabled="ops.working.value"
                             :logs-open="ops.logShown(group)"
                             :rollback-choices="rollbackChoices(manager.device.facts, group.sandbox)"
+                            :sleeps="deviceSupports(manager.device.facts, DEVICE_FEATURE_SLEEP) && !ops.selfGroup(group)"
                             @act="(verb) => ops.act(group, verb)"
                             @rollback-to="(choice) => ops.act(group, `rollback`, choice)"
                         />

@@ -113,6 +113,8 @@ export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 // - `keyring`: the keyring* procedures, intentic-keyring on this computer reached through the machine (keyring.ts);
 //   advertised only while a keyring is installed, so a sandbox never offers a computer without one as a place to keep or
 //   type a secret.
+// - `sleep`: the `sleep` op, a sandbox put to sleep now (`ic sandbox sleep <slug>`): stopped, and started again by
+//   itself when somebody opens it; advertised only when the agent's `ic` has `sandbox sleep`.
 export const DeviceFeatureSchema = z.enum([
     "reshape-later",
     "set-shape",
@@ -122,6 +124,7 @@ export const DeviceFeatureSchema = z.enum([
     "project-delivery",
     "programs",
     "keyring",
+    "sleep",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -132,6 +135,7 @@ export const DEVICE_FEATURE_BACKGROUND_PREPARE: DeviceFeature = "background-prep
 export const DEVICE_FEATURE_PROJECT_DELIVERY: DeviceFeature = "project-delivery";
 export const DEVICE_FEATURE_PROGRAMS: DeviceFeature = "programs";
 export const DEVICE_FEATURE_KEYRING: DeviceFeature = "keyring";
+export const DEVICE_FEATURE_SLEEP: DeviceFeature = "sleep";
 // The features an agent advertised that this build knows; an unknown one is a newer agent's and means nothing here.
 export const deviceFeatures = (facts: Pick<DeviceFacts, "features"> | undefined): DeviceFeature[] =>
     (facts?.features ?? []).flatMap((feature) => {

@@ -619,7 +619,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "manage_sandbox",
         description:
-            "Start, stop or restart one Intentic sandbox on this device, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it, and stopping the sandbox you are calling from severs your own connection. All three go through the device's `ic`. When a shape is saved for the sandbox's next restart (reshape_sandbox with `when: \"nextRestart\"`, shown as `resources.desired`), start and restart recreate it with that shape, which takes about a minute; stop keeps it waiting. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
+            "Start, stop, restart or sleep one Intentic sandbox on this device, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it, and stopping the sandbox you are calling from severs your own connection. `sleep` stops it the same way, but the device starts it again by itself as soon as somebody opens it. All four go through the device's `ic`. When a shape is saved for the sandbox's next restart (reshape_sandbox with `when: \"nextRestart\"`, shown as `resources.desired`), start and restart recreate it with that shape, which takes about a minute; stop keeps it waiting. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
         effect: "write",
         input: z.object({ op: SandboxOpSchema, slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ op, slug }, scopes) => textResult(await manageSandbox(op, slug, scopes)),

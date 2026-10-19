@@ -18,6 +18,7 @@ const LOG_TAIL_LINES = 200;
 const RUN_OF = {
     start: (slug: string) => `power:${slug}`,
     stop: (slug: string) => `power:${slug}`,
+    sleep: (slug: string) => `power:${slug}`,
     restart: (slug: string) => `power:${slug}`,
     update: (slug: string) => `recreate:${slug}`,
     rollback: (slug: string) => `recreate:${slug}`,
@@ -117,8 +118,9 @@ const promptFor = (verb: SandboxVerb, name: string, slug: string): SandboxVerbPr
     return verb === `remove` && asked !== undefined ? { header: asked.header, body: t(`desktop.app.removesSandboxKeepsFiles`, { slug }) } : asked;
 };
 
-// A verb that changes a row, the ones a press can ask about first.
-type RowChange = Exclude<SandboxVerb, `logs` | `resources`>;
+// A verb that changes a row, the ones a press can ask about first. Sleep is not one here: this window's power script
+// knows start, stop and restart, and its rows never offer Sleep (SandboxVerbs `sleeps`).
+type RowChange = Exclude<SandboxVerb, `logs` | `resources` | `sleep`>;
 
 // A verb that asks first (stop, remove, rollback…) asks in the system's own dialog, worded as the web tab's.
 const agreed = async (verb: RowChange, group: DeviceSandboxGroup, slug: string): Promise<boolean> => {
@@ -146,6 +148,9 @@ export const act = async (group: DeviceSandboxGroup, verb: SandboxVerb): Promise
     }
     if (verb === `logs`) {
         await toggleLogs(slug);
+        return;
+    }
+    if (verb === `sleep`) {
         return;
     }
     if (verb === `resources`) {

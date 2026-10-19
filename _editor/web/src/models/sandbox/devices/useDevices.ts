@@ -132,6 +132,7 @@ const severedOutcome = (op: DeviceSandboxOp, slug: string): string =>
 const OP_WORDS: Readonly<Record<DeviceSandboxOp, () => string>> = {
     start: () => t(`sandbox.useDevices.ops.start`),
     stop: () => t(`sandbox.useDevices.ops.stop`),
+    sleep: () => t(`sandbox.useDevices.ops.sleep`),
     restart: () => t(`sandbox.useDevices.ops.restart`),
     prepare: () => t(`sandbox.useDevices.ops.prepare`),
     "prepare-background": () => t(`sandbox.useDevices.ops.prepareBackground`),
