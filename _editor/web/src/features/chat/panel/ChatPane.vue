@@ -510,12 +510,12 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
             <Icon name="times" class="text-2xs" />
         </button>
         <!-- One scroller for the transcript and the composer under it, so the composer's height is reserved by layout, not measured back into it. -->
-        <!-- The gap below the composer is outside the scroller, so clipping keeps it clear without an opaque strip over the transcript. -->
+        <!-- The gap below the composer is outside the scroller, so clipping keeps it clear without an opaque strip over the transcript; a phone's is the footer's side inset. -->
         <!-- `.chat-scroller` is the IntersectionObserver root each prompt uses to tell if it's pinned. -->
         <div
             ref="scroller"
             class="chat-scroller flex flex-1 flex-col"
-            :class="[strip ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing, 'mb-3': !strip }]"
+            :class="[strip ? 'overflow-visible' : 'overflow-x-hidden overflow-y-auto', { 'chat-realize': realizing, 'mb-3': !strip && !mobile, 'mb-2': !strip && mobile }]"
         >
             <div ref="content" class="flex min-w-0 flex-1 flex-col">
                 <!-- The scratch pad withholds the turns, so no message component mounts and the scroller shrinks to the composer. -->

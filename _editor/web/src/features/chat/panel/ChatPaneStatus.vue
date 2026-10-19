@@ -152,7 +152,8 @@ const usageChip = computed(() => {
 <template>
     <!-- Keep the composer above the mobile keyboard inset. -->
     <div
-        class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 pb-2 text-2xs text-subtle"
+        class="mx-auto flex w-full max-w-[51rem] items-center gap-2 px-3 text-2xs text-subtle"
+        :class="{ 'pb-2': !mobile || block !== undefined }"
         :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
     >
         <!-- Whether this transcript shows its tool calls; left of the hint so it stays reachable on narrow panes. Not on a
@@ -165,15 +166,15 @@ const usageChip = computed(() => {
             <span class="truncate">{{ block }}</span>
         </span>
         <span v-else-if="!mobile" class="@max-md:hidden min-w-0 flex-1 truncate">{{ hint }}</span>
-        <!-- ONE LINE, EVERY READOUT WHOLE. On a phone only what is happening now stands here: the refusal on the left and
-             the jobs a chat left running. The standing instruments (cache, context, allowance) are the desktop's: under a
-             phone's composer they held a whole row for a glance nobody takes there, and each has its own door on the phone
-             (the session menu keeps the chat warm, Sandbox ▸ Usage says the allowance). -->
-        <div class="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
+        <!-- ONE LINE, EVERY READOUT WHOLE. On a phone only the refusal stands here, and the strip takes no room without it:
+             the readouts are the desktop's. Under a phone's composer each held a whole row for a glance nobody takes there,
+             and each has its own place on the phone (running jobs on their transcript rows and the card, keeping the chat
+             warm in the session menu, the allowance in Sandbox ▸ Usage). -->
+        <div v-if="!mobile" class="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
             <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
             <ChatJobsReadout />
             <!-- How long answering stays cheap, and the one press that keeps it so while the chat sits idle. -->
-            <template v-if="cacheChip !== undefined && card !== undefined && !maker && !mobile">
+            <template v-if="cacheChip !== undefined && card !== undefined && !maker">
                 <button
                     ref="cacheTrigger"
                     type="button"
@@ -190,13 +191,13 @@ const usageChip = computed(() => {
                     <KeepWarmPanel :agent="card" @done="cacheOpen = false" />
                 </ResponsiveOverlay>
             </template>
-            <span v-if="contextRing && !maker && !mobile" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
+            <span v-if="contextRing && !maker" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
                 <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-accent'" />
                 <span class="@max-xs:hidden">{{ contextRing.label }}</span>
             </span>
             <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost. -->
             <RouterLink
-                v-if="usageChip && !isGuest && !mobile"
+                v-if="usageChip && !isGuest"
                 to="/sandbox/usage"
                 class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
             >
