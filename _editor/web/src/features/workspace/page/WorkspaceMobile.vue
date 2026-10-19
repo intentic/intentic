@@ -58,6 +58,7 @@ import FileViewer from "../viewers/FileViewer.vue";
 import HistoryPanel from "../changes/history/HistoryPanel.vue";
 import ReviewPanel from "../changes/ReviewPanel.vue";
 import SavePanel from "../changes/save/SavePanel.vue";
+import BringProjectButton from "../explorer/BringProjectButton.vue";
 import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import { workspaceAgent, workspaceDir } from "../../../app/workspaceScope";
@@ -394,6 +395,7 @@ const onPick = (event: Event): void => {
                 >
                     <Icon name="history" class="text-base" />
                 </button>
+                <BringProjectButton v-if="segment === 'files' && !contentMode" look="phone" @pick="fileInput?.click()" />
                 <!-- The desktop funnel, thumb-sized, as a sheet not a menu; drill-down only, content search has its own chip. -->
                 <button
                     v-if="segment === 'files' && !contentMode"

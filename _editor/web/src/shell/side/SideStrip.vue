@@ -81,14 +81,28 @@ const onKeydown = (event: KeyboardEvent, id: string): void => {
     }
     if (event.key === `Delete`) {
         event.preventDefault();
-        emit(`close`, id);
+        closeKeepingFocus(id);
     }
 };
 
-const onClose = (event: Event, id: string): void => {
-    // The × sits inside the tab, so the press must not also select it.
-    event.stopPropagation();
+// Closing from the keyboard (Delete on a tab, or its × button) leaves focus where the reader can carry on: on the tab the
+// panel moved to (`active`, once it answers), or, with the strip gone, on the main area rather than nowhere.
+const closeKeepingFocus = (id: string): void => {
+    const hadFocus = scroller.value?.contains(document.activeElement) === true;
     emit(`close`, id);
+    if (!hadFocus) {
+        return;
+    }
+    void nextTick(() => {
+        const next = active === undefined ? undefined : tabEls.get(active);
+        (next ?? document.getElementById(`main-content`))?.focus();
+    });
+};
+
+const onClose = (event: Event, id: string): void => {
+    // The × sits inside the tab's box, so the press must not also select it.
+    event.stopPropagation();
+    closeKeepingFocus(id);
 };
 
 // A tab just opened past the strip's end is brought into view.
@@ -106,40 +120,50 @@ watch(
 
 <template>
     <div ref="scroller" class="scrollbar-none flex min-w-0 flex-1 items-stretch overflow-x-auto" role="tablist" :aria-label="t(`shell.sidePanel.label`)" @wheel="onWheel">
+        <!-- The tab and its close press side by side in one box: a role="tab" makes its children presentational, so a
+             button inside it would be no button at all to a screen reader. The box carries the pointer gestures. -->
         <div
             v-for="tab in tabs"
             :key="tab.id"
-            :ref="(el) => setTabEl(tab.id, el)"
-            role="tab"
-            :id="domId(tab.id)"
-            :aria-selected="tab.id === active"
-            :aria-controls="`${domId(tab.id)}-body`"
-            :tabindex="tab.id === active ? 0 : -1"
-            class="group flex max-w-48 shrink-0 items-center gap-1.5 border-r border-r-line px-3 text-xs outline-offset-[-2px]"
+            role="presentation"
+            class="group flex max-w-48 shrink-0 items-center gap-1.5 border-r border-r-line pl-3 pr-2 text-xs"
             :class="ui.tab(tab.id === active, tab.id === active ? `bg-canvas` : `hover:bg-content/6`)"
             v-tooltip.bottom="hint(tab)"
             v-middleclick="() => emit('close', tab.id)"
             @click="emit('select', tab.id)"
             @dblclick="emit('keep', tab.id)"
-            @keydown="onKeydown($event, tab.id)"
             @contextmenu.prevent="emit('contextmenu', tab.id, $event)"
         >
-            <Icon :name="tab.label.icon" class="shrink-0 text-2xs" :class="tab.label.iconClass ?? `text-muted`" />
-            <!-- Italic slants past its box; the padding keeps truncation from clipping the last glyph. -->
-            <span
-                class="min-w-0 truncate"
-                :class="tab.id === peek ? `pr-[0.2em] italic` : ``"
-                v-tooltip.bottom.overflow="hint(tab) === undefined ? tab.label.title : undefined"
-                >{{ tab.label.title }}</span
+            <div
+                :ref="(el) => setTabEl(tab.id, el)"
+                role="tab"
+                :id="domId(tab.id)"
+                :aria-selected="tab.id === active"
+                :aria-controls="`${domId(tab.id)}-body`"
+                :tabindex="tab.id === active ? 0 : -1"
+                class="flex min-w-0 items-center gap-1.5 self-stretch rounded-sm outline-offset-[-2px]"
+                @keydown="onKeydown($event, tab.id)"
             >
-            <span
-                class="flex h-3 w-3 shrink-0 items-center justify-center rounded transition-opacity group-hover:opacity-60"
-                :class="tab.id === active ? `opacity-60` : `opacity-0`"
-                aria-hidden="true"
+                <Icon :name="tab.label.icon" class="shrink-0 text-2xs" :class="tab.label.iconClass ?? `text-muted`" />
+                <!-- Italic slants past its box; the padding keeps truncation from clipping the last glyph. -->
+                <span
+                    class="min-w-0 truncate"
+                    :class="tab.id === peek ? `pr-[0.2em] italic` : ``"
+                    v-tooltip.bottom.overflow="hint(tab) === undefined ? tab.label.title : undefined"
+                    >{{ tab.label.title }}</span
+                >
+            </div>
+            <!-- In the Tab order for the tab on screen only (one stop after it, not one per tab); Delete closes any tab
+                 from the strip itself. Drawn on hover, on the active tab, and whenever it has the keyboard's focus. -->
+            <button
+                type="button"
+                :tabindex="tab.id === active ? 0 : -1"
+                :aria-label="t(`shell.sidePanel.closeTab`, { title: tab.label.title })"
+                :class="ui.iconButton({ size: `xs` }, `shrink-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-60 ${tab.id === active ? `opacity-60` : `opacity-0`}`)"
                 @click="onClose($event, tab.id)"
             >
                 <Icon name="times" class="text-[0.6rem] hover:text-content" />
-            </span>
+            </button>
         </div>
     </div>
 </template>

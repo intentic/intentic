@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import BringProjectButton from "../explorer/BringProjectButton.vue";
 import { ContextMenu, formatCount, SearchBar, SegmentedControl, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
@@ -546,13 +547,14 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                         :count="resultCount"
                         :placeholder="placeholder"
                         :aria-label="placeholder"
-                        class="w-52"
+                        class="w-52 min-w-24 shrink"
                         @keydown.stop="onFieldKey"
                         @clear="clearQuery"
                     />
                 </span>
             </div>
-            <HomeCoverPicker :cover="cover" :class="covering ? `ml-auto` : `ml-2`" @choose="showCover" @drop="dropCover" />
+            <BringProjectButton look="home" :class="covering ? `ml-auto` : `ml-2`" />
+            <HomeCoverPicker :cover="cover" class="ml-2" @choose="showCover" @drop="dropCover" />
         </nav>
 
         <!-- The tiles scroll under the breadcrumb rather than with it, so the window measures this element alone. Never

@@ -5,6 +5,7 @@ import {
     connectionNotice,
     type ConnectionNoticeInput,
     HOSTED_STUCK_AFTER_MS,
+    JUST_SET_UP_PATIENCE_MS,
     OWN_STUCK_AFTER_MS,
     UNADDRESSED_PATIENCE_MS,
 } from "./connectionNotice";
@@ -36,6 +37,26 @@ describe(`connectionNotice`, () => {
             action: undefined,
         });
         expect(late.action).toEqual({ kind: `setup`, label: `Finish setup` });
+    });
+
+    // A hosted machine never claims a setup code, so the claim's half minute never covered it: sixteen seconds after
+    // "Start instantly" the gate said "Connect" and "Finish setup" over a machine still routing (UX review 2026-10-18, F02).
+    it(`keeps a sandbox setup just opened connecting, address or not, then hands back the doors`, () => {
+        const unaddressed = classifyFailure({ unaddressed: true, message: `no address` });
+        const hosted = { hostedMachine: true, justSetUp: true } as const;
+        const fresh = notice(unaddressed, { ...hosted, outageMs: JUST_SET_UP_PATIENCE_MS - 1 });
+        expect({ title: fresh.title, waiting: fresh.waiting, action: fresh.action }).toEqual({
+            title: `Connecting to "laptop"…`,
+            waiting: true,
+            action: undefined,
+        });
+        expect(notice(unaddressed, { ...hosted, outageMs: JUST_SET_UP_PATIENCE_MS }).action).toEqual({ kind: `setup`, label: `Finish setup` });
+        // An unclaimed row nobody just set up still goes to setup at once.
+        expect(notice(unaddressed, { hostedMachine: true, outageMs: 1_000 }).action?.kind).toBe(`setup`);
+        // A network silence past the hosted minute is still a wait while the setup is fresh.
+        const network = classifyFailure({ message: `failed to fetch` });
+        expect(notice(network, { ...hosted, outageMs: HOSTED_STUCK_AFTER_MS + 1 }).waiting).toBe(true);
+        expect(notice(network, { hostedMachine: true, outageMs: HOSTED_STUCK_AFTER_MS + 1 }).waiting).toBe(false);
     });
 
     it(`asks for a sign-in on 401 rather than blaming the sandbox`, () => {

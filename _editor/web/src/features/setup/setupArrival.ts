@@ -1,6 +1,8 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { projectDirNameFor } from "@intentic/sandbox-contract/ids/project-dir";
 import type { LocationQueryValue } from "vue-router";
+import { timeAgo } from "@intentic/ui";
+import { t } from "@intentic/ui/i18n";
 
 // Decides, in one place, what arriving on /setup does by itself: the desktop app hands the setup code to itself;
 // a browser starts a hosted machine, and so does a project opened in a browser wherever the platform's machines can
@@ -149,6 +151,25 @@ export const touched = (row: SandboxSummary): boolean =>
 export type ResumedRow = `never-ran` | `removed` | `seen`;
 export const resumedRow = (row: Pick<SandboxSummary, `lastSeenAt` | `removedAt`>): ResumedRow =>
     (row.removedAt ?? null) !== null ? `removed` : (row.lastSeenAt ?? null) === null ? `never-ran` : `seen`;
+
+// The line over a resumed row. Reconnecting a sandbox that has run before reads differently from resuming one that never
+// started, and from one whose container its machine deleted: only that one is "cleaned up" (resumedRow). One this page
+// opened a moment ago (`justSetUp`, justSetUp.ts) is still connecting: "set up before" would describe a sandbox the
+// reader has only just started (UX review 2026-10-18, F02).
+export const resumedLine = (resumed: SandboxSummary | null, justSetUp: boolean): string => {
+    if (resumed !== null && justSetUp) {
+        return t(`setup.setup.justStartedStillConnecting`);
+    }
+    if (resumed === null || resumedRow(resumed) === `never-ran` || resumed.lastSeenAt === null) {
+        // A machine claimed the command and never announced: a run started and stopped, which "nothing has run" denies.
+        return resumed !== null && resumed.setupCodeClaimedAt !== null
+            ? t(`setup.setup.pickingUpLastRunStopped`)
+            : t(`setup.setup.pickingUpWhereLeft`);
+    }
+    return resumedRow(resumed) === `removed`
+        ? t(`setup.setup.stillOnPlatformCleanup`)
+        : t(`setup.setup.setUpBeforeLastSeen`, { when: timeAgo(Date.parse(resumed.lastSeenAt), { days: true }) });
+};
 
 // A machine of ours on a row nothing has ever run on (`ArrivalInput.hostedIdle`).
 export const hostedIdle = (row: SandboxSummary): boolean => (row.hosted ?? null) !== null && (row.lastSeenAt ?? null) === null;

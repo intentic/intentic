@@ -1746,6 +1746,25 @@ describe(`a low-memory hold`, () => {
         expect(sendAnyway(running)).toBeUndefined();
         expect(raise(running)).toBeUndefined();
     });
+
+    // A turn the trial stopped after it had already edited files holds nothing to resend: its press is the model list,
+    // so the same chat carries on elsewhere, and it stands down while a turn runs.
+    it(`offers another model, not a resend, under a turn that stopped partway`, () => {
+        const row: ChatMessage = {
+            id: 23,
+            role: `notice`,
+            text: `Free trial used up for today. The run stopped partway. The changes it made so far are kept: continue with another model to pick up from here.`,
+            noticeAction: `switchModel`,
+            noticeCode: { code: `stoppedPartway`, params: { message: `Free trial used up for today.`, error: `trial-exhausted`, switchModel: true } },
+        };
+        pane.messages = [opener, row];
+        const idle = mount(row);
+        expect(buttons(idle).map((button) => button.textContent?.trim())).toEqual([`Continue with another model`]);
+        expect(idle.textContent).not.toContain(`Send again`);
+
+        pane.streaming = true;
+        expect(buttons(remount(row))).toEqual([]);
+    });
 });
 
 // The sandbox writes its notices in English with a code beside them (sandbox-notice.ts); the row draws the code in the

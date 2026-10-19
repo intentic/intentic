@@ -215,18 +215,25 @@ watch(
                 <ChangeStatusMark v-else :status="tab.status" />
                 <!-- Italic slants past its box; truncate would clip the last glyph without room on the right. -->
                 <span class="max-w-40 truncate" :class="tab.id === preview ? `pr-[0.2em] italic` : ``">{{ tabLabel(tab) }}</span>
-                <span class="relative flex h-3 w-3 shrink-0 items-center justify-center" @click="onClose($event, tab.id)">
+                <!-- A real button, named for the tab it closes, so the × a pointer sees is a control a keyboard and a screen
+                     reader reach too; drawn while it has focus as well as on hover. -->
+                <button
+                    type="button"
+                    :class="ui.iconButton({ size: `xs` }, `group/close relative -mr-1 shrink-0`)"
+                    :aria-label="t(`workspace.fileTabs.closeTab`, { title: tabLabel(tab) })"
+                    @click="onClose($event, tab.id)"
+                >
                     <Icon
                         name="circle-fill"
                         v-if="tab.kind === 'file' && isDirty(tab.path)"
-                        class="text-[0.4rem] text-warning transition-opacity group-hover:opacity-0"
+                        class="text-[0.4rem] text-warning transition-opacity group-hover:opacity-0 group-focus-visible/close:opacity-0"
                     />
                     <Icon
                         name="times"
-                        class="absolute rounded text-[0.6rem] opacity-0 transition hover:text-content"
+                        class="absolute rounded text-[0.6rem] opacity-0 transition hover:text-content group-focus-visible/close:opacity-100"
                         :class="tab.kind === 'file' && isDirty(tab.path) ? 'group-hover:opacity-100' : 'group-hover:opacity-60'"
                     />
-                </span>
+                </button>
             </div>
         </div>
         <!-- Overlay scrollbar: hidden until the strip overflows, faint by default, highlighted on strip hover. -->

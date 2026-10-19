@@ -18,6 +18,8 @@ export interface TrialStatus {
     readonly retryAt?: string;
     // Real model behind the trial's published id for the account's latest message; the platform routes a ladder.
     readonly servedModel?: string;
+    // Steps a task begun within the allowance may still run today to finish past it (trial-turn.ts).
+    readonly grace?: number;
 }
 
 export interface TrialService {

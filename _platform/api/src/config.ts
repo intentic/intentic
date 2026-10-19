@@ -210,6 +210,9 @@ export const configSchema = z.object({
             models: z.string().default(``),
             // Messages per signed-in account per UTC day; enough to judge the product, too few to work on.
             dailyMessages: z.coerce.number().int().nonnegative().default(12),
+            // Extra calls a day a turn that STARTED with allowance left may run to finish (trial-usage.ts
+            // openTrialTurn); 0 turns the grace off, so a turn stops at the allowance as before.
+            graceSteps: z.coerce.number().int().nonnegative().default(25),
         })
         .prefault({}),
     // Repair agent in the desktop app: session-authenticated turns, separate from the sandbox trial allowance.

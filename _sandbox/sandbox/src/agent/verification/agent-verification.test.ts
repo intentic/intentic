@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { classifyCommand, createFrameLedger, createVerificationLedger } from "./agent-verification.js";
+import { checkOutcome, classifyCommand, commandExitCode, createFrameLedger, createVerificationLedger } from "./agent-verification.js";
 
 describe("command classification", () => {
     test.each([
@@ -59,7 +59,7 @@ describe("command classification", () => {
     test("a turn that only looked the runner up has proved nothing", () => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCommand("which bun; bun --version; bun test --help | head", true, "--- [exit 0, 1s]");
+        ledger.noteCommand("which bun; bun --version; bun test --help | head", "passed", "--- [exit 0, 1s]");
         expect(ledger.standing()).toEqual({ state: "unproven", paths: ["/work/src/a.ts"], check: undefined });
     });
 
@@ -85,7 +85,7 @@ describe("checks behind a shell wrapper", () => {
     ])("%s is a check, named by the script it runs", (command, check) => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCommand(command, true, "");
+        ledger.noteCommand(command, "passed", "");
         expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check });
     });
 
@@ -97,7 +97,7 @@ describe("checks behind a shell wrapper", () => {
     ])("%s proves nothing", (command) => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCommand(command, true, "");
+        ledger.noteCommand(command, "passed", "");
         expect(ledger.standing().state).toBe("unproven");
     });
 
@@ -105,7 +105,7 @@ describe("checks behind a shell wrapper", () => {
     test("a wrapped command alongside another keeps its whole line as the name", () => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCommand("cd /work && bash -lc 'pnpm test'", true, "");
+        ledger.noteCommand("cd /work && bash -lc 'pnpm test'", "passed", "");
         expect(ledger.standing().check).toBe("cd /work && bash -lc 'pnpm test'");
     });
 });
@@ -114,13 +114,13 @@ describe("the ledger", () => {
     test("a passing check after the last edit clears the verdict", () => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCommand("pnpm test", true, "");
+        ledger.noteCommand("pnpm test", "passed", "");
         expect(ledger.verdict()).toBeUndefined();
     });
 
     test("a passing check BEFORE the last edit does not", () => {
         const ledger = createVerificationLedger();
-        ledger.noteCommand("pnpm test", true, "");
+        ledger.noteCommand("pnpm test", "passed", "");
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
         expect(ledger.verdict()?.paths).toEqual(["/work/src/a.ts"]);
     });
@@ -128,7 +128,7 @@ describe("the ledger", () => {
     test("a failing check is reported as the reason, distinct from never having checked", () => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCommand("pnpm test", false, "2 failed");
+        ledger.noteCommand("pnpm test", "failed", "2 failed");
         const verdict = ledger.verdict();
         expect(verdict?.failed?.command).toBe("pnpm test");
         expect(verdict?.failed?.detail).toBe("2 failed");
@@ -157,7 +157,7 @@ describe("the ledger", () => {
 
     test("a turn that edited nothing never asks for anything", () => {
         const ledger = createVerificationLedger();
-        ledger.noteCommand("pnpm test", false, "broken");
+        ledger.noteCommand("pnpm test", "failed", "broken");
         expect(ledger.verdict()).toBeUndefined();
     });
 
@@ -172,7 +172,7 @@ describe("the ledger", () => {
     test("a prose edit after a passing check does not reopen the verdict", () => {
         const ledger = createVerificationLedger();
         ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
-        ledger.noteCommand("pnpm test", true, "");
+        ledger.noteCommand("pnpm test", "passed", "");
         ledger.noteEdit(`${WORKSPACE_ROOT}/README.md`);
         expect(ledger.verdict()).toBeUndefined();
     });
@@ -288,5 +288,136 @@ describe("the frame-fed ledger", () => {
         ledger.note({ kind: "delta", text: "done" });
         expect(ledger.standing().state).toBe("no-code");
         expect(ledger.edited()).toEqual([]);
+    });
+
+    // F04: `pnpm vitest run | tail` with vitest missing exited 0 through the pipe; the footer says the first stage's
+    // 127, and that is the check's own status.
+    test("a masked pipeline whose check could not start is not a pass", () => {
+        const ledger = createFrameLedger();
+        ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.ts`));
+        ledger.note(shellCall("2", "pnpm vitest run | tail -5"));
+        ledger.note(shellResult("2", "sh: 1: vitest: not found\n--- [exit 0 (pipeline: 127 0 — an earlier stage failed), 0s]"));
+        expect(ledger.standing()).toEqual({ state: "unproven", paths: ["/work/src/a.ts"], check: undefined });
+    });
+
+    test("a masked pipeline whose check failed is failing, and a filter after it does not launder that", () => {
+        const ledger = createFrameLedger();
+        ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.ts`));
+        ledger.note(shellCall("2", "pnpm test 2>&1 | grep -v noise"));
+        ledger.note(shellResult("2", "1 failed\n--- [exit 0 (pipeline: 1 0 — an earlier stage failed), 3s]"));
+        expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm test 2>&1 | grep -v noise" });
+    });
+
+    // Devin (`devin acp`) reports a finished command as a completed call whose text ends "Exited with code N".
+    test("a Devin command that exited 127 is not a pass, though the call completed", () => {
+        const ledger = createFrameLedger();
+        ledger.note(editCall("1", `${WORKSPACE_ROOT}/site/index.astro`));
+        ledger.note(shellCall("2", "cd /work/site && pnpm --filter @app_/landing run typecheck"));
+        ledger.note(shellResult("2", "bash: cd /work/site && pnpm --filter @app_/landing run typecheck: No such file or directory\nExited with code 127"));
+        expect(ledger.standing()).toEqual({ state: "unproven", paths: ["/work/site/index.astro"], check: undefined });
+    });
+
+    test("an exit code the runtime reports as a number outranks the call's status", () => {
+        const ledger = createFrameLedger();
+        ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.ts`));
+        ledger.note(shellCall("2", "pnpm test"));
+        ledger.note({ kind: "tool_call_update", id: "2", status: "completed", content: [{ type: "text", text: "2 failed" }], exitCode: 1 });
+        expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm test" });
+    });
+
+    test("a check the shell could not find is unproven, not failing and not verified", () => {
+        const ledger = createFrameLedger();
+        ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.ts`));
+        ledger.note(shellCall("2", "tsc --noEmit"));
+        ledger.note(shellResult("2", "bash: tsc: command not found", "failed"));
+        expect(ledger.standing()).toEqual({ state: "unproven", paths: ["/work/src/a.ts"], check: undefined });
+        expect(ledger.verdict()).toEqual({ paths: ["/work/src/a.ts"], failed: undefined });
+    });
+
+    test("a check that could not start, then a genuine pass of it, is verified", () => {
+        const ledger = createFrameLedger();
+        ledger.note(editCall("1", `${WORKSPACE_ROOT}/src/a.ts`));
+        ledger.note(shellCall("2", "vitest run"));
+        ledger.note(shellResult("2", "Exit code: 127"));
+        ledger.note(shellCall("3", "pnpm test"));
+        ledger.note(shellResult("3", "1 passed\n--- [exit 0, 2s]"));
+        expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check: "pnpm test" });
+    });
+});
+
+// The schema's own words: verified only when the latest run of every kind of check after the last edit passed.
+describe("standing over several checks", () => {
+    const edited = () => {
+        const ledger = createVerificationLedger();
+        ledger.noteEdit(`${WORKSPACE_ROOT}/src/a.ts`);
+        return ledger;
+    };
+
+    test("a pass then a failure of the same check is failing", () => {
+        const ledger = edited();
+        ledger.noteCommand("pnpm test", "passed", "");
+        ledger.noteCommand("pnpm test src/a.test.ts", "failed", "1 failed");
+        expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm test src/a.test.ts" });
+        expect(ledger.verdict()?.failed?.detail).toBe("1 failed");
+    });
+
+    test("a failure then a pass of the same check is verified", () => {
+        const ledger = edited();
+        ledger.noteCommand("pnpm test", "failed", "1 failed");
+        ledger.noteCommand("pnpm test", "passed", "");
+        expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check: "pnpm test" });
+        expect(ledger.verdict()).toBeUndefined();
+    });
+
+    test("a failing typecheck is not cleared by a passing test after it", () => {
+        const ledger = edited();
+        ledger.noteCommand("pnpm typecheck", "failed", "TS2322");
+        ledger.noteCommand("pnpm test", "passed", "");
+        expect(ledger.standing()).toEqual({ state: "failing", paths: ["/work/src/a.ts"], check: "pnpm typecheck" });
+    });
+
+    test("every kind passing on its latest run is verified, named by the latest", () => {
+        const ledger = edited();
+        ledger.noteCommand("pnpm typecheck", "failed", "TS2322");
+        ledger.noteCommand("pnpm typecheck", "passed", "");
+        ledger.noteCommand("pnpm test", "passed", "");
+        expect(ledger.standing()).toEqual({ state: "verified", paths: ["/work/src/a.ts"], check: "pnpm test" });
+    });
+
+    test("a pass of one kind does not stand in for another that could not start", () => {
+        const ledger = edited();
+        ledger.noteCommand("pnpm test", "passed", "");
+        ledger.noteCommand("pnpm typecheck", "unstarted", "pnpm: command not found");
+        expect(ledger.standing()).toEqual({ state: "unproven", paths: ["/work/src/a.ts"], check: undefined });
+    });
+});
+
+describe("reading how a command exited", () => {
+    test.each([
+        ["1 passed\n--- [exit 0, 2s]", 0],
+        ["--- [exit 1, 2s] 40 lines filtered to 3", 1],
+        ["--- [exit 0 (pipeline: 127 0 — an earlier stage failed), 0s]", 127],
+        ["--- [exit 0 (pipeline: 141 2 0 — an earlier stage failed), 0s]", 2],
+        ["Exited with code 127", 127],
+        ["output\nCommand exited with code 1", 1],
+        ["Exit code: 2", 2],
+        ["[exit status 3]", 3],
+        ["done", undefined],
+        ["✓ reports the child's exit code 1 to the caller", undefined],
+    ] as const)("%j exited %p", (text, code) => {
+        expect(commandExitCode(text)).toBe(code);
+    });
+
+    test.each([
+        [{ status: "completed", text: "ok" }, "passed"],
+        [{ status: "failed", text: "boom" }, "failed"],
+        [{ status: "completed", text: "", exitCode: 126 }, "unstarted"],
+        [{ status: "completed", text: "sh: 1: vitest: not found" }, "unstarted"],
+        [{ status: "failed", text: "bash: ./node_modules/.bin/tsc: No such file or directory" }, "unstarted"],
+        [{ status: "failed", text: "Error: ENOENT: no such file or directory, open 'a.json'" }, "failed"],
+        [{ status: "failed", text: "cat: fixtures/a.json: No such file or directory" }, "failed"],
+        [{ status: "completed", text: "Exited with code 1" }, "failed"],
+    ] as const)("%j is %s", (input, outcome) => {
+        expect(checkOutcome(input)).toBe(outcome);
     });
 });

@@ -20,6 +20,29 @@ type SandboxStore = ReturnType<typeof useSandbox>;
 const POLL_MS = 3_000;
 
 
+// Whether this reading opens the workspace. A hosted lane is held on its card until the workspace can be used: the
+// daemon proved its address answers and its boot chain converged. A check-in only proves a start, and handing over on
+// one opened an editor reading "Offline" and "Finish setup" (UX review 2026-10-18, F02). Past HAND_OVER_CEILING_MS
+// (`overdue`) it lets go anyway, so a sandbox whose image never reports reachability is not held for good; the
+// workspace's connecting state takes over from there. A hosted row that reads ready opens even without a check-in past
+// the baseline: `lastSeenAt` marks a boot, not a heartbeat, so a machine that booted before this page opened (a return
+// to it) never moves past the baseline, and the card sat on a spinning "Ready".
+export const opensWorkspace = (reading: {
+    readonly seen: string | null;
+    readonly baseline: string | null;
+    readonly hosted: boolean;
+    readonly wait: Pick<HostedWaitView, `ready` | `overdue`>;
+}): boolean => {
+    const { seen, baseline, hosted, wait } = reading;
+    if (seen === null) {
+        return false;
+    }
+    if (hosted) {
+        return wait.ready || (seen !== baseline && wait.overdue);
+    }
+    return seen !== baseline;
+};
+
 export interface RegistryWatchHost {
     readonly sandbox: Pick<SandboxStore, `refresh`>;
     readonly row: SetupRow;
@@ -66,20 +89,12 @@ export const useRegistryWatch = ({ sandbox, row, hosted, mintedFor }: RegistryWa
         row.announced.value = (found?.lastSeenAt ?? null) !== null;
     };
 
-    // Holds the hosted lane on its card until the daemon is reachable (a check-in only proves a start) and its boot
-    // chain has converged: handing over sooner lands on a second card that repeats this one.
-    const holding = (): boolean =>
-        hosted.hostedRow.value !== null && (hosted.hostedWait.value.reachable === false || hosted.hostedWait.value.booting);
-
     // On the own-computer rung, a row re-issued to another token, or carrying a machine, is not the one set up here.
     const foreign = (pending: SandboxSummary, found: SandboxSummary | undefined): boolean =>
         hosted.machine.value === `mine` && (found?.token !== pending.token || found?.hosted != null);
 
-    // The daemon checked in past the baseline, and nothing holds the lane on its card.
-    const arrived = (found: SandboxSummary | undefined): boolean => {
-        const seen = found?.lastSeenAt ?? null;
-        return seen !== null && seen !== row.baseline.value && !holding();
-    };
+    const arrived = (found: SandboxSummary | undefined): boolean =>
+        opensWorkspace({ seen: found?.lastSeenAt ?? null, baseline: row.baseline.value, hosted: hosted.hostedRow.value !== null, wait: hosted.hostedWait.value });
 
     // One registry reading of the row this page waits on, under the code and the action it was asked with.
     const read = async (pending: SandboxSummary, found: SandboxSummary | undefined, askedFor: string | undefined, action: number): Promise<void> => {

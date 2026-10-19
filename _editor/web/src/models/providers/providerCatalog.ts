@@ -118,6 +118,8 @@ export const trialStatus = sandboxRef<{
     retryAt?: string;
     // The real model behind the trial's most recent message; the trial routes per message.
     servedModel?: string;
+    // Steps a task begun within the allowance may still run today to finish past it; absent where the platform grants none.
+    grace?: number;
 }>(() => ({
     available: false,
     allowance: 0,

@@ -167,6 +167,26 @@ export const loadTrialStatus = (): Promise<void> =>
         trialStatus.value = status;
     });
 
+// While a trial turn runs, each step it takes moves the count, so it is re-read on a slow beat: the strip can then say the
+// allowance ran out under a running task, and that the platform lets the task finish past it (its finish-the-turn
+// grace), rather than learning either only once the turn ends.
+export const TRIAL_TURN_POLL_MS = 15_000;
+export const pollWhileRunning = (load: () => Promise<void>, everyMs: number): ((running: boolean) => void) => {
+    let timer: ReturnType<typeof setInterval> | undefined;
+    return (running) => {
+        clearInterval(timer);
+        timer = running
+            ? setInterval(() => {
+                  void load();
+              }, everyMs)
+            : undefined;
+    };
+};
+watch(
+    () => active.value.turn.streaming.value && isTrialProvider(active.value.selection.provider.value),
+    pollWhileRunning(loadTrialStatus, TRIAL_TURN_POLL_MS),
+);
+
 // Re-reads the allowance once a turn settles, only for isTrialProvider: every other provider's count isn't this
 // meter's business, and polling after those turns would return the same number.
 watch(

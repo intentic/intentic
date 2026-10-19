@@ -40,6 +40,7 @@ import { useChat } from "../../../models/conversations/run/useChat";
 import AgentReviewPanel from "./AgentReviewPanel.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
 import AgentLandPress from "./AgentLandPress.vue";
+import ReviewFocusButton from "./ReviewFocusButton.vue";
 import ChatChangesSwitch from "./pager/ChatChangesSwitch.vue";
 import SwipePages from "./pager/SwipePages.vue";
 import AgentReactions from "../board/cards/AgentReactions.vue";
@@ -566,6 +567,7 @@ const confirmHandOver = async (): Promise<void> => {
                 <!-- A phone's Chat | Changes, folded into this row: its thumb rides the pages as a finger turns them. -->
                 <ChatChangesSwitch v-if="paged" ref="pageSwitch" v-model="view" :pending="changes.pending.value.length" :id-prefix="PAGE_IDS" />
                 <Icon v-if="changes.actionBusy.value" name="spinner" class="shrink-0 text-xs text-muted" spin />
+                <ReviewFocusButton v-if="!mobile" />
                 <!-- The page's one primary action: appearing only when something is pending is itself the "not landed" signal, replacing the toolbar's old pill. A phone draws it under the review instead (below). -->
                 <AgentLandPress
                     v-if="landOffered"

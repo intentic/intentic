@@ -146,7 +146,7 @@ const focus = useCardFocus({
     strip: chatStrip,
     summon: summonChat,
 });
-const { focusAgent, focusSubagent, drillIn, keepAgent, closeAgent, openSession } = focus;
+const { focusAgent, focusSubagent, drillIn, reviewAgent, keepAgent, closeAgent, openSession } = focus;
 // The card the filter names by its id: the lanes lead with it, it is scrolled to, and Enter in the field opens it as a
 // click would; with nothing named, Enter does what it always did, which is nothing.
 const { found, openFound } = useFoundCard({ filter, lanes, move, reveal: revealCard, open: (agent) => focusAgent(agent) });
@@ -267,11 +267,13 @@ useAttentionAsk({
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
 const starters = computed(() => boardStarters(workspaceRepos.value.length, workspaceChanges.count.value));
-// The example card stands in Finished while getting started is on and nothing of the reader's own has finished:
-// a picture of the review before there is anything of theirs to review. Never in the archive or a filtered board.
-const exampleShown = computed(
-    () => tourVisible.value && !view.value.archive && !filtering.value && cardsFor(`finished`).length === 0 && runsFor(`finished`).length === 0,
-);
+// The example card stands in Finished while getting started is on and the board holds nothing of the reader's own: a
+// picture of the review before there is anything of theirs to review. It goes as soon as their first agent starts,
+// not when it finishes: beside real work, a finished-looking sample is one more card to tell apart from it, and the
+// reader's own card is now the thing to watch. Never in the archive or a filtered board.
+const LANES_OF_OWN_WORK = [`attention`, `active`, `finished`] as const;
+const ownWork = computed(() => LANES_OF_OWN_WORK.some((lane) => cardsFor(lane).length > 0 || runsFor(lane).length > 0));
+const exampleShown = computed(() => tourVisible.value && !view.value.archive && !filtering.value && !ownWork.value);
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -559,6 +561,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                                         @open="(event) => focusAgent(agent, event)"
                                         @keep="keepAgent(agent)"
                                         @review="drillIn(agent)"
+                                        @changes="reviewAgent(agent)"
                                         @resolve="resolveNow(agent.id, agent.sandboxId)"
                                         @land="pressLand(agent, `land`, mobile)"
                                         @reland="pressLand(agent, `reland`, mobile)"
@@ -646,6 +649,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             :match-case="matchCase"
                             @open="(event) => focusAgent(agent, event)"
                             @review="drillIn(agent)"
+                            @changes="reviewAgent(agent)"
                             @restore="restore([agent.id])"
                             @unwatch="unwatchNow(agent.id)"
                             @stop-job="(jobId) => agents.stopJob(agent.id, jobId)"

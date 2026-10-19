@@ -111,6 +111,14 @@ model TrialUsage {
     // model actually wrote an answer. It lives on the row rather than in process memory because the daemon
     // learns it by polling /trial/status, and a poll may reach a different replica than the one that served.
     lastModel String?
+    // The finish-the-turn grace: a turn that STARTS with a step of today's allowance left may run past it, up to
+    // `trial.graceSteps` more calls a day, so a first task is not cut off halfway (onboarding review 2026-10-18, F01).
+    // `graceOpen` counts the turns the daemon opened with allowance left and has not closed; `graceOpenedAt` is the
+    // latest such opening, after which an open the daemon never closed (a crash) stops earning grace; `graceSteps` is
+    // what the grace has spent today.
+    graceOpen     Int       @default(0)
+    graceOpenedAt DateTime?
+    graceSteps    Int       @default(0)
 
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt

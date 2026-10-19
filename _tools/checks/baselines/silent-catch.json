@@ -394,7 +394,6 @@
     "_site/site/scripts/source-first.mjs": 1,
     "_site/site/scripts/submit-indexnow.mjs": 2,
     "_site/site/src/lib/live.ts": 1,
-    "_site/site/worker.ts": 1,
     "_tools/base/src/when.ts": 1,
     "_tools/checks/layout.mjs": 1,
     "_tools/checks/lockfile-drift.mjs": 1,

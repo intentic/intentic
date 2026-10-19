@@ -660,6 +660,15 @@
         "repair": "Preguntar a Repair",
         "hosted": "Un ordenador que alojamos nosotros puede ejecutar tus agentes en su lugar.",
         "cloud": "Usar Intentic en la nube",
+        "hostedInstead": "Usar un espacio de trabajo alojado en su lugar",
+        "setUpAndMove": "Configurar este PC y mover los sandboxes",
+        "move": {
+            "title": "Tus sandboxes de Docker Desktop se moverán",
+            "body": "Al configurar este PC también se mueven los sandboxes que se ejecutan en Docker Desktop al motor propio de Intentic.",
+            "stops": "Cada sandbox se detiene mientras se copian sus archivos.",
+            "keeps": "Docker Desktop conserva su copia durante 7 días y puedes volver a moverlos.",
+            "disk": "Hasta entonces, ambas copias ocupan espacio en disco."
+        },
         "ready": "Listo para agentes",
         "signIn": {
             "now": "Los agentes trabajan con tu cuenta de Intentic. Cuando inicies sesión, Intentic preparará su sandbox aquí por sí solo.",

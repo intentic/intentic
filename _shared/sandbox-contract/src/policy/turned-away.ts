@@ -30,5 +30,20 @@ const TURNED_AWAY: ReadonlySet<string> = new Set([
     "engine-version-floor",
 ]);
 
+// The refusals about the model itself (its allowance, its account, its catalogue, its window), which another model
+// gets past: a turn one of these stops partway offers to carry on elsewhere rather than to wait.
+const ANOTHER_MODEL_CLEARS: ReadonlySet<string> = new Set([
+    "claude-not-entitled",
+    "context-window-too-small",
+    "model-helper-only",
+    "trial-unavailable",
+    "trial-model-unavailable",
+    "trial-exhausted",
+    "model-unavailable",
+]);
+
+/** Whether another model would get past a refusal: the trial's, the model's, or the account's on it. */
+export const anotherModelClears = (code: string | undefined): boolean => code !== undefined && ANOTHER_MODEL_CLEARS.has(code);
+
 /** Whether a failure code refuses a turn before the model sees any of it. */
 export const turnedAwayCode = (code: string | undefined): boolean => code !== undefined && TURNED_AWAY.has(code);

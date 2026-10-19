@@ -1,6 +1,6 @@
 import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
 import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
-import { delegates, numberedFileBody, present, TEXT_CAP } from "./toolPresentation";
+import { delegates, numberedFileBody, present, readableToolName, TEXT_CAP } from "./toolPresentation";
 
 // A completed call with no output, spread over per-case.
 const tool = (over: Partial<TranscriptTool> & Pick<TranscriptTool, "name">): TranscriptTool => ({
@@ -285,5 +285,22 @@ describe(`present: documents`, () => {
         const failed = present(written(`docs/findings.md`, `# Findings`, { status: `failed` }));
         expect(failed.document).toBeUndefined();
         expect(failed.diffs).toHaveLength(1);
+    });
+});
+
+// A developer's name for an MCP call: the wire id as server and tool, never a guess at any other name.
+describe(`readableToolName`, () => {
+    it(`reads an MCP id as its server and tool`, () => {
+        expect(readableToolName(`mcp__subagents__wait`)).toBe(`Subagents · wait`);
+        expect(readableToolName(`mcp__web__browser_take_screenshot`)).toBe(`Web · browser take screenshot`);
+        // A server's own capitals are its name; a tool may itself carry a double underscore.
+        expect(readableToolName(`mcp__claude-ai_GitHub__list__repos`)).toBe(`Claude ai GitHub · list repos`);
+    });
+
+    it(`leaves every other name to itself`, () => {
+        expect(readableToolName(`Read`)).toBeUndefined();
+        expect(readableToolName(`browser click`)).toBeUndefined();
+        expect(readableToolName(`mcp__subagents`)).toBeUndefined();
+        expect(readableToolName(`mcp____wait`)).toBeUndefined();
     });
 });

@@ -68,6 +68,20 @@ describe(`what a card's menu offers`, () => {
         expect(items[1]).toMatchObject({ icon: `copy`, url: `/agents/a1` });
     });
 
+    // A spent allowance's drill-in is its chat; the partial work it wrote stays one row away, at the review's address.
+    it(`offers a stranded card's partial work as Review changes beside its chat`, () => {
+        const stranded = card(`limit`, { status: `error`, failureCode: `rate_limit`, branch: `agent/limit`, diff: { files: 1, insertions: 20, deletions: 2 } });
+        const act = actions();
+        const items = menuItemsFor(stranded, facts(), act);
+        expect(rows(items).slice(0, 3)).toEqual([t(`ui.action.open`), t(`agents.agentStatus.openChat`), t(`agents.agentStatus.reviewChanges`)]);
+        expect(items[2]).toMatchObject({ icon: `copy`, url: `/agents/a1` });
+        press(items, t(`agents.agentStatus.reviewChanges`));
+        expect([act.reviewAgent.mock.calls, act.drillIn.mock.calls]).toEqual([[[stranded]], []]);
+        // Nothing written, nothing to review: the chat alone.
+        const empty = menuItemsFor({ ...stranded, diff: undefined }, facts(), actions());
+        expect(rows(empty)).not.toContain(t(`agents.agentStatus.reviewChanges`));
+    });
+
     // Its label is the ask's verb, so it goes where the ask is answered, the chat, and names no page that draws nothing.
     it(`answers an ask in the chat, with no link to a review page`, () => {
         const asking = card(`ask`, { status: `awaiting`, attention: { ...NO_ATTENTION, permission: true }, branch: `agent/ask` });

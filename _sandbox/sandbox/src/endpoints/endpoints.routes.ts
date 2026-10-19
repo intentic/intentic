@@ -6,6 +6,7 @@ import { findHostServers } from "./host-servers.js";
 import { localModelFit } from "./local-model-fit.js";
 import { localModelPrefetch, localModelPrefetchStatus } from "./local-model-weights.js";
 import { endpointConfigOf } from "./local-model.js";
+import { opt } from "../opt.js";
 
 export type EndpointsRoutesDeps = Pick<Services, "capabilities" | "endpointModels" | "trial" | "workspace">;
 
@@ -44,6 +45,7 @@ export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
                 resetsAt: status.resetsAt,
                 ...(status.retryAt === undefined ? {} : { retryAt: status.retryAt }),
                 ...(status.servedModel === undefined ? {} : { servedModel: status.servedModel }),
+                ...opt("grace", status.grace),
             };
         }),
         // Measured per call, never cached: a reshape that changes the memory cap and a download that lands both change the

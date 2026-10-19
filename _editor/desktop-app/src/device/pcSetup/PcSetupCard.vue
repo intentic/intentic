@@ -12,7 +12,7 @@ import FirstTaskComposer from "./FirstTaskComposer.vue";
 import PcPrefetch from "./PcPrefetch.vue";
 import PcStep from "./PcStep.vue";
 import { pcCard } from "./livePcCard";
-import { checksPassed, minutesLeft, offersWork, type PcCardPhase, pcSteps, type TaskKind, taskStart, unmetRows } from "./pcCard";
+import { checksPassed, minutesLeft, movesSandboxes, offersWork, type PcCardPhase, pcSteps, type TaskKind, taskStart, unmetRows } from "./pcCard";
 
 // THIS PC'S OWN SETUP, ON THIS COMPUTER (pcCard.ts says when and why): the way to agents on a new Windows PC, as three
 // steps under one heading that says what they are for (pcCard.ts `pcSteps`, 2026-10-13). Prepare this PC: what it still
@@ -127,6 +127,8 @@ const machineLine = computed(() => {
 const todo = computed(() => unmetRows(check.value));
 // Why the check could not say, as it said it (onboarding.rs: its one `check` row), for whoever looks into it.
 const unknownWhy = computed(() => (phase.value === `checkUnknown` ? todo.value.find((row) => row.detail !== undefined)?.detail : undefined));
+// This setup also moves the PC's sandboxes off their current engine: said before the press, and on the button.
+const moving = computed(() => movesSandboxes(check.value));
 const blocked = computed(() => todo.value.filter((row) => row.state === `blocked`));
 // The raw words behind a stopped setup or a check that could not say, behind a press: for whoever looks into it.
 const detailsOpen = ref(false);
@@ -404,6 +406,16 @@ const retryTask = (): Promise<void> =>
                             <span v-if="rowHint(row)" class="shrink-0 text-2xs text-subtle">{{ rowHint(row) }}</span>
                         </li>
                     </ul>
+                    <!-- THE MIGRATION the press includes: it stops sandboxes, so it is said here and not only on This device's engine card. -->
+                    <div v-if="moving" class="flex flex-col gap-1 rounded-lg border p-3 text-xs" :class="toneTint(`warning`, `soft`)">
+                        <p class="font-medium text-content">{{ t(`desktop.pcSetup.move.title`) }}</p>
+                        <p class="text-muted">{{ t(`desktop.pcSetup.move.body`) }}</p>
+                        <ul class="list-disc pl-4 text-muted">
+                            <li>{{ t(`desktop.pcSetup.move.stops`) }}</li>
+                            <li>{{ t(`desktop.pcSetup.move.keeps`) }}</li>
+                            <li>{{ t(`desktop.pcSetup.move.disk`) }}</li>
+                        </ul>
+                    </div>
                     <ul v-if="cost.length > 0" class="flex flex-wrap items-center gap-x-4 gap-y-1 text-2xs text-muted">
                         <li v-for="part in cost" :key="part.icon" class="flex items-center gap-1.5">
                             <Icon :name="part.icon" class="shrink-0 text-subtle" aria-hidden="true" />
@@ -411,13 +423,17 @@ const retryTask = (): Promise<void> =>
                         </li>
                     </ul>
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                        <Button size="small" :label="t(`desktop.app.setUpThisPc`)" @click="startSetup(false)">
+                        <Button size="small" :label="moving ? t(`desktop.pcSetup.setUpAndMove`) : t(`desktop.app.setUpThisPc`)" @click="startSetup(false)">
                             <template #icon><Icon name="bolt" /></template>
                         </Button>
                         <!-- For what only the reader can change (a firmware setting, disk space, Docker installed by hand). -->
                         <button type="button" :class="ui.textButton({ tone: `quiet` })" :disabled="busy !== undefined" @click="recheck">
                             <Icon v-if="busy === `recheck`" name="spinner" spin class="shrink-0" />
                             <span>{{ t(`desktop.requirements.checkAgain`) }}</span>
+                        </button>
+                        <!-- The way out of the whole setup, the move included: a computer we host runs the agents instead. -->
+                        <button type="button" :class="ui.textButton({ tone: `quiet` })" :disabled="busy !== undefined" @click="useCloud">
+                            <span>{{ t(`desktop.pcSetup.hostedInstead`) }}</span>
                         </button>
                     </div>
                 </template>

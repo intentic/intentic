@@ -29,6 +29,7 @@ const { router } = await import("../../../../router/index");
 // Connected accounts module state; the card reads it to turn a session's account id into a name.
 const { providerAccounts } = await import("../../../../models/providers/providerAccounts");
 const { queryClient } = await import("../../../../lib/queryPersistence");
+const { setAgentViewed } = await import("../../../../models/fleet/board/reviewMarks");
 const { rpcKey } = await import("../../../../lib/queryKeys");
 const NO_ACCOUNTS = providerAccounts.value;
 
@@ -68,7 +69,15 @@ const unmount = (): void => {
 const mount = (
     agent: FleetAgent,
     pending?: PendingAction,
-    handlers: { onOpen?: () => void; onReview?: () => void; onClose?: () => void; onReland?: () => void; onLand?: () => void; onUnwatch?: () => void } = {},
+    handlers: {
+        onOpen?: () => void;
+        onReview?: () => void;
+        onChanges?: () => void;
+        onClose?: () => void;
+        onReland?: () => void;
+        onLand?: () => void;
+        onUnwatch?: () => void;
+    } = {},
 ): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -187,6 +196,58 @@ it(`holds the land open on the daemon's own landing status, spinning and pressed
 // Land button would spin through an archive, reporting a land nobody asked for.
 it(`leaves the land button alone while some other action holds the card`, () => {
     expect(landButton(mount(ready(), `archive`))?.textContent?.trim()).toBe(`Land now`);
+});
+
+/* READ, THEN LAND: a Ready card with unread changes leads with its review, Land now kept as the quieter second press. */
+
+const written = (): FleetAgent => ({ ...ready(), id: `a7`, diff: { files: 2, insertions: 20, deletions: 2 } });
+const buttonNamed = (el: HTMLElement, words: string): HTMLButtonElement | undefined =>
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === words);
+
+it(`leads unread work with Review & land, and keeps Land now beside it for a deliberate skip`, () => {
+    const changes = jest.fn();
+    const landed = jest.fn();
+    const el = mount(written(), undefined, { onChanges: changes, onLand: landed });
+    const presses = [...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim());
+    expect(presses.indexOf(`Review & land`)).toBeGreaterThan(-1);
+    expect(presses.indexOf(`Review & land`)).toBeLessThan(presses.indexOf(`Land now`));
+    buttonNamed(el, `Review & land`)!.click();
+    expect([changes.mock.calls.length, landed.mock.calls.length]).toEqual([1, 0]);
+    landButton(el)!.click();
+    expect(landed).toHaveBeenCalledTimes(1);
+});
+
+it(`gives Land now the lead back once every file is marked reviewed`, () => {
+    setAgentViewed(`a7`, [`root:a.ts`, `root:b.ts`], true);
+    try {
+        const el = mount(written());
+        expect(buttonNamed(el, `Review & land`)).toBeUndefined();
+        expect(landButton(el)?.textContent?.trim()).toBe(`Land now`);
+    } finally {
+        setAgentViewed(`a7`, [`root:a.ts`, `root:b.ts`], false);
+    }
+});
+
+it(`offers no review first for a Ready card with nothing counted to read`, () => {
+    expect(buttonNamed(mount(ready()), `Review & land`)).toBeUndefined();
+});
+
+it(`opens the diff from the change count, a named press that does not also open the chat`, () => {
+    const changes = jest.fn();
+    const opened = jest.fn();
+    const el = mount(written(), undefined, { onChanges: changes, onOpen: opened });
+    const count = buttonLabelled(el, `Review changes: 20 lines added, 2 removed`)!;
+    expect(count.textContent?.replace(/\s+/g, ` `).trim()).toBe(`+20 −2`);
+    count.click();
+    expect([changes.mock.calls.length, opened.mock.calls.length]).toEqual([1, 0]);
+});
+
+it(`offers a stranded card's partial work beside its chat-bound drill-in`, () => {
+    const changes = jest.fn();
+    const stranded: FleetAgent = { ...written(), status: `error`, failureCode: `rate_limit` };
+    const el = mount(stranded, undefined, { onChanges: changes });
+    buttonNamed(el, `Review changes`)!.click();
+    expect(changes).toHaveBeenCalledTimes(1);
 });
 
 // The card's own face, which is also the press that opens the chat.

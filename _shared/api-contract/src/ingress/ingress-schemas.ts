@@ -310,6 +310,10 @@ export const EdgeCertificateSchema = z.object({ certificate: z.string(), private
 
 // The free trial's allowance for the sandbox's owner today; the daemon adds whether the trial is on.
 export const TrialAllowanceSchema = TrialStatusSchema.omit({ available: true });
+// A trial turn starting or ending (the daemon's trial-turn.ts). An opening that finds a step of today's allowance left
+// earns the turn the grace to finish past it (`grace: true`); a closing answers `grace: false`.
+export const TrialTurnBodySchema = z.object({ state: z.enum(["open", "close"]) });
+export const TrialTurnAnswerSchema = z.object({ grace: z.boolean() });
 
 /* The x402 wallet's signer. */
 

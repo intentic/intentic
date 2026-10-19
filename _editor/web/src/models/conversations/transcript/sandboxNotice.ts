@@ -123,7 +123,17 @@ const sentences = (...parts: readonly (string | undefined)[]): string => parts.f
 type Coded<C extends SandboxNotice[`code`]> = Extract<SandboxNotice, { code: C }>;
 type LandNotice = Coded<`synced` | `intoParent` | `intoParentClash` | `landHeld` | `landConflict` | `landed`>;
 type FailureNotice = Coded<
-    `retrying` | `retried` | `outageWaiting` | `renewing` | `renewalWithdrawn` | `reconnect` | `undelivered` | `kept` | `memoryHeld` | `failed`
+    | `retrying`
+    | `retried`
+    | `outageWaiting`
+    | `renewing`
+    | `renewalWithdrawn`
+    | `reconnect`
+    | `undelivered`
+    | `stoppedPartway`
+    | `kept`
+    | `memoryHeld`
+    | `failed`
 >;
 
 const LAND_CODES: ReadonlySet<SandboxNotice[`code`]> = new Set([`synced`, `intoParent`, `intoParentClash`, `landHeld`, `landConflict`, `landed`]);
@@ -136,6 +146,7 @@ const FAILURE_CODES: ReadonlySet<SandboxNotice[`code`]> = new Set([
     `renewalWithdrawn`,
     `reconnect`,
     `undelivered`,
+    `stoppedPartway`,
     `kept`,
     `memoryHeld`,
     `failed`,
@@ -180,6 +191,10 @@ const failureLine = (notice: FailureNotice): string => {
             return t(`chat.sandboxNotice.reconnect`, { message });
         case `undelivered`:
             return notice.params.unattended === true ? t(`chat.sandboxNotice.undeliveredUnattended`, { message }) : t(`chat.sandboxNotice.undelivered`, { message });
+        case `stoppedPartway`:
+            return notice.params.switchModel === true
+                ? t(`chat.sandboxNotice.stoppedPartwaySwitch`, { message })
+                : t(`chat.sandboxNotice.stoppedPartway`, { message });
         case `kept`:
             return notice.params.memory === true ? t(`chat.sandboxNotice.keptMemory`, { message }) : t(`chat.sandboxNotice.kept`, { message });
         case `memoryHeld`:

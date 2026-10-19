@@ -39,6 +39,7 @@ import ChatTurnAsides from "./asides/ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
 import NoticeDepsInstall from "./notices/NoticeDepsInstall.vue";
 import NoticeFailureDetails from "./notices/NoticeFailureDetails.vue";
+import NoticeSwitchModel from "./notices/NoticeSwitchModel.vue";
 import NoticeHeld from "./notices/NoticeHeld.vue";
 import NoticeLandHold from "./notices/NoticeLandHold.vue";
 import NoticeMemory from "./notices/NoticeMemory.vue";
@@ -112,6 +113,7 @@ const NOTICE_ACTIONS: Readonly<Record<Exclude<NonNullable<ChatMessage["noticeAct
     depsInstall: NoticeDepsInstall,
     watchStop: NoticeWatchStop,
     sendAgain: NoticeHeld,
+    switchModel: NoticeSwitchModel,
 };
 const noticeAction = computed(() => {
     const action = props.message.noticeAction;

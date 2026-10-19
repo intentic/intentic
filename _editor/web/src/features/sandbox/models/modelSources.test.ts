@@ -117,7 +117,7 @@ it(`points a model on this machine and an endpoint at the cards that manage them
     expect(sources.map((source) => [source.label, source.summary, source.manage])).toEqual([
         [`Qwen3 30B`, `Runs on this machine`, `/capabilities/localmodel`],
         [`OpenRouter`, `Your own server`, `/capabilities/endpoint`],
-        [`Free trial`, `0 free messages left today`, undefined],
+        [`Free trial`, `0 free agent steps left today`, undefined],
     ]);
-    expect(sources[2]).toMatchObject({ standing: `waiting`, line: `Today's free messages are used up` });
+    expect(sources[2]).toMatchObject({ standing: `waiting`, line: `Today's free agent steps are used up` });
 });

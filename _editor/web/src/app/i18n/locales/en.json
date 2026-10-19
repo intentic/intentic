@@ -141,7 +141,9 @@
             "couldntRename": "Couldn't rename the agent.",
             "sends": "sends {at}",
             "scheduledMessages": "Messages",
-            "sendsWhenRoom": "sends when memory frees"
+            "sendsWhenRoom": "sends when memory frees",
+            "landUnreviewedHint": "Lands without reading the changes",
+            "reviewChangesCount": "Review changes: {added} lines added, {removed} removed"
         },
         "agentConflictReport": {
             "agentWriting": "Agent writing",
@@ -189,7 +191,11 @@
             "toLand": "{count} to land",
             "toWorkspace": "To workspace",
             "workAlreadyLandedStays": "Work that already landed stays in your workspace: only what is still on the branch is lost.",
-            "writtenSoFar": "Written so far"
+            "writtenSoFar": "Written so far",
+            "focusReview": "Focus review",
+            "exitFocus": "Exit focus",
+            "focusReviewHint": "Give the review the whole window: hides the side panel, the chat beside it and the terminal until you exit",
+            "exitFocusHint": "Bring back the side panel, chat and terminal as they were"
         },
         "agentReactions": {
             "addReaction": "Add reaction",
@@ -250,7 +256,10 @@
             "offBranch": "Off the agent's branch",
             "noBranch": "no branch",
             "askAgent": "Ask the agent",
-            "addsTo": "Adds {names} to {manifest}"
+            "addsTo": "Adds {names} to {manifest}",
+            "pickFile": "Changed file",
+            "reviewedOption": "✓ {label} (reviewed)",
+            "unmarkReviewed": "Unmark {label} as reviewed"
         },
         "agentScratchReport": {
             "byproduct": "a log, dump or backup",
@@ -738,12 +747,12 @@
             "close": "Close {title}"
         },
         "cardSeal": {
-            "verified": "Tested after its last edit",
+            "verified": "Its check passed after the last edit",
             "verifiedDetail": "The agent ran a check after its last code change, and it passed.",
             "failed": "Its last check failed",
             "failedDetail": "The agent ran a check after its last code change, and it failed.",
             "unproven": "Not tested after its last edit",
-            "unprovenDetail": "The agent changed code and ran no test, typecheck, lint or build after it.",
+            "unprovenDetail": "The agent changed code and ran no test, typecheck, lint or build after it, or the one it tried could not start.",
             "unviewedHead": "Interface changed unseen",
             "unviewed": "Changed {count} interface file without looking at the result | Changed {count} interface files without looking at the result",
             "ran": "Ran"
@@ -2997,7 +3006,9 @@
                 "summaryBy": "Continued in a fresh session opened with a summary of the conversation written by {model}.",
                 "trimFellBack": "Could not trim the session for the hand-off, so it was carried whole.",
                 "summaryFellBack": "Could not write a summary for the hand-off, so the fresh session opened with the recent conversation and where the work stands instead."
-            }
+            },
+            "stoppedPartway": "{message} The run stopped partway. The changes it made so far are kept: send a message to pick up from here.",
+            "stoppedPartwaySwitch": "{message} The run stopped partway. The changes it made so far are kept: continue with another model to pick up from here."
         },
         "providerFailure": {
             "flaggedMessage": "{model}'s safeguards flagged this message.",
@@ -3204,7 +3215,7 @@
             "archivedOffBoardSending": "Archived: off the board. Sending a message restores it.",
             "billing": "Billing",
             "connectTitle": "Your own model",
-            "connectWays": "Google (free), local, or subscription",
+            "connectWays": "Subscription, API key, local model",
             "privacyFound": "The privacy shield didn't send this to {provider}: it found personal data in what {provider} reads where the shield can't mask it.",
             "privacyGrantFailed": "That didn't save.",
             "privacyGranted": "{provider} reads this conversation as it is: the privacy shield doesn't cover it here.",
@@ -3219,16 +3230,22 @@
             "privacyTakeBackTitle": "Shielded here again",
             "resumesIfAnswers": "Resumes if it answers",
             "retryTrial": "Retry trial",
-            "trialCount": "{remaining} of {allowance} free messages left today",
-            "trialFreeWays": "Some models connect for free",
+            "trialCount": "{remaining} of {allowance} free agent steps left today",
+            "trialFreeWays": "Switching models keeps this chat's work",
             "trialLastAnswer": "Last answer: {model}",
-            "trialNotCounted": "Failed messages aren't counted",
+            "trialNotCounted": "Failed steps aren't counted",
             "trialResets": "Resets {when}",
             "trialRouted": "Sent via intentic",
-            "trialSpent": "Today's free messages are used up",
-            "trialStepCost": "Each agent step uses one",
+            "trialSpent": "Today's free agent steps are used up",
+            "trialStepCost": "A small task can use 10 or more",
             "trialStrained": "Busy now, answers may be slower",
-            "trialUnavailable": "Free trial isn't answering right now"
+            "trialUnavailable": "Free trial isn't answering right now",
+            "trialFresh": "Free trial: {remaining} agent steps left today. A small task can use 10 or more.",
+            "trialFinishing": "Free steps used up, finishing this task",
+            "trialGraceLeft": "Up to {count} more step to finish | Up to {count} more steps to finish",
+            "trialFreshGrace": "Free trial: {remaining} agent steps left today. A small task can use 10 or more, and one you start can run past them to finish.",
+            "trialReviewChanges": "Review changes ({count} file) | Review changes ({count} files)",
+            "continueOtherModel": "Continue with another model"
         },
         "chatPaneTurns": {
             "couldntOpen": "Couldn't open this conversation.",
@@ -3761,7 +3778,8 @@
             "showFewerModels": "Show fewer {label} models",
             "showOlder": "Show {hidden} older",
             "showOlderModels": "Show {hidden} older {label} models",
-            "unavailable": "Unavailable"
+            "unavailable": "Unavailable",
+            "addAnotherProvider": "Add another provider ({count})"
         },
         "modelPickerState": {
             "useCustomModelId": "use as custom model id"
@@ -4127,7 +4145,7 @@
             "freeBadge": "Free · {requirement}",
             "needsBadge": "Needs {requirement}",
             "runsUnderClaudeCode": "{runs} under Claude Code",
-            "trialLeft": "Free trial · {remaining} left today",
+            "trialLeft": "Free trial · {remaining} steps left today",
             "trialUsedUp": "Free trial · used up today"
         },
         "cardReplies": {
@@ -4581,8 +4599,8 @@
             "signInAgain": "{account}: sign in again",
             "signingInTo": "signing in to {provider}",
             "someWaiting": "{count} of {total} resting for now",
-            "trialLeft": "{count} free message left today | {count} free messages left today",
-            "trialSpent": "Today's free messages are used up",
+            "trialLeft": "{count} free agent step left today | {count} free agent steps left today",
+            "trialSpent": "Today's free agent steps are used up",
             "verify": "{account}: verify it on the provider's page"
         },
         "providerGrid": {
@@ -6081,7 +6099,15 @@
             "alreadyFilledIn": "Already filled in at x.ai: approve on any device.",
             "enterCodeFinishesRest": "Enter this code on the page that opens: this sandbox finishes the rest and the account appears here.",
             "signInFinishesRest": "Sign in on the page that opens: this sandbox finishes the rest and the account appears here.",
-            "finishingWith": "Finishing sign-in with {destination}…"
+            "finishingWith": "Finishing sign-in with {destination}…",
+            "pasteToken": "Paste the token",
+            "pasteTokenPlaceholder": "Paste the token…",
+            "comeBackWithToken": "Sign in, then come back here with the token its last page shows.",
+            "whatYoullSee": "What you'll see",
+            "useAnotherProvider": "Use another provider instead",
+            "tripGoogle": "Google's page will call the app \"Google Antigravity\": that's Google's coding tool, and its sign-in is how this connects your Google account. Google may also warn you to sign in only if you downloaded the app from Google Play. If you'd rather not continue, another provider works just as well.",
+            "tripDevin": "Devin's sign-in happens on Windsurf, the company behind Devin, so the pages (and Google, if you sign in with it) will name Windsurf.",
+            "tripDevinToken": "Devin's sign-in happens on Windsurf, the company behind Devin, so the pages (and Google, if you sign in with it) will name Windsurf. The last page shows \"an authentication token for Devin CLI\". Intentic runs Devin CLI for you, so that token is the one to paste here."
         },
         "connectionNotice": {
             "cantStartedRightNow": "\"{name}\" can't be started right now",
@@ -10193,6 +10219,7 @@
         "hostedWait": {
             "coldBuilding": "{prefix}building a fresh machine: the first start downloads your sandbox, usually 3 to 5 minutes. You'll be taken in as soon as it's ready.",
             "coldLong": "{prefix}longer than usual, but still going. You'll be taken in as soon as it's ready.",
+            "connectingNote": "Your sandbox is running. We're waiting until it answers at its address, so the workspace opens ready to use instead of offline. This usually takes under a minute.",
             "goneProblem": "The machine we were running for you isn't there any more.",
             "goneRemedy": "Start it over below and we'll build you a new one, on the same address. Anything that was on the old machine is gone with it, and that's ours to fix, nothing on your side causes this.",
             "hoursProblem": "This sandbox's hosted hours for the month are used up, so we've left its machine stopped.",
@@ -10363,7 +10390,8 @@
             "needsGoogleDetail": "Your account signs in with an email code. A free machine needs a Google sign-in linked to it first; a machine you buy, or your own computer, needs nothing more.",
             "linkGoogle": "Link your Google account",
             "buyMachine": "Buy a machine",
-            "runOnThisComputer": "Run it on your own computer"
+            "runOnThisComputer": "Run it on your own computer",
+            "justStartedStillConnecting": "You started this sandbox a moment ago, and it's still connecting. This page opens it as soon as it answers."
         },
         "setupAccount": {
             "signOutFailed": "Couldn't sign out. Try again.",
@@ -10762,7 +10790,8 @@
             "tabs": "Opened beside",
             "toggleSplit": "Toggle Section Beside",
             "unavailable": "Not available",
-            "unavailableNote": "The extension that shows it is off or was removed."
+            "unavailableNote": "The extension that shows it is off or was removed.",
+            "closeTab": "Close {title}"
         },
         "useNavigationCommands": {
             "add": "Add…"
@@ -12017,6 +12046,14 @@
             "moveBack": "Move Back",
             "openToSide": "Open to the Side"
         },
+        "bringProject": {
+            "connectAccount": "Connect an account",
+            "description": "Clone a repository, upload files, or ask an agent to fetch it.",
+            "privateNeedsAccount": "A private GitHub or GitLab repository needs that account connected first, with a token that can read the repository (read-only is enough).",
+            "publicNeedsNoAccount": "A public repository needs no account: just paste its address.",
+            "tip": "Bring in",
+            "title": "Bring a project in"
+        },
         "workspaceEmptyState": {
             "askAgentToFetch": "Ask an agent to fetch it",
             "clone": "Clone",
@@ -12027,7 +12064,6 @@
             "filesStayOnSandbox": "Files stay on your sandbox machine: nowhere else",
             "getCodeIn": "Get your code in",
             "pasteGitAddressGithub": "Paste a Git address: GitHub, GitLab, anywhere you can clone from.",
-            "privateRepositoryNeedsHost": "A private repository needs its host connected under Capabilities first.",
             "repositoryAddress": "Repository address",
             "uploadFilesFolder": "Upload files or a folder",
             "workspaceAgentsReadEdit": "This is the workspace your agents read and edit. Bring something in and they have something to work on."
@@ -12200,7 +12236,8 @@
             "management": "Management panel",
             "path": "Path",
             "preview": "Preview",
-            "repo": "Repo"
+            "repo": "Repo",
+            "closeTab": "Close {title}"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} repos",
@@ -12402,6 +12439,8 @@
             "show": "Show getting started",
             "finishedTitle": "You're set up",
             "finishedLine": "That's the whole loop: bring work in, hand it to agents, review, land. Run as many side by side as you like.",
+            "finishedWhere": "The landed change is in your files now, not yet committed. Commit it in Changes to keep a version, and connect a remote to back it up.",
+            "openChanges": "Open Changes",
             "done": "Done"
         },
         "ring": {

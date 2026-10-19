@@ -63,6 +63,9 @@ export const SandboxNoticeSchema = z.discriminatedUnion("code", [
     z.object({ code: z.literal("renewalWithdrawn"), params: z.object(failure) }),
     z.object({ code: z.literal("reconnect"), params: z.object(failure) }),
     z.object({ code: z.literal("undelivered"), params: z.object({ ...failure, unattended: z.boolean().optional() }) }),
+    // A door refusal that came after the turn had already run (a trial spent mid-turn): what it did stays, nothing is
+    // held, and `switchModel` when another model gets past the refusal.
+    z.object({ code: z.literal("stoppedPartway"), params: z.object({ ...failure, switchModel: z.boolean().optional() }) }),
     // A turn the sandbox kept whole, its message above; `memory` when a memory hold kept it.
     z.object({ code: z.literal("kept"), params: z.object({ ...failure, memory: z.boolean().optional() }) }),
     z.object({ code: z.literal("memoryHeld"), params: z.object(failure) }),

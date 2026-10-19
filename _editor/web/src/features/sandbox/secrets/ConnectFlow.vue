@@ -6,9 +6,11 @@ import { formatList } from "@intentic/ui/format";
 import { computed, nextTick, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
 import { useChat } from "../../../models/conversations/run/useChat";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
+import ConnectTripNote from "./ConnectTripNote.vue";
 import { readClipboard, useCopied } from "@intentic/ui/clipboard";
 import { useT } from "@intentic/ui/i18n";
 import { onScreen } from "../../../workbench/window/onScreen";
+import { connectTripNote } from "./connectFlowNotes";
 
 // One sign-in panel for every provider and mechanism (own account or translator subscription); branches only on
 // the handshake shape (device: read-only poll; redirect: paste back a code or address), never on the provider. Lives
@@ -19,6 +21,9 @@ const t = useT();
 // `roomy` is the same panel given a page to stand on rather than a strip above a composer: full-size controls, and the
 // dead-end picture already open, since there the picture is reference beside the button instead of competing with it.
 const { kind, provider, roomy = false } = defineProps<{ kind: `native` | `routed`; provider: AgentProvider; roomy?: boolean }>();
+// The reader would rather not go through this provider's sign-in after reading what it shows: the host ends the attempt,
+// which puts the other providers back in front of them.
+const emit = defineEmits<{ elsewhere: [] }>();
 
 const { nativeConnectFlow, translatorConnectFlow, accountBusy, connectLabel, completeConnect, completeTranslator, connectSent } = useChat();
 
@@ -67,12 +72,24 @@ const hint = computed<string | undefined>(() => {
 // What the reader has to come back holding, named the same way in the instruction, the field and its label, so
 // the three cannot describe different objects. Whole messages per flow, since the noun alone would be English glued
 // into another language's sentence.
-const pasteLabel = computed(() =>
-    redirectFlow.value ? t(`sandbox.connectFlow.pasteAddress`, { destination: destination.value }) : t(`sandbox.connectFlow.pasteCode`),
-);
-const pastePlaceholder = computed(() =>
-    redirectFlow.value ? t(`sandbox.connectFlow.pasteAddressPlaceholder`) : t(`sandbox.connectFlow.pasteCodePlaceholder`),
-);
+// Devin's page hands over what it calls "an authentication token for Devin CLI", so here it is a token too: a reader told
+// to paste a code, holding a token the page said to use only in Devin CLI, had a reason to stop (UX review 2026-10-18, F09).
+const token = computed(() => provider === `devin` && !redirectFlow.value);
+const pasteLabel = computed(() => {
+    if (redirectFlow.value) {
+        return t(`sandbox.connectFlow.pasteAddress`, { destination: destination.value });
+    }
+    return token.value ? t(`sandbox.connectFlow.pasteToken`) : t(`sandbox.connectFlow.pasteCode`);
+});
+const pastePlaceholder = computed(() => {
+    if (redirectFlow.value) {
+        return t(`sandbox.connectFlow.pasteAddressPlaceholder`);
+    }
+    return token.value ? t(`sandbox.connectFlow.pasteTokenPlaceholder`) : t(`sandbox.connectFlow.pasteCodePlaceholder`);
+});
+
+// What the provider's pages will show that Intentic's words don't prepare for, said before the trip (connectFlowNotes.ts).
+const tripNote = computed(() => (flow.value === undefined ? undefined : connectTripNote(provider, { redirect: redirectFlow.value })));
 
 // Fake dead-end address per flow, for the user to recognize against the real error page: the redirect the page was
 // actually sent to (`redirect_uri`, or BigModel's `redirect`), then a grant truncated like a real one since only the
@@ -384,6 +401,7 @@ watch(flow, (live) => {
         <!-- Watched on the owner's own machine: going is the whole of it, and the paste is folded behind "somewhere else". -->
         <template v-else-if="watching && !pasteInstead && pasted.trim() === ``">
             <p :class="[bodyText, `text-muted`]">{{ t(`sandbox.connectFlow.finishesOn`, { where: watchedOn }) }}</p>
+            <ConnectTripNote v-if="tripNote" :note="tripNote" :class="bodyText" @elsewhere="emit(`elsewhere`)" />
             <Button
                 as="a"
                 class="self-start touch-target"
@@ -411,7 +429,10 @@ watch(flow, (live) => {
                     ><span class="font-semibold text-content">{{ t(`sandbox.connectFlow.wontLoad`) }}</span></template
                 >
             </i18n-t>
-            <p v-else :class="[bodyText, `text-muted`]">{{ t(`sandbox.connectFlow.comeBackWithCode`) }}</p>
+            <p v-else :class="[bodyText, `text-muted`]">
+                {{ token ? t(`sandbox.connectFlow.comeBackWithToken`) : t(`sandbox.connectFlow.comeBackWithCode`) }}
+            </p>
+            <ConnectTripNote v-if="tripNote" :note="tripNote" :class="bodyText" @elsewhere="emit(`elsewhere`)" />
             <Button
                 as="a"
                 class="self-start touch-target"

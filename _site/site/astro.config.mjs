@@ -33,6 +33,12 @@ const desktopDevRoutes = {
     configureServer(server) {
         server.middlewares.use((request, response, next) => {
             const pathname = new URL(request.url ?? "/", "http://localhost").pathname.replace(/\/$/u, "");
+            // The worker answers this in production; here there is no GitHub read, so the page keeps its built label.
+            if (pathname === "/desktop/latest.json") {
+                response.writeHead(503, { "content-type": "application/json" });
+                response.end("null");
+                return undefined;
+            }
             const route = DESKTOP_ROUTES[pathname];
             if (route === undefined) {
                 return next();

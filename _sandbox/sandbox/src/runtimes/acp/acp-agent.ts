@@ -341,7 +341,7 @@ const bindPhase = (connection: AcpConnection, request: AgentRequest, session: st
             wait.wake();
             return;
         }
-        const event = sessionUpdateEvent(update, request.spec.cwd);
+        const event = sessionUpdateEvent(update, request.spec.cwd, connection.terminalExit);
         if (event !== undefined) {
             queue.push(event);
         }

@@ -141,7 +141,9 @@
             "couldntRename": "Nie udało się zmienić nazwy agenta.",
             "sends": "wyśle {at}",
             "scheduledMessages": "Wiadomości",
-            "sendsWhenRoom": "wyśle, gdy zwolni się pamięć"
+            "sendsWhenRoom": "wyśle, gdy zwolni się pamięć",
+            "landUnreviewedHint": "Scala bez przejrzenia zmian",
+            "reviewChangesCount": "Przejrzyj zmiany: dodane wiersze: {added}, usunięte: {removed}"
         },
         "agentConflictReport": {
             "agentWriting": "Agent pisze",
@@ -189,7 +191,11 @@
             "toLand": "{count} do scalenia",
             "toWorkspace": "Do workspace",
             "workAlreadyLandedStays": "Praca, która już została scalona, zostaje w Twojej przestrzeni roboczej: przepada tylko to, co wciąż jest na gałęzi.",
-            "writtenSoFar": "Dotąd napisane"
+            "writtenSoFar": "Dotąd napisane",
+            "focusReview": "Skup się na przeglądzie",
+            "exitFocus": "Wyjdź z trybu skupienia",
+            "focusReviewHint": "Daje przeglądowi całe okno: ukrywa panel boczny, czat obok i terminal, dopóki nie wyjdziesz",
+            "exitFocusHint": "Przywraca panel boczny, czat i terminal do poprzedniego układu"
         },
         "agentReactions": {
             "addReaction": "Dodaj reakcję",
@@ -250,7 +256,10 @@
             "offBranch": "Poza gałęzią agenta",
             "noBranch": "brak gałęzi",
             "askAgent": "Poproś agenta",
-            "addsTo": "Dodaje {names} do {manifest}"
+            "addsTo": "Dodaje {names} do {manifest}",
+            "pickFile": "Zmieniony plik",
+            "reviewedOption": "✓ {label} (przejrzany)",
+            "unmarkReviewed": "Cofnij oznaczenie {label} jako przejrzanego"
         },
         "agentScratchReport": {
             "byproduct": "log, zrzut albo kopia zapasowa",
@@ -738,12 +747,12 @@
             "close": "Zamknij {title}"
         },
         "cardSeal": {
-            "verified": "Przetestowane po ostatniej zmianie",
+            "verified": "Jego sprawdzenie przeszło po ostatniej zmianie",
             "verifiedDetail": "Agent uruchomił sprawdzenie po ostatniej zmianie kodu i przeszło.",
             "failed": "Ostatnie sprawdzenie nie przeszło",
             "failedDetail": "Agent uruchomił sprawdzenie po ostatniej zmianie kodu i nie przeszło.",
             "unproven": "Nieprzetestowane po ostatniej zmianie",
-            "unprovenDetail": "Agent zmienił kod i nie uruchomił potem testów, typecheck, lint ani builda.",
+            "unprovenDetail": "Agent zmienił kod i nie uruchomił potem testów, typecheck, lint ani builda albo ten, który próbował uruchomić, nie wystartował.",
             "unviewedHead": "Interfejs zmieniony bez podglądu",
             "unviewed": "Zmienił {count} plik interfejsu bez obejrzenia wyniku | Zmienił {count} pliki interfejsu bez obejrzenia wyniku | Zmienił {count} plików interfejsu bez obejrzenia wyniku",
             "ran": "Uruchomił"
@@ -2997,7 +3006,9 @@
                 "summaryBy": "Kontynuowano w nowej sesji otwartej streszczeniem rozmowy, napisanym przez {model}.",
                 "trimFellBack": "Nie udało się przyciąć sesji do przekazania, więc przeniesiono ją w całości.",
                 "summaryFellBack": "Nie udało się napisać streszczenia do przekazania, więc nowa sesja otworzyła się ostatnią częścią rozmowy i stanem pracy."
-            }
+            },
+            "stoppedPartway": "{message} Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: wyślij wiadomość, żeby podjąć pracę od tego miejsca.",
+            "stoppedPartwaySwitch": "{message} Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: kontynuuj z innym modelem, żeby podjąć pracę od tego miejsca."
         },
         "providerFailure": {
             "flaggedMessage": "Zabezpieczenia modelu {model} oznaczyły tę wiadomość.",
@@ -3204,7 +3215,7 @@
             "archivedOffBoardSending": "Zarchiwizowane: zdjęte z tablicy. Wysłanie wiadomości je przywraca.",
             "billing": "Rozliczenia",
             "connectTitle": "Własny model",
-            "connectWays": "Google (darmowo), lokalnie lub abonament",
+            "connectWays": "Abonament, klucz API, model lokalny",
             "privacyFound": "Osłona prywatności nie wysłała tego do {provider}: znalazła dane osobowe w tym, co {provider} czyta tam, gdzie osłona nie może ich zamaskować.",
             "privacyGrantFailed": "Nie udało się zapisać.",
             "privacyGranted": "{provider} czyta tę rozmowę bez maskowania: osłona prywatności jej tu nie obejmuje.",
@@ -3219,16 +3230,22 @@
             "privacyTakeBackTitle": "Znów pod osłoną",
             "resumesIfAnswers": "Wznawia, gdy odpowie",
             "retryTrial": "Ponów wersję próbną",
-            "trialCount": "Darmowe wiadomości na dziś: {remaining} z {allowance}",
-            "trialFreeWays": "Niektóre modele podłączysz za darmo",
+            "trialCount": "Darmowe kroki agenta na dziś: {remaining} z {allowance}",
+            "trialFreeWays": "Zmiana modelu zachowuje pracę tego czatu",
             "trialLastAnswer": "Ostatnia odpowiedź: {model}",
-            "trialNotCounted": "Nieudane wiadomości nie są liczone",
+            "trialNotCounted": "Nieudane kroki nie są liczone",
             "trialResets": "Odnowienie {when}",
             "trialRouted": "Przechodzi przez intentic",
-            "trialSpent": "Dzisiejsze darmowe wiadomości się skończyły",
-            "trialStepCost": "Każdy krok agenta zużywa jedną",
+            "trialSpent": "Dzisiejsze darmowe kroki agenta się skończyły",
+            "trialStepCost": "Małe zadanie może zużyć 10 lub więcej",
             "trialStrained": "Duży ruch, odpowiedzi mogą przyjść wolniej",
-            "trialUnavailable": "Darmowa wersja próbna teraz nie odpowiada"
+            "trialUnavailable": "Darmowa wersja próbna teraz nie odpowiada",
+            "trialFresh": "Darmowa wersja próbna: kroków agenta na dziś: {remaining}. Małe zadanie może zużyć 10 lub więcej.",
+            "trialFinishing": "Darmowe kroki się skończyły, agent kończy to zadanie",
+            "trialGraceLeft": "Na dokończenie: jeszcze do {count} kroku | Na dokończenie: jeszcze do {count} kroków | Na dokończenie: jeszcze do {count} kroków",
+            "trialFreshGrace": "Darmowa wersja próbna: kroków agenta na dziś: {remaining}. Małe zadanie może zużyć 10 lub więcej, a rozpoczęte zadanie może je przekroczyć, by się zakończyć.",
+            "trialReviewChanges": "Przejrzyj zmiany ({count} plik) | Przejrzyj zmiany ({count} pliki) | Przejrzyj zmiany ({count} plików)",
+            "continueOtherModel": "Kontynuuj z innym modelem"
         },
         "chatPaneTurns": {
             "couldntOpen": "Nie udało się otworzyć tej rozmowy.",
@@ -3761,7 +3778,8 @@
             "currentModel": "bieżący model",
             "notConnected": "niepodłączony",
             "older": "starsza",
-            "olderThan": "starsza wersja, {newer} jest nowszy"
+            "olderThan": "starsza wersja, {newer} jest nowszy",
+            "addAnotherProvider": "Dodaj innego dostawcę ({count})"
         },
         "modelPickerState": {
             "useCustomModelId": "użyj jako własnego id modelu"
@@ -4127,7 +4145,7 @@
             "freeBadge": "Za darmo · {requirement}",
             "needsBadge": "Wymaga {requirement}",
             "runsUnderClaudeCode": "{runs} w Claude Code",
-            "trialLeft": "Darmowa wersja próbna · zostało na dziś: {remaining}",
+            "trialLeft": "Darmowa wersja próbna · kroków na dziś: {remaining}",
             "trialUsedUp": "Darmowa wersja próbna · na dziś wyczerpana"
         },
         "cardReplies": {
@@ -4581,8 +4599,8 @@
             "signInAgain": "{account}: zaloguj się ponownie",
             "signingInTo": "logowanie do {provider}",
             "someWaiting": "{count} z {total} na razie odpoczywa",
-            "trialLeft": "Zostało {count} darmowa wiadomość na dziś | Zostały {count} darmowe wiadomości na dziś | Zostało {count} darmowych wiadomości na dziś",
-            "trialSpent": "Dzisiejsze darmowe wiadomości się skończyły",
+            "trialLeft": "Został {count} darmowy krok agenta na dziś | Zostały {count} darmowe kroki agenta na dziś | Zostało {count} darmowych kroków agenta na dziś",
+            "trialSpent": "Dzisiejsze darmowe kroki agenta się skończyły",
             "verify": "{account}: zweryfikuj je na stronie dostawcy"
         },
         "providerGrid": {
@@ -5610,7 +5628,15 @@
             "alreadyFilledIn": "Na x.ai kod jest już wpisany: zatwierdź na dowolnym urządzeniu.",
             "enterCodeFinishesRest": "Wpisz ten kod na stronie, która się otworzy: resztę dokończy ten sandbox, a konto pojawi się tutaj.",
             "signInFinishesRest": "Zaloguj się na stronie, która się otworzy: resztę dokończy ten sandbox, a konto pojawi się tutaj.",
-            "finishingWith": "Kończenie logowania w {destination}…"
+            "finishingWith": "Kończenie logowania w {destination}…",
+            "pasteToken": "Wklej token",
+            "pasteTokenPlaceholder": "Wklej token…",
+            "comeBackWithToken": "Zaloguj się, a potem wróć tutaj z tokenem, który pokaże ostatnia strona.",
+            "whatYoullSee": "Co zobaczysz",
+            "useAnotherProvider": "Użyj innego dostawcy",
+            "tripGoogle": "Strona Google nazwie aplikację „Google Antigravity”: to narzędzie Google do programowania, a jego logowanie służy tu do połączenia Twojego konta Google. Google może też ostrzec, żeby logować się tylko wtedy, gdy aplikacja pochodzi z Google Play. Jeśli wolisz nie kontynuować, inny dostawca zadziała równie dobrze.",
+            "tripDevin": "Logowanie do Devina odbywa się w Windsurf, firmie stojącej za Devinem, więc strony (i Google, jeśli logujesz się przez Google) będą wymieniać Windsurf.",
+            "tripDevinToken": "Logowanie do Devina odbywa się w Windsurf, firmie stojącej za Devinem, więc strony (i Google, jeśli logujesz się przez Google) będą wymieniać Windsurf. Ostatnia strona pokaże „token uwierzytelniający dla Devin CLI”. Intentic uruchamia Devin CLI za Ciebie, więc to właśnie ten token wklej tutaj."
         },
         "connectionNotice": {
             "cantStartedRightNow": "„{name}” nie da się teraz uruchomić",
@@ -9722,6 +9748,7 @@
         "hostedWait": {
             "coldBuilding": "{prefix}budujemy nową maszynę: pierwsze uruchomienie pobiera Twój sandbox, zwykle 3 do 5 minut. Wejdziesz, gdy tylko będzie gotowe.",
             "coldLong": "{prefix}dłużej niż zwykle, ale wciąż trwa. Wejdziesz, gdy tylko będzie gotowe.",
+            "connectingNote": "Twój sandbox działa. Czekamy, aż odpowie pod swoim adresem, żeby obszar roboczy otworzył się gotowy do pracy, a nie offline. Zwykle trwa to krócej niż minutę.",
             "goneProblem": "Maszyny, którą dla Ciebie uruchomiliśmy, już nie ma.",
             "goneRemedy": "Uruchom go od nowa poniżej, a zbudujemy Ci nową, pod tym samym adresem. Wszystko, co było na starej maszynie, zniknęło razem z nią, i to my musimy to naprawić, nic po Twojej stronie tego nie powoduje.",
             "hoursProblem": "Godziny hostowane tego sandboxa na ten miesiąc się skończyły, więc zostawiliśmy jego maszynę zatrzymaną.",
@@ -9892,7 +9919,8 @@
             "needsGoogleDetail": "Twoje konto loguje się kodem z e-maila. Darmowa maszyna wymaga najpierw połączenia konta z logowaniem Google; kupiona maszyna albo własny komputer nie wymagają niczego więcej.",
             "linkGoogle": "Połącz konto Google",
             "buyMachine": "Kup maszynę",
-            "runOnThisComputer": "Uruchom na własnym komputerze"
+            "runOnThisComputer": "Uruchom na własnym komputerze",
+            "justStartedStillConnecting": "Ten sandbox uruchomiono przed chwilą i wciąż się łączy. Ta strona otworzy go, gdy tylko odpowie."
         },
         "setupAccount": {
             "signOutFailed": "Nie udało się wylogować. Spróbuj ponownie.",
@@ -10251,7 +10279,8 @@
             "tabs": "Otwarte obok",
             "toggleSplit": "Przełącz sekcję obok",
             "unavailable": "Niedostępne",
-            "unavailableNote": "Rozszerzenie, które to pokazuje, jest wyłączone lub zostało usunięte."
+            "unavailableNote": "Rozszerzenie, które to pokazuje, jest wyłączone lub zostało usunięte.",
+            "closeTab": "Zamknij {title}"
         },
         "useNavigationCommands": {
             "add": "Dodaj…"
@@ -11531,6 +11560,14 @@
             "moveBack": "Przenieś z powrotem",
             "openToSide": "Otwórz obok"
         },
+        "bringProject": {
+            "connectAccount": "Połącz konto",
+            "description": "Sklonuj repozytorium, wgraj pliki albo poproś agenta, żeby je pobrał.",
+            "privateNeedsAccount": "Prywatne repozytorium GitHub lub GitLab wymaga wcześniej połączonego konta, z tokenem umożliwiającym odczyt repozytorium (wystarczy dostęp tylko do odczytu).",
+            "publicNeedsNoAccount": "Publiczne repozytorium nie wymaga konta: wklej tylko jego adres.",
+            "tip": "Dodaj projekt",
+            "title": "Dodaj projekt"
+        },
         "workspaceEmptyState": {
             "askAgentToFetch": "Poproś agenta, żeby to pobrał",
             "clone": "Sklonuj",
@@ -11541,7 +11578,6 @@
             "filesStayOnSandbox": "Pliki zostają na maszynie Twojego sandboxa — nigdzie indziej",
             "getCodeIn": "Wnieś swój kod",
             "pasteGitAddressGithub": "Wklej adres Git: GitHub, GitLab, skądkolwiek da się klonować.",
-            "privateRepositoryNeedsHost": "Prywatne repozytorium wymaga najpierw podłączenia jego hosta w Możliwościach.",
             "repositoryAddress": "Adres repozytorium",
             "uploadFilesFolder": "Wgraj pliki albo folder",
             "workspaceAgentsReadEdit": "To jest przestrzeń robocza, którą Twoje agenty czytają i edytują. Wnieś do niej coś, a będą miały nad czym pracować."
@@ -11729,7 +11765,8 @@
             "management": "Panel zarządzania",
             "path": "Ścieżka",
             "preview": "Podgląd",
-            "repo": "Repozytorium"
+            "repo": "Repozytorium",
+            "closeTab": "Zamknij {title}"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, repozytoria: {count}",
@@ -12402,6 +12439,8 @@
             "show": "Pokaż pierwsze kroki",
             "finishedTitle": "Wszystko gotowe",
             "finishedLine": "To cała pętla: dodaj pracę, przekaż ją agentom, przejrzyj, scal. Uruchamiaj ich obok siebie, ilu chcesz.",
+            "finishedWhere": "Scalona zmiana jest już w Twoich plikach, ale jeszcze nie zatwierdzona. Zatwierdź ją w Zmianach, by zachować wersję, i połącz zdalne repozytorium, by mieć kopię zapasową.",
+            "openChanges": "Otwórz Zmiany",
             "done": "Gotowe"
         },
         "ring": {

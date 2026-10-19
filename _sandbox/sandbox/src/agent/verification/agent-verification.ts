@@ -17,18 +17,63 @@ const EVIDENCE_DETAIL_MAX = 800;
 
 export type VerificationKind = "test" | "typecheck" | "lint" | "build";
 
-// Reads the tmux wrapper's own footer (`--- [exit N, ...]`), the only way to tell a failed suite from one that merely
-// printed failures. Undefined means no footer; the LAST one wins for a compound command.
+// Reads how a command exited from what its result says, for runtimes that report no number of their own. The tmux
+// wrapper's footer (`--- [exit N, …]`) wins where present, the LAST one for a compound command; a masked pipeline
+// footer (`--- [exit 0 (pipeline: 127 0 — …), …]`) answers with the earliest stage that failed, since that is the
+// check and the stage after it (`| tail`, `| grep`) only filtered what it printed. Without a footer, a line that is
+// nothing but a vendor's own exit note (Devin's "Exited with code 127", "Exit code: 1", "exit status 2") is read,
+// the last one winning. Undefined means the text says nothing about it.
+const FOOTER = /---\s\[exit\s(\d+)(?:\s\(pipeline:\s([\d\s]+?)\s—)?/g;
+const EXIT_LINE = /^[\s[(]*(?:command\s+|process\s+)?(?:exited\s+with\s+(?:exit\s+)?code|exit\s+code|exit\s+status)\s*:?\s*(\d+)[\s\])]*\.?\s*$/gim;
+// A stage the next one closed early (SIGPIPE, `| head`) did not fail.
+const SIGPIPE = 141;
+
 export const commandExitCode = (response: unknown): number | undefined => {
     const text = typeof response === "string" ? response : typeof response === "object" && response !== null ? JSON.stringify(response) : "";
-    const last = [...text.matchAll(/---\s\[exit\s(\d+),/g)].at(-1)?.[1];
-    return last === undefined ? undefined : Number(last);
+    const footer = [...text.matchAll(FOOTER)].at(-1);
+    if (footer !== undefined) {
+        const stages = (footer[2] ?? "").trim().split(/\s+/).filter((stage) => stage !== "").map(Number);
+        const masked = stages.slice(0, -1).find((stage) => stage !== 0 && stage !== SIGPIPE);
+        return masked ?? Number(footer[1]);
+    }
+    const said = [...text.matchAll(EXIT_LINE)].at(-1)?.[1];
+    return said === undefined ? undefined : Number(said);
+};
+
+// How one check came out. `unstarted`: the shell never ran it (126 not executable, 127 not found), which proves
+// nothing about the code either way, so it is neither a pass nor a failure.
+export type CheckOutcome = "passed" | "failed" | "unstarted";
+
+// The shell's own word that it could not start a program: `bash: pnpm: command not found`, `sh: 1: vitest: not found`,
+// `bash: ./node_modules/.bin/tsc: No such file or directory`.
+const NOT_STARTED = /^(?:[\w./-]*sh|env|xargs):\s*(?:line\s+\d+:\s*|\d+:\s*)?[^:\n]+:\s*(?:command not found|not found|No such file or directory|Permission denied)\s*$/m;
+
+// A settled command's outcome: an exit code the runtime reported as a number outranks one read from its text, which
+// outranks the call's own status (a suite that exited 1 can still show as a completed call).
+export const checkOutcome = (input: { readonly status: "completed" | "failed"; readonly text: string; readonly exitCode?: number | undefined }): CheckOutcome => {
+    const exit = input.exitCode ?? commandExitCode(input.text);
+    if (exit === 126 || exit === 127) {
+        return "unstarted";
+    }
+    if (exit === 0) {
+        return "passed";
+    }
+    if (exit !== undefined) {
+        return "failed";
+    }
+    // No exit code anywhere: a shell that said it could not find the program did not run the check, whatever the
+    // call's status claims.
+    if (NOT_STARTED.test(input.text)) {
+        return "unstarted";
+    }
+    return input.status === "completed" ? "passed" : "failed";
 };
 
 // One check the turn ran. `at` is the shared counter, not a clock.
 interface Evidence {
     readonly command: string;
-    readonly passed: boolean;
+    readonly kind: VerificationKind;
+    readonly outcome: CheckOutcome;
     readonly detail: string;
     readonly at: number;
 }
@@ -48,14 +93,15 @@ export interface VerificationStanding {
     readonly state: VerificationState;
     // The code paths edited, deduped, newest last. Empty for `no-code`.
     readonly paths: readonly string[];
-    // The command that spoke: cleared it (`verified`) or broke it (`failing`); absent for `unproven`/`no-code`.
+    // The command that spoke: cleared it (`verified`) or broke it (`failing`); absent for `unproven`/`no-code`, a
+    // check that could not start included.
     readonly check: string | undefined;
 }
 
 export interface VerificationLedger {
     readonly noteEdit: (path: string) => void;
-    readonly noteCommand: (command: string, passed: boolean, detail: string) => void;
-    // Undefined ⇒ nothing to ask for: no code was edited, or a passing check followed the last edit.
+    readonly noteCommand: (command: string, outcome: CheckOutcome, detail: string) => void;
+    // Undefined ⇒ nothing to ask for: no code was edited, or the checks after the last edit stand `verified`.
     readonly verdict: () => VerificationVerdict | undefined;
     // Every code path edited, deduped, newest last, whether or not it has since been proven.
     readonly edited: () => readonly string[];
@@ -195,14 +241,20 @@ const checkNameOf = (command: string, depth = 0): string => {
     return script === undefined ? command.trim() : checkNameOf(script, depth + 1);
 };
 
+// What the checks after the last edit add up to, and the one that says so.
+interface Judgement {
+    readonly state: Exclude<VerificationState, "no-code">;
+    readonly evidence: Evidence | undefined;
+}
+
 export const createVerificationLedger = (): VerificationLedger => {
     // Every edit is recorded, prose included; the prose filter is applied where it's read (`verdict`), not here.
     const edits: { path: string; at: number; prose: boolean }[] = [];
     const evidence: Evidence[] = [];
     let counter = 0;
-    const note = (command: string, passed: boolean, detail: string): void => {
+    const note = (command: string, kind: VerificationKind, outcome: CheckOutcome, detail: string): void => {
         counter += 1;
-        evidence.push({ command: command.trim(), passed, detail: detail.slice(0, EVIDENCE_DETAIL_MAX), at: counter });
+        evidence.push({ command: command.trim(), kind, outcome, detail: detail.slice(0, EVIDENCE_DETAIL_MAX), at: counter });
     };
     // Only code counts, so a turn that touched nothing else is done already; order means after the last edit a check
     // could speak to. `paths` is deduped, newest last.
@@ -217,37 +269,52 @@ export const createVerificationLedger = (): VerificationLedger => {
             after: evidence.filter((item) => item.at > lastEdit.at),
         };
     };
+    // Where the checks after the last edit leave the work, read per kind of check: each kind's LATEST run is what it
+    // says, so a test that failed and was then fixed and rerun is passing, and one that passed and then failed is not.
+    // Failing if any kind's latest run failed; unproven if any kind's latest could not start (it established nothing,
+    // and a pass of a different kind does not stand in for it) or nothing ran; verified only when every kind's latest
+    // passed. The command named is the latest that says so.
+    const judge = (after: readonly Evidence[]): Judgement => {
+        const latest = [...new Map(after.map((item) => [item.kind, item])).values()];
+        const failed = latest.findLast((item) => item.outcome === "failed");
+        if (failed !== undefined) {
+            return { state: "failing", evidence: failed };
+        }
+        if (latest.length === 0 || latest.some((item) => item.outcome === "unstarted")) {
+            return { state: "unproven", evidence: undefined };
+        }
+        return { state: "verified", evidence: latest.at(-1) };
+    };
     return {
         noteEdit: (path) => {
             counter += 1;
             edits.push({ path, at: counter, prose: isProsePath(path) });
         },
-        noteCommand: (command, passed, detail) => {
-            if (commandKind(command) !== undefined) {
-                note(checkNameOf(command), passed, detail);
+        noteCommand: (command, outcome, detail) => {
+            const kind = commandKind(command);
+            if (kind !== undefined) {
+                note(checkNameOf(command), kind, outcome, detail);
             }
         },
         edited: () => [...new Set(edits.map((edit) => edit.path))],
         verdict: () => {
             const { paths, after } = read();
-            if (paths.length === 0 || after.some((item) => item.passed)) {
+            if (paths.length === 0) {
                 return undefined;
             }
-            const failed = after.findLast((item) => !item.passed);
-            return { paths, ...(failed !== undefined ? { failed } : { failed: undefined }) };
+            const judged = judge(after);
+            if (judged.state === "verified") {
+                return undefined;
+            }
+            return { paths, failed: judged.state === "failing" ? judged.evidence : undefined };
         },
         standing: () => {
             const { paths, after } = read();
             if (paths.length === 0) {
                 return { state: "no-code", paths, check: undefined };
             }
-            // A pass anywhere after the last edit clears it; the last such pass is the one named.
-            const passed = after.findLast((item) => item.passed);
-            if (passed !== undefined) {
-                return { state: "verified", paths, check: passed.command };
-            }
-            const failed = after.findLast((item) => !item.passed);
-            return failed === undefined ? { state: "unproven", paths, check: undefined } : { state: "failing", paths, check: failed.command };
+            const judged = judge(after);
+            return { state: judged.state, paths, check: judged.evidence?.command };
         },
     };
 };
@@ -279,7 +346,7 @@ export const createFrameLedger = (): FrameLedger => {
     const pending = new Map<string, TrackedCall>();
     // A call's result, once it has one; interim updates leave it pending, only a terminal status is an answer
     // (activity/outbound.ts).
-    const settle = (id: string, status: ToolCallStatus | undefined, content: readonly ToolCallContent[] | undefined): void => {
+    const settle = (id: string, status: ToolCallStatus | undefined, content: readonly ToolCallContent[] | undefined, exitCode?: number): void => {
         if (status !== "completed" && status !== "failed") {
             return;
         }
@@ -296,16 +363,14 @@ export const createFrameLedger = (): FrameLedger => {
             }
             return;
         }
-        const text = content?.find((entry) => entry.type === "text")?.text ?? "";
-        // Exit code outranks the tool's own status: a suite that exited 1 can still show as a completed call.
-        const exit = commandExitCode(text);
-        ledger.noteCommand(call.command, exit === undefined ? status === "completed" : exit === 0, text);
+        const text = (content ?? []).flatMap((entry) => (entry.type === "text" ? [entry.text] : [])).join("\n");
+        ledger.noteCommand(call.command, checkOutcome({ status, text, exitCode }), text);
     };
     return {
         ...ledger,
         note: (event) => {
             if (event.kind === "tool_call_update") {
-                settle(event.id, event.status, event.content);
+                settle(event.id, event.status, event.content, event.exitCode);
                 return;
             }
             if (event.kind !== "tool_call") {

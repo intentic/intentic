@@ -12,7 +12,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { code, additions, deletions, of } = defineProps<{
+const { code, additions, deletions, of, whole = false } = defineProps<{
     // Comments-stripped diff, as the daemon counted it; absent when there's no such reading, so git's numbers apply.
     code?: LineStat;
     // Git's own, comments included.
@@ -20,12 +20,15 @@ const { code, additions, deletions, of } = defineProps<{
     deletions?: number;
     // The largest addition in this list; when present, the rail is drawn and scaled to it.
     of?: number;
+    // A whole body of work's total, which a board card also counts: said in git's reading whatever the diff shows, so the
+    // card's +N/−M and the review's header are one number. The code-only reading moves to the hover.
+    whole?: boolean;
 }>();
 
 const { showComments } = useLayout();
 
 // True when the surface shows code alone; the only mode where the props above matter.
-const stripped = computed(() => !showComments.value);
+const stripped = computed(() => !showComments.value && !whole);
 const shown = computed(() => shownStat(stripped.value, code, additions, deletions));
 const commentsOnly = computed(
     () => stripped.value && code?.additions === 0 && code.deletions === 0 && ((additions ?? 0) > 0 || (deletions ?? 0) > 0),
@@ -34,7 +37,16 @@ const commentsOnly = computed(
 // Git's reading, formatted the way the badge formats numbers, for the hover text.
 const full = computed(() => [additions ? `+${additions}` : ``, deletions ? `−${deletions}` : ``].filter(Boolean).join(` `));
 // Only when the two readings differ; otherwise the hover would repeat the number below it.
-const hint = computed<Tip | undefined>(() => {
+const hint = computed<Tip | undefined>(() => (whole ? wholeHint.value : strippedHint.value));
+// A total said in git's reading names the code-only one in its hover, while the diff beneath shows code alone.
+const wholeHint = computed<Tip | undefined>(() => {
+    if (showComments.value || code === undefined || (code.additions === (additions ?? 0) && code.deletions === (deletions ?? 0))) {
+        return undefined;
+    }
+    const codeOnly = [code.additions ? `+${code.additions}` : ``, code.deletions ? `−${code.deletions}` : ``].filter(Boolean).join(` `) || `0`;
+    return { title: t(`common.reviewStat.withComments`), rows: [{ label: t(`common.reviewStat.codeOnly`), value: codeOnly }] };
+});
+const strippedHint = computed<Tip | undefined>(() => {
     if (!stripped.value || code === undefined || (code.additions === (additions ?? 0) && code.deletions === (deletions ?? 0))) {
         return undefined;
     }

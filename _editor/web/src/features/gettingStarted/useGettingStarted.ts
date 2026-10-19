@@ -9,7 +9,7 @@ import { archived, loadArchived, registry, rosterHeard } from "../../models/flee
 import { pastFirstDays, workLanded } from "../../models/fleet/fleetHistory";
 import { acpProviders, endpointProviders } from "../../models/providers/providerCatalog";
 import { refreshConnections } from "../../models/conversations/accounts/useChat-accounts";
-import { accessKnown, firstReadyProvider, providerReady } from "../../models/providers/access";
+import { accessKnown, firstReadyProvider, providerReady, trialPhase } from "../../models/providers/access";
 import { sharedWorkspaceTreeKey } from "../../models/workspace/tree/workspaceTreeKey";
 import { useGettingStartedChoices } from "./gettingStartedChoices";
 import { startAgent } from "../../models/fleet/agentActions";
@@ -51,6 +51,16 @@ const ownModelReady = (): boolean =>
         (provider) => !isTrialProvider(provider) && providerReady(provider),
     );
 
+// The trial is the model in use and it is past half or gone: the reader will meet its limit, so their own model is due.
+const trialShort = (): boolean => firstReadyProvider() === TRIAL_PROVIDER && trialPhase(TRIAL_PROVIDER) !== `fresh` && trialPhase(TRIAL_PROVIDER) !== `none`;
+
+// What decides when one's own model is offered: a first task still running holds it back, a short trial brings it on.
+const timingFacts = () => ({
+    ready: registry.value.some((agent) => agent.status === `ready` && agent.archivedAt === undefined),
+    running: registry.value.some((agent) => agent.status === `running` && agent.archivedAt === undefined),
+    trialShort: trialShort(),
+});
+
 const create = (): GettingStarted => {
     const { choices, heard, hide, show, skip } = useGettingStartedChoices();
     const { canShip } = useRole();
@@ -69,7 +79,7 @@ const create = (): GettingStarted => {
             // Filing a finished agent away is the same trip through review as landing it, so it counts.
             land: rosterKnown ? landedHere() || filed : undefined,
             runnable: accessKnown.value ? firstReadyProvider() !== undefined : undefined,
-            ready: registry.value.some((agent) => agent.status === `ready` && agent.archivedAt === undefined),
+            ...timingFacts(),
             established: pastFirstDays(registry.value, Date.now()),
         };
     });

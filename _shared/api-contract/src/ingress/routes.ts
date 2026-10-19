@@ -31,6 +31,8 @@ import {
     SetupClaimFormSchema,
     SetupReportBodySchema,
     TrialAllowanceSchema,
+    TrialTurnAnswerSchema,
+    TrialTurnBodySchema,
     WalletAddressSchema,
     WalletEnsureBodySchema,
     WalletSignatureSchema,
@@ -176,6 +178,16 @@ export const PLATFORM_INGRESS = {
     trialStatus: { method: "GET", path: "/trial/status", auth: "connect-bearer", body: "none", answer: "json", output: TrialAllowanceSchema },
     trialModels: { method: "GET", path: "/trial/v1/models", auth: "connect-bearer", body: "none", answer: "passthrough" },
     trialChat: { method: "POST", path: "/trial/v1/chat/completions", auth: "connect-bearer", body: "raw", answer: "passthrough" },
+    // A trial turn opening or closing: one that opens with allowance left may run past it to finish (trial-usage.ts).
+    trialTurn: {
+        method: "POST",
+        path: "/trial/turn",
+        auth: "connect-bearer",
+        body: "json",
+        answer: "json",
+        input: TrialTurnBodySchema,
+        output: TrialTurnAnswerSchema,
+    },
     // The x402 wallet: the owner's address on a network, and one signature under the owner's caps.
     walletEnsure: {
         method: "POST",

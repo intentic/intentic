@@ -6,6 +6,7 @@ import {
     customEntryFor,
     familyGroups,
     filterEntries,
+    foldUnconnected,
     isAutoPick,
     lanesOf,
     type PickerEntry,
@@ -222,6 +223,42 @@ test("seats connected providers above the ones that still need a credential", ()
     const sections = pickerSections(MIXED, `claude`, undefined, readyOnly(`claude`, `gemini`));
 
     expect(sections.slice(0, 3).map((section) => section.key)).toEqual([`claude`, `gemini`, `codex`]);
+});
+
+// The first-run picker showed every provider's catalogue, most of it locked, while the one model that worked sat on top.
+// Once anything can run, the list is what can run, and the rest waits behind one disclosure.
+describe("folding the providers nothing here can run yet", () => {
+    const keys = (sections: readonly { key: string }[]): readonly string[] => sections.map((section) => section.key);
+
+    test("keeps the ready lanes open and folds every locked one, in the order they would have been listed", () => {
+        const { shown, folded } = foldUnconnected(pickerSections(MIXED, `claude`, undefined, readyOnly(`claude`)), `claude`, readyOnly(`claude`));
+
+        expect(keys(shown)).toEqual([`claude`]);
+        expect(keys(folded)).toEqual([`codex`, `grok`, `kimi`, `gemini`, `cursor`, `devin`, `meta`, `zai`]);
+    });
+
+    test("counts the free trial as something that can run, so a first-run reader sees it alone", () => {
+        endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
+        const ready = readyOnly(TRIAL_PROVIDER);
+        const { shown, folded } = foldUnconnected(pickerSections(MIXED, TRIAL_PROVIDER, undefined, ready), TRIAL_PROVIDER, ready);
+
+        expect(keys(shown)).toEqual([TRIAL_PROVIDER]);
+        // Cheapest first inside the fold, as the open list ordered them before.
+        expect(keys(folded)).toEqual([`gemini`, `devin`, `claude`, `codex`, `grok`, `kimi`, `cursor`, `meta`, `zai`]);
+    });
+
+    test("never folds the lane the conversation is on, even locked", () => {
+        const { shown } = foldUnconnected(pickerSections(MIXED, `kimi`, undefined, readyOnly(`claude`)), `kimi`, readyOnly(`claude`));
+
+        expect(keys(shown)).toEqual([`kimi`, `claude`]);
+    });
+
+    // A spent trial with nothing connected: the locked lanes are the only way on, so nothing hides them.
+    test("folds nothing while nothing can run", () => {
+        const sections = pickerSections(MIXED, `codex`, undefined, readyOnly());
+
+        expect(foldUnconnected(sections, `codex`, readyOnly())).toEqual({ shown: sections, folded: [] });
+    });
 });
 
 test("keeps the ACTIVE provider first even when it is the locked one", () => {

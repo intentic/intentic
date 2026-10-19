@@ -45,6 +45,15 @@ const FOLDED: readonly TranscriptRow[] = [
     ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.`, unattended: true }]),
     ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.`, held: { ran: false } }]),
     ...turn([{ kind: `error`, code: `agent-busy`, message: `This agent is already running a turn, wait for it to finish.` }]),
+    // The same door refusals, once the turn had already run a tool: stopped partway, nothing held.
+    ...turn([
+        { kind: `tool_call`, id: `t1`, name: `Edit`, category: `edit`, status: `completed` },
+        { kind: `error`, code: `trial-exhausted`, message: `Free trial used up for today.` },
+    ]),
+    ...turn([
+        { kind: `tool_call`, id: `t1`, name: `Edit`, category: `edit`, status: `completed` },
+        { kind: `error`, code: `sandbox-disk-low`, message: `The disk is full.` },
+    ]),
     ...turn([{ kind: `prompt_cache`, readTokens: 305_000, writtenTokens: 2_000, kept: { forMs: 125 * 60_000, refreshes: 1 } }]),
     ...turn([{ kind: `prompt_cache`, readTokens: 0, writtenTokens: 310_000, kept: { forMs: 7 * 60_000, refreshes: 3 } }]),
     ...turn([{ kind: `context_trim`, window: 16_384, omitted: [`Field notes`, `Skills`], base: true }]),
@@ -149,6 +158,11 @@ describe(`a sandbox notice, as the chat says it`, () => {
         expect(line(coded(`undelivered`))).toBe(
             `This model accepts 16,384 tokens. Twoja wiadomość nie została dostarczona: czeka, aż wyślesz ją ponownie.`,
         );
+        const partway = FOLDED.filter((row) => row.noticeCode?.code === `stoppedPartway`).map(line);
+        expect(partway).toEqual([
+            `Free trial used up for today. Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: kontynuuj z innym modelem, żeby podjąć pracę od tego miejsca.`,
+            `The disk is full. Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: wyślij wiadomość, żeby podjąć pracę od tego miejsca.`,
+        ]);
         // A failure the sandbox worded itself is said in Polish whole.
         expect(line(coded(`failed`))).toBe(`Ten agent już wykonuje turę, poczekaj, aż skończy.`);
         expect(DAEMON.map(line).slice(0, 3)).toEqual([`Pytanie odrzucone.`, `Plan zatwierdzony.`, `Planowanie trwa dalej.`]);

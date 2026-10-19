@@ -4,7 +4,7 @@ import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcrip
 import { useChatSurface } from "../../../models/conversations/tools/chatToolSurface";
 import ChatToolCard from "./ChatToolCard.vue";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
-import { delegates, present } from "./toolPresentation";
+import { delegates, present, readableToolName } from "./toolPresentation";
 import { useT } from "@intentic/ui/i18n";
 import { useAudience } from "../../../app/useAudience";
 import { plainToolWords } from "../../../lib/toolWords/toolWords";
@@ -35,8 +35,12 @@ const name = computed(() => {
         return maker.value ? t(`chat.toolWords.helperName`) : t(`shared.subagent`);
     }
     // Said as the act, as a single call's card says it (ChatToolCard).
-    return maker.value ? plainToolWords({ name: props.group.name, target: props.group.target, category: props.group.category }, { file: false }) : props.group.name;
+    // MCP wire ids as words, the id kept as the name's title (ChatToolCard).
+    return maker.value
+        ? plainToolWords({ name: props.group.name, target: props.group.target, category: props.group.category }, { file: false })
+        : (readableToolName(props.group.name) ?? props.group.name);
 });
+const rawName = computed(() => (maker.value || name.value === props.group.name ? undefined : props.group.name));
 const target = computed(() => (maker.value && props.group.category === `execute` ? undefined : props.group.target));
 
 // Whether any tool in the group is still running: shows the spinner instead of the icon.
@@ -69,7 +73,7 @@ const location = computed(() => {
                 <span class="chat-mark mr-0.5"><Icon :name="expanded ? 'chevron-down' : 'chevron-right'" class="text-2xs" /></span>
                 <Icon v-if="running && live" name="spinner" :spin="true" class="text-2xs text-link" />
                 <Icon v-else :name="icon" class="text-2xs" :class="failed ? 'text-danger' : 'text-link'" />
-                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ name }}</span>
+                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'" :title="rawName">{{ name }}</span>
             </button>
             <button
                 v-if="location && openFile"

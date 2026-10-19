@@ -83,7 +83,8 @@ defineExpose({ reveal });
         <template v-if="phase === `live`">
             <!-- A refused step stays beside the steps it refused, not in a banner over the page. -->
             <Notice v-if="problem" :of="{ tone: `danger`, title: problem }" size="sm" />
-            <ConnectFlow :kind="kind" :provider="provider" roomy />
+            <!-- Choosing another provider over this one's sign-in ends this attempt, which puts the others back in front of the reader. -->
+            <ConnectFlow :kind="kind" :provider="provider" roomy @elsewhere="emit(`cancel`)" />
         </template>
 
         <div v-else-if="phase === `failed`" class="flex flex-wrap items-center gap-2">

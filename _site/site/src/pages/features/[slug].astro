@@ -1,7 +1,7 @@
 ---
 import { guidesHref } from "@intentic/site-content/guides";
 import { productHref, productPages, type ProductPage } from "@intentic/site-content/product";
-import { APP_URL, DEMO_PATH } from "@intentic/site-content/site";
+import { APP_URL, HOSTED_START_LABEL, DEMO_PATH } from "@intentic/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
@@ -40,7 +40,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
                     <h1 class="display mt-3 text-3xl leading-tight font-semibold sm:text-4xl">{page.heading}</h1>
                     <p class="mt-4 max-w-copy text-base leading-relaxed text-muted">{page.sub}</p>
                     <div class="mt-7 flex flex-wrap gap-3">
-                        <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
+                        <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
                         <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
                     </div>
                 </div>
@@ -152,7 +152,7 @@ const portraitHero = heroImage ? heroImage.height > heroImage.width : false;
                     <p class="mt-1 max-w-sm text-sm text-muted">{next.menuBlurb}</p>
                 </a>
                 <div class="flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
+                    <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
                     <a class="btn btn-secondary" href="/docs/quickstart/">Read the quickstart</a>
                 </div>
             </div>

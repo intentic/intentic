@@ -45,6 +45,16 @@ describe(`which step is next`, () => {
         expect(progress(facts({ work: true, agent: true, ready: true, land: true }), NONE).current).toBe(`models`);
     });
 
+    it(`holds the model back while the first task is running, unless the trial is short`, () => {
+        const running = facts({ work: true, agent: true, running: true });
+        expect(stepOrder(running)).toEqual([`work`, `agent`, `land`, `models`]);
+        expect(progress(running, NONE).current).toBe(`land`);
+        // A trial past half or spent makes the reader's own model the useful next step even mid-task.
+        expect(progress({ ...running, trialShort: true }, NONE).current).toBe(`models`);
+        // Once the task has finished (nothing running, nothing waiting yet) the model is offered again.
+        expect(progress(facts({ work: true, agent: true }), NONE).current).toBe(`models`);
+    });
+
     it(`moves past a step the reader passed over, and counts it as settled`, () => {
         const scratch = progress(facts(), { hidden: false, skipped: [`work`] });
         expect(scratch.current).toBe(`agent`);

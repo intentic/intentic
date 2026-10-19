@@ -10,6 +10,7 @@ import { SKIPPABLE, type StepId, type StepState } from "../tour/steps";
 import { skipWords, stepWords } from "../tour/tourCopy";
 import { useGettingStarted } from "./useGettingStarted";
 import CommunityInvite from "../community/CommunityInvite.vue";
+import { openChanges } from "../../models/changes/openChanges";
 import { useCommunityInvite } from "../community/useCommunityInvite";
 
 const t = useT();
@@ -30,6 +31,12 @@ const leadIcon = (state: StepState): IconName => (state === `done` ? `check-circ
 const go = (step: StepId): void => {
     emit(`done`);
     void router.push(stepWords(step).to);
+};
+
+// Where the landed change sits (uncommitted, in the files) and how to keep it: Changes is where it is committed.
+const seeChanges = (): void => {
+    emit(`done`);
+    openChanges();
 };
 
 const hide = (): void => {
@@ -58,6 +65,10 @@ const hide = (): void => {
             </div>
         </div>
         <p v-if="tour.finished.value" class="px-2 text-xs leading-relaxed text-muted">{{ t(`gettingStarted.panel.finishedLine`) }}</p>
+        <div v-if="tour.finished.value" class="flex flex-col items-start gap-1.5 px-2">
+            <p class="text-xs leading-relaxed text-muted">{{ t(`gettingStarted.panel.finishedWhere`) }}</p>
+            <Button size="small" tier="quiet" @click="seeChanges">{{ t(`gettingStarted.panel.openChanges`) }}</Button>
+        </div>
         <RowGroup flat undivided>
             <Row
                 v-for="row in rows"

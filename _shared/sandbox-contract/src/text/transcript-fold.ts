@@ -15,8 +15,8 @@ import { contextTrimLine, contextTrimNotice } from "../schemas/context-trim.js";
 import { keptWarmLine, keptWarmNotice } from "../schemas/keep-warm.js";
 import { handedOffLine, handedOffNotice } from "../schemas/providers/handoff.js";
 import { isLandConflict } from "../events/land-conflict.js";
-import { turnedAwayCode } from "../policy/turned-away.js";
-import { undeliveredRow } from "../events/undelivered.js";
+import { anotherModelClears, turnedAwayCode } from "../policy/turned-away.js";
+import { stoppedPartwayRow, undeliveredRow } from "../events/undelivered.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
 import { needRowText } from "../events/need-wake.js";
@@ -239,8 +239,8 @@ const RENEWAL_WITHDRAWN =
     "The credential was being renewed, but the turn stopped before it could continue: it will not carry on by itself, so press Continue to pick it back up.";
 
 // Row for a turn-ending error: the provider's own message plus one clause on what happens next. The live wait itself is
-// drawn by the chat, not stored here.
-const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
+// drawn by the chat, not stored here. `ran`: an assistant row stands, so a door refusal stopped the turn partway.
+const errorRow = (event: Extract<AgentEvent, { kind: "error" }>, ran: boolean): TranscriptRow => {
     const { message, code } = event;
     const said = failureOf(event);
     switch (code) {
@@ -281,7 +281,7 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
         // provider's own uncoded words are only ever themselves.
         return code === undefined ? { role: "notice", text: message } : { role: "notice", text: message, noticeCode: noticeCode({ code: "failed", params: said }) };
     }
-    return heldRow(event);
+    return ran && event.held === undefined ? stoppedPartwayRow(said, anotherModelClears(code)) : heldRow(event);
 };
 
 // What a laddered wall's automatic re-runs are doing, said on the failure's own row so the count stays in the record.
@@ -488,7 +488,7 @@ export class TranscriptFold {
             case "error":
                 // Keeps a refusal (no prose from the provider) from reading as a session that ended mid-question.
                 // A refusal that ran nothing takes its message back out ahead of the notice standing in for it.
-                return [...this.retract(event), ...this.withdrawRenewal(event), ...this.pushRow(errorRow(event))];
+                return [...this.retract(event), ...this.withdrawRenewal(event), ...this.pushRow(errorRow(event, this.rows.some((row) => row.role === "assistant")))];
             case "plan": {
                 // Folds a plan into an identical retired prose bubble instead of drawing the same markdown twice.
                 const adjacent = this.rows.at(-1);

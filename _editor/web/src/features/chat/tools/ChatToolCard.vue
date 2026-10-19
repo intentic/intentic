@@ -7,7 +7,7 @@ import { useChatSurface } from "../../../models/conversations/tools/chatToolSurf
 import ChatCodeBody from "../transcript/ChatCodeBody.vue";
 import ChatDocumentBody from "../transcript/cards/ChatDocumentBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
-import { present } from "./toolPresentation";
+import { present, readableToolName } from "./toolPresentation";
 import { subagentView } from "./subagentCard";
 import { useT } from "@intentic/ui/i18n";
 import { useAudience } from "../../../app/useAudience";
@@ -135,8 +135,13 @@ const name = computed(() => {
     if (view.value.delegates) {
         return maker.value ? t(`chat.toolWords.helperName`) : t(`shared.subagent`);
     }
-    return maker.value ? plainToolWords({ name: props.tool.name, target: props.tool.target, category: props.tool.category }, { file: false }) : props.tool.name;
+    // A developer reads the tool, but an MCP wire id (`mcp__subagents__wait`) as words; the id stays the name's title.
+    return maker.value
+        ? plainToolWords({ name: props.tool.name, target: props.tool.target, category: props.tool.category }, { file: false })
+        : (readableToolName(props.tool.name) ?? props.tool.name);
 });
+// The id behind a name said as words, under the pointer: what a developer greps the logs or the server's docs for.
+const rawName = computed(() => (maker.value || name.value === props.tool.name ? undefined : props.tool.name));
 const target = computed(() => (maker.value && props.tool.category === `execute` ? undefined : props.tool.target));
 // The row above the fold, in reading order: what type it runs as, then what it was asked to do.
 const subagentTitle = computed(() => [subagent.value?.agentType, subagent.value?.description].filter(Boolean).join(` · `));
@@ -252,7 +257,7 @@ const openSubagent = (event: MouseEvent): void => {
             >
                 <span class="chat-mark mr-0.5"><Icon :name="isOpen ? 'chevron-down' : 'chevron-right'" class="text-2xs" /></span>
                 <Icon v-bind="statusIcon" class="text-2xs" />
-                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ name }}</span>
+                <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'" :title="rawName">{{ name }}</span>
             </button>
             <template v-else>
                 <!-- Kept as one protected flex item too: chat messages inherit `overflow-wrap: anywhere`. An empty mark box
@@ -260,7 +265,7 @@ const openSubagent = (event: MouseEvent): void => {
                 <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
                     <span class="chat-mark mr-0.5" aria-hidden="true"></span>
                     <Icon v-bind="statusIcon" class="text-2xs" />
-                    <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ name }}</span>
+                    <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'" :title="rawName">{{ name }}</span>
                 </span>
             </template>
             <!-- Who it delegated to and what it asked for, in the slot a path would take; a sentence, not mono. -->

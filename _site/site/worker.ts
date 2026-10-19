@@ -1,5 +1,6 @@
 import { INSTALL_SCRIPTS, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
-import { DESKTOP_ROUTES, RELEASES_URL } from "./src/lib/desktop-downloads";
+import { DESKTOP_ROUTES } from "./src/lib/desktop-downloads";
+import { createReleaseResolver } from "./src/lib/release";
 import { type LiveContent, LIVE_CACHE_SECONDS, LIVE_CONTENT_URL, type LiveSwitch, parseLiveContent } from "./src/lib/live";
 import { injectPs1, injectSh, parseVerbRoute, refusalScript, resolveVerbRequest, scriptUrlOf, type VerbRequest } from "./src/lib/worker-verbs";
 import { handleSiteWire, type WireEnv } from "./src/lib/site-wire";
@@ -67,32 +68,20 @@ function canonicalForMarkdown(pathname: string): string | undefined {
 
 // Desktop download URLs never carry a version; the resolved file does. Path table shared with the dev server.
 
-// Resolved download memoised per platform for an hour; verifies the release actually carries the asset first.
-const DOWNLOAD_TTL_MS = 60 * 60 * 1000;
-const downloadCache = new Map<string, { url: string; at: number }>();
+// Resolved download and the release label share one resolver, so the version /download/ shows is the one a route serves.
+const releases = createReleaseResolver((input, init) => fetch(input, init));
+const resolveDownload = releases.resolveDownload;
 
-async function resolveDownload(asset: (version: string) => string, key: string): Promise<string> {
-    const cached = downloadCache.get(key);
-    if (cached !== undefined && Date.now() - cached.at < DOWNLOAD_TTL_MS) {
-        return cached.url;
-    }
-    let resolved = `${RELEASES_URL}/latest`;
-    try {
-        const latest = await fetch(`${RELEASES_URL}/latest`, { redirect: "manual" });
-        const version = /\/releases\/tag\/v(?<version>[^/?#]+)$/u.exec(latest.headers.get("location") ?? "")?.groups?.version;
-        if (version !== undefined) {
-            const candidate = `${RELEASES_URL}/download/v${version}/${asset(version)}`;
-            // An asset that exists answers a HEAD with a redirect to storage; one that does not answers 404.
-            const probe = await fetch(candidate, { method: "HEAD", redirect: "manual" });
-            if (probe.status < 400) {
-                resolved = candidate;
-            }
-        }
-    } catch {
-        // Offline, rate-limited, or the redirect shape moved, the releases-page fallback stands.
-    }
-    downloadCache.set(key, { url: resolved, at: Date.now() });
-    return resolved;
+// What /desktop/latest.json answers: the version and date the download routes would serve right now.
+const LATEST_JSON_PATH = "/desktop/latest.json";
+
+async function latestReleaseJson(): Promise<Response> {
+    const release = await releases.latestRelease();
+    // 503 not 200-with-nothing: the page treats anything but a version as "keep the label that was built in".
+    return Response.json(release, {
+        status: release === null ? 503 : 200,
+        headers: { "cache-control": "public, max-age=300", "access-control-allow-origin": "*" },
+    });
 }
 
 // Live document, read per request and memoised for LIVE_CACHE_SECONDS; any failure leaves the page as built.
@@ -270,6 +259,10 @@ async function route(request: Request, url: URL, env: { ASSETS: { fetch: typeof 
     const moved = movedPath(url.pathname);
     if (moved !== undefined) {
         return Response.redirect(new URL(`${moved}${url.search}`, url).href, 301);
+    }
+
+    if (url.pathname === LATEST_JSON_PATH) {
+        return latestReleaseJson();
     }
 
     const download = DESKTOP_ROUTES[url.pathname.replace(/\/$/, "")];

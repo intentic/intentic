@@ -4,12 +4,15 @@ import type {
     ToolCallContent as AcpToolCallContent,
     ToolCallLocation as AcpToolCallLocation,
     ToolKind as AcpToolKind,
+    ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
+import { z } from "zod";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type ToolCallContent, type ToolCallLocation, type ToolKind, ToolKindSchema } from "@intentic/sandbox-contract/events/requests";
 import { toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { diffContent, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { toolCallOpened } from "../decorators/vendor-events.js";
+import { opt } from "../../opt.js";
 
 // Maps ACP session/update notifications onto AgentEvent frames; an update with no UI mapping returns undefined. ACP's
 // `plan` is a TodoWrite-style checklist, not intentic's approval plan frame, and maps to `todos`.
@@ -56,8 +59,46 @@ const mapLocations = (locations: AcpToolCallLocation[] | null | undefined, cwd: 
     return mapped.length > 0 ? mapped : undefined;
 };
 
+// A finished command's exit code, where the update carries one as a number: in `rawOutput` (`exitCode`, `exit_code`,
+// or a terminal-style `exitStatus.exitCode`), else from the terminal it embeds, which this client ran itself. Without
+// it a completed call reads as a pass whatever its command did (agent-verification.ts).
+type TerminalExit = (terminalId: string) => number | undefined;
+
+const RawExitSchema = z.looseObject({
+    exitCode: z.number().int().optional().catch(undefined),
+    exit_code: z.number().int().optional().catch(undefined),
+    exitStatus: z
+        .looseObject({ exitCode: z.number().int().optional().catch(undefined) })
+        .optional()
+        .catch(undefined),
+});
+
+const exitCodeOf = (update: ToolCallUpdate, terminalExit: TerminalExit): number | undefined => {
+    if (update.status !== "completed" && update.status !== "failed") {
+        return undefined;
+    }
+    const raw = RawExitSchema.safeParse(update.rawOutput);
+    const reported = raw.success ? (raw.data.exitCode ?? raw.data.exit_code ?? raw.data.exitStatus?.exitCode) : undefined;
+    if (reported !== undefined) {
+        return reported;
+    }
+    const terminal = (update.content ?? []).findLast((entry) => entry.type === "terminal");
+    return terminal?.type === "terminal" ? terminalExit(terminal.terminalId) : undefined;
+};
+
+const noTerminals: TerminalExit = () => undefined;
+
+const toolCallUpdated = (update: ToolCallUpdate, cwd: string, terminalExit: TerminalExit): AgentEvent => ({
+    kind: "tool_call_update",
+    id: update.toolCallId,
+    ...opt("status", update.status ?? undefined),
+    ...opt("content", mapContent(update.content, cwd)),
+    ...opt("locations", mapLocations(update.locations, cwd)),
+    ...opt("exitCode", exitCodeOf(update, terminalExit)),
+});
+
 // One session/update → at most one AgentEvent. `undefined` = no UI mapping, dropped.
-export const sessionUpdateEvent = (update: SessionUpdate, cwd: string): AgentEvent | undefined => {
+export const sessionUpdateEvent = (update: SessionUpdate, cwd: string, terminalExit: TerminalExit = noTerminals): AgentEvent | undefined => {
     switch (update.sessionUpdate) {
         case "agent_message_chunk": {
             const text = textOf(update.content);
@@ -77,17 +118,8 @@ export const sessionUpdateEvent = (update: SessionUpdate, cwd: string): AgentEve
                 locations: mapLocations(update.locations, cwd),
                 content: mapContent(update.content, cwd),
             });
-        case "tool_call_update": {
-            const locations = mapLocations(update.locations, cwd);
-            const content = mapContent(update.content, cwd);
-            return {
-                kind: "tool_call_update",
-                id: update.toolCallId,
-                ...(update.status !== null && update.status !== undefined ? { status: update.status } : {}),
-                ...(content !== undefined ? { content } : {}),
-                ...(locations !== undefined ? { locations } : {}),
-            };
-        }
+        case "tool_call_update":
+            return toolCallUpdated(update, cwd, terminalExit);
         case "plan":
             // ACP's plan is a progress checklist (entries with status), the TodoWrite shape.
             return { kind: "todos", items: update.entries.map((entry) => ({ content: entry.content, status: entry.status })) };

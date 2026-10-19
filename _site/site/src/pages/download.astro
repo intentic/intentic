@@ -5,6 +5,7 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
 import { desktopPlatforms } from "../lib/desktop-downloads";
+import { formatReleaseDate } from "../lib/release";
 
 /* THE DOWNLOAD PAGE: the answer to the one objection the quickstart raises. */
 
@@ -35,7 +36,7 @@ const alternatives = [
 const does = [
     {
         title: "Installs and starts your sandbox",
-        body: "The app installs Docker if needed, starts the sandbox and its private connection, then opens your workspace.",
+        body: "The app installs its own container engine if needed, starts the sandbox and its private connection, then opens your workspace.",
     },
     {
         title: "Updates it with a button",
@@ -56,6 +57,14 @@ const does = [
             <p class="mt-4 max-w-copy text-lg text-muted">
                 Install the desktop app, sign in and click <strong class="text-content">Run on this computer</strong>. The app sets up the same
                 sandbox you can run from the command line.
+            </p>
+
+            {/* Said before the download, because setup changes the PC more than an installer usually does. Figures: _sandbox/ic/src/prepare/plan.rs. */}
+            <p class="mt-4 max-w-copy text-sm text-muted" data-engine-disclosure>
+                <strong class="font-medium text-content">What setup does to this PC.</strong> The app installs intentic's own container engine:
+                about 1.9 GB to download and about 15 minutes. If Docker Desktop is already on the PC, your existing sandboxes move to the new
+                engine. Each one stops while its files are copied, and Docker Desktop keeps its copy for 7 days. Rather not? Use a{" "}
+                <a href={APP_URL} class="text-link hover:underline">hosted workspace in your browser</a> instead.
             </p>
 
             <div class="mt-10 grid gap-4 sm:grid-cols-2">
@@ -82,10 +91,11 @@ const does = [
             {/* Keep the link before punctuation so formatting cannot add a visible gap. */}
             {
                 release !== null && (
-                    <p class="mt-4 max-w-copy text-xs text-subtle">
-                        Version <strong class="font-medium text-muted">{release.version}</strong>, released {release.date}. Each download is
-                        named for its version, so you can always tell which build you have.{" "}
-                        <a href={release.notes} target="_blank" rel="noopener" class="text-link hover:underline">
+                    <p class="mt-4 max-w-copy text-xs text-subtle" data-release-label data-built-version={release.version}>
+                        Version <strong class="font-medium text-muted" data-release-version>{release.version}</strong>, released{" "}
+                        <span data-release-date>{formatReleaseDate(release.date)}</span>. Each download is named for its version, so you can
+                        always tell which build you have.{" "}
+                        <a href={release.notes} target="_blank" rel="noopener" class="text-link hover:underline" data-release-notes>
                             What's new
                         </a>
                     </p>
@@ -152,3 +162,32 @@ const does = [
     </main>
     <Footer />
 </BaseLayout>
+
+{/* The label is built at deploy time and deploys are manual; the worker names the version the download routes serve now. */}
+<script>
+    import { formatReleaseDate } from "../lib/release";
+
+    const label = document.querySelector<HTMLElement>("[data-release-label]");
+    if (label !== null) {
+        fetch("/desktop/latest.json")
+            .then((response) => (response.ok ? response.json() : null))
+            .then((release: { version: string; date: string | null; notes: string } | null) => {
+                if (release === null || !/^\d+\.\d+\.\d+/u.test(release.version)) {
+                    return;
+                }
+                const set = (selector: string, text: string): void => {
+                    const node = label.querySelector(selector);
+                    if (node !== null) {
+                        node.textContent = text;
+                    }
+                };
+                set("[data-release-version]", release.version);
+                // A date the API would not give is better absent than the old build's.
+                set("[data-release-date]", release.date === null ? "recently" : formatReleaseDate(release.date));
+                label.querySelector("[data-release-notes]")?.setAttribute("href", release.notes);
+            })
+            .catch(() => {
+                // Offline or the route is not served (astro dev): the label built into the page stands.
+            });
+    }
+</script>

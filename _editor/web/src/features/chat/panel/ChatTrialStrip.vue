@@ -7,6 +7,8 @@ import { isTrialProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract/mode
 import { trialExhausted, trialPhase } from "../../../models/providers/access";
 import { modelLabelFor, trialStatus } from "../../../models/providers/providerCatalog";
 import { loadTrialStatus } from "../../../models/conversations/accounts/useChat-catalog";
+import { useAgents } from "../../../models/fleet/useAgents";
+import ChatChooseModelButton from "../models/ChatChooseModelButton.vue";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
@@ -15,17 +17,22 @@ import { MODELS_PATH } from "../../../lib/routes/modelsPath";
 // The free trial's standing above the composer, as one short card rather than a paragraph: a headline that is the
 // news (what is left, or that nothing is), one quiet line of facts under it, and the press that ends the trial. The
 // picker says all of it once at the moment of choosing; this is what stays in view while the allowance runs down.
+// The unit is an agent step (one model call), never a "message": a single request spends several, and a reader told
+// "12 free messages" reasonably expected twelve requests (onboarding review 2026-10-18, F01). So the unit is said before
+// the first send too, as one quiet line, and a spent trial offers the two presses that matter at that moment: the work
+// the run already did, and the same chat carried on by another model.
 
 const t = useT();
 
 const { conversation, provider, streaming } = usePaneView();
 const { reachable } = useSandbox();
+const { agentById } = useAgents();
 
 // Not answering is an interruption; working for it is not — conflating the two put "Failed messages are not
 // counted" over answers that had just worked. `unavailable` means no key answered (the turn is held and refunded,
 // Retry is real); `degraded` means the pool answered after failing over, the ladder working as designed.
 type TrialCard = {
-    readonly state: `left` | `spent` | `unavailable`;
+    readonly state: `left` | `finishing` | `spent` | `unavailable`;
     readonly title: string;
     // The quiet line under the headline, each fact its own phrase so they wrap as units, never mid-thought.
     readonly facts: readonly string[];
@@ -42,8 +49,20 @@ const card = computed<TrialCard | undefined>(() => {
     }
     const status = trialStatus.value;
     // Spent is this strip's alone to say: the account gate would otherwise report the trial as "not connected", which
-    // is false and contradicts the line under it. Names no single vendor: free-and-uncapped is a Google sign-in, a
-    // model on this machine, or a subscription the reader may already hold, and the view offering all three is the press.
+    // is false and contradicts the line under it. Names no single vendor: the way on is whichever model the reader can
+    // use (a subscription, a key, a model on this machine), and the picker that lists them all is the press.
+    // Spent, but the turn running now began within the allowance: the platform lets it finish on a few extra steps (its
+    // finish-the-turn grace), so the card says the task is being finished rather than that it has stopped.
+    const grace = status.grace ?? 0;
+    if (trialExhausted(provider.value) && streaming.value && grace > 0) {
+        return {
+            state: `finishing`,
+            title: t(`chat.chatPaneNotices.trialFinishing`),
+            facts: [t(`chat.chatPaneNotices.trialGraceLeft`, { count: grace }, grace)],
+            strained: false,
+            left: undefined,
+        };
+    }
     if (trialExhausted(provider.value)) {
         const resets = status.resetsAt === undefined ? Number.NaN : Date.parse(status.resetsAt);
         return {
@@ -51,6 +70,7 @@ const card = computed<TrialCard | undefined>(() => {
             title: t(`chat.chatPaneNotices.trialSpent`),
             facts: [
                 ...(Number.isNaN(resets) ? [] : [t(`chat.chatPaneNotices.trialResets`, { when: formatUntil(resets) })]),
+                // The reassurance that makes "another model" the obvious way on: the chat and its work survive the switch.
                 t(`chat.chatPaneNotices.trialFreeWays`),
             ],
             strained: false,
@@ -67,8 +87,8 @@ const card = computed<TrialCard | undefined>(() => {
         };
     }
     const strained = status.health === `degraded`;
-    // Not a warning until it is one: shown once the trial is past fresh (trialPhase) or the pool is straining, not from
-    // the first message, since a fresh count read as an imminent limit.
+    // Not a warning until it is one: the card comes up once the trial is past fresh (trialPhase) or the pool is
+    // straining, not from the first message, since a fresh count read as an imminent limit. Fresh gets the quiet line.
     if (trialPhase(provider.value) === `fresh` && !strained) {
         return undefined;
     }
@@ -90,11 +110,29 @@ const card = computed<TrialCard | undefined>(() => {
     };
 });
 
+// Before the card is due: one quiet line naming the unit and what a task costs in it, so the count is understood before
+// the first send rather than learned from how fast it falls.
+const freshNote = computed(() => {
+    const status = trialStatus.value;
+    if (!isTrialProvider(provider.value) || trialPhase(provider.value) !== `fresh` || status.health !== `healthy`) {
+        return undefined;
+    }
+    // Where the platform grants the grace, the note says a task begun now is not cut off when the count runs out.
+    return status.grace === undefined
+        ? t(`chat.chatPaneNotices.trialFresh`, { remaining: status.remaining })
+        : t(`chat.chatPaneNotices.trialFreshGrace`, { remaining: status.remaining });
+});
+
+// What the run already changed, once the trial stops it: the desktop's /agents/:id is the review of exactly that. Only
+// when there is something to review, never a door onto an empty diff.
+const changedFiles = computed(() => agentById(conversation.value.conversationId)?.diff?.files ?? 0);
+const reviewPath = computed(() => `/agents/${encodeURIComponent(conversation.value.conversationId)}`);
+
 // The bar turns amber for the last fifth: the point where "connect something" stops being advice.
 const meterTone = computed(() => (card.value?.left !== undefined && card.value.left <= 0.2 ? `warning` : `accent`));
 // The tile carries the state at a glance: the trial's own gift while it works, the warning ink once it doesn't.
 const tile = computed(() =>
-    card.value?.state === `left`
+    card.value?.state === `left` || card.value?.state === `finishing`
         ? { icon: `gift` as const, tone: `primary` as const }
         : { icon: card.value?.state === `spent` ? (`clock` as const) : (`exclamation-triangle` as const), tone: `warning` as const },
 );
@@ -109,6 +147,7 @@ const retryTrial = async (): Promise<void> => {
 </script>
 
 <template>
+    <p v-if="freshNote" class="px-1 text-2xs text-subtle" role="status">{{ freshNote }}</p>
     <!-- A status, not an alert: it changes as the reader works, and a screen reader should not be interrupted by it. -->
     <div v-if="card" class="flex items-start gap-3 rounded-xl bg-card px-3 py-2.5 text-left text-2xs shadow-sm" role="status">
         <span class="flex size-7 shrink-0 items-center justify-center rounded-lg" :class="toneWash(tile.tone)" aria-hidden="true">
@@ -145,12 +184,21 @@ const retryTrial = async (): Promise<void> => {
                 >
                     <Icon name="refresh" class="mr-1 text-2xs" />{{ t(`ui.action.retry`) }}
                 </Button>
-                <!-- One action, not two: the spent trial's question is "what now", and the model list was the same answer
-                     arrived at sideways. Standing whenever this card does, not only once spent — somebody halfway through the
-                     day's allowance who wants to connect now should not have to run out first. The card's one filled press,
-                     except beside Retry, which is the thing to try first there. A place, so a link drawn as a button:
-                     Ctrl/Cmd-click keeps this conversation. -->
+                <!-- Spent: what the run already did, and the same chat on another model. The picker lists every model
+                     the reader can use and every one they could connect, so it is the one way on; the conversation
+                     keeps its history and its changes across the switch. -->
+                <template v-if="card.state === `spent`">
+                    <Button v-if="changedFiles > 0" :as="RouterLink" :to="reviewPath" size="small" thumb tier="quiet">
+                        {{ t(`chat.chatPaneNotices.trialReviewChanges`, { count: changedFiles }, changedFiles) }}
+                    </Button>
+                    <ChatChooseModelButton :label="t(`chat.chatPaneNotices.continueOtherModel`)" tier="accent" />
+                </template>
+                <!-- While some is left: one action. Standing whenever this card does, not only once spent — somebody halfway
+                     through the day's allowance who wants to connect now should not have to run out first. The card's one
+                     filled press, except beside Retry, which is the thing to try first there. A place, so a link drawn as a
+                     button: Ctrl/Cmd-click keeps this conversation. -->
                 <Button
+                    v-else
                     :as="RouterLink"
                     :to="MODELS_PATH"
                     size="small"

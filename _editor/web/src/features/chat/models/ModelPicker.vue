@@ -11,6 +11,7 @@ import { acpProviders, type CatalogLoadState, endpointProviders, providerModelsS
 import {
     customEntryFor,
     filterEntries,
+    foldUnconnected,
     isOlderEntry,
     newerThanEntry,
     type PickerEntry,
@@ -25,6 +26,7 @@ import { loadAllProviderModels, loadProviderModels } from "../../../models/conve
 import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
 import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
+import PickerFoldRow from "./PickerFoldRow.vue";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
@@ -102,6 +104,11 @@ const toggleExpanded = (target: string): void => {
     expanded.value = next;
 };
 
+// Lanes nothing here can run yet wait behind one row once something can (foldUnconnected); search reads them all anyway.
+const othersOpen = ref(false);
+const fold = computed(() => foldUnconnected(pickerSections(pickerEntries.value, provider, rail.value, providerReady), provider, providerReady));
+const foldAfter = computed(() => (searching.value || fold.value.folded.length === 0 ? undefined : fold.value.shown.at(-1)?.key));
+
 // The visible list: one flat section while searching, else one section per lane, blocks latest then older.
 const sections = computed<
     readonly {
@@ -126,49 +133,33 @@ const sections = computed<
     let index = 0;
     const withRows = (entries: readonly PickerEntry[]): { entry: PickerEntry; index: number }[] =>
         entries.map((entry) => ({ entry, index: index++ }));
+    // An unlabelled section that is one flat run of rows (search results, the lead rows): no provider, nothing folded.
+    const flatSection = (key: string, rows: { entry: PickerEntry; index: number }[]) => ({
+        key,
+        label: undefined,
+        provider: undefined,
+        providers: [],
+        blocks: [{ key, label: undefined, rows }],
+        rowCount: rows.length,
+        hidden: 0,
+        expanded: false,
+        collapsible: false,
+        badge: undefined,
+        trial: undefined,
+    });
     if (searching.value) {
         // Lead rows search alongside the catalog rather than being pinned through a query: somebody typing a model
         // name is asking for that model, not for the mode sitting above it.
         const matched = filterEntries([...(leadRows ?? []), ...pickerEntries.value], query.value, rail.value, leadAwareReady, isOlderEntry);
         // Ranked hits first, custom entry last, so Enter takes the real match; search stays flat, no family folding.
         const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);
-        return [
-            {
-                key: `search`,
-                label: undefined,
-                provider: undefined,
-                providers: [],
-                blocks: [{ key: `search`, label: undefined, rows }],
-                rowCount: rows.length,
-                hidden: 0,
-                expanded: false,
-                collapsible: false,
-                badge: undefined,
-                trial: undefined,
-            },
-        ];
+        return [flatSection(`search`, rows)];
     }
     const leading = rail.value === undefined ? (leadRows ?? []) : [];
     return [
         // Its own section above every lane, unlabelled: a heading over one row would make a mode look like a provider.
-        ...(leading.length === 0
-            ? []
-            : [
-                  {
-                      key: `lead`,
-                      label: undefined,
-                      provider: undefined,
-                      providers: [],
-                      blocks: [{ key: `lead`, label: undefined, rows: withRows(leading) }],
-                      rowCount: leading.length,
-                      hidden: 0,
-                      expanded: false,
-                      collapsible: false,
-                      badge: undefined,
-                      trial: undefined,
-                  },
-              ]),
-        ...pickerSections(pickerEntries.value, provider, rail.value, providerReady).map((section) => {
+        ...(leading.length === 0 ? [] : [flatSection(`lead`, withRows(leading))]),
+        ...[...fold.value.shown, ...(othersOpen.value ? fold.value.folded : [])].map((section) => {
             const isExpanded = expanded.value.has(section.key);
             const single = section.providers.length === 1 ? section.providers[0] : undefined;
             // The selected model survives collapse only for the current provider's lane; only that checkmark is real.
@@ -590,6 +581,7 @@ onMounted(() => {
                             <Icon name="spinner" spin /> {{ t(`chat.modelPicker.loadingModels`) }}
                         </div>
                     </template>
+                    <PickerFoldRow v-if="section.key === foldAfter" v-model="othersOpen" :count="fold.folded.length" />
                 </template>
                 <div v-if="searching && flat.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">
                     <p>{{ t(`chat.modelPicker.noModelsMatch`) }}</p>

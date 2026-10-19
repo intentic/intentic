@@ -41,7 +41,7 @@ import {
 } from "../workbench/views/registry";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { useVocabulary } from "../workbench/views/vocabulary";
-import { chatInSidePanel, chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../models/conversations/panel/chatPanelLayout";
+import { chatOnRail, lastSectionPath, toggleChatFloating, toggleChatHome } from "../models/conversations/panel/chatPanelLayout";
 import { useChatFloating } from "../models/conversations/panel/chatFloating";
 import { useShellCommands } from "./commands/useShellCommands";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
@@ -70,8 +70,7 @@ import { terminalSlot } from "../workbench/window/panelSlots";
 import SidePanel from "./side/SidePanel.vue";
 import { registerCoreSideViews } from "./side/coreSideViews";
 import { setSplit, sideDocked } from "../workbench/side/sideTabs";
-import { besideChat, besideFills } from "./side/sideLayout";
-import { shownSideTabs } from "../workbench/side/sideViews";
+import { besideChat, besideFills, sideColumnShown, sideShown } from "./side/sideLayout";
 import { type RailTile, useRailMemory } from "./rail/railMemory";
 import { useRailPins } from "./rail/railPins";
 import { popChatOutAt, useChatTileDrag } from "./rail/chatTileDrag";
@@ -456,15 +455,11 @@ const keepOnRail = (tile: SectionTile): void => {
     moreTrigger.value?.focus();
 };
 
-// The side panel (shell/side) takes its column while it holds anything: the chat whose home is the side, or what was
-// opened beside the section. Empty, the column is 0 wide. Holding both, what was opened fills the middle, the panel
-// spanning the section's cell too (sideLayout.ts), or, split, the column is wide enough for the two side by side.
-const sideShown = computed(() => chatInSidePanel.value || shownSideTabs.value.length > 0);
 const sideWidth = computed(() =>
     besideChat.value && !besideFills.value ? layout.chatWidth.value + layout.besideWidth.value : layout.chatWidth.value,
 );
 const gridStyle = computed(() => ({
-    "--side-width": sideShown.value ? uiLength(sideWidth.value) : `0px`,
+    "--side-width": sideColumnShown.value ? uiLength(sideWidth.value) : `0px`,
     // The rail's own measures, shared with a desktop window on a local folder (railFrame.ts, iconRail.css).
     ...railFrame(iconRailSize.value),
 }));
@@ -736,7 +731,7 @@ useGettingStarted();
         </nav>
 
         <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->
-        <SidePanel v-if="sideShown" />
+        <SidePanel v-if="sideShown" v-show="sideColumnShown" />
 
         <!-- Under what was opened while it fills the middle: hidden and inert, but mounted at its own size, so the section
              comes back as it was left, scrolled where it was. -->

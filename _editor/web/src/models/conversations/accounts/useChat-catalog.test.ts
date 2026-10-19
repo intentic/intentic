@@ -18,7 +18,7 @@ jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({ providers: { list: providersList, models: providerModels }, endpoints: { models: endpointModels, trial } }),
 }));
 
-const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels, readOrKeep } = await import("./useChat-catalog");
+const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels, pollWhileRunning, readOrKeep } = await import("./useChat-catalog");
 const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract/models/provider-specs");
 const { acpProviders, endpointProviders, endpointsLoaded, nativeReady } = await import("../../providers/providerCatalog");
 const { setConversations } = await import("../tabs/useChat-tabs");
@@ -204,4 +204,38 @@ test(`forgives a failed read by keeping the last value, and never forgives the a
             throw new TypeError(`body.commands is undefined`);
         }),
     ).rejects.toThrow(`body.commands is undefined`);
+});
+
+// A trial turn's count moves with every step, and the strip says when it runs out under a running task (and that the
+// task finishes on the platform's grace) only if the count is read while the turn runs, not just after it.
+describe(`the trial count while a turn runs`, () => {
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    it(`is re-read on a slow beat while the turn runs, and not once it stops`, () => {
+        jest.useFakeTimers();
+        const load = jest.fn(async () => undefined);
+        const running = pollWhileRunning(load, 15_000);
+
+        running(true);
+        jest.advanceTimersByTime(45_000);
+        expect(load).toHaveBeenCalledTimes(3);
+
+        running(false);
+        jest.advanceTimersByTime(60_000);
+        expect(load).toHaveBeenCalledTimes(3);
+    });
+
+    it(`keeps one beat when the run is said to start twice`, () => {
+        jest.useFakeTimers();
+        const load = jest.fn(async () => undefined);
+        const running = pollWhileRunning(load, 15_000);
+
+        running(true);
+        running(true);
+        jest.advanceTimersByTime(15_000);
+        expect(load).toHaveBeenCalledTimes(1);
+        running(false);
+    });
 });

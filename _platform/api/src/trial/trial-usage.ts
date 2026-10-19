@@ -24,7 +24,13 @@ export interface TrialStatus {
     readonly resetsAt: string;
     // Real model behind the trial's one published id, for the account's latest message; absent until served.
     readonly servedModel?: string;
+    // Steps of today's turn grace still unspent (openTrialTurn); absent where the platform grants none.
+    readonly grace?: number;
 }
+
+// What is left of today's turn grace, said only where there is one.
+const graceLeft = (config: Config, spent: number): { grace?: number } =>
+    config.trial.graceSteps === 0 ? {} : { grace: Math.max(0, config.trial.graceSteps - spent) };
 
 // What's left today without spending anything, polled for the model picker's badge; no row means a full allowance, not
 // an error.
@@ -38,6 +44,7 @@ export const trialStatus = async (prisma: PrismaClient, config: Config, userId: 
         remaining: Math.max(0, allowance - used),
         resetsAt: trialResetsAt(now),
         ...(row?.lastModel === null || row?.lastModel === undefined ? {} : { servedModel: row.lastModel }),
+        ...graceLeft(config, row?.graceSteps ?? 0),
     };
 };
 
@@ -69,12 +76,78 @@ export const spendTrialMessage = async (
     return { allowance, used, remaining: Math.max(0, allowance - used), resetsAt: trialResetsAt(now), allowed: used <= allowance };
 };
 
-// Gives back an optimistically-spent slot for a turn that never got an answer; floored at zero, since a refund can race
-// the daily reset. Non-throwing, since the caller still owes its reply; a refund that did not land is logged.
-export const refundTrialMessage = async (prisma: PrismaClient, logger: Logger, userId: string, now: Date): Promise<void> => {
+/* THE FINISH-THE-TURN GRACE. The allowance counts model calls, and one small task can spend all twelve halfway: the
+ * tester's first task stopped mid-edit, before it showed anything (onboarding review 2026-10-18, F01). So a turn that
+ * STARTS with a step left may run on past the allowance to finish, up to `trial.graceSteps` more calls a day for the
+ * account. A turn that starts with nothing left earns none: the grace finishes work already under way, it is not more
+ * allowance. The daemon says when a trial turn opens and closes (POST /trial/turn), since the calls themselves reach
+ * this route through its translator, which carries no turn. */
+
+// How long an opened turn earns grace if the daemon never closes it (a crash, a close lost on the way): a trial task
+// runs for minutes, and the daily cap bounds the cost either way.
+const GRACE_TURN_MS = 60 * 60_000;
+
+// A trial turn opening: whether it earns the grace. Decided by one conditional update against the row, so two turns
+// opening together can't both read "one step left" off a stale count.
+export const openTrialTurn = async (prisma: PrismaClient, config: Config, userId: string, now: Date): Promise<boolean> => {
+    if (config.trial.graceSteps === 0) {
+        return false;
+    }
+    const day = trialDay(now);
+    // A first turn of the day has no row yet, and the whole allowance.
+    await prisma.trialUsage.upsert({ where: { userId_day: { userId, day } }, create: { userId, day }, update: {} });
+    const opened = await prisma.trialUsage.updateMany({
+        where: { userId, day, messages: { lt: config.trial.dailyMessages } },
+        data: { graceOpen: { increment: 1 }, graceOpenedAt: now },
+    });
+    return opened.count > 0;
+};
+
+// A turn that earned the grace closing, so the next turn the account starts with nothing left can't ride it. Floored at
+// zero; a close that lands on the next day's row finds nothing open and changes nothing. Non-throwing: an open the
+// close never reaches stops earning at GRACE_TURN_MS.
+export const closeTrialTurn = async (prisma: PrismaClient, logger: Logger, userId: string, now: Date): Promise<void> => {
     const day = trialDay(now);
     try {
-        await prisma.trialUsage.update({ where: { userId_day: { userId, day } }, data: { messages: { decrement: 1 } } });
+        await prisma.trialUsage.updateMany({ where: { userId, day, graceOpen: { gt: 0 } }, data: { graceOpen: { decrement: 1 } } });
+    } catch (error) {
+        logger.warn({ err: error, userId, day }, `trial: closing a turn failed; its grace lapses on its own`);
+    }
+};
+
+// One call past the allowance, granted from the grace while a turn that earned it is still open and today's grace has a
+// step left. One conditional update, so concurrent calls can't overspend it.
+export const spendTrialGrace = async (prisma: PrismaClient, config: Config, userId: string, now: Date): Promise<boolean> => {
+    if (config.trial.graceSteps === 0) {
+        return false;
+    }
+    const granted = await prisma.trialUsage.updateMany({
+        where: {
+            userId,
+            day: trialDay(now),
+            graceOpen: { gt: 0 },
+            graceOpenedAt: { gte: new Date(now.getTime() - GRACE_TURN_MS) },
+            graceSteps: { lt: config.trial.graceSteps },
+        },
+        data: { graceSteps: { increment: 1 } },
+    });
+    return granted.count > 0;
+};
+
+// Gives back an optimistically-spent slot for a turn that never got an answer; floored at zero, since a refund can race
+// the daily reset. A call the grace paid for gives its grace step back too. Non-throwing, since the caller still owes
+// its reply; a refund that did not land is logged.
+export const refundTrialMessage = async (
+    prisma: PrismaClient,
+    logger: Logger,
+    userId: string,
+    now: Date,
+    options: { readonly grace?: boolean } = {},
+): Promise<void> => {
+    const day = trialDay(now);
+    const data = options.grace === true ? { messages: { decrement: 1 }, graceSteps: { decrement: 1 } } : { messages: { decrement: 1 } };
+    try {
+        await prisma.trialUsage.update({ where: { userId_day: { userId, day } }, data });
     } catch (error) {
         logger.error({ err: error, userId, day }, `trial: refunding an unserved message failed; it stays spent`);
         return;
@@ -82,4 +155,12 @@ export const refundTrialMessage = async (prisma: PrismaClient, logger: Logger, u
     await prisma.trialUsage
         .updateMany({ where: { userId, day, messages: { lt: 0 } }, data: { messages: 0 } })
         .catch((error: unknown) => logger.warn({ err: error, userId, day }, `trial: flooring a refunded count at zero failed`));
+    if (options.grace !== true) {
+        return;
+    }
+    try {
+        await prisma.trialUsage.updateMany({ where: { userId, day, graceSteps: { lt: 0 } }, data: { graceSteps: 0 } });
+    } catch (error) {
+        logger.warn({ err: error, userId, day }, `trial: flooring a refunded grace count at zero failed`);
+    }
 };

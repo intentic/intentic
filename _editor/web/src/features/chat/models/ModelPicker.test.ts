@@ -48,6 +48,10 @@ const headings = (element: HTMLElement): string[] =>
 const freeChip = (element: HTMLElement): Element | undefined =>
     [...element.querySelectorAll(`[role="presentation"] span`)].find((node) => node.textContent?.trim() === `Free · Google sign-in`);
 
+// The one row the list folds the providers nothing here can run yet behind, while something can.
+const disclosure = (element: HTMLElement): HTMLButtonElement | undefined =>
+    [...element.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Add another provider`));
+
 const oneModel = (label: string) => [{ value: label.toLowerCase().replaceAll(` `, `-`), label }];
 
 beforeEach(() => {
@@ -106,7 +110,16 @@ it(`stops pitching the free sign-in once a model is connected`, async () => {
     const element = mount();
     await nextTick();
 
+    // What runs leads alone; every locked provider waits behind one row (onboarding review 2026-10-18, F10).
+    expect(headings(element)).toEqual([`Claude Code`]);
+    expect(freeChip(element)).toBeUndefined();
+    expect(disclosure(element)?.textContent?.trim()).toBe(`Add another provider (8)`);
+    expect(disclosure(element)?.getAttribute(`aria-expanded`)).toBe(`false`);
+
+    disclosure(element)?.click();
+    await nextTick();
     expect(headings(element).slice(0, 5)).toEqual([`Claude Code`, `Codex`, `Grok`, `Kimi Code`, `Google`]);
+    expect(disclosure(element)?.getAttribute(`aria-expanded`)).toBe(`true`);
     // The price still reads, since a reader comparing options wants it, but in the same chip as every other row.
     expect(freeChip(element)?.className).toContain(`text-subtle`);
     expect(freeChip(element)?.className).not.toContain(`text-accent`);
@@ -120,9 +133,33 @@ it(`seats the working free trial above the locked rows, with its allowance rathe
     const element = mount();
     await nextTick();
 
+    // The lane the chat is on stays, locked or not; the trial is the one other thing that runs, and the catalogue of
+    // accounts the reader does not have waits behind one row, cheapest first once opened.
+    expect(headings(element)).toEqual([`Claude Code`, `Free trial`]);
+    expect(element.textContent).toContain(`Free trial · 12 steps left today`);
+    expect(disclosure(element)?.textContent?.trim()).toBe(`Add another provider (8)`);
+
+    disclosure(element)?.click();
+    await nextTick();
     expect(headings(element).slice(0, 3)).toEqual([`Claude Code`, `Free trial`, `Google`]);
-    expect(element.textContent).toContain(String(trialStatus.value.remaining));
-    expect(element.textContent).toContain(`trial`);
+});
+
+// Folded is not gone: a reader who types a provider's model still finds it.
+it(`still finds a folded provider's models by search`, async () => {
+    endpointProviders.value = [{ id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` }];
+    trialStatus.value = { available: true, allowance: 12, used: 0, remaining: 12, health: `healthy` };
+    providerModels.value = { ...providerModels.value, [TRIAL_PROVIDER]: oneModel(`Free trial`) };
+    const element = mount();
+    await nextTick();
+    expect(element.textContent).not.toContain(`Gemini 3 Pro`);
+
+    const search = element.querySelector(`input`)!;
+    search.value = `gemini`;
+    search.dispatchEvent(new Event(`input`));
+    await nextTick();
+
+    expect([...element.querySelectorAll(`[role="option"]`)].map((row) => row.textContent?.replace(/\s+/g, ` `).trim())).toEqual([`Gemini 3 Pro`]);
+    expect(disclosure(element)).toBeUndefined();
 });
 
 // The door to everything this list can only badge: connecting a first model, a second account, dropping one. A list

@@ -41,6 +41,8 @@ export const commitDraftPaceKey = accountKey(`intentic.commitDraftPace`);
 export const pictureSizesKey = sandboxKeys(`intentic.pictureSizes.`);
 // The passkey nudge put away after a first sign-in by email code, per sandbox (client/session/sandboxSession.ts).
 export const passkeyNudgeKey = sandboxKeys(`intentic.passkeyNudge.`);
+// When /setup last opened a sandbox it had just set up, per sandbox (models/sandbox/live/justSetUp.ts).
+export const justSetUpKey = sandboxKeys(`intentic.justSetUp.`);
 
 // The transcript mirror (models/conversations/transcript/transcriptCache.ts): up to its last few hundred messages per
 // conversation, in IndexedDB. Deleted whole on sign-out; a window holding it open closes on the version change, so the

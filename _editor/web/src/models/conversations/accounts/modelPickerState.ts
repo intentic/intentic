@@ -279,3 +279,28 @@ export const pickerSections = (
             return { key: lane.key, label: lane.label, providers: lane.providers, groups, total: owned.length };
         });
 };
+
+export interface FoldedSections {
+    // The lanes the list draws open: every one that can run a turn now, and the one this conversation is on.
+    readonly shown: readonly PickerSection[];
+    // The lanes behind the list's one "Add another provider" disclosure, in the order pickerSections gave them.
+    readonly folded: readonly PickerSection[];
+}
+
+// Ready options lead and the rest of the catalogue waits behind one disclosure, but only once something here can run:
+// a first-run reader on the trial was shown twenty-one rows, most of them accounts they did not have, while the one
+// that worked sat at the top (onboarding review 2026-10-18, F10). With nothing usable the locked lanes ARE the answer,
+// so they stay open, cheapest first, as before. The active lane never folds: it is the pick the composer shows.
+// Search reads the whole catalogue (filterEntries), so a folded provider is still found by name.
+export const foldUnconnected = (
+    sections: readonly PickerSection[],
+    activeProvider: AgentProvider,
+    isReady: (provider: AgentProvider) => boolean,
+): FoldedSections => {
+    const usable = (section: PickerSection): boolean => section.providers.some(isReady);
+    if (!sections.some(usable)) {
+        return { shown: sections, folded: [] };
+    }
+    const open = (section: PickerSection): boolean => usable(section) || section.providers.includes(activeProvider);
+    return { shown: sections.filter(open), folded: sections.filter((section) => !open(section)) };
+};

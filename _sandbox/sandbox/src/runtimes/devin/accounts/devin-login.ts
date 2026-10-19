@@ -296,7 +296,8 @@ export const finishDevinLogin = async (handshake: string, grant: string): Promis
     const brought = grant.trim();
     if (brought === "") {
         throw new Error(
-            attempt.mode === "manual" ? "Paste the code the sign-in page showed." : "Paste the whole address the sign-in page sent your browser to.",
+            // Named as Devin's page names it ("an authentication token for Devin CLI"), as the editor's field does.
+            attempt.mode === "manual" ? "Paste the token the sign-in page showed." : "Paste the whole address the sign-in page sent your browser to.",
         );
     }
     const replay = attempt.landing === undefined ? undefined : replayTarget(attempt.landing, brought);

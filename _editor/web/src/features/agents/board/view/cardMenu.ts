@@ -2,7 +2,7 @@ import { clipboardOf } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, type Ref, ref } from "vue";
-import { drillTarget, reviewAction } from "../../../../models/agent-status/agentStatus-attention";
+import { drillTarget, reviewAction, reviewBesideDrill } from "../../../../models/agent-status/agentStatus-attention";
 import { unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
 import { boxNameOf, isRemote, openInSandbox } from "../../../../models/fleet/fleetScope";
 import { canArchive, type FleetAgent } from "../../../../models/fleet/useAgents-fleet";
@@ -91,6 +91,20 @@ const ownRows = ({ rename, react }: CardPresses = {}): MenuItem[] => [
     ...(react === undefined ? [] : [{ label: t(`agents.agentReactions.addReaction`), icon: `plus`, command: () => react() }]),
 ];
 
+// The card's drill-in. A link too, hoverable and Ctrl/Cmd-clickable into its own tab; a plain click still points the
+// chat dock. An ask answered in the chat is no link: the page it would name draws nothing to answer (drillTarget). Such a
+// card with written work (a spent allowance stopping it halfway) keeps its diff one row away (reviewBesideDrill).
+const drillRows = (agent: FleetAgent, review: string | undefined, facts: MenuFacts, act: MenuActions): MenuItem[] => {
+    if (review === undefined) {
+        return [];
+    }
+    const diffRow = { label: t(`agents.agentStatus.reviewChanges`), icon: `copy`, url: facts.href(), command: () => act.reviewAgent(agent) };
+    if (drillTarget(agent) === `chat` && facts.here) {
+        return [{ label: review, icon: `comments`, command: () => act.drillIn(agent) }, ...(reviewBesideDrill(agent) ? [diffRow] : [])];
+    }
+    return [{ ...diffRow, label: review }];
+};
+
 // Groups rather than a flat list with inline separators: almost every row is conditional, and a separator written inline
 // would draw a line under a group that turned out empty.
 export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActions): MenuItem[] => {
@@ -101,13 +115,7 @@ export const menuItemsFor = (agent: FleetAgent, facts: MenuFacts, act: MenuActio
             { label: t(`ui.action.open`), icon: `arrow-right`, command: () => act.focusAgent(agent) },
             // The press that stops a look going; the chat rail's menu carries the identical row for the identical state.
             ...(facts.peeked ? [{ label: t(`ui.action.keepOpen`), icon: `pin`, command: () => act.keepAgent(agent) }] : []),
-            // A link too, hoverable and Ctrl/Cmd-clickable into its own tab; a plain click still points the chat dock. An
-            // ask answered in the chat is no link: the page it would name draws nothing to answer (drillTarget).
-            ...(review === undefined
-                ? []
-                : drillTarget(agent) === `chat` && facts.here
-                  ? [{ label: review, icon: `comments`, command: () => act.drillIn(agent) }]
-                  : [{ label: review, icon: `copy`, url: facts.href(), command: () => act.reviewAgent(agent) }]),
+            ...drillRows(agent, review, facts, act),
         ],
         ownRows(facts.presses),
         // The bare name (`sleek-arrow-uzgj`) `agents show`, Quick Open and the worktree path take; `agent/` is git's spelling.

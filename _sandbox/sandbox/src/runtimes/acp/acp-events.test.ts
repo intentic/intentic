@@ -80,6 +80,17 @@ test("tool_call_update maps status and text content; terminal content entries be
     });
 });
 
+// Without a number, a completed call reads as a pass whatever its command did (agent-verification.ts).
+test("a finished tool_call_update carries the exit code rawOutput or its embedded terminal reports", () => {
+    const update = (rest: object) => sessionUpdateEvent({ sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed", ...rest }, CWD, (id) => (id === "term-1" ? 127 : undefined));
+    expect(update({ rawOutput: { exitCode: 2, output: "1 failed" } })).toMatchObject({ exitCode: 2 });
+    expect(update({ rawOutput: { exit_code: 0 } })).toMatchObject({ exitCode: 0 });
+    expect(update({ rawOutput: { exitStatus: { exitCode: 1 } } })).toMatchObject({ exitCode: 1 });
+    expect(update({ content: [{ type: "terminal", terminalId: "term-1" }] })).toMatchObject({ exitCode: 127 });
+    expect(Object.keys(update({ rawOutput: "plain text" }) ?? {})).not.toContain("exitCode");
+    expect(Object.keys(sessionUpdateEvent({ sessionUpdate: "tool_call_update", toolCallId: "t1", status: "in_progress", rawOutput: { exitCode: 1 } }, CWD) ?? {})).not.toContain("exitCode");
+});
+
 test("available_commands_update maps to the commands frame", () => {
     expect(
         sessionUpdateEvent(

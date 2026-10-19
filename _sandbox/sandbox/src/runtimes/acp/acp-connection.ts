@@ -34,6 +34,8 @@ export interface AcpConnection {
     readonly modes: Map<string, SessionModes>;
     // Routes one session's updates/permissions to a turn and returns the unbind; marks the connection busy.
     readonly bindTurn: (sessionId: string, hooks: TurnHooks) => () => void;
+    // How a terminal this connection ran exited (acp-terminal.ts), for a tool call that embeds it and says no code.
+    readonly terminalExit: (terminalId: string) => number | undefined;
     // Gives up on a session whose turn stopped answering, once that turn has cancelled and unbound it. The process is
     // every conversation's on this agent, so it is killed only when no other turn is bound to it; a process that hung
     // outright still dies once the last turn on it gives up. Until a turn binds the session again, a permission it asks
@@ -74,7 +76,6 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
         const proc = spawnAcpProcess(launch, cwd);
         const routing: SessionRouting = { turns: new Map(), abandoned: new Set(), models: new Map(), thoughts: new Map(), modes: new Map() };
         const { turns, abandoned } = routing;
-        const sessions = new Set<string>();
         const terminals = createAcpTerminals(terminalRun);
         let dead = false;
         let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -183,10 +184,11 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             capabilities: init.agentCapabilities ?? {},
             alive: () => !dead,
             stderrTail: proc.stderrTail,
-            sessions,
+            sessions: new Set<string>(),
             models: routing.models,
             thoughts: routing.thoughts,
             modes: routing.modes,
+            terminalExit: terminals.exitCode,
             bindTurn: (sessionId, hooks) => {
                 abandoned.delete(sessionId);
                 turns.set(sessionId, hooks);

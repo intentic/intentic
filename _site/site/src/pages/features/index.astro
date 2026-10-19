@@ -1,6 +1,6 @@
 ---
 import { productHref, productPages } from "@intentic/site-content/product";
-import { APP_URL, DEMO_PATH } from "@intentic/site-content/site";
+import { APP_URL, HOSTED_START_LABEL, DEMO_PATH } from "@intentic/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
@@ -27,7 +27,7 @@ import ProductShot from "../../components/ProductShot.astro";
                     Run them, connect them, automate them, review their work and host them on your own machine.
                 </p>
                 <div class="mt-7 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
+                    <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
                     <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
                 </div>
             </div>

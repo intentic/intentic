@@ -1,5 +1,5 @@
 import type { LocalCheckRow, LocalFirstTask, LocalPcCheck } from "@intentic/web/local-host";
-import { checksPassed, minutesLeft, offersWork, pcCardPhase, type PcCardInput, pcSteps, taskStart, unmetRows } from "./pcCard";
+import { checksPassed, minutesLeft, movesSandboxes, offersWork, pcCardPhase, type PcCardInput, pcSteps, taskStart, unmetRows } from "./pcCard";
 
 // What This computer's card for this PC says, from what the app last said about the PC, its setup, this computer's own
 // sandbox and the first task.
@@ -150,5 +150,14 @@ describe(`the card's three steps: this PC, the sign-in, the first task`, () => {
         expect(pcSteps(`signIn`, true, `sent`).task).toBe(`done`);
         expect(pcSteps(`signIn`, true, `failed`).task).toBe(`failed`);
         expect(pcSteps(`firstTaskFailed`, false, `failed`)).toEqual({ pc: `done`, account: `done`, task: `failed` });
+    });
+});
+
+describe(`the sandbox move a setup includes`, () => {
+    it(`is announced only while the check still lists the engine move`, () => {
+        expect(movesSandboxes(check(`needsSetup`, [row(`engine`, `ours`), row(`engine-move`, `ours`)]))).toBe(true);
+        expect(movesSandboxes(check(`needsSetup`, [row(`engine`, `ours`), row(`engine-move`, `met`)]))).toBe(false);
+        expect(movesSandboxes(check(`needsSetup`, [row(`engine`, `ours`)]))).toBe(false);
+        expect(movesSandboxes(undefined)).toBe(false);
     });
 });

@@ -1,6 +1,6 @@
 ---
 import { guidePages, guidesHref, guidesIndex } from "@intentic/site-content/guides";
-import { APP_URL, DEMO_PATH } from "@intentic/site-content/site";
+import { APP_URL, HOSTED_START_LABEL, DEMO_PATH } from "@intentic/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import Footer from "../../components/Footer.astro";
 import Nav from "../../components/Nav.astro";
@@ -36,7 +36,7 @@ const faqEntries = guidePages.map((page) => ({ question: page.question, answer: 
                 </div>
 
                 <div class="mt-8 flex flex-wrap gap-3">
-                    <a class="btn btn-primary" href={APP_URL}>Create your workspace</a>
+                    <a class="btn btn-primary" href={APP_URL}>{HOSTED_START_LABEL}</a>
                     <a class="btn btn-secondary" href={DEMO_PATH}>Open the live workspace</a>
                 </div>
             </div>

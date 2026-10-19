@@ -49,9 +49,11 @@ jest.mock(`../../../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: (
 // An account whose one free machine, s1, has spent `usedMinutes` of the forty free hours.
 const spending = (usedMinutes: number): HostedPlanState =>
     hostedPlanState(hostedLane([hostedMachine(`s1`, spentHours(usedMinutes))], spentHours(usedMinutes)));
+// The conversation's own board row, for what its run has changed so far (the spent trial's Review press).
+const agentRow = ref<{ diff?: { files: number; insertions: number; deletions: number } } | undefined>(undefined);
 jest.mock(`../../../models/fleet/useAgents`, () => ({
     useAgents: () => ({
-        agentById: () => undefined,
+        agentById: () => agentRow.value,
         archived: ref([]),
         loadArchived: jest.fn(async () => {}),
         restore: jest.fn(),
@@ -95,6 +97,7 @@ beforeEach(() => {
     trialStatus.value = { available: true, allowance: 10, used: 6, remaining: 4, health: `healthy` };
     accounts.value = [];
     servingAccount.value = undefined;
+    agentRow.value = undefined;
     resume.mockClear();
     loadTrialStatus.mockClear();
 });
@@ -112,12 +115,12 @@ it(`reports a pool that answered as a working trial, whatever it went through to
 
     const element = mount();
 
-    expect(element.textContent).toContain(`4 of 10 free messages left today`);
+    expect(element.textContent).toContain(`4 of 10 free agent steps left today`);
     // Which rung answered is worth saying while the ladder is falling: it explains a weaker answer.
     expect(element.textContent).toContain(`Last answer: Gemini Flash Lite Latest`);
     expect(element.textContent).toContain(`Busy now, answers may be slower`);
     // The two false claims over an answered turn: that a message failed, and that there's something to press about.
-    expect(element.textContent).not.toContain(`Failed messages`);
+    expect(element.textContent).not.toContain(`Failed steps`);
     expect(element.textContent).not.toContain(`degraded`);
     expect(named(element, `Retry`)).toBeUndefined();
 });
@@ -129,8 +132,8 @@ it(`says only the count and its two facts while the pool is answering cleanly`, 
 
     const element = mount();
 
-    expect(element.textContent).toContain(`4 of 10 free messages left today`);
-    expect(element.textContent).toContain(`Each agent step uses one`);
+    expect(element.textContent).toContain(`4 of 10 free agent steps left today`);
+    expect(element.textContent).toContain(`A small task can use 10 or more`);
     // Every surface offering the trial says it is routed through intentic (agent-catalog.ts).
     expect(element.textContent).toContain(`Sent via intentic`);
     expect(element.textContent).not.toContain(`Busy now`);
@@ -153,18 +156,47 @@ it(`draws what is left as a bar that empties, amber once little is left`, async 
 
 // The first screen of a new account: a count plus a connect press over an unanswered chat reads as an imminent limit,
 // so the card stays down until half the allowance is gone.
+// It still names the unit before the first send, as one quiet line: "12 free messages" read as twelve requests, and a
+// small task spends ten steps or more (onboarding review 2026-10-18, F01).
 it(`stays down while more than half the allowance is left, and comes up at the halfway mark`, () => {
     trialStatus.value = { ...trialStatus.value, used: 2, remaining: 8 };
     let element = mount();
-    expect(element.textContent).not.toContain(`free messages left`);
+    expect(element.textContent).not.toContain(`free agent steps left`);
+    expect(element.textContent).toBe(`Free trial: 8 agent steps left today. A small task can use 10 or more.`);
     expect(named(element, `Connect a model`)).toBeUndefined();
     app?.unmount();
     document.body.innerHTML = ``;
 
     trialStatus.value = { ...trialStatus.value, used: 5, remaining: 5 };
     element = mount();
-    expect(element.textContent).toContain(`5 of 10 free messages left today`);
+    expect(element.textContent).toContain(`5 of 10 free agent steps left today`);
     expect(named(element, `Connect a model`)).toEqual(expect.any(Object));
+});
+
+// Where the platform grants the finish-the-turn grace, the line before the first send says a task begun now is not cut
+// off when the count runs out.
+it(`says a task begun within the allowance can run past it, where the platform grants that`, () => {
+    trialStatus.value = { ...trialStatus.value, used: 2, remaining: 8, grace: 25 };
+    const element = mount();
+    expect(element.textContent).toBe(`Free trial: 8 agent steps left today. A small task can use 10 or more, and one you start can run past them to finish.`);
+});
+
+// The grace itself: the allowance is gone, but the turn running now began within it and the platform lets it finish.
+// "Used up" over an agent still visibly working read as a stop that had not happened.
+it(`says the task is being finished while a turn runs on past the allowance, and is the spent card again once it ends`, () => {
+    trialStatus.value = { ...trialStatus.value, used: 10, remaining: 0, grace: 7 };
+    streaming.value = true;
+    let element = mount();
+    expect(element.textContent).toContain(`Free steps used up, finishing this task`);
+    expect(element.textContent).toContain(`Up to 7 more steps to finish`);
+    expect(element.textContent).not.toContain(`Today's free agent steps are used up`);
+    app?.unmount();
+    document.body.innerHTML = ``;
+
+    streaming.value = false;
+    element = mount();
+    expect(element.textContent).toContain(`Today's free agent steps are used up`);
+    expect(named(element, `Continue with another model`)?.tagName).toBe(`BUTTON`);
 });
 
 // A strained pool is worth a line at any count — someone watching a slow answer wants it explained.
@@ -182,7 +214,7 @@ it(`interrupts, with the press that sends the held turn, only when nothing answe
     const element = mount();
 
     expect(element.textContent).toContain(`Free trial isn't answering right now`);
-    expect(element.textContent).toContain(`Failed messages aren't counted`);
+    expect(element.textContent).toContain(`Failed steps aren't counted`);
 
     named(element, `Retry`)?.click();
     await nextTick();
@@ -191,25 +223,42 @@ it(`interrupts, with the press that sends the held turn, only when nothing answe
     expect(resume).toHaveBeenCalledTimes(1);
 });
 
-// Spent is the signpost, not a warning, and it carries ONE press. The model list used to stand beside it, which was
-// the same answer reached sideways: every row in that list a spent reader could use is already behind this door.
+// Spent is the signpost, not a warning. Its way on is this same chat on another model: the picker lists every model
+// the reader can use or connect, and the card says the chat keeps its work across the switch. With nothing changed
+// yet there is nothing to review, so that press stays away.
 it(`turns into the way out once today's allowance is gone, saying when it comes back`, () => {
     trialStatus.value = { ...trialStatus.value, used: 10, remaining: 0, resetsAt: new Date(Date.now() + 3_600_000).toISOString() };
 
     const element = mount();
 
-    expect(element.textContent).toContain(`Today's free messages are used up`);
+    expect(element.textContent).toContain(`Today's free agent steps are used up`);
     expect(element.textContent).toMatch(/Resets \S+ (today|tomorrow)/);
-    expect(element.textContent).toContain(`Some models connect for free`);
-    expect(named(element, `Connect a model`)?.getAttribute(`href`)).toBe(`/sandbox/models`);
-    expect(named(element, `Choose a model`)).toBeUndefined();
+    expect(element.textContent).toContain(`Switching models keeps this chat's work`);
+    expect(named(element, `Continue with another model`)?.tagName).toBe(`BUTTON`);
+    expect(named(element, `Connect a model`)).toBeUndefined();
+    expect(named(element, `Review changes`)).toBeUndefined();
+    expect(element.textContent).not.toContain(`Google`);
+});
+
+// The reported strand: the trial ran out after the run had already edited a file, and the card offered nothing but a
+// connect flow. What the run changed is one press away, beside the way on.
+it(`offers the changes the run already made once the trial stops it`, () => {
+    trialStatus.value = { ...trialStatus.value, used: 10, remaining: 0 };
+    agentRow.value = { diff: { files: 2, insertions: 11, deletions: 2 } };
+
+    const element = mount();
+
+    const review = named(element, `Review changes`);
+    expect(review?.textContent?.trim()).toBe(`Review changes (2 files)`);
+    expect(review?.getAttribute(`href`)).toBe(`/agents/agent-1`);
+    expect(review?.parentElement).toBe(named(element, `Continue with another model`)?.parentElement);
 });
 
 // A reset the platform has not named yet is left unsaid rather than guessed.
 it(`leaves the reset out when the platform has not said it`, () => {
     trialStatus.value = { ...trialStatus.value, used: 10, remaining: 0 };
     const element = mount();
-    expect(element.textContent).toContain(`Today's free messages are used up`);
+    expect(element.textContent).toContain(`Today's free agent steps are used up`);
     expect(element.textContent).not.toContain(`Resets`);
 });
 

@@ -16,6 +16,7 @@ interface Props {
     additions?: number;
     deletions?: number;
     of?: number;
+    whole?: boolean;
 }
 
 const render = (props: Props): HTMLElement => {
@@ -52,6 +53,17 @@ describe(`<ReviewStat>`, () => {
         expect(host.textContent).not.toContain(`34`);
         expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toContain(`+34`);
         expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toContain(`−8`);
+    });
+
+    // A whole review's total is the number the board card shows for the same work, so it stays git's; the code-only
+    // reading the diff shows moves to the hover.
+    it(`says a whole review's total as git counts it, the card's number, with the code-only reading on hover`, async () => {
+        await withComments(false);
+        const host = render({ code: { additions: 19, deletions: 2 }, additions: 20, deletions: 2, whole: true });
+
+        expect(host.textContent).toContain(`+20`);
+        expect(host.textContent).not.toContain(`19`);
+        expect(host.querySelector<HTMLElement>(`[data-tip]`)?.dataset[`tip`]).toContain(`+19`);
     });
 
     it(`hands the numbers back to git when the reader asks for the comments`, async () => {

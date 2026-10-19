@@ -68,12 +68,12 @@ afterEach(() => {
     completeTranslator.mockClear();
 });
 
-const mount = async (flow: Flow, kind: `native` | `routed` = `native`): Promise<HTMLElement> => {
+const mount = async (flow: Flow, kind: `native` | `routed` = `native`, onElsewhere?: () => void): Promise<HTMLElement> => {
     (kind === `native` ? nativeConnectFlow : translatorConnectFlow).value = flow;
     const { default: ConnectFlow } = await import(`./ConnectFlow.vue`);
     const host = document.createElement(`div`);
     document.body.append(host);
-    app = createApp(defineComponent({ render: () => h(ConnectFlow, { kind, provider: flow.provider }) }));
+    app = createApp(defineComponent({ render: () => h(ConnectFlow, { kind, provider: flow.provider, onElsewhere }) }));
     // Icon is registered globally by the app shell; not under test here.
     app.component(`Icon`, IconStub);
     // The step-one sentence is one message with the bold phrase slotted in (`<i18n-t>`), which the plugin registers.
@@ -373,4 +373,36 @@ it(`draws the dead-end page at the address the provider was really sent to`, asy
     [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`What that page looks like`))!.click();
     await nextTick();
     expect(host.querySelector(`[aria-hidden="true"]`)?.textContent).toContain(`localhost:54321/callback?code=4/0AX4…`);
+});
+
+// UX review 2026-10-18, F03 and F09: Google's page names a different app and warns about where it came from, Devin's
+// happens on Windsurf and hands over "an authentication token for Devin CLI". Both are said before the trip.
+describe(`what the provider's own pages will show`, () => {
+    it(`tells a Google sign-in about Antigravity and its warning, with a way to another provider`, async () => {
+        const elsewhere = jest.fn();
+        const host = await mount({ ...GOOGLE_FLOW }, `routed`, elsewhere);
+        expect(host.textContent).toContain(`What you'll see`);
+        expect(host.textContent).toContain(`Google Antigravity`);
+        expect(host.textContent).toContain(`Google Play`);
+        [...host.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Use another provider instead`))!.click();
+        expect(elsewhere).toHaveBeenCalledTimes(1);
+    });
+
+    it(`names Devin's pasted value a token, as its page does, everywhere the panel asks for it`, async () => {
+        const host = await mount({ provider: `devin`, url: `https://app.devin.ai/auth/cli/continue?state=s1`, code: ``, handshake: `hd` });
+        expect(host.textContent).toContain(`Windsurf`);
+        expect(host.textContent).toContain(`an authentication token for Devin CLI`);
+        expect(host.textContent).toContain(`come back here with the token`);
+        expect(host.textContent, `offered a way out of a sign-in nothing warns about`).not.toContain(`Use another provider`);
+        await goToProvider();
+        const field = host.querySelector<HTMLInputElement>(`input[name="connectCode"]`)!;
+        expect(field.placeholder).toBe(`Paste the token…`);
+        expect(host.querySelector(`label`)?.textContent).toBe(`Paste the token`);
+    });
+
+    it(`says nothing extra for a sign-in whose pages match what the panel says`, async () => {
+        const host = await mount({ provider: `claude`, url: `https://claude.ai/oauth/authorize`, code: ``, handshake: `hc` });
+        expect(host.textContent).not.toContain(`What you'll see`);
+        expect(host.textContent).toContain(`come back here with the code`);
+    });
 });

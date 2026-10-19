@@ -18,13 +18,13 @@ type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
 export const trialUnavailableFrame = (): ErrorEvent => ({
     kind: "error",
     code: "trial-unavailable",
-    message: "Free trial unavailable. Failed messages are not counted. Retry or connect Google.",
+    message: "Free trial unavailable. Failed agent steps are not counted. Retry, or connect a model of your own.",
 });
 
 const trialExhaustedFrame = (message?: string): ErrorEvent => ({
     kind: "error",
     code: "trial-exhausted",
-    message: message ?? "Free trial used up for today. Connect Google to keep going free.",
+    message: message ?? "Free trial used up for today: every free agent step is spent. Connect a model to keep going.",
 });
 
 export const trialRetryFrame = (error: string): ErrorEvent => (error === "rate_limit" ? trialExhaustedFrame() : trialUnavailableFrame());
@@ -137,7 +137,7 @@ const trialFrame = (message: SDKAssistantMessage): ErrorEvent => {
     return {
         kind: "error",
         code: "trial-model-unavailable",
-        message: `This model could not run through the free trial. ${explained} Choose another model or connect Google.`,
+        message: `This model could not run through the free trial. ${explained} Choose another model, or connect one of your own.`,
     };
 };
 

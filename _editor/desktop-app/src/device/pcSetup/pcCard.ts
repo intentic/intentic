@@ -105,6 +105,9 @@ export const offersWork = (phase: PcCardPhase): boolean => WORK_PHASES.has(phase
 /** The rows still to do, the only ones listed: what is already fine is counted in the summary instead (`checksPassed`). */
 export const unmetRows = (check: LocalPcCheck | undefined): readonly LocalCheckRow[] => check?.rows.filter((row) => row.state !== `met`) ?? [];
 
+/** Sandboxes on the PC's current engine will be carried to Intentic's by this setup (plan.rs `engine-move`). */
+export const movesSandboxes = (check: LocalPcCheck | undefined): boolean => unmetRows(check).some((row) => row.id === `engine-move`);
+
 /** How many of the check's rows are met already, for the card's one summary line; undefined for a check with none. */
 export const checksPassed = (check: LocalPcCheck | undefined): { readonly met: number; readonly total: number } | undefined => {
     const rows = check?.rows ?? [];

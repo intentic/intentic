@@ -10,7 +10,15 @@ import { freeLaneOpen } from "../sandbox/hosted/free-lane.js";
 import { withImagesInUserMessages } from "./trial-images.js";
 import { createTrialLadder } from "./trial-ladder.js";
 import { createTrialPool, type Fetcher, poolRefused, trialEnabled } from "./trial-pool.js";
-import { recordServedModel, refundTrialMessage, spendTrialMessage, trialStatus } from "./trial-usage.js";
+import {
+    closeTrialTurn,
+    openTrialTurn,
+    recordServedModel,
+    refundTrialMessage,
+    spendTrialGrace,
+    spendTrialMessage,
+    trialStatus,
+} from "./trial-usage.js";
 
 // Free trial served as a model API: the platform's own credential can't be handed to a tenant machine, so this is the
 // one place it sits on the command path. OpenAI-compatible, so the sandbox's existing endpoint machinery works
@@ -51,29 +59,44 @@ const connectToken = (authorization: string | undefined, header: string | undefi
     return token === undefined || token === `` ? undefined : token;
 };
 
+// Resolves the caller to the account that pays, or refuses. 404, not 401, for an unknown token or a switched-off
+// trial: a 401 would confirm to a probe that the route exists and the token is merely wrong.
+interface Caller {
+    readonly req: { header: (name: string) => string | undefined };
+}
+const ownerOfCaller = async (prisma: PrismaClient, c: Caller): Promise<string | undefined> => {
+    const token = connectToken(c.req.header(`authorization`), c.req.header(CONNECT_TOKEN_HEADER));
+    if (token === undefined) {
+        return undefined;
+    }
+    const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) }, select: { ownerId: true } });
+    return sandbox?.ownerId;
+};
+
+// The trial is a free lane: an owner who signs in only by email reaches it once a Google account is linked to theirs
+// (sandbox/hosted/free-lane.ts). Said in the owner's words, with the reason the editor reads to offer linking.
+const GOOGLE_REQUIRED = {
+    error: `the free trial needs a Google sign-in linked to this sandbox owner's account: link Google in Settings, or connect a model of your own`,
+    reason: GOOGLE_REQUIRED_REASON,
+};
+
+// The refusal once today's allowance (and any turn grace) is spent. Names the way forward, not just the wall; 429 reads
+// to an OpenAI client as "slow down".
+const exhausted = (spend: { readonly allowance: number; readonly resetsAt: string }) => ({
+    error: {
+        type: `trial_exhausted`,
+        message: `Free trial used up for today (${spend.allowance} agent steps, one per model call). Resets at ${spend.resetsAt}. Connect a model to keep going.`,
+    },
+    trial: { allowance: spend.allowance, remaining: 0, resetsAt: spend.resetsAt },
+});
+
 export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new Date() }: TrialDeps) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
     const ingress = ingressServer(app, `/trial`);
     const pool = createTrialPool(config, fetchFn, () => now().getTime());
     const ladder = createTrialLadder(config, pool, () => now().getTime());
 
-    // Resolves the caller to the account that pays, or refuses. 404, not 401, for an unknown token or a switched-off
-    // trial: a 401 would confirm to a probe that the route exists and the token is merely wrong.
-    const ownerOf = async (c: { req: { header: (name: string) => string | undefined } }): Promise<string | undefined> => {
-        const token = connectToken(c.req.header(`authorization`), c.req.header(CONNECT_TOKEN_HEADER));
-        if (token === undefined) {
-            return undefined;
-        }
-        const sandbox = await prisma.sandbox.findUnique({ where: { tokenDigest: sha256Hex(token) }, select: { ownerId: true } });
-        return sandbox?.ownerId;
-    };
-
-    // The trial is a free lane: an owner who signs in only by email reaches it once a Google account is linked to theirs
-    // (sandbox/hosted/free-lane.ts). Said in the owner's words, with the reason the editor reads to offer linking.
-    const GOOGLE_REQUIRED = {
-        error: `the free trial needs a Google sign-in linked to this sandbox owner's account: link Google in Settings, or connect a model of your own`,
-        reason: GOOGLE_REQUIRED_REASON,
-    };
+    const ownerOf = (c: Caller): Promise<string | undefined> => ownerOfCaller(prisma, c);
 
     // What this account has left today; polled by the daemon for the model picker's badge, and spends nothing.
     ingress(`trialStatus`, async (c, kit) => {
@@ -88,6 +111,28 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
             return kit.refuse(403, GOOGLE_REQUIRED.error);
         }
         return kit.answer({ ...(await trialStatus(prisma, config, ownerId, now())), ...pool.status() });
+    });
+
+    // A trial turn opening or closing (the daemon's trial-turn.ts): one that opens with a step of today's allowance left
+    // may run past it to finish (trial-usage.ts openTrialTurn). The chat route can't tell, since its calls arrive through
+    // the daemon's translator, which carries no turn.
+    ingress(`trialTurn`, async (c, kit) => {
+        if (!trialEnabled(config)) {
+            return kit.refuse(404, `the free trial is not enabled on this platform`);
+        }
+        const ownerId = await ownerOf(c);
+        if (ownerId === undefined) {
+            return kit.refuse(404, `unknown sandbox`);
+        }
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, `the body must be {"state":"open"} or {"state":"close"}`);
+        }
+        if (body.state === `close`) {
+            await closeTrialTurn(prisma, c.get(`logger`), ownerId, now());
+            return kit.answer({ grace: false });
+        }
+        return kit.answer({ grace: await openTrialTurn(prisma, config, ownerId, now()) });
     });
 
     // A constant list, not discovery: the old catalog could be empty, full of models that fail their first message, or
@@ -121,18 +166,10 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         const body = withImagesInUserMessages(await c.req.text());
         const at = now();
         const spend = await spendTrialMessage(prisma, config, ownerId, at);
-        if (!spend.allowed) {
-            // Names the way forward, not just the wall; 429 reads to an OpenAI client as "slow down".
-            return c.json(
-                {
-                    error: {
-                        type: `trial_exhausted`,
-                        message: `Free trial used up for today (${spend.allowance} messages). Resets at ${spend.resetsAt}. Connect Google to keep going free.`,
-                    },
-                    trial: { allowance: spend.allowance, remaining: 0, resetsAt: spend.resetsAt },
-                },
-                429,
-            );
+        // Past the allowance, a turn that started within it finishes on the grace rather than stopping mid-edit.
+        const grace = !spend.allowed && (await spendTrialGrace(prisma, config, ownerId, at));
+        if (!spend.allowed && !grace) {
+            return c.json(exhausted(spend), 429);
         }
         // The ladder orders real models, the pool walks keys against them; an unserved turn is refunded and answered in
         // our own words rather than passing through Google's refusal (billing advice that doesn't apply to a user with
@@ -146,7 +183,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         });
         if (attempt === undefined || poolRefused(attempt.response.status)) {
             await attempt?.response.body?.cancel().catch(() => undefined);
-            await refundTrialMessage(prisma, c.get(`logger`), ownerId, at);
+            await refundTrialMessage(prisma, c.get(`logger`), ownerId, at, { grace });
             c.get(`logger`).warn(
                 { tried: attempt?.tried ?? 0, status: attempt?.response.status ?? 0, candidates },
                 `trial: no key answered on any model`,
@@ -158,7 +195,7 @@ export const trialRoutes = ({ config, prisma, fetchFn = fetch, now = () => new D
         }
         // A failed completion is preserved for the sandbox to explain, but never consumes allowance.
         if (!attempt.response.ok) {
-            await refundTrialMessage(prisma, c.get(`logger`), ownerId, at);
+            await refundTrialMessage(prisma, c.get(`logger`), ownerId, at, { grace });
         }
         // Body streamed through untouched, since owning this wire format means re-shipping the service on every
         // upstream change. Remaining-allowance stays off it deliberately; the translator would mangle it, so the daemon

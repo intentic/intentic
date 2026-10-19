@@ -18,6 +18,10 @@ flowchart LR
   the ready daemon cancels it. (2026-10-18: an in-process timer would disappear on an api restart.)
 - `personSeenAt` is the last moment a person was there, which the free lane's idle collection measures from
   (`20261018180000_person_seen`, backfilled from `lastSeenAt`, since before the alarm every boot was somebody's).
+- `trial_usage` holds each account's free-trial spend per UTC day. Its `graceOpen`, `graceOpenedAt` and `graceSteps`
+  columns let a turn that started with allowance left finish past it, up to `TRIAL_GRACE_STEPS` (default 25) more
+  calls a day (`20261019120000_trial_turn_grace`). A turn the daemon opened and never closed stops counting an hour
+  after it opened.
 - Some database state lives only in SQL. `20261002120000_platform_memory` adds a trigger on `sandbox` that
   writes a `sandbox_tombstone` for the tunnel id of every deleted row and rotated token (cascades included), and the
   one `platform_identity` row that migration minted for its database. Neither appears in a `migrate diff`, and both are

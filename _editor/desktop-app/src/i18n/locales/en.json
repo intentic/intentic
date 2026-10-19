@@ -661,6 +661,15 @@
         "repair": "Ask Repair",
         "hosted": "A computer we host can run your agents instead.",
         "cloud": "Use Intentic in the cloud",
+        "hostedInstead": "Use a hosted workspace instead",
+        "setUpAndMove": "Set up this PC and move sandboxes",
+        "move": {
+            "title": "Your sandboxes on Docker Desktop will move",
+            "body": "Setting up this PC also moves the sandboxes that run on Docker Desktop over to Intentic's own engine.",
+            "stops": "Each sandbox stops while its files are copied.",
+            "keeps": "Docker Desktop keeps its copy for 7 days, and you can move back.",
+            "disk": "Both copies use disk space until then."
+        },
         "ready": "Ready for agents",
         "signIn": {
             "now": "Agents work under your Intentic account. Once you're signed in, Intentic sets up their sandbox here by itself.",

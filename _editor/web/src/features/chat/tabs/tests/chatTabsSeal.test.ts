@@ -129,7 +129,7 @@ it(`draws what the last turn showed of its own work as the seal alone, its words
 
     const proven = sealOf(rowOf(el, `proven`))!;
     expect(proven.dataset[`sealKind`]).toBe(`closed`);
-    expect(readings(proven)).toEqual([`Landed`, `Tested after its last edit`, `pnpm -C api test`]);
+    expect(readings(proven)).toEqual([`Landed`, `Its check passed after the last edit`, `pnpm -C api test`]);
     // One glyph per row, whatever it has to say.
     expect(rowOf(el, `unproven`).querySelectorAll(`[data-seal]`)).toHaveLength(1);
     expect(el.querySelector(`[data-check]`)).toBeNull();
@@ -164,7 +164,7 @@ it(`stands the seal in for a landed card's glyph`, async () => {
     const el = await mountCard(cardOf(`proven`));
     const seal = sealOf(el)!;
     expect(seal.dataset[`sealKind`]).toBe(`closed`);
-    expect(readings(seal)).toEqual([`Landed`, `Tested after its last edit`, `pnpm -C api test`]);
+    expect(readings(seal)).toEqual([`Landed`, `Its check passed after the last edit`, `pnpm -C api test`]);
     expect(el.querySelector(`[data-icon="check-circle"]`)).toBeNull();
     expect(el.querySelector(`[data-check]`)).toBeNull();
 });
@@ -186,5 +186,5 @@ it(`keeps the seal beside an unread card's chip rather than under it`, async () 
 it(`sets the seal beside a glyph that has something of its own to say`, async () => {
     const el = await mountCard({ ...cardOf(`proven`), status: `ready` });
     expect(el.querySelector(`[data-icon="download"]`)).not.toBeNull();
-    expect(readings(sealOf(el))).toEqual([`Tested after its last edit`, `pnpm -C api test`]);
+    expect(readings(sealOf(el))).toEqual([`Its check passed after the last edit`, `pnpm -C api test`]);
 });

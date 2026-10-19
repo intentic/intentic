@@ -25,6 +25,10 @@ export interface StepFacts {
     readonly runnable: boolean | undefined;
     // An agent's work is waiting for review right now. That is the payoff the whole list leads to, so it goes next.
     readonly ready?: boolean;
+    // An agent is working right now. The first task is the reader's whole attention, so one's own model waits for it.
+    readonly running?: boolean;
+    // The free trial is low or spent: connecting one's own model is then the useful next step, task running or not.
+    readonly trialShort?: boolean;
     // The sandbox is past its first days: an agent on it last did anything more than a week ago. Work done in place
     // never lands (it was in the workspace all along), so a land alone cannot tell an old hand from a newcomer.
     readonly established?: boolean;
@@ -65,7 +69,8 @@ export const stepOrder = (facts: StepFacts): readonly StepId[] => {
     if (facts.runnable === false && facts.models === false) {
         return [`models`, `work`, `agent`, `land`];
     }
-    return facts.ready === true && facts.land !== true ? [`work`, `agent`, `land`, `models`] : STEP_IDS;
+    const holdsModels = (facts.ready === true || facts.running === true) && facts.land !== true && facts.trialShort !== true;
+    return holdsModels ? [`work`, `agent`, `land`, `models`] : STEP_IDS;
 };
 
 export const progress = (facts: StepFacts, choices: Choices): Progress => {

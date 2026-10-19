@@ -931,6 +931,57 @@ describe(`a refusal that ran nothing`, () => {
         expect(fold.ranNothing).toBe(false);
     });
 
+    // The reported row (onboarding review 2026-10-18, F07): the trial ran out on a later step of a turn that had already
+    // edited a file, and the row said the message was not delivered and held to send again. Neither was true: the turn
+    // ran, nothing holds its words (turn-runs keeps only a turn turned away at the door), and a resend repeats its edits.
+    describe(`arriving after the turn already ran`, () => {
+        const SPENT = {
+            kind: `error`,
+            code: `trial-exhausted`,
+            message: `Free trial used up for today: every free agent step is spent. Connect a model to keep going.`,
+        } as const satisfies AgentEvent;
+        const EDITED: readonly AgentEvent[] = [
+            { kind: `tool_call`, id: `t1`, name: `Edit`, category: `edit`, status: `completed`, target: `src/page.tsx` },
+        ];
+
+        it(`says the run stopped partway with its changes kept, and offers another model rather than a resend`, () => {
+            const fold = new TranscriptFold(openingOf(`change the heading`));
+            for (const event of EDITED) {
+                fold.apply(event);
+            }
+            fold.apply(SPENT);
+
+            expect(fold.rows.map((row) => row.role)).toEqual([`user`, `assistant`, `notice`]);
+            expect(fold.rows.at(-1)).toEqual({
+                role: `notice`,
+                text: `${SPENT.message} The run stopped partway. The changes it made so far are kept: continue with another model to pick up from here.`,
+                noticeAction: `switchModel`,
+                noticeCode: { code: `stoppedPartway`, params: { message: SPENT.message, error: `trial-exhausted`, switchModel: true } },
+            });
+            expect(fold.ranNothing).toBe(false);
+        });
+
+        // Another model does not clear a full disk; the row still never claims the words are held.
+        it(`offers no model switch for a refusal another model would not get past`, () => {
+            const disk = { kind: `error`, code: `sandbox-disk-low`, message: `The sandbox's disk is full.` } as const satisfies AgentEvent;
+            expect(foldOf(`change the heading`, [...EDITED, disk]).at(-1)).toEqual({
+                role: `notice`,
+                text: `${disk.message} The run stopped partway. The changes it made so far are kept: send a message to pick up from here.`,
+                noticeCode: { code: `stoppedPartway`, params: { message: disk.message, error: `sandbox-disk-low` } },
+            });
+        });
+
+        it(`keeps the not-delivered row for the same refusal when nothing had run`, () => {
+            expect(foldOf(`change the heading`, [SPENT])).toEqual([
+                {
+                    role: `notice`,
+                    text: `${SPENT.message} Your message was not delivered: it is held for you to send again.`,
+                    noticeCode: { code: `undelivered`, params: { message: SPENT.message, error: `trial-exhausted` } },
+                },
+            ]);
+        });
+    });
+
     // The sandbox, not a composer, keeps a turn it started itself (a fix press, a peer's message): the frame says so
     // with `held`. The bug this exists for: such a refusal took the fix prompt out, and no queue anywhere held a copy.
     describe(`of a turn the sandbox keeps`, () => {

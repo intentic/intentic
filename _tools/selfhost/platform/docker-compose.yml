@@ -197,6 +197,8 @@ services:
             TRIAL_BASE_URL: ${TRIAL_BASE_URL:-}
             TRIAL_MODELS: ${TRIAL_MODELS:-}
             TRIAL_DAILY_MESSAGES: ${TRIAL_DAILY_MESSAGES:-}
+            # Extra calls a day a turn begun within the allowance may run to finish it (default 25; 0 turns it off).
+            TRIAL_GRACE_STEPS: ${TRIAL_GRACE_STEPS:-}
             # THE HOSTED PLAN (the one paid thing). stripeSecretKey + stripePrices are the switch: both empty
             # and the plan does not exist — /hosted-plan routes 404 and no plan is offered anywhere.
             HOSTED_PLAN_STRIPE_SECRET_KEY: ${HOSTED_PLAN_STRIPE_SECRET_KEY:-}

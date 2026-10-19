@@ -18,6 +18,7 @@ import { readerHere } from "../../workbench/browser-tab/readerHere";
 import { setTabMark } from "./tabTitle";
 import { chimeAsks, chimeFinished, tabStatus } from "../../workbench/browser-tab/tabPreferences";
 import { newsItemsBetween, type TabFrame, tabMark, tabOffline } from "./tabSignal";
+import { justSetUp } from "../../models/sandbox/live/justSetUp";
 
 // The browser tab as a surface of the app (tabSignal.ts has the rules): what the fleet says the tab should show, and
 // when it should ring. The page's own name comes from the router, and tabTitle.ts writes both. Inside the desktop app,
@@ -93,7 +94,10 @@ export const startBrowserTab = (): void => {
     const availability = useSandboxAvailability();
     const { active, connection } = useSandbox();
     // Answered before, here or anywhere: a sandbox still being set up has never announced, and is not "Offline".
-    const seen = computed(() => connection.value.everOnline || (active.value?.lastSeenAt ?? null) !== null);
+    // One /setup opened moments ago counts as still being set up until it answers here (justSetUp.ts).
+    const seen = computed(
+        () => connection.value.everOnline || ((active.value?.lastSeenAt ?? null) !== null && !justSetUp(active.value?.id)),
+    );
     // A turn finished while the reader was elsewhere; over the moment they are back in any window of the app.
     const doneAway = ref(false);
     watch(

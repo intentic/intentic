@@ -301,6 +301,22 @@ describe(`ChatToolCard`, () => {
         expect(header).not.toContain(`rg -n`);
     });
 
+    // A developer is told the tool, but an MCP wire id read as words (onboarding review 2026-10-18, F11); the id itself
+    // stays on the name, under the pointer, for the logs and the server's docs.
+    it(`says an MCP tool's id as its server and tool for a developer, keeping the id as the title`, () => {
+        const element = mount({ id: `w1`, name: `mcp__subagents__wait`, category: `other`, status: `completed` });
+        const named = [...element.querySelectorAll(`.group\\/tool span.font-medium`)];
+        expect(named.map((span) => [span.textContent?.trim(), span.getAttribute(`title`)])).toEqual([[`Subagents · wait`, `mcp__subagents__wait`]]);
+        expect(element.textContent).not.toContain(`mcp__`);
+    });
+
+    it(`leaves a runtime's own tool name as it is, with no title to repeat it`, () => {
+        const element = mount({ id: `r2`, name: `Read`, category: `read`, status: `completed`, target: `src/main.ts` });
+        const named = element.querySelector(`.group\\/tool span.font-medium`);
+        expect(named?.textContent?.trim()).toBe(`Read`);
+        expect(named?.hasAttribute(`title`)).toBe(false);
+    });
+
     it(`keeps the file's path beside the plain verb for a maker`, () => {
         useAudience().setAudience(`maker`);
         const element = mount({ id: `r1`, name: `Read`, category: `read`, status: `completed`, target: `src/main.ts` });

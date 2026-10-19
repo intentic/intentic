@@ -24,6 +24,9 @@ export const TrialStatusSchema = z.object({
     retryAt: z.string().optional(),
     // The real model that served the last trial message; the published id only names the trial ladder.
     servedModel: z.string().optional(),
+    // Steps a task started while some of the allowance was left may still run today to finish past it (the platform's
+    // turn grace); absent where the platform grants none.
+    grace: z.number().int().nonnegative().optional(),
 });
 export type TrialStatusResponse = z.infer<typeof TrialStatusSchema>;
 

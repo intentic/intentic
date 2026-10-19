@@ -16,15 +16,16 @@ import {
     useDevice,
     useExplorerStyle,
     useLoadingReveal,
+    useNarrow,
 } from "@intentic/ui";
 import { isTestPath } from "@intentic/sandbox-contract/text/path-refs";
-import type { OutsideCheckout, WorkspaceModule } from "@intentic/sandbox-contract/schemas/git/git";
+import type { WorkspaceModule } from "@intentic/sandbox-contract/schemas/git/git";
 import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
 import type { LineStat } from "@intentic/code-read";
 import { computed, nextTick, ref, type Ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import ReviewStat from "../../workspace/changes/ReviewStat.vue";
-import { draftStrayAsk, stopAgent } from "../../../models/fleet/agentActions";
+import { stopAgent } from "../../../models/fleet/agentActions";
 import { boxNameOf, openInSandbox } from "../../../models/fleet/fleetScope";
 import { CONFLICT_ICON, reasonCopy } from "../../../models/conversations/review/conflictResolution";
 import { AGENT_FILE_DIFF_OPTIONS, agentFileDiffKey, type AgentReviewFile, readAgentFileDiff, useAgentChanges } from "./useAgentChanges";
@@ -53,11 +54,15 @@ import AgentHistoryChip from "./AgentHistoryChip.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
 import ReviewWaitLine from "./ReviewWaitLine.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
+import ReviewFileSwitcher from "./ReviewFileSwitcher.vue";
+import ReviewTotals from "./ReviewTotals.vue";
+import ReviewUncarriedNotes from "./ReviewUncarriedNotes.vue";
 import { groupCountLabel, groupPassOn, rowAfterGroup, viewedIn } from "./reviewGroupPass";
 import { basename } from "@intentic/ui/path";
 import { useT } from "@intentic/ui/i18n";
 import { commandShortcut } from "../../../workbench/commands/useCommands";
 import { REVIEW_MARK, REVIEW_MARK_GROUP, REVIEW_NEXT, REVIEW_PREVIOUS, useReviewKeys } from "./reviewKeys";
+import { NARROW_REVIEW_REM, type ReviewFilter, reviewListMode } from "./reviewRoom";
 
 // One agent's work as a review: file list on the left, that file's diff on the right, the shape every code review
 // has. Replaces the old panel's mistakes:
@@ -142,7 +147,6 @@ const outline = useLoadingReveal(
 // - Code/Tests: shown only when the review holds both
 // - Not landed: the Land now remainder, shown only as a proper subset
 // - In history: committed work, a second body of work rather than a narrowing, so it sits last
-type ReviewFilter = `all` | `blocked` | `code` | `tests` | `pending` | `history`;
 const filter = ref<ReviewFilter>(`all`);
 // Some landed and some not: the only state in which "not landed" tells one file apart from its neighbours, and so the
 // only state that earns a narrowing option, a row dot or a badge on the open file. With nothing landed yet — the
@@ -507,6 +511,17 @@ const panel = useTemplateRef<HTMLElement>(`panel`);
 
 useReviewKeys({ panel, move, viewAndAdvance, viewGroupAndAdvance });
 
+// The review's own width decides where its file list goes (reviewRoom.ts); a phone keeps its list-then-diff pages.
+const narrow = useNarrow(computed(() => panel.value ?? undefined), NARROW_REVIEW_REM);
+const listMode = computed(() => (mobile.value ? `side` : reviewListMode(narrow.value, filtered.value.length, filterOptions.value.length)));
+// The switcher's rows: every row on the list, folded headings or not, in the list's own order.
+const switcherRows = computed<readonly AgentReviewFile[]>(() => groups.value.flatMap((group) => viewOf(group.key).buckets.flatMap((bucket) => bucket.rows)));
+// A mark's name says what pressing it does, so a reviewed file's says it unmarks.
+const markLabel = (file: AgentReviewFile): string =>
+    isViewed(file)
+        ? t(`agents.agentReviewPanel.unmarkReviewed`, { label: file.label })
+        : t(`agents.agentReviewPanel.markReviewed2`, { label: file.label });
+
 // The diff.
 // Shares its cache key with the background loader (AGENT_FILE_DIFF_OPTIONS), so a warmed row paints without a
 // re-read. Keyed by selection too, so a slow earlier fetch can't land on the file now chosen.
@@ -587,39 +602,8 @@ const ICON_BUTTON = ui.iconButton(`disabled:opacity-40`);
 // A notice that needs no decision: one line under the bar, no box, so only the bar reads as something to act on.
 const NOTE_LINE = `mx-2 mt-1.5 flex shrink-0 items-center gap-1.5 px-2 text-2xs text-muted`;
 
-// Files written where the copy carries no repository, said as what it means: they are on no branch, so nothing lands
-// them. Why each folder is outside is the hover's, with what clears it.
-const outside = computed(() => changes.review.value?.outside ?? []);
-const outsideFiles = computed(() => outside.value.reduce((total, hole) => total + hole.files, 0));
-const outsideRepos = computed(() => outside.value.map((hole) => hole.repo).join(`, `));
-// Each wording spelled as its own call, so the catalog check can see every message asked for.
-const OUTSIDE_REASONS = {
-    unborn: () => t(`agents.agentReviewPanel.outsideUnborn`),
-    unreadable: () => t(`agents.agentReviewPanel.outsideUnreadable`),
-    "not-carried": () => t(`agents.agentReviewPanel.outsideNotCarried`),
-} satisfies Record<OutsideCheckout["reason"], () => string>;
-const outsideTip = computed(
-    (): Tip => ({
-        title: t(`agents.agentReviewPanel.outsideTitle`),
-        rows: outside.value.map((hole) => ({ label: hole.repo, value: OUTSIDE_REASONS[hole.reason]() })),
-    }),
-);
-
 // What a refused land left behind; causes and the action ladder are AgentConflictReport's to own.
 const resolvingPaths = computed(() => (changes.resolving.value ?? []).flatMap((entry) => entry.paths));
-
-// Copies on a branch of their own whose commits there did not reach this conversation's branch: work no land carries.
-// A copy that was carried is not news to the reader (it lands like the rest), so only the stranded ones are said.
-// Absent `carried` is a sandbox too old to copy them, which never did.
-const stranded = computed(() => changes.elsewhere.value.filter((stray) => stray.carried !== true));
-const strandedRepos = computed(() => stranded.value.map((stray) => stray.repo).join(`, `));
-// Where each copy stands, for whoever wants the git of it; the line itself says only what it means.
-const strandedTip = computed(
-    (): Tip => ({
-        title: t(`agents.agentReviewPanel.offBranch`),
-        rows: stranded.value.map((stray) => ({ label: stray.repo, value: stray.branch ?? t(`agents.agentReviewPanel.noBranch`) })),
-    }),
-);
 
 // What landing the work takes on: per manifest that gained any, the dependency names it declares now and did not
 // before, labelled the way the rows are. This is where a new dependency is approved, since a conversation installs
@@ -683,30 +667,8 @@ const seamWidth = computed<number>({
             </button>
         </div>
 
-        <!-- Work no land carries, said as what it means; where each copy stands is the hover's. The ask goes into the
-             agent's composer, not straight to it, so a running turn is never steered by a press made here. -->
-        <div v-if="stranded.length > 0" :class="NOTE_LINE">
-            <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
-            <span class="min-w-0 flex-1" v-tooltip.bottom="strandedTip">{{
-                t(`agents.agentReviewPanel.strandedWork`, { repos: strandedRepos })
-            }}</span>
-            <button
-                v-if="at === undefined"
-                type="button"
-                class="shrink-0 text-link underline-offset-2 hover:underline"
-                @click="draftStrayAsk(agentId, stranded)"
-            >
-                {{ t(`agents.agentReviewPanel.askAgent`) }}
-            </button>
-        </div>
-
-        <!-- Work no land carries because no checkout of its repository stood where it was written. -->
-        <div v-if="outside.length > 0" :class="NOTE_LINE">
-            <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
-            <span class="min-w-0 flex-1" v-tooltip.bottom="outsideTip">{{
-                t(`agents.agentReviewPanel.outsideWork`, { count: outsideFiles, repos: outsideRepos }, outsideFiles)
-            }}</span>
-        </div>
+        <!-- Work no land carries: stranded on another branch, or written where no repository stood. -->
+        <ReviewUncarriedNotes :agent-id="agentId" :at="at" :changes="changes" />
 
         <!-- What no land carries: files that look like scratch, left in the conversation's copy until included or deleted. -->
         <AgentScratchReport
@@ -769,7 +731,7 @@ const seamWidth = computed<number>({
         <!-- No select-none while dragging: ResizeSeam already claims the whole document's selection for the drag. -->
         <div v-else class="flex min-h-0 flex-1">
             <aside
-                v-if="!mobile || selected === undefined"
+                v-if="mobile ? selected === undefined : listMode === `side`"
                 class="flex min-h-0 min-w-0 flex-col"
                 :class="mobile ? 'flex-1' : 'shrink-0 border-r border-line'"
                 :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
@@ -787,14 +749,8 @@ const seamWidth = computed<number>({
                             <span class="font-medium text-content">{{ bodyFiles.length }}</span>&nbsp;{{ t(`agents.agentReviewPanel.files`, {}, bodyFiles.length) }}
                         </span>
                         <span v-if="changes.fetching.value" class="inline-flex items-center"><Icon name="spinner" class="text-2xs text-muted" spin /></span>
-                        <span class="ml-auto inline-flex shrink-0 items-center gap-1.5">
-                            <!-- Totals for the whole review; the code/tests split is carried by the filter options instead. -->
-                            <ReviewStat :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" />
-                            <!-- A check and "N/total" reads as reviewed-of-total on its own, no hover-only shortcut hint needed here. -->
-                            <span class="inline-flex items-center gap-0.5 whitespace-nowrap text-2xs text-subtle">
-                                <Icon name="check" class="text-2xs" />{{ bodyViewed }}/{{ bodyFiles.length }}
-                            </span>
-                        </span>
+                        <!-- Totals for the whole review; the code/tests split is carried by the filter options instead. -->
+                        <ReviewTotals class="ml-auto" :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" :viewed="bodyViewed" :total="bodyFiles.length" />
                     </div>
                 </div>
 
@@ -938,7 +894,7 @@ const seamWidth = computed<number>({
                                             "
                                             @click="toggleViewed(file)"
                                             v-tooltip.right="isViewed(file) ? reviewedTip() : t(`agents.agentReviewPanel.markReviewed`)"
-                                            :aria-label="t(`agents.agentReviewPanel.markReviewed2`, { label: file.label })"
+                                            :aria-label="markLabel(file)"
                                         >
                                             <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />
                                         </button>
@@ -952,7 +908,7 @@ const seamWidth = computed<number>({
 
             <!-- Sits in flow with negative margins, straddling the border without an overlay that scrolls with the list. -->
             <ResizeSeam
-                v-if="!mobile"
+                v-if="!mobile && listMode === `side`"
                 v-model="seamWidth"
                 :min="toScreenPx(MIN_REVIEW_LIST_WIDTH)"
                 :max="toScreenPx(MAX_REVIEW_LIST_WIDTH)"
@@ -967,6 +923,18 @@ const seamWidth = computed<number>({
                 class="flex min-h-0 min-w-0 flex-1 flex-col"
                 :data-own-swipe="mobile ? `` : undefined"
             >
+                <!-- The file list folded into one row over the diff (listMode `switcher`). -->
+                <ReviewFileSwitcher
+                    v-if="listMode === `switcher`"
+                    v-model:filter="filter"
+                    :filters="filterOptions"
+                    :rows="switcherRows"
+                    :selected="selectedKey"
+                    :viewed="changes.viewed.value"
+                    @pick="select"
+                >
+                    <ReviewTotals :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" :viewed="bodyViewed" :total="bodyFiles.length" />
+                </ReviewFileSwitcher>
                 <template v-if="selected !== undefined">
                     <!-- The same toolbar the workspace tab renders, so Split|Unified and Comments sit in the same place everywhere. -->
                     <DiffToolbar
@@ -1024,7 +992,7 @@ const seamWidth = computed<number>({
                                 :class="[ICON_BUTTON, isViewed(selected) ? 'text-success' : '']"
                                 @click="toggleViewed(selected)"
                                 v-tooltip.bottom="isViewed(selected) ? reviewedTip(markTip.keys) : markTip"
-                                :aria-label="t(`agents.agentReviewPanel.markReviewed2`, { label: selected.label })"
+                                :aria-label="markLabel(selected)"
                             >
                                 <Icon :name="isViewed(selected) ? 'check-square' : 'check'" class="text-2xs" />
                             </button>

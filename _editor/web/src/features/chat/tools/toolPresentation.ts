@@ -244,6 +244,26 @@ const presenterFor = (name: string): Presenter => {
     return PRESENTERS[lower] ?? (lower.startsWith(`browser `) ? BROWSER_PRESENTER : SPAWN_TOOL.test(name) ? SPAWN_PRESENTER : {});
 };
 
+// An MCP tool's wire name, `mcp__<server>__<tool>`: the server is the first segment, the tool all the rest (a tool may
+// itself carry a double underscore).
+const MCP_NAME = /^mcp__([^_].*?)__(.+)$/;
+// One identifier as words: separators to spaces, case kept, since a server's own capitals ("GitHub") are its name.
+const spoken = (identifier: string): string => identifier.replace(/[_-]+/g, ` `).trim();
+
+/**
+ * A developer's readable name for an MCP tool's call, "Subagents · wait" for `mcp__subagents__wait`; undefined for any
+ * other name, which is already what its runtime calls it. The raw id stays the card's title, so it is never lost.
+ */
+export const readableToolName = (name: string): string | undefined => {
+    const match = MCP_NAME.exec(name);
+    if (match === null) {
+        return undefined;
+    }
+    const server = spoken(match[1]!);
+    const tool = spoken(match[2]!);
+    return server === `` || tool === `` ? undefined : `${server.charAt(0).toUpperCase()}${server.slice(1)} · ${tool}`;
+};
+
 /** Whether a call started a subagent: a delegating tool, or any call the transcript put a subagent on. */
 export const delegates = (tool: TranscriptTool): boolean => tool.subagent !== undefined || presenterFor(tool.name).delegates === true;
 

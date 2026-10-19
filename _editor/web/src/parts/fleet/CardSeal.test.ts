@@ -46,7 +46,7 @@ it(`leads with the status it stands in for, then the verdict, the whole command 
     const seal = await mount({ proof: { verification: `verified`, check, unviewed: 1 }, status: `Landed` });
     expect(readings(seal)).toEqual([
         `Landed`,
-        `Tested after its last edit`,
+        `Its check passed after the last edit`,
         check,
         `Changed 1 interface file without looking at the result`,
     ]);

@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
 import { gitInit } from "@intentic/base/git";
 import type { Services } from "../composition.js";
-import { seedStarterSite, STARTER_BAKED_DIR, workspaceArrivedEmpty } from "./starter-site.js";
+import { bakedStoreDir, seedStarterSite, STARTER_BAKED_DIR, storePinLines, workspaceArrivedEmpty } from "./starter-site.js";
 
 const exec = promisify(execFile);
 
@@ -61,6 +61,21 @@ afterEach(async () => {
 });
 
 describe("seedStarterSite", () => {
+    // F05: modules installed against the image's store, seeded onto /work's own filesystem, made pnpm ask to purge and
+    // reinstall them on the first `pnpm … typecheck`, a prompt an agent's pane waited on for minutes.
+    it("pins the store the baked modules came from, and never asks before a purge, in the committed starter", async () => {
+        await writeFile(join(baked, "pnpm-workspace.yaml"), "packages:\n  - _*/*\n");
+        await writeFile(join(baked, "node_modules", ".modules.yaml"), `${JSON.stringify({ layoutVersion: 5, storeDir: "/usr/local/share/pnpm/store/v11" }, undefined, 2)}\n`);
+        await seedStarterSite(services(), baked);
+        const yaml = readFileSync(join(root, "site", "pnpm-workspace.yaml"), "utf8");
+        expect(yaml.startsWith("packages:\n  - _*/*\n")).toBe(true);
+        expect(yaml.split("\n").filter((line) => !line.startsWith("#") && line.includes(":") && !line.startsWith("packages"))).toEqual([
+            "storeDir: /usr/local/share/pnpm/store",
+            "confirmModulesPurge: false",
+        ]);
+        expect((await exec("git", ["-C", join(root, "site"), "status", "--porcelain"])).stdout).toBe("");
+    });
+
     it("lands the baked site as its own repo and records it for autostart", async () => {
         expect(await seedStarterSite(services(), baked)).toEqual({ repo: "site" });
 
@@ -149,5 +164,19 @@ describe("workspaceArrivedEmpty", () => {
 
     it("reads a root it cannot list as no workspace to seed into", () => {
         expect(workspaceArrivedEmpty(join(root, "absent"))).toBe(false);
+    });
+});
+
+describe("the store pin", () => {
+    it("reads the store a modules manifest records, without its layout version", () => {
+        expect(bakedStoreDir(`{\n  "storeDir": "/usr/local/share/pnpm/store/v11",\n  "virtualStoreDir": ".pnpm"\n}`)).toBe("/usr/local/share/pnpm/store");
+        expect(bakedStoreDir("storeDir: /srv/store/v10\n")).toBe("/srv/store");
+        expect(bakedStoreDir("")).toBeUndefined();
+    });
+
+    it("adds only what the workspace does not already set", () => {
+        expect(storePinLines("packages: []\n", "/s")).toEqual(["storeDir: /s", "confirmModulesPurge: false"]);
+        expect(storePinLines("storeDir: /mine\n", "/s")).toEqual(["confirmModulesPurge: false"]);
+        expect(storePinLines("confirmModulesPurge: true\n", undefined)).toEqual([]);
     });
 });

@@ -127,7 +127,9 @@
             "stopCommandNote": "Pour intégrer le travail.",
             "sends": "part {at}",
             "scheduledMessages": "Messages",
-            "sendsWhenRoom": "envoi quand la mémoire se libère"
+            "sendsWhenRoom": "envoi quand la mémoire se libère",
+            "landUnreviewedHint": "Intègre sans lire les modifications",
+            "reviewChangesCount": "Examiner les modifications : {added} lignes ajoutées, {removed} supprimées"
         },
         "agentConflictReport": {
             "agentWriting": "L'agent écrit",
@@ -167,7 +169,11 @@
             "toLand": "{count} à intégrer",
             "toWorkspace": "Vers le workspace",
             "workAlreadyLandedStays": "Le travail déjà intégré reste dans votre espace de travail : seul ce qui est encore sur la branche est perdu.",
-            "writtenSoFar": "Écrit jusqu'ici"
+            "writtenSoFar": "Écrit jusqu'ici",
+            "focusReview": "Focaliser la revue",
+            "exitFocus": "Quitter le focus",
+            "focusReviewHint": "Donne toute la fenêtre à la revue : masque le panneau latéral, le chat et le terminal jusqu’à la sortie",
+            "exitFocusHint": "Rétablit le panneau latéral, le chat et le terminal tels qu’ils étaient"
         },
         "agentReactions": {
             "addReaction": "Ajouter une réaction",
@@ -220,7 +226,10 @@
             "offBranch": "Hors de la branche de l'agent",
             "noBranch": "aucune branche",
             "askAgent": "Demander à l'agent",
-            "addsTo": "Ajoute {names} à {manifest}"
+            "addsTo": "Ajoute {names} à {manifest}",
+            "pickFile": "Fichier modifié",
+            "reviewedOption": "✓ {label} (examiné)",
+            "unmarkReviewed": "Ne plus marquer {label} comme examiné"
         },
         "agentScratchReport": {
             "byproduct": "un journal, un vidage ou une sauvegarde",
@@ -624,12 +633,12 @@
             "close": "Fermer {title}"
         },
         "cardSeal": {
-            "verified": "Testé après sa dernière modification",
+            "verified": "Sa vérification a réussi après la dernière modification",
             "verifiedDetail": "L’agent a lancé une vérification après sa dernière modification du code, et elle a réussi.",
             "failed": "Sa dernière vérification a échoué",
             "failedDetail": "L’agent a lancé une vérification après sa dernière modification du code, et elle a échoué.",
             "unproven": "Non testé après sa dernière modification",
-            "unprovenDetail": "L’agent a modifié du code sans lancer ensuite de tests, typecheck, lint ni build.",
+            "unprovenDetail": "L’agent a modifié du code sans lancer ensuite de tests, typecheck, lint ni build, ou celui qu’il a tenté n’a pas pu démarrer.",
             "unviewedHead": "Interface modifiée sans regarder",
             "unviewed": "A modifié {count} fichier d’interface sans regarder le résultat | A modifié {count} fichiers d’interface sans regarder le résultat",
             "ran": "Lancé"
@@ -1551,7 +1560,7 @@
             "archivedOffBoardSending": "Archivé : retiré du tableau. Envoyer un message le restaure.",
             "billing": "Facturation",
             "connectTitle": "Votre propre modèle",
-            "connectWays": "Google, local ou abonnement",
+            "connectWays": "Abonnement, clé d'API, modèle local",
             "privacyFound": "Le bouclier de confidentialité n'a pas envoyé ceci à {provider} : il a trouvé des données personnelles dans ce que {provider} lit là où le bouclier ne peut pas les masquer.",
             "privacyGrantFailed": "Ce n'a pas été enregistré.",
             "privacyGranted": "{provider} lit cette conversation telle quelle : le bouclier de confidentialité ne la couvre pas ici.",
@@ -2773,7 +2782,15 @@
             "waitingApproval": "En attente d'approbation…",
             "waitingOn": "En attente de la connexion sur {where}…",
             "whatPageLooksLike": "À quoi ressemble cette page",
-            "wontLoad": "ne charge pas"
+            "wontLoad": "ne charge pas",
+            "pasteToken": "Collez le jeton",
+            "pasteTokenPlaceholder": "Collez le jeton…",
+            "comeBackWithToken": "Connectez-vous, puis revenez ici avec le jeton qu'affiche sa dernière page.",
+            "whatYoullSee": "Ce que vous allez voir",
+            "useAnotherProvider": "Utiliser un autre fournisseur",
+            "tripGoogle": "La page de Google appellera l'application « Google Antigravity » : c'est l'outil de programmation de Google, et sa connexion sert ici à relier votre compte Google. Google peut aussi vous avertir de ne vous connecter que si vous avez téléchargé l'application depuis Google Play. Si vous préférez ne pas continuer, un autre fournisseur fonctionne tout aussi bien.",
+            "tripDevin": "La connexion à Devin se fait sur Windsurf, l'entreprise derrière Devin : les pages (et Google, si vous vous connectez avec) mentionneront donc Windsurf.",
+            "tripDevinToken": "La connexion à Devin se fait sur Windsurf, l'entreprise derrière Devin : les pages (et Google, si vous vous connectez avec) mentionneront donc Windsurf. La dernière page affiche « un jeton d'authentification pour Devin CLI ». Intentic exécute Devin CLI pour vous : c'est ce jeton qu'il faut coller ici."
         },
         "connectionNotice": {
             "cantStartedRightNow": "« {name} » ne peut pas être démarré pour l'instant",
@@ -5263,6 +5280,7 @@
             "yourSandbox": "votre sandbox"
         },
         "hostedWait": {
+            "connectingNote": "Votre sandbox tourne. Nous attendons qu'il réponde à son adresse, pour que l'espace de travail s'ouvre prêt à l'emploi et non hors ligne. Cela prend généralement moins d'une minute.",
             "puttingOnInternet": "Mise en ligne",
             "ready": "Prêt",
             "startingMachine": "Démarrage de la machine",
@@ -5318,6 +5336,7 @@
             "hostedSandboxesSwitchedOff": "Les sandboxes hébergés sont désactivés pour ce compte ; l'e-mail que nous avons envoyé dit pourquoi et où écrire. Le faire tourner sur votre propre ordinateur n'est pas concerné.",
             "httpsAddressSandboxAlready": "L'adresse https sur laquelle votre sandbox répond déjà (https:// est facultatif).",
             "installsDockerNeedStarts": "Installe Docker si vous en avez besoin, démarre votre sandbox et son tunnel, et ouvre votre espace de travail dès qu'il répond. Pas de terminal.",
+            "justStartedStillConnecting": "Vous avez démarré ce sandbox il y a un instant et il est encore en cours de connexion. Cette page l'ouvrira dès qu'il répondra.",
             "keepAddress": "Garder cette adresse",
             "localDevBuildsCheckout": "Dev local : construit depuis votre checkout",
             "machinePickedUp": "Votre machine l'a pris en charge.",
@@ -5597,7 +5616,8 @@
             "tabs": "Ouvert à côté",
             "toggleSplit": "Basculer la section à côté",
             "unavailable": "Indisponible",
-            "unavailableNote": "L'extension qui l'affiche est désactivée ou a été supprimée."
+            "unavailableNote": "L'extension qui l'affiche est désactivée ou a été supprimée.",
+            "closeTab": "Fermer {title}"
         },
         "useNavigationCommands": {
             "add": "Ajouter…"
@@ -6527,6 +6547,14 @@
             "toggleTestFiles": "Basculer les fichiers de test",
             "viewing": "Vue en tant que"
         },
+        "bringProject": {
+            "connectAccount": "Connecter un compte",
+            "description": "Clonez un dépôt, importez des fichiers ou demandez à un agent de le récupérer.",
+            "privateNeedsAccount": "Un dépôt privé GitHub ou GitLab exige d'abord de connecter ce compte, avec un jeton capable de lire le dépôt (un accès en lecture seule suffit).",
+            "publicNeedsNoAccount": "Un dépôt public n'exige aucun compte : collez simplement son adresse.",
+            "tip": "Apporter",
+            "title": "Apporter un projet"
+        },
         "workspaceEmptyState": {
             "askAgentToFetch": "Demander à un agent d'aller le chercher",
             "clone": "Cloner",
@@ -6537,7 +6565,6 @@
             "filesStayOnSandbox": "Les fichiers restent sur la machine de votre sandbox : nulle part ailleurs",
             "getCodeIn": "Faites entrer votre code",
             "pasteGitAddressGithub": "Collez une adresse Git : GitHub, GitLab, partout d'où vous pouvez cloner.",
-            "privateRepositoryNeedsHost": "Un dépôt privé a d'abord besoin que son hébergeur soit connecté dans Capacités.",
             "repositoryAddress": "Adresse du dépôt",
             "uploadFilesFolder": "Envoyer des fichiers ou un dossier",
             "workspaceAgentsReadEdit": "C'est l'espace de travail que vos agents lisent et modifient. Faites-y entrer quelque chose et ils auront de quoi travailler."
@@ -6663,7 +6690,8 @@
             "management": "Panneau de gestion",
             "path": "Chemin",
             "preview": "Aperçu",
-            "repo": "Dépôt"
+            "repo": "Dépôt",
+            "closeTab": "Fermer {title}"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} dépôts",
@@ -6825,6 +6853,8 @@
             "show": "Afficher les premiers pas",
             "finishedTitle": "Tout est prêt",
             "finishedLine": "Voilà toute la boucle : apporter du travail, le confier aux agents, relire, intégrer. Lancez-en autant que vous voulez côte à côte.",
+            "finishedWhere": "La modification intégrée est maintenant dans vos fichiers, mais pas encore validée. Validez-la dans Modifications pour garder une version, et connectez un dépôt distant pour la sauvegarder.",
+            "openChanges": "Ouvrir Modifications",
             "done": "Terminé"
         },
         "ring": {

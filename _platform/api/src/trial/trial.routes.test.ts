@@ -35,28 +35,75 @@ interface Counters {
     readonly used?: number;
     // Google accounts linked to the owner's: the trial is a free lane, open only with one (free-lane.ts).
     readonly googleAccounts?: number;
+    // Today's turn grace as the row holds it: turns opened with allowance left and not closed, when the latest opened,
+    // and the grace steps spent.
+    readonly graceOpen?: number;
+    readonly graceOpenedAt?: Date;
+    readonly graceSteps?: number;
 }
 
-const fakePrisma = ({ used, googleAccounts = 1 }: Counters = {}) => {
-    let messages = used ?? 0;
-    let lastModel: string | null = null;
+// The bounds trial-usage.ts filters its conditional updates by, read the way Postgres would (a null date is never in
+// range).
+interface Bound {
+    readonly lt?: number;
+    readonly gt?: number;
+    readonly gte?: Date;
+}
+type Change = number | { readonly increment?: number; readonly decrement?: number };
+type Counted = `messages` | `graceOpen` | `graceSteps`;
+interface RowWhere extends Partial<Record<Counted, Bound>> {
+    readonly graceOpenedAt?: Bound;
+}
+interface RowData extends Partial<Record<Counted, Change>> {
+    readonly graceOpenedAt?: Date;
+}
+
+const inBound = (value: number, bound: Bound): boolean =>
+    (bound.lt === undefined || value < bound.lt) && (bound.gt === undefined || value > bound.gt) && (bound.gte === undefined || value >= bound.gte.getTime());
+const changed = (value: number, change: Change): number =>
+    change instanceof Object ? value + (change.increment ?? 0) - (change.decrement ?? 0) : change;
+
+const fakePrisma = ({ used, googleAccounts = 1, graceOpen = 0, graceOpenedAt, graceSteps = 0 }: Counters = {}) => {
+    const row = { messages: used ?? 0, lastModel: null as string | null, graceOpen, graceOpenedAt: graceOpenedAt ?? null, graceSteps };
+    const counted: readonly Counted[] = [`messages`, `graceOpen`, `graceSteps`];
+    const matches = (where: RowWhere): boolean =>
+        counted.every((field) => where[field] === undefined || inBound(row[field], where[field])) &&
+        (where.graceOpenedAt === undefined || inBound(row.graceOpenedAt?.getTime() ?? Number.NEGATIVE_INFINITY, where.graceOpenedAt));
     const trialUsage = {
-        findUnique: jest.fn(async () => (messages === 0 && lastModel === null ? null : { messages, lastModel })),
-        upsert: jest.fn(async () => {
-            messages += 1;
-            return { messages, lastModel };
+        findUnique: jest.fn(async () => (row.messages === 0 && row.lastModel === null && row.graceSteps === 0 ? null : { ...row })),
+        // A spend increments; an opening turn only makes sure today's row exists.
+        upsert: jest.fn(async ({ update }: { update: RowData }) => {
+            if (update.messages !== undefined) {
+                row.messages += 1;
+            }
+            return { ...row };
         }),
         // One `update` mock serves both the refund (decrement) and the served-model write (sets a name); branches on
         // the payload so a test can't pass by triggering the wrong one.
-        update: jest.fn(async ({ data }: { data: { lastModel?: string } }) => {
+        update: jest.fn(async ({ data }: { data: RowData & { lastModel?: string } }) => {
             if (typeof data.lastModel === `string`) {
-                lastModel = data.lastModel;
-                return { messages, lastModel };
+                row.lastModel = data.lastModel;
+                return { ...row };
             }
-            messages -= 1;
-            return { messages, lastModel };
+            row.messages -= 1;
+            if (data.graceSteps !== undefined) {
+                row.graceSteps = changed(row.graceSteps, data.graceSteps);
+            }
+            return { ...row };
         }),
-        updateMany: jest.fn(async () => ({ count: 0 })),
+        updateMany: jest.fn(async ({ where, data }: { where: RowWhere; data: RowData }) => {
+            if (!matches(where)) {
+                return { count: 0 };
+            }
+            for (const field of counted) {
+                const change = data[field];
+                if (change !== undefined) {
+                    row[field] = changed(row[field], change);
+                }
+            }
+            row.graceOpenedAt = data.graceOpenedAt ?? row.graceOpenedAt;
+            return { count: 1 };
+        }),
     };
     const prisma = {
         sandbox: {
@@ -67,7 +114,7 @@ const fakePrisma = ({ used, googleAccounts = 1 }: Counters = {}) => {
         trialUsage,
         account: { count: jest.fn(async () => googleAccounts) },
     };
-    return { prisma: prisma as unknown as PrismaClient, trialUsage, spent: () => messages };
+    return { prisma: prisma as unknown as PrismaClient, trialUsage, spent: () => row.messages, graceSpent: () => row.graceSteps };
 };
 
 const call = (config: Config, prisma: PrismaClient, path: string, init?: RequestInit) =>
@@ -140,8 +187,11 @@ describe("the free trial", () => {
         expect(response.status).toBe(429);
         const body = (await response.json()) as { error: { type: string; message: string }; trial: { allowance: number; resetsAt: string } };
         expect(body.error.type).toBe(`trial_exhausted`);
-        expect(body.error.message).toContain(`${body.trial.allowance} messages`);
-        expect(body.error.message).toContain(body.trial.resetsAt);
+        // Counts what the trial meters (one agent step per model call), and points at any model rather than one vendor's
+        // sign-in: Google's route signs in as a third-party app its terms keep out of other clients (F03).
+        expect(body.error.message).toBe(
+            `Free trial used up for today (${body.trial.allowance} agent steps, one per model call). Resets at ${body.trial.resetsAt}. Connect a model to keep going.`,
+        );
         // A refused turn must not also spend the pool.
         expect(fetchFn).not.toHaveBeenCalled();
         unstubAllGlobals();
@@ -487,6 +537,89 @@ describe("the free trial", () => {
     });
 });
 
+/* THE FINISH-THE-TURN GRACE. Twelve calls is less than one small task, so the first one stopped mid-edit (onboarding
+ * review 2026-10-18, F01). A turn the daemon opens while a step is left may finish past the allowance, within a daily
+ * cap: the cost of the grace is what is pinned here, as much as the grace itself. */
+describe("the finish-the-turn grace", () => {
+    const graceConfig = configWith({ graceSteps: 3 });
+    const turn = (config: Config, prisma: PrismaClient, state: `open` | `close`) =>
+        call(config, prisma, `/trial/turn`, { method: `POST`, body: JSON.stringify({ state }) });
+    const answering = () => jest.fn(async () => new Response(`{"choices":[]}`, { status: 200, headers: { "content-type": `application/json` } }));
+
+    it("lets a turn opened with a step left run past the allowance, up to the day's grace and no further", async () => {
+        const { prisma, graceSpent } = fakePrisma({ used: 1 });
+        stubGlobal(`fetch`, answering());
+
+        expect(await (await turn(graceConfig, prisma, `open`)).json()).toEqual({ grace: true });
+        // The allowance's last step, three of grace, then the wall.
+        const statuses = [
+            (await chat(graceConfig, prisma)).status,
+            (await chat(graceConfig, prisma)).status,
+            (await chat(graceConfig, prisma)).status,
+            (await chat(graceConfig, prisma)).status,
+            (await chat(graceConfig, prisma)).status,
+        ];
+
+        expect(statuses).toEqual([200, 200, 200, 200, 429]);
+        expect(graceSpent()).toBe(3);
+        expect(await (await call(graceConfig, prisma, `/trial/status`)).json()).toMatchObject({ remaining: 0, grace: 0 });
+        unstubAllGlobals();
+    });
+
+    it("earns nothing for a turn that opens with the allowance already spent", async () => {
+        const { prisma, graceSpent } = fakePrisma({ used: 2 });
+        stubGlobal(`fetch`, answering());
+
+        expect(await (await turn(graceConfig, prisma, `open`)).json()).toEqual({ grace: false });
+        expect((await chat(graceConfig, prisma)).status).toBe(429);
+        expect(graceSpent()).toBe(0);
+        unstubAllGlobals();
+    });
+
+    it("ends with its turn, so the next turn can't ride it", async () => {
+        const { prisma } = fakePrisma({ used: 1 });
+        stubGlobal(`fetch`, answering());
+
+        await turn(graceConfig, prisma, `open`);
+        expect((await chat(graceConfig, prisma)).status).toBe(200);
+        expect(await (await turn(graceConfig, prisma, `close`)).json()).toEqual({ grace: false });
+
+        expect((await chat(graceConfig, prisma)).status).toBe(429);
+        unstubAllGlobals();
+    });
+
+    it("lapses an hour after the turn opened when the daemon never closed it", async () => {
+        const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+        stubGlobal(`fetch`, answering());
+
+        const stale = fakePrisma({ used: 2, graceOpen: 1, graceOpenedAt: minutesAgo(61) });
+        expect((await chat(graceConfig, stale.prisma)).status).toBe(429);
+        const running = fakePrisma({ used: 2, graceOpen: 1, graceOpenedAt: minutesAgo(59) });
+        expect((await chat(graceConfig, running.prisma)).status).toBe(200);
+        unstubAllGlobals();
+    });
+
+    it("gives the grace step back with the message when the call was not answered", async () => {
+        const { prisma, spent, graceSpent } = fakePrisma({ used: 2, graceOpen: 1, graceOpenedAt: new Date() });
+        stubGlobal(
+            `fetch`,
+            jest.fn(async () => new Response(`{"error":{"message":"model not supported"}}`, { status: 404 })),
+        );
+
+        expect((await chat(graceConfig, prisma)).status).toBe(404);
+        expect([spent(), graceSpent()]).toEqual([2, 0]);
+        unstubAllGlobals();
+    });
+
+    it("is off where the platform grants none: no turn earns it and the status names none", async () => {
+        const off = configWith({ graceSteps: 0 });
+        const { prisma } = fakePrisma({ used: 1 });
+
+        expect(await (await turn(off, prisma, `open`)).json()).toEqual({ grace: false });
+        expect(await (await call(off, prisma, `/trial/status`)).json()).not.toHaveProperty(`grace`);
+    });
+});
+
 describe("the free-trial key pool", () => {
     it("reports healthy when the first selected key answers", async () => {
         const pool = createTrialPool(baseConfig, jest.fn(async () => new Response(`{}`, { status: 200 })) as unknown as typeof fetch);
@@ -683,6 +816,7 @@ describe("the free-trial key pool", () => {
             auths.push(auth);
             return new Response(`{}`, auth === `Bearer k1` ? { status: 429, headers: { "retry-after": `120` } } : { status: 200 });
         });
+        // SAFETY: the pool calls its fetcher as (url, init) and reads only the Response, which is all this mock takes and gives.
         const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch, () => at);
 
         await pool.call(`/chat/completions`, { method: `POST` });

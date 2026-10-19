@@ -75,13 +75,15 @@ export interface LandingContent {
     economics: LandingSectionIntro & { accounts: { name: string; logo: ProviderBrand; detail: string }[]; points: string[] };
     // Cards live in about.ts, shared with /about/; counts come from git at build and must never render zero.
     trust: { eyebrow: string; cta: string };
-    // `desktop` sits beside the command: no macOS build exists, so leading with it reads as a gap to Mac users.
+    // The app is the primary path; `alternatives` are labelled as such (the one-command route and the hosted workspace).
     connect: LandingSectionIntro & {
         steps: LandingFact[];
-        commandNote: string;
-        // A link, not a fork: one command for the reader's own machine; unsure readers opt out via the link.
-        commandChoice: { lead: string; cta: string };
-        desktop: { lead: string; cta: string; note: string };
+        appCta: string;
+        alternatives: {
+            heading: string;
+            command: { title: string; body: string; note: string; compare: { lead: string; cta: string } };
+            hosted: { title: string; body: string };
+        };
     };
     /** The other product, named under the hero: the one line a reader in the wrong place needs. */
     crossLink: CrossLink;
@@ -250,31 +252,37 @@ export const landingContent: LandingContent = {
     connect: {
         eyebrow: "Getting started",
         heading: "Three steps to your first agent.",
-        sub: "Sign in, paste one command, and your workspace opens.",
+        // Same sequence as /download/ and the quickstart; the command and the hosted workspace are labelled alternatives.
+        sub: "Install the app, sign in, and click Run on this computer.",
         steps: [
             {
+                title: "Install the app",
+                body: "For Windows or Linux. Setup installs intentic's own container engine, about 1.9 GB and about 15 minutes. If Docker Desktop is already on the PC, intentic moves your existing sandboxes over and Docker Desktop keeps its copy for 7 days.",
+            },
+            {
                 title: "Sign in with Google or email",
-                // Defines "sandbox" (not "container") in plain words: the product's only noun for the thing, first used
-                // here.
                 body: "Google, or a code mailed to an address on any domain. No password and no card. We keep your email address and your workspace's address, and nothing else.",
             },
             {
-                title: "Your sandbox is waiting",
-                body: "Your sandbox is the private room your agents live and work in. We spin one up and give it its own web address, no Cloudflare account needed.",
-            },
-            {
-                title: "Paste one command",
-                body: "One line starts it on your own machine. If Docker is missing, it offers to install that first.",
+                title: "Click Run on this computer",
+                // Defines "sandbox" (not "container") in plain words: the product's only noun for the thing, first used
+                // here.
+                body: "The app starts your sandbox: the private room your agents live and work in, on your own machine. It gets its own web address, no Cloudflare account needed.",
             },
         ],
-        commandNote: "It sets up your workspace on your own computer. Nothing is deployed anywhere and no ports are opened.",
-        // Framed as a comparison: "one of two" says the command is a choice to check, not one to abandon.
-        commandChoice: { lead: "This is one of two machines it can run on.", cta: "Compare them" },
-        desktop: {
-            lead: "Rather not touch a terminal?",
-            cta: "Get the app for Windows or Linux",
-            // States what the app is: the same install with a window around it; Mac readers use the command above.
-            note: "It runs the same command for you: Docker if the machine needs it, then the sandbox, then your workspace.",
+        appCta: "Download the app",
+        alternatives: {
+            heading: "No app? Two other ways in.",
+            command: {
+                title: "On any machine, with one command",
+                body: "Sign in at app.intentic.dev, then paste this in a terminal. It starts the same sandbox on your own computer. If Docker is missing, it offers to install that first.",
+                note: "Nothing is deployed anywhere and no ports are opened.",
+                compare: { lead: "Your own machine is one of two places it can run.", cta: "Compare them" },
+            },
+            hosted: {
+                title: "In your browser, on a machine we host",
+                body: "Nothing to install. Sign in and start a hosted workspace.",
+            },
         },
     },
     crossLink: { lead: "Not a programmer?", label: "intentic desk, the same assistant for your documents", href: DESK_PATH },

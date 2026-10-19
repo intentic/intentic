@@ -6,6 +6,7 @@ import { RouterLink } from "vue-router";
 import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
+import { justSetUp } from "../../../models/sandbox/live/justSetUp";
 import { restartExpected } from "../../../models/sandbox/live/sandboxRestart";
 import { type ConnectionNotice, connectionNotice, stalledBody } from "./connectionNotice";
 import SandboxRecovery from "./SandboxRecovery.vue";
@@ -43,6 +44,8 @@ const known = computed(() => {
         removedBy: box?.removedBy ?? null,
         // A machine picked its setup up: a missing address is one on its way for a while (connectionNotice.ts).
         claimed: (box?.setupCodeClaimedAt ?? null) !== null,
+        // /setup opened it moments ago and it has not answered here yet: its quiet is a connection on its way.
+        justSetUp: !connection.value.everOnline && justSetUp(box?.id),
     };
 });
 

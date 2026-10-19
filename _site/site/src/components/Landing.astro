@@ -4,7 +4,7 @@ import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/ab
 import { faqGroups } from "@intentic/site-content/faq";
 import { landingContent } from "@intentic/site-content/landing";
 import { templeScene } from "@intentic/site-content/temple";
-import { APP_URL, DEMO_PATH, githubUrl } from "@intentic/site-content/site";
+import { APP_URL, DEMO_PATH, HOSTED_ALT_LABEL, HOSTED_START_LABEL, START_SEQUENCE, githubUrl } from "@intentic/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
 // Provider marks match the session icons used by the app.
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
@@ -53,9 +53,8 @@ const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
 /* Stage screenshots size from the shell and viewport bleed. */
 const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 624px), (min-width: 48rem) calc(100vw - 3rem), calc(275vw - 11rem)";
 
-/* Getting-started steps are grouped by execution location. */
-const browserSteps = content.connect.steps.slice(0, -1);
-const machineStep = content.connect.steps.at(-1)!;
+/* Getting started: the app is the primary path, the command and the hosted workspace are its labelled alternatives. */
+const { steps: appSteps, alternatives } = content.connect;
 ---
 
 <BaseLayout
@@ -100,8 +99,9 @@ const machineStep = content.connect.steps.at(-1)!;
                         {/* Hero shows two start actions; the bar hides its duplicate while they are visible. */}
                         <div class="hero-actions" data-hero-cta>
                             <DownloadCta primary />
-                            <a class="btn btn-secondary" href={APP_URL}>Create your workspace</a>
+                            <a class="btn btn-secondary" href={APP_URL}>{HOSTED_ALT_LABEL}</a>
                         </div>
+                        <p class="hero-sequence">{START_SEQUENCE}</p>
 
                         {/* The other product, for the reader who is in the wrong place: /desk/ is its own page. */}
                         <p class="hero-cross">
@@ -339,12 +339,12 @@ const machineStep = content.connect.steps.at(-1)!;
                     <h2 class="h2 display">{content.connect.heading}</h2>
                     <p class="lede">{content.connect.sub}</p>
 
-                    {/* Steps are grouped by location: browser first, then terminal. */}
+                    {/* Same sequence as /download/: install, sign in, Run on this computer. Alternatives sit in their own labelled zone. */}
                     <div class="flow">
                         <div class="flow-zone">
-                            <div class="flow-where">in your browser</div>
+                            <div class="flow-where">With the app</div>
                             {
-                                browserSteps.map((step) => (
+                                appSteps.map((step) => (
                                     <div class="station">
                                         <h3>
                                             <Bullet />
@@ -354,18 +354,21 @@ const machineStep = content.connect.steps.at(-1)!;
                                     </div>
                                 ))
                             }
+                            <p class="mt-6">
+                                <DownloadCta primary class="btn-sm" label={content.connect.appCta} icon={false} />
+                            </p>
                         </div>
 
                         <div class="flow-seam" aria-hidden="true"></div>
 
                         <div class="flow-zone">
-                            <div class="flow-where">on your machine</div>
+                            <div class="flow-where">{alternatives.heading}</div>
                             <div class="station">
                                 <h3>
                                     <Bullet />
-                                    {machineStep.title}
+                                    {alternatives.command.title}
                                 </h3>
-                                <p>{machineStep.body}</p>
+                                <p>{alternatives.command.body}</p>
                             </div>
 
                             <div class="frame command">
@@ -373,23 +376,23 @@ const machineStep = content.connect.steps.at(-1)!;
                                 <div class="command-head"><span class="command-where">your terminal</span></div>
                                 <pre><code><span class="prompt">$ </span>curl -fsSL https://intentic.dev/connect | sh</code></pre>
                             </div>
-                            <p class="command-note">{content.connect.commandNote}</p>
-                            {/* Supporting links stay below the terminal command. */}
+                            <p class="command-note">{alternatives.command.note}</p>
                             <p class="command-note">
-                                {content.connect.commandChoice.lead}{" "}
-                                <a href="/where-it-runs/" class="text-link hover:underline">{content.connect.commandChoice.cta}</a>
+                                {alternatives.command.compare.lead}{" "}
+                                <a href="/where-it-runs/" class="text-link hover:underline">{alternatives.command.compare.cta}</a>
                             </p>
-                        </div>
-                    </div>
 
-                    <div class="card desktop">
-                        <Corners set="diag" />
-                        <div>
-                            <p class="desktop-lead">{content.connect.desktop.lead}</p>
-                            <p class="desktop-note">{content.connect.desktop.note}</p>
+                            <div class="station mt-8">
+                                <h3>
+                                    <Bullet />
+                                    {alternatives.hosted.title}
+                                </h3>
+                                <p>{alternatives.hosted.body}</p>
+                                <p class="mt-3">
+                                    <a class="btn btn-secondary btn-sm" href={APP_URL}>{HOSTED_START_LABEL}</a>
+                                </p>
+                            </div>
                         </div>
-                        {/* The download sits beside the terminal command for non-terminal users. */}
-                        <DownloadCta primary class="btn-sm" label={content.connect.desktop.cta} icon={false} />
                     </div>
                 </div>
             </section>

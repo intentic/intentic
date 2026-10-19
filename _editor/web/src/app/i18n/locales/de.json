@@ -127,7 +127,9 @@
             "stopCommandNote": "Damit die Arbeit landet.",
             "sends": "sendet {at}",
             "scheduledMessages": "Nachrichten",
-            "sendsWhenRoom": "sendet, sobald Speicher frei ist"
+            "sendsWhenRoom": "sendet, sobald Speicher frei ist",
+            "landUnreviewedHint": "Übernimmt, ohne die Änderungen zu lesen",
+            "reviewChangesCount": "Änderungen prüfen: {added} Zeilen hinzugefügt, {removed} entfernt"
         },
         "agentConflictReport": {
             "agentWriting": "Agent schreibt",
@@ -167,7 +169,11 @@
             "toLand": "{count} zu übernehmen",
             "toWorkspace": "In den Workspace",
             "workAlreadyLandedStays": "Arbeit, die bereits gelandet ist, bleibt in Ihrem Workspace: nur was noch auf dem Branch liegt, geht verloren.",
-            "writtenSoFar": "Bisher geschrieben"
+            "writtenSoFar": "Bisher geschrieben",
+            "focusReview": "Prüfung fokussieren",
+            "exitFocus": "Fokus beenden",
+            "focusReviewHint": "Gibt der Prüfung das ganze Fenster: blendet Seitenleiste, Chat daneben und Terminal aus, bis du den Fokus beendest",
+            "exitFocusHint": "Stellt Seitenleiste, Chat und Terminal wieder her, wie sie waren"
         },
         "agentReactions": {
             "addReaction": "Reaktion hinzufügen",
@@ -219,7 +225,10 @@
             "offBranch": "Nicht auf dem Branch des Agenten",
             "noBranch": "kein Branch",
             "askAgent": "Agent fragen",
-            "addsTo": "Fügt {names} zu {manifest} hinzu"
+            "addsTo": "Fügt {names} zu {manifest} hinzu",
+            "pickFile": "Geänderte Datei",
+            "reviewedOption": "✓ {label} (geprüft)",
+            "unmarkReviewed": "{label} nicht mehr als geprüft markieren"
         },
         "agentScratchReport": {
             "byproduct": "ein Log, ein Dump oder eine Sicherung",
@@ -623,12 +632,12 @@
             "close": "{title} schließen"
         },
         "cardSeal": {
-            "verified": "Nach der letzten Änderung getestet",
+            "verified": "Prüfung nach der letzten Änderung bestanden",
             "verifiedDetail": "Der Agent hat nach seiner letzten Codeänderung eine Prüfung ausgeführt, und sie war erfolgreich.",
             "failed": "Letzte Prüfung fehlgeschlagen",
             "failedDetail": "Der Agent hat nach seiner letzten Codeänderung eine Prüfung ausgeführt, und sie ist fehlgeschlagen.",
             "unproven": "Nach der letzten Änderung nicht getestet",
-            "unprovenDetail": "Der Agent hat Code geändert und danach weder Tests, Typecheck, Lint noch Build ausgeführt.",
+            "unprovenDetail": "Der Agent hat Code geändert und danach weder Tests, Typecheck, Lint noch Build ausgeführt, oder die versuchte Prüfung konnte nicht starten.",
             "unviewedHead": "Oberfläche ungesehen geändert",
             "unviewed": "{count} Oberflächendatei geändert, ohne das Ergebnis anzusehen | {count} Oberflächendateien geändert, ohne das Ergebnis anzusehen",
             "ran": "Ausgeführt"
@@ -1549,7 +1558,7 @@
             "archivedOffBoardSending": "Archiviert: vom Board genommen. Eine Nachricht zu senden stellt ihn wieder her.",
             "billing": "Abrechnung",
             "connectTitle": "Eigenes Modell",
-            "connectWays": "Google, lokal oder Abo",
+            "connectWays": "Abo, API-Schlüssel, lokales Modell",
             "privacyFound": "Der Datenschutzschild hat das nicht an {provider} gesendet: Er hat personenbezogene Daten in etwas gefunden, das {provider} dort liest, wo der Schild sie nicht maskieren kann.",
             "privacyGrantFailed": "Das wurde nicht gespeichert.",
             "privacyGranted": "{provider} liest diese Unterhaltung unmaskiert: Der Datenschutzschild deckt sie hier nicht ab.",
@@ -2772,7 +2781,15 @@
             "waitingApproval": "Warten auf Genehmigung…",
             "waitingOn": "Warten, bis die Anmeldung auf {where} ankommt…",
             "whatPageLooksLike": "Wie diese Seite aussieht",
-            "wontLoad": "lädt nicht"
+            "wontLoad": "lädt nicht",
+            "pasteToken": "Token einfügen",
+            "pasteTokenPlaceholder": "Token einfügen…",
+            "comeBackWithToken": "Melde dich an und komm dann mit dem Token zurück, das die letzte Seite zeigt.",
+            "whatYoullSee": "Was du sehen wirst",
+            "useAnotherProvider": "Stattdessen einen anderen Anbieter nutzen",
+            "tripGoogle": "Googles Seite nennt die App „Google Antigravity“: Das ist Googles Programmierwerkzeug, und über dessen Anmeldung wird hier dein Google-Konto verbunden. Google warnt eventuell auch, dich nur anzumelden, wenn du die App aus Google Play hast. Wenn du lieber nicht fortfahren möchtest, funktioniert ein anderer Anbieter genauso gut.",
+            "tripDevin": "Die Anmeldung bei Devin läuft über Windsurf, das Unternehmen hinter Devin, deshalb nennen die Seiten (und Google, wenn du dich damit anmeldest) Windsurf.",
+            "tripDevinToken": "Die Anmeldung bei Devin läuft über Windsurf, das Unternehmen hinter Devin, deshalb nennen die Seiten (und Google, wenn du dich damit anmeldest) Windsurf. Die letzte Seite zeigt „ein Authentifizierungstoken für Devin CLI“. Intentic führt Devin CLI für dich aus, also ist dieses Token das, was du hier einfügst."
         },
         "connectionNotice": {
             "cantStartedRightNow": "„{name}“ lässt sich gerade nicht starten",
@@ -5285,6 +5302,7 @@
             "yourSandbox": "Ihre Sandbox"
         },
         "hostedWait": {
+            "connectingNote": "Deine Sandbox läuft. Wir warten, bis sie unter ihrer Adresse antwortet, damit sich der Arbeitsbereich einsatzbereit öffnet statt offline. Das dauert meist weniger als eine Minute.",
             "puttingOnInternet": "Es kommt ins Internet",
             "ready": "Bereit",
             "startingMachine": "Die Maschine wird gestartet",
@@ -5340,6 +5358,7 @@
             "hostedSandboxesSwitchedOff": "Gehostete Sandboxes sind für dieses Konto abgeschaltet; die E-Mail, die wir geschickt haben, sagt warum und wohin Sie schreiben können. Der Betrieb auf Ihrem eigenen Computer ist davon nicht betroffen.",
             "httpsAddressSandboxAlready": "Die https-Adresse, unter der Ihre Sandbox bereits antwortet (https:// ist optional).",
             "installsDockerNeedStarts": "Installiert Docker, falls Sie es brauchen, startet Ihre Sandbox und ihren Tunnel und öffnet Ihren Workspace, sobald er antwortet. Kein Terminal.",
+            "justStartedStillConnecting": "Du hast diese Sandbox gerade erst gestartet, und sie verbindet sich noch. Diese Seite öffnet sie, sobald sie antwortet.",
             "keepAddress": "Diese Adresse behalten",
             "localDevBuildsCheckout": "Lokale Entwicklung: baut aus Ihrem Checkout",
             "machinePickedUp": "Ihre Maschine hat es aufgegriffen.",
@@ -5642,7 +5661,8 @@
             "tabs": "Daneben geöffnet",
             "toggleSplit": "Bereich daneben umschalten",
             "unavailable": "Nicht verfügbar",
-            "unavailableNote": "Die Erweiterung, die es zeigt, ist aus oder wurde entfernt."
+            "unavailableNote": "Die Erweiterung, die es zeigt, ist aus oder wurde entfernt.",
+            "closeTab": "{title} schließen"
         },
         "useNavigationCommands": {
             "add": "Hinzufügen…"
@@ -6576,6 +6596,14 @@
             "toggleTestFiles": "Testdateien umschalten",
             "viewing": "Ansicht als"
         },
+        "bringProject": {
+            "connectAccount": "Konto verbinden",
+            "description": "Ein Repository klonen, Dateien hochladen oder einen Agenten bitten, es zu holen.",
+            "privateNeedsAccount": "Ein privates GitHub- oder GitLab-Repository setzt voraus, dass dieses Konto zuerst verbunden wird, mit einem Token, das das Repository lesen darf (nur Lesezugriff genügt).",
+            "publicNeedsNoAccount": "Ein öffentliches Repository braucht kein Konto: Fügen Sie einfach seine Adresse ein.",
+            "tip": "Hereinholen",
+            "title": "Projekt hereinholen"
+        },
         "workspaceEmptyState": {
             "askAgentToFetch": "Einen Agenten bitten, es zu holen",
             "clone": "Klonen",
@@ -6586,7 +6614,6 @@
             "filesStayOnSandbox": "Dateien bleiben auf Ihrer Sandbox-Maschine — sonst nirgends",
             "getCodeIn": "Bringen Sie Ihren Code herein",
             "pasteGitAddressGithub": "Fügen Sie eine Git-Adresse ein: GitHub, GitLab, überall, woher Sie klonen können.",
-            "privateRepositoryNeedsHost": "Ein privates Repository braucht zuerst seinen Host unter „Fähigkeiten“ verbunden.",
             "repositoryAddress": "Repository-Adresse",
             "uploadFilesFolder": "Dateien oder einen Ordner hochladen",
             "workspaceAgentsReadEdit": "Das ist der Workspace, den Ihre Agenten lesen und bearbeiten. Bringen Sie etwas herein, und sie haben etwas zu tun."
@@ -6709,7 +6736,8 @@
             "management": "Verwaltungspanel",
             "path": "Pfad",
             "preview": "Vorschau",
-            "repo": "Repo"
+            "repo": "Repo",
+            "closeTab": "{title} schließen"
         },
         "outgoingWork": {
             "acrossRepos": "{summary}, {count} Repos",
@@ -6871,6 +6899,8 @@
             "show": "Erste Schritte anzeigen",
             "finishedTitle": "Alles eingerichtet",
             "finishedLine": "Das ist der ganze Ablauf: Arbeit hereinholen, an Agenten geben, prüfen, landen. Lassen Sie so viele nebeneinander laufen, wie Sie möchten.",
+            "finishedWhere": "Die gelandete Änderung liegt jetzt in Ihren Dateien, aber noch nicht als Commit. Committen Sie sie unter Änderungen, um eine Version zu behalten, und verbinden Sie ein Remote für ein Backup.",
+            "openChanges": "Änderungen öffnen",
             "done": "Fertig"
         },
         "ring": {

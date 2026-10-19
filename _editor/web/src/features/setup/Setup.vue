@@ -12,7 +12,6 @@ import {
     SandboxLogo,
     SegmentedControl,
     StepSection,
-    timeAgo,
     ui,
     useDevice,
     useOsPreference,
@@ -49,7 +48,7 @@ import SetupOnMachine from "./SetupOnMachine.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
-import { resumedRow, setupProjectOf } from "./setupArrival";
+import { resumedLine as resumedLineFor, setupProjectOf } from "./setupArrival";
 import { probeDaemon } from "./setupAttach";
 import { lockedReasonOf } from "./flow/commandHandoff";
 import { DEV_SANDBOX_IMAGE } from "./flow/installCommand";
@@ -59,6 +58,7 @@ import { useCommandLane } from "./flow/useCommandLane";
 import { useCommandWait } from "./flow/useCommandWait";
 import { useHostedLane } from "./flow/useHostedLane";
 import { useRegistryWatch } from "./flow/useRegistryWatch";
+import { justSetUp, markJustSetUp } from "../../models/sandbox/live/justSetUp";
 import { useRunStep } from "./flow/useRunStep";
 import { useSetupArrival } from "./flow/useSetupArrival";
 import { useSetupRow } from "./flow/useSetupRow";
@@ -113,6 +113,10 @@ const reader = { mobile, inApp: desktop, installer };
 // which offers each of them as one press (lib/foundOnComputer.ts).
 const enterWorkspace = async (): Promise<void> => {
     const entered = activeSandboxId.value;
+    // The workspace's first quiet seconds are a connection on its way, not a setup left unfinished (justSetUp.ts).
+    if (entered !== undefined) {
+        markJustSetUp(entered);
+    }
     if (project !== undefined && entered !== undefined) {
         openOnProject(entered, project.dirName);
     }
@@ -202,21 +206,8 @@ const installUnderWay = computed(() =>
 
 // Another sandbox to go back to: not this one, and not one that has never reported in.
 const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => entry.id !== created.value?.id && entry.lastSeenAt !== null));
-// Reconnecting a sandbox that has run before reads differently from resuming one that never started, and from one whose
-// container its machine deleted: only that one is "cleaned up" (resumedRow).
-const resumedLine = computed((): string => {
-    const resumed = created.value;
-    const kind = resumed === null ? `never-ran` : resumedRow(resumed);
-    if (kind === `never-ran` || resumed === null || resumed.lastSeenAt === null) {
-        // A machine claimed the command and never announced: a run started and stopped, which "nothing has run" denies.
-        return resumed !== null && resumed.setupCodeClaimedAt !== null
-            ? t(`setup.setup.pickingUpLastRunStopped`)
-            : t(`setup.setup.pickingUpWhereLeft`);
-    }
-    return kind === `removed`
-        ? t(`setup.setup.stillOnPlatformCleanup`)
-        : t(`setup.setup.setUpBeforeLastSeen`, { when: timeAgo(Date.parse(resumed.lastSeenAt), { days: true }) });
-});
+// What the page says about the row it resumes (setupArrival.ts `resumedLine`).
+const resumedLine = computed(() => resumedLineFor(created.value, created.value !== null && justSetUp(created.value.id)));
 // An account that signs in only by email, holding no paid slot: the free machine needs Google linked first (the offer's
 // `needsGoogle`, or the platform's GOOGLE_REQUIRED_REASON at the press), so the ladder's hosted rung gives way to the three
 // ways on: link Google, buy a machine, or run the sandbox on this computer (SetupNeedsGoogle.vue).

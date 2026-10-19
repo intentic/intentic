@@ -125,7 +125,8 @@ export const trialBadge = (provider: AgentProvider): string | undefined => {
 
 // Where the day's free trial stands, the one reading of its allowance every surface takes: `none` (not the trial, or
 // the daemon has not confirmed it), `fresh` (no more than half the day's messages spent, so nothing needs saying),
-// `low` (past half: the strip counts down) and `spent` (nothing left: the row points at the free, uncapped options).
+// `low` (past half: the strip counts down) and `spent` (nothing left: the strip offers another model for the same chat).
+// The allowance counts agent steps (one per model call), not requests: one request can spend ten or more.
 export type TrialPhase = "none" | "fresh" | "low" | "spent";
 
 export const trialPhase = (provider: AgentProvider): TrialPhase => {
@@ -139,7 +140,7 @@ export const trialPhase = (provider: AgentProvider): TrialPhase => {
     return allowance > 0 && remaining > allowance / 2 ? `fresh` : `low`;
 };
 
-// Whether the trial is spent: the row stops being an offer and points to the free, uncapped Google sign-in instead.
+// Whether the trial is spent: the row stops being an offer and points at the models the reader can use instead.
 export const trialExhausted = (provider: AgentProvider): boolean => trialPhase(provider) === `spent`;
 
 // Both accountsLoaded and endpointsLoaded must be true before a surface says "nothing to send with": the

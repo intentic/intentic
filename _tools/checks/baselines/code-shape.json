@@ -372,7 +372,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/agents/board/cards/AgentCard.vue": {
-        "count": 998,
+        "count": 993,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/agents/board/useAgentFilter.ts#useAgentFilter#lines": {
@@ -416,7 +416,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/agents/review/AgentReviewPanel.vue": {
-        "count": 1098,
+        "count": 1066,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/agents/review/pager/swipePager.ts#useSwipePager#lines": {
@@ -476,7 +476,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/chat/models/ModelPicker.vue": {
-        "count": 619,
+        "count": 612,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/chat/models/run-settings/useRunThrough.ts#useRunThrough#cognitive": {
@@ -543,7 +543,7 @@
         "count": 221,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/chat/transcript/ChatMessageView.vue": 656,
+    "_editor/web/src/features/chat/transcript/ChatMessageView.vue": 658,
     "_editor/web/src/features/chat/transcript/pages/ChatPageFrame.vue#act#cognitive": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
@@ -693,7 +693,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/setup/Setup.vue": {
-        "count": 1535,
+        "count": 1526,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/terminal/channel/streamSocket.ts#receive#cognitive": {

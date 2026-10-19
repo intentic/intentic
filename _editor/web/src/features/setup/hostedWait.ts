@@ -68,6 +68,12 @@ export interface HostedWaitView {
     readonly reachable: boolean | undefined;
     // Whether the daemon's boot chain has not yet converged; false when it reports nothing (older images).
     readonly booting: boolean;
+    // The workspace can be opened: the daemon proved its own address answers, its boot chain converged, and nothing
+    // failed. The only reading that opens it before HAND_OVER_CEILING_MS (useRegistryWatch.ts).
+    readonly ready: boolean;
+    // Waited past HAND_OVER_CEILING_MS with nothing failed: a daemon that has checked in is handed over anyway, and the
+    // workspace's own connecting state carries on retrying (connectionNotice.ts, justSetUp.ts).
+    readonly overdue: boolean;
 }
 
 export interface HostedWaitInput {
@@ -107,6 +113,12 @@ const WARM_SPENT_MS = 90_000;
 const COLD_SPENT_MS = 5 * MINUTE_MS;
 // Ceiling for a stuck machine: SILENT_MS never fires while the provider reports `starting`/`created`.
 const MACHINE_STUCK_MS = 10 * MINUTE_MS;
+// How long the card holds a sandbox that has checked in but not yet proven it can be reached. Handing over on a bare
+// check-in opened an editor reading "Offline" and "Finish setup" over a machine sixteen seconds old (UX review
+// 2026-10-18, F02); holding forever would trap a sandbox whose image never reports reachability (older images).
+export const HAND_OVER_CEILING_MS = 2 * MINUTE_MS;
+// When the card says, in words, what the connecting step is waiting for.
+const CONNECTING_LOUD_MS = 20_000;
 
 /* WHAT THE SANDBOX ITSELF IS SAYING, while it is still saying it. */
 const stillTrying = (input: HostedWaitInput, inFor: string): string | undefined => {
@@ -287,6 +299,13 @@ const healthyStep = (input: HostedWaitInput, reachable: boolean | undefined): Wa
     return input.machine === `started` ? `booting` : `machine`;
 };
 
+// Running but not answering yet is the one step a reader sees no progress in, so it is said rather than spun; the
+// sandbox's own words about a failing probe (`stillTrying`) say more, and keep the line once they speak.
+const connectingNote = (input: HostedWaitInput, current: WaitStep): string | undefined =>
+    current === `connecting` && input.waitedMs >= CONNECTING_LOUD_MS && stillTrying(input, ``) === undefined
+        ? t(`setup.hostedWait.connectingNote`)
+        : undefined;
+
 export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
     const reachable = input.boot === null ? undefined : input.boot.reach === `reachable`;
     const chain = converging(input);
@@ -303,7 +322,18 @@ export const hostedWaitView = (input: HostedWaitInput): HostedWaitView => {
     // established (a refused check-in, a refused start) may speak over one.
     const stall = finalFailure(input) ?? (input.waking ? undefined : stalledFailure(input));
     const booting = chain !== undefined;
-    return stall === undefined
-        ? { steps: at(steps, healthyStep(input, reachable)), note, failure: undefined, reachable, booting }
-        : { steps: at(steps, stall.step), note, failure: stall.failure, reachable, booting };
+    if (stall !== undefined) {
+        return { steps: at(steps, stall.step), note, failure: stall.failure, reachable, booting, ready: false, overdue: false };
+    }
+    const current = healthyStep(input, reachable);
+    const ready = current === `ready` && !machineIsDown(input.machine);
+    return {
+        steps: at(steps, current),
+        note: connectingNote(input, current) ?? note,
+        failure: undefined,
+        reachable,
+        booting,
+        ready,
+        overdue: !ready && input.waitedMs >= HAND_OVER_CEILING_MS,
+    };
 };

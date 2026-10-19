@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useDevice } from "@intentic/ui";
+import { useDevice, useNarrow } from "@intentic/ui";
 import type * as Monaco from "monaco-editor-core";
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { useLayout } from "../../../workbench/window/useLayout";
@@ -29,10 +29,14 @@ const emit = defineEmits<{ stat: [LineStat | undefined] }>();
 const { mobile } = useDevice();
 const { ensureMonaco, ensureLanguage } = useMonaco();
 const { showComments, toggleShowComments, diffLayout, diffOpen } = useLayout();
-// The stored preference is a desktop one: two panes cannot fit a phone, so mobile is always inline regardless.
-const split = computed(() => !mobile.value && diffLayout.value === `split`);
-
 const host = ref<HTMLElement>();
+// The stored preference is a desktop one: two panes cannot fit a phone, so mobile is always inline regardless. Nor do
+// they fit a pane: a review beside a preview and a docked chat on a laptop leaves each half a column of fragments, so
+// below this width (rem) the diff reads inline too. The preference is left as it is, and the diff splits again as soon
+// as its pane has the room.
+const SPLIT_MIN_REM = 44;
+const cramped = useNarrow(host, SPLIT_MIN_REM);
+const split = computed(() => !mobile.value && !cramped.value && diffLayout.value === `split`);
 const diff = shallowRef<Monaco.editor.IStandaloneDiffEditor>();
 let original: Monaco.editor.ITextModel | undefined;
 let modified: Monaco.editor.ITextModel | undefined;

@@ -303,6 +303,7 @@ export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities
         models: routing.models,
         thoughts: routing.thoughts,
         modes: routing.modes,
+        terminalExit: () => undefined,
         bindTurn: (sessionId, hooks) => {
             abandoned.delete(sessionId);
             turns.set(sessionId, hooks);

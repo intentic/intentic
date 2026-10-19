@@ -1,5 +1,5 @@
 import type { BootReport } from "@intentic/api-contract";
-import { hostedWaitView, machineStartable, type HostedWaitInput } from "../hostedWait";
+import { HAND_OVER_CEILING_MS, hostedWaitView, machineStartable, type HostedWaitInput } from "../hostedWait";
 
 // A wait with nothing known yet: every case below is this plus the one fact it is about.
 const wait = (over: Partial<HostedWaitInput> = {}): HostedWaitInput => ({
@@ -257,5 +257,39 @@ describe(`the boot chain on the card`, () => {
         expect(machineStartable(`destroying`)).toBe(false);
         expect(machineStartable(`destroyed`)).toBe(false);
         expect(machineStartable(undefined)).toBe(false);
+    });
+});
+
+// What the registry watch opens the workspace on (useRegistryWatch.ts `opensWorkspace`): only a sandbox proven reachable
+// and converged, or one that has waited past the ceiling with nothing failed.
+describe(`when the card lets the workspace open`, () => {
+    it(`is ready only once the sandbox's own address answers and its chain converged`, () => {
+        expect(hostedWaitView(wait({ machine: `started`, announced: true })).ready).toBe(false);
+        expect(hostedWaitView(wait({ machine: `started`, announced: true, boot: boot(`checking`) })).ready).toBe(false);
+        expect(hostedWaitView(wait({ machine: `started`, announced: true, boot: boot(`reachable`) })).ready).toBe(true);
+        const converging: BootReport = { ...boot(`reachable`), boot: { ready: false, step: `workspace`, done: 3, total: 5 } };
+        expect(hostedWaitView(wait({ machine: `started`, announced: true, boot: converging })).ready).toBe(false);
+    });
+
+    it(`is not ready over a machine that reads down, whatever the daemon said last`, () => {
+        expect(hostedWaitView(wait({ machine: `stopped`, announced: true, boot: boot(`reachable`), downForMs: 0 })).ready).toBe(false);
+    });
+
+    it(`lets go past the ceiling only when nothing has failed`, () => {
+        const connecting = { machine: `started` as const, announced: true, boot: boot(`checking`) };
+        expect(hostedWaitView(wait({ ...connecting, waitedMs: HAND_OVER_CEILING_MS - 1 })).overdue).toBe(false);
+        expect(hostedWaitView(wait({ ...connecting, waitedMs: HAND_OVER_CEILING_MS })).overdue).toBe(true);
+        // The daemon gave up on its address: the card keeps it and says so.
+        const failed = hostedWaitView(wait({ ...connecting, boot: boot(`unreachable`, `no route`, false), waitedMs: HAND_OVER_CEILING_MS }));
+        expect({ failed: failed.failure !== undefined, overdue: failed.overdue }).toEqual({ failed: true, overdue: false });
+    });
+
+    it(`says what the connecting step waits for once it has run a while`, () => {
+        const connecting = { machine: `started` as const, announced: true, boot: boot(`checking`) };
+        expect(hostedWaitView(wait({ ...connecting, waitedMs: 5_000 })).note).not.toContain(`answers at its address`);
+        expect(hostedWaitView(wait({ ...connecting, waitedMs: 30_000 })).note).toContain(`answers at its address`);
+        // The sandbox's own words about a failing probe say more, and keep the line.
+        const failing = hostedWaitView(wait({ ...connecting, boot: boot(`unreachable`, `Tunnel not bound.`), waitedMs: 90_000 }));
+        expect(failing.note).toContain(`Tunnel not bound.`);
     });
 });

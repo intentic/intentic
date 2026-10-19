@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import TourMark from "../../../tour/TourMark.vue";
 import {
     type ActionItem,
     Button,
@@ -22,6 +21,7 @@ import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import OriginMark from "../../../../parts/fleet/OriginMark.vue";
 import AgentCardClock from "./AgentCardClock.vue";
 import AgentReactions from "./AgentReactions.vue";
+import CardLandPresses from "./CardLandPresses.vue";
 import { useCardRequests } from "./cardRequests";
 import OwnerMark from "../session/OwnerMark.vue";
 import ParentMark from "../session/ParentMark.vue";
@@ -33,7 +33,7 @@ import WorkflowMark from "../../../../components/WorkflowMark.vue";
 import { dropActionFor, type PendingAction } from "../laneDrop";
 import type { CardOwnPresses } from "../view/cardMenu";
 import type { IdMatch } from "../idMatch";
-import { attentionReason, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
+import { attentionReason, landFailure, retryLand, reviewAction, reviewBesideDrill, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { cardFailure, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
@@ -109,6 +109,9 @@ const emit = defineEmits<{
     // The click that opened it, if any; a modified click asks for a pane instead of focus.
     open: [event?: MouseEvent];
     review: [];
+    // The agent's diff itself, whatever its drill-in says: the change count, Review & land, and Review changes beside a
+    // drill-in that leads to the chat.
+    changes: [];
     resolve: [];
     land: [];
     // Separate from `land`: relands the whole output, not just the remainder, and must never fire by accident.
@@ -227,6 +230,9 @@ const resendable = computed(
 // unless Send again holds that seat. Nothing is lost there: a stranded card's drill-in is "Open chat" (drillTarget),
 // exactly where a click on the card already goes, so it earns no header seat taken out of the title's width.
 const rowDrill = computed(() => review.value !== undefined && lane.value === `attention` && !resendable.value);
+// Work a chat-bound drill-in would walk past (a spent allowance or an ask that stopped it halfway): the diff gets a press
+// of its own in the same row, so partial work is read without answering or resuming first.
+const rowChanges = computed(() => lane.value === `attention` && reviewBesideDrill(props.agent));
 
 // Asks laneDrop the same question the drag already answers, so a second reading can't disagree with it on the same
 // card.
@@ -307,7 +313,7 @@ const words = useVocabulary();
 const { maker } = useAudience();
 const { rename } = useAgents();
 // Request land and Send again go to the daemon from the card itself (cardRequests.ts).
-const { requesting, requestLand, landAsk, resending, sendAgain } = useCardRequests(() => props.agent, () => displayTitle.value);
+const { resending, sendAgain } = useCardRequests(() => props.agent, () => displayTitle.value);
 // Its own flag, not a wider `landing`, so each button names only its own press; on an `away` card the daemon's
 // `landing` is that press, whichever window made it.
 const relanding = computed(() => props.pending === `reland` || (relandOffered.value && props.agent.status === `landing`));
@@ -365,7 +371,7 @@ const cardRoot = useTemplateRef<HTMLElement>(`cardRoot`);
 // No "Completed" here: the word was the drill-in's stand-in from when this row carried the drill-in on every lane, so
 // once that moved to the header it said itself only where the drill-in was missing (any phone, a card with no branch),
 // a coin toss of a label on forty receipts in a lane already named Finished, whose corner glyph says how each settled.
-const summary = computed(() => stats.value || rowDrill.value || resendable.value || dated.value || working.value || reactable.value);
+const summary = computed(() => stats.value || rowDrill.value || rowChanges.value || resendable.value || dated.value || working.value || reactable.value);
 const loopLine = computed(() => (props.agent.loop === undefined ? undefined : loopMeta(props.agent.loop)));
 // What its last turn showed of its own work (proofSeal.ts). Held while value-equal, so a roster frame that moved
 // something else on this card (its activity, its clock) redraws none of the seal.
@@ -886,44 +892,16 @@ const grab = (event: PointerEvent): void => {
                 <Icon :name="delivery.icon" class="mt-0.5 shrink-0 text-2xs" /><span class="line-clamp-2 min-w-0">{{ delivery.text }}</span>
             </p>
 
-            <!-- Success-styled with the check glyph, matching the review panel's own Land now: the same action on the same work must read as such. -->
-            <div v-if="(landable || shipping) && canShip" class="flex min-w-0 flex-col gap-1">
-                <!-- The standing ask leads the button it's about, so a maintainer meets the reason before the press. -->
-                <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
-                    <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}</span>
-                </p>
-                <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
-                <div class="flex items-center gap-1.5">
-                    <Button
-                        size="small"
-                        tone="success" thumb
-                        :disabled="landing || busy"
-                        class="self-start whitespace-nowrap"
-                        @click.stop="emit('land')"
-                    >
-                        <Icon :name="landing ? 'spinner' : 'check'" :spin="landing" />{{ landing ? words.landing : words.land }}
-                    </Button>
-                    <!-- Getting started's mark for the first land, beside the press that does it (only while that is the step). -->
-                    <TourMark v-if="!landing" step="land" place="card" :priority="3" side="bottom" @click.stop />
-                </div>
-            </div>
-
-            <!-- The same Ready card for a collaborator: land is a maintainer's press, so this offers the ask instead, same spot and size but quieter chrome. -->
-            <div v-else-if="landable && canReview" class="flex min-w-0 flex-col gap-1">
-                <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
-                    <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{
-                        t(`agents.agentCard.waitingMaintainer`, { landAsk })
-                    }}</span>
-                </p>
-                <template v-else>
-                    <Button size="small" tier="boring" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="requestLand">
-                        <Icon :name="requesting ? 'spinner' : 'send'" :spin="requesting" />{{
-                            requesting ? t(`agents.agentCard.asking`) : words.requestLand
-                        }}
-                    </Button>
-                    <span class="text-2xs leading-snug text-subtle">{{ words.requestLandHint }}.</span>
-                </template>
-            </div>
+            <!-- Land now, or Review & land ahead of it, or a collaborator's Request land (CardLandPresses). -->
+            <CardLandPresses
+                v-if="landable || shipping"
+                :agent="agent"
+                :title="displayTitle"
+                :busy="busy"
+                :landing="landing"
+                @land="emit('land')"
+                @changes="emit('changes')"
+            />
 
             <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`). -->
             <div
@@ -934,10 +912,18 @@ const grab = (event: PointerEvent): void => {
                 <!-- No hover labels: a stat you can't name from its icon doesn't belong in this row. -->
 
                 <!-- Red and green only while the diff is a live signal. -->
-                <span v-if="diffShown && agent.diff !== undefined" class="font-mono">
+                <!-- A press: the count is what the work IS, so it opens the work (the review) rather than the chat the card opens. -->
+                <button
+                    v-if="diffShown && agent.diff !== undefined"
+                    type="button"
+                    class="rounded-sm font-mono hover:underline"
+                    :aria-label="t(`agents.agentCard.reviewChangesCount`, { added: agent.diff.insertions, removed: agent.diff.deletions })"
+                    v-tooltip.top="t(`agents.agentStatus.reviewChanges`)"
+                    @click.stop="emit('changes')"
+                >
                     <span :class="receipt ? '' : 'text-success'">+{{ agent.diff.insertions }}</span>
                     <span :class="receipt ? '' : 'text-danger'"> −{{ agent.diff.deletions }}</span>
-                </span>
+                </button>
                 <!-- Lifetime cost total, read-only here. -->
                 <span v-if="costShown && agent.costUsd !== undefined">{{ formatMoney(agent.costUsd) }}</span>
                 <!-- Opt-in geek metrics, beside what it cost: what its processes hold now. Draws only when the board provides a reading naming this conversation, so never for another box's card. -->
@@ -956,6 +942,15 @@ const grab = (event: PointerEvent): void => {
 
                 <!-- Press and clock take the line's leftover width, right-aligned. Sized from zero, floored at their fixed parts: the running command's words are contained (AgentCardClock), so a long command truncates here instead of pushing the corner onto a row of its own. -->
                 <span class="inline-flex min-w-max flex-[1_1_0] items-center justify-end gap-2 text-subtle">
+                    <!-- Partial work behind a chat-bound drill-in (see `rowChanges`): its diff, one press away. -->
+                    <button
+                        v-if="rowChanges"
+                        type="button"
+                        class="inline-flex shrink-0 items-center gap-1 rounded font-medium text-link hover:underline"
+                        @click.stop="emit('changes')"
+                    >
+                        {{ t(`agents.agentStatus.reviewChanges`) }}
+                    </button>
                     <!-- A stranded turn's own press, in the drill-in's seat (see `resendable`). It acts in place, so it is a text action leading with what it does, not a link trailing the arrow that marks the drill-in as a way somewhere else. -->
                     <button
                         v-if="resendable"

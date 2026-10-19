@@ -11,6 +11,18 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
 const SCRIPT_FLAG = /^-[a-z]*c$/;
 
+// The shell line a terminal/create runs. An argv with arguments is quoted word by word, as written. A bare `command`
+// is the agent's whole command line (`cd site && pnpm typecheck`): Zed runs it through a shell, so agents built
+// against Zed (Devin's `devin acp`) send it that way, and quoted as one word it was a program named after the whole
+// line, which every shell answers with 127 — Devin read that as a sandbox with no `ls`, `cd` or `pnpm`.
+export const terminalLine = (request: Pick<CreateTerminalRequest, "command" | "args">): string => {
+    const args = request.args ?? [];
+    return args.length === 0 ? request.command : [request.command, ...args].map(shellQuote).join(" ");
+};
+
+// How many settled terminals' exit codes are kept past their release, for the tool call that reports on one later.
+const EXITS_KEPT = 64;
+
 // What a terminal/create runs, as the rulebook reads a command: the script a shell is handed, else the argv as one line.
 export const terminalProgram = (request: Pick<CreateTerminalRequest, "command" | "args">): string => {
     const args = request.args ?? [];
@@ -35,20 +47,42 @@ export interface AcpTerminals {
     readonly output: (terminalId: string) => TerminalOutputResponse | undefined;
     readonly waitForExit: (terminalId: string) => Promise<TerminalExitStatus> | undefined;
     readonly kill: (terminalId: string) => boolean;
+    // How a terminal's command exited, kept a while past its release: the agent's tool_call_update that embeds the
+    // terminal often arrives after it released it. Undefined while it runs, for a signal, or once forgotten.
+    readonly exitCode: (terminalId: string) => number | undefined;
     readonly release: (terminalId: string) => boolean;
     // Aborts every live handle; called on connection teardown so a dead agent leaves no runaway panes.
     readonly disposeAll: () => void;
 }
 
+// The last EXITS_KEPT exit codes by terminal id, oldest forgotten first.
+const exitMemory = () => {
+    const exits = new Map<string, number>();
+    return {
+        settled: (id: string, code: number | undefined): void => {
+            if (code === undefined) {
+                return;
+            }
+            exits.set(id, code);
+            const oldest = exits.keys().next();
+            if (exits.size > EXITS_KEPT && oldest.done !== true) {
+                exits.delete(oldest.value);
+            }
+        },
+        read: (id: string): number | undefined => exits.get(id),
+    };
+};
+
 export const createAcpTerminals = (runner: TerminalRunner): AcpTerminals => {
     const handles = new Map<string, Handle>();
+    const exits = exitMemory();
     let next = 0;
 
     return {
         create: (session, cwd, request) => {
             const id = `acpterm-${(next += 1)}`;
             const controller = new AbortController();
-            const command = [request.command, ...(request.args ?? [])].map(shellQuote).join(" ");
+            const command = terminalLine(request);
             const env = Object.fromEntries((request.env ?? []).map((entry) => [entry.name, entry.value]));
             const partial: Omit<Handle, "done"> = {
                 output: "",
@@ -68,6 +102,7 @@ export const createAcpTerminals = (runner: TerminalRunner): AcpTerminals => {
                     ({ code, output }) => {
                         handle.output = output;
                         handle.exit = handle.killed ? { exitCode: code, signal: "SIGTERM" } : { exitCode: code };
+                        exits.settled(id, handle.killed ? undefined : code);
                     },
                     () => {
                         // An aborted runner throws (the kill path); anything else is a spawn failure.
@@ -97,6 +132,7 @@ export const createAcpTerminals = (runner: TerminalRunner): AcpTerminals => {
             }
             return handle.done.then(() => handle.exit ?? { exitCode: 1 });
         },
+        exitCode: exits.read,
         kill: (terminalId) => {
             const handle = handles.get(terminalId);
             if (handle === undefined) {

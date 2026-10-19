@@ -46,6 +46,12 @@ const { class: className } = Astro.props;
                         {card.linkLabel} →
                     </a>
                 )}
+
+                {card.secondary && (
+                    <a href={card.secondary.href} class="link mt-4 ml-5 inline-block text-sm">
+                        {card.secondary.label} →
+                    </a>
+                )}
             </div>
         ))
     }

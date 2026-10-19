@@ -15,6 +15,7 @@ import type { AcpLaunch } from "../../runtimes/acp/acp-spawn.js";
 import type { OpenCodeService } from "../../runtimes/opencode/opencode.js";
 import type { ProviderDeps, RuntimeAdapters } from "../../runtimes/runtime-table.js";
 import { localTolerantFetch } from "../../system/tls/local-tls.js";
+import { tellPlatform, withTrialTurn } from "../../trial/trial-turn.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
 import type { HeadroomService } from "../../usage/headroom.js";
 import { fileModelCooldownStore, modelCooldownsDocument, type ModelCooldownStore } from "../../usage/model-cooldowns.js";
@@ -145,7 +146,9 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
         providerReadiness: () => providerReadiness(whole()),
         judgeCommand: (execution, input, signal) => judgeCommand(whole(), execution, input, signal),
         endpointModels: createEndpointCatalog(join(built.authRoot, "endpoints"), localTolerantFetch, { onChanged: resyncTranslator }),
-        // The Claude Code loop over these actors, which hold the children and background commands a turn starts.
-        agent: (request) => runAgent(conversations, request),
+        // The Claude Code loop over these actors, which hold the children and background commands a turn starts. A turn
+        // on the free trial tells the platform when it opens and closes, so one begun within the allowance can finish.
+        agent: (request) =>
+            request.credential.kind === "trial" ? withTrialTurn(tellPlatform(whole()), () => runAgent(conversations, request)) : runAgent(conversations, request),
     };
 };

@@ -48,6 +48,14 @@ describe(`ChatToolGroup`, () => {
         expect(chip).toBeUndefined();
     });
 
+    it(`names a run of MCP calls as its server and tool, the id kept as the title`, () => {
+        const waits: TranscriptTool[] = [0, 1, 2].map((index) => ({ id: `w${index}`, name: `mcp__subagents__wait`, category: `other`, status: `completed` }));
+        const element = mount(waits);
+        const named = [...element.querySelectorAll(`span.font-medium`)].find((span) => span.textContent?.includes(`Subagents`));
+        expect(named?.textContent?.trim()).toBe(`Subagents · wait`);
+        expect(named?.getAttribute(`title`)).toBe(`mcp__subagents__wait`);
+    });
+
     it(`opens the run's file through the surface it is mounted under`, () => {
         const opened: [string, number | undefined][] = [];
         const element = mount(edits(3), { imageUrl: () => undefined, openFile: (path, line) => opened.push([path, line]) });

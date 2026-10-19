@@ -21,6 +21,8 @@ export interface TrustCard {
     /** Where the reader goes to check it. */
     href?: string;
     linkLabel?: string;
+    /** A second link beside the first, for a card whose claim has a caveat the reader should be able to open. */
+    secondary?: { href: string; label: string };
 }
 
 /** A line of the background list: the lead is bolded, the rest is context. */
@@ -81,9 +83,10 @@ export const trustCards: TrustCard[] = [
     },
     {
         title: "Open source first",
-        body: "All of intentic is MIT on GitHub. No hidden binaries, no telemetry, nothing to trust blind.",
+        body: "All of intentic is MIT on GitHub, with no hidden binaries. A sandbox you run sends us nothing. The app and desktop app have optional product analytics: a masked replay that leaves your workspace text out, and a switch under Settings, Data. intentic.dev/privacy lists what is recorded.",
         href: githubUrl,
         linkLabel: "Read the source",
+        secondary: { href: "/privacy/", label: "What analytics records" },
     },
     {
         title: "It builds itself",

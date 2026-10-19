@@ -4,10 +4,10 @@ import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
-import { hostedWaitView } from "../hostedWait";
+import { HAND_OVER_CEILING_MS, hostedWaitView } from "../hostedWait";
 import { HOSTED_IDLE, type HostedLane } from "./hostedLane";
 import type { Machine } from "./machineLadder";
-import { useRegistryWatch } from "./useRegistryWatch";
+import { opensWorkspace, useRegistryWatch } from "./useRegistryWatch";
 import { type SetupRowHost, useSetupRow } from "./useSetupRow";
 
 // Pins the registry watch: the claim and the machine's report are recorded only for the code still on screen, the
@@ -132,6 +132,31 @@ describe(`opening the workspace`, () => {
         expect(enter).toHaveBeenCalledTimes(1);
     });
 
+    // A bare check-in opened an editor reading "Offline" and "Finish setup" sixteen seconds in (UX review 2026-10-18, F02).
+    it(`holds a hosted row that checked in without saying whether it is reachable, until the ceiling`, async () => {
+        const { enter, hosted, watcher } = stage([{ ...pending, hosted: { region: `iad`, warm: true }, lastSeenAt: `2026-09-23T10:02:00Z` }]);
+        hosted.machine.value = `hosted`;
+        hosted.hostedRow.value = { region: `iad`, warm: true };
+        hosted.hostedWait.value = waitView({ machine: `started`, announced: true, waitedMs: 20_000 });
+        await watcher.check();
+        expect(enter).not.toHaveBeenCalled();
+        hosted.hostedWait.value = waitView({ machine: `started`, announced: true, waitedMs: HAND_OVER_CEILING_MS });
+        await watcher.check();
+        expect(enter).toHaveBeenCalledTimes(1);
+    });
+
+    // Back on this page for a machine that booted before it opened: `lastSeenAt` never moves past the baseline, and the
+    // card sat on a spinning "Ready" (UX review 2026-10-18, F02).
+    it(`opens a hosted row that reads ready even when its boot predates the page`, async () => {
+        const booted = { ...pending, hosted: { region: `iad`, warm: true }, lastSeenAt: `2026-09-23T10:02:00Z` };
+        const { enter, hosted, watcher } = stage([booted], booted);
+        hosted.machine.value = `hosted`;
+        hosted.hostedRow.value = { region: `iad`, warm: true };
+        hosted.hostedWait.value = waitView({ machine: `started`, announced: true, boot: { reach: `reachable`, at: `2026-09-23T10:02:00Z` } });
+        await watcher.check();
+        expect(enter).toHaveBeenCalledTimes(1);
+    });
+
     it(`opens nothing from an answer that lands after a hand-back began`, async () => {
         const { enter, refresh, hosted, watcher } = stage([{ ...pending, lastSeenAt: `2026-09-23T10:02:00Z` }]);
         refresh.mockImplementationOnce(async () => {
@@ -180,5 +205,21 @@ describe(`the watch itself`, () => {
         expect(watcher.status.value).toBe(`Can't reach the platform to check. Retrying…`);
         await watcher.check();
         expect(watcher.status.value).toBe(undefined);
+    });
+});
+
+describe(`opensWorkspace`, () => {
+    const waits = { ready: false, overdue: false };
+    it(`opens a sandbox on your own computer on its first check-in past the baseline`, () => {
+        expect(opensWorkspace({ seen: null, baseline: null, hosted: false, wait: waits })).toBe(false);
+        expect(opensWorkspace({ seen: `b`, baseline: `b`, hosted: false, wait: waits })).toBe(false);
+        expect(opensWorkspace({ seen: `c`, baseline: `b`, hosted: false, wait: waits })).toBe(true);
+    });
+
+    it(`opens a hosted one when it reads ready, or on a fresh check-in once the wait is overdue`, () => {
+        expect(opensWorkspace({ seen: `c`, baseline: `b`, hosted: true, wait: waits })).toBe(false);
+        expect(opensWorkspace({ seen: `b`, baseline: `b`, hosted: true, wait: { ready: true, overdue: false } })).toBe(true);
+        expect(opensWorkspace({ seen: `c`, baseline: `b`, hosted: true, wait: { ready: false, overdue: true } })).toBe(true);
+        expect(opensWorkspace({ seen: `b`, baseline: `b`, hosted: true, wait: { ready: false, overdue: true } })).toBe(false);
     });
 });

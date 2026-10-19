@@ -62,6 +62,8 @@ import WorkspaceDirChip from "../explorer/WorkspaceDirChip.vue";
 import WorkspaceScopeNote from "../explorer/WorkspaceScopeNote.vue";
 import WorkspaceScopeChip from "../explorer/WorkspaceScopeChip.vue";
 import ExplorerSearchBar from "../search/ExplorerSearchBar.vue";
+import BringProjectButton from "../explorer/BringProjectButton.vue";
+import BringProjectModal from "../explorer/BringProjectModal.vue";
 import WorkspaceSearchResults from "../search/WorkspaceSearchResults.vue";
 import WorkspaceTree from "../explorer/WorkspaceTree.vue";
 import HomeCoverPicker from "../home/HomeCoverPicker.vue";
@@ -849,6 +851,7 @@ const homeTooltip = computed((): Tip => ({
                     :filter-tip="lensTip"
                 >
                     <template #tools>
+                        <BringProjectButton />
                         <!-- One file read in every folder: the tree then lists folders alone, and the page beside it reads them. -->
                         <HomeCoverPicker v-if="!contentMode" compact :cover="cover" @choose="(name) => (cover = name)" @drop="cover = undefined" />
                         <!-- Root's own codebase health: root is a repo (ensureRootRepo) with no tree row, so this lives on the toolbar. -->
@@ -1037,12 +1040,10 @@ const homeTooltip = computed((): Tip => ({
             </div>
         </div>
 
-        <!-- Bottom terminal panel; v-if unmounts only the host element, so its tmux session survives in useTerminal's map. -->
-
         <!-- Right-click tab menu, plus the confirm shown before a bulk close discards unsaved edits. -->
         <ContextMenu ref="tabMenu" :model="tabMenuItems" :min-width="13" />
-        <!-- The explorer toolbar's funnel, opened by a left click rather than a row's right click. -->
         <CloseGuardDialog :open="askingToClose" :question="closeQuestion" @cancel="keepOpen" @confirm="closeAnyway" />
+        <BringProjectModal @pick="canEditFiles ? fileInput?.click() : refuseWrite()" />
         <!-- Opened by a directory row's person icon: who works there, and how to add one. Mounted here, not the tree. -->
         <DirectoryPersonas v-model="personaDir" />
         <DirectoryChecks v-model="checksDir" />

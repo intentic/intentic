@@ -247,6 +247,13 @@ export const drillTarget = (agent: AgentStanding): `chat` | `review` => {
     return limited(agent) || memoryHeld(agent) || agent.status === `awaiting` ? `chat` : `review`;
 };
 
+// Whether a card whose drill-in leads to the chat (a spent allowance, an ask, a classified failure) still has written
+// work worth reading on its own: then it offers "Review changes" beside that drill-in, so partial work can be inspected
+// without first answering or resuming. A draft has no branch to read, and a card that drills into the review already
+// leads there.
+export const reviewBesideDrill = (agent: AgentStanding & { readonly branch?: string; readonly diff?: { files: number } }): boolean =>
+    !unregistered(agent.status) && agent.branch !== undefined && (agent.diff?.files ?? 0) > 0 && drillTarget(agent) === `chat`;
+
 // Endings whose destination is named by the ending itself rather than by the diff; tabled for the same reason as
 // `endingReasons`. Anything absent falls to the diff reading below.
 const endingActions = (): Partial<Record<AgentStatus | ClientAgentStatus, string>> => ({

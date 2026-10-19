@@ -21,6 +21,10 @@ export const OWN_STUCK_AFTER_MS = 60_000;
 // that watched it report in opens the workspace a moment before this browser's list carries its address, and "finish
 // setup" flashed there over a setup that had just finished.
 export const UNADDRESSED_PATIENCE_MS = 30_000;
+// How long a sandbox /setup has only just opened (justSetUp.ts) may stay quiet, address or not, before the gate stops
+// calling it a connection on its way. A fresh hosted machine can take a minute or two to route through its edge, and
+// over that minute the gate used to say "Connect" and "Finish setup" (UX review 2026-10-18, F02).
+export const JUST_SET_UP_PATIENCE_MS = 2 * 60_000;
 // A detached sandbox's verdict is held for DETACHED_AFTER_MS (availability.ts) before it is spoken: a container that
 // restarts is detached for a few seconds, and the gate's words and the switcher's dot change their mind together.
 
@@ -59,6 +63,9 @@ export interface ConnectionNoticeInput {
     readonly removedBy?: string | null;
     // A machine claimed this sandbox's setup code (`setupCodeClaimedAt`): an address missing now is one on its way.
     readonly claimed?: boolean;
+    // /setup opened this sandbox moments ago and it has not answered this browser yet (justSetUp.ts). Hosted rows never
+    // claim a setup code, so this is what tells their first quiet minute from a setup nobody finished.
+    readonly justSetUp?: boolean;
     // A restart this browser asked for (sandboxRestart.ts), still young enough to be what the silence is. The only
     // input here that explains a wait instead of ending one.
     readonly restart?: RestartQuiet | undefined;
@@ -214,7 +221,7 @@ export const stalledBody = (path: string | undefined): string | undefined => {
 // The wait that has stopped being one, on either lane. Nothing is diagnosed: the machine we run can be looked at, and
 // the machine somebody else runs is theirs to look at, which is exactly what each sentence says.
 const stuckNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined => {
-    const patience = input.hostedMachine ? HOSTED_STUCK_AFTER_MS : OWN_STUCK_AFTER_MS;
+    const patience = Math.max(input.hostedMachine ? HOSTED_STUCK_AFTER_MS : OWN_STUCK_AFTER_MS, input.justSetUp === true ? JUST_SET_UP_PATIENCE_MS : 0);
     if (input.outageMs < patience) {
         return undefined;
     }
@@ -304,7 +311,9 @@ const isSettled = (kind: ConnectionFailure[`kind`]): kind is SettledKind => kind
 export const connectionNotice = (input: ConnectionNoticeInput): ConnectionNotice => {
     const { failure } = input;
     const name = input.sandboxName ?? t(`sandbox.connectionNotice.yourSandbox`);
-    const addressComing = failure?.kind === `unaddressed` && input.claimed === true && input.outageMs < UNADDRESSED_PATIENCE_MS;
+    const addressComing =
+        failure?.kind === `unaddressed` &&
+        ((input.claimed === true && input.outageMs < UNADDRESSED_PATIENCE_MS) || (input.justSetUp === true && input.outageMs < JUST_SET_UP_PATIENCE_MS));
     if (failure === undefined || (addressComing && input.removed !== true)) {
         return {
             title: t(`sandbox.connectionNotice.connectingTo`, { name }),

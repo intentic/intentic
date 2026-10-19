@@ -289,7 +289,7 @@ flowchart LR
 | `src/me` | The caller's profile and GDPR data export |
 | `src/tokens` | Account-level API tokens |
 | `src/push-relay` | APNs push relay for native installs |
-| `src/trial` | Free-trial model API, OpenAI-compatible, on the platform's credential |
+| `src/trial` | Free-trial model API, OpenAI-compatible, on the platform's credential. Metered per model call (`TRIAL_DAILY_MESSAGES`, default 12 a day); a turn the daemon opens with a call left may finish on up to `TRIAL_GRACE_STEPS` more (default 25 a day, `POST /trial/turn`) |
 | `src/wallet` | Agent wallet: payments signed by a custody provider under per-member caps |
 | `src/e2e` | Suites against real Fly and Stripe, gated by `INTENTIC_E2E` |
 

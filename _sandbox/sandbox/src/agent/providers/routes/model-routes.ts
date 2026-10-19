@@ -281,7 +281,7 @@ const resolveTrialRoute = async (services: Pick<Services, "capabilities" | "conf
         return {
             ok: false,
             code: "trial-unavailable",
-            message: "The free trial is no longer available from this sandbox. Connect Google in Sandbox ▸ Agent to keep going for free.",
+            message: "The free trial is no longer available from this sandbox. Connect a model in Sandbox ▸ Agent to keep going.",
         };
     }
     if (services.config.translator.url === "") {
@@ -289,7 +289,7 @@ const resolveTrialRoute = async (services: Pick<Services, "capabilities" | "conf
             ok: false,
             code: "trial-unavailable",
             message:
-                "The free trial needs the sandbox's bundled model translator. Rebuild this sandbox from the published image, or connect Google in Sandbox ▸ Agent.",
+                "The free trial needs the sandbox's bundled model translator. Rebuild this sandbox from the published image, or connect a model in Sandbox ▸ Agent.",
         };
     }
     return {

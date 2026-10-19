@@ -4,6 +4,7 @@ import type { AgentSpan, AgentSummary, LandConflictReason, LandMode, LandResult 
 import type { WorkspaceModule, AgentChange, AgentChanges, AgentRepoChanges } from "@intentic/sandbox-contract/schemas/git/git";
 import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
 import { sandboxRef } from "@intentic/extension-api";
+import { NO_FILES_VIEWED, setAgentViewed, viewedByAgent } from "../../../models/fleet/board/reviewMarks";
 import type { NoticeModel } from "@intentic/ui/async";
 import { computed, onScopeDispose, watch, type Ref } from "vue";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
@@ -115,11 +116,6 @@ const statOf = (subset: readonly AgentReviewFile[]): { files: number; additions:
     additions: subset.reduce((total, file) => total + (file.change.additions ?? 0), 0),
     deletions: subset.reduce((total, file) => total + (file.change.deletions ?? 0), 0),
 });
-
-// Per-agent set of files already viewed; module-level so navigating away and back keeps it, but lost on reload, and on
-// a switch, since agent ids are minted per daemon and the next sandbox's same id is another agent.
-const viewedByAgent = sandboxRef<ReadonlyMap<string, ReadonlySet<string>>>(() => new Map());
-const NONE: ReadonlySet<string> = new Set();
 
 // Agents whose land conflict the user has handed back to them, from the press until the turn it started is over.
 const askedByAgent = sandboxRef<ReadonlySet<string>>(() => new Set());
@@ -235,23 +231,10 @@ export function useAgentChanges(
     // One file's diff via the shared cached read above, so a row the loader already warmed opens without a round trip.
     const fileDiff = (repo: string, path: string): Promise<FileDiff> => agentFileDiff(agentId.value, repo, path);
 
-    const viewed = computed<ReadonlySet<string>>(() => viewedByAgent.value.get(agentId.value) ?? NONE);
+    const viewed = computed<ReadonlySet<string>>(() => viewedByAgent.value.get(agentId.value) ?? NO_FILES_VIEWED);
     // Counted over current rows, so a reverted file doesn't inflate progress.
     const viewedCount = computed(() => files.value.filter((file) => viewed.value.has(file.key)).length);
-    // Takes a set of keys, not one: a per-key setter would copy the set and write N times for one heading toggle.
-    const setViewed = (keys: readonly string[], on: boolean): void => {
-        const next = new Set(viewed.value);
-        for (const key of keys) {
-            if (on) {
-                next.add(key);
-            } else {
-                next.delete(key);
-            }
-        }
-        const byAgent = new Map(viewedByAgent.value);
-        byAgent.set(agentId.value, next);
-        viewedByAgent.value = byAgent;
-    };
+    const setViewed = (keys: readonly string[], on: boolean): void => setAgentViewed(agentId.value, keys, on);
 
     // The presses on this agent's work, kept in the ledger under the card rather than in this view: a land runs to
     // the end of the daemon's apply (minutes on a large branch) with no deadline, and the reader who opens another
