@@ -12,7 +12,6 @@ export const DESK_PATH = "/desk/";
 // The two ways in, worded once: the app is the primary path, the hosted workspace is its labelled alternative.
 export const HOSTED_START_LABEL = "Start in your browser";
 export const HOSTED_ALT_LABEL = "Or start in your browser";
-export const START_SEQUENCE = "Install the app, sign in, click Run on this computer. Or start a hosted workspace in your browser.";
 export const ORG_NAME = "intentic";
 // Fixed nouns: "agent" for the actor, "sandbox" for the machine; the host machine is "laptop, desktop or VPS".
 export const ORG_TAGLINE = "More work. Less AI waste. Same subscriptions.";

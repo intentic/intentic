@@ -91,16 +91,6 @@ html:not([data-variant="desk"]) .home .headline .display {
     margin-top: 2.1rem;
 }
 
-/* THE SEQUENCE, one line under the two actions: what clicking the first one leads to, and what the second is instead. */
-.home .hero-sequence {
-    margin: 1rem auto 0;
-    max-width: 38rem;
-    font-size: 0.875rem;
-    line-height: 1.6;
-    color: var(--color-muted);
-    text-wrap: balance;
-}
-
 /* THE OTHER PRODUCT, one line under the actions, for the reader who is in the wrong place. */
 .home .hero-cross {
     margin: 1.2rem 0 0;

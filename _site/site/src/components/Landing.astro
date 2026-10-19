@@ -4,7 +4,7 @@ import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/ab
 import { faqGroups } from "@intentic/site-content/faq";
 import { landingContent } from "@intentic/site-content/landing";
 import { templeScene } from "@intentic/site-content/temple";
-import { APP_URL, DEMO_PATH, HOSTED_ALT_LABEL, HOSTED_START_LABEL, START_SEQUENCE, githubUrl } from "@intentic/site-content/site";
+import { APP_URL, DEMO_PATH, HOSTED_ALT_LABEL, HOSTED_START_LABEL, githubUrl } from "@intentic/site-content/site";
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
 // Provider marks match the session icons used by the app.
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
@@ -101,7 +101,6 @@ const { steps: appSteps, alternatives } = content.connect;
                             <DownloadCta primary />
                             <a class="btn btn-secondary" href={APP_URL}>{HOSTED_ALT_LABEL}</a>
                         </div>
-                        <p class="hero-sequence">{START_SEQUENCE}</p>
 
                         {/* The other product, for the reader who is in the wrong place: /desk/ is its own page. */}
                         <p class="hero-cross">
