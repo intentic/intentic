@@ -8,7 +8,6 @@ import { type Pairing, pairingKey, removePairing, type SyncState } from "./confi
 import { runProcess } from "./exec.js";
 import { retirePairingMirror, teardownAllForwards } from "./mirror.js";
 import {
-    ensureMutagen,
     MUTAGEN_CALL_TIMEOUT_MS,
     MUTAGEN_RUN_VALUE,
     ownMutagenPath,
@@ -82,9 +81,10 @@ export const uninstallPairings = async (
     dropped: readonly Pairing[],
     { forGood = false }: { readonly forGood?: boolean } = {},
 ): Promise<string> => {
-    // Nothing paired and no copy of this agent's Mutagen means no session of its own anywhere: an uninstall from a PC
-    // that never synced downloads nothing to find that out.
-    const mutagen = state.pairings.length === 0 && !existsSync(ownMutagenPath()) ? undefined : await ensureMutagen();
+    // This agent's own copy, never a download (2026-10-18: one that was missing or of another version used to be
+    // fetched first, so an uninstall offline or behind a proxy waited on a download to remove things). Without a copy
+    // the session steps are skipped: the pairings still go, and nothing of this agent's starts their sessions again.
+    const mutagen = existsSync(ownMutagenPath()) ? ownMutagenPath() : undefined;
     if (mutagen !== undefined) {
         // What older builds left in Mutagen's shared data directory moves first, so an uninstall leaves nothing of this
         // agent's there either, even where no watcher ever ran this build (mutagen-move.ts).

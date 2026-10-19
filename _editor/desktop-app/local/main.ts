@@ -49,8 +49,9 @@ const loadEditor = async (): Promise<void> => {
 // shell and This device can be looked at. Never in a build, and never inside the app itself.
 const standInForTheApp = async (): Promise<void> => {
     if (import.meta.env.DEV && !(`__TAURI_INTERNALS__` in window)) {
-        const { installDevDesktop } = await import(`./devDesktop`);
-        installDevDesktop();
+        const [{ installDevDesktop }, { uninstallVerb }] = await Promise.all([import(`./devDesktop`), import(`./devUninstall`)]);
+        // Uninstalling Intentic, answered by a stand-in of its own (devUninstall.ts), ahead of everything else.
+        installDevDesktop(uninstallVerb);
     }
 };
 

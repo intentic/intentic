@@ -1015,6 +1015,30 @@ pub fn begin(title: &str, plan: Vec<PlanStep>, scope: Option<&str>) {
     start_spinner();
 }
 
+/// The plan of a flow whose header is already on screen (a report the person answered a question under): the steps
+/// and their weights, without a second header.
+pub fn continue_with(plan: Vec<PlanStep>) {
+    let mut state = ui();
+    state.plan = plan;
+    state.started = Instant::now();
+    if state.mode == Mode::Plain {
+        return;
+    }
+    drop(state);
+    start_spinner();
+}
+
+/// Settle the running step with a verdict other than done — a step that finished with something left (`Warn`), or
+/// that could not do its work (`Fail`) — without stopping the flow: the uninstall carries on past a step that left
+/// something, and names it at the end. Nothing in a log, where the caller's own markers say it.
+pub fn settle_step(tone: Tone) {
+    let mut state = ui();
+    if state.mode == Mode::Plain {
+        return;
+    }
+    settle(&mut state, tone, None);
+}
+
 /// A PHASE OF THE FLOW, ANNOUNCED ONCE — prose for the terminal, and a name for anything watching.
 ///
 /// The phase id is the vocabulary the desktop app's plan and the platform's setup report both use, so it must
@@ -1552,6 +1576,67 @@ pub fn pick(
     Ok(None)
 }
 
+/// Pick ONE of a few outcomes, with `default` taken on Enter: the uninstall's "remove everything / keep my sandboxes".
+/// Unlike [`pick`], whose Enter cancels, the default here is one of the rows, so a row that deletes anything must be
+/// gated by its own typed confirmation after this (the protocol's "nothing irreversible on a default"). `q` cancels.
+pub fn choose(
+    question: &str,
+    choices: &[(String, String)],
+    default: usize,
+) -> crate::util::Result<Option<usize>> {
+    let listing = {
+        let state = ui();
+        if state.mode == Mode::Rich {
+            pick_lines(&state.pen(), choices)
+        } else {
+            choices
+                .iter()
+                .enumerate()
+                .map(|(index, (name, meta))| {
+                    format!("  {}) {name}  {meta}", index + 1)
+                        .trim_end()
+                        .to_string()
+                })
+                .collect()
+        }
+    };
+    let prompt = format!(
+        "1-{} (Enter for {}), or q to cancel: ",
+        choices.len(),
+        default + 1
+    );
+    let mut consequence = listing.join("\n");
+    for _ in 0..3 {
+        let Some(answer) = ask_line_listing(question, &consequence, &prompt) else {
+            return Err(nobody_to_answer(question, "a flag that answers it"));
+        };
+        match parse_choice(&answer, choices.len(), default) {
+            Ok(picked) => return Ok(picked),
+            Err(why) => consequence = format!("{}\n{why}", listing.join("\n")),
+        }
+    }
+    Ok(None)
+}
+
+/// What a [`choose`] answer means: the row, `None` to cancel, or what was wrong. Pure.
+fn parse_choice(
+    answer: &str,
+    count: usize,
+    default: usize,
+) -> std::result::Result<Option<usize>, String> {
+    let answer = answer.trim();
+    if answer.is_empty() {
+        return Ok(Some(default));
+    }
+    if answer.eq_ignore_ascii_case("q") {
+        return Ok(None);
+    }
+    match answer.parse::<usize>() {
+        Ok(number) if (1..=count).contains(&number) => Ok(Some(number - 1)),
+        _ => Err(format!("{answer} is not on the list.")),
+    }
+}
+
 /// [`ask_line`] for a list: the rows are drawn as they are, not wrapped as a consequence sentence.
 fn ask_line_listing(question: &str, listing: &str, prompt: &str) -> Option<String> {
     if !crate::tty::have_tty() {
@@ -1920,6 +2005,15 @@ pub(crate) fn parse_layer(line: &str) -> Option<(String, f32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_choice_takes_its_default_on_enter_and_cancels_on_q() {
+        assert_eq!(parse_choice("", 2, 0), Ok(Some(0)));
+        assert_eq!(parse_choice(" 2 ", 2, 0), Ok(Some(1)));
+        assert_eq!(parse_choice("Q", 2, 0), Ok(None));
+        assert!(parse_choice("3", 2, 0).is_err());
+        assert!(parse_choice("1 2", 2, 0).is_err());
+    }
 
     /* THE SETUP-PROGRESS RECORD every reader of these lines is tested against (desktop app, web, here). */
     fn progress_fixture() -> serde_json::Value {

@@ -31,6 +31,7 @@ Every command the product hands out is `curl -fsSL https://intentic.dev/<verb>/<
 - PowerShell gets the `.ps1` script when the User-Agent says `PowerShell`; everything else gets sh. A trailing `.ps1` or `.sh` on the last segment overrides that.
 - sh: right after the shebang come `set -- '<args>'`, `INTENTIC_SCRIPT_URL='<url>'` (for a script that re-runs itself under `sudo`) and the verb's env lines.
 - PowerShell: the script is wrapped as `& { … } -Param '<value>'`, so its `param(...)` binds as if it were called by name.
+- `uninstall` carries nothing in its URL and keeps what the person adds: its sh gets `set -- "$@"` and its PowerShell block ends in `@args`, so `| sh -s -- --dry-run` and `& ([scriptblock]::Create((irm …))) -DryRun` reach the script. Every other verb's URL replaces anything typed (the table's `typed` flag).
 - Each argument must match its verb's pattern and hold only `[A-Za-z0-9._~/-]`; anything else gets a one-sentence 400 and no script. Responses are `no-store` and vary on the User-Agent.
 
 The flat paths (`/connect`, `/fix.ps1`, …) keep answering as before.

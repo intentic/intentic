@@ -122,6 +122,13 @@ unlock. The newer revision of an entry wins.
   over a fresh challenge, checked by the service against the Hello key pinned at setup (`src/service/hello-verify.ts`),
   so a helper the agent started cannot say yes for the person.
 
+- Undone by `intentic-keyring service uninstall`, run elevated by `intentic-machine keyring uninstall` and by the
+  agent's `uninstall --purge`: the task is unregistered and the vault, its keys and its audit go back to
+  `~/.intentic/keyring`. Then what the service left goes too (`src/service/leftovers.ts`): the user's emptied folder
+  and, once no other user's `<SID>.hardened` marker is left, the service's copy in `bin`, the empty
+  `%ProgramData%\Intentic\Keyring` and `Intentic` folders, and the empty `\Intentic\` folder in Task Scheduler. Its
+  JSON answer names them in `swept`, and whatever could not go, with why, in `left`.
+
 What it does not cover: a value being typed passes through the helper, a process of the user, for that moment. Every
 other value, the vault key and the vault itself stay with the service.
 

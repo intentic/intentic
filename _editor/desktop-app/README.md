@@ -552,21 +552,30 @@ flowchart LR
   read-only, for the workspace's origin alone and for fifteen minutes (a handoff grant, never a window), and opens
   the workspace at `/?handoff=<base64url of { url, token, name }>`, where `url` is the sidecar's
   `/workspace/raw?path=<name>`.
-- **Uninstalling on Windows** (`src-tauri/installer-hooks.nsh`, 2026-10-05). The uninstaller ends the app and its
-  file server (`intentic-files.exe`, which an install over the app ends too: a slow exit held its file), then asks "Also
-  remove the Intentic machine agent from this PC?" where one is installed. Yes runs `intentic-machine uninstall`, which
-  removes this PC's links, sync pairings and login entry, the keeper that starts Docker Desktop at every sign-in with
-  them, and never a container. Never asked on an update or a passive uninstall; a silent one answers no. Folder sync
-  ends whatever the answer (2026-10-18): where the agent stays, `intentic-machine sync uninstall --folders` unpairs
-  every pairing that syncs a folder here and ends its Mutagen sessions, so a kept agent goes on hosting sandboxes and
-  mirroring their ports without syncing files again by itself (an agent older than the flag runs the whole
-  `sync uninstall`); the synced folders keep their files. A reinstall does neither. It signs out on
-  this PC: the webview's cookie files (`%LOCALAPPDATA%\dev.intentic.desktop\EBWebView`) and `roster.json` go, whether or
-  not "Delete app data" is ticked; the platform's own record of the session is left to expire, since the uninstaller has
-  no way to send it. Its last page says what stays: the sandboxes and their files, in Docker, which `ic sandbox list`
-  shows and `ic sandbox remove <name>` removes (recoverable for a week), and the agent where it was kept. `ic` and its
-  PATH entry stay, since they are how the sandboxes are removed. Before, the uninstaller removed the app alone, and said
-  nothing.
+- **Uninstalling on Windows** (`src-tauri/installer-hooks.nsh`, 2026-10-18). The uninstaller ends the app and its
+  file server (`intentic-files.exe`, which an install over the app ends too: a slow exit held its file), and the rest of
+  Intentic goes through `ic uninstall`, run from the copy of ic the app ships beside itself (`intentic-ic.exe`), so it
+  is there even where ic was never set up. Its first page asks ic what this PC holds (`ic uninstall --dry-run --ini`)
+  and offers one choice: **Remove everything**, preselected (the sandboxes and runners with their data, the saved
+  passwords, the intentic engine, the machine agent, folder sync, ic, caches and logs), or **Keep my sandboxes** (they
+  keep running, with the engine, the agent and ic that keep them up; only the app, folder sync and caches go). With
+  sandboxes on the PC, Remove everything asks once more, naming them, with No as the default; with nothing of the
+  reader's own there, the page only says that everything goes. The hook then runs `intentic-ic.exe uninstall
+  --without-app --yes`, with `--delete-data --confirm <n>` or `--keep-sandboxes`. A passive or silent uninstall shows
+  no page and keeps the sandboxes; an update, or a reinstall (a newer setup running this uninstaller in place), calls
+  no ic and keeps the shortcuts and the session; and when ic itself started the uninstaller (`INTENTIC_UNINSTALL=done`,
+  the last step of `ic uninstall`) the hook leaves the rest to it. When ic is missing, cannot look or fails, the app
+  still goes, the sandboxes stay, folder sync is stopped through the machine agent (`intentic-machine sync uninstall
+  --folders`), and the last page says to run `ic uninstall` in a terminal; a copy with no `intentic-ic.exe` at all
+  asks "Also remove the Intentic machine agent from this PC?" as before. The app's own folders
+  (`%APPDATA%\dev.intentic.desktop` and `%LOCALAPPDATA%\dev.intentic.desktop`, the webview's profile with the session
+  cookie in it) go on every real uninstall, "Delete app data" ticked or not; the install folder
+  `%LOCALAPPDATA%\Intentic` is never deleted whole, since the engine's disk is in it. The platform's own record of the
+  session is left to expire, since the uninstaller has no way to send it. The last page says what went and what stays:
+  Docker Desktop, WSL and the synced folders' files are not Intentic's. _(2026-10-05 to 2026-10-18) The uninstaller
+  asked about the machine agent alone, stopped folder sync, and said on its last page that the sandboxes, their data,
+  the engine and `ic` stayed, with the commands that remove them. Before that it removed the app alone and said
+  nothing._
 - **"Open with Intentic" in Windows 11's own menu** ([explorer-menu](explorer-menu), 2026-10-07). The installer used to
   register it as classic registry verbs only, which Windows 11 shows under "Show more options" and never in its new
   menu: that menu lists only commands declared by an app package. `intentic_explorer_menu.dll`, installed beside the

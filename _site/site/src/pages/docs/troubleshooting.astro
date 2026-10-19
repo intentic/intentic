@@ -286,6 +286,10 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
         API and in the desktop app. Your files are never the thing at risk while you dig: <code>/work</code> and your history are named Docker
         volumes, and removing, updating or rebuilding a container does not touch them.
     </p>
+    <p>
+        To start over, <a href="/docs/uninstall/">Uninstall</a> takes Intentic off the computer, and asks whether to keep the sandboxes
+        running or delete them too.
+    </p>
     {/* Send unresolved questions to Discord and reproducible failures to Issues. */}
     <p>
         And if none of it says anything either: bring the symptom to the <a href={discordUrl}>Discord community</a>: most of what reaches
@@ -298,6 +302,7 @@ docker logs --tail 50 intentic-sandbox-tunnel-<SLUG>`;
             { href: "/docs/docker/", title: "Docker setup", why: "what every install path created, and the update, rebuild and cleanup commands." },
             { href: "/docs/glossary/", title: "Glossary", why: "the words above, if any of them were doing unexplained work." },
             { href: "/api/errors/", title: "When a call fails", why: "every status the API returns and what it actually means." },
+            { href: "/docs/uninstall/", title: "Uninstall", why: "taking Intentic off a computer, with or without its sandboxes." },
         ]}
     />
 </DocsLayout>

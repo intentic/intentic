@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { launchState, pinFiles } from "./hermetic.js";
 
-// The install tier's launch is decided by the app's own files in its config directory, which outlive an uninstall on
-// a runner that is also used: pinned for the run, and every one put back as it was, absent ones included.
+// The install tier's launch is decided by the app's own files in its config directory, which a runner that is also used
+// may hold from before the run: pinned for the run, and every one put back as it was, absent ones included, even after
+// the tier's uninstall took the directory.
 
 const made: string[] = [];
 afterEach(async () => {
@@ -48,4 +49,25 @@ test(`pinned files are written or removed, and put back exactly as they were`, a
     expect(await readFile(join(dir, `hosts-sandboxes.json`), `utf8`)).toBe(`true`);
     expect(await readFile(join(dir, `resume-setup.json`), `utf8`)).toBe(`{"args":{}}`);
     expect(existsSync(join(dir, `last-face.json`))).toBe(false);
+});
+
+test(`files are put back after the uninstall took their directory, and an absent one leaves no directory`, async () => {
+    const parent = await directory();
+    const kept = join(parent, `kept`);
+    const restoreKept = await pinFiles(kept, new Map([[`settings.json`, `{}`]]));
+    await rm(kept, { recursive: true, force: true });
+    await restoreKept();
+    expect(existsSync(join(kept, `settings.json`))).toBe(false);
+
+    await mkdir(kept, { recursive: true });
+    await writeFile(join(kept, `settings.json`), `{"appUrl":"x"}`);
+    const restore = await pinFiles(kept, new Map([[`settings.json`, `{}`]]));
+    await rm(kept, { recursive: true, force: true });
+    await restore();
+    expect(await readFile(join(kept, `settings.json`), `utf8`)).toBe(`{"appUrl":"x"}`);
+
+    const never = join(parent, `never`);
+    const restoreNever = await pinFiles(never, new Map([[`resume-setup.json`, undefined]]));
+    await restoreNever();
+    expect(existsSync(never)).toBe(false);
 });

@@ -19,6 +19,7 @@ const VERB_SAMPLES = [
     ["rebuild", ["sandbox-example", "0123abcd"]],
     ["remove", ["sandbox-example"]],
     ["remove", []],
+    ["uninstall", []],
     ["device", ["sandbox-example.intentic.app", "AB12CD34"]],
     ["sync", ["sandbox-example.intentic.app", "AB12CD34"]],
     ["server", ["sandbox-example.intentic.app", "AB12CD34"]],

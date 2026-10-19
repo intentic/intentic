@@ -9,6 +9,7 @@ pub mod choice;
 mod commands;
 mod fetch;
 mod install_plan;
+pub mod leave;
 pub mod moves;
 mod paths;
 mod pins;

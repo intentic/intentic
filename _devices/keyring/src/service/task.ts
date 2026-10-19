@@ -46,3 +46,23 @@ try {
 `;
 
 export const taskInput = (paths: HardenedPaths, sid: string) => ({ exe: paths.exe, sid, taskPath: paths.taskPath, taskName: paths.taskName });
+
+// Task Scheduler's \Intentic\ folder, removed once no task (hidden ones included) and no subfolder is left in it: the
+// last hardened user's uninstall (leftovers.ts). A folder already gone is no failure.
+export const REMOVE_TASK_FOLDER_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+try {
+  $name = $KeyringInput.taskPath.Trim('\\')
+  $service = New-Object -ComObject Schedule.Service
+  $service.Connect()
+  $removed = $false
+  try { $folder = $service.GetFolder('\\' + $name) } catch { $folder = $null }
+  if ($folder -ne $null -and $folder.GetTasks(1).Count -eq 0 -and $folder.GetFolders(0).Count -eq 0) {
+    $service.GetFolder('\\').DeleteFolder($name, 0)
+    $removed = $true
+  }
+  [Console]::Out.WriteLine('intentic-keyring>' + (@{ ok = $true; removed = $removed } | ConvertTo-Json -Compress))
+} catch {
+  [Console]::Out.WriteLine('intentic-keyring>' + (@{ ok = $false; error = $_.Exception.Message } | ConvertTo-Json -Compress))
+}
+`;

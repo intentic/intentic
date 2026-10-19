@@ -1,9 +1,9 @@
 import { explain, type Ui } from "@intentic/local-agent";
 import { buildRouteMap, type CommandContext } from "@stricli/core";
-import { beforeSignInCommand, retireBeforeSignIn } from "./autostart/before-sign-in.js";
+import { beforeSignInCommand } from "./autostart/before-sign-in.js";
 import { buildCommand, machineUi } from "./cli-ui.js";
 import { runLogPath } from "./config.js";
-import { deviceCommands, deviceUninstall } from "./device/commands.js";
+import { deviceCommands } from "./device/commands.js";
 import { sandboxRoutes } from "./device/sandbox-cli.js";
 import { environmentRoutes, updates } from "./environments/commands.js";
 import { keyringCommands } from "./keyring/commands.js";
@@ -11,7 +11,8 @@ import { type MachineUpgradeEnd, realMachineIo, upgradeMachine } from "./environ
 import { runForeground } from "./resident/resident.js";
 import { readResident, restartResident, stopResident } from "./resident/supervision.js";
 import { status } from "./status.js";
-import { syncCommands, syncUninstall } from "./sync/commands.js";
+import { syncCommands } from "./sync/commands.js";
+import { uninstall } from "./uninstall/command.js";
 import { doctor } from "./upkeep/doctor.js";
 import { upgradeLanded, upgradeStop } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
@@ -131,27 +132,6 @@ const upgradeEnded = (ui: Ui, ending: MachineUpgradeEnd): void => {
     const stop = upgradeStop(ending.outcome);
     throw new Error(explain(stop.headline, stop.problem, stop.fix));
 };
-
-// Removes this environment's links and pairings in one command; sync tears down first while its credentials still exist.
-const uninstall = buildCommand({
-    docs: { brief: "Remove this environment's agent: every sandbox link, every sync pairing, the login entry" },
-    parameters: {},
-    async func(this: CommandContext) {
-        const ui = machineUi(this.process);
-        ui.act("Removing the agent from this device");
-        // For good: the agent goes even from a device that hosts sandboxes, which it would otherwise stay to keep.
-        ui.note(await syncUninstall(ui, undefined, { forGood: true }));
-        ui.note(await deviceUninstall(ui, undefined, { forGood: true }));
-        await retireBeforeSignIn(ui.note);
-        const still = await readResident();
-        if (still === undefined) {
-            ui.done("Removed the agent. Nothing intentic stays running on this device.");
-            return;
-        }
-        ui.note("Run the uninstall inside each of this device's WSL distros to remove it entirely.");
-        ui.done(`Removed this side's links. The agent keeps running (pid ${still.pid}) only to keep this device's WSL distros running.`);
-    },
-});
 
 export const commands = buildRouteMap({
     routes: {

@@ -161,9 +161,14 @@ export const linkNamed = (urls: readonly string[], value: string): string => {
 };
 
 // Drops the named link (or all), then reconciles the resident agent so it keeps running for what's left and retires only
-// when nothing remains. `forGood` is the top-level `uninstall`, which retires it whatever this device hosts. Narrates
-// through `say` and answers the verdict, for the caller to settle its line with.
-export const deviceUninstall = async (say: Narration, sandbox?: string, { forGood = false }: { readonly forGood?: boolean } = {}): Promise<string> => {
+// when nothing remains. `forGood` is the top-level `uninstall`, which retires it whatever this device hosts; `recordStays`
+// false is its `--delete-data`, which says what becomes of the record itself. Narrates through `say` and answers the
+// verdict, for the caller to settle its line with.
+export const deviceUninstall = async (
+    say: Narration,
+    sandbox?: string,
+    { forGood = false, recordStays = true }: { readonly forGood?: boolean; readonly recordStays?: boolean } = {},
+): Promise<string> => {
     const only = sandbox === undefined || sandbox === "" ? undefined : linkNamed((await readLinks()).map((link) => link.sandboxUrl), sandbox);
     const dropped = await removeLinks(only);
     const left = await readLinks();
@@ -183,7 +188,9 @@ export const deviceUninstall = async (say: Narration, sandbox?: string, { forGoo
     if (dropped.length > 0) {
         say.note("Each sandbox still lists this device until it is removed there; its access is already gone.");
     }
-    say.note(`Your record of what this agent did stays at ${auditPath}.`);
+    if (recordStays) {
+        say.note(`Your record of what this agent did stays at ${auditPath}.`);
+    }
     return dropped.length === 0 ? "Nothing was connected. Removed any leftovers." : `Disconnected from ${urls}.`;
 };
 

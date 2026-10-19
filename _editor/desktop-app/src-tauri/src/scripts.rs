@@ -1306,11 +1306,40 @@ pub fn run_command_heard(
     limit: Option<Duration>,
     heard: Option<Heard>,
 ) -> Result<Ended, String> {
-    let mut command = own_group(command);
-    intentic_bounded::no_window(&mut command);
     let spool = Spool::open(id).map_err(|error| {
         format!("could not start {what}: nowhere to write what it says ({error})")
     })?;
+    run_spooled(app, id, what, command, spool, limit, heard)
+}
+
+/// [`run_command_heard`], with its transcript and its child's two files in `dir` rather than ~/.intentic/logs: for a run
+/// that deletes that folder itself (`ic uninstall`, uninstall.rs). Windows refuses to delete a file a process holds open,
+/// and this process and the child hold all three open until the end; the transcript would go with the folder besides.
+pub fn run_command_heard_in(
+    app: &AppHandle,
+    id: &str,
+    what: &str,
+    command: Command,
+    dir: &Path,
+    heard: Option<Heard>,
+) -> Result<Ended, String> {
+    let spool = Spool::open_in(id, dir).map_err(|error| {
+        format!("could not start {what}: nowhere to write what it says ({error})")
+    })?;
+    run_spooled(app, id, what, command, spool, None, heard)
+}
+
+fn run_spooled(
+    app: &AppHandle,
+    id: &str,
+    what: &str,
+    command: Command,
+    spool: Spool,
+    limit: Option<Duration>,
+    heard: Option<Heard>,
+) -> Result<Ended, String> {
+    let mut command = own_group(command);
+    intentic_bounded::no_window(&mut command);
     let child = spool
         .attach(&mut command)
         .and_then(|()| command.spawn())
@@ -1350,7 +1379,17 @@ impl Spool {
     /// The run's transcript path and its child's two files, made empty: beside the transcript when there is one, else in
     /// the system's temporary folder under a name no other run has.
     fn open(id: &str) -> std::io::Result<Spool> {
-        let log = log_path(id);
+        Spool::with_log(id, log_path(id))
+    }
+
+    /// [`open`](Self::open), the transcript and the two files in `dir` rather than the logs folder.
+    fn open_in(id: &str, dir: &Path) -> std::io::Result<Spool> {
+        std::fs::create_dir_all(dir)?;
+        let log = dir.join(format!("desktop-{}-{}.log", safe_name(id), stamp()));
+        Spool::with_log(id, Some(log))
+    }
+
+    fn with_log(id: &str, log: Option<PathBuf>) -> std::io::Result<Spool> {
         let base = match &log {
             Some(log) => log.with_extension(""),
             None => std::env::temp_dir().join(format!(
@@ -2850,9 +2889,10 @@ mod tests {
             );
             blocks.push((path, block));
         }
+        // uninstall.ps1 downloads ic too when none is installed, and `ic uninstall` then takes the entry off again.
         assert!(
-            blocks.len() == 5,
-            "expected connect/connect-host/recreate/fix/cleanup to carry this, found {}",
+            blocks.len() == 6,
+            "expected connect/connect-host/recreate/fix/cleanup/uninstall to carry this, found {}",
             blocks.len()
         );
         let (first_path, first) = &blocks[0];

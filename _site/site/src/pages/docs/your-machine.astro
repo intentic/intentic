@@ -69,8 +69,9 @@ const scopes = [
         <li><strong>Mirror</strong>: ports only, on any number of machines. What a member is offered, and what an owner can add on a second device while the first holds sync.</li>
     </ul>
     <p>
-        Disabling revokes the machine's access but leaves the agent installed: removing it is <code>intentic-machine sync uninstall</code> on that
-        machine, so nothing uninstalls software behind your back.
+        Disabling revokes the machine's access but leaves the agent installed, so nothing uninstalls software behind your back. To stop
+        syncing on that machine, run <code>intentic-machine sync uninstall</code> there. The folders keep their files. To take the agent and
+        the rest of Intentic off it, see <a href="/docs/uninstall/">Uninstall</a>.
     </p>
 
     <h2>Letting the agent use your device</h2>
@@ -150,6 +151,7 @@ const scopes = [
         links={[
             { href: "/docs/remote-runners/", title: "Remote runners", why: "executing conversations on this device without moving control." },
             { href: "/docs/access/", title: "Access & sharing", why: "who else may connect a machine, and what a member is offered." },
+            { href: "/docs/uninstall/", title: "Uninstall", why: "taking the agent, folder sync and the rest of Intentic off a machine." },
             { href: "/api/auth/", title: "Authorising a call", why: "control tokens, their scopes, and minting one without the UI." },
             { href: "/guides/where-your-code-goes-with-cloud-coding-agents/", title: "Guide: where your code goes", why: "whose machine holds the checkout and whose account holds the keys, across the field." },
         ]}

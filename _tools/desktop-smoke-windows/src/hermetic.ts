@@ -37,8 +37,9 @@ const restore = (key: string, value: string | undefined): void => {
 
 /* THE FILES THE APP DECIDES A BARE LAUNCH BY, pinned for the run and put back after it (2026-10-12). The runner is a PC
  * that is also used, by its owner's own installs and by the nightly's deeper tiers, which connect real sandboxes, and an
- * uninstall leaves the app's config directory where it is: so whatever that directory last held decided which window
- * this tier's launch opened. A PC that hosts sandboxes, launched while Docker Desktop is down (it does not start itself
+ * uninstall left the app's config directory where it was: so whatever that directory last held decided which window
+ * this tier's launch opened. An uninstall takes the directory now (installer-hooks.nsh, 2026-10-18), but one that never
+ * ran (a run cut short, a runner that lost its job) or an older build's still leaves it. A PC that hosts sandboxes, launched while Docker Desktop is down (it does not start itself
  * at sign-in), opens This device for the engine rather than the workspace (lib.rs `opening`), and the launch's check of
  * the workspace page waited out its 30 seconds for a request that was never coming (run 38301566644, after the run
  * before it lost its runner mid-tier). `undefined` names a file that must not exist. */
@@ -54,12 +55,18 @@ export const launchState = (workspaceUrl: string, platformUrl: string): Readonly
         [`resume-setup.json`, undefined],
     ]);
 
-// Writes each file as `files` says (or removes it), and answers what puts every one back exactly as it was.
+// Writes each file as `files` says (or removes it), and answers what puts every one back exactly as it was. The
+// directory itself may be gone by then, taken by the uninstall the tier runs, and is made again for a file that was
+// there before the run.
 export const pinFiles = async (directory: string, files: ReadonlyMap<string, string | undefined>): Promise<() => Promise<void>> => {
-    await mkdir(directory, { recursive: true });
     const put = async (name: string, content: string | Buffer | undefined): Promise<void> => {
         const path = join(directory, name);
-        await (content === undefined ? rm(path, { force: true }) : writeFile(path, content));
+        if (content === undefined) {
+            await rm(path, { force: true });
+            return;
+        }
+        await mkdir(directory, { recursive: true });
+        await writeFile(path, content);
     };
     const before = new Map<string, Buffer | undefined>();
     for (const [name, content] of files) {
@@ -95,7 +102,7 @@ export const prepareHermeticDesktop = async (configuredAppUrl: string | undefine
     await writeFile(ic, `@echo off\r\n> "${marker}" echo started\r\nexit /b 1\r\n`);
 
     // Written where the installed app reads them (its Tauri config directory), so the cold launch is this run's own
-    // whatever the runner kept across an uninstall (launchState).
+    // whatever the runner kept (launchState).
     const appData = process.env[`APPDATA`];
     if (appData === undefined || appData === ``) {
         throw new Error(`APPDATA is unavailable; the installed app's settings location cannot be prepared`);

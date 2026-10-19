@@ -40,6 +40,9 @@ flowchart LR
   UAC prompt on that PC, answered there, and never registered unasked. `state()` reads it back without elevation
   (`on`, `off`, `stale`, `unknown`). A Linux agent needs none of this: its systemd unit with lingering already starts
   at boot.
+- (2026-10-18) A systemd registration turns lingering on (`loginctl enable-linger`), and writes `linger-enabled` beside
+  the agent's log only when that changed it from off to on ([`src/linger.ts`](src/linger.ts)). An agent's purge turns
+  lingering off only where that marker is (`lingerOn`, `disableLinger`), so lingering the user had already stays on.
 - Every supervisor restarts an agent that exits non-zero or is killed by a signal: the systemd unit's
   `Restart=on-failure`, the LaunchAgent's `KeepAlive { SuccessfulExit = false }`, and the logon task's restart on
   failure plus its five-minute repetition. That is what an agent's own hang watchdog relies on when it kills itself.

@@ -1262,8 +1262,12 @@ fn supervise(app: &AppHandle) {
     }
 }
 
-/// One round: decide, act, then the folders.
+/// One round: decide, act, then the folders. None while Intentic is being uninstalled from this computer
+/// (uninstall.rs): a round then would make, start or recreate the very sandbox the uninstall is deleting.
 fn round(app: &AppHandle, launch: bool, asked: Option<Ask>) {
+    if crate::uninstall::underway() {
+        return;
+    }
     let record = status(app);
     let facts = gather(app, &record, launch, asked);
     match decide(&record, &facts) {
@@ -1566,8 +1570,9 @@ fn create(app: &AppHandle, consent: bool) {
     if let Some(lock) = &lock {
         let _ = std::fs::remove_file(lock);
     }
-    if EXITING.load(Ordering::SeqCst) {
-        // Stopped by the app's own quit: the next launch finds it creating, and runs it again.
+    if EXITING.load(Ordering::SeqCst) || crate::uninstall::underway() {
+        // Stopped by the app's own quit, or by an uninstall ([`stand_down`]): not a failure to tell anyone about. After
+        // a quit the next launch finds it creating, and runs it again.
         return;
     }
     let progress = progress
@@ -1862,7 +1867,7 @@ fn follow_live_run(app: &AppHandle) -> bool {
         })
         .collect();
     let mut gone = false;
-    while !EXITING.load(Ordering::SeqCst) {
+    while !EXITING.load(Ordering::SeqCst) && !crate::uninstall::underway() {
         if !live() {
             gone = true;
             break;
@@ -2439,6 +2444,17 @@ pub fn before_exit() {
     if crate::scripts::is_running(RUN) {
         if let Err(error) = crate::scripts::stop(RUN) {
             eprintln!("intentic: this computer's sandbox setup was not stopped: {error}");
+        }
+    }
+}
+
+/// Intentic is being uninstalled from this computer (uninstall.rs, which has already said so through `underway`): a
+/// setup of this sandbox under way is stopped with everything it started, as a quit stops one, and no round makes,
+/// starts or recreates it from now on.
+pub fn stand_down() {
+    if crate::scripts::is_running(RUN) {
+        if let Err(error) = crate::scripts::stop(RUN) {
+            eprintln!("intentic: this computer's sandbox setup was not stopped for the uninstall: {error}");
         }
     }
 }

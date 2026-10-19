@@ -173,6 +173,18 @@ export const docsBook: Book = {
                                 datePublished: "2026-08-11",
                             },
                         },
+                        {
+                            // Last on the shelf: the way out, after every page about keeping a sandbox running.
+                            id: "uninstall",
+                            title: "Uninstall",
+                            blurb: "Take Intentic off a device, with or without its sandboxes",
+                            meta: {
+                                title: "Uninstall Intentic · intentic docs",
+                                description:
+                                    "Remove Intentic from a Windows, Linux or macOS device: from Settings, from the desktop app, or with one command. What each choice removes, what always stays, and the flags for unattended runs.",
+                                datePublished: "2026-10-18",
+                            },
+                        },
                     ],
                 },
             ],

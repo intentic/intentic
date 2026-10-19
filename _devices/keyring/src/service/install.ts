@@ -6,6 +6,7 @@ import { keyringPaths } from "../address.js";
 import { runPowerShell } from "../powershell.js";
 import type { Runner } from "../run.js";
 import { hardenedAcls, type IcaclsCall, markerAcl } from "./acl.js";
+import { sweepHardenedLeftovers } from "./leftovers.js";
 import { hardenedPaths } from "./paths.js";
 import { currentSid } from "./sid.js";
 import { REGISTER_TASK_SCRIPT, STOP_TASK_SCRIPT, taskInput, UNREGISTER_TASK_SCRIPT } from "./task.js";
@@ -76,7 +77,11 @@ export const installService = async (runner: Runner, program: string = process.e
     return { sid, moved };
 };
 
-export const uninstallService = async (runner: Runner): Promise<{ readonly sid: string; readonly restored: readonly string[] }> => {
+// The vault back in the user's own folder and the task gone; then what the service left, once nobody else uses it
+// (leftovers.ts). `left` names what stays, with why: an answer to read, never a reason to fail what already happened.
+export const uninstallService = async (
+    runner: Runner,
+): Promise<{ readonly sid: string; readonly restored: readonly string[]; readonly swept: readonly string[]; readonly left: readonly string[] }> => {
     const sid = await currentSid(runner);
     const paths = hardenedPaths(sid);
     await runPowerShell(runner, { script: UNREGISTER_TASK_SCRIPT, input: taskInput(paths, sid), timeoutMs: 60_000 }, TaskAnswerSchema);
@@ -90,5 +95,5 @@ export const uninstallService = async (runner: Runner): Promise<{ readonly sid: 
     }
     await rm(paths.marker, { force: true });
     await rm(paths.door, { force: true });
-    return { sid, restored };
+    return { sid, restored, ...(await sweepHardenedLeftovers(runner, paths, sid)) };
 };

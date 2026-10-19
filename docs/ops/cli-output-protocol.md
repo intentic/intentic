@@ -119,6 +119,7 @@ While it runs, the same line reads `⠹  Stopping sandbox-82789f4106b4  ·  wait
 - The safe answer is always the default, and the default is always `N`. No question asks `[Y/n]`.
 - Picking from a list numbers the rows and accepts numbers, `a` for all, or `q` to cancel.
 - Something that cannot be undone is confirmed by typing its name (`Type its name to confirm:`). `--yes` never answers that kind of question; only `--confirm <name>` does.
+- `ic uninstall` is the one question whose first option, already selected, removes the most. It is one pick: `1` remove everything, `2` keep my sandboxes, `q` to cancel, because removing everything is what a person uninstalling asked for. The safe default still holds, since a default deletes nothing: when option 1 would delete sandboxes, it asks for their count typed (`Type 3 to confirm:`), `--yes` keeps every sandbox and saved password, and only `--delete-data --confirm <n>` deletes them unattended. With no sandboxes or saved passwords on the device it is a plain `[y/N]`.
 - Saying no prints one line and exits `0`: `·  Cancelled. Nothing changed.`
 
 **Stop**: something failed. The running step settles as `✗` with its time, so the reader can see where it stopped. Then comes the stop block on stderr:
@@ -151,6 +152,8 @@ The headline says what did not happen. `problem:` says why, in terms of the read
 | update, roll back, rebuild | recreate, swap | move a sandbox to another image |
 | stop, start, restart | power off, wake | a sandbox's containers |
 
+`uninstall` names one thing only: taking Intentic itself off a device (`ic uninstall`, the `uninstall` one-liner, the Windows uninstaller, the app's **Uninstall Intentic…**). Taking a sandbox off a device stays `remove`.
+
 Command names keep their spelling (`ic machine enroll`, `ic sandbox purge`) because scripts and the desktop app call them. Only the prose follows this table.
 
 **Typography:**
@@ -181,6 +184,7 @@ irm https://intentic.dev/<verb>/<arg> | iex
 | `fix/<code>` | a fix code | `fix` |
 | `update/<sandbox>`, `rollback/<sandbox>`, `restart/<sandbox>`, `rebuild/<sandbox>/<hash>` | the sandbox's name | `recreate` |
 | `remove[/<sandbox>]` | the sandbox's name, or nothing to pick from a list | `cleanup`, which hands over to `ic sandbox remove` |
+| `uninstall` | nothing, and what the person adds after it reaches `ic` (`\| sh -s -- --dry-run`) | `uninstall`, which hands over to `ic uninstall` |
 | `device/<host>/<code>`, `sync/<host>/<code>`, `server/<host>/<code>` | the sandbox's address and a code the sandbox minted | `device`, `sync`, `connect-host` |
 
 The PowerShell client is told apart by its User-Agent; a trailing `.ps1` or `.sh` on the last segment picks one outright. The older flat paths (`/connect`, `/device.ps1`, …) keep working for every command already pasted somewhere.
@@ -194,7 +198,7 @@ The PowerShell client is told apart by its User-Agent; a trailing `.ps1` or `.sh
 
 The sync folder's path never goes through the platform; only its last segment rides the URL, into a script on the person's own device. A setup that cannot be said this way (a sandbox reached on localhost, an origin other than the app's, a folder outside `~/intentic/`) keeps its environment-variable command.
 
-**Flags** are long and kebab-case: `--yes`, `--now`, `--confirm <name>`, `--json`. PowerShell scripts spell the same flags `-Yes`, `-Now`, `-Confirm`. A one-liner carries none, because its verb implies them.
+**Flags** are long and kebab-case: `--yes`, `--now`, `--confirm <name>`, `--json`. PowerShell scripts spell the same flags `-Yes`, `-Now`, `-Confirm`. A one-liner carries none, because its verb implies them. `uninstall` is the one verb that passes on flags the person adds: the Worker writes `set -- "$@"` into its sh script and `@args` after its PowerShell block, so `curl -fsSL https://intentic.dev/uninstall | sh -s -- --dry-run` and `& ([scriptblock]::Create((irm https://intentic.dev/uninstall))) -DryRun` both reach `ic uninstall`. Every other verb's URL replaces whatever was typed.
 
 **Elevation is asked for, never baked in.** When a step needs root or administrator rights, the script asks for them at that step and says why in one sentence. The editor never puts `sudo` in front of a command. A script that needs root throughout (connecting or removing a server) re-runs itself as `curl -fsSL "$INTENTIC_SCRIPT_URL" | sudo sh`, from the URL the Worker wrote into it.
 
@@ -217,6 +221,7 @@ Line by line, for a reader with no screen:
 - `intentic-requirement: {json}` and `intentic-requirement-state: {json}` come from `ic`'s Windows setup. The different prefix keeps a requirement from reading as a phase. Two rows can be `running` at once: the Docker Desktop download moves its own row while WSL2 is being turned on.
 - `intentic-prefetch: {"state","done","total"}` comes from `ic image prefetch`, about every two seconds: `state` is `fetching`, `ready`, `elsewhere` (another prefetch holds the cache), `skipped` (Docker Desktop is installed and nothing was half-fetched, so Docker pulls it) or `failed`; `done` and `total` are bytes.
 - `intentic-move:`, `intentic-fix:` and `intentic-prepare-summary:` carry one JSON object each, for the desktop app and the machine agent.
+- `intentic-uninstall: {json}` comes from `ic uninstall`, for the Windows uninstaller's page and the desktop app. The first line is the plan (`{"plan":[{"step","label"}],"choice"}`, `choice` being `everything` or `keep-sandboxes`). Each step then reports `{"step","state","label"}` with `state` `running`, and settles as `done`, `failed` or `skipped` with a `detail` sentence. The last line is the result: `{"result":"done"|"partial","stays":[…],"failed":[{"label","problem","fix"}]}`. Step ids are `stop`, `distros`, `sandboxes`, `agent`, `sync`, `engine`, `files`, `app` and `ic`. A reader ignores a field or a step it does not know. `ic uninstall --dry-run --json` prints the inventory as one document instead.
 - Docker's pull and build lines pass through verbatim; the desktop app reads layer states from them.
 - Warnings go to stderr with the `intentic: ` prefix. A stopped run ends with `error: <message>` on stderr; the desktop app shows the text after `error: ` to the person.
 

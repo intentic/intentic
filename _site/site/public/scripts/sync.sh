@@ -2,8 +2,8 @@
 # intentic desktop sync: sync a local folder on THIS device two ways with your sandbox's /work (block-delta, near
 # real time), and mirror the sandbox's dev-server ports onto this device's localhost (both powered by Mutagen). Runs as
 # YOU (no sudo): it installs the one device agent into ~/.intentic/machine (shared with the connected-device capability,
-# if you enable that too) and registers per-user login entries (the agent and the Mutagen daemon) so both resume after a
-# reboot. `intentic-machine sync uninstall` removes everything.
+# if you enable that too) and registers a per-user login entry for it, so it, and the Mutagen daemon it starts, resume
+# after a reboot. `intentic-machine sync uninstall` stops syncing; `intentic-machine uninstall --purge` removes the agent.
 #
 # THIS IS A BOOTSTRAP SHIM: its whole job is to put an agent that understands `sync setup` on a device that has none,
 # then hand over to it, and that agent decides everything else, including moving itself onto the current release, so

@@ -54,6 +54,7 @@ mod selfhost;
 mod shape;
 mod tty;
 mod ui;
+mod uninstall;
 mod util;
 
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
@@ -106,6 +107,39 @@ enum Command {
     /// pairing. Exit 3 on any machine that is not Intentic OS
     #[command(subcommand)]
     Os(OsCommand),
+    /// Uninstall Intentic from this device: shows what is here, asks what happens to your sandboxes, then removes the
+    /// rest (the app, the engine, the agent, folder sync, caches and ic itself)
+    Uninstall {
+        /// Keep your sandboxes and what keeps them running (the engine, the agent, ic); remove only the app, folder
+        /// sync and caches
+        #[arg(long, conflicts_with = "delete_data")]
+        keep_sandboxes: bool,
+        /// Also delete your sandboxes and saved passwords. With sandboxes, --confirm <count> answers it without a
+        /// terminal
+        #[arg(long)]
+        delete_data: bool,
+        /// Answer the typed confirmation of --delete-data without a terminal: the number of sandboxes --dry-run lists
+        #[arg(long, value_name = "COUNT")]
+        confirm: Option<String>,
+        /// Go ahead without asking. It keeps your sandboxes and saved passwords unless --delete-data says otherwise
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+        /// Show what is here and what each outcome would remove, and change nothing
+        #[arg(long)]
+        dry_run: bool,
+        /// With --dry-run: one line of JSON on stdout (what the desktop app reads)
+        #[arg(long, requires = "dry_run")]
+        json: bool,
+        /// With --dry-run: the inventory as an INI file (what the Windows uninstaller's page reads)
+        #[arg(long, requires = "dry_run", hide = true, value_name = "PATH")]
+        ini: Option<std::path::PathBuf>,
+        /// The desktop app removes itself (its uninstaller, or its own dialog): leave the app alone
+        #[arg(long, hide = true)]
+        without_app: bool,
+        /// Run by an outer `ic uninstall` that has already asked (inside a WSL distro)
+        #[arg(long, hide = true)]
+        nested: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1397,6 +1431,27 @@ fn main() {
             Some(EngineCommand::Wsl { action, distro }) => engine::run_wsl(action, distro),
         },
         Command::Os(command) => run_os(command),
+        Command::Uninstall {
+            keep_sandboxes,
+            delete_data,
+            confirm,
+            yes,
+            dry_run,
+            json,
+            ini,
+            without_app,
+            nested,
+        } => uninstall::run(uninstall::Args {
+            keep_sandboxes,
+            delete_data,
+            confirm,
+            yes,
+            dry_run,
+            json,
+            ini,
+            without_app,
+            nested,
+        }),
     };
     if let Err(util::Fail(message)) = result {
         ui::error(&message);
@@ -1421,6 +1476,8 @@ fn allowed_during_a_move(command: &Command) -> bool {
             None | Some(EngineCommand::Status { .. }) | Some(EngineCommand::Fetch)
         ),
         Command::Image(_) => true,
+        // Reading what is here changes nothing; an uninstall waits for the move like every other change.
+        Command::Uninstall { dry_run, .. } => *dry_run,
         Command::Docker(DockerCommand::Prepare { dry_run, .. }) => *dry_run,
         // The lock screen's check reads nothing of an engine, and refusing it would keep the owner out of their screen.
         Command::Os(OsCommand::Lock(LockCommand::Check | LockCommand::Status { .. })) => true,

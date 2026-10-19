@@ -92,6 +92,15 @@ export const addToWindowsPathValue = (stored: string, folder: string): string | 
     return [...entries, folder].join(";");
 };
 
+// The per-user PATH without `folder`, or undefined when it holds no such entry: the mirror of addToWindowsPathValue,
+// for `uninstall --purge`. Whole entries only, compared as Windows compares paths (case-insensitively, a trailing `\`
+// not counting); every other entry, empty ones included, goes back exactly as it was, under the value's own kind.
+export const removeFromWindowsPathValue = (stored: string, folder: string): string | undefined => {
+    const same = (entry: string): boolean => entry.replace(/\\+$/u, "").toLowerCase() === folder.replace(/\\+$/u, "").toLowerCase();
+    const entries = stored.split(";");
+    return entries.some(same) ? entries.filter((entry) => !same(entry)).join(";") : undefined;
+};
+
 // Explorer hands every terminal it starts a copy of the environment taken at its own startup; without this
 // broadcast the new PATH reaches nothing until the next sign-in. SendMessageTimeout, so one wedged window
 // cannot wedge a setup.
@@ -116,10 +125,10 @@ export const windowsPathFrom = (value: RegistryValue | undefined): { readonly ki
 
 // Read unexpanded and with its kind (windows-registry.ts), the property [Environment]::GetEnvironmentVariable lacks;
 // written through reg.exe, which never changes a value's kind on add and takes the value as UTF-16 from Node's argv.
-const readWindowsPath = async (): Promise<{ readonly kind: string; readonly stored: string }> =>
+export const readWindowsPath = async (): Promise<{ readonly kind: string; readonly stored: string }> =>
     windowsPathFrom(await readRegistryValue("HKCU:\\Environment", "Path"));
 
-const writeWindowsPath = async (kind: string, value: string): Promise<void> => {
+export const writeWindowsPath = async (kind: string, value: string): Promise<void> => {
     const add = await runBounded("reg", ["add", "HKCU\\Environment", "/v", "Path", "/t", kind, "/d", value, "/f"], { timeoutMs: 15_000 });
     if (add.exitCode !== 0) {
         throw new Error(add.stderr.text.trim() === "" ? `reg add exited ${String(add.exitCode)}` : add.stderr.text.trim());

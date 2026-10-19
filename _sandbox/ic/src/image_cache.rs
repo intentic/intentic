@@ -147,13 +147,18 @@ fn home() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Where one image's cache lives. `INTENTIC_IMAGE_CACHE` moves the root (tests, and a device whose home is the small disk).
-pub fn dir_for(reference: &Reference) -> Option<PathBuf> {
-    let root = std::env::var_os("INTENTIC_IMAGE_CACHE")
+/// Where every image's cache lives. `INTENTIC_IMAGE_CACHE` moves the root (tests, and a device whose home is the small
+/// disk); `ic uninstall` deletes it whole.
+pub fn cache_root() -> Option<PathBuf> {
+    std::env::var_os("INTENTIC_IMAGE_CACHE")
         .filter(|root| !root.is_empty())
         .map(PathBuf::from)
-        .or_else(|| home().map(|home| home.join(".intentic").join("image-cache")))?;
-    Some(root.join(reference.slug()))
+        .or_else(|| home().map(|home| home.join(".intentic").join("image-cache")))
+}
+
+/// Where one image's cache lives.
+pub fn dir_for(reference: &Reference) -> Option<PathBuf> {
+    Some(cache_root()?.join(reference.slug()))
 }
 
 fn blob_path(dir: &Path, digest: &str) -> PathBuf {

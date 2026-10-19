@@ -79,6 +79,7 @@ describe("every verb", () => {
         ["/rebuild/sandbox-abc/0123abcd", "set -- 'sandbox-abc' '0123abcd'", "-Slug 'sandbox-abc' -Hash '0123abcd'", "recreate.sh"],
         ["/remove/sandbox-abc", "set -- 'sandbox-abc' '--yes'", "-Slug 'sandbox-abc' -Yes", "cleanup.sh"],
         ["/remove", "set --", "", "cleanup.sh"],
+        ["/uninstall", 'set -- "$@"', "@args", "uninstall.sh"],
         ["/device/sandbox-abc.intentic.app/AB12-CD34", "set -- 'sandbox-abc.intentic.app' 'AB12-CD34'", "-Sandbox 'sandbox-abc.intentic.app' -Code 'AB12-CD34'", "device.sh"],
         ["/sync/sandbox-abc.intentic.app/AB12CD34", "set -- 'sandbox-abc.intentic.app' 'AB12CD34'", "-Sandbox 'sandbox-abc.intentic.app' -Code 'AB12CD34'", "sync.sh"],
         ["/server/box.example.com/AB12CD34", "set -- 'box.example.com' 'AB12CD34'", "-Sandbox 'box.example.com' -Code 'AB12CD34'", "connect-host.sh"],
@@ -101,6 +102,13 @@ describe("every verb", () => {
             expect(psBody.endsWith(ps1 === "" ? "\n}\n" : `\n} ${ps1}\n`)).toBe(true);
         });
     }
+
+    test("uninstall keeps what the person typed after the URL, and every other verb replaces it", () => {
+        expect(ok("/uninstall").typed).toBe(true);
+        expect(ok("/remove").typed).toBe(false);
+        expect(ok("/remove/sandbox-abc").typed).toBe(false);
+        expect(serve("/uninstall.ps1", CURL).endsWith("\n} @args\n")).toBe(true);
+    });
 
     test("a sync folder leaf rides as an exported SYNC_DIR line after the URL", () => {
         const lines = serve("/setup/Abc123XYZ/my-project").split("\n");
@@ -165,6 +173,7 @@ describe("refusals", () => {
         expect(refused("/update/a1/b2")).toBe("update takes a sandbox name.");
         expect(refused("/rebuild/sandbox-abc")).toBe("rebuild takes a sandbox name and an image hash.");
         expect(refused("/remove/sandbox-abc/more")).toBe("remove takes an optional sandbox name.");
+        expect(refused("/uninstall/everything")).toBe("uninstall takes nothing after it.");
         expect(refused("/setup")).toBe("setup takes a setup code and an optional sync folder.");
         expect(refused("/server/box.example.com")).toBe("server takes a sandbox address and a code.");
     });
@@ -188,12 +197,20 @@ describe("injection", () => {
         expect(injectSh("#!/bin/sh\r\necho\r\n", resolved, "https://x.dev/u").startsWith("#!/bin/sh\r\nset -- 'sandbox-abc'\n")).toBe(true);
     });
 
+    test("a typed verb passes the person's own arguments on, after the URL's", () => {
+        const typed: ResolvedOneLiner = { ...resolved, typed: true };
+        expect(injectSh("#!/bin/sh\necho hi\n", typed, "https://x.dev/u")).toBe(
+            "#!/bin/sh\nset -- 'sandbox-abc' \"$@\"\nINTENTIC_SCRIPT_URL='https://x.dev/u'\necho hi\n",
+        );
+        expect(injectPs1("param([string]$Slug)\n$Slug", typed)).toBe("& {\nparam([string]$Slug)\n$Slug\n} -Slug 'sandbox-abc' @args\n");
+    });
+
     test("a URL that could break the quoting is refused", () => {
         expect(() => injectSh("#!/bin/sh\n", resolved, "https://x.dev/'")).toThrow();
     });
 
     test("the ps1 param block stays the first statement inside the block", () => {
-        for (const file of ["connect.ps1", "recreate.ps1", "cleanup.ps1", "connect-host.ps1"]) {
+        for (const file of ["connect.ps1", "recreate.ps1", "cleanup.ps1", "connect-host.ps1", "uninstall.ps1"]) {
             const body = injectPs1(script(file), resolved);
             const inner = body.slice("& {\n".length, body.lastIndexOf("\n}"));
             // Comments (the help block) are not statements; the first code is `param(`.

@@ -7,6 +7,7 @@ import { runBoundedSync, runBoundedSyncBytes, type SyncProcessResult } from "@in
 import { LOG_ROTATE_BYTES } from "./detached.js";
 import { type CliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub } from "./launcher.js";
 import type { Log } from "./home.js";
+import { enableLinger } from "./linger.js";
 
 // Login autostart per OS, every mechanism supervising what it starts and none needing elevation or a password: a
 // per-user logon task through the launcher stub on Windows (the Run key as fallback), a systemd user unit on Linux
@@ -727,7 +728,6 @@ const plistArguments = (entry: string): string | undefined => {
 };
 
 // Exactly one of a systemd user unit or an XDG entry is written, never both, or a desktop machine starts it twice.
-// Lingering keeps the user manager (and the unit) alive without a session, or a headless box never autostarts.
 const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): Autostart => ({
     inspect: async () => {
         if (systemdUserAvailable()) {
@@ -746,7 +746,7 @@ const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): A
             await rm(linuxDesktopPath(spec), { force: true });
             await mkdir(dirname(unit), { recursive: true });
             await writeFile(unit, wanted, { mode: 0o644 });
-            runTool("loginctl", ["enable-linger"], "ignore");
+            await enableLinger(spec);
             // daemon-reload so a rewritten unit is picked up, not the version systemd already parsed.
             runTool("systemctl", ["--user", "daemon-reload"], "ignore");
             register("systemctl", ["--user", "enable", systemdUnitName(spec)]);

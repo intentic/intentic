@@ -206,7 +206,8 @@ impl MoveReading {
 }
 
 /// The `ic` this app runs `ic engine` with: its own, which knows every field the card reads, else the one installed.
-fn ic_program() -> Option<PathBuf> {
+/// `ic uninstall` too (uninstall.rs): the one beside this app is the same release, and is never the copy it removes.
+pub(crate) fn ic_program() -> Option<PathBuf> {
     commands::bundled_ic().or_else(|| {
         let home = std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
@@ -233,7 +234,7 @@ fn ic_engine(args: &[&str], limit: Duration) -> Result<scripts::Captured, String
 }
 
 /// What ic said on its way out of a run that failed: its `error:` line, else its last line. Pure.
-fn last_words(stdout: &str, stderr: &str, what: &str) -> String {
+pub(crate) fn last_words(stdout: &str, stderr: &str, what: &str) -> String {
     let said = |text: &str| {
         text.lines()
             .map(str::trim)

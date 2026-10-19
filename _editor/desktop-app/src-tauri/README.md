@@ -53,6 +53,9 @@ flowchart LR
   Restart Manager to release their executable files before Tauri's running-app check. A process name can disappear
   before that file ownership clears; checking too soon silently aborted removal before Windows' uninstall entry and
   the terminal command's PATH entry were removed. The wait is bounded, leaving Tauri to report a shutdown failure.
+  The uninstaller's first page asks the bundled `intentic-ic.exe` what else is on the PC and offers "Remove
+  everything" or "Keep my sandboxes"; the hook hands that answer to `ic uninstall --without-app`, then deletes the
+  app's own folders (the package README has the whole of it).
 
 ## Key files
 

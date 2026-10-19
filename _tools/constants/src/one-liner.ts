@@ -70,12 +70,16 @@ export interface ResolvedOneLiner {
     readonly shArgs: readonly string[];
     readonly shEnv: readonly (readonly [name: string, value: string])[];
     readonly ps1Params: readonly Ps1Param[];
+    // Whether the arguments a person adds by hand (`| sh -s -- --dry-run`, or after the scriptblock in PowerShell) ride
+    // after the URL's. Otherwise the URL's replace them, so `$1…` are exactly what the URL says.
+    readonly typed: boolean;
 }
 
 interface VerbSpec {
     readonly files: { readonly sh: string; readonly ps1: string };
     readonly required: readonly ArgSpec[];
     readonly optional: readonly ArgSpec[];
+    readonly typed?: true;
     readonly sh: (args: readonly string[]) => { readonly args: readonly string[]; readonly env?: readonly (readonly [string, string])[] };
     readonly ps1: (args: readonly string[]) => readonly Ps1Param[];
 }
@@ -160,6 +164,16 @@ const VERBS = {
         sh: ([name]) => ({ args: name === undefined ? [] : [name, `--yes`] }),
         ps1: ([name]) => (name === undefined ? [] : [{ name: `Slug`, value: name }, { name: `Yes` }]),
     },
+    // Intentic itself off this device, by `ic uninstall`, which shows what it found and asks before it deletes
+    // anything. Nothing rides the URL; a flag the person adds (`--dry-run`, `--keep-sandboxes`) reaches ic.
+    uninstall: {
+        files: { sh: `uninstall.sh`, ps1: `uninstall.ps1` },
+        required: [],
+        optional: [],
+        typed: true,
+        sh: () => ({ args: [] }),
+        ps1: () => [],
+    },
     device: coded(`device.sh`, `device.ps1`),
     sync: coded(`sync.sh`, `sync.ps1`),
     server: coded(`connect-host.sh`, `connect-host.ps1`),
@@ -195,7 +209,7 @@ export const resolveOneLiner = (verb: OneLinerVerb, raw: readonly string[]): Res
         args.push(normalized);
     }
     const sh = spec.sh(args);
-    return { files: spec.files, shArgs: sh.args, shEnv: sh.env ?? [], ps1Params: spec.ps1(args) };
+    return { files: spec.files, shArgs: sh.args, shEnv: sh.env ?? [], ps1Params: spec.ps1(args), typed: spec.typed === true };
 };
 
 const resolved = (verb: OneLinerVerb, args: readonly string[]): ResolvedOneLiner => {

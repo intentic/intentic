@@ -1446,7 +1446,8 @@ pub fn unsaved_windows() -> usize {
 /// A restart cannot be held (Tauri ignores a prevented restart), which is why an update refuses to start while
 /// anything is unsaved or running (update.rs `refusal`) rather than relying on this.
 pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
-    if code == tauri::RESTART_EXIT_CODE {
+    // The quit that ends an uninstall (uninstall.rs `finish`): nothing is left to save or to wait for.
+    if code == tauri::RESTART_EXIT_CODE || crate::uninstall::leaving() {
         return false;
     }
     let count = unsaved_windows();
@@ -1525,6 +1526,8 @@ pub fn run_said(run: &str) -> String {
             "updating this computer's system".to_string()
         }
         "project" => "bringing changes back to a folder".to_string(),
+        // This device's "Uninstall Intentic…" (uninstall.rs): stopped half way, it leaves half an install behind.
+        "uninstall" => "uninstalling Intentic".to_string(),
         _ => "a task on this computer".to_string(),
     }
 }

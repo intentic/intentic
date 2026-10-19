@@ -116,6 +116,8 @@ export const runTeardown = async (harness: Harness): Promise<void> => {
         harness.pass(`${PRODUCT_NAME} is not installed`);
         return;
     }
+    // Silent, so it keeps every sandbox and what runs them (installer-hooks.nsh: an unattended uninstall runs
+    // `ic uninstall --keep-sandboxes`): this run's containers are the ones removed by name above.
     await uninstallSilently(installed.uninstallString);
     // A failed uninstall leaves the registration, satisfying the install tier's own assertion on stale evidence.
     await powershell(

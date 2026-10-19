@@ -410,16 +410,30 @@ fn announce_removal(slug: &str) {
 /// Err says what was not done and where that left the sandbox; the caller counts it as not removed (2026-10-11: every
 /// selected slug was counted, so a removal docker refused said "1 sandbox removed" and exited 0).
 pub fn remove_slug(slug: &str, now: bool) -> std::result::Result<(), String> {
+    removal(slug, now, true)
+}
+
+/// [`remove_slug`] under `--now`, with no live line of its own: `ic uninstall` deletes every sandbox inside one step
+/// of its checklist, and an action line per sandbox would settle that step before its work was done.
+pub(crate) fn delete_within_a_step(slug: &str) -> std::result::Result<(), String> {
+    removal(slug, true, false)
+}
+
+fn removal(slug: &str, now: bool, say: bool) -> std::result::Result<(), String> {
     let _held = lock::hold_for_person(slug).map_err(|fail| {
         let why: Vec<&str> = fail.0.lines().map(str::trim).collect();
         format!("{slug} was left as it is: {}", why.join(" "))
     })?;
     announce_removal(slug);
     let outcome = if now {
-        ui::act(&format!("Deleting {slug}"));
+        if say {
+            ui::act(&format!("Deleting {slug}"));
+        }
         trash::delete(slug)
     } else {
-        ui::act(&format!("Removing {slug}"));
+        if say {
+            ui::act(&format!("Removing {slug}"));
+        }
         trash::stash(slug)
     };
     // Its pairings go once it has left the live namespace, whether or not every step after that went through.
@@ -451,7 +465,7 @@ fn forget_pairings(slug: &str) {
 }
 
 /// The machine agent's binary: on PATH, else where its installer puts it.
-fn machine_agent() -> Option<std::path::PathBuf> {
+pub(crate) fn machine_agent() -> Option<std::path::PathBuf> {
     let name = if cfg!(windows) {
         "intentic-machine.exe"
     } else {
@@ -472,7 +486,7 @@ fn machine_agent() -> Option<std::path::PathBuf> {
 }
 
 /// The user who ran `sudo ic …`, whose agent and home these are; None when this is not a sudo run.
-fn invoking_user() -> Option<String> {
+pub(crate) fn invoking_user() -> Option<String> {
     #[cfg(unix)]
     {
         if docker::is_root() {
@@ -488,7 +502,7 @@ fn invoking_user() -> Option<String> {
 const UNINSTALL_LIMIT: Duration = Duration::from_secs(120);
 
 /// The machine agent, run as the user whose agent it is: `sudo -u <user> -H` under sudo, else as it is.
-fn as_invoking_user(program: &Path) -> std::process::Command {
+pub(crate) fn as_invoking_user(program: &Path) -> std::process::Command {
     match invoking_user() {
         Some(user) => {
             let mut sudo = std::process::Command::new("sudo");
@@ -523,7 +537,7 @@ fn disconnect_machine_agent() {
 }
 
 /// The machine agent's own folder, in the home of the user whose agent it is.
-fn machine_dir() -> PathBuf {
+pub(crate) fn machine_dir() -> PathBuf {
     let home = invoking_user()
         .and_then(|user| {
             std::fs::read_to_string("/etc/passwd")
@@ -570,7 +584,7 @@ fn purge_machine_records() {
 /// sandbox they belong to, as `ic sandbox tidy` groups them. A set this side made goes to the trash like any removed
 /// sandbox (under `--now`, it is deleted); a network alone holds nothing and goes; a set another side of this
 /// computer made is that side's to decide. The prefixes never overlap the platform's intentic-app-* resources.
-fn sweep_orphans(now: bool) {
+pub(crate) fn sweep_orphans(now: bool) {
     let Some(live) = crate::sandbox::live_slugs() else {
         return;
     };
@@ -629,7 +643,7 @@ fn sweep_orphans(now: bool) {
     }
 }
 
-fn auth_volume() -> String {
+pub(crate) fn auth_volume() -> String {
     std::env::var("INTENTIC_AGENT_AUTH_VOLUME")
         .ok()
         .filter(|value| !value.is_empty())
@@ -665,6 +679,24 @@ fn maybe_remove_agent_auth(args: &Args) -> Result<()> {
         remove_agent_auth(&volume);
     }
     Ok(())
+}
+
+/// The shared logins volume deleted inside `ic uninstall`'s step: said as narration, since the step is the live line.
+/// True when it is gone (or was never there).
+pub(crate) fn delete_agent_auth_within_a_step() -> bool {
+    let volume = auth_volume();
+    if volume.starts_with('/') || !docker::ok(&["volume", "inspect", &volume]) {
+        return true;
+    }
+    if docker::ok(&["volume", "rm", &volume]) {
+        crate::sandbox::at_rest::forget(&crate::sandbox::at_rest::shared_key(&volume));
+        ui::note(&format!(
+            "Deleted the AI logins of every dev sandbox ({volume})."
+        ));
+        true
+    } else {
+        false
+    }
 }
 
 fn remove_agent_auth(volume: &str) {

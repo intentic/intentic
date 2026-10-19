@@ -175,7 +175,8 @@ flowchart LR
   restarted more often than hourly never paused a dead sandbox's sessions). A sandbox that no longer exists is another
   matter: see [Sandboxes that are gone](#sandboxes-that-are-gone). `sync uninstall` ends every session and forward of
   this agent's and stops its Mutagen daemon, which serves this agent alone (below), starting it first if it was down so
-  every session is really ended; the synced folders keep their files. `sync uninstall --folders` (what the desktop app's
+  every session is really ended; the synced folders keep their files. It runs the agent's own Mutagen in `bin/` and
+  downloads none: without that copy the session steps are skipped (2026-10-18). `sync uninstall --folders` (what the desktop app's
   uninstaller runs) unpairs only the pairings that sync a folder here: mirror-only pairings and the projects host keep
   their ports and their enrollments.
 - Symbolic links travel only where the device can create them ([`sync/symlinks.ts`](src/sync/symlinks.ts)). A
@@ -930,9 +931,51 @@ user: through `[Environment]::SetEnvironmentVariable` on Windows, and on Linux a
 `~/.config/environment.d/intentic-askpass.conf`, printing the `export` lines a shell profile needs. `keyring
 uninstall` keeps the vault in `~/.intentic/keyring`.
 
+### Uninstall
+
+`intentic-machine uninstall [--purge] [--delete-data]` ([`src/uninstall/`](src/uninstall/)). `ic uninstall` is the one
+orchestrator of a whole-device uninstall and runs `--purge` here; the agent's own command is the same removal for a
+person who runs it alone, and either way it never downloads anything.
+
+- **No flag**: every sandbox link, every sync pairing and the login entry go, as they always have. The agent goes even
+  from a device that hosts sandboxes; on Windows it keeps running while WSL distros are attached, to keep them running.
+- **`--purge`**: everything of the agent leaves this environment, in this order:
+  1. On Windows, each WSL distro in `machine.json` is purged through its own agent (`wsl.exe`, five minutes at most
+     each; an agent older than `--purge` takes the plain uninstall, and the warning says how to finish), and the list
+     is emptied, so nothing is left for the Windows side's agent to keep running for.
+  2. On Linux and macOS the binary is renamed to `bin/intentic-machine.uninstalling` before anything stops the agent.
+     The Windows side restarts a stopped distro agent a second later through a script that exits 64 when the binary is
+     missing, and then drops that distro from its list, so a purged distro does not come back.
+  3. The programs sandboxes started with `app_start` are stopped, from every sandbox's `runs/<sandbox>/apps.json`.
+  4. The plain uninstall runs (links, pairings, the login entry). Mutagen is the agent's own copy in `bin/` or none: a
+     missing copy skips the session steps instead of downloading one.
+  5. Windows' start before sign-in is removed (Windows asks for permission), and the resident agent is stopped with its
+     login entry whatever it still served.
+  6. The agent's Mutagen daemon is stopped and the ssh include removed, in case the sync step stopped early.
+  7. The keyring goes with askpass (`keyring uninstall`). A hardened keyring needs an administrator's yes. If it is
+     declined, the service stays, and so do `bin/` and the PATH entry, so the purge can be run again to finish it.
+  8. What the agents before this one left goes: the `intentic-host` and `intentic-sync-mirror` login entries,
+     `~/.intentic/host` and `~/.intentic/sync`, their `~/.local/bin` links, and the `intentic-link-watch` timer.
+  9. The PATH entry goes: `bin` out of the per-user PATH on Windows (`removeFromWindowsPathValue`, written back under
+     the value's own kind), and the `~/.local/bin/intentic-machine` link where it points into `bin`.
+  10. Lingering is turned off only where the agent turned it on. local-agent writes `linger-enabled` beside the agent's
+      log the one time `loginctl enable-linger` changes it from off to on. Lingering the user had already stays.
+  11. The files go: `~/.intentic/machine` and `~/.intentic/keyring` except the person's data, then each folder once
+      empty, and `~/.intentic` once nothing is left in it. Everything else under `~/.intentic` is ic's and is never
+      touched. On Windows the running agent is moved to `%TEMP%` first, and a hidden PowerShell removes what was still
+      in use once this process has exited.
+- **The data that stays** without `--delete-data`: the keyring's `vault.json`, `keys.json` and `audit.jsonl*`;
+  `machine/restore`; `machine/audit.jsonl*`; and in `machine/trash` the folders `trash_file` made for files a sandbox
+  moved aside on this device (named for the moment alone; the upkeep's own trash entries go). The narration says what
+  stayed and why.
+- **`--delete-data`** implies `--purge` and removes the data too.
+- A step that does not finish is a warning with the command that finishes it by hand (`fix:` on its own line), and the
+  verdict counts them. The run fails, exit 1, only when the agent is still running or its files could not be removed.
+
 ## Key files
 
 - [src/commands.ts](src/commands.ts) — the CLI: `device`, `sync`, `keyring`, `sandbox`, `run`, `status`, `doctor`, `upgrade`, `updates`, `uninstall`.
+- [src/uninstall/purge.ts](src/uninstall/purge.ts) — `uninstall --purge`: the steps in `steps.ts`, the distros in `distros.ts`, the files in `sweep.ts`, every decision pure in `plan.ts`.
 - [src/resident/resident.ts](src/resident/resident.ts) — the resident process that holds links, pairings and WSL distros; `supervision.ts` beside it starts and stops it through whatever restarts this environment's agent.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
 - [src/device/policy.ts](src/device/policy.ts) — scope checks and the file-root boundary.

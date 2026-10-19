@@ -34,6 +34,7 @@ mod shell;
 mod shown;
 mod sidecar;
 mod state;
+mod uninstall;
 mod update;
 mod wake;
 mod webview_sync;
@@ -289,6 +290,11 @@ pub fn run() {
             engine::engine_move,
             engine::engine_prefer,
             engine::engine_cleanup,
+            // Uninstalling Intentic from this computer, This device's "Uninstall Intentic…" (uninstall.rs).
+            uninstall::uninstall_inventory,
+            uninstall::uninstall_run,
+            uninstall::uninstall_state,
+            uninstall::uninstall_finish,
             // Intentic OS: this computer's system, and the changes This device makes to it (os.rs).
             os::os_status,
             os::os_update_check,

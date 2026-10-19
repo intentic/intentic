@@ -41,6 +41,7 @@ export {
     spawnDetached,
     stopProcess,
 } from "./detached.js";
+export { disableLinger, lingerMarkerPath, lingerOn } from "./linger.js";
 export { agentException } from "./text.js";
 export {
     asLabel,

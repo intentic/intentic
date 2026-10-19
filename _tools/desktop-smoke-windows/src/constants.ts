@@ -4,7 +4,7 @@
 /** What Windows lists the app as, and what installedApp matches on; productName in the bundle config. */
 export const PRODUCT_NAME = `Intentic`;
 
-/** Tauri's bundle identifier; names this app's directory under Windows' roaming app-data directory. */
+/** Tauri's bundle identifier; names this app's directories under Windows' roaming and local app-data directories. */
 export const APP_IDENTIFIER = `dev.intentic.desktop`;
 
 /** The scheme the whole channel from the SPA into the app rides on. */

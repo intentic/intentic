@@ -35,6 +35,7 @@ import ThisComputer from "./intenticOs/ThisComputer.vue";
 import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
 import PasswordsGroup from "./keyring/PasswordsGroup.vue";
+import UninstallSection from "./uninstall/UninstallSection.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
 import { engineBackShown, engineDownSentence, engineEventful, engineQuiet, showMoveLog } from "./engine";
@@ -646,6 +647,9 @@ onMounted(() => {
                     {{ t(`desktop.engine.moveBack`) }}
                 </button>
             </p>
+            <!-- REMOVING INTENTIC FROM THIS COMPUTER, last of all: there for whoever looks for it, and it asks before anything goes.
+                 Not on Intentic OS, where Intentic is the system itself. -->
+            <UninstallSection v-if="!osState" :app-version="info?.version" />
         </div>
 
         <!-- The sandbox's shape as ic reports it (running and saved for the next restart) and this engine's size for the form's rails. -->

@@ -4,7 +4,8 @@
 // 2. on disk: the executable and the scripts it spawns, and the `intentic` terminal command on the user's PATH
 // 3. intentic:// registered before the app's first run, since the app rewrites it after
 // 4. the deep link, with the app not running and already running (different mechanisms)
-// 5. uninstall while the app is running (the ordinary state, since it lives in the tray)
+// 5. uninstall while the app is running (the ordinary state, since it lives in the tray), silently: what an unattended
+//    uninstall removes (the app, its own folders, its PATH entry) and nothing it keeps (installer-hooks.nsh)
 
 import { errorMessage } from "@intentic/base/errors";
 import type { WindowInfo } from "@intentic/desktop-automation";
@@ -15,7 +16,7 @@ import { appExecutable, appRunning, installSilently, launchApp, quitApp, uninsta
 import { APP_IDENTIFIER, CONFIRM_TITLE, PRODUCT_NAME, SCHEME, SETUP_LINK, SETUP_TITLE, WORKSPACE_TITLE } from "./constants.js";
 import type { Harness } from "./harness.js";
 import { prepareHermeticDesktop } from "./hermetic.js";
-import { ownedBy, pathHolds } from "./parse.js";
+import { type InstalledApp, ownedBy, pathHolds } from "./parse.js";
 import { answerConfirm, appWindowTitled, appWindows, findInstalledApp, openLink, schemeCommand, userPath, webView2, windows } from "./probe.js";
 
 export interface InstallTierOptions {
@@ -37,6 +38,10 @@ const SCREEN_SECONDS = 60;
 // loaded runner is its own wait: run 38459232153's setup screen took 28 s to appear and the stand-in had not run 10 s
 // later, where every run before it found it already run (the release smoke passed the same build an hour earlier).
 const SETUP_START_SECONDS = 45;
+
+/** The app's own folders: its settings (roaming) and the webview's profile (local), each named for its identifier. */
+const appFolders = (): readonly string[] =>
+    [process.env[`APPDATA`], process.env[`LOCALAPPDATA`]].filter((base): base is string => base !== undefined && base !== ``).map((base) => join(base, APP_IDENTIFIER));
 
 // Single-instance plugin's own hidden window (15×15 at the origin), named so window counts by owning program can
 // exclude it.
@@ -91,8 +96,9 @@ const assertAskedOnce = async (harness: Harness, app: string): Promise<void> => 
 };
 
 // The ic CLI beside the app as intentic-ic.exe (tauri.conf.json `externalBin`), which every script the app runs copies
-// into place as ic.exe rather than downloading the same release from GitHub (commands.rs INTENTIC_IC_PATH).
-// verify-desktop-bundle.sh finds it in the archive; this checks the install put it on disk.
+// into place as ic.exe rather than downloading the same release from GitHub (commands.rs INTENTIC_IC_PATH), and which the
+// uninstaller runs to remove the rest of Intentic (installer-hooks.nsh, `ic uninstall`). verify-desktop-bundle.sh finds
+// it in the archive; this checks the install put it on disk.
 const assertCarriesIc = (harness: Harness, installLocation: string): void => {
     const ic = join(installLocation, `intentic-ic.exe`);
     if (existsSync(ic)) {
@@ -117,6 +123,33 @@ const assertTerminalCommand = async (harness: Harness, installLocation: string):
         harness.pass(`${bin} is on the user's PATH`);
     } else {
         harness.fail(`${bin} is not on the user's PATH`, `\`intentic .\` would not be found in a new terminal; the install's details say why.`);
+    }
+};
+
+// The uninstall, run silently over the app while it runs, and what it must leave: no entry, no process, no PATH entry,
+// none of the app's own folders.
+const uninstallRunning = async (harness: Harness, installed: InstalledApp, executable: string): Promise<void> => {
+    harness.section(`uninstall, with the app running`);
+    const uninstall = await uninstallSilently(installed.uninstallString);
+    if (uninstall.code === 0) {
+        harness.pass(`the uninstaller completed unattended, without a prompt`);
+    } else {
+        harness.fail(`the uninstaller exited ${uninstall.code}`, `${uninstall.stdout}${uninstall.stderr}`);
+    }
+    await harness.untilTrue(60, `Windows no longer lists it`, async () => (await findInstalledApp(PRODUCT_NAME)) === undefined);
+    await harness.untilTrue(30, `no process is left running`, async () => !(await appRunning(executable)));
+    // An entry left behind would point every terminal at a folder that is gone.
+    if (pathHolds(await userPath(), join(installed.installLocation, `bin`))) {
+        harness.fail(`the uninstall left the terminal command's folder on the user's PATH`);
+    } else {
+        harness.pass(`the terminal command's folder is off the user's PATH`);
+    }
+    // The app's own folders go with every real uninstall, a silent one included (2026-10-18): its settings, and the
+    // webview's profile with the signed-in session in it. Before, they stayed unless "Delete app data" was ticked,
+    // which a silent uninstall never does. A silent one keeps the reader's data (sandboxes, saved passwords): that is
+    // ic's to keep (`--keep-sandboxes`), and nothing of it is in these folders.
+    for (const folder of appFolders()) {
+        await harness.untilTrue(30, `the uninstall removed the app's folder ${folder}`, () => !existsSync(folder));
     }
 };
 
@@ -302,21 +335,7 @@ export const runInstallTier = async (harness: Harness, options: InstallTierOptio
         }
 
         // Deliberately not quit first: the app running is the ordinary state the pre-uninstall hook exists for.
-        harness.section(`uninstall, with the app running`);
-        const uninstall = await uninstallSilently(installed.uninstallString);
-        if (uninstall.code === 0) {
-            harness.pass(`the uninstaller completed unattended, without a prompt`);
-        } else {
-            harness.fail(`the uninstaller exited ${uninstall.code}`, `${uninstall.stdout}${uninstall.stderr}`);
-        }
-        await harness.untilTrue(60, `Windows no longer lists it`, async () => (await findInstalledApp(PRODUCT_NAME)) === undefined);
-        await harness.untilTrue(30, `no process is left running`, async () => !(await appRunning(executable)));
-        // An entry left behind would point every terminal at a folder that is gone.
-        if (pathHolds(await userPath(), join(installed.installLocation, `bin`))) {
-            harness.fail(`the uninstall left the terminal command's folder on the user's PATH`);
-        } else {
-            harness.pass(`the terminal command's folder is off the user's PATH`);
-        }
+        await uninstallRunning(harness, installed, executable);
     } finally {
         await hermetic.close();
     }

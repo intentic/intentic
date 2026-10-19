@@ -726,6 +726,10 @@ fn refusal_title(error: &str) -> Option<&'static str> {
 
 /* THE INVISIBLE PATH, AND THE ONE THAT MAKES "ALWAYS ON THE NEWEST VERSION" TRUE. */
 pub fn install_on_exit(app: &AppHandle) {
+    // Quitting at the end of an uninstall (uninstall.rs): an update installed now would put the app back.
+    if crate::uninstall::leaving() {
+        return;
+    }
     // An install already under way is what an "Update" click a moment ago started, and it is on its way to
     // ending this process by itself. Reaching the installer twice is the one race here that could leave a
     // machine with two installers writing over each other and no working app at the end of it.

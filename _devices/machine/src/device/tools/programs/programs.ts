@@ -145,9 +145,9 @@ const processStartedAt = async (pid: number): Promise<number | undefined> => {
 // started (the machine rebooted, the agent was upgraded or crashed) only by its pid, which the system hands to another
 // program once the run ends, so the pid counts only while the process holding it began when the run did. `unknown` is
 // a live pid whose start cannot be read: nothing is signalled on its say-so.
-type RunState = "running" | "ended" | "unknown";
+export type RunState = "running" | "ended" | "unknown";
 
-const runState = async (run: AppRun): Promise<RunState> => {
+export const runState = async (run: AppRun): Promise<RunState> => {
     if (run.endedAt !== undefined) {
         return "ended";
     }
@@ -564,12 +564,12 @@ export const appLogs = async (id: string, lines: number, grep: string | undefine
     return shown === "" ? `${head}\n(nothing${grep === undefined ? " printed yet" : " matches"}; a GUI program often prints nothing at all)` : `${head}\n${shown}`;
 };
 
-const waitGone = async (run: AppRun, ms: number): Promise<boolean> => {
+export const waitGone = async (run: AppRun, ms: number): Promise<boolean> => {
     const gone = await pollFor(async () => ((await runState(run)) === "ended" ? true : undefined), { intervalMs: 200, until: Date.now() + ms });
     return gone.kind === "found" || (await runState(run)) === "ended";
 };
 
-const signalTree = async (pid: number, force: boolean): Promise<void> => {
+export const signalTree = async (pid: number, force: boolean): Promise<void> => {
     if (process.platform === "win32") {
         // /T takes everything it started; without /F a window is asked to close, as its close button would.
         // allow(silent-catch): taskkill fails when the tree already ended, which is the outcome a stop wants

@@ -1,11 +1,12 @@
 # ic
 
-The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, and gets Docker there first.
+The host-side CLI that starts, updates, diagnoses and removes intentic sandbox containers on the machine that runs them, gets Docker there first, and takes Intentic off it again.
 
 ```mermaid
 flowchart LR
     shim["connect.sh · connect.ps1<br/>setup one-liner"] --> ic(["ic"])
     fixshim["fix.sh · fix.ps1<br/>recovery panel's command"] --> ic
+    uninstallshim["uninstall.sh · uninstall.ps1<br/>Windows uninstaller"] --> ic
     desktop["Desktop app"] --> ic
     machine["Machine agent<br/>sandbox tools"] --> ic
     hosted["Platform<br/>hosted overlay builds"] --> ic
@@ -19,7 +20,8 @@ flowchart LR
 
 - Runs on the host: a laptop, a server or a hosted machine, never inside a sandbox, which cannot see its siblings.
   The bootstrap shims download a fresh static binary on every run, except one pinned to the release already installed
-  (`IC_VERSION` beside `IC_URL`, which the desktop app sets to its own); the desktop app and the machine agent call the
+  (`IC_VERSION` beside `IC_URL`, which the desktop app sets to its own) and the uninstall shim, which uses any ic that
+  knows `uninstall`; the desktop app and the machine agent call the
   installed one. An agent reaches it through a connected device's sandbox tools. A download replaces nothing until it
   matches the release's `SHA256SUMS` (the shims, by `sha256sum`, `shasum` or `Get-FileHash`), and the machine agent
   also checks the release key's signature over those sums before it puts its own release's ic in place.
@@ -326,8 +328,26 @@ flowchart LR
   runc, with one line saying why, when dockerd has no `kata` or the line asks for what a microVM cannot give: the
   host's network, PID, IPC or UTS namespace, the Docker socket, a GPU, another runtime. The tunnel sidecar is never
   changed, and a policy change reaches a sandbox at its next recreate.
+- **Taking Intentic off a device** (`ic uninstall`, [src/uninstall/](src/uninstall/)). Every way out runs it: the
+  `uninstall` one-liner, the Windows uninstaller's page and the desktop app's **Uninstall Intentic…**. Unlike the other
+  shims, `uninstall.sh` and `uninstall.ps1` look for an ic already on the device before they download one
+  (`~/.intentic/ic/bin`, `/usr/local/bin`, PATH, then the `intentic-ic` the desktop app carries), so removing Intentic
+  needs no network, and they pass on whatever flags the person adds. It takes stock, then offers
+  two outcomes, the first preselected: remove everything (sandboxes and runners with their data, the keyring's saved
+  passwords, the intentic engine, the machine agent, folder sync, the app, caches and logs, and ic last, since it is
+  what is running), or keep the sandboxes, which also keeps what runs them (engine, agent, ic, keyring) and removes
+  only the app, folder sync and caches.
+  - There is no third outcome that keeps the data but removes what runs it: a removed sandbox's volumes, its trash and
+    its at-rest key are readable only through ic, so that data would be a leftover nobody can open.
+  - Data is never deleted unattended. `--yes` means keep the sandboxes when there is data, and deleting it takes
+    `--delete-data` with `--confirm <n>` (sandboxes and runners, recoverable ones counted) or the count typed. Docker
+    Desktop, WSL, the docker group, synced folders' files and `~/intentic/local` always stay.
+  - `--dry-run` reports what is here (`--json` for the app, `--ini <path>` for the uninstaller page's ReadINIStr), and a
+    plain run prints `intentic-uninstall:` markers ([docs/ops/cli-output-protocol.md](../../docs/ops/cli-output-protocol.md)).
+    The app uninstaller ic starts gets `INTENTIC_UNINSTALL=done`, so its own hook does not call ic back. The person's
+    page is [/docs/uninstall/](../../_site/site/src/pages/docs/uninstall.astro).
 - `ic docker prepare` checks and, with consent, installs what Docker needs; `ic machine enroll` makes the host a deploy
-  target; `ic runner up` starts a runner container for a parent sandbox.
+  target (`ic machine remove` takes it off again); `ic runner up` starts a runner container for a parent sandbox.
 - On Windows, `ic docker prepare` ends every piped run with one `intentic-prepare-summary: {json}` line (ready,
   needsSetup, or cantRun; engine choice; download size and time estimates; machine facts; what is already fine in
   `met`). Each `intentic-requirement:` row carries `"admin"` and `"ours"`. New checks: physical memory (under 7 GiB is

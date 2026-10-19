@@ -1,5 +1,5 @@
 import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
-import { addToWindowsPathValue, selfUpdateBeforeSetup, type SelfUpdateIo, windowsPathFrom } from "./install.js";
+import { addToWindowsPathValue, removeFromWindowsPathValue, selfUpdateBeforeSetup, type SelfUpdateIo, windowsPathFrom } from "./install.js";
 import type { UpgradeOutcome } from "./upgrade.js";
 
 const io = (
@@ -100,6 +100,33 @@ describe("addToWindowsPathValue", () => {
 });
 
 // What is read here is written back whole, so every reading that is not the user's PATH as stored would replace it.
+// The mirror `uninstall --purge` runs: the caller writes the answer back under the kind it read (windowsPathFrom).
+describe("removeFromWindowsPathValue", () => {
+    const BIN = String.raw`C:\Users\a\.intentic\machine\bin`;
+
+    it("takes the folder out and keeps every other entry as it was, tokens included", () => {
+        expect(removeFromWindowsPathValue(String.raw`%USERPROFILE%\bin;C:\Users\a\.intentic\machine\bin;C:\tools`, BIN)).toBe(String.raw`%USERPROFILE%\bin;C:\tools`);
+    });
+
+    it("matches the whole entry case-insensitively, a trailing backslash not counting, and every copy of it", () => {
+        expect(removeFromWindowsPathValue(`${String.raw`C:\USERS\A\.INTENTIC\MACHINE\BIN;C:\tools;`}${BIN}\\`, BIN)).toBe(String.raw`C:\tools`);
+    });
+
+    it("leaves a longer path that only starts with the folder, and a folder inside it, alone", () => {
+        expect(removeFromWindowsPathValue(String.raw`C:\Users\a\.intentic\machine\bin2;C:\Users\a\.intentic\machine\bin\sub`, BIN)).toBeUndefined();
+    });
+
+    it("answers undefined when the folder is not there, so nothing is written back", () => {
+        expect(removeFromWindowsPathValue(String.raw`C:\one;;C:\two;`, BIN)).toBeUndefined();
+        expect(removeFromWindowsPathValue("", BIN)).toBeUndefined();
+    });
+
+    it("keeps the user's own empty entries where they were, and empties a PATH that held only the folder", () => {
+        expect(removeFromWindowsPathValue(String.raw`C:\one;;C:\Users\a\.intentic\machine\bin;C:\two;`, BIN)).toBe(String.raw`C:\one;;C:\two;`);
+        expect(removeFromWindowsPathValue(BIN, BIN)).toBe("");
+    });
+});
+
 describe("windowsPathFrom", () => {
     it("keeps the value as stored, unexpanded and in any language, and its kind", () => {
         expect(windowsPathFrom({ kind: "REG_EXPAND_SZ", data: "%USERPROFILE%\\bin;C:\\Użytkownicy\\Zażółć\\narzędzia" })).toEqual({

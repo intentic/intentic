@@ -62,14 +62,15 @@ const SHEBANG = /^#!.*(?:\r?\n|$)/u;
 
 /**
  * sh: directly after the shebang (else at the very top), `set -- <args>`, `INTENTIC_SCRIPT_URL='<url>'`, then the
- * verb's env lines. So `$1…` are the args exactly as if typed `sh -s -- <args>`.
+ * verb's env lines. So `$1…` are the args exactly as if typed `sh -s -- <args>`. A verb that takes what the person
+ * typed (`typed`) gets `set -- <args> "$@"`, so `| sh -s -- --dry-run` still reaches the script.
  */
 export const injectSh = (script: string, resolved: ResolvedOneLiner, scriptUrl: string): string => {
     if (scriptUrl.includes("'")) {
         throw new Error("The script URL cannot be single-quoted.");
     }
     const lines = [
-        `set -- ${shArgsText(resolved.shArgs)}`.trimEnd(),
+        ["set --", shArgsText(resolved.shArgs), resolved.typed ? `"$@"` : ""].filter((part) => part !== "").join(" "),
         `INTENTIC_SCRIPT_URL='${scriptUrl}'`,
         ...resolved.shEnv.map(([name, value]) => `${name}='${value}'; export ${name}`),
     ].join("\n");
@@ -84,10 +85,12 @@ export const injectSh = (script: string, resolved: ResolvedOneLiner, scriptUrl: 
 
 /**
  * ps1: `& {` + newline + script + newline + `} <params>`. The script's `param(...)` stays the first statement inside
- * the block and binds the parameters; `$PSCommandPath` is empty there, as under `irm | iex`.
+ * the block and binds the parameters; `$PSCommandPath` is empty there, as under `irm | iex`. A `typed` verb adds
+ * `@args`: empty under `irm | iex`, and what the person typed after `& ([scriptblock]::Create((irm …)))`, switches
+ * included, since splatting `$args` keeps a `-Name` a parameter name.
  */
 export const injectPs1 = (script: string, resolved: ResolvedOneLiner): string => {
-    const params = ps1ParamsText(resolved.ps1Params);
+    const params = [ps1ParamsText(resolved.ps1Params), resolved.typed ? "@args" : ""].filter((part) => part !== "").join(" ");
     return `& {\n${script.replace(/^\uFEFF/u, "")}\n}${params === "" ? "" : ` ${params}`}\n`;
 };
 

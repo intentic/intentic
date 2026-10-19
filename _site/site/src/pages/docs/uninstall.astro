@@ -1,0 +1,231 @@
+---
+import DocsCodeBlock from "../../components/docs/DocsCodeBlock.astro";
+import DocsLayout from "../../components/docs/DocsLayout.astro";
+import DocsRelated from "../../components/docs/DocsRelated.astro";
+
+/* Every way out goes through `ic uninstall` (_sandbox/ic/src/uninstall/), so the choices and rules below are its own. */
+
+const unix = `curl -fsSL https://intentic.dev/uninstall | sh`;
+
+const windows = `irm https://intentic.dev/uninstall | iex`;
+
+const flagsUnix = `# See what would go, and change nothing.
+curl -fsSL https://intentic.dev/uninstall | sh -s -- --dry-run
+
+# With ic installed, the same command without the download.
+ic uninstall --dry-run`;
+
+const flagsWindows = `& ([scriptblock]::Create((irm https://intentic.dev/uninstall))) -DryRun`;
+
+const unattended = `# Keep the sandboxes and saved passwords. Remove the app, folder sync and the caches.
+ic uninstall --keep-sandboxes --yes
+
+# Delete everything, data included. 3 is how many sandboxes and runners --dry-run counted.
+ic uninstall --delete-data --confirm 3`;
+
+const server = `curl -fsSL https://intentic.dev/cleanup-host | sudo sh`;
+
+const oneSandbox = `curl -fsSL https://intentic.dev/remove | sh`;
+
+const choices = [
+    { what: `Sandboxes and runners, with their files`, everything: `Deleted`, keep: `Stay, and keep running` },
+    { what: `Saved passwords, in the keyring on this computer`, everything: `Deleted`, keep: `Stay` },
+    { what: `The Intentic engine (Windows)`, everything: `Removed`, keep: `Stays` },
+    { what: `The machine agent, intentic-machine`, everything: `Removed`, keep: `Stays` },
+    { what: `Folder sync`, everything: `Stopped and removed`, keep: `Stopped and removed` },
+    { what: `ic, the command-line tool`, everything: `Removed`, keep: `Stays` },
+    { what: `The desktop app`, everything: `Removed`, keep: `Removed` },
+    { what: `Caches`, everything: `Deleted`, keep: `Deleted` },
+    { what: `Intentic's other files and logs`, everything: `Deleted`, keep: `Stay` },
+];
+---
+
+<DocsLayout
+    pageId="uninstall"
+    heading="Uninstall Intentic"
+    lead="Take Intentic off a computer from Windows Settings, from the desktop app, or with one command in a terminal. Every way shows what it found first, and asks before it removes anything."
+>
+    <h2 id="start">Three ways to start</h2>
+    <ul>
+        <li>
+            <strong>Windows Settings.</strong> Open <strong>Apps</strong>, find <strong>Intentic</strong> in the list and choose{" "}
+            <strong>Uninstall</strong>. Intentic's uninstaller opens on a page with the two choices below.
+        </li>
+        <li>
+            <strong>The desktop app.</strong> Open <strong>This device</strong> and choose <strong>Uninstall Intentic…</strong>. The same two
+            choices, in the app's window.
+        </li>
+        <li>
+            <strong>A terminal, on any system.</strong> Run one command on the computer you want to clean up:
+        </li>
+    </ul>
+    <DocsCodeBlock code={unix} lang="bash" title="Linux, macOS, WSL" />
+    <DocsCodeBlock code={windows} lang="powershell" title="Windows (PowerShell)" />
+    <p>
+        The command uses the <code>ic</code> already on the computer, whether you installed it or the desktop app carries it. It downloads{" "}
+        <code>ic</code> only when there is none, then runs <code>ic uninstall</code>, which does the rest. Where <code>ic</code> is
+        installed, <code>ic uninstall</code> on its own is the same thing. Running it twice is safe: the second run finds what is left and
+        removes only that.
+    </p>
+    <p>
+        On a Windows PC, run it in PowerShell rather than inside a WSL distro. Removing everything from the Windows side also removes Intentic
+        from the PC's WSL distros.
+    </p>
+
+    <h2 id="choices">The two choices</h2>
+    <p>
+        First it lists what it found: the sandboxes and runners and the space they use, saved passwords, the Intentic engine, the machine
+        agent and the folders it syncs, the desktop app, and the caches. Then it asks one question with two answers, and the first one is
+        already selected:
+    </p>
+    <ul>
+        <li><strong>Remove everything.</strong> Nothing of Intentic stays on this computer.</li>
+        <li>
+            <strong>Keep my sandboxes.</strong> The sandboxes stay and keep running, and so does what runs them. Only the desktop app,
+            folder sync and the caches go.
+        </li>
+    </ul>
+    <table>
+        <thead>
+            <tr><th>On this computer</th><th>Remove everything</th><th>Keep my sandboxes</th></tr>
+        </thead>
+        <tbody>
+            {
+                choices.map((row) => (
+                    <tr>
+                        <td>{row.what}</td>
+                        <td>{row.everything}</td>
+                        <td>{row.keep}</td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+    <p>
+        Removing everything deletes the sandboxes for good, including any you removed in the last 7 days that could still have been
+        restored. So when there are sandboxes, pressing Enter is not enough: the terminal asks you to type how many there are, and the
+        Windows uninstaller and the app ask you to confirm. Until you do, nothing has been deleted.
+    </p>
+    <p>
+        Keeping your sandboxes keeps everything they need to run: the engine they run on, the machine agent that starts them when you sign in
+        and keeps them connected, <code>ic</code>, and the keyring their agents use. To take the rest off later, run the uninstall again
+        and choose Remove everything.
+    </p>
+    <p>
+        If you also run your own containers on the Intentic engine (connected to a WSL distro with <code>ic engine wsl</code>), the engine
+        stays even when you remove everything, and the summary says how to remove it yourself.
+    </p>
+
+    <h2 id="stays">What always stays</h2>
+    <p>
+        These are either yours or shared with other programs on the computer, and an uninstall cannot tell what else depends on them. The
+        summary at the end lists the ones this computer has.
+    </p>
+    <ul>
+        <li>
+            <strong>Docker Desktop.</strong> Other containers and tools may use it. If nothing else needs it, uninstall it from Windows
+            Settings like any other program.
+        </li>
+        <li>
+            <strong>WSL and its Windows features.</strong> Other Linux distros may live there, and turning the features off needs a restart.
+            Intentic's own distro, the engine, is removed with everything else.
+        </li>
+        <li>
+            <strong>Your membership of the <code>docker</code> group</strong> on Linux. Your own <code>docker</code> commands may rely on it.{" "}
+            <code>sudo gpasswd -d $USER docker</code> removes it.
+        </li>
+        <li>
+            <strong>The files in the folders you synced.</strong> Uninstalling stops the syncing and leaves the files where they are. After
+            Remove everything, the copy on this computer is the only one left.
+        </li>
+        <li>
+            <strong><code>~/intentic/local</code>.</strong> The folder the desktop app opens when you have not picked one. What you saved
+            there is yours.
+        </li>
+    </ul>
+    <p>
+        An uninstall only touches the computer it runs on. Sandboxes Intentic hosts for you, your account, and servers you connected for
+        deployments are left as they are.
+    </p>
+
+    <h2 id="flags">Flags</h2>
+    <p>
+        Add them to <code>ic uninstall</code>, or after the one-liner. In PowerShell, <code>| iex</code> cannot pass flags, so run the
+        script as a scriptblock and spell them <code>-DryRun</code>, <code>-KeepSandboxes</code>, <code>-Yes</code>,{" "}
+        <code>-DeleteData</code> and <code>-Confirm &lt;n&gt;</code>:
+    </p>
+    <DocsCodeBlock code={flagsUnix} lang="bash" title="Linux, macOS, WSL" />
+    <DocsCodeBlock code={flagsWindows} lang="powershell" title="Windows (PowerShell)" />
+    <table>
+        <thead>
+            <tr><th>Flag</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>--dry-run</code></td>
+                <td>
+                    Lists what it found and what each choice would remove, and removes nothing. It also says the number{" "}
+                    <code>--confirm</code> needs. With <code>--json</code>, the same as one JSON document for a program to read.
+                </td>
+            </tr>
+            <tr>
+                <td><code>--keep-sandboxes</code></td>
+                <td>Picks Keep my sandboxes without the question. On a terminal it still asks yes or no, unless you add <code>--yes</code>.</td>
+            </tr>
+            <tr>
+                <td><code>--yes</code></td>
+                <td>
+                    Answers the question without asking it. With sandboxes or saved passwords on the computer it keeps them, as Keep my
+                    sandboxes does. With neither, it removes everything.
+                </td>
+            </tr>
+            <tr>
+                <td><code>--delete-data --confirm &lt;n&gt;</code></td>
+                <td>
+                    Picks Remove everything, sandboxes and saved passwords included. <code>&lt;n&gt;</code> is the number of sandboxes and
+                    runners on the computer, counting removed ones that could still be restored. A different number stops the run before
+                    anything changes. With saved passwords and no sandboxes, <code>--delete-data --yes</code> does the same.
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2 id="unattended">Unattended</h2>
+    <p>
+        A run nobody answers never deletes a sandbox or a saved password unless you name the deletion. That covers <code>--yes</code>, a
+        terminal-less run, and a silent uninstall from Windows (the uninstaller's <code>/S</code>, as software-management tools run it).
+        Each of these keeps the data and does what Keep my sandboxes does. To delete it unattended, say so with{" "}
+        <code>--delete-data</code>, and give the count:
+    </p>
+    <DocsCodeBlock code={unattended} lang="bash" title="Scripts and management tools" />
+    <p>
+        A run with no terminal and none of these flags stops before it changes anything, and names the flag that would answer. It ends
+        with <strong>0</strong> when it finished or you said no, <strong>1</strong> when a step failed or nobody was there to answer (the
+        last lines say which step and what to do), and <strong>2</strong> when the command line itself was wrong.
+    </p>
+
+    <h2 id="servers">One sandbox, or a server</h2>
+    <p>
+        To take a single sandbox off a computer and keep Intentic, use <code>remove</code>. It lists the sandboxes and removes the one you
+        pick, and <code>ic sandbox restore &lt;name&gt;</code> brings it back within 7 days:
+    </p>
+    <DocsCodeBlock code={oneSandbox} lang="bash" title="One sandbox" />
+    <p>
+        A server you connected for deployments is not touched by uninstalling Intentic from your own computer. On the server, run:
+    </p>
+    <DocsCodeBlock code={server} lang="bash" title="On the server, as root" />
+    <p>
+        It runs <code>ic machine remove</code>, which lists what Intentic put on the server and asks once. Then it removes the deployed
+        services and their volumes (databases included), <code>/opt/intentic</code>, the SSH tunnel connector and the service user. It
+        keeps Docker Engine, the SSH server and the <code>cloudflared</code> program. It cannot reach your Cloudflare account, so remove the
+        server on the <strong>Infrastructure</strong> page too and apply: that deletes its tunnels and DNS records.
+    </p>
+
+    <DocsRelated
+        links={[
+            { href: "/docs/your-machine/", title: "Your own machine", why: "what the machine agent, folder sync and a runner do while they are installed." },
+            { href: "/docs/docker/", title: "Docker setup", why: "the containers and volumes a sandbox is made of, which Remove everything deletes." },
+            { href: "/docs/troubleshooting/", title: "Troubleshooting", why: "when the problem is a sandbox that stopped answering, not Intentic itself." },
+        ]}
+    />
+</DocsLayout>

@@ -782,7 +782,7 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
     return null;
 };
 
-export const installDevDesktop = (): void => {
+export const installDevDesktop = (more?: (command: string, args: InvokeArgs | undefined) => Promise<object> | object | null | undefined): void => {
     const machine = machineOf();
     // Read now, while the address still carries it: the page rewrites its address before anything asks (local/main.ts).
     projectCaseOf();
@@ -799,7 +799,7 @@ export const installDevDesktop = (): void => {
         };
     }
     startMachineSandbox(machine);
-    mockIPC((command, args) => answer(machine, command, args), { shouldMockEvents: true });
+    mockIPC((command, args) => more?.(command, args) ?? answer(machine, command, args), { shouldMockEvents: true });
     // The window this page is, as the app labels it (windows.rs `HOME`, local.rs `files-<n>`): the main window's setup
     // titles its own window (src/device/title.ts), which asks which window it is.
     mockWindows(window.__INTENTIC_LOCAL__?.home === true ? `home` : `files-1`);

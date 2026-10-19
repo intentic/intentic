@@ -7,7 +7,8 @@
 //! matter most, so it looks every 20 seconds and starts the engine itself after two misses in a row.
 //!
 //! It only ever starts an engine this PC's sandboxes run on (engine.json `active`), never one stopped on purpose
-//! (`held`), never during a move between engines or a setup, and with `--quiet`, which leaves all of those alone in
+//! (`held`), never during a move between engines, a setup or an uninstall (uninstall.rs, which removes the engine: a
+//! start in the middle would bring back what it just stopped), and with `--quiet`, which leaves all of those alone in
 //! ic as well. A start that fails waits longer each time before the next (one, two, five, then fifteen minutes): an
 //! engine that will not come up gets a person's attention through the card, not a start every 20 seconds.
 
@@ -46,6 +47,8 @@ pub struct Sight {
     pub held: bool,
     pub moving: bool,
     pub setting_up: bool,
+    /// Intentic is being uninstalled from this computer, or has been and the app is on its way out.
+    pub uninstalling: bool,
     pub listening: bool,
 }
 
@@ -65,7 +68,13 @@ pub struct Keeper {
 
 impl Keeper {
     pub fn look(&mut self, sight: Sight, now: Instant) -> Act {
-        if !sight.ours || sight.held || sight.moving || sight.setting_up || sight.listening {
+        if !sight.ours
+            || sight.held
+            || sight.moving
+            || sight.setting_up
+            || sight.uninstalling
+            || sight.listening
+        {
             self.misses = 0;
             if sight.listening {
                 self.failures = 0;
@@ -117,12 +126,15 @@ fn run(app: AppHandle) {
         let held = ours && scripts::engine_held();
         let moving = ours && scripts::engine_move_running();
         let setting_up = crate::onboarding::setup_running();
-        let listening = ours && !held && !moving && scripts::our_engine_listening();
+        let uninstalling = crate::uninstall::underway();
+        let listening =
+            ours && !held && !moving && !uninstalling && scripts::our_engine_listening();
         let sight = Sight {
             ours,
             held,
             moving,
             setting_up,
+            uninstalling,
             listening,
         };
         if listening && was_down {
@@ -204,6 +216,10 @@ mod tests {
             },
             Sight {
                 setting_up: true,
+                ..down()
+            },
+            Sight {
+                uninstalling: true,
                 ..down()
             },
         ] {
