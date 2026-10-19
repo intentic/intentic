@@ -73,6 +73,28 @@ RUN apt-get update \
 # matched), and baking one repository's checkout path into a shared CI image is the worse trade.
 RUN git config --system --add safe.directory '*'
 
+# The privacy shield's text reader: PaddleOCR's PP-OCRv6 medium detector and recognizer, the ONNX files the privacy
+# image pack installs, at the same path, so _sandbox/ocr and the shield's image masking are proved against the real models
+# rather than a stand-in (~132 MB, a few seconds of build). onnxruntime-node itself comes with the workspace's install.
+# ponytail: keep the revisions and digests in lockstep with _sandbox/sandbox/image-packs/privacy.Dockerfile
+# (packs.integration.test.ts holds the two in step).
+# Placed above bun, ruff/pyright and pnpm, whose pins the daily tool bump moves: these models move only with the
+# privacy pack, so a tool bump no longer re-downloads them and every runner keeps the 132 MB layer it already pulled.
+RUN ocr=/opt/privacy-models/pp-ocrv6 \
+    && mkdir -p "$ocr/det" "$ocr/rec" \
+    && det="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/61323801669c338b7891481ec7bac61ce31b576a" \
+    && rec="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/50c7eacafc52fa7bcf4194e8cd08e46f8558504b" \
+    && curl -fsSL --retry 3 -o "$ocr/det/inference.onnx" "$det/inference.onnx" \
+    && curl -fsSL --retry 3 -o "$ocr/det/inference.yml" "$det/inference.yml" \
+    && curl -fsSL --retry 3 -o "$ocr/rec/inference.onnx" "$rec/inference.onnx" \
+    && curl -fsSL --retry 3 -o "$ocr/rec/inference.yml" "$rec/inference.yml" \
+    && printf '%s  %s\n' \
+        eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1 "$ocr/det/inference.onnx" \
+        7298d5ead546584af2504d03355f881ac7a7bc0eb1e282d3e159277c1d0af871 "$ocr/det/inference.yml" \
+        9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba "$ocr/rec/inference.onnx" \
+        991b700facf5b50a7de193468207d5f4255b538dde0d312ae3b7c7a9b6873129 "$ocr/rec/inference.yml" \
+        | sha256sum -c -
+
 # bun — _tools/scripts/build/build-agent-binaries.sh cross-compiles the release's intentic-machine binaries with
 # `bun build --compile`. Copied out of the official image instead of piping the install script from bun.sh: the
 # version is digest-pinned and this layer needs no network. -slim is Debian trixie, so the binary is linked against
@@ -112,26 +134,6 @@ ENV PATH=$PNPM_HOME/bin:$PATH
 RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.13.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
-
-# The privacy shield's text reader: PaddleOCR's PP-OCRv6 medium detector and recognizer, the ONNX files the privacy
-# image pack installs, at the same path, so _sandbox/ocr and the shield's image masking are proved against the real models
-# rather than a stand-in (~132 MB, a few seconds of build). onnxruntime-node itself comes with the workspace's install.
-# ponytail: keep the revisions and digests in lockstep with _sandbox/sandbox/image-packs/privacy.Dockerfile
-# (packs.integration.test.ts holds the two in step).
-RUN ocr=/opt/privacy-models/pp-ocrv6 \
-    && mkdir -p "$ocr/det" "$ocr/rec" \
-    && det="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/61323801669c338b7891481ec7bac61ce31b576a" \
-    && rec="https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/50c7eacafc52fa7bcf4194e8cd08e46f8558504b" \
-    && curl -fsSL --retry 3 -o "$ocr/det/inference.onnx" "$det/inference.onnx" \
-    && curl -fsSL --retry 3 -o "$ocr/det/inference.yml" "$det/inference.yml" \
-    && curl -fsSL --retry 3 -o "$ocr/rec/inference.onnx" "$rec/inference.onnx" \
-    && curl -fsSL --retry 3 -o "$ocr/rec/inference.yml" "$rec/inference.yml" \
-    && printf '%s  %s\n' \
-        eb13b44b25bb36f89528b68720af8a61d9cf381176107f465db1757b65d086e1 "$ocr/det/inference.onnx" \
-        7298d5ead546584af2504d03355f881ac7a7bc0eb1e282d3e159277c1d0af871 "$ocr/det/inference.yml" \
-        9c09abf0957f7968c7586464b7397b84ad2387a0497a351af40e9acc71b673ba "$ocr/rec/inference.onnx" \
-        991b700facf5b50a7de193468207d5f4255b538dde0d312ae3b7c7a9b6873129 "$ocr/rec/inference.yml" \
-        | sha256sum -c -
 
 # Fail the image build, not some pipeline three days later, if any of the baked tooling is missing.
 RUN node --version && pnpm --version && git --version && docker --version && docker buildx version \

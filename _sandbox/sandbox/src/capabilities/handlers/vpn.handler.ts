@@ -17,9 +17,10 @@ const VPN_FRAGMENT = `# vpn capability: clients for all three supported protocol
 #   easy to miss: xauth-generic lives there, not in libcharon-extra-plugins (which ships only xauth-eap and
 #   xauth-pam, neither of which can answer a gateway's XAuth challenge with a username and password). Without
 #   it an XAuth tunnel negotiates phase 1 and then fails with no mention of the missing plugin.
-RUN apt-get update && apt-get install -y --no-install-recommends \\
-        wireguard-tools openresolv openconnect vpnc-scripts strongswan libcharon-extra-plugins libcharon-extauth-plugins \\
-    && rm -rf /var/lib/apt/lists/*`;
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\
+    apt-get update && apt-get install -y --no-install-recommends \\
+        wireguard-tools openresolv openconnect vpnc-scripts strongswan libcharon-extra-plugins libcharon-extauth-plugins`;
 
 // Agent drives VPNs through the `vpn` CLI, never the clients directly, so agent and UI state can't drift apart.
 const VPN_SKILL = `---

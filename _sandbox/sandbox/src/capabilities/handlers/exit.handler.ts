@@ -11,20 +11,23 @@ import { TUN_PRIVILEGES_FRAGMENT } from "./net-privileges.js";
 const TOR_FRAGMENT = `# exit capability (tor): the Tor client. No runtime privileges accompany this on purpose — tor publishes its
 # own SOCKS port, so it needs no tun device and no NET_ADMIN, which makes a tor-only exit the cheapest and
 # least privileged way to come out of another country.
-RUN apt-get update && apt-get install -y --no-install-recommends tor \\
-    && rm -rf /var/lib/apt/lists/*`;
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\
+    apt-get update && apt-get install -y --no-install-recommends tor`;
 
 const OPENVPN_FRAGMENT = `# exit capability (vpngate): the OpenVPN client. VPN Gate's public CSV hands out OpenVPN configurations and
 # nothing else, so this is the client that pool requires.
-RUN apt-get update && apt-get install -y --no-install-recommends openvpn \\
-    && rm -rf /var/lib/apt/lists/*`;
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\
+    apt-get update && apt-get install -y --no-install-recommends openvpn`;
 
 const WIREGUARD_FRAGMENT = `# exit capability (wireguard): wg-quick, for exits pasted in as .conf files (Proton VPN's free tier, Mullvad,
 # a self-hosted peer). Deliberately without openresolv: an exit's DNS= line is stripped before the tunnel comes
 # up, because applying it would rewrite /etc/resolv.conf for the WHOLE container and an exit is supposed to be
 # inert until something opts into it.
-RUN apt-get update && apt-get install -y --no-install-recommends wireguard-tools \\
-    && rm -rf /var/lib/apt/lists/*`;
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\
+    apt-get update && apt-get install -y --no-install-recommends wireguard-tools`;
 
 const EXIT_SKILL = `---
 name: geo

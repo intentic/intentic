@@ -39,7 +39,6 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
         wpa_supplicant \
         udisks2 \
     && dnf -y --setopt=keepcache=1 --setopt=tsflags=noscripts install kata-containers \
-    && dnf clean all \
     && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf
 
 # The host CLI every door goes through (build.sh puts the binary for this architecture here).

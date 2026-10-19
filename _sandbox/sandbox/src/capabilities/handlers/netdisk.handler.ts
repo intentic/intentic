@@ -11,8 +11,9 @@ import { tunnelHandler, tunnelStatus } from "../../tunnel/tunnel-handler.js";
 
 const NETDISK_FRAGMENT = `# netdisk capability: the kernel cifs client's userspace half (mount.cifs). No runtime privilege rides
 # with it: the sandbox already holds CAP_SYS_ADMIN for its mount namespaces, and that is all a cifs mount needs.
-RUN apt-get update && apt-get install -y --no-install-recommends cifs-utils \\
-    && rm -rf /var/lib/apt/lists/*`;
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \\
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \\
+    apt-get update && apt-get install -y --no-install-recommends cifs-utils`;
 
 // Agent drives disks through the `netdisk` CLI, never mount.cifs directly, so agent and UI state can't drift apart.
 const NETDISK_SKILL = `---

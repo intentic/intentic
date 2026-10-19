@@ -7,7 +7,9 @@
 # while the composer shows the progress. Whisper, which hears the other ~75 languages, is never baked: it is fetched
 # the first time someone dictates in one of them.
 # Fetched by prepare-image-trees.sh (_sandbox/speech/scripts/fetch-speech-models.mjs, digest-checked) into the `trees`
-# context, so the pack is BAKE-ONLY like `semantic`: the COPY layer is the same bytes on every commit, so a pull after
-# an update reuses it instead of downloading the model again.
+# context, so the pack is BAKE-ONLY like `semantic`, and copies a static layer root the same way: the layer is the same
+# bytes on every commit, so a pull after an update reuses it instead of downloading the model again. `--link` alone did
+# not do that: the files' mtimes and the `opt/` the COPY created moved with every build, and 1.342.0 → 1.344.0 shipped
+# this unchanged model as a new 464 MB layer.
 # Licence: CC-BY-4.0 (NVIDIA); the attribution travels in the directory with it.
-COPY --from=trees --link speech-models /opt/speech-models
+COPY --link --from=trees layers/speech-models/ /

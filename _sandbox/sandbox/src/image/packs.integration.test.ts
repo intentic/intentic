@@ -28,7 +28,11 @@ test("profiles name real packs, and placement/overlayability inference matches e
     }
     for (const name of ["semantic", "messaging", "speech"]) {
         expect(byName.get(name)?.overlayable, `${name} is bake-only (COPYs from the trees context)`).toBe(false);
-        expect(byName.get(name)?.postTrees, `${name} must splice below the tree COPYs`).toBe(true);
+    }
+    // messaging copies per-commit deploy trees; semantic and speech copy static layer roots, which splice above them.
+    expect(byName.get("messaging")?.postTrees, "messaging must splice below the tree COPYs").toBe(true);
+    for (const name of ["semantic", "speech"]) {
+        expect(byName.get(name)?.postTrees, `${name} copies a static layer root and must splice above the tree COPYs`).toBe(false);
     }
     // Privileges belong to capability handlers, not packs; rebuild executors grep for the runtime-directive token.
     for (const pack of packs) {
@@ -131,7 +135,12 @@ test("compose-image-dockerfile.mjs stamps the hashes this module computes, in th
     expect(composed.indexOf("# ---- pack: docker ----")).toBeLessThan(treesCopy);
     expect(composed.indexOf("# ---- pack: browser ----")).toBeLessThan(treesCopy);
     expect(composed.indexOf("# ---- pack: messaging ----")).toBeGreaterThan(treesCopy);
-    expect(composed.indexOf("# ---- pack: semantic ----")).toBeGreaterThan(treesCopy);
+    // Static layer roots sit below the first per-commit layer (the CLI tree), so a classic-store pull keeps them too.
+    const cliCopy = composed.indexOf("COPY --from=trees cli /opt/intentic-cli");
+    expect(cliCopy).toBeGreaterThan(-1);
+    expect(composed.indexOf("# ---- pack: semantic ----")).toBeLessThan(cliCopy);
+    expect(composed.indexOf("# ---- pack: speech ----")).toBeLessThan(cliCopy);
+    expect(composed.indexOf("COPY --link --from=trees layers/sandbox-deps/ /")).toBeLessThan(cliCopy);
     // The core profile is the Dockerfile unmodified: the minimal image is not a variant.
     const core = execFileSync("node", ["_tools/scripts/image/compose-image-dockerfile.mjs", "core"], { cwd: repoRoot, encoding: "utf8" });
     expect(core).toBe(readFileSync(join(sandboxRoot, "Dockerfile"), "utf8"));

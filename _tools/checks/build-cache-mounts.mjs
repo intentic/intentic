@@ -7,6 +7,8 @@
 // 3. A RUN that compiles with cmake must mount ccache and route compilers through it via COMPILER_LAUNCHER.
 // 4. A RUN that fetches from npm must mount ~/.npm, and nothing may clear it.
 // 5. A cmake build must not use bare -j or --parallel: unbounded concurrency can exhaust the host.
+// Covered too: the fragments the capability handlers carry as template literals (_sandbox/sandbox/src/capabilities/
+// handlers/*.ts), which compose into an overlay exactly as a *.Dockerfile does and once shipped every rule broken.
 // Not checked: the platform's own service Dockerfiles (api, web, ci-base), separate images with no overlay above them.
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -20,7 +22,8 @@ const APT_CACHE = /--mount=type=cache,target=\/var\/cache\/apt\b/;
 const APT_LISTS = /--mount=type=cache,target=\/var\/lib\/apt\/lists\b/;
 const CCACHE = /--mount=type=cache,target=\/root\/\.cache\/ccache\b/;
 const NPM_CACHE = /--mount=type=cache,target=\/root\/\.npm\b/;
-const APT_INSTALL = /\bapt-get\s+(?:-\S+\s+)*install\b/;
+// `apt install` too, as environment/apt-cache-rule.ts reads it: the same install, the same cache.
+const APT_INSTALL = /\bapt(?:-get)?\s+(?:-\S+\s+)*install\b/;
 const CMAKE_BUILD = /\bcmake\s+--build\b/;
 const UNBOUNDED_CMAKE_PARALLELISM = /(?:^|\s)(?:-j|--parallel)(?=\s*(?:\\\s*\n\s*)?(?:--[a-z]|&&|;|$))/m;
 const COMPILER_LAUNCHER = /-DCMAKE_(?:C|CXX|CUDA)_COMPILER_LAUNCHER=ccache\b/;
@@ -55,7 +58,25 @@ const fragmentFiles = () => {
     if (statSync(extensions, { throwIfNoEntry: false })?.isDirectory()) {
         walk(extensions);
     }
+    const handlers = join(root, "_sandbox/sandbox/src/capabilities/handlers");
+    files.push(
+        ...readdirSync(handlers)
+            .filter((entry) => entry.endsWith(".ts") && !entry.endsWith(".test.ts"))
+            .map((entry) => join(handlers, entry)),
+    );
     return files;
+};
+
+// What a file holds as Dockerfile text, each with the line it starts on. A *.Dockerfile is one piece; a handler's
+// fragments are its template literals that carry a RUN. Their continuations are written `\\` in the source, which still
+// ends a line with a backslash, so they read as one instruction here exactly as in the composed overlay.
+const dockerfileTexts = (path, content) => {
+    if (!path.endsWith(".ts")) {
+        return [{ text: content, startLine: 1 }];
+    }
+    return [...content.matchAll(/`([^`]*)`/g)]
+        .filter((match) => /^\s*RUN\s/m.test(match[1]))
+        .map((match) => ({ text: match[1], startLine: content.slice(0, match.index).split("\n").length }));
 };
 
 // Logical instructions, not lines: a backslash-continued RUN is one instruction, since the mount flags sit on its first
@@ -89,71 +110,62 @@ const instructions = (content) => {
 const findings = [];
 const files = fragmentFiles();
 
-for (const path of files) {
-    const where = relative(root, path);
-    const content = readFileSync(path, "utf8");
+// The rules, as data: a RUN breaks one when it does what `when` names and lacks `missing` (or carries `present`); a line
+// outside a comment breaks a line rule when it carries `present`.
+const RUN_RULES = [
+    { when: APT_INSTALL, missing: APT_CACHE, message: "installs with apt but does not mount /var/cache/apt as a build cache" },
+    { when: APT_INSTALL, missing: APT_LISTS, message: "installs with apt but does not mount /var/lib/apt/lists as a build cache" },
+    { when: CMAKE_BUILD, missing: CCACHE, message: "compiles with cmake but does not mount /root/.cache/ccache as a build cache" },
+    {
+        when: CMAKE_BUILD,
+        missing: COMPILER_LAUNCHER,
+        message: "compiles with cmake but sets no -DCMAKE_<LANG>_COMPILER_LAUNCHER=ccache, so the ccache mount stays empty",
+    },
+    {
+        when: CMAKE_BUILD,
+        present: UNBOUNDED_CMAKE_PARALLELISM,
+        message: "runs cmake with unbounded parallelism; give -j/--parallel an explicit CPU- and memory-bounded job count",
+    },
+    { when: NPM_FETCH, missing: NPM_CACHE, message: "fetches from npm but does not mount /root/.npm as a build cache" },
+];
+const LINE_RULES = [
+    {
+        present: DELETES_LISTS,
+        message: "deletes /var/lib/apt/lists, which empties the cache mount the next build reads (and is a no-op now that the lists live in a mount)",
+    },
+    {
+        present: DELETES_NPM_CACHE,
+        message: "clears the npm cache, which empties the cache mount the next build reads (and is a no-op now that the cache lives in a mount)",
+    },
+];
+const breaks = (rule, code) => rule.when.test(code) && (rule.missing === undefined ? rule.present.test(code) : !rule.missing.test(code));
 
+// One piece of Dockerfile text, its findings reported against the file's own line numbers.
+const checkText = (where, content, startLine) => {
     for (const { line, text } of instructions(content)) {
         // Comment lines inside a continued RUN body would otherwise let a rule be satisfied by prose.
         const code = text
             .split("\n")
             .filter((entry) => !entry.trim().startsWith("#"))
             .join("\n");
-        if (!/^\s*RUN\b/i.test(code)) {
-            continue;
-        }
-        if (APT_INSTALL.test(code)) {
-            if (!APT_CACHE.test(code)) {
-                findings.push({ where, line, message: "installs with apt but does not mount /var/cache/apt as a build cache" });
+        if (/^\s*RUN\b/i.test(code)) {
+            for (const rule of RUN_RULES.filter((candidate) => breaks(candidate, code))) {
+                findings.push({ where, line: line + startLine - 1, message: rule.message });
             }
-            if (!APT_LISTS.test(code)) {
-                findings.push({ where, line, message: "installs with apt but does not mount /var/lib/apt/lists as a build cache" });
-            }
-        }
-        if (CMAKE_BUILD.test(code)) {
-            if (!CCACHE.test(code)) {
-                findings.push({ where, line, message: "compiles with cmake but does not mount /root/.cache/ccache as a build cache" });
-            }
-            if (!COMPILER_LAUNCHER.test(code)) {
-                findings.push({
-                    where,
-                    line,
-                    message: "compiles with cmake but sets no -DCMAKE_<LANG>_COMPILER_LAUNCHER=ccache, so the ccache mount stays empty",
-                });
-            }
-            if (UNBOUNDED_CMAKE_PARALLELISM.test(code)) {
-                findings.push({
-                    where,
-                    line,
-                    message: "runs cmake with unbounded parallelism; give -j/--parallel an explicit CPU- and memory-bounded job count",
-                });
-            }
-        }
-        if (NPM_FETCH.test(code) && !NPM_CACHE.test(code)) {
-            findings.push({ where, line, message: "fetches from npm but does not mount /root/.npm as a build cache" });
         }
     }
+    for (const [index, line] of content.split("\n").entries()) {
+        const broken = line.trim().startsWith("#") ? [] : LINE_RULES.filter((rule) => rule.present.test(line));
+        for (const rule of broken) {
+            findings.push({ where, line: index + startLine, message: rule.message });
+        }
+    }
+};
 
-    for (const [at, line] of content.split("\n").entries()) {
-        if (line.trim().startsWith("#")) {
-            continue;
-        }
-        if (DELETES_LISTS.test(line)) {
-            findings.push({
-                where,
-                line: at + 1,
-                message:
-                    "deletes /var/lib/apt/lists, which empties the cache mount the next build reads (and is a no-op now that the lists live in a mount)",
-            });
-        }
-        if (DELETES_NPM_CACHE.test(line)) {
-            findings.push({
-                where,
-                line: at + 1,
-                message:
-                    "clears the npm cache, which empties the cache mount the next build reads (and is a no-op now that the cache lives in a mount)",
-            });
-        }
+for (const path of files) {
+    const where = relative(root, path);
+    for (const { text, startLine } of dockerfileTexts(path, readFileSync(path, "utf8"))) {
+        checkText(where, text, startLine);
     }
 }
 

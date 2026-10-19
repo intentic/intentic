@@ -7,8 +7,11 @@
 # CPU (glibc and musl, regular and baseline), about 200 MB each. Its postinstall links the build this machine runs into
 # @opencode/cli/bin, after which the build packages are dead weight; they are removed in the same layer so they never
 # reach the image.
+# /tmp is a tmpfs for the same reason the npm cache is a mount: `opencode --version` is a Bun-compiled binary, which
+# unpacks its native library to /tmp (`.bun-<hash>.so`, 6.3 MB in 1.344.0) and left it committed in this layer.
 # ponytail: bump together with @opencode/client.
 RUN --mount=type=cache,target=/root/.npm \
+    --mount=type=tmpfs,target=/tmp \
     npm install -g @opencode/cli@2.0.28 \
     && test -x "$(npm root -g)/@opencode/cli/bin/opencode.exe" \
     && rm -rf "$(npm root -g)"/@opencode/cli/node_modules/@opencode/cli-* "$(npm root -g)"/@opencode/cli-* \

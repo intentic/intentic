@@ -53,7 +53,7 @@ for ext in $BUNDLES; do filters+=(--filter="@intentic/ext-$ext"); done
 pnpm turbo run build "${filters[@]}"
 
 # Regenerate the deploy trees but PRESERVE the cached model dir (and its completeness marker).
-rm -rf "$out/sandbox" "$out/cli" "$out/extensions"
+rm -rf "$out/sandbox" "$out/cli" "$out/extensions" "$out/layers"
 # Each tree pruned out of the same content-addressed store into a directory of its own — which is what a store
 # is for, so they are pruned at once rather than one after another (1m26s in series, measured in the images job
 # of pipeline 2725042409, and paid again by the release).
@@ -111,6 +111,55 @@ rm -rf "$out"/sandbox/node_modules/.pnpm/@cursor+sdk@*
 rm -rf "$out"/sandbox/node_modules/.pnpm/@cursor+sdk-*
 find "$out/sandbox/node_modules" -xtype l -delete
 
+# onnxruntime-node ships its native binding for EVERY OS and CPU in one package (bin/napi-v*/<os>/<cpu>), and pnpm
+# has no say in it: measured in 1.344.0, darwin/arm64 86 MiB, win32/arm64 70, win32/x64 64 and the other linux CPU
+# 25, so ~245 MiB of every image could never load. The binding resolves bin/napi-v*/<process.platform>/<process.arch>,
+# and this tree is already this machine's CPU only (its sharp, sherpa-onnx and claude-agent-sdk platform packages are
+# pnpm's pick for the host), so the host's arch is the one to keep, exactly as for those.
+arch="$(node -p process.arch)"
+for bin in "$out"/sandbox/node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v*; do
+    [ -d "$bin/linux/$arch" ] || { echo "$bin has no linux/$arch binding to keep" >&2; exit 1; }
+    for platform in "$bin"/*/*; do
+        [ "$platform" = "$bin/linux/$arch" ] || rm -rf "$platform"
+    done
+    rmdir "$bin"/* 2>/dev/null || true
+done
+
+# STATIC LAYER ROOTS: what the image copies with `COPY --link --from=trees layers/<name>/ /`, so a layer whose bytes did
+# not change keeps its digest and an update does not download it again. Two things decide that digest besides the
+# content, and both used to change from build to build: each file's mtime (when this runner happened to fetch or
+# deploy it) and the parent directories a COPY creates (`opt/`, stamped with the build's own clock). Measured between
+# 1.342.0 and 1.344.0: the speech and iq model layers held identical files and still got new digests (speech on both
+# counts, iq on `opt/` alone), ~504 MB of the ~1 GB compressed an update downloaded. So each root carries its whole path from / down, every entry at one fixed time, and --link builds the
+# layer apart from whatever sits under it. The image's Dockerfile splices these ABOVE the trees that change per commit,
+# because Docker's classic store re-downloads every layer above the first changed one whatever its digest.
+normalize_times() { find "$1" -exec env TZ=UTC touch -h -t 198001010000.00 {} +; }
+static_layer() { # <layer name> <directory to carry> <its path in the image>
+    local root="$out/layers/$1"
+    mkdir -p "$root$(dirname "$3")"
+    # Hard links where the filesystem allows them: the model dirs are hundreds of MiB, and the cached original is
+    # what the next run reuses (only its mtimes change, which nothing reads).
+    if ! cp -al "$2" "$root$3" 2>/dev/null; then
+        rm -rf "$root$3"
+        cp -R "$2" "$root$3"
+    fi
+    normalize_times "$root"
+}
+
+# The daemon's third-party node_modules: ~950 MiB of its ~1.1 GiB tree, and identical on every release whose lockfile
+# moved nothing the daemon depends on (about half of them). The workspace's own packages (`@intentic+…`, and anything
+# whose name carries a `file:`/`link:` path) change on every commit and stay in the tree COPY'd after it, together with
+# .pnpm/node_modules and lock.yaml, which list them.
+deps="$out/layers/sandbox-deps/opt/sandbox/node_modules/.pnpm"
+mkdir -p "$deps"
+for dir in "$out"/sandbox/node_modules/.pnpm/*; do
+    case "${dir##*/}" in
+        node_modules | lock.yaml | @intentic+* | *@file+* | *@link+*) ;;
+        *) mv "$dir" "$deps/" ;;
+    esac
+done
+normalize_times "$out/layers/sandbox-deps"
+
 # netd the entrypoint execs (_sandbox/netd), compiled in the image's own Debian release: the one piece of the
 # payload no JS build produces, and whose glibc must be the image's rather than this machine's.
 bash _tools/scripts/image/build-netd.sh "$out/netd"
@@ -129,4 +178,6 @@ if [ ! -f "$out/.speech-models-complete" ]; then
     node _sandbox/speech/scripts/fetch-speech-models.mjs "$out/speech-models" parakeet
     touch "$out/.speech-models-complete"
 fi
+static_layer iq-models "$out/iq-models" /opt/iq-models
+static_layer speech-models "$out/speech-models" /opt/speech-models
 echo "image trees ready in $out/"

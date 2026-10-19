@@ -3,7 +3,7 @@
 // stamping the pack's content hash to /opt/packs/<name>, so a daemon knows what its base image already bakes. Placement
 // (pre- or post-trees) is inferred from pack content, mirroring src/image/packs.ts.
 // packs:pre-trees pinned installs, above the tree COPYs
-// packs:post-trees packs that read /opt/sandbox or COPY --from=trees
+// packs:post-trees packs that read /opt/sandbox or COPY a per-commit tree --from=trees
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -39,13 +39,18 @@ if (unknown.length > 0) {
     process.exit(2);
 }
 
+// A COPY from the trees context that is not a static layer root (`layers/<name>/`, built apart with --link and the same
+// bytes on every commit): only those may splice above the per-commit trees. Comment lines do not count. Mirrors packs.ts.
+const readsCommitTrees = (content) =>
+    content.split("\n").some((line) => !line.trim().startsWith("#") && line.includes("--from=trees") && !/\slayers\//u.test(line));
+
 // Fragment verbatim, then a stamp RUN; hash is sha256 of the trimmed content, matching packs.ts's, or a baked pack
 // reads as not baked.
 const section = (name) => {
     const content = readFileSync(join(packsDir, `${name}.Dockerfile`), "utf8").trim();
     const hash = createHash("sha256").update(content).digest("hex");
     return {
-        postTrees: content.includes("/opt/sandbox") || content.includes("--from=trees"),
+        postTrees: content.includes("/opt/sandbox") || readsCommitTrees(content),
         text: [`# ---- pack: ${name} ----`, content, `RUN mkdir -p /opt/packs && printf '%s' '${hash}' > /opt/packs/${name}`].join("\n"),
     };
 };

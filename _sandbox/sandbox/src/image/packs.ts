@@ -21,9 +21,16 @@ export interface Pack {
     readonly hash: string;
     // No COPY instruction, composable into a rebuild overlay, not only a published profile.
     readonly overlayable: boolean;
-    // Needs the daemon tree, so it splices after the image's tree COPYs.
+    // Needs the daemon tree or a per-commit tree, so it splices after the image's tree COPYs.
     readonly postTrees: boolean;
 }
+
+// A COPY from the trees context that is not a static layer root. Those roots (`layers/<name>/`, prepare-image-trees.sh)
+// are COPY'd with --link and keep their bytes from commit to commit, so a pack made only of them splices ABOVE the
+// per-commit trees: Docker's classic store re-downloads every layer above the first one that changed, whatever its digest.
+// Comment lines do not count. compose-image-dockerfile.mjs carries the same rule.
+const readsCommitTrees = (content: string): boolean =>
+    content.split("\n").some((line) => !line.trim().startsWith("#") && line.includes("--from=trees") && !/\slayers\//u.test(line));
 
 const packOf = (name: string, raw: string): Pack => {
     const content = raw.trim();
@@ -32,7 +39,7 @@ const packOf = (name: string, raw: string): Pack => {
         content,
         hash: sha256Hex(content),
         overlayable: !/^\s*copy\s/im.test(content),
-        postTrees: content.includes("/opt/sandbox") || content.includes("--from=trees"),
+        postTrees: content.includes("/opt/sandbox") || readsCommitTrees(content),
     };
 };
 

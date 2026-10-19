@@ -349,6 +349,14 @@ RUN set -eu; arch="$(dpkg --print-architecture)"; \
     gh --version
 # ---- packs:pre-trees ---- (spliced by compose-image-dockerfile.mjs — pinned pack installs land here, ABOVE
 # the tree COPYs, so a source change never evicts a pack download; the core profile carries none)
+
+# The daemon's third-party node_modules, a layer apart from the rest of its tree (prepare-image-trees.sh moves them into
+# this static layer root and fixes every timestamp). --link builds it apart from the layers under it, so it is the same
+# bytes on every release whose lockfile moved none of them, and an update reuses it rather than downloading ~950 MiB of
+# unchanged packages with each commit's daemon. Placed here, below the first per-commit layer (the CLI tree just after),
+# because Docker's classic store re-downloads every layer above the first changed one whatever its digest. The tree
+# COPY'd into /opt/sandbox below merges over it: the workspace's own packages, the .pnpm index and the daemon itself.
+COPY --link --from=trees layers/sandbox-deps/ /
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
@@ -374,8 +382,14 @@ RUN chmod +x /opt/intentic-cli/dist/cli.js \
 #
 # Only the page differs from a hand-added landing app: starter-site/ lays intentic's own first page (and its
 # fonts) over the template's src/ and public/, leaving its package, config and install untouched.
+#
+# pnpm's metadata cache (~/.cache/pnpm, 176 MB in 1.344.0) is a cache MOUNT, for the reason the npm installs above give:
+# nothing reads it at run time, and committed it was a fifth of this layer. The store under $PNPM_HOME stays in the
+# image on purpose: the seeded starter names it as its storeDir (src/scaffold/starter-site.ts), and its files are the
+# same inodes as /opt/starter's node_modules, so it costs the layer next to nothing.
 ARG STARTER_TEMPLATE_REF=main
-RUN intentic scaffold monorepo --dir /opt --name starter --ref "$STARTER_TEMPLATE_REF" \
+RUN --mount=type=cache,target=/root/.cache/pnpm \
+    intentic scaffold monorepo --dir /opt --name starter --ref "$STARTER_TEMPLATE_REF" \
     && intentic scaffold add-app --dir /opt/starter --apps landing --ref "$STARTER_TEMPLATE_REF" \
     && rm -rf /opt/starter/.git
 COPY _sandbox/sandbox/starter-site/ /opt/starter/_apps/landing/
@@ -409,6 +423,10 @@ COPY --from=trees sandbox /opt/sandbox
 # netd the entrypoint execs: every port, the ingress tunnel, and the daemon's supervision (_sandbox/netd). Built
 # on this image's Debian release by build-netd.sh, so it links against the glibc this layer carries.
 COPY --from=trees netd /opt/sandbox/netd
+# THE CLIS THE DAEMON'S TREE CARRIES, put on PATH in ONE layer. Each used to be a RUN of its own, nine layers of a few
+# KiB each against the 125-deep limit image-layers.integration.test.ts holds the budget for; one RUN costs one. What each
+# is for, and why it is a symlink rather than a tree of its own:
+#
 # The lsp CLI on PATH — the agent's TypeScript rename + diagnostics tool, gated by the lspTools setting (the
 # daemon writes/removes its skill at /work/.claude/skills/lsp). It runs the native TypeScript compiler (its
 # bundled @typescript/native-preview binary) over whatever tsconfig project the agent points it at in /work.
@@ -421,43 +439,63 @@ COPY --from=trees netd /opt/sandbox/netd
 # imports from the target's realpath inside /opt/sandbox/node_modules, the pane-log-clean precedent below. The
 # chmod is the intentic rationale — and it doubles as this layer's existence check: a tree that stopped carrying
 # the package fails the build here instead of leaving `lsp` off PATH.
-RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
-    && ln -s /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js /usr/local/bin/lsp
 # The iq search CLI on PATH — the agent's primary code-search tool (every backend's Bash tool inherits PATH)
 # and the daemon's /workspace/search backend (execFile `iq --json`). Symlinked out of the daemon's tree exactly
 # like lsp above: @intentic/iq is a dependency of @intentic/sandbox, so /opt/sandbox already carries it — a
 # second `pnpm deploy` root shipped a ~450 MiB duplicate of the engine's node_modules (onnxruntime,
 # transformers, ast-grep) for a CLI whose own code is under 1 MiB. Same chmod-as-existence-check rationale.
-RUN chmod +x /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
-    && ln -s /opt/sandbox/node_modules/@intentic/iq/dist/cli.js /usr/local/bin/iq
 # The webq CLI on PATH — the agent's web-fetch tool (URL → clean budgeted markdown, bounded site crawls,
 # shared 15-min cache). Symlinked out of the daemon's tree exactly like lsp and iq above: @intentic/webq is a
 # dependency of @intentic/sandbox, so /opt/sandbox already carries it and its deps (parse5; playwright is the
 # daemon's own copy). Uses the browser pack's Chromium when a page needs JS and degrades to static HTML with a
 # notice when this image doesn't carry it. Same chmod-as-existence-check rationale.
-RUN chmod +x /opt/sandbox/node_modules/@intentic/webq/dist/cli.js \
-    && ln -s /opt/sandbox/node_modules/@intentic/webq/dist/cli.js /usr/local/bin/webq
 # The fileq CLI on PATH — the agent's binary-file reader (docx/xlsx/pptx/pdf/images/audio → clean budgeted
 # markdown, cached by content under .intentic/local/cache/derived/ so a repeat read of unchanged bytes is instant).
 # Symlinked out of the daemon's tree exactly like lsp, iq and webq above: @intentic/fileq is a dependency of
 # @intentic/sandbox, and the daemon (src/derived/) spawns this very binary to render a file a person opens. The
 # skill that teaches agents it exists rides settings/skills.ts, not a plugin dir.
-RUN chmod +x /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js \
-    && ln -s /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js /usr/local/bin/fileq
 # An agent's own `git diff`, `git show` and `git log -p` on a document print fileq's text instead of "Binary files
 # differ": the global attributes file names every derivable extension `diff=fileq` (a repo's own .gitattributes still
 # wins), and the textconv driver is `fileq read --plain`, which saves nothing for the temp file git hands it. The
 # daemon's diff routes are untouched: diff-partial.ts passes --no-textconv, and /diff/derived renders the sides itself.
-RUN fileq git-attributes > /etc/gitattributes \
-    && git config --global core.attributesFile /etc/gitattributes \
-    && git config --global diff.fileq.textconv 'fileq read --plain'
 # Plain `rg` searches documents: fileq-rg-pre (POSIX sh, no Node on its fast path) prints a pdf's, docx's, xlsx's…
 # fresh shadow with `[p. N] ` page marks, else falls back to `fileq read --plain`. The config routes only document
 # globs to it, so code reads as before. The daemon points agents' shells at it (RIPGREP_CONFIG_PATH, derived/
 # search-env.ts) while the documentSearch setting keeps the shadows current. Symlinked like fileq above; the chmod is
 # the same existence check.
-RUN chmod +x /opt/sandbox/node_modules/@intentic/fileq/bin/fileq-rg-pre \
+#
+# pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte
+# stream through it (a headless VT emulator using @xterm/headless from the daemon's node_modules) to keep
+# the terminal logs readable. Symlinked like intentic/iq: node resolves @xterm/headless from the target's
+# realpath (/opt/sandbox/node_modules); tsc keeps the file's shebang, so chmod +x makes it directly runnable.
+# ocr on PATH: the text on an image, read on this machine by the privacy shield's own reader (PaddleOCR PP-OCRv6,
+# _sandbox/ocr), for an agent that must read a screenshot without sending it anywhere and for fileq's OCR tier. Its
+# models come with the privacy pack; without them it says so and exits 2. Symlinked out of the daemon's tree like lsp
+# and iq above: @intentic/ocr is a dependency of @intentic/sandbox, so node resolves onnxruntime-node and sharp from
+# the package's realpath inside /opt/sandbox/node_modules. Same chmod-as-existence-check rationale.
+# memory-room, the memory half of the heavy-command queue (queue-run, below), symlinked the same way: it asks the daemon's resource budget over its local socket
+# (src/workload/room-socket.ts), and where no daemon answers applies the same formula itself
+# (@intentic/constants/memory-room), so queue-run holds a suite off a pinned box without a second policy. Fails open
+# on every path, including this binary being absent.
+RUN chmod +x /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js \
+        /opt/sandbox/node_modules/@intentic/iq/dist/cli.js \
+        /opt/sandbox/node_modules/@intentic/webq/dist/cli.js \
+        /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js \
+        /opt/sandbox/node_modules/@intentic/fileq/bin/fileq-rg-pre \
+        /opt/sandbox/node_modules/@intentic/ocr/dist/cli.js \
+        /opt/sandbox/node_modules/@intentic/constants/src/memory-room.mjs \
+        /opt/sandbox/dist/logs/pane-log-clean.js \
+    && ln -s /opt/sandbox/node_modules/@intentic/lsp/dist/cli.js /usr/local/bin/lsp \
+    && ln -s /opt/sandbox/node_modules/@intentic/iq/dist/cli.js /usr/local/bin/iq \
+    && ln -s /opt/sandbox/node_modules/@intentic/webq/dist/cli.js /usr/local/bin/webq \
+    && ln -s /opt/sandbox/node_modules/@intentic/fileq/dist/cli.js /usr/local/bin/fileq \
     && ln -s /opt/sandbox/node_modules/@intentic/fileq/bin/fileq-rg-pre /usr/local/bin/fileq-rg-pre \
+    && ln -s /opt/sandbox/node_modules/@intentic/ocr/dist/cli.js /usr/local/bin/ocr \
+    && ln -s /opt/sandbox/node_modules/@intentic/constants/src/memory-room.mjs /usr/local/bin/memory-room \
+    && ln -s /opt/sandbox/dist/logs/pane-log-clean.js /usr/local/bin/pane-log-clean \
+    && fileq git-attributes > /etc/gitattributes \
+    && git config --global core.attributesFile /etc/gitattributes \
+    && git config --global diff.fileq.textconv 'fileq read --plain' \
     && mkdir -p /etc/fileq \
     && fileq ripgrep-config --pre /usr/local/bin/fileq-rg-pre > /etc/fileq/ripgreprc
 # The `codex` CLI is the codex feature pack (a global install pinned to @openai/codex-sdk's exact dependency —
@@ -534,25 +572,6 @@ COPY --chmod=755 _extensions/e-urzad/bin /opt/extensions/e-urzad/bin
 COPY --from=trees extensions/e-urzad/dist /opt/extensions/e-urzad/dist
 # ---- packs:post-trees ---- (spliced by compose-image-dockerfile.mjs — packs that read the daemon tree or
 # COPY from the trees context land here, below every tree COPY they depend on)
-# pane-log-clean on PATH — the tmux pipe-pane hooks (above / logs/log-files.ts) replay each pane's byte
-# stream through it (a headless VT emulator using @xterm/headless from the daemon's node_modules) to keep
-# the terminal logs readable. Symlinked like intentic/iq: node resolves @xterm/headless from the target's
-# realpath (/opt/sandbox/node_modules); tsc keeps the file's shebang, so chmod +x makes it directly runnable.
-RUN chmod +x /opt/sandbox/dist/logs/pane-log-clean.js \
-    && ln -s /opt/sandbox/dist/logs/pane-log-clean.js /usr/local/bin/pane-log-clean
-# ocr on PATH: the text on an image, read on this machine by the privacy shield's own reader (PaddleOCR PP-OCRv6,
-# _sandbox/ocr), for an agent that must read a screenshot without sending it anywhere and for fileq's OCR tier. Its
-# models come with the privacy pack; without them it says so and exits 2. Symlinked out of the daemon's tree like lsp
-# and iq above: @intentic/ocr is a dependency of @intentic/sandbox, so node resolves onnxruntime-node and sharp from
-# the package's realpath inside /opt/sandbox/node_modules. Same chmod-as-existence-check rationale.
-RUN chmod +x /opt/sandbox/node_modules/@intentic/ocr/dist/cli.js \
-    && ln -s /opt/sandbox/node_modules/@intentic/ocr/dist/cli.js /usr/local/bin/ocr
-# The memory half of the same queue, symlinked the same way: it asks the daemon's resource budget over its local socket
-# (src/workload/room-socket.ts), and where no daemon answers applies the same formula itself
-# (@intentic/constants/memory-room), so queue-run holds a suite off a pinned box without a second policy. Fails open
-# on every path, including this binary being absent.
-RUN chmod +x /opt/sandbox/node_modules/@intentic/constants/src/memory-room.mjs \
-    && ln -s /opt/sandbox/node_modules/@intentic/constants/src/memory-room.mjs /usr/local/bin/memory-room
 # Image-baked agent skills (the daemon runs as root; the agent's settingSources loads /root/.claude). The
 # environment skill teaches the agent to extend this very image via an approved overlay Dockerfile; the
 # intentic skill is the product's own reference, what the agent reads before it answers for the product.

@@ -12,8 +12,11 @@ ARG CHANNEL=stable
 ARG REPOSITORY=ghcr.io/intentic/os-desktop
 
 # The app's own .rpm (build.sh stages it) pulls WebKitGTK and GTK; sway, greetd, Chromium and fonts come from Fedora.
-COPY desktop/rpm/ /tmp/intentic-rpm/
-RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
+# The rpm is BIND-mounted, not COPY'd: a COPY committed it as a 62 MB layer of its own that the RUN then deleted, so
+# every pull of this image carried the app twice. No `dnf clean all` either: it emptied the cache mount keepcache=1
+# exists to fill, and a mount is never committed, so it saved the image nothing.
+RUN --mount=type=bind,source=desktop/rpm,target=/tmp/intentic-rpm \
+    --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
     dnf -y --setopt=keepcache=1 install \
         sway swaybg greetd xdg-desktop-portal-wlr mako swayidle swaylock \
         chromium \
@@ -21,8 +24,7 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
         mesa-dri-drivers mesa-vulkan-drivers \
         pipewire wireplumber \
         /tmp/intentic-rpm/*.rpm \
-    && dnf clean all \
-    && rm -rf /tmp/intentic-rpm /var/log/dnf5.log* /var/lib/dnf /run/dnf /run/selinux-policy
+    && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf /run/selinux-policy
 
 COPY desktop/rootfs/ /
 # The screen is the app's: pairing happens in it (This device) or on the LAN page, never on tty1.
