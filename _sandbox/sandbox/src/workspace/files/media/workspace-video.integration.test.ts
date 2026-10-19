@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requires } from "@intentic/testing/requires";
 import sharp from "sharp";
+import { stateRelPath } from "../../../state-paths.js";
 import { workspaceThumbnail } from "../workspace-thumbnail.js";
 import { parseVideoFacts, videoFacts } from "./workspace-video.js";
 
@@ -39,6 +40,8 @@ const writeFadeIn = (path: string, size: string): void => {
     ]);
 };
 
+const CACHE = stateRelPath(".intentic/local/cache/", "thumbnails");
+
 const spreadOf = async (bytes: Buffer): Promise<number> => (await sharp(bytes).greyscale().stats()).channels[0]!.stdev;
 
 describe.skipIf(!ffmpeg.runs)(ffmpeg.title("a video's tile"), () => {
@@ -51,6 +54,21 @@ describe.skipIf(!ffmpeg.runs)(ffmpeg.title("a video's tile"), () => {
         const drawn = await sharp(tile!.bytes).metadata();
         expect([tile!.type, drawn.width, drawn.height]).toEqual(["image/webp", 256, 144]);
         expect(await spreadOf(tile!.bytes)).toBeGreaterThan(16);
+    });
+
+    test("cuts its frame once, however many sizes it is drawn at", async () => {
+        const root = await mkdtemp(join(tmpdir(), "ws-video-"));
+        const file = join(root, "fade-in.mp4");
+        writeFadeIn(file, "640x360");
+
+        const tile = await workspaceThumbnail(root, file, "tile");
+        const larger = await workspaceThumbnail(root, file, "e512");
+        expect((await sharp(larger!.bytes).metadata()).width).toBe(512);
+        expect(tile!.etag).not.toBe(larger!.etag);
+        // Two renditions and the one frame they were both made from.
+        const kept = await readdir(join(root, CACHE));
+        expect(kept.filter((name) => name.endsWith(".png"))).toHaveLength(1);
+        expect(kept.filter((name) => name.endsWith(".webp"))).toHaveLength(2);
     });
 
     test("reads a video's box and running time", async () => {

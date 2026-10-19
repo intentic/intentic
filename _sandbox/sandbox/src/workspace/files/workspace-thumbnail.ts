@@ -4,6 +4,7 @@ import { extname, join } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
 import { writeFileAtomic } from "@intentic/base/fs";
 import sharp, { type ResizeOptions } from "sharp";
+import type { PictureEdge } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { statePath } from "../../state-paths.js";
 import { isVideo, videoPoster } from "./media/workspace-video.js";
 
@@ -11,9 +12,10 @@ import { isVideo, videoPoster } from "./media/workspace-video.js";
 // for a folder of screenshots and took seconds per picture on a slow link. Rendered once per version and kept on disk,
 // so the second look costs a read.
 
-// How a picture is drawn: `tile` whole inside a folder tile, `gallery` as one picture of a gallery row, `strip` as the
-// top of the page in a chat strip's 16:10 box, `view` at its own size in the viewer and a tool card.
-export type Rendition = "tile" | "gallery" | "strip" | "view";
+// How a picture is drawn: `tile` whole inside a folder tile, `strip` as the top of the page in a chat strip's 16:10 box,
+// `view` at its own size in the viewer and a tool card, and `e<edge>` whole inside a square of that edge, for a reader
+// drawing it at whatever size its box is (PICTURE_EDGES). `gallery` is what a gallery row asked for before the edges.
+export type Rendition = "tile" | "gallery" | "strip" | "view" | `e${PictureEdge}`;
 
 export type PictureType = "image/webp" | "image/avif";
 
@@ -23,6 +25,12 @@ interface Spec {
     // Whether the rendition is big enough for AVIF's smaller bytes to repay its slower encode.
     readonly avif: boolean;
 }
+
+const edge = (side: PictureEdge): Spec => ({
+    resize: { width: side, height: side, fit: "inside", withoutEnlargement: true },
+    webpQuality: side <= 768 ? 78 : 80,
+    avif: side >= 1024,
+});
 
 const SPECS: Record<Rendition, Spec> = {
     // Twice the tile's own box, so a HiDPI screen still draws a sharp one.
@@ -34,6 +42,14 @@ const SPECS: Record<Rendition, Spec> = {
     strip: { resize: { width: 480, height: 300, fit: "cover", position: "top" }, webpQuality: 75, avif: false },
     // Its own size, capped where WebP stops encoding (16383 px) and wider than any viewer draws a screenshot.
     view: { resize: { width: 2560, height: 16383, fit: "inside", withoutEnlargement: true }, webpQuality: 80, avif: true },
+    // Never enlarged: a picture smaller than the edge comes back at its own size, which the reader can tell by its pixels.
+    // AVIF from 1024 up, where its bytes are a third smaller and the encode is a one-off the cache keeps.
+    e384: edge(384),
+    e512: edge(512),
+    e768: edge(768),
+    e1024: edge(1024),
+    e1536: edge(1536),
+    e2048: edge(2048),
 };
 
 export const isRendition = (name: string): name is Rendition => Object.hasOwn(SPECS, name);
@@ -115,21 +131,46 @@ const sweep = async (dir: string): Promise<void> => {
     }
 };
 
-// A picture is decoded from its file; a video from the frame its tile shows, cut first. A video ffmpeg cannot read has
-// no frame, and the tile keeps its glyph.
-const sourceOf = async (target: string, scratch: string): Promise<string | Buffer | undefined> => {
-    if (!isVideo(target)) {
-        return target;
+// The version of a source a rendition is made from.
+interface Version {
+    readonly size: number;
+    readonly mtimeMs: number;
+}
+
+// Frames being cut, keyed by their cache file, so the renditions a screenful asks of one video wait on one ffmpeg.
+const cutting = new SingleFlight<string, Buffer | undefined>();
+
+// A video's frame, cut once per version of the file and kept beside its renditions: every size a reader draws it at
+// is re-encoded from the one frame, rather than each sending ffmpeg back into the film.
+const posterOf = async (target: string, scratch: string, version: Version): Promise<Buffer | undefined> => {
+    const key = createHash("sha256").update(`${target}\n${version.size}\n${Math.trunc(version.mtimeMs)}\nposter`).digest("hex");
+    const file = join(scratch, `${key}.png`);
+    // allow(silent-catch): a frame not cut yet is what a miss here means
+    const kept = await readFile(file).catch(() => undefined);
+    if (kept !== undefined) {
+        return kept;
     }
-    // The frame is written through the cache's own directory, which a first render has yet to make.
-    await mkdir(scratch, { recursive: true });
-    return inVideoSlot(() => videoPoster(target, scratch));
+    return cutting.run(file, async () => {
+        // The frame is written through the cache's own directory, which a first render has yet to make.
+        await mkdir(scratch, { recursive: true });
+        const frame = await inVideoSlot(() => videoPoster(target, scratch));
+        if (frame !== undefined) {
+            // allow(silent-catch): a cache is allowed to forget, see sweep
+            await writeFileAtomic(file, frame).catch(() => undefined);
+        }
+        return frame;
+    });
 };
 
-const encode = async (target: string, scratch: string, rendition: Rendition, type: PictureType): Promise<Buffer | undefined> => {
+// A picture is decoded from its file; a video from the frame its tile shows. A video ffmpeg cannot read has no frame,
+// and the tile keeps its glyph.
+const sourceOf = (target: string, scratch: string, version: Version): Promise<string | Buffer | undefined> =>
+    isVideo(target) ? posterOf(target, scratch, version) : Promise.resolve(target);
+
+const encode = async (target: string, scratch: string, rendition: Rendition, type: PictureType, version: Version): Promise<Buffer | undefined> => {
     const spec = SPECS[rendition];
     // allow(silent-catch): a cache directory that cannot be made is no picture to draw, the answer encode gives below too
-    const source = await sourceOf(target, scratch).catch(() => undefined);
+    const source = await sourceOf(target, scratch, version).catch(() => undefined);
     if (source === undefined) {
         return undefined;
     }
@@ -142,9 +183,9 @@ const encode = async (target: string, scratch: string, rendition: Rendition, typ
     return inSlot(() => encoded.toBuffer()).catch(() => undefined);
 };
 
-const render = async (target: string, file: string, rendition: Rendition, type: PictureType): Promise<Buffer | undefined> => {
+const render = async (target: string, file: string, rendition: Rendition, type: PictureType, version: Version): Promise<Buffer | undefined> => {
     const dir = join(file, "..");
-    const bytes = await encode(target, dir, rendition, type);
+    const bytes = await encode(target, dir, rendition, type, version);
     if (bytes === undefined) {
         return undefined;
     }
@@ -170,7 +211,7 @@ const renditionOf = async (root: string, target: string, rendition: Rendition, t
     if (cached !== undefined) {
         return { bytes: cached, type, etag };
     }
-    const bytes = await rendering.run(file, () => render(target, file, rendition, type));
+    const bytes = await rendering.run(file, () => render(target, file, rendition, type, { size, mtimeMs }));
     return bytes === undefined ? undefined : { bytes, type, etag };
 };
 

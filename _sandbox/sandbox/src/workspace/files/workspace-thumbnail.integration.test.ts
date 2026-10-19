@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { stateRelPath } from "../../state-paths.js";
+import { PICTURE_EDGES } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { isRendition, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 
 // The same table entry the module under test builds its cache dir from, so the two cannot drift.
@@ -179,8 +180,28 @@ test("a burst of renders larger than the slots all complete", async () => {
     expect(drawn.map((picture) => picture?.type)).toEqual(Array.from({ length: 7 }, () => "image/avif"));
 });
 
-test("isRendition names exactly the four sizes the route answers", () => {
-    expect(["tile", "gallery", "strip", "view", "original", "toString", ""].map(isRendition)).toEqual([true, true, true, true, false, false, false]);
+test("isRendition names the fixed sizes and every edge a reader picks from, and nothing else", () => {
+    expect(["tile", "gallery", "strip", "view", ...PICTURE_EDGES.map((edge) => `e${edge}`)].every(isRendition)).toBe(true);
+    expect(["original", "toString", "", "e100", "e4096"].some(isRendition)).toBe(false);
+});
+
+test("an edge rendition is the picture whole inside that square, never enlarged, AVIF only where it pays", async () => {
+    const root = await mkdtemp(join(tmpdir(), "ws-thumb-"));
+    const shot = join(root, "shot.png");
+    const icon = join(root, "icon.png");
+    await writePicture(shot, 1600, 1200);
+    await writePicture(icon, 64, 64);
+
+    const sized = async (file: string, rendition: Parameters<typeof workspaceThumbnail>[2], avif = false) => {
+        const thumbnail = (await workspaceThumbnail(root, file, rendition, avif))!;
+        const drawn = await sharp(thumbnail.bytes).metadata();
+        return [thumbnail.type, drawn.width, drawn.height];
+    };
+    expect(await sized(shot, "e768")).toEqual(["image/webp", 768, 576]);
+    expect(await sized(shot, "e768", true)).toEqual(["image/webp", 768, 576]);
+    expect(await sized(shot, "e1536", true)).toEqual(["image/avif", 1536, 1152]);
+    // Smaller than the edge: its own pixels, which is how a reader knows it has the whole picture.
+    expect(await sized(icon, "e512")).toEqual(["image/webp", 64, 64]);
 });
 
 test("a gallery picture stands a row's height, twice over for a sharp screen, keeping its shape", async () => {

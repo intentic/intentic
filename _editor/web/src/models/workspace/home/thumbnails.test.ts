@@ -144,39 +144,79 @@ it(`downloads the original under its own name`, async () => {
 describe(`what a home tile draws`, () => {
     const film = { name: `warcry.mp4`, path: `public/warcry.mp4`, type: `file` as const, size: 30_000_000 };
     const shot = { name: `after.png`, path: REPO_SHOT, type: `file` as const, size: 180_000 };
+    const sizesAsked = (): (string | null)[] => asked().map(({ route }) => new URLSearchParams(route.split(`?`)[1]).get(`size`));
 
-    it(`draws a video as the frame the daemon cut, never asking for the video itself`, async () => {
+    it(`draws a video as the frame the daemon cut at the edge asked, never asking for the video itself`, async () => {
         const { tileArt } = await load();
-        expect(await tileArt(film, `video`, `gallery`)).toEqual({ url: `blob:picture`, as: `picture` });
-        expect(asked()).toEqual([{ route: `/workspace/thumb?${query({ path: film.path, size: `gallery` })}`, accept: `image/webp` }]);
+        expect(await tileArt(film, `video`, 512)).toEqual({ url: `blob:picture`, as: `picture`, edge: 512, bytes: 1 });
+        expect(asked()).toEqual([{ route: `/workspace/thumb?${query({ path: film.path, size: `e512` })}`, accept: `image/webp` }]);
         expect(mediaTicket).not.toHaveBeenCalled();
     });
 
     it.each([400, 415])(`hands a video to a player where the daemon answers %i for its frame`, async (status) => {
         const { tileArt } = await load();
         blob.mockRejectedValue(refusal(status));
-        const art = await tileArt(film, `video`, `tile`);
+        const art = await tileArt(film, `video`, 256);
         expect(art.as).toBe(`video`);
         expect(art.url).toContain(`/workspace/media?`);
         // Never the raw route, which would move the whole film to draw a tile.
         expect(asked().map(({ route }) => route.split(`?`)[0])).toEqual([`/workspace/thumb`]);
     });
 
-    it(`falls back to the grid tile's picture where a sandbox does not know the gallery's size`, async () => {
+    it(`asks a large box's edge in AVIF where this engine decodes it, and a tile's in WebP`, async () => {
+        decodesAvif();
+        const { tileArt } = await load();
+        await tileArt(shot, `picture`, 1536);
+        await tileArt(shot, `picture`, 256);
+        expect(asked().map(({ accept }) => accept)).toEqual([`image/avif,image/webp`, `image/webp`]);
+        expect(sizesAsked()).toEqual([`e1536`, `tile`]);
+    });
+
+    it(`takes the viewer's rendition, as the largest edge, where a sandbox does not know the edges`, async () => {
         const { tileArt } = await load();
         blob.mockImplementation(async (route) => {
-            if (route.includes(`size=gallery`)) {
+            if (route.includes(`size=e768`)) {
                 throw refusal(400);
             }
             return new Blob([`x`]);
         });
-        expect(await tileArt(shot, `picture`, `gallery`)).toEqual({ url: `blob:picture`, as: `picture` });
-        expect(asked().map(({ route }) => new URLSearchParams(route.split(`?`)[1]).get(`size`))).toEqual([`gallery`, `tile`]);
+        expect(await tileArt(shot, `picture`, 768)).toEqual({ url: `blob:picture`, as: `picture`, edge: 2048, bytes: 1 });
+        expect(sizesAsked()).toEqual([`e768`, `view`]);
     });
 
-    it(`asks once for a burst of tiles wanting one picture`, async () => {
+    it(`asks once for a burst of tiles wanting one picture at one edge, and again for another edge`, async () => {
         const { tileArt } = await load();
-        await Promise.all([tileArt(shot, `picture`), tileArt(shot, `picture`), tileArt(shot, `picture`)]);
-        expect(blob).toHaveBeenCalledTimes(1);
+        await Promise.all([tileArt(shot, `picture`), tileArt(shot, `picture`), tileArt(shot, `picture`, 768)]);
+        expect(sizesAsked()).toEqual([`tile`, `e768`]);
+    });
+
+    it(`keeps the largest picture on hand for a larger look to show while its own arrives`, async () => {
+        const { tileArt, heldArt } = await load();
+        let made = 0;
+        globalThis.URL.createObjectURL = jest.fn(() => `blob:${(made += 1)}`);
+        expect(heldArt(shot)).toBeUndefined();
+        await tileArt(shot, `picture`, 768);
+        await tileArt(shot, `picture`, 256);
+        expect(heldArt(shot)).toMatchObject({ url: `blob:1`, edge: 768 });
+    });
+
+    it(`lets the least recently asked pictures go once they hold more than the budget`, async () => {
+        const { tileArt, heldArt } = await load();
+        let made = 0;
+        globalThis.URL.createObjectURL = jest.fn(() => `blob:${(made += 1)}`);
+        const revoked: string[] = [];
+        globalThis.URL.revokeObjectURL = jest.fn((url: string) => void revoked.push(url));
+        // Forty megabytes each, against a budget of ninety-six.
+        blob.mockImplementation(async () => new Blob([new Uint8Array(40 * 1024 * 1024)]));
+        const pictures = [`a`, `b`, `c`].map((name) => ({ name: `${name}.png`, path: `shots/${name}.png`, type: `file` as const, size: 1 }));
+        await tileArt(pictures[0]!, `picture`, 2048);
+        await tileArt(pictures[1]!, `picture`, 2048);
+        // Asked again, so the first is the recent one and the second the one to go.
+        await tileArt(pictures[0]!, `picture`, 2048);
+        await tileArt(pictures[2]!, `picture`, 2048);
+        await settle();
+        expect(revoked).toEqual([`blob:2`]);
+        expect(heldArt(pictures[1]!)).toBeUndefined();
+        expect(heldArt(pictures[0]!)).toMatchObject({ url: `blob:1` });
     });
 });

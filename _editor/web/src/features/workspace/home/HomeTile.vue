@@ -4,7 +4,7 @@ import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/work
 import { explorerColorClass, type IconName, iconForEntry } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";
-import { thumbnailKind } from "../../../models/workspace/home/thumbnails";
+import { edgeFor, screenScale, thumbnailKind } from "../../../models/workspace/home/thumbnails";
 import { useTileArt } from "./useTileArt";
 import { useT } from "@intentic/ui/i18n";
 
@@ -70,10 +70,12 @@ const quiet = computed(() => dimmed || locked || pending);
 // --- The thumbnail: fetched once the tile is near the viewport, never for a folder of four hundred off-screen shots. ---
 const kind = computed(() => (locked || pending ? undefined : thumbnailKind(entry)));
 const art = ref<HTMLElement>();
+const ART_LONG_EDGE = 104;
 const { src, as, shown, failed, onPicture, onVideoMetadata, onVideoFrame, onError } = useTileArt(
     () => entry,
     () => kind.value,
-    `tile`,
+    // Drawn at most 6.5rem (104px) along its long edge, counted in this screen's pixels.
+    () => edgeFor(ART_LONG_EDGE * screenScale.value),
     art,
 );
 </script>

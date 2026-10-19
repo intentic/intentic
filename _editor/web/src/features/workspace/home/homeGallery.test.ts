@@ -1,5 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { aspectFor, clampAspect, justifyRows, MAX_ASPECT, MIN_ASPECT, readsAsGallery, typicalAspect } from "./homeGallery";
+import { aspectFor, clampAspect, edgeNeeded, justifyRows, MAX_ASPECT, MIN_ASPECT, readsAsGallery, tooSmallFor, typicalAspect } from "./homeGallery";
 import { moveInGrid } from "./homeGrid";
 import { homeLayout } from "./homeLayout";
 import type { HomeGroup } from "./homeOrder";
@@ -174,5 +174,26 @@ describe(`a gallery inside the home's bands`, () => {
         const landed = moveInGrid(layout, lastOfFirst, `ArrowDown`);
         // The rightmost picture of a row lands on the rightmost of the next, whatever their counts.
         expect(landed).toBe(second!.start + second!.count - 1);
+    });
+});
+
+describe(`edgeNeeded`, () => {
+    it(`is the long edge a covering picture is drawn at, in the screen's pixels`, () => {
+        // A 16:9 shot in a 320×180 box on a 2× screen: 640 device pixels across.
+        expect(edgeNeeded(320, 180, 16 / 9, 2)).toBe(640);
+        // A portrait one cropped into a wider box is drawn as wide as the box, so taller than it.
+        expect(edgeNeeded(200, 200, 0.5, 1)).toBe(400);
+    });
+
+    it(`never asks past the picture's own long edge`, () => {
+        expect(edgeNeeded(800, 450, 16 / 9, 2, 1000)).toBe(1000);
+    });
+});
+
+describe(`tooSmallFor`, () => {
+    it(`keeps an icon at its own size, and fills the box with anything enlarged twice or less`, () => {
+        expect(tooSmallFor({ width: 64, height: 64 }, 200, 200)).toBe(true);
+        expect(tooSmallFor({ width: 120, height: 90 }, 240, 180)).toBe(false);
+        expect(tooSmallFor({ width: 1920, height: 1080 }, 430, 242)).toBe(false);
     });
 });

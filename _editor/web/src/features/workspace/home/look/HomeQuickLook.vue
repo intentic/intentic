@@ -1,37 +1,40 @@
 <!-- The home's quick look: a card beside the hovered tile with a file's first lines, the picture itself, a document's first page, or what a folder holds. -->
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import {
-    Code,
-    explorerColorClass,
-    formatBytes,
-    formatCount,
-    iconForEntry,
-    placeAnchored,
-    type Placement,
-    SkeletonSnapshot,
-    vSkeletonSource,
-} from "@intentic/ui";
+import { Code, explorerColorClass, formatBytes, formatCount, iconForEntry, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, type Ref, shallowRef, watch } from "vue";
 import { useLatest } from "@intentic/ui/async";
-import { useLayout } from "../../../workbench/window/useLayout";
-import { renderViewerForExtension, useViewerComponent } from "../../../workbench/views/viewerRegistry";
-import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
-import { explorerShows } from "../explorer/explorerFilter";
-import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
-import { readFileWindow } from "../../../models/workspace/files/fileWindow";
-import { scopeQuery } from "../../../app/workspaceScope";
+import { useLayout } from "../../../../workbench/window/useLayout";
+import { renderViewerForExtension, useViewerComponent } from "../../../../workbench/views/viewerRegistry";
+import { sandboxBlob } from "../../../../client/sandbox/sandboxClient";
+import { explorerShows } from "../../explorer/explorerFilter";
+import { useWorkspaceTree } from "../../../../models/workspace/tree/useWorkspaceTree";
+import { readFileWindow } from "../../../../models/workspace/files/fileWindow";
+import { scopeQuery } from "../../../../app/workspaceScope";
 import { extensionOf } from "@intentic/ui/file-format";
-import { homeGroups, homeOrder } from "./homeOrder";
-import { kindLabel, QUICK_LOOK_BYTES, type QuickLookKind, quickLookLines, quickLookPlan } from "../../../models/workspace/home/quickLookContent";
-import { thumbnailUrl } from "../../../models/workspace/home/thumbnails";
+import { homeGroups, homeOrder } from "../homeOrder";
+import { kindLabel, QUICK_LOOK_BYTES, type QuickLookKind, quickLookLines, quickLookPlan } from "../../../../models/workspace/home/quickLookContent";
+import { edgeFor, screenScale } from "../../../../models/workspace/home/thumbnails";
+import { mediaBox, requestBoxes } from "../../../../models/workspace/home/mediaBoxes";
 import { useT } from "@intentic/ui/i18n";
+import { edgeNeeded } from "../homeGallery";
+import { type AnchorRect, lookFrame, mediaCard, type MediaLimits, type Size } from "./quickLookFrame";
+import { useLookPicture } from "./useLookPicture";
 
 // `entry` undefined means closed. The card takes no pointer events: it overlaps the tiles beside its anchor, and the
 // pointer crossing onto one of them is how the look moves on.
 const t = useT();
 
-const { entry, anchor } = defineProps<{ entry: WorkspaceTreeEntry | undefined; anchor: HTMLElement | undefined }>();
+const {
+    entry,
+    anchor,
+    large = false,
+} = defineProps<{
+    entry: WorkspaceTreeEntry | undefined;
+    anchor: HTMLElement | undefined;
+    // The gallery's look: its pictures are already large on the page, so the card draws them as large as the window lets.
+    large?: boolean;
+}>();
 
 const { listingOf, keepListed } = useWorkspaceTree();
 const layout = useLayout();
@@ -65,7 +68,6 @@ const folderNames = computed(() => (folderChildren.value === undefined ? [] : ho
 // tiles, pictures and videos come from the cache the tiles already filled, and a document is fetched per hover, since
 // no tile drew it. -----------------------------------------------------------------------------------------------
 const text = ref<string>();
-const media = ref<string>();
 // A document's own bytes, handed to its viewer; shallow, since a Blob has nothing worth making reactive.
 const documentBytes = shallowRef<Blob>();
 const loading = ref(false);
@@ -119,14 +121,6 @@ const readText = async (target: WorkspaceTreeEntry, isLatest: () => boolean, sig
         settle(isLatest, text, undefined); // aborted or refused: the header already says the name and kind
     }
 };
-const readMedia = async (target: WorkspaceTreeEntry, medium: "picture" | "video", isLatest: () => boolean): Promise<void> => {
-    loading.value = true;
-    try {
-        settle(isLatest, media, await thumbnailUrl(target, medium));
-    } catch {
-        settle(isLatest, media, undefined);
-    }
-};
 // The whole file, since a document is a zip a viewer reads end to end; the look's size cap is what keeps that bounded.
 const readDocument = async (target: WorkspaceTreeEntry, isLatest: () => boolean, signal: AbortSignal): Promise<void> => {
     loading.value = true;
@@ -145,7 +139,6 @@ const load = (target: WorkspaceTreeEntry | undefined): void => {
     controller = undefined;
     const isLatest = latest();
     text.value = undefined;
-    media.value = undefined;
     documentBytes.value = undefined;
     loading.value = false;
     const planned: QuickLookKind = target === undefined ? `none` : quickLookPlan(target).kind;
@@ -156,7 +149,8 @@ const load = (target: WorkspaceTreeEntry | undefined): void => {
         controller = new AbortController();
         void readText(target, isLatest, controller.signal);
     } else if (planned === `picture` || planned === `video`) {
-        void readMedia(target, planned, isLatest);
+        // Its shape sizes the card; the tile that drew it has usually said it already.
+        void requestBoxes([target]);
     } else if (planned === `document`) {
         controller = new AbortController();
         void readDocument(target, isLatest, controller.signal);
@@ -164,44 +158,134 @@ const load = (target: WorkspaceTreeEntry | undefined): void => {
 };
 watch(() => entry, load, { immediate: true });
 
-// --- Where the card sits: beside its tile, flipping to the other side at the window's edge. -----------------------
+// --- Where the card sits and how large: beside its tile on the side with the most room for it, or over the tile where
+// no side has enough, always inside the window (quickLookFrame.ts). A picture's card takes the picture's shape. --------
+const medium = computed(() => (kind.value === `picture` || kind.value === `video` ? kind.value : undefined));
+// The card's own header and borders, around the picture: the header is one fixed height, so a card is sized before
+// anything in it has drawn.
+const HEADER_HEIGHT = 52;
+const CHROME: Size = { width: 2, height: HEADER_HEIGHT + 3 };
+// Wide enough for a text file's lines; a grid's picture look is the same width, a gallery's as large as fits.
+const CARD_WIDTH = 576;
+const MIN_WIDTH = 288;
+const GAP = 12;
+const EDGE = 8;
+
 const box = ref<HTMLElement>();
-const placement = ref<Placement>();
-const style = computed<CSSProperties>(() =>
-    placement.value === undefined
-        ? { transform: `translate(-200vw, -200vh)` }
-        : { left: `${Math.round(placement.value.left)}px`, top: `${Math.round(placement.value.top)}px` },
+const anchorRect = shallowRef<AnchorRect>();
+const view = shallowRef<Size>();
+// A card that is not a picture is as tall as what it holds, which it says once drawn.
+const measured = ref(0);
+// The picture's own size where known, its shape where only a smaller rendition has said it, and what the element
+// reports once drawn.
+const drawn = shallowRef<Size>();
+const known = computed(() => (entry === undefined ? undefined : mediaBox(entry)));
+const aspect = computed(() => {
+    const pictureBox = known.value ?? drawn.value;
+    return pictureBox === undefined || pictureBox.height <= 0 ? Number.NaN : pictureBox.width / pictureBox.height;
+});
+const limits = computed<MediaLimits>(() => ({
+    cap: large ? { width: 1280, height: Number.POSITIVE_INFINITY } : { width: CARD_WIDTH - CHROME.width, height: Math.min(384, (view.value?.height ?? 0) * 0.55) },
+    own: known.value?.exact === true ? known.value : undefined,
+    chrome: CHROME,
+    minWidth: MIN_WIDTH,
+}));
+const frame = computed(() => {
+    const at = anchorRect.value;
+    const room = view.value;
+    if (at === undefined || room === undefined) {
+        return undefined;
+    }
+    const place = { anchor: at, view: room, gap: GAP, edge: EDGE };
+    if (medium.value !== undefined) {
+        return lookFrame({ ...place, size: (space) => mediaCard(space, aspect.value, limits.value) });
+    }
+    return lookFrame({ ...place, size: (space) => ({ width: Math.min(CARD_WIDTH, space.width), height: Math.min(measured.value, space.height), media: undefined }) });
+});
+// The edge the picture's box needs on this screen, as a srcset would pick it.
+const pictureEdge = computed(() => {
+    const media = frame.value?.media;
+    if (media === undefined || media.width === 0) {
+        return undefined;
+    }
+    const own = limits.value.own;
+    return edgeFor(edgeNeeded(media.width, media.height, aspect.value, screenScale.value, own === undefined ? undefined : Math.max(own.width, own.height)));
+});
+const { picture, stream } = useLookPicture(
+    () => entry,
+    () => medium.value,
+    () => pictureEdge.value,
 );
-const reposition = (): void => {
-    const el = box.value;
-    const view = anchor?.ownerDocument.defaultView;
-    if (el === undefined || anchor === undefined || view === null || view === undefined) {
+
+// A card that is not a picture waits, unseen, until it has been measured; a picture's is sized before it draws.
+const placed = computed(() => frame.value !== undefined && (medium.value !== undefined || measured.value > 0));
+const style = computed<CSSProperties>(() => {
+    const at = frame.value;
+    if (at === undefined || !placed.value) {
+        return { transform: `translate(-200vw, -200vh)`, width: `${CARD_WIDTH}px` };
+    }
+    const where = { left: `${Math.round(at.left)}px`, top: `${Math.round(at.top)}px`, width: `${Math.round(at.width)}px` };
+    return medium.value === undefined ? { ...where, maxHeight: `${Math.round(at.height)}px` } : { ...where, height: `${Math.round(at.height)}px` };
+});
+const mediaStyle = computed<CSSProperties | undefined>(() => {
+    const media = frame.value?.media;
+    return media === undefined ? undefined : { height: `${media.height}px` };
+});
+
+const measure = (): void => {
+    const doc = anchor?.ownerDocument.defaultView;
+    if (anchor === undefined || doc === null || doc === undefined) {
+        anchorRect.value = undefined;
         return;
     }
-    placement.value = placeAnchored({
-        anchor: anchor.getBoundingClientRect(),
-        box: el.getBoundingClientRect(),
-        view: { width: view.innerWidth, height: view.innerHeight },
-        side: `right`,
-        cross: `start`,
-        gap: 12,
-        edge: 8,
-    });
+    const rect = anchor.getBoundingClientRect();
+    anchorRect.value = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+    view.value = { width: doc.innerWidth, height: doc.innerHeight };
 };
+let sizes: ResizeObserver | undefined;
+// Vue clears a template ref to null, not undefined, when its element goes.
+watch(box, (next, previous) => {
+    if (previous instanceof Element) {
+        sizes?.unobserve(previous);
+    }
+    if (next instanceof Element) {
+        sizes ??= new ResizeObserver(() => {
+            measured.value = box.value?.scrollHeight ?? 0;
+        });
+        sizes.observe(next);
+    }
+});
 // A fresh open parks off-screen until measured; a move between tiles glides from where the card already is.
 watch(
     () => anchor,
     async (next, previous) => {
         if (previous === undefined) {
-            placement.value = undefined;
+            anchorRect.value = undefined;
+            measured.value = 0;
         }
+        drawn.value = undefined;
         await nextTick();
-        reposition();
+        measure();
     },
-    { flush: `post` },
+    { flush: `post`, immediate: true },
 );
+const onDrawn = (width: number, height: number): void => {
+    if (width > 0 && height > 0) {
+        drawn.value = { width, height };
+    }
+};
+const onPictureDrawn = (event: Event): void => {
+    // SAFETY: bound to an <img>'s load event, whose target is that element.
+    const img = event.target as HTMLImageElement;
+    onDrawn(img.naturalWidth, img.naturalHeight);
+};
+const onVideoDrawn = (event: Event): void => {
+    // SAFETY: bound to a <video>'s loadedmetadata event, whose target is that element.
+    const video = event.target as HTMLVideoElement;
+    onDrawn(video.videoWidth, video.videoHeight);
+};
 // Which way the card leans in from, so its entrance comes from the tile rather than from nowhere.
-const enterFrom = computed(() => (placement.value?.side === `left` ? `opacity-0 translate-x-1` : `opacity-0 -translate-x-1`));
+const enterFrom = computed(() => (frame.value?.side === `left` ? `opacity-0 translate-x-1` : frame.value?.side === `over` ? `opacity-0` : `opacity-0 -translate-x-1`));
 
 // A document whose bytes never came (gone, or refused): the card is its header alone, not an empty page-sized box.
 const unreadable = computed(() => kind.value === `document` && !loading.value && documentBytes.value === undefined);
@@ -212,7 +296,10 @@ const count = computed(() => {
     return listed === undefined ? undefined : t(`workspace.homeQuickLook.itemCount`, { count: formatCount(listed.length) }, listed.length);
 });
 
-onBeforeUnmount(() => controller?.abort());
+onBeforeUnmount(() => {
+    controller?.abort();
+    sizes?.disconnect();
+});
 </script>
 
 <template>
@@ -221,11 +308,12 @@ onBeforeUnmount(() => controller?.abort());
             <div
                 v-if="entry !== undefined && plan !== undefined"
                 ref="box"
-                class="ui-home-move pointer-events-none fixed z-[1000] w-[min(36rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-line bg-card shadow-lg"
+                class="ui-home-move pointer-events-none fixed z-[1000] flex flex-col overflow-hidden rounded-lg border border-line bg-card shadow-lg"
                 :style="style"
                 role="tooltip"
             >
-                <div class="flex items-center gap-2.5 px-3 py-2.5">
+                <!-- One height whatever it says, so a picture's card is sized before it draws. -->
+                <div class="flex h-[3.25rem] shrink-0 items-center gap-2.5 px-3">
                     <Icon :name="icon" class="shrink-0 text-lg" :class="color" />
                     <div class="flex min-w-0 flex-1 flex-col">
                         <span class="truncate text-xs font-medium text-content">{{ entry.name }}</span>
@@ -236,12 +324,13 @@ onBeforeUnmount(() => controller?.abort());
                     </div>
                 </div>
                 <!-- Text and a document get a fixed body, so the card never jumps as they land. A picture or video takes its
-                     own shape up to a cap the window sets, since the tile already fetched it and it lands at once; a folder's
-                     names come from the tree on hand and take the room they need. -->
+                     own shape, as large as its room lets (quickLookFrame.ts), and is drawn edge to edge; a folder's names
+                     come from the tree on hand and take the room they need. -->
                 <div
                     v-if="kind !== 'none' && !unreadable"
-                    class="overflow-hidden border-t border-line bg-canvas"
-                    :class="kind === 'text' ? 'h-64' : kind === 'document' ? 'h-72' : kind === 'folder' ? '' : 'max-h-[min(24rem,55vh)]'"
+                    class="relative shrink-0 overflow-hidden border-t border-line bg-canvas"
+                    :class="kind === 'text' ? 'h-64' : kind === 'document' ? 'h-72' : ''"
+                    :style="mediaStyle"
                 >
                     <template v-if="kind === 'folder'">
                         <p v-if="folderChildren !== undefined && folderChildren.length === 0" class="px-3 py-3 text-2xs text-subtle">
@@ -262,25 +351,25 @@ onBeforeUnmount(() => controller?.abort());
                         </ul>
                     </template>
                     <template v-else-if="kind === 'picture'">
-                        <img
-                            v-if="media !== undefined"
-                            :src="media"
-                            :alt="entry.name"
-                            class="block max-h-[min(24rem,55vh)] w-full object-contain p-2"
-                        />
+                        <img v-if="picture !== undefined" :src="picture" :alt="entry.name" class="block size-full object-contain" @load="onPictureDrawn" />
+                        <Icon v-else :name="icon" class="absolute inset-0 m-auto text-[2.5rem] opacity-40" :class="color" aria-hidden="true" />
                     </template>
-                    <!-- Plays silently while looked at, the way a thumbnail strip does; the element streams by range. -->
+                    <!-- Plays silently while looked at, the way a thumbnail strip does, over the frame its tile drew; the
+                         element streams by range. -->
                     <template v-else-if="kind === 'video'">
                         <video
-                            v-if="media !== undefined"
-                            :src="media"
+                            v-if="stream !== undefined || picture !== undefined"
+                            :src="stream"
+                            :poster="picture"
                             autoplay
                             muted
                             loop
                             playsinline
                             preload="metadata"
-                            class="block max-h-[min(24rem,55vh)] w-full object-contain p-2"
+                            class="block size-full object-contain"
+                            @loadedmetadata="onVideoDrawn"
                         ></video>
+                        <Icon v-else :name="icon" class="absolute inset-0 m-auto text-[2.5rem] opacity-40" :class="color" aria-hidden="true" />
                     </template>
                     <template v-else-if="text !== undefined">
                         <p v-if="text === ''" class="px-3 py-3 text-2xs text-subtle">{{ t(`workspace.homeQuickLook.nothingInYet`) }}</p>

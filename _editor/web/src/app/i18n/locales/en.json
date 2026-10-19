@@ -11627,7 +11627,9 @@
             "gallery": "Gallery",
             "galleryOnHint": "Show pictures",
             "galleryOffHint": "Show tiles",
-            "gallerySize": "Picture size"
+            "gallerySize": "Picture size",
+            "gallerySmaller": "Smaller pictures",
+            "galleryLarger": "Larger pictures"
         },
         "diffSkeleton": {
             "readingFile": "Reading the file…"

@@ -6,9 +6,9 @@ import { formatDuration } from "@intentic/ui/format";
 import { computed, ref } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";
 import { mediaBox } from "../../../models/workspace/home/mediaBoxes";
-import { thumbnailKind } from "../../../models/workspace/home/thumbnails";
+import { edgeFor, screenScale, thumbnailKind } from "../../../models/workspace/home/thumbnails";
 import { useT } from "@intentic/ui/i18n";
-import { clampAspect } from "./homeGallery";
+import { clampAspect, edgeNeeded, tooSmallFor } from "./homeGallery";
 import { useTileArt } from "./useTileArt";
 
 const t = useT();
@@ -67,10 +67,26 @@ const quiet = computed(() => dimmed || locked || pending);
 
 const kind = computed(() => (locked || pending ? undefined : thumbnailKind(entry)));
 const art = ref<HTMLElement>();
-const { src, as, shown, failed, natural, onPicture, onVideoMetadata, onVideoFrame, onError } = useTileArt(
+// The picture's own box, once the daemon (or the picture itself) has said it.
+const own = computed(() => mediaBox(entry));
+const aspect = computed(() => (own.value === undefined ? width / height : own.value.width / own.value.height));
+const vector = computed(() => entry.name.toLowerCase().endsWith(`.svg`));
+// A picture much smaller than its box (an icon, a favicon) is drawn at its own size rather than blown up into a blur.
+// Only a true size says so, never the pixels of a rendition that was asked to be small; every other picture fills its
+// box edge to edge. An SVG draws as sharp at any size, so it always fills.
+const small = computed(() => own.value?.exact === true && !vector.value && tooSmallFor(own.value, width, height));
+// The edge this box needs on this screen, as a srcset would pick it. An SVG is drawn from its own markup at any size.
+const edge = computed(() =>
+    vector.value
+        ? 256
+        : edgeFor(
+              edgeNeeded(width, height, aspect.value, screenScale.value, own.value?.exact === true ? Math.max(own.value.width, own.value.height) : undefined),
+          ),
+);
+const { src, as, shown, failed, onPicture, onVideoMetadata, onVideoFrame, onError } = useTileArt(
     () => entry,
     () => kind.value,
-    `gallery`,
+    () => edge.value,
     art,
 );
 
@@ -85,20 +101,14 @@ const nameParts = computed(() => {
     return { head: entry.name.slice(0, end), tail: entry.name.slice(end, at), extension: entry.name.slice(at) };
 });
 
-// How the picture fills its box. Cropped to it where its own shape was past what a row carries (homeGallery.ts
-// `clampAspect`): the top of a tall one, which is where a page or a phone screen starts, the middle of a wide one. A
-// picture much smaller than its box (an icon, a favicon) is drawn at its own size rather than blown up into a blur.
+// How the picture fills its box: all of it, the box having its shape. Cropped where its shape was past what a row
+// carries (homeGallery.ts `clampAspect`): the top of a tall one, which is where a page or a phone screen starts, the
+// middle of a wide one.
 const fit = computed(() => {
-    const own = natural.value;
-    if (own !== undefined && own.width < width * 0.75 && own.height < height * 0.75) {
+    if (small.value) {
         return `object-scale-down`;
     }
-    const known = mediaBox(entry);
-    const aspect = known === undefined ? undefined : known.width / known.height;
-    if (aspect !== undefined && clampAspect(aspect) > aspect + 0.01) {
-        return `object-cover object-top`;
-    }
-    return `object-cover`;
+    return own.value !== undefined && clampAspect(aspect.value) > aspect.value + 0.01 ? `object-cover object-top` : `object-cover`;
 });
 
 // Past a narrow picture the line after the name would leave the name a few letters; the heading above already says
@@ -181,12 +191,8 @@ const duration = computed(() => {
                 :aria-label="t(`workspace.words.symlink`)"
             />
             <!-- Over the picture, not behind it, where an inset ring would be painted under it: a hairline that keeps a dark
-                 picture's edge off a dark page, and the selection's ring. -->
-            <span
-                class="pointer-events-none absolute inset-0 rounded-md ring-inset"
-                :class="selected ? 'ring-2 ring-primary-500' : 'ring-1 ring-line/50'"
-                aria-hidden="true"
-            ></span>
+                 picture's edge off a dark page. Selection is the card's own, the one every row and tile wears. -->
+            <span class="pointer-events-none absolute inset-0 rounded-md ring-1 ring-line/50 ring-inset" aria-hidden="true"></span>
         </span>
         <input
             v-if="renaming"
@@ -202,9 +208,10 @@ const duration = computed(() => {
             @blur="emit('commit')"
             @vue:mounted="focusInput"
         />
-        <!-- One line, one height for every picture, so the home can place its rows by arithmetic. -->
-        <span v-else class="mt-1 flex h-5 min-w-0 items-center gap-2 px-0.5 text-xs" :style="{ width: `${width}px` }">
-            <span class="flex min-w-0 flex-1" :class="quiet ? 'text-subtle' : 'text-content/90'">
+        <!-- One line, one height for every picture, so the home can place its rows by arithmetic. Centred under the
+             picture, as a grid tile's name is, and clear of the edge a selected card wears in Sanctum. -->
+        <span v-else class="mt-1 flex h-5 min-w-0 items-center justify-center gap-2 px-1 text-xs" :style="{ width: `${width}px` }">
+            <span class="flex min-w-0" :class="quiet ? 'text-subtle' : 'text-content/90'">
                 <span class="truncate" v-tooltip.bottom.overflow="entry.name">{{ nameParts.head }}</span>
                 <span class="shrink-0 whitespace-pre">{{ nameParts.tail }}</span>
                 <span class="shrink-0 text-muted">{{ nameParts.extension }}</span>

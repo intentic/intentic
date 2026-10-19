@@ -33,7 +33,7 @@ import HomeCoverPicker from "./HomeCoverPicker.vue";
 import HomeGallerySwitch from "./HomeGallerySwitch.vue";
 import HomeGalleryTile from "./HomeGalleryTile.vue";
 import HomeProbe from "./HomeProbe.vue";
-import HomeQuickLook from "./HomeQuickLook.vue";
+import HomeQuickLook from "./look/HomeQuickLook.vue";
 import HomeTile from "./HomeTile.vue";
 import { useT } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
@@ -485,7 +485,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
         <!-- Where you are; the root wears the scope's own name. Outside the scrolling area, so a long folder keeps its way
              back in view without the tiles having to scroll under it. A crumb also takes a drop, which is how a tile moves
              up a level or two. -->
-        <nav class="z-10 flex shrink-0 items-center gap-1 bg-canvas px-5 pt-4 pb-2 text-xs" :aria-label="t(`workspace.homeView.folderPath`)">
+        <nav class="@container/home-bar z-10 flex shrink-0 items-center gap-1 bg-canvas px-5 pt-4 pb-2 text-xs" :aria-label="t(`workspace.homeView.folderPath`)">
             <template v-for="(crumb, index) in crumbs" :key="crumb.path">
                 <!-- One line however deep: a crumb above the folder gives way to an ellipsis rather than wrapping, so the
                      bar's controls keep their room; the folder itself stays whole. -->
@@ -524,7 +524,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     @click.stop
                 />
                 <!-- The gallery, offered only where the folder has a picture to draw. -->
-                <HomeGallerySwitch v-if="galleryOffered" class="shrink-0" :on="galleryOn" @toggle="toggleGallery" />
+                <HomeGallerySwitch v-if="galleryOffered" class="shrink-0" :on="galleryOn" @toggle="toggleGallery" @resize="resizeGallery" />
                 <!-- The sidebar's query, here too; the placeholder names the scope the sidebar set, since it may be closed. The
                      wrapper keeps a press on the field's box from reaching the tiles' own click and context menu. -->
                 <span v-if="search !== undefined" class="contents" @click.stop @contextmenu.stop>
@@ -708,7 +708,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
             </span>
         </div>
 
-        <HomeQuickLook :entry="lookEntry" :anchor="lookAnchor" />
+        <HomeQuickLook :entry="lookEntry" :anchor="lookAnchor" :large="galleryOn" />
         <ContextMenu ref="menu" :model="menuItems" :min-width="10" />
     </div>
 </template>

@@ -130,8 +130,8 @@ const CANDIDATES = [1 / 3, 2 / 3, 0.1, 0.9, 0.5] as const;
 // A frame whose grey levels spread less than this is a flat field (a fade to white, a black slate): the same bar that
 // thumbnailer sets, a variance of 256.
 const BORING_STDEV = 16;
-// Larger than any rendition is cut from, so the rendition's own resize sets the quality.
-const FRAME_BOX = 1440;
+// As large as the largest rendition is cut from (PICTURE_EDGES), so the rendition's own resize sets the quality.
+const FRAME_BOX = 2048;
 
 // One frame at `at` seconds as a PNG, or undefined when ffmpeg cannot reach it. Written to a file beside the cache
 // rather than piped, since the daemon's one command door reads output as text.

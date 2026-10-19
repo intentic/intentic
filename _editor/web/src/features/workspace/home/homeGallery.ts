@@ -94,6 +94,28 @@ export const justifyRows = (aspects: readonly number[], metrics: GalleryMetrics)
     return rows;
 };
 
+/**
+ * The long edge, in device pixels, a picture of proportions `aspect` needs to cover a box `width`×`height` CSS pixels
+ * at `scale` device pixels each: as `object-fit: cover` draws it, as wide as the box or as tall, whichever leaves no
+ * gap. Never longer than the picture's own long edge where that is known, since past it the daemon answers the same
+ * pixels under another name.
+ */
+export const edgeNeeded = (width: number, height: number, aspect: number, scale: number, ownLong?: number): number => {
+    const ratio = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+    const drawnWidth = Math.max(width, height * ratio);
+    const need = Math.ceil(Math.max(drawnWidth, drawnWidth / ratio) * scale);
+    return ownLong === undefined ? need : Math.min(need, ownLong);
+};
+
+// How far a picture is enlarged to fill its box before it is drawn at its own size instead. A screenshot a little
+// smaller than its box fills it, softer by a step; an icon or a favicon blown up four times over is a blur, and reads
+// better small and sharp on the box's faint fill.
+const MAX_ENLARGE = 2;
+
+/** Whether a picture of its own `own` pixels would have to be enlarged past MAX_ENLARGE to cover a `width`×`height` box. */
+export const tooSmallFor = (own: { readonly width: number; readonly height: number }, width: number, height: number): boolean =>
+    own.width > 0 && own.height > 0 && Math.max(width / own.width, height / own.height) > MAX_ENLARGE;
+
 // --- Which folders read as a gallery -------------------------------------------------------------------------------
 
 /** What a gallery draws as itself: a picture or a video. Anything else in a gallery row is a card with its glyph. */

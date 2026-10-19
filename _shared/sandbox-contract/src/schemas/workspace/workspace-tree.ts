@@ -143,6 +143,13 @@ export const WorkspaceMediaTicketSchema = z.object({
     ticket: z.string().describe("Hand this to the streaming route in the query string. It buys exactly the one file it was minted for."),
     expiresAt: z.number().describe("When it stops working, in milliseconds, so a player can tell a dead ticket from a dead file."),
 });
+// The long edges a picture is re-encoded at for drawing (GET /workspace/thumb's `size=e<edge>`), smallest first. A reader
+// asks for the smallest one at least as long as the box the picture fills on its screen, device pixels counted, the
+// way a browser picks from a srcset. Steps of about one and a half, so a pick is never much larger than it needs, and
+// few enough that the pictures of a folder seen at several sizes share their renditions.
+export const PICTURE_EDGES = [384, 512, 768, 1024, 1536, 2048] as const;
+export type PictureEdge = (typeof PICTURE_EDGES)[number];
+
 // The box each picture or video is drawn in, asked of a folder's worth at once: a gallery lays its rows out from every
 // picture's shape before any of them has loaded, so a row never reflows under the reader as its pictures arrive.
 export const WORKSPACE_DIMENSIONS_MAX = 500;

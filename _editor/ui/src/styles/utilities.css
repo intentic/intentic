@@ -574,10 +574,94 @@
             opacity 0.15s ease-out,
             translate 0.15s ease-out,
             left 0.15s ease-out,
-            top 0.15s ease-out;
+            top 0.15s ease-out,
+            width 0.15s ease-out,
+            height 0.15s ease-out;
     }
 
     :root[data-motion="reduced"] .ui-home-move {
         transition: none;
+    }
+}
+
+/* A SLIM SLIDER: a hairline track filled in the accent up to the value, and a round knob in the accent that swells under
+   the pointer. The native range input underneath keeps its keys, its focus and the value a screen reader says. The
+   caller says how far along the value is as `--ui-range-fill` (0%-100%), since only Firefox paints the filled part
+   itself. Its box is taller than the track, so the knob is easy to catch. */
+@layer components {
+    .ui-range {
+        --ui-range-track: color-mix(in srgb, var(--color-content) 16%, transparent);
+        --ui-range-knob: 0.75rem;
+        height: 1rem;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+    }
+
+    .ui-range::-webkit-slider-runnable-track {
+        height: 3px;
+        border-radius: 9999px;
+        background: linear-gradient(
+            to right,
+            var(--color-primary-500) var(--ui-range-fill, 0%),
+            var(--ui-range-track) var(--ui-range-fill, 0%)
+        );
+    }
+
+    .ui-range::-moz-range-track {
+        height: 3px;
+        border-radius: 9999px;
+        background: var(--ui-range-track);
+    }
+
+    .ui-range::-moz-range-progress {
+        height: 3px;
+        border-radius: 9999px;
+        background: var(--color-primary-500);
+    }
+
+    .ui-range::-webkit-slider-thumb {
+        width: var(--ui-range-knob);
+        height: var(--ui-range-knob);
+        margin-top: calc((3px - var(--ui-range-knob)) / 2);
+        appearance: none;
+        border-radius: 9999px;
+        background: var(--color-primary-500);
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+        transition: scale var(--motion-hover);
+    }
+
+    .ui-range::-moz-range-thumb {
+        width: var(--ui-range-knob);
+        height: var(--ui-range-knob);
+        border: 0;
+        border-radius: 9999px;
+        background: var(--color-primary-500);
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.35);
+        transition: scale var(--motion-hover);
+    }
+
+    .ui-range:is(:hover, :active)::-webkit-slider-thumb {
+        scale: 1.2;
+    }
+
+    .ui-range:is(:hover, :active)::-moz-range-thumb {
+        scale: 1.2;
+    }
+
+    .ui-range:focus-visible {
+        outline: none;
+    }
+
+    .ui-range:focus-visible::-webkit-slider-thumb {
+        box-shadow:
+            0 0 0 2px var(--color-canvas),
+            0 0 0 4px color-mix(in srgb, var(--color-primary-500) 60%, transparent);
+    }
+
+    .ui-range:focus-visible::-moz-range-thumb {
+        box-shadow:
+            0 0 0 2px var(--color-canvas),
+            0 0 0 4px color-mix(in srgb, var(--color-primary-500) 60%, transparent);
     }
 }

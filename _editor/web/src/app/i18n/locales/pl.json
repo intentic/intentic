@@ -11309,7 +11309,9 @@
             "gallery": "Galeria",
             "galleryOnHint": "Pokaż obrazy",
             "galleryOffHint": "Pokaż kafelki",
-            "gallerySize": "Rozmiar obrazów"
+            "gallerySize": "Rozmiar obrazów",
+            "gallerySmaller": "Mniejsze obrazy",
+            "galleryLarger": "Większe obrazy"
         },
         "htmlPreview": {
             "failed": "Nie udało się przygotować tej strony do podglądu.",

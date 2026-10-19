@@ -1,5 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { PICTURE_EDGES, type PictureEdge, type WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
+import { ref } from "vue";
 import { lazyByPath } from "../../../client/sandbox/lazyByPath";
 import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
@@ -10,7 +11,7 @@ import { quickLookPlan } from "./quickLookContent";
 // A workspace file at the size it is drawn: a daemon rendition (`tile`, `gallery`, `strip`, `view`) or its own bytes
 // (`original`).
 
-export type PictureSize = "tile" | "gallery" | "strip" | "view" | "original";
+export type PictureSize = "tile" | "gallery" | "strip" | "view" | "original" | `e${PictureEdge}`;
 
 // `url` undefined is the daemon's final answer that nothing can be drawn there; the whole Picture undefined is still on its way.
 export interface Picture {
@@ -58,10 +59,10 @@ const queryOf = (scope: string | undefined, path: string, size?: PictureSize): s
 
 const refusedWith = (error: unknown, statuses: ReadonlySet<number>): boolean => error instanceof SandboxHttpError && statuses.has(error.status);
 
-// One route's answer as an object URL, or undefined for a final refusal; any other failure propagates for lazyByPath.
-const objectUrl = async (route: string, accept?: string): Promise<string | undefined> => {
+// One route's answer, or undefined for a final refusal; any other failure propagates for lazyByPath.
+const blobOf = async (route: string, accept?: string): Promise<Blob | undefined> => {
     try {
-        return URL.createObjectURL(await sandboxBlob(route, accept === undefined ? undefined : { headers: { accept } }));
+        return await sandboxBlob(route, accept === undefined ? undefined : { headers: { accept } });
     } catch (error) {
         if (refusedWith(error, NOTHING_THERE)) {
             return undefined;
@@ -70,20 +71,28 @@ const objectUrl = async (route: string, accept?: string): Promise<string | undef
     }
 };
 
+// The sizes the daemon may answer in AVIF (its own table says which do): the viewer's, and the edges a large box asks for.
+const mayBeAvif = (size: PictureSize): boolean => size === `view` || size.startsWith(`e`);
+
 // What the daemon will not re-encode is drawn from the file, which for SVG is small anyway.
-const pictureUrl = async (scope: string | undefined, path: string, size: PictureSize): Promise<string | undefined> => {
+const pictureBlob = async (scope: string | undefined, path: string, size: PictureSize): Promise<Blob | undefined> => {
     if (size === `original`) {
-        return objectUrl(`/workspace/raw?${queryOf(scope, path)}`);
+        return blobOf(`/workspace/raw?${queryOf(scope, path)}`);
     }
-    const accept = size === `view` && (await decodesAvif()) ? `image/avif,image/webp` : `image/webp`;
+    const accept = mayBeAvif(size) && (await decodesAvif()) ? `image/avif,image/webp` : `image/webp`;
     try {
-        return await objectUrl(`/workspace/thumb?${queryOf(scope, path, size)}`, accept);
+        return await blobOf(`/workspace/thumb?${queryOf(scope, path, size)}`, accept);
     } catch (error) {
         if (refusedWith(error, NOT_RENDERED)) {
-            return objectUrl(`/workspace/raw?${queryOf(scope, path)}`);
+            return blobOf(`/workspace/raw?${queryOf(scope, path)}`);
         }
         throw error;
     }
+};
+
+const pictureUrl = async (scope: string | undefined, path: string, size: PictureSize): Promise<string | undefined> => {
+    const blob = await pictureBlob(scope, path, size);
+    return blob === undefined ? undefined : URL.createObjectURL(blob);
 };
 
 // A daemon rendition's bytes, for reading its pixels rather than drawing it (shotLooks.ts). WebP, which every engine
@@ -144,29 +153,78 @@ export const thumbnailKind = (entry: WorkspaceTreeEntry): ThumbnailKind | undefi
     return kind === `picture` || kind === `video` ? kind : undefined;
 };
 
-// The box a tile is drawn in: a grid tile's, or a gallery row's, which stands several times taller.
-export type TileSize = "tile" | "gallery";
+// --- Which size to ask for: the srcset a browser would pick from, picked here --------------------------------------
+// The daemon answers a picture at a handful of long edges (PICTURE_EDGES), and a tile asks for the smallest one at
+// least as long as the box it fills, in device pixels. It cannot hand the browser a srcset to pick from itself: the
+// renditions are read with the sandbox's bearer, which an <img> cannot send, so they arrive as object URLs.
+
+/** A long edge a tile can be drawn from: the grid tile's own rendition, or one of the daemon's edges. */
+export type TileEdge = 256 | PictureEdge;
+const TILE_EDGES: readonly TileEdge[] = [256, ...PICTURE_EDGES];
+
+/** The smallest edge at least `needed` device pixels long, or the largest there is. */
+export const edgeFor = (needed: number): TileEdge => TILE_EDGES.find((edge) => edge >= needed) ?? 2048;
+
+const renditionAt = (edge: TileEdge): PictureSize => (edge === 256 ? `tile` : `e${edge}`);
+
+// Device pixels per CSS pixel, kept current as a window moves to another screen or the reader zooms. A query for the
+// ratio now stops matching the moment it changes, which is the one event a browser gives for it.
+export const screenScale = ref(globalThis.devicePixelRatio || 1);
+const watchScale = (): void => {
+    globalThis.matchMedia?.(`(resolution: ${screenScale.value}dppx)`).addEventListener(
+        `change`,
+        () => {
+            screenScale.value = globalThis.devicePixelRatio || 1;
+            watchScale();
+        },
+        { once: true },
+    );
+};
+watchScale();
 
 /** What a tile draws: a picture (a rendition, or a video's frame the daemon cut), or a video to seek into itself. */
 export interface TileArt {
     readonly url: string;
     readonly as: "picture" | "video";
+    // The long edge the picture was drawn at. The daemon never enlarges one, so a picture whose pixels come back shorter
+    // than this is the file's own size.
+    readonly edge: TileEdge;
+    // What it holds in memory, which the held answers are budgeted by; none for a stream, which the player reads by range.
+    readonly bytes: number;
 }
 
-// Held answers; each is a few kilobytes, and scrolling back up a long folder should find its tiles already there.
+// Held answers, least recently asked first. A grid tile's is a few kilobytes and a large look's a few hundred, and
+// scrolling back up a long folder should find its pictures already there; past either bound the least recently asked
+// go, their URLs with them. A picture already painted stays painted when its URL goes.
 const CAP = 512;
-// In flight or settled, so a burst of tiles asking for one file makes one request.
-const held = new Map<string, Promise<TileArt>>();
+const BUDGET_BYTES = 96 * 1024 * 1024;
+interface Held {
+    readonly art: Promise<TileArt>;
+    // Counted once it lands.
+    bytes: number;
+}
+// In flight or settled, so a burst of tiles asking for one file at one edge makes one request.
+const held = new Map<string, Held>();
+let heldBytes = 0;
+// The largest settled picture per version of a file, for a draw that wants something on screen at once: a larger look
+// shows what the tile already has while its own size arrives.
+const largest = new Map<string, TileArt>();
 
 // A rewritten file (same path, new size) is a new picture.
-const artKey = (entry: WorkspaceTreeEntry, use: TileSize | "stream"): string =>
-    `${workspaceAgent.value ?? ``}\n${use}\n${entry.path} ${entry.size ?? 0}`;
+const versionKey = (entry: WorkspaceTreeEntry): string => `${workspaceAgent.value ?? ``}\n${entry.path} ${entry.size ?? 0}`;
+const artKey = (entry: WorkspaceTreeEntry, use: TileEdge | "stream"): string => `${versionKey(entry)}\n${use}`;
+
+interface Drawn {
+    readonly blob: Blob;
+    readonly edge: TileEdge;
+}
 
 // A video's frame as the daemon cut it, or undefined where it cannot: a sandbox without ffmpeg refuses a video as it
-// refuses an SVG (415), and one from before video frames refuses the size (400).
-const posterUrl = async (entry: WorkspaceTreeEntry, size: TileSize): Promise<string | undefined> => {
+// refuses an SVG (415), and one from before the edges refuses the size (400), so the grid tile's frame is asked next.
+const posterAt = async (entry: WorkspaceTreeEntry, edge: TileEdge): Promise<Drawn | undefined> => {
     try {
-        return await objectUrl(`/workspace/thumb?${queryOf(workspaceAgent.value, entry.path, size)}`, `image/webp`);
+        const blob = await blobOf(`/workspace/thumb?${queryOf(workspaceAgent.value, entry.path, renditionAt(edge))}`, `image/webp`);
+        return blob !== undefined ? { blob, edge } : edge === 256 ? undefined : await posterAt(entry, 256);
     } catch (error) {
         if (refusedWith(error, NOT_RENDERED)) {
             return undefined;
@@ -175,61 +233,104 @@ const posterUrl = async (entry: WorkspaceTreeEntry, size: TileSize): Promise<str
     }
 };
 
-const fetchArt = async (entry: WorkspaceTreeEntry, kind: ThumbnailKind, size: TileSize): Promise<TileArt> => {
-    if (kind === `video`) {
-        // The frame first: a player seeking into a film that opens on a fade draws a white card.
-        const poster = await posterUrl(entry, size);
-        return poster === undefined ? { url: await mediaUrl(entry.path), as: `video` } : { url: poster, as: `picture` };
+// A sandbox from before the edges refuses their names. Its viewer's rendition is the picture's own pixels up to 2560
+// wide, as sharp as any edge, so it is taken as the largest; past that, the tile's.
+const pictureAt = async (entry: WorkspaceTreeEntry, edge: TileEdge): Promise<Drawn | undefined> => {
+    const scope = workspaceAgent.value;
+    const asked = await pictureBlob(scope, entry.path, renditionAt(edge));
+    if (asked !== undefined || edge === 256) {
+        return asked === undefined ? undefined : { blob: asked, edge };
     }
-    // A sandbox from before the gallery's rendition refuses its name; the grid tile's is the next best.
-    const url =
-        (await pictureUrl(workspaceAgent.value, entry.path, size)) ??
-        (size === `tile` ? undefined : await pictureUrl(workspaceAgent.value, entry.path, `tile`));
-    if (url === undefined) {
-        throw new Error(`Nothing to draw for ${entry.path}.`);
+    const view = await pictureBlob(scope, entry.path, `view`);
+    if (view !== undefined) {
+        return { blob: view, edge: 2048 };
     }
-    return { url, as: `picture` };
+    const tile = await pictureBlob(scope, entry.path, `tile`);
+    return tile === undefined ? undefined : { blob: tile, edge: 256 };
 };
 
-const evictOldest = (): void => {
-    if (held.size <= CAP) {
-        return;
+const fetchArt = async (entry: WorkspaceTreeEntry, kind: ThumbnailKind, edge: TileEdge): Promise<TileArt> => {
+    // A video's frame first: a player seeking into a film that opens on a fade draws a white card.
+    const drawn = kind === `video` ? await posterAt(entry, edge) : await pictureAt(entry, edge);
+    if (drawn !== undefined) {
+        return { url: URL.createObjectURL(drawn.blob), as: `picture`, edge: drawn.edge, bytes: drawn.blob.size };
     }
-    const [oldest] = held;
-    if (oldest === undefined) {
-        return;
+    if (kind === `video`) {
+        return { url: await mediaUrl(entry.path), as: `video`, edge, bytes: 0 };
     }
-    held.delete(oldest[0]);
-    void oldest[1].then(
-        ({ url }) => {
-            if (url.startsWith(`blob:`)) {
-                URL.revokeObjectURL(url);
+    throw new Error(`Nothing to draw for ${entry.path}.`);
+};
+
+const forget = (key: string, kept: Held): void => {
+    held.delete(key);
+    heldBytes -= kept.bytes;
+    void kept.art.then(
+        (art) => {
+            for (const [version, biggest] of largest) {
+                if (biggest.url === art.url) {
+                    largest.delete(version);
+                }
+            }
+            if (art.url.startsWith(`blob:`)) {
+                URL.revokeObjectURL(art.url);
             }
         },
         () => undefined,
     );
 };
 
-const once = (key: string, fetch: () => Promise<TileArt>): Promise<TileArt> => {
-    const pending = held.get(key);
-    if (pending !== undefined) {
-        return pending;
+// Oldest first, never the one just asked for unless it alone is past the budget.
+const evict = (): void => {
+    for (const [key, kept] of held) {
+        if (held.size <= CAP && heldBytes <= BUDGET_BYTES) {
+            return;
+        }
+        forget(key, kept);
     }
-    const loading = fetch();
-    held.set(key, loading);
-    // A failed read is forgotten, so the next look retries rather than failing for the rest of the session.
-    loading.catch(() => held.delete(key));
-    evictOldest();
-    return loading;
 };
 
-/** What a home tile draws for an entry at `size`, fetched once per version of the file. */
-export const tileArt = (entry: WorkspaceTreeEntry, kind: ThumbnailKind, size: TileSize = `tile`): Promise<TileArt> =>
-    once(artKey(entry, size), () => fetchArt(entry, kind, size));
+const once = (key: string, version: string, fetch: () => Promise<TileArt>): Promise<TileArt> => {
+    const pending = held.get(key);
+    if (pending !== undefined) {
+        // Asked again, so it is recent again.
+        held.delete(key);
+        held.set(key, pending);
+        return pending.art;
+    }
+    const kept: Held = { art: fetch(), bytes: 0 };
+    held.set(key, kept);
+    kept.art.then(
+        (art) => {
+            // Forgotten before it landed: forget has its URL.
+            if (held.get(key) !== kept) {
+                return;
+            }
+            kept.bytes = art.bytes;
+            heldBytes += art.bytes;
+            const before = largest.get(version);
+            if (art.as === `picture` && (before === undefined || before.edge < art.edge)) {
+                largest.set(version, art);
+            }
+            evict();
+        },
+        // A failed read is forgotten, so the next look retries rather than failing for the rest of the session.
+        () => {
+            if (held.get(key) === kept) {
+                held.delete(key);
+            }
+        },
+    );
+    evict();
+    return kept.art;
+};
 
-/** What the quick look draws: a picture's tile rendition, or a video's own stream, which the card plays. */
-export const thumbnailUrl = async (entry: WorkspaceTreeEntry, kind: ThumbnailKind): Promise<string> =>
-    (kind === `video`
-        ? await once(artKey(entry, `stream`), async () => ({ url: await mediaUrl(entry.path), as: `video` }))
-        : await tileArt(entry, kind)
-    ).url;
+/** What a home tile draws for an entry at `edge` device pixels, fetched once per version of the file and edge. */
+export const tileArt = (entry: WorkspaceTreeEntry, kind: ThumbnailKind, edge: TileEdge = 256): Promise<TileArt> =>
+    once(artKey(entry, edge), versionKey(entry), () => fetchArt(entry, kind, edge));
+
+/** The largest picture of an entry already on hand, at whatever edge, to draw while a larger one is on its way. */
+export const heldArt = (entry: WorkspaceTreeEntry): TileArt | undefined => largest.get(versionKey(entry));
+
+/** A video's own stream, which the quick look plays. */
+export const videoStream = async (entry: WorkspaceTreeEntry): Promise<string> =>
+    (await once(artKey(entry, `stream`), versionKey(entry), async () => ({ url: await mediaUrl(entry.path), as: `video`, edge: 256, bytes: 0 }))).url;

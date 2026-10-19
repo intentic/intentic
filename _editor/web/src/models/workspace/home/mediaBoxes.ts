@@ -13,6 +13,9 @@ export interface MediaBox {
     readonly height: number;
     // A video's running time in seconds, where the daemon could read it.
     readonly duration?: number | undefined;
+    // The picture's own pixels, as the daemon read them or a whole picture showed them; otherwise only its proportions,
+    // learned from a rendition smaller than the original.
+    readonly exact: boolean;
 }
 
 // Answers kept: a few numbers each, so the cap is about the map, not memory.
@@ -38,11 +41,12 @@ const keep = (key: string, box: MediaBox | null): void => {
 /** The box an entry is shown in, once known. Reactive: a gallery laid out from it lays out again when it lands. */
 export const mediaBox = (entry: WorkspaceTreeEntry): MediaBox | undefined => boxes.get(keyOf(entry)) ?? undefined;
 
-/** What a drawn tile measured of its own picture, kept where the daemon had no answer. */
-export const reportBox = (entry: WorkspaceTreeEntry, width: number, height: number): void => {
+/** What a drawn tile measured of its own picture, kept where the daemon had no answer, or a better one than before. */
+export const reportBox = (entry: WorkspaceTreeEntry, width: number, height: number, exact: boolean): void => {
     const key = keyOf(entry);
-    if (width > 0 && height > 0 && boxes.get(key) == null) {
-        keep(key, { width, height });
+    const known = boxes.get(key);
+    if (width > 0 && height > 0 && (known == null || (exact && !known.exact))) {
+        keep(key, { width, height, exact });
     }
 };
 
@@ -52,7 +56,7 @@ const ask = async (batch: readonly { readonly entry: WorkspaceTreeEntry; readonl
         const byPath = new Map(items.map((item) => [item.path, item]));
         for (const { entry, key } of batch) {
             const item = byPath.get(entry.path);
-            keep(key, item === undefined ? null : { width: item.width, height: item.height, duration: item.duration });
+            keep(key, item === undefined ? null : { width: item.width, height: item.height, duration: item.duration, exact: true });
         }
     } catch {
         // allow(silent-catch): a sandbox that cannot measure (older, or gone a moment) leaves the tiles to measure themselves
