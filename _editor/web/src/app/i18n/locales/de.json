@@ -396,7 +396,6 @@
             "undoArchive": "Archivieren rückgängig",
             "willStartTurn": "{agent} startet einen Zug: er rebaset seinen Branch auf Ihren aktuellen Workspace, löst den Konflikt in seinem eigenen Worktree und landet das Ergebnis, wenn er fertig ist.",
             "workTheyAlreadyLanded": "Arbeit, die sie bereits gelandet haben, bleibt in Ihrem Workspace. Nur was ihre Branches nie verlassen hat, geht verloren. Agenten, die noch auf dem Board sind, bleiben unangetastet.",
-            "attentionFirst": "Wenn ein Agent Sie etwas fragt oder eine Erlaubnis braucht, wartet er hier.",
             "finishedFirst": "Fertige Agenten warten hier auf Ihre Prüfung. Nichts landet in Ihrem Workspace, bevor Sie es sagen."
         },
         "buildIdeas": {
@@ -6037,7 +6036,6 @@
             "archiveConversation": "Gespräch archivieren",
             "untitledConversation": "Gespräch ohne Titel",
             "laneActiveEmpty": "Gerade arbeitet kein Assistent. Beginne ein Gespräch und gib ihm eine Aufgabe.",
-            "laneAttentionFirst": "Wenn ein Assistent dich etwas fragt oder deine Erlaubnis braucht, wartet er hier.",
             "laneFinishedEmpty": "Fertige Arbeit wartet hier, bis du sie ansiehst.",
             "laneFinishedFirst": "Fertige Arbeit wartet hier auf dich. Nichts ändert deine Dateien, bevor du es annimmst.",
             "archiveEmptied": "Archiv geleert. Fertige Gespräche sammeln sich hier nach ein paar ruhigen Tagen von selbst wieder.",

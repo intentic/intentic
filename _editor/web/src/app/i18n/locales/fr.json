@@ -395,7 +395,6 @@
             "undoArchive": "Annuler l'archivage",
             "willStartTurn": "{agent} lancera un tour : il rebase sa branche sur votre espace de travail actuel, résout le conflit dans son propre worktree et intègre le résultat quand il a fini.",
             "workTheyAlreadyLanded": "Le travail qu'ils ont déjà intégré reste dans votre espace de travail. Seul ce qui n'a jamais quitté leurs branches est perdu. Les agents encore sur le tableau ne sont pas touchés.",
-            "attentionFirst": "Quand un agent vous pose une question ou a besoin d'une autorisation, il attend ici.",
             "finishedFirst": "Les agents terminés attendent ici votre relecture. Rien n'arrive dans votre espace de travail sans votre accord."
         },
         "buildIdeas": {
@@ -5990,7 +5989,6 @@
             "archiveConversation": "Archiver la conversation",
             "untitledConversation": "Conversation sans titre",
             "laneActiveEmpty": "Aucun assistant ne travaille en ce moment. Commencez une conversation et confiez-lui une tâche.",
-            "laneAttentionFirst": "Quand un assistant vous pose une question ou a besoin de votre accord, il attend ici.",
             "laneFinishedEmpty": "Le travail terminé attend ici que vous le regardiez.",
             "laneFinishedFirst": "Le travail terminé vous attend ici. Rien ne modifie vos fichiers tant que vous ne l'acceptez pas.",
             "archiveEmptied": "Archive vidée. Les conversations terminées s'y rassembleront d'elles-mêmes après quelques jours calmes.",

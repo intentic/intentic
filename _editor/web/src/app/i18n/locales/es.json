@@ -399,7 +399,6 @@
             "undoArchive": "Deshacer archivar",
             "willStartTurn": "{agent} empezará un turno: rebasa su rama sobre tu espacio de trabajo actual, resuelve el conflicto en su propio worktree e integra el resultado cuando termine.",
             "workTheyAlreadyLanded": "El trabajo que ya integraron se queda en tu espacio de trabajo. Solo se pierde lo que nunca salió de sus ramas. Los agentes que siguen en el tablero no se tocan.",
-            "attentionFirst": "Cuando un agente te pregunta algo o necesita un permiso, espera aquí.",
             "finishedFirst": "Los agentes terminados esperan aquí tu revisión. Nada entra en tu espacio de trabajo hasta que lo digas."
         },
         "buildIdeas": {
@@ -6066,7 +6065,6 @@
             "archiveConversation": "Archivar la conversación",
             "untitledConversation": "Conversación sin título",
             "laneActiveEmpty": "Ningún asistente está trabajando ahora. Empieza una conversación y encárgale una tarea.",
-            "laneAttentionFirst": "Cuando un asistente te pregunta algo o necesita tu permiso, espera aquí.",
             "laneFinishedEmpty": "El trabajo terminado espera aquí hasta que lo mires.",
             "laneFinishedFirst": "El trabajo terminado te espera aquí. Nada cambia tus archivos hasta que lo aceptes.",
             "archiveEmptied": "Archivo vaciado. Las conversaciones terminadas volverán a reunirse aquí solas tras unos días tranquilos.",

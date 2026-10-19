@@ -499,13 +499,11 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         <FirstAgentSlot :starters="starters" />
                     </div>
                     <!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
-                    <!-- On a first run each lane says what will arrive in it, since "nothing here" teaches nothing to someone who has never seen it full. -->
                     <p
                         v-else-if="
                             cardsFor(lane.key).length === 0 && runsFor(lane.key).length === 0 && !(lane.key === 'attention' && scopedHeld.length > 0)
                         "
                         class="px-1 pb-3 text-2xs text-subtle"
-                        :class="first ? 'rounded-xl border border-dashed border-line px-3 py-3 leading-snug' : ''"
                     >
                         {{ filtering ? t(`agents.agentsView.noMatchesInLane`) : first ? lane.first : lane.empty }}
                     </p>

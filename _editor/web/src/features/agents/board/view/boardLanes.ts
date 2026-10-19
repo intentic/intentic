@@ -30,7 +30,7 @@ export const laneHeads = (): readonly LaneHead[] => [
         key: `attention`,
         label: t(`shared.attention`),
         empty: t(`agents.agentsView.nothingNeedsRightNow`),
-        first: useVocabulary().value.laneAttentionFirst,
+        first: t(`agents.agentsView.nothingNeedsRightNow`),
     },
     // Active never says its first-run line: that lane holds the first agent's slot instead (FirstAgentSlot).
     {

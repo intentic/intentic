@@ -147,7 +147,7 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
     expect(useChat().conversations.value).toHaveLength(Math.max(before, 1));
     // Still a first run: filling the composer is not starting anything. The filled draft is an unsent card standing in
     // the first agent's slot, which is where the slot said its card would appear.
-    expect(board.textContent).toContain(`When an agent asks you something`);
+    expect(board.textContent).toContain(`Nothing needs you right now.`);
     expect(board.textContent).toContain(`Unsent`);
 });
 

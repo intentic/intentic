@@ -492,7 +492,6 @@
             "archiveFamily": "Archive {title} and its {count} subagent? | Archive {title} and its {count} subagents?",
             "archiveFamilyKept": "They leave the board together. Nothing is lost: branches, conversations and changes are kept, and Undo or the archive brings them back.",
             "archiveWithSubagents": "Archive {count} agent | Archive {count} agents",
-            "attentionFirst": "When an agent asks you something or needs a permission, it waits here.",
             "finishedFirst": "Finished agents wait here for your review. Nothing lands in your workspace until you say so."
         },
         "liveMetrics": {
@@ -11380,7 +11379,6 @@
             "archiveConversation": "Archive conversation",
             "untitledConversation": "Untitled conversation",
             "laneActiveEmpty": "No assistant is working right now. Start a conversation and hand it a task.",
-            "laneAttentionFirst": "When an assistant asks you something or needs your permission, it waits here.",
             "laneFinishedEmpty": "Finished work waits here until you look at it.",
             "laneFinishedFirst": "Finished work waits here for you. Nothing changes your files until you accept it.",
             "archiveEmptied": "Archive emptied. Finished conversations gather here again by themselves after a few quiet days.",

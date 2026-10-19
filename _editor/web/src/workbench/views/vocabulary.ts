@@ -78,7 +78,6 @@ export interface Vocabulary {
     readonly archiveAgent: string;
     readonly untitledAgent: string;
     readonly laneActiveEmpty: string;
-    readonly laneAttentionFirst: string;
     readonly laneFinishedEmpty: string;
     readonly laneFinishedFirst: string;
     readonly archiveEmptied: string;
@@ -143,7 +142,6 @@ const developer = (): Vocabulary => ({
     archiveAgent: t(`agents.agentCard.archiveAgent`),
     untitledAgent: t(`agents.agentStatus.untitledAgent`),
     laneActiveEmpty: t(`agents.agentsView.noAgentsWorkingStart`),
-    laneAttentionFirst: t(`agents.agentsView.attentionFirst`),
     laneFinishedEmpty: t(`agents.agentsView.finishedAgentsLandWork`),
     laneFinishedFirst: t(`agents.agentsView.finishedFirst`),
     archiveEmptied: t(`agents.agentsView.archiveEmptiedFinishedAgents`),
@@ -208,7 +206,6 @@ const maker = (): Vocabulary => ({
     archiveAgent: t(`views.plain.archiveConversation`),
     untitledAgent: t(`views.plain.untitledConversation`),
     laneActiveEmpty: t(`views.plain.laneActiveEmpty`),
-    laneAttentionFirst: t(`views.plain.laneAttentionFirst`),
     laneFinishedEmpty: t(`views.plain.laneFinishedEmpty`),
     laneFinishedFirst: t(`views.plain.laneFinishedFirst`),
     archiveEmptied: t(`views.plain.archiveEmptied`),

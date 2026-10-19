@@ -362,7 +362,7 @@ describe(`the lanes' heads`, () => {
                 key: `attention`,
                 label: t(`shared.attention`),
                 empty: t(`agents.agentsView.nothingNeedsRightNow`),
-                first: t(`agents.agentsView.attentionFirst`),
+                first: t(`agents.agentsView.nothingNeedsRightNow`),
             },
             {
                 key: `active`,

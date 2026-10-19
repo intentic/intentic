@@ -492,7 +492,6 @@
             "archiveFamily": "Zarchiwizować {title} i jego {count} podagenta? | Zarchiwizować {title} i jego {count} podagenty? | Zarchiwizować {title} i jego {count} podagentów?",
             "archiveFamilyKept": "Znikną z tablicy razem. Nic nie przepada: gałęzie, rozmowy i zmiany zostają, a Cofnij albo archiwum przywróci je z powrotem.",
             "archiveWithSubagents": "Zarchiwizuj {count} agenta | Zarchiwizuj {count} agenty | Zarchiwizuj {count} agentów",
-            "attentionFirst": "Gdy agent o coś pyta albo potrzebuje zgody, czeka tutaj.",
             "finishedFirst": "Skończone agenty czekają tu na Twój przegląd. Nic nie trafia do Twojej przestrzeni roboczej bez Twojej zgody."
         },
         "buildIdeas": {
@@ -10909,7 +10908,6 @@
             "archiveConversation": "Zarchiwizuj rozmowę",
             "untitledConversation": "Rozmowa bez tytułu",
             "laneActiveEmpty": "Żaden asystent teraz nie pracuje. Zacznij rozmowę i powierz mu zadanie.",
-            "laneAttentionFirst": "Gdy asystent o coś zapyta albo poprosi o zgodę, poczeka tutaj.",
             "laneFinishedEmpty": "Skończona praca czeka tutaj, aż na nią spojrzysz.",
             "laneFinishedFirst": "Skończona praca czeka tu na Ciebie. Nic nie zmieni Twoich plików, dopóki tego nie przyjmiesz.",
             "archiveEmptied": "Archiwum opróżnione. Skończone rozmowy same trafią tu znowu po kilku spokojnych dniach.",
