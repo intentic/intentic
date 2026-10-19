@@ -167,6 +167,8 @@ const namePlaceholder = computed(() => {
 
 const blockedByConflicts = computed(() => scannable.value.some((repo: RepoChanges) => repo.conflicted.length > 0));
 const savingNow = computed(() => changes.committing.value.length > 0);
+// A slow run's own line (IndexRunPrompt) has the bar's reading room, and says more than "Saving…" does.
+const slowRun = ref(false);
 const saveReady = computed(() => pending.value > 0 && !blockedByConflicts.value && !changes.actionBusy.value && !savingNow.value);
 // The count Save carries, held as pressed while the save runs: its own staging reaches the change feed mid-run, and a
 // count changing under the spinner resizes the button for nothing.
@@ -230,11 +232,12 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                 :draft-title="soleId === undefined ? undefined : titleOf(soleId)"
                 @submit="doSave"
             />
-            <IndexRunPrompt />
             <div class="flex items-center justify-end gap-1">
+                <!-- A slow stage or commit run, with its Stop, in the same room, so it never adds a row under the box. -->
+                <IndexRunPrompt @progress="slowRun = $event.length > 0" />
                 <!-- What a press under way is doing, in the room beside the presses, so the presses never reword themselves:
                      each keeps its face and width under its spinner from click to answer. -->
-                <span v-if="savingNow || actions.backingUp.value" class="min-w-0 flex-1 truncate text-2xs text-muted" aria-live="polite">{{
+                <span v-if="!slowRun && (savingNow || actions.backingUp.value)" class="min-w-0 flex-1 truncate text-2xs text-muted" aria-live="polite">{{
                     savingNow ? t(`workspace.savePanel.saving`) : t(`workspace.savePanel.backingUp`)
                 }}</span>
                 <Button

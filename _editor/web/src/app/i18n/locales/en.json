@@ -12428,6 +12428,7 @@
             "stageStopped": "Stage stopped. What git had already staged stays staged; unstage it to take it back."
         },
         "indexRunPrompt": {
+            "andMore": "+{count} more",
             "commitAnyway": "Commit anyway",
             "commitFiles": "Commit {count} file? | Commit {count} files?",
             "committing": "Committing in {repo}…",

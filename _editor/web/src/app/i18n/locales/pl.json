@@ -11957,6 +11957,7 @@
             "stageStopped": "Dodawanie do indeksu zatrzymane. To, co git zdążył dodać, w nim zostaje; wycofaj to z indeksu, żeby cofnąć."
         },
         "indexRunPrompt": {
+            "andMore": "+{count} więcej",
             "commitAnyway": "Commituj mimo to",
             "commitFiles": "Commitować {count} plik? | Commitować {count} pliki? | Commitować {count} plików?",
             "committing": "Commitowanie w {repo}…",

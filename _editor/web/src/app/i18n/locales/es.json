@@ -6797,6 +6797,7 @@
             "stageStopped": "Preparación detenida. Lo que git ya había preparado sigue preparado; quítalo del índice para deshacerlo."
         },
         "indexRunPrompt": {
+            "andMore": "+{count} más",
             "commitAnyway": "Hacer commit igualmente",
             "commitFiles": "¿Hacer commit de {count} archivo? | ¿Hacer commit de {count} archivos?",
             "committing": "Haciendo commit en {repo}…",

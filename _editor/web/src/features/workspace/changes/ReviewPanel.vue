@@ -27,6 +27,8 @@ import HoverCard from "../../chat/tabs/HoverCard.vue";
 import ReviewStat from "./ReviewStat.vue";
 import CommitField from "./commit/CommitField.vue";
 import IndexRunPrompt from "./commit/IndexRunPrompt.vue";
+import { useSettlingMove } from "./commit/settlingMove";
+import { sideViews, type SideView } from "./reviewSides";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
 import { rendersAsBytes } from "../../../models/workspace/tree/fileType";
 import { useAgents } from "../../../models/fleet/useAgents";
@@ -197,6 +199,8 @@ const originTargets = (id: string, side: GitDiffSide): readonly RepoTarget[] =>
 // Staging stays the only selection Commit reads, and the Staged list shows exactly what the commit will take. The lit
 // chip still narrows the list and names the commit, recorded outside this component (nameCommitAfter) so the name holds
 // after the panel closes. Conflicts are left alone: staging one marks it resolved, which no chip should do for the owner.
+// From a chip's click until the review shows what it staged: the Commit press's count is stale in between.
+const chipMove = useSettlingMove(changes.fetching);
 const toggleOrigin = async (id: string): Promise<void> => {
     const was = originFilter.value;
     const next = was === id ? undefined : id;
@@ -206,7 +210,7 @@ const toggleOrigin = async (id: string): Promise<void> => {
     // answers with a no-op. Lighting asks only the repos holding that origin's work.
     const clearing = was === undefined ? [] : scannable.value.map((repo) => repo.repo);
     const lighting = next === undefined ? [] : originTargets(next, `unstaged`).map((target) => target.repo);
-    await changes.swapChip({ origin: was, repos: clearing }, { origin: next, repos: lighting });
+    await chipMove.run(() => changes.swapChip({ origin: was, repos: clearing }, { origin: next, repos: lighting }));
 };
 
 // Computed, not read at the click: recomputes as the review updates, so a message drafted seconds after
@@ -299,31 +303,7 @@ const showRowOrigins = (repo: RepoChanges, change: GitChange): boolean => {
     return !(ids.length === 1 && ids[0] === originFilter.value);
 };
 
-// Sides in git's order (conflicts block everything, then staged, then unstaged); an empty section renders
-// nothing. The origin filter is applied here once, so every row, verb and count downstream inherits it for free.
-// Except on Staged: that side is exactly what Commit records whenever it holds anything, so hiding part of it let a
-// filtered commit take files nobody could see.
-interface SideView {
-    readonly side: GitDiffSide;
-    readonly label: string;
-    readonly changes: readonly GitChange[];
-}
-const sidesByRepo = computed<ReadonlyMap<string, readonly SideView[]>>(
-    () =>
-        new Map(
-            scannable.value.map((repo) => [
-                repo.repo,
-                [
-                    { side: `conflicted` as const, label: t(`workspace.reviewPanel.conflicts`), changes: repo.conflicted },
-                    { side: `staged` as const, label: t(`workspace.reviewPanel.staged2`), changes: repo.staged },
-                    { side: `unstaged` as const, label: t(`workspace.reviewPanel.unstaged`), changes: repo.unstaged },
-                ].flatMap((section) => {
-                    const shown = section.side === `staged` ? section.changes : section.changes.filter((change) => matchesFilter(repo, change));
-                    return shown.length === 0 ? [] : [{ side: section.side, label: section.label, changes: shown }];
-                }),
-            ]),
-        ),
-);
+const sidesByRepo = computed(() => sideViews(scannable.value, matchesFilter, t));
 const sidesOf = (repo: RepoChanges): readonly SideView[] => sidesByRepo.value.get(repo.repo) ?? [];
 
 // A side's own heading (and count) only earns its row once there's more than one side to tell apart; with
@@ -547,9 +527,12 @@ const commitReady = computed(
 );
 // A plain Commit carries its staged count beside the label; the stage-first press says "all" instead.
 const commitLabel = computed(() => (stagesFirst.value ? t(`workspace.reviewPanel.commitAll`) : t(`workspace.reviewPanel.commit`)));
-// The face as pressed, held while the commit runs under a spinner that keeps its width, so the run never resizes it.
+// The face as pressed, held while the commit runs under a spinner that keeps its width, and while a chip's staging
+// awaits its rescan (else "Commit all", "Commit", "Commit 4" inside a second), so neither resizes it.
 const commitFace = computed<{ readonly label: string; readonly count: number }>((held) =>
-    commitRunning.value && held !== undefined ? held : { label: commitLabel.value, count: stagesFirst.value ? 0 : changes.stagedCount.value },
+    (commitRunning.value || chipMove.moving.value) && held !== undefined
+        ? held
+        : { label: commitLabel.value, count: stagesFirst.value ? 0 : changes.stagedCount.value },
 );
 
 // The commit button's hover: what the press will record, and the chord that presses it from the box. Nothing while it
@@ -1090,16 +1073,17 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 :draft-title="filterLabel"
                 @submit="doCommit"
             />
-            <IndexRunPrompt @progress="progressRepos = $event" />
             <!-- The bar's own width says the one thing its buttons can't, most pressing first: what stops Commit, a press
                  under way, why Ctrl+Enter refused, the push in flight or just done, why the lit chip left the box alone,
                  and last what the sync spans. A line that matters keeps a floor (basis), so a narrow box wraps the buttons
                  under it rather than cutting it to nothing; at rest there is no line, and it is never shorter than a press. -->
             <div class="flex min-h-6.5 flex-wrap items-center justify-end gap-x-1 gap-y-1.5 max-md:min-h-8">
-                <span v-if="changes.count.value > 0 && blockedByConflicts" :class="BAR_LINE" class="text-danger">
+                <IndexRunPrompt @progress="progressRepos = $event" />
+                <template v-if="progressRepos.length > 0"></template>
+                <span v-else-if="changes.count.value > 0 && blockedByConflicts" :class="BAR_LINE" class="text-danger">
                     {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
                 </span>
-                <!-- Where the commit is happening, until a slow run's own row (IndexRunPrompt) takes it over with its Stop. -->
+                <!-- Where the commit is happening, until a slow run's line (IndexRunPrompt, first above) takes it with its Stop. -->
                 <span v-else-if="commitStatusRepos.length > 0" :class="BAR_LINE" class="text-muted">{{
                     t(`workspace.reviewPanel.committingNow`, { repos: commitStatusRepos.join(`, `) })
                 }}</span>
@@ -1176,7 +1160,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         size="small"
                         tone="success"
                         thumb
-                        class="shrink-0 whitespace-nowrap"
+                        class="min-w-24 shrink-0 whitespace-nowrap"
                         :disabled="!commitReady"
                         :loading="commitRunning"
                         @click="doCommit"
@@ -1346,11 +1330,12 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-current opacity-60"
                     ></span>
                 </span>
-                <!-- Named on every chip, cut short until lit: two sessions on one provider differ by little else. Label and
+                <!-- Named on every chip, cut short: two sessions on one provider differ by little else. Lit, the label cedes
+                     its cross's room, so lighting recolours the chip in place instead of wrapping the row. Label and
                      count share a baseline, the count a step smaller: full-size digits stand at cap height and read as
                      floating above a lowercase name, which centring each box on its own could never fix. -->
                 <span class="flex min-w-0 items-baseline gap-1">
-                    <span class="min-w-0 truncate" :class="originFilter === entry.id ? '' : 'max-w-24'">{{ originLabel(entry.id) }}</span>
+                    <span class="min-w-0 truncate" :class="originFilter === entry.id ? 'max-w-20' : 'max-w-24'">{{ originLabel(entry.id) }}</span>
                     <span class="shrink-0 text-[0.625rem] tabular-nums opacity-70">{{ entry.files }}</span>
                 </span>
                 <!-- The way out, drawn only on the chip that's hiding rows: a cross means "clear this" without a word. -->

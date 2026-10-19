@@ -2,6 +2,7 @@
 import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
 import { growTextarea, type IconName, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
+import { canAnimate, FOLD_EASE, FOLD_MS, lessMotion } from "@intentic/ui/motion";
 import { computed, ref, watch } from "vue";
 import { useLayout } from "../../../../workbench/window/useLayout";
 import { draftReport, draftRunning, type DraftReportRow } from "../changeOrigins";
@@ -91,9 +92,25 @@ const RING = 2 * Math.PI * 6;
 // matching the composer's own ceiling (ChatPane), scaled to the sidebar.
 const MAX_HEIGHT = 142;
 const box = ref<HTMLTextAreaElement | null>(null);
+// A change of more than this is text arriving or leaving whole (a chip's message filling the box, a commit clearing it),
+// not typing, which moves the box a line at a time and has to keep up with the caret. 1.5 lines at 16.5px.
+const SLIDE_PX = 25;
 // This box has its own border (the composer's doesn't), so growTextarea reads it off the element rather than a constant.
+// A fill or a clear eases the box between its two heights instead of snapping, so the bar and the list under it slide
+// rather than jump five lines in one frame. `height`, not a FLIP: the box is the one thing that resizes, and what it
+// pushes is the rest of a sidebar, cheap to lay out for the few frames it takes. The slide is cancelled before measuring,
+// since a box held at its animated height would report that height back as its content's.
+let slide: Animation | undefined;
 const grow = (): void => {
-    growTextarea(box.value, MAX_HEIGHT);
+    const element = box.value;
+    slide?.cancel();
+    const before = element?.offsetHeight ?? 0;
+    growTextarea(element, MAX_HEIGHT);
+    const after = element?.offsetHeight ?? 0;
+    if (!canAnimate(element) || before === 0 || Math.abs(after - before) < SLIDE_PX || lessMotion()) {
+        return;
+    }
+    slide = element.animate([{ height: `${before}px` }, { height: `${after}px` }], { duration: FOLD_MS, easing: FOLD_EASE });
 };
 // Watched, not `@input`: most of what fills this box isn't typing (a chip fill, a clear, a sandbox switch). Sidebar
 // width, the placeholder and the mark are in the list too, since a re-wrap, a longer placeholder and the room the mark

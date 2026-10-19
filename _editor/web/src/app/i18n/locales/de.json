@@ -6762,6 +6762,7 @@
             "stageStopped": "Stagen gestoppt. Was git schon gestaged hat, bleibt gestaged; unstage es, um es zurückzunehmen."
         },
         "indexRunPrompt": {
+            "andMore": "+{count} weitere",
             "commitAnyway": "Trotzdem committen",
             "commitFiles": "{count} Datei committen? | {count} Dateien committen?",
             "committing": "Commit in {repo}…",

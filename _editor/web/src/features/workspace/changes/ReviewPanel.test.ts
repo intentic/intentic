@@ -252,10 +252,13 @@ it(`stages a session's work when its chip is lit, and unstages it when the chip 
     await settle();
     expect(stage).toHaveBeenCalledWith({ repo: `root`, chip: `a1` });
     expect(unstage).not.toHaveBeenCalled();
-    // Under a lit chip Commit records the index, never a stage-first over rows the filter hides.
-    expect(buttonNamed(el, `Commit all`)).toBeUndefined();
+    // Under a lit chip Commit records the index, never a stage-first over rows the filter hides. Until the rescan says
+    // what the chip staged, the press keeps the face it had (its label changing twice in a second moved the bar) but
+    // can't be pressed: there is nothing in the index for it to record yet.
+    expect(buttonNamed(el, `Commit all`)?.disabled).toBe(true);
 
     await answer(unstagedTree(true));
+    expect(buttonNamed(el, `Commit all`)).toBeUndefined();
     // The staged count rides on the press itself; there's no "N staged" readout beside it any more.
     expect(buttonNamed(el, `Commit`)?.textContent?.replace(/\s+/g, ` `).trim()).toBe(`Commit 1`);
     expect(el.textContent).not.toMatch(/\d+ staged/);
@@ -377,6 +380,8 @@ it(`a lit You chip stays on screen after the last agent's work leaves, so cleari
     chip(`You`)?.click();
     await settle();
     expect(unstage).toHaveBeenCalledWith({ repo: `root`, chip: `yours` });
+    // The press says what it records once the rescan after the unstage does.
+    await answer({ repos: [{ repo: `root`, branch: `main`, conflicted: [], staged: [], unstaged: [{ path: `mine.ts`, status: `modified` }] }] });
     expect(buttonNamed(el, `Commit all`)).toBeInstanceOf(HTMLButtonElement);
 });
 

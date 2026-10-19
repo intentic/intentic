@@ -6716,6 +6716,7 @@
             "stageStopped": "Indexation arrêtée. Ce que git avait déjà indexé le reste ; retirez-le de l’index pour revenir en arrière."
         },
         "indexRunPrompt": {
+            "andMore": "+{count} de plus",
             "commitAnyway": "Committer quand même",
             "commitFiles": "Committer {count} fichier ? | Committer {count} fichiers ?",
             "committing": "Commit en cours dans {repo}…",

@@ -716,7 +716,7 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/workspace/changes/ReviewPanel.vue": 1723,
+    "_editor/web/src/features/workspace/changes/ReviewPanel.vue": 1710,
     "_editor/web/src/features/workspace/changes/save/useSaveActions.ts#useSaveActions#lines": {
         "count": 105,
         "why": "standing when the check arrived (2026-10-16)"
