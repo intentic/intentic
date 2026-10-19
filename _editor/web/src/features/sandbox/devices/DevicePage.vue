@@ -7,7 +7,6 @@ import {
     ConfirmDialog,
     DeviceAgentNotes,
     DeviceDetail,
-    DeviceRunLog,
     type DeviceSandboxGroup,
     Icon,
     mirroringOff,
@@ -28,6 +27,7 @@ import DeviceConcern from "./health/DeviceConcern.vue";
 import DeviceEnvironment from "./DeviceEnvironment.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceOpOutcome from "./runners/DeviceOpOutcome.vue";
+import DeviceVerbLog from "./runners/DeviceVerbLog.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
 import DeviceUpdateProgress from "./runners/DeviceUpdateProgress.vue";
 import SandboxBatchBar from "./batch/SandboxBatchBar.vue";
@@ -60,6 +60,7 @@ import {
     switchMenus,
 } from "../../../models/sandbox/devices/deviceRows";
 import { useDeviceOps } from "./runners/deviceOps";
+import { verbStartedAt } from "./runners/deviceOpKeys";
 import { useSandboxSelection } from "./batch/sandboxSelection";
 import { environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
@@ -593,12 +594,11 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                         />
                         <!-- Not while a batch works down the list: the bar says where it has got, and a pane opening under
                              each row in turn would be five logs for one press. -->
-                        <DeviceRunLog
+                        <DeviceVerbLog
                             v-else-if="(ops.verbRunning(group) && ops.batchProgress.value === undefined) || ops.logShown(group)"
                             :lines="ops.lines(group)"
                             :running="ops.verbRunning(group)"
-                            :empty="t(`sandbox.devicePage.startingOnDevice`)"
-                            :note="t(`sandbox.words.runningOnDeviceKeeps`)"
+                            :started-at="verbStartedAt(machine.key, group)"
                         />
                         <DeviceOpFailure
                             v-if="ops.failure.value?.key === ops.rowKey(group)"

@@ -2,6 +2,7 @@
 // Needs jsdom: this file's import chain reaches the app's theme, which touches the document as it loads.
 import "@intentic/testing/dom";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
+import OutageWait from "../../features/sandbox/gates/OutageWait.vue";
 import { RESTART_PATIENCE_MS, type RestartWork } from "../../models/sandbox/live/sandboxRestart";
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
 import { BUSY_CARD_AFTER_MS, diagnosisCard, outageCardShown, restartCard, type UploadState, uploadHeadline, uploadPhase } from "./notificationSources";
@@ -24,6 +25,8 @@ describe(`the card for a sandbox that has gone quiet`, () => {
         const card = restartCard(rebuild, `stale`, 0);
         expect(card?.title).toBe(rebuild.quiet.title);
         expect(card?.detail).toBe(rebuild.quiet.detail);
+        // Beneath it, how long the swap has run and usually takes.
+        expect(card?.body).toBe(OutageWait);
     });
 
     it(`keeps saying it through every shape a swap takes from here`, () => {
@@ -73,6 +76,12 @@ describe(`the card for a sandbox that isn't answering`, () => {
         expect(card).toMatchObject({ kind: `condition`, tone: `info`, icon: `spinner`, spin: true, title: `acme is busy` });
         expect(card.detail).toBe(`It's still running and will catch up by itself.`);
         expect(card.body).toBeUndefined();
+    });
+
+    it(`says how long a wait with a clock has run and usually takes, beneath its sentence`, () => {
+        const card = diagnosisCard(notice({ title: `Waking acme`, wait: { elapsedMs: 5_000, typicalMs: 60_000, giveUpMs: 180_000 } }), false, () => undefined);
+        expect(card).toMatchObject({ tone: `info`, spin: true, body: OutageWait });
+        expect(card.wide).toBeUndefined();
     });
 
     it(`carries the recovery panel once there is a way back, and can be put away`, () => {

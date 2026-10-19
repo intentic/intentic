@@ -11,6 +11,8 @@ import { restartExpected } from "../../../models/sandbox/live/sandboxRestart";
 import { type ConnectionNotice, connectionNotice, stalledBody } from "./connectionNotice";
 import SandboxRecovery from "./SandboxRecovery.vue";
 import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "./useVisibleOutage";
+import { useOutageDetails } from "../diagnosis/useOutageDetails";
+import WaitProgress from "../../../components/WaitProgress.vue";
 import { stalledPaths } from "../../../app/perf/perf";
 import { DEADLINE_MS } from "../../../client/sandbox/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
@@ -68,7 +70,7 @@ const diagnosed = computed<ConnectionNotice | undefined>(() => {
         return undefined;
     }
     const stalled = found.chain.some((link) => link.id === `sandbox` && link.state === `working`) ? stalledBody(stalledPath.value) : undefined;
-    return { title: found.title, body: stalled ?? found.body, action: undefined, waiting: found.waiting };
+    return { title: found.title, body: stalled ?? found.body, action: undefined, waiting: found.waiting, wait: found.wait };
 });
 
 const notice = computed(() =>
@@ -88,6 +90,8 @@ const notice = computed(() =>
 // shows its chain there, so "it's busy" can be seen to be true.
 const recovering = useRecoveryDue(outage, diagnosis);
 const explained = computed(() => notice.value === diagnosed.value && (diagnosis.value?.chain.length ?? 0) > 0);
+// What the sentence was made of, verbatim, behind the wait's "Technical details".
+const details = useOutageDetails(outage);
 
 // Carries the sandbox id so /setup resumes this sandbox rather than offering a blank create form.
 const setupTo = computed(() => ({ path: `/setup`, query: { sandbox: active.value?.id } }));
@@ -104,6 +108,7 @@ const signIn = async (): Promise<void> => {
     <!-- The spinner follows what the notice says is still expected, not whether there's a button. -->
     <GateCard icon="box" :title="notice.title" :spinner="notice.waiting">
         <p class="text-sm text-muted">{{ notice.body }}</p>
+        <WaitProgress v-if="notice.waiting && notice.wait" :wait="notice.wait" :details="details" class="mt-3" />
         <template #actions>
             <Button
                 v-if="notice.action?.kind === `setup`"

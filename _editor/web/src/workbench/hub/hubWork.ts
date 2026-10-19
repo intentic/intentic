@@ -1,12 +1,13 @@
 import { inject, type InjectionKey, provide, type Ref, shallowRef } from "vue";
+import { formatElapsed } from "@intentic/ui/format";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { t } from "@intentic/ui/i18n";
 
 // WORK IN FLIGHT BEHIND A HUB ROW. A hub mounts one section at a time, so the rebuild started on Environment leaves
 // nothing on screen the moment Devices is opened — and these are the runs that take minutes. The ledger is module
 // state rather than any component's: the work outlives the section that started it, so the row keeps its mark until
-// the work ends, not until the reader clicks away. It says only that something is moving, never what it will do:
-// the section itself is where a run is read.
+// the work ends, not until the reader clicks away. It says only that something is moving, and for how long, never what
+// it will do: the section itself is where a run is read.
 
 interface HubRun {
     readonly id: number;
@@ -15,11 +16,33 @@ interface HubRun {
     readonly what: string;
     /** The sandbox on screen when the work began: a rebuild runs on that box, and marks that box's row alone. */
     readonly sandboxId: string | undefined;
+    readonly startedAt: number;
 }
 
 // allow(module-state): work in flight behind a hub row, each run stamped with the sandbox it began on and retired by its own end
 const runs = shallowRef<readonly HubRun[]>([]);
 let last = 0;
+
+// HOW LONG IT HAS BEEN GOING, in the row's sentence once it outlasts a glance: "Cloning acme" read the same after ten
+// seconds as after ten minutes, and the second is the one worth opening the section for. The clock ticks once a second
+// while the ledger holds a run and stands still otherwise, so an idle hub is never woken by it.
+const SAY_ELAPSED_AFTER_MS = 5_000;
+// allow(module-state): the ledger's own clock, ticking only while it holds a run
+const clock = shallowRef(Date.now());
+let ticker: ReturnType<typeof setInterval> | undefined;
+const keepTime = (): void => {
+    if (runs.value.length > 0 && ticker === undefined) {
+        clock.value = Date.now();
+        ticker = setInterval(() => (clock.value = Date.now()), 1000);
+    } else if (runs.value.length === 0 && ticker !== undefined) {
+        clearInterval(ticker);
+        ticker = undefined;
+    }
+};
+const sayRun = (run: HubRun): string => {
+    const age = clock.value - run.startedAt;
+    return age < SAY_ELAPSED_AFTER_MS ? run.what : `${run.what} · ${formatElapsed(age / 1000)}`;
+};
 
 /** `<hub route name>:<section slug>` — the one address a row and the work behind it agree on. */
 export const hubWorkKey = (hub: string, slug: string): string => `${hub}:${slug}`;
@@ -28,9 +51,11 @@ export const hubWorkKey = (hub: string, slug: string): string => `${hub}:${slug}
 export const beginHubWork = (key: string, what: string): (() => void) => {
     last += 1;
     const id = last;
-    runs.value = [...runs.value, { id, key, what, sandboxId: activeSandboxId.value }];
+    runs.value = [...runs.value, { id, key, what, sandboxId: activeSandboxId.value, startedAt: Date.now() }];
+    keepTime();
     return (): void => {
         runs.value = runs.value.filter((run) => run.id !== id);
+        keepTime();
     };
 };
 
@@ -54,12 +79,13 @@ export const hubWorkRunning = (key: string, sandboxId?: string): string | undefi
     if (first === undefined) {
         return undefined;
     }
-    return here.length === 1 ? first.what : t(`shell.hubWork.running`, { count: here.length });
+    return here.length === 1 ? sayRun(first) : t(`shell.hubWork.running`, { count: here.length });
 };
 
 /** Test seam: the ledger is module state, and a leaked ticket would follow one test into the next. */
 export const forgetHubWork = (): void => {
     runs.value = [];
+    keepTime();
 };
 
 // The section a view is mounted in, provided by <HubLayout> so no view has to be told its own address. Read at the

@@ -13,6 +13,7 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { useAudience } from "../../app/useAudience";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
+import { useBusySince, useLineWithElapsed } from "../../components/useWaitClock";
 
 const { window: windowId, active, toolsTo } = defineProps<{
     // One window on the desktop, by its id; absent for the whole display. Fixed for the tab's life, as its key is.
@@ -62,6 +63,12 @@ const message = computed<string | undefined>(() => {
     }
 });
 const gone = computed(() => view.status.value?.kind === `gone`);
+
+// How long the picture has been on its way, after the line that says so once it outlasts a blip: the reconnect loop never
+// gives up. One wait runs from the connect through the first frame and every retry, and ends once frames flow or the
+// line says why none will.
+const WAITS: ReadonlySet<DesktopStatus[`kind`]> = new Set([`connecting`, `reconnecting`, `waiting`, `unreachable`, `authFailed`]);
+const messageLine = useLineWithElapsed(message, useBusySince(() => view.status.value !== undefined && WAITS.has(view.status.value.kind)));
 
 // An empty desktop is one black screen, the same picture as a stream that never came: once frames flow and the daemon
 // counts no window on it, the view says so, and says how a window gets there. Never on an unknown count (a daemon too
@@ -155,7 +162,7 @@ defineExpose({ driving: view.driving, toggle, focus: () => stageEl.value?.focus(
         >
             <canvas ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
             <div v-if="message" class="pointer-events-none absolute inset-0 flex items-center justify-center px-4">
-                <span class="max-w-md rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ message }}</span>
+                <span class="max-w-md rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ messageLine }}</span>
             </div>
         </div>
         <!-- While driving, the picture rings: a stray keystroke is the one real mistake here. -->

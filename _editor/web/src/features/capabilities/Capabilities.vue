@@ -67,6 +67,7 @@ import { catalogEntries, entryIcon } from "../../models/capabilities/tiles";
 import { useSetupWalk } from "./setupWalk";
 import SshKeyField from "../../parts/capabilities/SshKeyField.vue";
 import { useTilePane } from "./tilePane";
+import CapabilityFormStatus from "./CapabilityFormStatus.vue";
 
 // Capabilities give the agent tools (GitHub, MCP servers, SSH hosts, Stripe) and scaffold managed repos. Core tiles are
 // static catalog data; cli tiles derive from enabled extensions' contributes.capabilities. What the page decides lives
@@ -154,7 +155,7 @@ const { name, nameEdited, savedName, namePreview, nameCollision, nameProblem, va
 const { probeResult, finishName, finishField, onFieldInput, onFieldPaste, fieldAlarm, fieldQuiet, fieldChecked, fieldUrlFix, applyUrlFix } = form;
 const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects, hostPresetOptions } = form;
 const { applyHostPreset, applyRegistryPick, pickForticlient, pickLinked, auditable, updateFrom, submitLabel, keptSecrets } = form;
-const { probing, canProbe, runProbe, failure: probeFailure } = useCapabilityProbe({ selected, form });
+const { probing, canProbe, runProbe, failure: probeFailure, startedAt: probeStartedAt } = useCapabilityProbe({ selected, form });
 // Has an agent read the pinned code, or what an update changes, before the install is approved.
 const startAudit = (): void => void startAgent(auditPrompt(name.value, values, updateFrom.value));
 
@@ -163,7 +164,7 @@ const { profileVisible, profileCapability, profileLabel, profileMode, openBrowse
 const { connectVisible, connectId, connectPlatform, connectPermissions, connectUnnamed, onHostConnected, onHostRenamed } = pairing;
 const { browserConnectVisible, browserConnectId, browserInstall, browserPermissions, onBrowserExtConnected, handOff } = pairing;
 const { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, phonePlatform, onPhoneConnected } = pairing;
-const { submit, submitting, failure: saveFailure } = useCapabilitySubmit({
+const { submit, submitting, failure: saveFailure, startedAt: submitStartedAt } = useCapabilitySubmit({
     hosted,
     selected,
     editing,
@@ -575,25 +576,8 @@ onBeforeUnmount(() => {
                         </Notice>
 
                         <!-- Submit stays stuck to the pane's foot: some tiles (VPN, a device's permissions) are long. -->
-                        <!-- What the probe itself said, shown above the submit since "will this work" belongs before the commitment. -->
-                        <p
-                            v-if="probeResult"
-                            class="flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
-                            :class="
-                                probeResult.ok
-                                    ? toneTint(`success`, `strong`, `text-content`)
-                                    : probeResult.checked
-                                      ? toneTint(`danger`, `strong`, `text-content`)
-                                      : `border-line bg-card text-muted`
-                            "
-                        >
-                            <Icon
-                                :name="probeResult.ok ? 'check-circle' : probeResult.checked ? 'exclamation-triangle' : 'info-circle'"
-                                class="mt-0.5 shrink-0 text-2xs"
-                                :class="probeResult.ok ? 'text-success' : probeResult.checked ? 'text-danger' : 'text-subtle'"
-                            />
-                            {{ probeResult.message }}
-                        </p>
+                        <!-- What the probe said, and the save or test still running, above the submit (CapabilityFormStatus). -->
+                        <CapabilityFormStatus :probe-result="probeResult" :submit-started-at="submitStartedAt" :probe-started-at="probeStartedAt" />
 
                         <div
                             :class="[

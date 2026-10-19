@@ -116,9 +116,9 @@ const REPORT_LEAD_MS = 30_000;
 // A machine still "checking" or "fixing" this long after it last wrote has stopped writing.
 const REPORT_STALE_MS = 10 * 60_000;
 // "Fixed" is the machine's word; the sandbox itself has this long to prove it by dialling in.
-const FIXED_PATIENCE_MS = 3 * 60_000;
+export const FIXED_PATIENCE_MS = 3 * 60_000;
 
-const reportTime = (report: HostReport): number => Date.parse(report.at);
+export const reportTime = (report: HostReport): number => Date.parse(report.at);
 
 // The machine's report, if it is about THIS outage and still current.
 export const freshReport = (report: HostReport | null | undefined, outageStartedAt: number | undefined, now: number): HostReport | undefined => {

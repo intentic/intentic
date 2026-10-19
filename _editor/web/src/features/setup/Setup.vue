@@ -50,6 +50,8 @@ import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
 import { resumedLine as resumedLineFor, setupProjectOf } from "./setupArrival";
 import { probeDaemon } from "./setupAttach";
+import WaitProgress from "../../components/WaitProgress.vue";
+import { useSetupWaits } from "./flow/useSetupWaits";
 import { lockedReasonOf } from "./flow/commandHandoff";
 import { DEV_SANDBOX_IMAGE } from "./flow/installCommand";
 import { ladderOptionsOf } from "./flow/machineLadder";
@@ -186,6 +188,7 @@ const { emailed, handoff, reportFailures, buildStage, nudging, stalled, nudgeVar
     wait;
 const attach = useAttachLane({ sandbox, row, minted: () => setup.value?.hostname, getIdToken, probe: probeDaemon, reopen: (id) => reopenListed(id) });
 const { domain, attachToken, attaching, attachOutcome, attachNotice, originHelp, normalizedDomain, ownAddress, domainProblem, connectDomain } = attach;
+const { provisionWait, attachWait, attachNote } = useSetupWaits({ hostedBusy, attaching });
 // A press on the attach lane still out, or its refusal still to be read (useAttachLane.ts), reopens that lane.
 if (attach.attachPending.value) {
     lane.value = `attach`;
@@ -589,7 +592,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             >
                             <span v-else class="text-xs text-muted">{{ t(`setup.setup.httpsAddressSandboxAlready`) }}</span>
                         </label>
-
+                        <WaitProgress v-if="attachWait" :wait="attachWait" :what="attachNote" />
                         <!-- Each probe failure names the one thing the user can do about it. -->
                         <!-- Two checks anyone can make, then the one that needs a variable they may never have set: a
                              reader who has not heard of WEB_ORIGIN reads it as a fourth thing wrong with their setup. -->
@@ -981,10 +984,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                     <p class="text-xs text-muted">{{ hostedWait.note }}</p>
                                 </template>
                             </template>
-                            <p v-else-if="hostedBusy" class="flex items-center gap-2 text-xs text-content">
-                                <Icon name="spinner" spin class="text-info" />
-                                {{ t(`setup.setup.startingMachine`) }}
-                            </p>
+                            <WaitProgress v-else-if="hostedBusy && provisionWait" :wait="provisionWait" :what="t(`setup.setup.startingMachine`)" />
                             <!-- The action states the no-backup commitment at the decision point. -->
                             <!-- A full fleet offers only a capacity recheck. -->
                             <template v-else-if="hostedFull">

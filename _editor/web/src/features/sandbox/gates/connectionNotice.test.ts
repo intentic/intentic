@@ -8,6 +8,8 @@ import {
     JUST_SET_UP_PATIENCE_MS,
     OWN_STUCK_AFTER_MS,
     UNADDRESSED_PATIENCE_MS,
+    USUAL_RECONNECT_MS,
+    USUAL_RESTART_MS,
 } from "./connectionNotice";
 
 // The ordinary case every test below varies one fact of: somebody's own computer, freshly unreachable.
@@ -374,5 +376,43 @@ describe(`a sandbox the reader is a member of`, () => {
         expect(notice(unaddressed, { owner: true }).action).toEqual({ kind: `setup`, label: `Finish setup` });
         expect(notice(dead, { owner: true, hostedMachine: true, outageMs: HOSTED_STUCK_AFTER_MS }).action).toEqual({ kind: `setup`, label: `Check the machine` });
         expect(notice(detached, { owner: true, outageMs: DETACHED_AFTER_MS }).action).toEqual({ kind: `setup`, label: `Check setup` });
+    });
+});
+
+// Every wait the gate names carries its own clock (components/WaitProgress.vue), and the time it says it gives up at is
+// the time the gate's own words change: a promise the reader can hold it to.
+describe(`a wait's own clock`, () => {
+    const network = classifyFailure({ message: `failed to fetch` });
+
+    it(`gives a reconnect the lane's patience, which is when the gate stops calling it a wait`, () => {
+        expect(notice(network, { outageMs: 5_000 }).wait).toEqual({ elapsedMs: 5_000, typicalMs: USUAL_RECONNECT_MS, giveUpMs: OWN_STUCK_AFTER_MS });
+        expect(notice(network, { outageMs: 5_000, hostedMachine: true, justSetUp: true }).wait?.giveUpMs).toBe(JUST_SET_UP_PATIENCE_MS);
+        expect(notice(network, { outageMs: OWN_STUCK_AFTER_MS }).wait).toBeUndefined();
+    });
+
+    it(`gives up on a sandbox of the reader's own the edge calls detached when the gate says so`, () => {
+        const detached = classifyFailure({ edge: `no-tunnel`, message: `not connected` });
+        expect(notice(detached, { outageMs: 1_000 }).wait?.giveUpMs).toBe(DETACHED_AFTER_MS);
+    });
+
+    it(`times a restart this browser asked for on the restart's own patience`, () => {
+        const restart = { title: `Restarting`, detail: `About half a minute.` };
+        expect(notice(network, { outageMs: 10_000, restart }).wait).toEqual({
+            elapsedMs: 10_000,
+            typicalMs: USUAL_RESTART_MS,
+            giveUpMs: RESTART_PATIENCE_MS,
+        });
+    });
+
+    it(`has nothing to time on a first connect that has not failed, and an address on its way has the claim's patience`, () => {
+        expect(notice(undefined).wait).toBeUndefined();
+        const unaddressed = classifyFailure({ unaddressed: true, message: `no address` });
+        expect(notice(unaddressed, { claimed: true, outageMs: 3_000 }).wait?.giveUpMs).toBe(UNADDRESSED_PATIENCE_MS);
+    });
+
+    it(`passes a diagnosis's clock through, and puts none on a cause waiting cannot repair`, () => {
+        const diagnosed = { title: `Waking`, body: `About a minute.`, action: undefined, waiting: true, wait: { elapsedMs: 1, typicalMs: 2, giveUpMs: 3 } };
+        expect(notice(network, { diagnosed }).wait).toEqual(diagnosed.wait);
+        expect(notice(classifyFailure({ status: 401, message: `401` })).wait).toBeUndefined();
     });
 });

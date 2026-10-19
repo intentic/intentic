@@ -1246,7 +1246,9 @@
             "stopped": "stopped",
             "test": "Test",
             "whatAgentCallConnection": "What your agent will call this connection.",
-            "workspaceAsksFor": "{count} capability your workspace asks for | {count} capabilities your workspace asks for"
+            "workspaceAsksFor": "{count} capability your workspace asks for | {count} capabilities your workspace asks for",
+            "savingWhat": "Saving the connection. If it installs anything, that can take a few minutes, and its commands open in a terminal.",
+            "testingWhat": "Testing whether it works with what you entered."
         },
         "capabilityEffects": {
             "addToSandbox": "This will add to your sandbox",
@@ -4585,6 +4587,16 @@
             "expiresIn": "Single use, expires in {time}.",
             "expired": "This command has expired.",
             "renew": "New command"
+        },
+        "waitProgress": {
+            "seconds": "{count} second | {count} seconds",
+            "minutes": "{count} minute | {count} minutes",
+            "elapsed": "{elapsed} so far",
+            "usually": "usually about {usual}",
+            "longerThanUsual": "longer than the usual {usual}",
+            "giveUp": "If it takes more than {limit}, we'll show you what you can do.",
+            "estimate": "Estimated progress",
+            "details": "Technical details"
         }
     },
     "connect": {
@@ -5527,7 +5539,8 @@
             "stillConnected": "Still connected to {count} sandbox. | Still connected to {count} sandboxes.",
             "updateFailed": "Couldn't update its agent",
             "updated": "Update finished",
-            "updating": "Updating its agent…"
+            "updating": "Updating its agent…",
+            "deadline": "If its agent isn't back within {limit}, the machine's status here will say what's wrong."
         },
         "agentMemory": {
             "addToMemory": "Add to memory",
@@ -6083,7 +6096,9 @@
             "takeSecretValuesToo": "Take the secret values too",
             "tookLogoFromBundle": "Took the logo from the bundle.",
             "whatWouldLand": "What would land",
-            "wontHappenByItself": "Won't happen by itself"
+            "wontHappenByItself": "Won't happen by itself",
+            "readingNote": "Reading what's in it. A bundle is uploaded whole first, so a large one can take a few minutes. Nothing changes until you bring it in.",
+            "applyingNote": "Bringing it in. The bigger it is, the longer this takes, and it keeps going if you leave this page."
         },
         "assistantGuide": {
             "folderLivesInsideContainer": "Then the folder lives inside the container, not on the machine. Copy it out first, then pack the copy, replace NAME with your container's name.",
@@ -6635,7 +6650,8 @@
             "syncSettings": "Sync settings",
             "syncing": "Syncing…",
             "unread": "Couldn't read this sandbox's runners ({reason}).",
-            "updating": "Updating runner {name}"
+            "updating": "Updating runner {name}",
+            "buildTakesMinutes": "Building its container on that computer can take a few minutes."
         },
         "discoverCard": {
             "cantClone": "Can't clone",
@@ -6697,7 +6713,9 @@
             "updatedSwitchedOff": "Updated. It is still switched off, so none of it runs until you turn it on in Installed.",
             "useOwnAgentRead": ": use your own agent read if you want an independent account.",
             "whatYoudTrusting": "What you'd be trusting",
-            "workflowRun": "Workflow run {runId}."
+            "workflowRun": "Workflow run {runId}.",
+            "installingWhat": "Installing: its code is cloned and started in the sandbox. A big extension can take a few minutes, and its output opens in a terminal.",
+            "updatingWhat": "Updating: the new code is fetched and started in the sandbox. A big extension can take a few minutes."
         },
         "discoverListing": {
             "atPinnedCommit": "At the pinned commit, {problem}",
@@ -6899,7 +6917,9 @@
             "updateTo": "Update to {version}",
             "updated": "{id} updated",
             "updating": "Updating {id}",
-            "verified": "verified"
+            "verified": "verified",
+            "reviewingWhat": "Fetching the new version to compare what it asks for.",
+            "applyingWhat": "Fetching and building the new code, then reloading it here. A big extension can take a few minutes."
         },
         "extensionUpdatePolicy": {
             "agentPrepared": "Agent-prepared",
@@ -7112,7 +7132,8 @@
             "couldntStartExport": "Could not start the export.",
             "couldntStartDownload": "Could not start the download.",
             "couldntCompareDefinition": "Could not compare against that definition.",
-            "publishingWorkspace": "Publishing the workspace"
+            "publishingWorkspace": "Publishing the workspace",
+            "publishingNote": "Creating the repository and pushing the whole workspace to it. A large workspace can take a few minutes."
         },
         "newExtensionDialog": {
             "couldNotCreate": "The extension could not be created.",
@@ -7549,7 +7570,9 @@
             "daysLeftToRestore": "{count} day left | {count} days left",
             "nothingToRestore": "Nothing to restore",
             "reading": "Reading deleted sandboxes",
-            "paletteTitle": "Recently deleted sandboxes"
+            "paletteTitle": "Recently deleted sandboxes",
+            "restoringHostedNote": "Bringing it back and starting its machine with its files. This can take a few minutes.",
+            "restoringOwnNote": "Bringing it back. Once it's restored, connect the computer it ran on again."
         },
         "sandboxDevices": {
             "couldntListDevices": "Couldn't list your devices."
@@ -8689,8 +8712,8 @@
             "hostedStuckBody": "The machine we run it on is on, but the sandbox never connected. Your files are kept. Restarting it usually brings it back.",
             "machineWorkingTitle": "{machine} is fixing {name}",
             "machineChecking": "Checking what's wrong…",
-            "machineFixedTitle": "{machine} fixed it",
-            "machineFixedBody": "{name} is reconnecting.",
+            "machineFixedTitle": "{machine} fixed {name}",
+            "machineFixedBody": "It's coming back up and reconnects by itself. There's nothing you need to do.",
             "machineAskingTitle": "{machine} is waiting for you",
             "machineAskingBody": "The command running there is asking a question in its terminal.",
             "machineNeedsYouTitle": "{name} needs a hand on {machine}",
@@ -10071,7 +10094,8 @@
             "stoppedWaitingForStripe": "Nothing came back from Stripe, so Billing stopped waiting for it",
             "changingSlots": "Changing the slots on your plan",
             "movingToRung": "Moving a sandbox to {name}",
-            "movedToRung": "Sandbox moved to {name}"
+            "movedToRung": "Sandbox moved to {name}",
+            "movingNote": "Moving it: we snapshot its machine, move it and check that it starts. This takes a few minutes, and the sandbox can't be reached until it's done."
         },
         "settingsData": {
             "dataPrivacy": "Data & privacy",
@@ -10088,7 +10112,9 @@
             "accountDeletionFailed": "Account deletion failed.",
             "exportFailed": "Couldn't export your data.",
             "exportDownloaded": "Your data export downloaded",
-            "deletingAccount": "Deleting your account"
+            "deletingAccount": "Deleting your account",
+            "exportingNote": "Gathering everything we store about your account. The download starts once it's all collected.",
+            "deletingNote": "Removing your access from every sandbox, then deleting the account. You'll be taken to the sign-in page when it's done."
         },
         "settingsKeybindings": {
             "alsoOn": "Also on",
@@ -10457,7 +10483,8 @@
             "linkGoogle": "Link your Google account",
             "buyMachine": "Buy a machine",
             "runOnThisComputer": "Run it on your own computer",
-            "justStartedStillConnecting": "You started this sandbox a moment ago, and it's still connecting. This page opens it as soon as it answers."
+            "justStartedStillConnecting": "You started this sandbox a moment ago, and it's still connecting. This page opens it as soon as it answers.",
+            "attachingNote": "Checking that the address answers and lets your account in. Each check gives up after {limit}."
         },
         "setupAccount": {
             "signOutFailed": "Couldn't sign out. Try again.",
@@ -11233,7 +11260,7 @@
             "password": "password:",
             "password2": "password: your",
             "reReadLiveCluster": "Live cluster state",
-            "readingLiveInfrastructure": "Reading live infrastructure…",
+            "readingLiveInfrastructure": "Reading live infrastructure: asking each live resource for its actual state and comparing it with the plan. Nothing is changed.",
             "refreshToReadLive": "Refresh to read the live state of your infrastructure.",
             "revealPassword": "Reveal password",
             "status": "Status",
@@ -12116,7 +12143,8 @@
             "privateNeedsAccount": "A private GitHub or GitLab repository needs that account connected first, with a token that can read the repository (read-only is enough).",
             "publicNeedsNoAccount": "A public repository needs no account: just paste its address.",
             "tip": "Bring in",
-            "title": "Bring a project in"
+            "title": "Bring a project in",
+            "cloningWhat": "Downloading {name} into the workspace. A large repository can take several minutes, and it keeps going if you leave this screen."
         },
         "workspaceEmptyState": {
             "askAgentToFetch": "Ask an agent to fetch it",

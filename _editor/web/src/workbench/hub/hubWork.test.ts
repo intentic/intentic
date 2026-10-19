@@ -1,5 +1,6 @@
 // THE LEDGER BEHIND A HUB ROW'S TURNING MARK. What is pinned here is the part a component cannot hold: a run
 // survives the section that started it, the row it belongs to, and how a row with several runs describes itself.
+import { waitFor } from "@intentic/testing/bun";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { beginHubWork, forgetHubWork, hubWorkKey, hubWorkRunning, trackHubWork } from "./hubWork";
 
@@ -14,6 +15,19 @@ it(`says nothing until something runs, the run's own words while it does, and no
     expect(hubWorkRunning(DEVICES)).toBe(`Updating a container`);
     end();
     expect(hubWorkRunning(DEVICES)).toBeUndefined();
+});
+
+// A run that outlasts a glance says for how long, on the ledger's own clock, so a stuck one reads differently from a fresh one.
+it(`says how long a run has been going once it outlasts a glance`, async () => {
+    const start = Date.now();
+    const now = jest.spyOn(Date, `now`).mockReturnValue(start);
+    const end = beginHubWork(DEVICES, `Cloning acme`);
+    expect(hubWorkRunning(DEVICES)).toBe(`Cloning acme`);
+    now.mockReturnValue(start + 72_000);
+    // The clock ticks once a second; three is a hang bound, not a latency.
+    await waitFor(() => expect(hubWorkRunning(DEVICES)).toBe(`Cloning acme · 1m 12s`), { timeout: 3_000 });
+    end();
+    now.mockRestore();
 });
 
 // A row is four pixels of glance, so a second run turns the sentence into a number rather than a list.

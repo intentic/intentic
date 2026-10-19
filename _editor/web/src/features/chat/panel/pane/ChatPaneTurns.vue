@@ -28,6 +28,7 @@ import { viewingIn } from "./paneSurface";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import FileRefPeek from "../../../../parts/workspace/FileRefPeek.vue";
 import { retryHydrate } from "../../../../models/conversations/run/useChat-sessions";
+import { useBusySince, useElapsedWords } from "../../../../components/useWaitClock";
 
 // A pane's turns: rows grouped by prompt, the marks between them, each turn's pictures and the one viewer walking them.
 
@@ -74,6 +75,8 @@ const {
     }),
     refresh,
 });
+// How long the reconnect has been going, beside the line that says so once it outlasts a blip (useElapsedWords).
+const reconnectingFor = useElapsedWords(useBusySince(() => staleness.value?.kind === `reconnecting`));
 // The rows drawn, newest first (paneWindow.ts): a long chat opens on its last rows, mounts more at idle up to a window,
 // and draws the rest above as the reader climbs to the mark (`edge`) over the oldest row drawn.
 const edge = ref<HTMLElement>();
@@ -235,6 +238,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
             <template v-if="staleness.kind === `reconnecting`">
                 <Icon name="spinner" spin class="text-2xs" />
                 <span>{{ t(`chat.chatPaneTurns.reconnecting`) }}</span>
+                <span v-if="reconnectingFor" class="tabular-nums">{{ reconnectingFor }}</span>
             </template>
             <template v-else>
                 <Icon name="exclamation-triangle" class="text-2xs text-warning" />

@@ -12,6 +12,8 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useOperation } from "../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 import { settingsPartPath } from "./settingsNav";
+import WaitProgress from "../../components/WaitProgress.vue";
+import { useWaitClock } from "../../components/useWaitClock";
 
 const t = useT();
 
@@ -43,6 +45,8 @@ const deleteInWorkspace = async (): Promise<void> => {
 // GDPR data export: download everything the platform stores about the account as JSON (me.export).
 const exporting = useOperation(`account/data/export`);
 const exportError = computed(() => exporting.failure.value);
+// How long the platform has been gathering, under the row: it answers only once it has every row, which is not instant.
+const exportWait = useWaitClock(() => (exporting.busy.value ? exporting.operation.value?.startedAt : undefined));
 const exportData = async (): Promise<void> => {
     await exporting.run({
         // The platform gathers every row it holds about the account before it answers, so the row says so meanwhile.
@@ -66,6 +70,7 @@ const exportData = async (): Promise<void> => {
 const confirmingDelete = ref(false);
 const removal = useOperation(`account/data/delete`);
 const deleting = removal.busy;
+const deleteWait = useWaitClock(() => (deleting.value ? removal.operation.value?.startedAt : undefined));
 // The one line under the row: the deletion's own failure, or the workspace that would not open for it.
 const deleteError = computed(() => {
     const failure = removal.failure.value ?? handing.failure.value;
@@ -105,8 +110,9 @@ const confirmDelete = async (): Promise<void> => {
                         @click="exportData"
                     />
                 </template>
-                <template v-if="exportError" #below>
-                    <Notice :of="exportError" />
+                <template v-if="exportError || exportWait" #below>
+                    <WaitProgress v-if="exportWait" :wait="exportWait" :what="t(`settings.settingsData.exportingNote`)" />
+                    <Notice v-else-if="exportError" :of="exportError" />
                 </template>
             </Row>
             <Row
@@ -148,6 +154,7 @@ const confirmDelete = async (): Promise<void> => {
                             @click="confirmDelete"
                         />
                     </div>
+                    <WaitProgress v-if="deleteWait" :wait="deleteWait" :what="t(`settings.settingsData.deletingNote`)" class="mt-2" />
                     <p v-if="deleteError" class="mt-2 text-2xs text-danger">{{ deleteError }}</p>
                 </template>
             </Row>

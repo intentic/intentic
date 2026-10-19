@@ -67,5 +67,7 @@ export function useAddRepo() {
         failure: computed(() => refused.value ?? clone.failure.value),
         // The address of the clone still running, or of the one that failed.
         url: computed(() => clone.progress.value?.url),
+        // When the clone still running began, for the pane's clock (components/WaitProgress.vue); undefined otherwise.
+        startedAt: computed(() => (clone.busy.value ? clone.operation.value?.startedAt : undefined)),
     };
 }

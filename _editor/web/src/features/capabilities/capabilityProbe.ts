@@ -52,6 +52,8 @@ export const useCapabilityProbe = ({ selected, form }: ProbeHost) => {
     return {
         probing: probe.busy,
         failure: probe.failure,
+        // When the test still running began, for the form's clock (components/WaitProgress.vue).
+        startedAt: computed(() => (probe.busy.value ? probe.operation.value?.startedAt : undefined)),
         // Hidden once a tile has answered that no test exists for it.
         canProbe: computed(() => selected.value !== undefined && form.probeResult.value?.checked !== false),
         runProbe,

@@ -28,6 +28,8 @@ export interface AgentRun {
     readonly links?: LinksAsked | undefined;
     /** The machine's refusal, and the same act as a line to type there. */
     readonly failure?: { readonly notice: NoticeModel; readonly command?: string | undefined } | undefined;
+    /** When it was pressed: what the strip's "so far" counts from, and what its deadline is measured against. */
+    readonly startedAt?: number | undefined;
 }
 
 // Counted so the headline can say how much was done, never only that something was.

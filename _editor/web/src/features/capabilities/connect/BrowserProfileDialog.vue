@@ -8,6 +8,8 @@ import { pointerFrame, type PointerAction } from "../../../models/browsers/point
 import { selectionCopy } from "../../../models/browsers/selectionCopy";
 import { type ScreencastMessage, useScreencast } from "../../../models/browsers/useScreencast";
 import { socketUrl as wsSocketUrl } from "../../../client/sandbox/streams/wsTicket";
+import WaitProgress from "../../../components/WaitProgress.vue";
+import { useBusySince, useWaitClock } from "../../../components/useWaitClock";
 import { useT } from "@intentic/ui/i18n";
 
 // One connected account's Chromium, driven live over /system/browser-profile (video of the page's viewport in, input
@@ -30,6 +32,8 @@ const emit = defineEmits<{ (event: "update:visible", value: boolean): void; (eve
 const painting = ref(false);
 const status = ref<"connecting" | "ready" | "saving" | "error">("connecting");
 const errorMsg = ref<NoticeModel>();
+// How long the browser has been starting (or starting again), shown under its sentence until the first frame paints.
+const startWait = useWaitClock(useBusySince(() => props.visible && !painting.value && status.value !== `error`));
 // What the page shows under the pointer; the picture carries no cursor of its own.
 const cursor = ref("default");
 const surface = ref<HTMLElement>();
@@ -386,13 +390,19 @@ const finish = async (): Promise<void> => {
                 <!-- Video beneath, the sharp still of the settled page above it (videoSink); both the same box so a click aims the same. -->
                 <canvas v-show="painting" ref="canvasEl" class="absolute inset-0 h-full w-full object-contain" />
                 <canvas v-show="painting" ref="stillEl" class="pointer-events-none absolute inset-0 h-full w-full object-contain" />
-                <div v-if="!painting" class="absolute inset-0 flex items-center justify-center gap-2 text-xs text-muted">
-                    <Icon name="spinner" spin />
-                    <span>{{
-                        status === "error"
-                            ? t(`capabilities.browserProfileDialog.couldntStartBrowser`)
-                            : t(`capabilities.browserProfileDialog.startingBrowser`)
-                    }}</span>
+                <!-- A spinner only while it is still starting: beside "Couldn't start the browser" it promised a wait that was over. -->
+                <div v-if="!painting" class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-xs text-muted">
+                    <p v-if="status === `error`" class="flex items-center gap-2">
+                        <Icon name="exclamation-triangle" class="text-warning" />
+                        <span>{{ t(`capabilities.browserProfileDialog.couldntStartBrowser`) }}</span>
+                    </p>
+                    <template v-else>
+                        <p class="flex items-center gap-2">
+                            <Icon name="spinner" spin />
+                            <span>{{ t(`capabilities.browserProfileDialog.startingBrowser`) }}</span>
+                        </p>
+                        <WaitProgress v-if="startWait" :wait="startWait" class="max-w-xs" />
+                    </template>
                 </div>
             </div>
         </div>

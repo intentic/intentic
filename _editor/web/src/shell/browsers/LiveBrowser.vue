@@ -1486,7 +1486,7 @@ const { floats } = useBrowsersFloating();
                         </template>
                     </PreviewStage>
                     <div v-if="view.status.value" class="absolute inset-0 flex items-center justify-center px-4">
-                        <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.status.value }}</span>
+                        <span class="rounded-md bg-card px-2 py-1 text-center text-xs text-muted">{{ view.statusWithElapsed.value }}</span>
                     </div>
                     <!-- An open drop-down the picture itself can't show; only happens on the frames path, since a native menu on video is already photographed and clickable. -->
                     <BrowserSelectMenu

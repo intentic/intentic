@@ -67,8 +67,10 @@ export const useVisibleOutage = (): { elapsed: ComputedRef<number>; hidden: Comp
 // What the diagnosis of the active sandbox's outage says, in words (diagnosis/presentation.ts); undefined while it
 // answers, or while what is wrong is not a silence.
 export const useDiagnosisNotice = (clock: { readonly elapsed: ComputedRef<number> }): ComputedRef<DiagnosisNotice | undefined> => {
-    const { active } = useSandbox();
+    const { active, connection, reachable } = useSandbox();
     const diagnosis = useDiagnosis(clock);
+    // The wall clock a machine's report is measured against ("fixed" two minutes ago), ticking only through an outage.
+    const now = useNow(() => !reachable.value && connection.value.unavailableSince !== undefined);
     return computed(() => {
         const box = active.value;
         const current = diagnosis.value;
@@ -81,6 +83,9 @@ export const useDiagnosisNotice = (clock: { readonly elapsed: ComputedRef<number
             lane: box.hosted === null ? `own` : `hosted`,
             owner: box.role === `owner`,
             canRollBack: box.hosted?.canRollBack === true,
+            outageMs: clock.elapsed.value,
+            now: now.value,
+            warm: box.hosted?.warm,
         });
     });
 };

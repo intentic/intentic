@@ -5,7 +5,7 @@ import GateCard from "./GateCard.vue";
 import { bootSteps, bootStartedAt } from "../../../client/sandbox/useDaemonBoot";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useT } from "@intentic/ui/i18n";
-import { formatElapsed } from "@intentic/ui";
+import { formatElapsed, Meter } from "@intentic/ui";
 
 // Shown while the active daemon is reached but not yet ready, converging state before other routes work. Steps
 // come from the daemon's own declared boot chain, streamed on /events, so a slow boot names its slow step while
@@ -34,6 +34,12 @@ const now = useNow();
             {{ t(`sandbox.sandboxWarming.sandboxUpGettingWorkspace`) }}
         </p>
         <template #below>
+            <!-- Real progress, not an estimate: the share of the daemon's declared boot steps that have finished. -->
+            <Meter
+                v-if="bootSteps.length > 0"
+                :value="done / bootSteps.length"
+                :label="t(`sandbox.sandboxWarming.stepsDone`, { done, total: bootSteps.length })"
+            />
             <!-- The declared chain, in run order; a daemon too old to report one just leaves this empty. -->
             <div v-if="bootSteps.length > 0" class="flex flex-col gap-1.5 text-left">
                 <div

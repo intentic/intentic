@@ -2,6 +2,7 @@ import { computed, ref } from "vue";
 import { useNow } from "@intentic/ui/async";
 import PushQuestionBody from "./PushQuestionBody.vue";
 import SandboxRecovery from "../../features/sandbox/gates/SandboxRecovery.vue";
+import OutageWait from "../../features/sandbox/gates/OutageWait.vue";
 import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "../../features/sandbox/gates/useVisibleOutage";
 import type { DiagnosisNotice } from "../../features/sandbox/diagnosis/presentation";
 import UploadProgressBody from "../../features/workspace/files/upload/UploadProgressBody.vue";
@@ -164,7 +165,7 @@ const QUIET: ReadonlySet<SandboxAvailability> = new Set([`stale`, `busy`, `unrea
 // a minute, and the causes that were always here speak again.
 export const restartCard = (restart: RestartWork | undefined, availability: SandboxAvailability, outageMs: number): NotificationInput | undefined =>
     restart !== undefined && QUIET.has(availability) && outageMs < RESTART_PATIENCE_MS
-        ? { kind: `condition`, tone: `info`, icon: `refresh`, spin: true, title: restart.quiet.title, detail: restart.quiet.detail }
+        ? { kind: `condition`, tone: `info`, icon: `refresh`, spin: true, title: restart.quiet.title, detail: restart.quiet.detail, body: OutageWait }
         : undefined;
 
 // How long a sandbox the diagnosis saw ALIVE stays quiet in the lane: it is catching up, the switcher's dot already says
@@ -179,7 +180,11 @@ export const diagnosisCard = (notice: DiagnosisNotice, due: boolean, dismiss: ()
     const calm = notice.waiting && !due;
     const card: NotificationInput = { kind: `condition`, tone: calm ? `info` : `warning`, title: notice.title, detail: notice.body, dismiss };
     const spinning: NotificationInput = calm ? { ...card, icon: `spinner`, spin: true } : card;
-    return due || notice.otherActions.length > 0 ? { ...spinning, body: SandboxRecovery, wide: true } : spinning;
+    if (due || notice.otherActions.length > 0) {
+        return { ...spinning, body: SandboxRecovery, wide: true };
+    }
+    // A wait with a clock says how long it has run and how long it usually takes, not only that it is happening.
+    return calm && notice.wait !== undefined ? { ...spinning, body: OutageWait } : spinning;
 };
 
 // Whether the outage card is up. A way back found is said, and so is a cause established and still a wait (asleep, its

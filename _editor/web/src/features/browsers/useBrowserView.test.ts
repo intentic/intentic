@@ -529,3 +529,19 @@ test("a still on the video path goes to the canvas, not the img", async () => {
 
     expect(view.frame.value).toBeUndefined();
 });
+
+// The pane says how long the picture has been on its way (LiveBrowser), so the view keeps when that wait began: one wait
+// from the connect through the first frame, over as a picture lands, and never a clock beside a reason there will be none.
+test("a view keeps one wait from connecting to its first picture, and none once it says why there won't be one", async () => {
+    stubGlobal(`URL`, { createObjectURL: () => `blob:frame`, revokeObjectURL: () => {} });
+    const { view, socket } = await connected();
+    expect(view.waitingSince.value).toEqual(expect.any(Number));
+    expect(view.status.value).toBe(`Waiting for the first frame…`);
+
+    socket().deliverFrame([1, 0x52, 0x49]);
+    expect(view.waitingSince.value).toBeUndefined();
+
+    stubGlobal(`VideoDecoder`, undefined);
+    socket().deliver({ type: `ready`, kind: `video`, width: 1280, height: 880, codec: `avc1.42C028` });
+    expect(view.waitingSince.value).toBeUndefined();
+});

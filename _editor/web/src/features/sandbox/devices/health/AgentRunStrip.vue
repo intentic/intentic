@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { Button, DeviceRunLog, Icon, toneTint } from "@intentic/ui";
 import RunCommand from "../../../../components/RunCommand.vue";
+import WaitProgress from "../../../../components/WaitProgress.vue";
+import { useWaitClock } from "../../../../components/useWaitClock";
+import { spanWords } from "../../../../components/waitProgress";
 import { computed, ref } from "vue";
 import { type AgentRun, agentRunDetail, agentRunTitle } from "../runners/agentRun";
+import { AGENT_RETURN_DEADLINE_MS } from "../runners/deviceWork";
 import { useT } from "@intentic/ui/i18n";
 
 // One press of an agent verb, drawn where the concern that offered it stood, so the question and its answer occupy
@@ -28,6 +32,17 @@ const detail = computed(() => agentRunDetail(run) ?? (run.state === `failed` ? r
 const latest = computed(() => (run.state === `running` ? run.lines.at(-1) : undefined));
 const showing = ref(false);
 
+// How long it has been going, and how long it is given. An update downloads and installs before the agent comes back on
+// the new build, so a strip saying only "Waiting for its agent to come back…" read the same at second ten as at minute
+// four. Past the deadline (deviceWork.ts) the run stops counting as work in flight and the machine's own status says
+// what is wrong, which is what the strip promises. A drop of links has no agent to wait for and no deadline.
+const wait = useWaitClock(() => (busy.value ? run.startedAt : undefined));
+const deadline = computed(() =>
+    busy.value && run.op !== `forget-unreachable` && (wait.value?.elapsedMs ?? 0) < AGENT_RETURN_DEADLINE_MS
+        ? t(`sandbox.agentRun.deadline`, { limit: spanWords(AGENT_RETURN_DEADLINE_MS) })
+        : undefined,
+);
+
 // The two outcomes wear the kit's strong tint (tone.ts), as <DeviceConcern> does; a run still going sits on the
 // page's own surface.
 const SURFACE: Record<AgentRun[`state`], string> = {
@@ -49,6 +64,8 @@ const ICON = { running: `spinner`, waiting: `spinner`, done: `check-circle`, fai
                 <p class="text-xs font-medium text-content">{{ title }}</p>
                 <p v-if="detail" class="text-2xs text-muted">{{ detail }}</p>
                 <p v-else-if="latest" class="truncate font-mono text-2xs text-subtle">{{ latest }}</p>
+                <WaitProgress v-if="wait" :wait="wait" class="mt-0.5" />
+                <p v-if="deadline" class="text-2xs text-subtle">{{ deadline }}</p>
             </div>
             <div class="ml-auto flex shrink-0 items-center gap-0.5">
                 <Button

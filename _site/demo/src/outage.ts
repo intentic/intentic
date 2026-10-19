@@ -12,11 +12,12 @@ import { type DemoHandler, json } from "./transport";
 //   down        the edge holds no tunnel; nothing on the machine has reported
 //   fixing      the edge holds no tunnel; the machine agent is starting Docker Desktop
 //   needs-you   the edge holds no tunnel; the machine found what only its owner can fix
+//   fixed       the edge holds no tunnel; the machine says it fixed it, and the sandbox has yet to dial in
 //   hosted      a machine we run, which failed to start; the platform kept the image before its last update
 //   asleep      its machine put it to sleep for want of use; the edge holds no tunnel until it wakes, WAKES_AFTER_MS
 //               into the visit (the keeper's poll, a start, a boot), and from then on it answers as ever
 
-const OUTAGES = [`busy`, `restarting`, `down`, `fixing`, `needs-you`, `hosted`, `asleep`] as const;
+const OUTAGES = [`busy`, `restarting`, `down`, `fixing`, `needs-you`, `fixed`, `hosted`, `asleep`] as const;
 export type DemoOutage = (typeof OUTAGES)[number];
 
 const STORAGE_KEY = `intentic.demo.outage`;
@@ -84,6 +85,20 @@ const NEEDS_YOU: HostReport = {
     at: REPORTED_AT,
 };
 
+const FIXED: HostReport = {
+    source: `agent`,
+    machine: `ada-laptop`,
+    os: `windows`,
+    stage: `done`,
+    outcome: `fixed`,
+    checks: [
+        { id: `docker-app`, label: `Docker Desktop`, state: `ok` },
+        { id: `container`, label: `Sandbox container`, state: `ok` },
+        { id: `tunnel`, label: `Tunnel to Intentic`, state: `ok` },
+    ],
+    at: REPORTED_AT,
+};
+
 const ASLEEP: HostReport = {
     source: `agent`,
     machine: `ada-laptop`,
@@ -106,6 +121,8 @@ export const outageReport = (): HostReport | null => {
             return FIXING;
         case `needs-you`:
             return NEEDS_YOU;
+        case `fixed`:
+            return FIXED;
         case `asleep`:
             return ASLEEP;
         default:
@@ -144,6 +161,7 @@ export const withOutage =
             case `down`:
             case `fixing`:
             case `needs-you`:
+            case `fixed`:
             case `hosted`:
                 return noTunnel();
             case `asleep`:

@@ -7,6 +7,8 @@ import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { DELETED_ANCHOR } from "../../../../models/sandbox/devices/deviceLinks";
 import { daysLeft, trashSection } from "./trashWindow";
 import { useSandboxTrash } from "./useSandboxTrash";
+import WaitProgress from "../../../../components/WaitProgress.vue";
+import { useBusySince, useWaitClock } from "../../../../components/useWaitClock";
 
 // Sandboxes this account deleted that can still come back, as the Devices board's last group: the board is where every
 // sandbox the account runs is laid out by the machine it runs on, so the ones that left it are kept at its foot rather
@@ -53,6 +55,9 @@ const stopScroll = watch(
         stopScroll();
     },
 );
+
+// How long a restore has run, under its row: bringing a hosted machine back is the platform's work and is not instant.
+const restoreWait = useWaitClock(useBusySince(() => trash.restoring.value !== undefined));
 
 // Restoring makes it the active sandbox: the reader asked for that box back, and an own-machine one has a connection
 // to set up again, which is the next thing its screen asks for.
@@ -105,6 +110,12 @@ const restore = async (trashId: string): Promise<void> => {
                             :loading="trash.restoring.value === row.id"
                             :disabled="trash.restoring.value !== undefined"
                             @click="void restore(row.id)"
+                        />
+                    </template>
+                    <template v-if="restoreWait && trash.restoring.value === row.id" #below>
+                        <WaitProgress
+                            :wait="restoreWait"
+                            :what="row.hosted ? t(`sandbox.recentlyDeleted.restoringHostedNote`) : t(`sandbox.recentlyDeleted.restoringOwnNote`)"
                         />
                     </template>
                 </Row>

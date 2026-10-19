@@ -1246,7 +1246,9 @@
             "stopped": "zatrzymany",
             "test": "Testuj",
             "whatAgentCallConnection": "Tak Twój agent będzie nazywał to połączenie.",
-            "workspaceAsksFor": "{count} możliwość, o którą prosi Twoja przestrzeń robocza | {count} możliwości, o które prosi Twoja przestrzeń robocza | {count} możliwości, o które prosi Twoja przestrzeń robocza"
+            "workspaceAsksFor": "{count} możliwość, o którą prosi Twoja przestrzeń robocza | {count} możliwości, o które prosi Twoja przestrzeń robocza | {count} możliwości, o które prosi Twoja przestrzeń robocza",
+            "savingWhat": "Zapisywanie połączenia. Jeśli coś instaluje, może to potrwać kilka minut, a jego polecenia otwierają się w terminalu.",
+            "testingWhat": "Sprawdzanie, czy działa z tym, co podano."
         },
         "capabilityEffects": {
             "addToSandbox": "To doda do Twojego sandboxa",
@@ -4585,6 +4587,16 @@
             "expiresIn": "Jednorazowe, wygasa za {time}.",
             "expired": "To polecenie wygasło.",
             "renew": "Nowe polecenie"
+        },
+        "waitProgress": {
+            "seconds": "{count} s | {count} s | {count} s",
+            "minutes": "{count} min | {count} min | {count} min",
+            "elapsed": "minęło {elapsed}",
+            "usually": "zwykle ok. {usual}",
+            "longerThanUsual": "dłużej niż zwykle (ok. {usual})",
+            "giveUp": "Jeśli potrwa dłużej niż {limit}, pokażemy, co możesz zrobić.",
+            "estimate": "Szacowany postęp",
+            "details": "Szczegóły techniczne"
         }
     },
     "connect": {
@@ -5056,7 +5068,8 @@
             "stillConnected": "Wciąż połączone z {count} sandboxem. | Wciąż połączone z {count} sandboxami. | Wciąż połączone z {count} sandboxami.",
             "updateFailed": "Nie udało się zaktualizować jego agenta",
             "updated": "Aktualizacja zakończona",
-            "updating": "Aktualizowanie jego agenta…"
+            "updating": "Aktualizowanie jego agenta…",
+            "deadline": "Jeśli agent nie wróci w ciągu {limit}, status maszyny pokaże tutaj, co jest nie tak."
         },
         "agentMemory": {
             "addToMemory": "Dodaj do pamięci",
@@ -5612,7 +5625,9 @@
             "takeSecretValuesToo": "Zabierz też wartości sekretów",
             "tookLogoFromBundle": "Logo wzięte z paczki.",
             "whatWouldLand": "Co by dotarło",
-            "wontHappenByItself": "Samo się nie stanie"
+            "wontHappenByItself": "Samo się nie stanie",
+            "readingNote": "Odczytujemy zawartość. Paczka najpierw jest przesyłana w całości, więc duża może zająć kilka minut. Nic się nie zmieni, dopóki jej nie wprowadzisz.",
+            "applyingNote": "Wprowadzamy ją. Im jest większa, tym dłużej to trwa; działa dalej, nawet jeśli opuścisz tę stronę."
         },
         "assistantGuide": {
             "folderLivesInsideContainer": "Wtedy folder żyje w kontenerze, nie na maszynie. Skopiuj go najpierw na zewnątrz, potem spakuj kopię, zastępując NAZWA nazwą swojego kontenera.",
@@ -6186,7 +6201,8 @@
             "syncSettings": "Ustawienia synchronizacji",
             "syncing": "Synchronizowanie…",
             "unread": "Nie udało się odczytać runnerów tego sandboxa ({reason}).",
-            "updating": "Aktualizowanie runnera {name}"
+            "updating": "Aktualizowanie runnera {name}",
+            "buildTakesMinutes": "Budowanie kontenera na tym komputerze może potrwać kilka minut."
         },
         "discoverCard": {
             "cantClone": "Nie do sklonowania",
@@ -6248,7 +6264,9 @@
             "updatedSwitchedOff": "Zaktualizowane. Wciąż jest wyłączone, więc nic z niego nie działa, dopóki nie włączysz go w Zainstalowanych.",
             "useOwnAgentRead": ": skorzystaj z odczytu własnego agenta, jeśli chcesz niezależnej relacji.",
             "whatYoudTrusting": "Czemu byś zaufał",
-            "workflowRun": "Przebieg workflow {runId}."
+            "workflowRun": "Przebieg workflow {runId}.",
+            "installingWhat": "Instalowanie: kod jest klonowany i uruchamiany w sandboxie. Duże rozszerzenie może zająć kilka minut, a jego wyjście otwiera się w terminalu.",
+            "updatingWhat": "Aktualizowanie: nowy kod jest pobierany i uruchamiany w sandboxie. Duże rozszerzenie może zająć kilka minut."
         },
         "discoverListing": {
             "atPinnedCommit": "W przypiętym commicie: {problem}",
@@ -6450,7 +6468,9 @@
             "updateTo": "Zaktualizuj do {version}",
             "updated": "Zaktualizowano {id}",
             "updating": "Aktualizowanie {id}",
-            "verified": "zweryfikowane"
+            "verified": "zweryfikowane",
+            "reviewingWhat": "Pobieranie nowej wersji, by porównać, o co prosi.",
+            "applyingWhat": "Pobieranie i budowanie nowego kodu, a potem przeładowanie go tutaj. Duże rozszerzenie może zająć kilka minut."
         },
         "extensionUpdatePolicy": {
             "agentPrepared": "Przygotowane przez agenta",
@@ -6663,7 +6683,8 @@
             "couldntStartExport": "Nie udało się rozpocząć eksportu.",
             "couldntStartDownload": "Nie udało się rozpocząć pobierania.",
             "couldntCompareDefinition": "Nie udało się porównać z tą definicją.",
-            "publishingWorkspace": "Publikowanie przestrzeni roboczej"
+            "publishingWorkspace": "Publikowanie przestrzeni roboczej",
+            "publishingNote": "Tworzymy repozytorium i wypychamy do niego cały obszar roboczy. Duży obszar może zająć kilka minut."
         },
         "newExtensionDialog": {
             "couldNotCreate": "Nie udało się utworzyć rozszerzenia.",
@@ -7111,7 +7132,9 @@
             "daysLeftToRestore": "został {count} dzień | zostało {count} dni",
             "nothingToRestore": "Nic do przywrócenia",
             "reading": "Odczytywanie usuniętych sandboxów",
-            "paletteTitle": "Ostatnio usunięte sandboxy"
+            "paletteTitle": "Ostatnio usunięte sandboxy",
+            "restoringHostedNote": "Przywracamy go i uruchamiamy jego maszynę z plikami. Może to potrwać kilka minut.",
+            "restoringOwnNote": "Przywracamy go. Po przywróceniu połącz ponownie komputer, na którym działał."
         },
         "sandboxDevices": {
             "couldntListDevices": "Nie udało się wypisać Twoich urządzeń."
@@ -8218,8 +8241,8 @@
             "hostedStuckBody": "Maszyna, na której go uruchamiamy, jest włączona, ale sandbox się nie połączył. Twoje pliki są zachowane. Restart zwykle przywraca go do działania.",
             "machineWorkingTitle": "{machine} naprawia {name}",
             "machineChecking": "Sprawdzanie, co jest nie tak…",
-            "machineFixedTitle": "{machine} to naprawił",
-            "machineFixedBody": "{name} łączy się ponownie.",
+            "machineFixedTitle": "{machine} naprawił {name}",
+            "machineFixedBody": "Właśnie się uruchamia i połączy się sam. Nie musisz nic robić.",
             "machineAskingTitle": "{machine} czeka na ciebie",
             "machineAskingBody": "Uruchomione tam polecenie zadaje pytanie w swoim terminalu.",
             "machineNeedsYouTitle": "{name} potrzebuje twojej pomocy na {machine}",
@@ -9600,7 +9623,8 @@
             "stoppedWaitingForStripe": "Ze Stripe nic nie wróciło, więc Rozliczenia przestały czekać",
             "changingSlots": "Zmiana miejsc w Twoim planie",
             "movingToRung": "Przenoszenie sandboxa na {name}",
-            "movedToRung": "Sandbox przeniesiony na {name}"
+            "movedToRung": "Sandbox przeniesiony na {name}",
+            "movingNote": "Przenosimy go: robimy migawkę jego maszyny, przenosimy ją i sprawdzamy, czy się uruchamia. Trwa to kilka minut, a do tego czasu sandbox jest niedostępny."
         },
         "settingsData": {
             "dataPrivacy": "Dane i prywatność",
@@ -9617,7 +9641,9 @@
             "accountDeletionFailed": "Usunięcie konta nie powiodło się.",
             "exportFailed": "Nie udało się wyeksportować Twoich danych.",
             "exportDownloaded": "Eksport Twoich danych został pobrany",
-            "deletingAccount": "Usuwanie Twojego konta"
+            "deletingAccount": "Usuwanie Twojego konta",
+            "exportingNote": "Zbieramy wszystko, co przechowujemy o Twoim koncie. Pobieranie zacznie się, gdy wszystko zostanie zebrane.",
+            "deletingNote": "Odbieramy Ci dostęp do każdego sandboxa, a potem usuwamy konto. Gdy skończymy, przejdziesz do strony logowania."
         },
         "settingsKeybindings": {
             "alsoOn": "Także w",
@@ -9986,7 +10012,8 @@
             "linkGoogle": "Połącz konto Google",
             "buyMachine": "Kup maszynę",
             "runOnThisComputer": "Uruchom na własnym komputerze",
-            "justStartedStillConnecting": "Ten sandbox uruchomiono przed chwilą i wciąż się łączy. Ta strona otworzy go, gdy tylko odpowie."
+            "justStartedStillConnecting": "Ten sandbox uruchomiono przed chwilą i wciąż się łączy. Ta strona otworzy go, gdy tylko odpowie.",
+            "attachingNote": "Sprawdzamy, czy adres odpowiada i wpuszcza Twoje konto. Każde sprawdzenie poddaje się po {limit}."
         },
         "setupAccount": {
             "signOutFailed": "Nie udało się wylogować. Spróbuj ponownie.",
@@ -10762,7 +10789,7 @@
             "password": "hasło:",
             "password2": "hasło: Twoje",
             "reReadLiveCluster": "Stan klastra na żywo",
-            "readingLiveInfrastructure": "Odczytywanie infrastruktury na żywo…",
+            "readingLiveInfrastructure": "Odczytywanie infrastruktury na żywo: każdy działający zasób jest pytany o swój rzeczywisty stan, który porównujemy z planem. Nic nie jest zmieniane.",
             "refreshToReadLive": "Odśwież, żeby odczytać stan swojej infrastruktury na żywo.",
             "revealPassword": "Pokaż hasło",
             "status": "Status",
@@ -11630,7 +11657,8 @@
             "privateNeedsAccount": "Prywatne repozytorium GitHub lub GitLab wymaga wcześniej połączonego konta, z tokenem umożliwiającym odczyt repozytorium (wystarczy dostęp tylko do odczytu).",
             "publicNeedsNoAccount": "Publiczne repozytorium nie wymaga konta: wklej tylko jego adres.",
             "tip": "Dodaj projekt",
-            "title": "Dodaj projekt"
+            "title": "Dodaj projekt",
+            "cloningWhat": "Pobieranie {name} do przestrzeni roboczej. Duże repozytorium może zająć kilka minut, a pobieranie trwa dalej, nawet jeśli opuścisz ten ekran."
         },
         "workspaceEmptyState": {
             "askAgentToFetch": "Poproś agenta, żeby to pobrał",

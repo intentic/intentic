@@ -1,12 +1,13 @@
 import { errorMessage } from "@intentic/base/errors";
 import { t } from "@intentic/ui/i18n";
-import { onScopeDispose, ref, type Ref, watch } from "vue";
+import { type ComputedRef, onScopeDispose, ref, type Ref, watch } from "vue";
 import { z } from "zod";
 import { keyIntent, type BrowserCommand, type KeyFrame } from "../../models/browsers/keyIntent";
 import { pointerFrame, type PointerAction } from "../../models/browsers/pointerFrame";
 import { selectionCopy } from "../../models/browsers/selectionCopy";
 import { type ScreencastMessage, useScreencast } from "../../models/browsers/useScreencast";
 import { socketUrl as wsSocketUrl } from "../../client/sandbox/streams/wsTicket";
+import { useLineWithElapsed } from "../../components/useWaitClock";
 
 // One live view of the agent's browser over /system/browser-view, with clicks/keys going back. `ready` picks video
 // (H.264 of the page's viewport off the browser's own X display into a canvas, with a sharp still laid over it once
@@ -39,6 +40,11 @@ export interface BrowserView {
     readonly frame: Ref<string | undefined>;
     // What to say while there's no picture: connecting, reconnecting, or why there never will be one.
     readonly status: Ref<string | undefined>;
+    // When the current wait for a picture began (connecting, the first frame, a reconnect, a retried session); undefined
+    // once one lands, or once `status` says why none ever will. What the pane's "so far" counts from.
+    readonly waitingSince: Ref<number | undefined>;
+    // `status` with how long that wait has run once it outlasts a blip ("Reconnecting… · 1m 5s"), for the pane's line.
+    readonly statusWithElapsed: ComputedRef<string | undefined>;
     // True while the user's input is being forwarded; off by default.
     readonly driving: Ref<boolean>;
     // CSS cursor keyword from the daemon: the picture carries no pointer, the pane draws the local one in this shape.
@@ -97,10 +103,33 @@ export interface BrowserViewOptions {
 // token await, from one active-sandbox snapshot.
 const socketUrl = (name: string): Promise<string | undefined> => wsSocketUrl(`/system/browser-view`, { session: name });
 
+// The pane's one line and how long it has been a wait. A line that is still a wait (a connect, the first frame, a retry
+// after a drop) keeps the start of the wait under way, since a retry is the same wait to the reader; a picture, or a
+// line saying why there will never be one, ends it. `restart` begins a new wait outright, for a switch to another browser.
+const statusLine = (first: string) => {
+    const status = ref<string | undefined>(first);
+    const waitingSince = ref<number | undefined>(Date.now());
+    return {
+        // What the view hands its pane.
+        line: { status, waitingSince, statusWithElapsed: useLineWithElapsed(status, waitingSince) } satisfies Pick<
+            BrowserView,
+            `status` | `waitingSince` | `statusWithElapsed`
+        >,
+        say: (text: string | undefined, waiting: boolean): void => {
+            status.value = text;
+            waitingSince.value = waiting ? (waitingSince.value ?? Date.now()) : undefined;
+        },
+        restart: (text: string | undefined): void => {
+            status.value = text;
+            waitingSince.value = text === undefined ? undefined : Date.now();
+        },
+    };
+};
+
 // Follows `name` as the view switches browsers; a change tears the old socket down and opens a new one, with
 // nothing to preserve across the switch.
 export const useBrowserView = (name: Ref<string | undefined>, options: BrowserViewOptions = {}): BrowserView => {
-    const status = ref<string | undefined>(t(`browsers.browserView.connecting`));
+    const { line, say, restart } = statusLine(t(`browsers.browserView.connecting`));
     const driving = ref(false);
     const cursor = ref(`default`);
     const select = ref<SelectMenu | undefined>();
@@ -119,7 +148,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
     // The daemon knows this session is done for good; reconnecting would only ask the same dead question.
     const onError = (reason: string | undefined): void => {
         cast.live.end();
-        status.value = reason ?? t(`browsers.browserView.sessionGone`);
+        say(reason ?? t(`browsers.browserView.sessionGone`), false);
         cast.frame.value = undefined;
     };
 
@@ -162,25 +191,25 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         holdSize: () => device !== undefined,
         onMessage,
         onReady: () => {
-            status.value = t(`browsers.browserView.waiting`);
+            say(t(`browsers.browserView.waiting`), true);
         },
         onUnsupported: () => {
-            status.value = t(`browsers.browserView.unsupported`);
+            say(t(`browsers.browserView.unsupported`), false);
         },
         onVideoError: (message) => {
-            status.value = message;
+            say(message, false);
         },
         onPicture: () => {
-            status.value = undefined;
+            say(undefined, false);
         },
         socket: {
             onMintFailed: (error) => {
                 // A session that couldn't be minted (sandbox restarting, network down) retries like a drop; nothing else would.
                 console.warn(`browser ${name.value ?? ``}: authorizing the view's socket failed`, error);
-                status.value = t(`browsers.browserView.authFailed`, { reason: errorMessage(error) });
+                say(t(`browsers.browserView.authFailed`, { reason: errorMessage(error) }), true);
             },
             onUnreachable: () => {
-                status.value = t(`browsers.browserView.unreachable`);
+                say(t(`browsers.browserView.unreachable`), true);
             },
             onOpen: () => {
                 if (pinned !== undefined) {
@@ -193,7 +222,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
                 cast.syncVisibility();
             },
             onDrop: () => {
-                status.value = t(`browsers.browserView.reconnecting`);
+                say(t(`browsers.browserView.reconnecting`), true);
             },
         },
     });
@@ -220,7 +249,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
             cursor.value = `default`;
             // A menu from the browser being left has nothing left to point at.
             select.value = undefined;
-            status.value = name.value === undefined ? undefined : t(`browsers.browserView.connecting`);
+            restart(name.value === undefined ? undefined : t(`browsers.browserView.connecting`));
             if (name.value !== undefined) {
                 cast.live.connect();
             }
@@ -259,7 +288,7 @@ export const useBrowserView = (name: Ref<string | undefined>, options: BrowserVi
         viewScale: cast.scale,
         attachCanvases: video.attach,
         frame: cast.frame,
-        status,
+        ...line,
         driving,
         cursor,
         bindPage: (pageId) => {

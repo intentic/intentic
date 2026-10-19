@@ -276,6 +276,7 @@ export const agentRunOf = (device: string): AgentRun | undefined => {
         waiting: record.waiting,
         links: record.links,
         failure: record.failure,
+        startedAt: record.askedAt,
     };
 };
 

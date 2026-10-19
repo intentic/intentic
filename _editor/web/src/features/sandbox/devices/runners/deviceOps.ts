@@ -5,6 +5,7 @@ import { rollbackToPrompt, sandboxVerbPrompt, VERB_LABEL } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref, ref } from "vue";
 import { type Operation, useOperations } from "../../../../workbench/operations/operations";
+import { opsScope, ROW } from "./deviceOpKeys";
 import { agentFallback, sandboxFallback, syncFallback } from "./deviceFallback";
 import { agentRefusal, type AgentRun, type LinksAsked } from "./agentRun";
 import { type DeviceUpdateRun, foldUpdateLine, isStagedVerb, settleUpdateRun, startUpdateRun } from "./deviceUpdateStages";
@@ -394,9 +395,8 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     // Every run on this machine, under one scope per sandbox so another sandbox's page never reads it: a container
     // verb under its row, a removal or a batch under the list, a switch under the control that was pressed, a revoke
     // under the environment's access. The newest run is the page's one answer line, as a single slot always was.
-    const scope = (): string => `devices/${machine().key}/ops`;
+    const scope = (): string => opsScope(machine().key);
     const ops = useOperations<OpOutcome | undefined, OpFailure, DeviceProgress>(scope);
-    const ROW = (group: DeviceSandboxGroup): string => `row/${group.sandboxId}`;
     const LIST = `list`;
     const SYNC = (key: string): string => `sync/${key}`;
     const ACCESS = (key: string): string => `access/${key}`;

@@ -3,6 +3,7 @@ import { DETACHED_AFTER_MS } from "../overview/availability";
 import type { ConnectionFailure } from "../../../client/sandbox/connection";
 import { RESTART_PATIENCE_MS, type RestartQuiet } from "../../../models/sandbox/live/sandboxRestart";
 import { t } from "@intentic/ui/i18n";
+import type { WaitExpectation } from "../../../components/waitProgress";
 
 // What the connecting gate says, as a pure function of the classified failure and what the platform knows, so setup,
 // reconnect, sign-in, removal and blocked causes each get their own words and action instead of one generic screen.
@@ -28,6 +29,12 @@ export const JUST_SET_UP_PATIENCE_MS = 2 * 60_000;
 // A detached sandbox's verdict is held for DETACHED_AFTER_MS (availability.ts) before it is spoken: a container that
 // restarts is detached for a few seconds, and the gate's words and the switcher's dot change their mind together.
 
+// How long the waits this file names usually take, told beside how long they have run (components/WaitProgress.vue).
+// A reconnect to a sandbox that is up answers within seconds; a fresh one routes through its edge in under a minute.
+export const USUAL_RECONNECT_MS = 20_000;
+// A swap of the container, which every restart this browser asked for ends in (sandboxRestart.ts): about half a minute.
+export const USUAL_RESTART_MS = 30_000;
+
 // Which affordance to offer, with its words; one value so a gate can't mix the setup door with sign-in text.
 export type ConnectionAction =
     | { readonly kind: "setup"; readonly label: string }
@@ -43,6 +50,9 @@ export interface ConnectionNotice {
     // Whether something is still expected to happen on its own. The spinner reads this and nothing else: a spinner over
     // a sandbox that was deleted is the bug this file exists to end.
     readonly waiting: boolean;
+    // A wait's own clock, drawn under the sentence: how long it has run, how long it usually takes, and when the gate
+    // stops waiting. Only a waiting notice has one.
+    readonly wait?: WaitExpectation | undefined;
 }
 
 export interface ConnectionNoticeInput {
@@ -79,13 +89,14 @@ export interface ConnectionNoticeInput {
 
 // The patient wait, in the three shapes the browser can observe; split out since the caller now has a decision to
 // make first.
-const waitingNotice = (kind: "timeout" | "closed" | "network" | "detached", name: string): ConnectionNotice => {
+const waitingNotice = (kind: "timeout" | "closed" | "network" | "detached", name: string, wait: WaitExpectation): ConnectionNotice => {
     if (kind === `timeout`) {
         return {
             title: t(`sandbox.connectionNotice.stillOpening`, { name }),
             body: t(`sandbox.connectionNotice.sandboxTakingLongerThan`),
             action: undefined,
             waiting: true,
+            wait,
         };
     }
     if (kind === `closed`) {
@@ -94,6 +105,7 @@ const waitingNotice = (kind: "timeout" | "closed" | "network" | "detached", name
             body: t(`sandbox.connectionNotice.sandboxStillGettingReady`),
             action: undefined,
             waiting: true,
+            wait,
         };
     }
     return {
@@ -101,6 +113,7 @@ const waitingNotice = (kind: "timeout" | "closed" | "network" | "detached", name
         body: t(`sandbox.connectionNotice.waitingSandboxToAnswer`),
         action: undefined,
         waiting: true,
+        wait,
     };
 };
 
@@ -220,9 +233,12 @@ export const stalledBody = (path: string | undefined): string | undefined => {
 
 // The wait that has stopped being one, on either lane. Nothing is diagnosed: the machine we run can be looked at, and
 // the machine somebody else runs is theirs to look at, which is exactly what each sentence says.
+// How long a silence nobody can account for is still called a wait, on either lane.
+const stuckPatience = (input: ConnectionNoticeInput): number =>
+    Math.max(input.hostedMachine ? HOSTED_STUCK_AFTER_MS : OWN_STUCK_AFTER_MS, input.justSetUp === true ? JUST_SET_UP_PATIENCE_MS : 0);
+
 const stuckNotice = (input: ConnectionNoticeInput, name: string): ConnectionNotice | undefined => {
-    const patience = Math.max(input.hostedMachine ? HOSTED_STUCK_AFTER_MS : OWN_STUCK_AFTER_MS, input.justSetUp === true ? JUST_SET_UP_PATIENCE_MS : 0);
-    if (input.outageMs < patience) {
+    if (input.outageMs < stuckPatience(input)) {
         return undefined;
     }
     const stalled = stalledBody(input.stalledPath);
@@ -258,7 +274,13 @@ const stuckNotice = (input: ConnectionNoticeInput, name: string): ConnectionNoti
 const restartNotice = (input: ConnectionNoticeInput): ConnectionNotice | undefined =>
     input.restart === undefined || input.outageMs >= RESTART_PATIENCE_MS
         ? undefined
-        : { title: input.restart.title, body: input.restart.detail, action: undefined, waiting: true };
+        : {
+              title: input.restart.title,
+              body: input.restart.detail,
+              action: undefined,
+              waiting: true,
+              wait: { elapsedMs: input.outageMs, typicalMs: USUAL_RESTART_MS, giveUpMs: RESTART_PATIENCE_MS },
+          };
 
 // The network-shaped causes read as one thing (a wait) while waiting can still fix them, then as the most specific
 // thing established about them. A refused wake outranks everything, at any age.
@@ -269,7 +291,12 @@ const networkNotice = (input: ConnectionNoticeInput, kind: "timeout" | "closed" 
     input.diagnosed ??
     detachedNotice(input, name) ??
     stuckNotice(input, name) ??
-    waitingNotice(kind, name);
+    waitingNotice(kind, name, {
+        elapsedMs: input.outageMs,
+        typicalMs: USUAL_RECONNECT_MS,
+        // The edge's verdict on a sandbox of somebody's own machine is spoken sooner than any silence (detachedNotice).
+        giveUpMs: kind === `detached` && !input.hostedMachine ? DETACHED_AFTER_MS : stuckPatience(input),
+    });
 
 // The causes that are one fixed sentence whatever else is true, as a table — so the function below holds only the
 // decisions that need one, and a new cause cannot be added without giving it words.
@@ -315,11 +342,14 @@ export const connectionNotice = (input: ConnectionNoticeInput): ConnectionNotice
         failure?.kind === `unaddressed` &&
         ((input.claimed === true && input.outageMs < UNADDRESSED_PATIENCE_MS) || (input.justSetUp === true && input.outageMs < JUST_SET_UP_PATIENCE_MS));
     if (failure === undefined || (addressComing && input.removed !== true)) {
+        // Nothing has failed on a first attempt, so there is no outage to time; an address on its way has one.
+        const giveUpMs = input.justSetUp === true ? JUST_SET_UP_PATIENCE_MS : UNADDRESSED_PATIENCE_MS;
         return {
             title: t(`sandbox.connectionNotice.connectingTo`, { name }),
             body: t(`sandbox.connectionNotice.sandboxReportedInOpening`),
             action: undefined,
             waiting: true,
+            wait: failure === undefined ? undefined : { elapsedMs: input.outageMs, typicalMs: USUAL_RECONNECT_MS, giveUpMs },
         };
     }
     // Ahead of every arm below, including `unaddressed`: a removed sandbox has no address precisely BECAUSE it was

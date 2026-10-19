@@ -1,12 +1,16 @@
 import type { HostReport } from "@intentic/api-contract";
 import type { Diagnosis } from "./diagnose";
-import { BUSY_RESTART_AFTER_MS, findingsOf, presentDiagnosis, type PresentationInput } from "./presentation";
+import { ASLEEP_WAKE_PATIENCE_MS, FIXED_PATIENCE_MS, HOSTED_COLD_PATIENCE_MS, HOSTED_WARM_PATIENCE_MS } from "./diagnose";
+import { BUSY_RESTART_AFTER_MS, findingsOf, presentDiagnosis, type PresentationInput, USUAL_MS } from "./presentation";
 
 // What each diagnosis says and offers. The rule under test throughout: at most one thing to press, and nothing to press
 // while waiting is still the answer.
 
+// The report fixtures below are written at this instant; `now` sits a minute after it unless a case moves it.
+const REPORTED_AT = Date.parse(`2026-09-30T10:00:00.000Z`);
+
 const present = (diagnosis: Diagnosis, over: Partial<PresentationInput> = {}) =>
-    presentDiagnosis({ diagnosis, name: `acme`, lane: `own`, owner: true, canRollBack: false, ...over });
+    presentDiagnosis({ diagnosis, name: `acme`, lane: `own`, owner: true, canRollBack: false, outageMs: 20_000, now: REPORTED_AT + 60_000, ...over });
 
 const report = (over: Partial<HostReport> = {}): HostReport => ({
     source: `agent`,
@@ -151,5 +155,55 @@ describe(`a wait said at once`, () => {
         expect(present({ kind: `checking` }).sayAtOnce).toBe(false);
         expect(present({ kind: `busy`, vitals: undefined, longMs: 0 }).sayAtOnce).toBe(false);
         expect(present({ kind: `not-dialled`, patient: false, lastReport: undefined }).sayAtOnce).toBe(false);
+    });
+});
+
+// Every wait that ends by itself says how long it has run, how long it usually takes, and when the screen gives up on
+// it, on the same clock the diagnosis gives up on: the time the words promise is the time the way back appears.
+describe(`a wait's own clock`, () => {
+    it(`times a machine's "fixed" from its report, and gives the sandbox as long to dial in as the diagnosis does`, () => {
+        const fixed = report({ outcome: `fixed`, checks: [] });
+        const shown = present({ kind: `machine`, report: fixed, standing: `fixed` }, { outageMs: 600_000 });
+        expect(shown).toMatchObject({ title: `rog fixed acme`, waiting: true });
+        expect(shown.body).toContain(`reconnects by itself`);
+        expect(shown.wait).toEqual({ elapsedMs: 60_000, typicalMs: USUAL_MS.fixed, giveUpMs: FIXED_PATIENCE_MS });
+    });
+
+    it(`gives a sleeping sandbox about a minute, and the owner a way back once waking has taken too long`, () => {
+        const slept = report({ outcome: `healthy`, checks: [], asleep: true });
+        expect(present({ kind: `asleep`, report: slept, patient: true }).wait).toEqual({
+            elapsedMs: 20_000,
+            typicalMs: USUAL_MS.asleep,
+            giveUpMs: ASLEEP_WAKE_PATIENCE_MS,
+        });
+        // Past its patience it is no longer a wait, and says so with a way back rather than a clock.
+        expect(present({ kind: `asleep`, report: slept, patient: false }).wait).toBeUndefined();
+    });
+
+    it(`expects a hosted machine from the warm pool in seconds and one built to order in minutes`, () => {
+        expect(present({ kind: `waking`, machine: `starting` }, { lane: `hosted`, warm: true }).wait).toMatchObject({
+            typicalMs: USUAL_MS.wakingWarm,
+            giveUpMs: HOSTED_WARM_PATIENCE_MS,
+        });
+        expect(present({ kind: `waking`, machine: `starting` }, { lane: `hosted`, warm: false }).wait).toMatchObject({
+            typicalMs: USUAL_MS.wakingCold,
+            giveUpMs: HOSTED_COLD_PATIENCE_MS,
+        });
+    });
+
+    it(`promises a busy sandbox's owner a restart after a while, and nobody else anything`, () => {
+        expect(present({ kind: `busy`, vitals: undefined, longMs: 60_000 }).wait).toEqual({ elapsedMs: 60_000, giveUpMs: BUSY_RESTART_AFTER_MS });
+        expect(present({ kind: `busy`, vitals: undefined, longMs: 60_000 }, { owner: false }).wait).toEqual({ elapsedMs: 60_000, giveUpMs: undefined });
+    });
+
+    it(`times a wait on this side's network without guessing how long it lasts`, () => {
+        expect(present({ kind: `offline` }).wait).toEqual({ elapsedMs: 20_000 });
+    });
+
+    it(`has no clock where it waits on the reader, or where waiting is over`, () => {
+        const asking = report({ stage: `asking`, outcome: undefined, doing: `Restart Docker Desktop?` });
+        expect(present({ kind: `machine`, report: asking, standing: `needs-you` }).wait).toBeUndefined();
+        expect(present({ kind: `crashing`, restarts: 4 }).wait).toBeUndefined();
+        expect(present({ kind: `silent`, patient: false }).wait).toBeUndefined();
     });
 });

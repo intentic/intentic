@@ -14,6 +14,8 @@ import { useWorkspaceState } from "../../features/extensions/useWorkspaceState";
 import { useRole } from "../../client/sandbox/useRole";
 import DependencyGraph from "./DependencyGraph.vue";
 import ResourceDetails from "./ResourceDetails.vue";
+import WaitProgress from "../../components/WaitProgress.vue";
+import { useBusySince, useWaitClock } from "../../components/useWaitClock";
 import { useT } from "@intentic/ui/i18n";
 
 // Plan-vs-reality board. Left: Planned, the resolved desired-state dependency graph, nodes colored by last
@@ -44,6 +46,9 @@ const liveActions = ref<PlanStep[]>([]);
 const liveOrphans = ref<PlanOrphan[]>([]);
 
 const loading = computed(() => wsLoading.value || appsLoading.value || checking.value);
+// The plan reads every live resource before it answers, all at once, so the only thing to show while it runs is what it
+// is doing and for how long.
+const checkWait = useWaitClock(useBusySince(checking));
 
 const convergence = computed(() => convergedBadge(state.value?.converged));
 
@@ -238,11 +243,8 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     <div class="mt-4 border-t border-line-subtle pt-3">
                         <div class="mb-2 flex items-center gap-2">
                             <h3 class="text-2xs font-semibold uppercase tracking-wide text-subtle/70">{{ t(`views.liveStatusView.liveCheck`) }}</h3>
-                            <template v-if="checking">
-                                <Icon name="spinner" class="text-2xs text-info" spin />
-                                <span class="text-2xs text-subtle">{{ t(`views.liveStatusView.readingLiveInfrastructure`) }}</span>
-                            </template>
                         </div>
+                        <WaitProgress v-if="checking && checkWait" :wait="checkWait" :what="t(`views.liveStatusView.readingLiveInfrastructure`)" />
                         <Notice v-if="liveError" :of="liveError" />
                         <div v-else-if="liveRan && !checking" class="flex flex-col gap-1.5">
                             <PlanStepRow v-for="item in liveActions" :key="item.id" :id="item.id" :action="item.action" :reason="item.reason" />

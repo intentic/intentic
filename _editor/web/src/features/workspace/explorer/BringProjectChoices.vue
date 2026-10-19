@@ -6,6 +6,9 @@ import { Button, Notice, vAction } from "@intentic/ui";
 import { useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { useAddRepo } from "./useAddRepo";
+import { repoNameFromUrl } from "../health/repoName";
+import WaitProgress from "../../../components/WaitProgress.vue";
+import { useWaitClock } from "../../../components/useWaitClock";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -14,7 +17,11 @@ const router = useRouter();
 // `pick` opens the page's file picker; `done` says something was started, so a dialog around this can close.
 const emit = defineEmits<{ pick: []; done: [] }>();
 
-const { addRepo, cloning, failure: cloneNotice, url: cloningUrl } = useAddRepo();
+const { addRepo, cloning, failure: cloneNotice, url: cloningUrl, startedAt: cloneStartedAt } = useAddRepo();
+// The daemon runs `git clone` to the end in one request, so there is no progress to read: only how long it has run,
+// and what it is, said beneath the held button.
+const cloneWait = useWaitClock(cloneStartedAt);
+const cloningName = computed(() => repoNameFromUrl(cloningUrl.value ?? ``));
 // Clone form opens inline instead of on its own route. A pane that comes back over a clone still running, or one that
 // failed while it was away, opens on it with the address it was given.
 const cloneOpen = ref(cloning.value || cloneNotice.value !== undefined);
@@ -83,6 +90,7 @@ const connectHost = (): void => {
                         }}
                     </Button>
                 </div>
+                <WaitProgress v-if="cloneWait" :wait="cloneWait" :what="t(`workspace.bringProject.cloningWhat`, { name: cloningName })" />
                 <!-- Message comes from the daemon's refusal, not guessed ahead of it. -->
                 <Notice v-if="cloneNotice !== undefined" :of="cloneNotice" />
                 <p class="text-2xs text-subtle">{{ t(`workspace.bringProject.publicNeedsNoAccount`) }}</p>

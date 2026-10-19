@@ -65,15 +65,12 @@ const unavailableTip = computed(() =>
                 class="shrink-0 text-2xs text-warning"
                 :aria-label="t(`sandbox.discoverCard.wontLoad`)"
             />
-            <!-- Where it stands here, after what it is: one glyph, the one that changes what a press leads to. -->
-            <Icon
-                v-if="installing"
-                name="spinner"
-                spin
-                class="shrink-0 text-2xs text-muted"
-                role="status"
-                :aria-label="listing.state.kind === `update` ? t(`sandbox.discoverCard.updating`) : t(`sandbox.discoverCard.installing`)"
-            />
+            <!-- Where it stands here, after what it is: one glyph, the one that changes what a press leads to. A running
+                 install also says so in words, since a bare spinner on a tile reads as the tile loading. -->
+            <span v-if="installing" class="flex shrink-0 items-center gap-1 text-2xs text-muted" role="status">
+                <Icon name="spinner" spin aria-hidden="true" />
+                {{ listing.state.kind === `update` ? t(`sandbox.discoverCard.updating`) : t(`sandbox.discoverCard.installing`) }}
+            </span>
             <Icon
                 v-else-if="listing.state.kind === `installed`"
                 v-tooltip.top="t(`sandbox.discoverCard.installed`)"

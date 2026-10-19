@@ -165,6 +165,12 @@ flowchart LR
   (or `intentic://fix` in the desktop app). The recovery panel (`gates/SandboxRecovery.vue`) shows when the diagnosis
   found a way back, never on a timer: inside the connecting gate on a screen with nothing to paint yet, and as a card
   in the notification lane everywhere else. Both read one answer to which screen that is (`gates/established.ts`).
+  Every wait that ends by itself carries its own clock (`components/WaitProgress.vue`, `waitProgress.ts`): an estimated
+  bar drawn from how long that kind of wait usually takes (`USUAL_MS` in `presentation.ts`), how long it has run, and
+  when the screen stops waiting, which is the diagnosis's own patience constant, so the time the words promise is the
+  time the way back appears. The raw facts behind the sentence (`diagnosis/details.ts`: the failure, the probes, the
+  machine's report check by check) sit behind "Technical details". The same component times other long presses
+  (`components/useWaitClock.ts`).
   _2026-09-30: replaced a panel that appeared after two minutes of silence with three commands (restart, rollback,
   doctor) for the reader to choose between. It was shown to sandboxes that were only busy, and the choice was the
   reader's to get right._

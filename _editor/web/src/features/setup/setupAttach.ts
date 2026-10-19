@@ -7,7 +7,7 @@ import { normalizeDaemonUrl } from "../../lib/daemonUrl";
 // (authorized: also performs the daemon's first-use owner bind).
 
 // Bounds the probe; without it a dead tunnel hangs on the browser's own multi-minute connect timeout.
-const PROBE_TIMEOUT_MS = 10_000;
+export const PROBE_TIMEOUT_MS = 10_000;
 
 // Edge-up-but-nothing-behind statuses; Cloudflare's 530 usually means the container is gone.
 const NO_ORIGIN_STATUSES = new Set([502, 503, 504, 521, 522, 523, 530]);

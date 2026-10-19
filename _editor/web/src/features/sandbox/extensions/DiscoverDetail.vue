@@ -4,6 +4,10 @@ import { computed, ref } from "vue";
 import CatalogDetail from "../../../components/CatalogDetail.vue";
 import { type DiscoverListing, type InstallOutcome, splitListingName } from "../../../models/sandbox/discoverListing";
 import DiscoverTrust from "./DiscoverTrust.vue";
+import { INSTALLS } from "./installsInFlight";
+import { operationAt } from "../../../workbench/operations/operations";
+import WaitProgress from "../../../components/WaitProgress.vue";
+import { useWaitClock } from "../../../components/useWaitClock";
 import { useT } from "@intentic/ui/i18n";
 
 // One listing, read before it's run, opened where the Browse grid stood, the way Capabilities opens a tile: where this
@@ -79,6 +83,14 @@ const badge = computed<{ variant: StatusVariant; label: string } | undefined>(()
             return undefined;
     }
 });
+// The install or update running for this listing, read off the ledger (installsInFlight.ts): a clone and an install
+// out in the sandbox, which on a big extension takes minutes. Said beneath the held button with how long it has run.
+const run = computed(() => (installing ? operationAt(`${INSTALLS}/${listing.entry.name}`) : undefined));
+const installWait = useWaitClock(() => (run.value?.state === `running` ? run.value.startedAt : undefined));
+const installWhat = computed(() =>
+    listing.state.kind === `update` ? t(`sandbox.discoverDetail.updatingWhat`) : t(`sandbox.discoverDetail.installingWhat`),
+);
+
 const actionLabel = computed(() => {
     if (!unaudited.value) {
         return listing.state.action;
@@ -157,6 +169,7 @@ const actionLabel = computed(() => {
             </label>
 
             <Notice v-if="failure" :of="failure" />
+            <WaitProgress v-if="installWait" :wait="installWait" :what="installWhat" :details="run?.lines ?? []" />
             <p v-if="listing.state.action !== undefined && !canInstall" class="text-2xs text-subtle">
                 {{ t(`sandbox.discoverDetail.onlySandboxOwnerInstall`) }}
             </p>

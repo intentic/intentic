@@ -103,6 +103,7 @@ it(`keeps an agent update in flight past its call, until a reading shows a new p
         waiting: WAITING,
         links: undefined,
         failure: undefined,
+        startedAt: expect.any(Number),
     });
 
     // The same processes answering: nothing has been replaced yet.
