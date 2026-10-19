@@ -212,7 +212,7 @@ const describe = (token: ControlTokenSummary): string =>
 </script>
 
 <template>
-    <RowGroup v-if="canShip" data-setting="access-api-tokens" :label="t(`shared.apiTokens`)" :count="tokens.length === 0 ? undefined : tokens.length">
+    <RowGroup v-if="canShip" data-setting="access-api-tokens" :label="t(`shared.apiTokens`)">
         <template #actions>
             <Button v-if="!creating" :label="t(`sandbox.controlTokensSection.newToken`)" size="small" tier="boring" @click="startCreate">
                 <template #icon><Icon name="plus" /></template>
