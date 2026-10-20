@@ -312,7 +312,7 @@ watch(item, async (found) => {
                     @close="pick(`all`)"
                 />
                 <RequestsView v-else-if="onRequests" :requests="requests" :items="items" :port="port" :now="now" @answered="state.load()" />
-                <div v-else ref="body" class="flex min-h-0 flex-1 gap-6">
+                <div v-else ref="body" class="relative flex min-h-0 flex-1 gap-6">
                     <div v-if="showList" class="flex min-h-0 flex-col" :class="narrow ? `flex-1` : `w-80 shrink-0`">
                         <PasswordList :items="visible" :selected="selected" :recent="recent" :empty="emptyText" @select="select" @open="open" @review="pick(`fresh`)" />
                     </div>
@@ -333,7 +333,7 @@ watch(item, async (found) => {
                                 @changed="state.load()"
                             />
                         </template>
-                        <p v-else class="m-auto text-sm text-subtle">{{ t(`app.list.nothingSelected`) }}</p>
+                        <p v-else class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-subtle">{{ t(`app.list.nothingSelected`) }}</p>
                     </div>
                 </div>
             </template>
