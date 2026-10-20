@@ -3,11 +3,11 @@ import { browserOwnsClick, SearchBar, type Tip, useDevice, useListNavigation } f
 import { computed, nextTick, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { capabilitiesOf, PROVIDERS, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { capabilitiesOf, isTrialProvider, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { accessBadge, accessStateFor, providerReady, trialBadge } from "../../../models/providers/access";
 import { formatReset } from "../../../models/providers/usageStatus";
 import { badgeMeta } from "./catalog";
-import { acpProviders, type CatalogLoadState, endpointProviders, providerModelsState } from "../../../models/providers/providerCatalog";
+import { type CatalogLoadState, providerModelsState } from "../../../models/providers/providerCatalog";
 import {
     customEntryFor,
     filterEntries,
@@ -17,6 +17,7 @@ import {
     type PickerEntry,
     type PickerLane,
     lanesOf,
+    offeredProviders,
     pickerBlocks,
     pickerEntries,
     pickerSections,
@@ -75,14 +76,9 @@ const isLead = (entry: PickerEntry): boolean => (leadRows ?? []).some((lead) => 
 const leadAwareReady = (candidate: AgentProvider): boolean =>
     (leadRows ?? []).some((entry) => entry.provider === candidate) || providerReady(candidate);
 
-// Rail lanes: native providers, then endpoints and ACP agents, folded by the same rule the sections use.
-const railLanes = computed<readonly PickerLane[]>(() =>
-    lanesOf([
-        ...PROVIDERS.map((option) => option.value),
-        ...endpointProviders.value.map((endpoint) => endpoint.id),
-        ...acpProviders.value.map((agent) => agent.id),
-    ]),
-);
+// Rail lanes: the providers the sections offer (a retired trial drops out of both), folded by the same rule.
+const offered = computed(() => offeredProviders(provider, providerReady));
+const railLanes = computed<readonly PickerLane[]>(() => lanesOf(offered.value));
 
 // The free sign-in's chip is lit only for a reader who has connected nothing; after that it states its price in the
 // same quiet chip as every other locked row.
@@ -150,7 +146,9 @@ const sections = computed<
     if (searching.value) {
         // Lead rows search alongside the catalog rather than being pinned through a query: somebody typing a model
         // name is asking for that model, not for the mode sitting above it.
-        const matched = filterEntries([...(leadRows ?? []), ...pickerEntries.value], query.value, rail.value, leadAwareReady, isOlderEntry);
+        // A retired trial is not found by name either; every other row keeps search's whole-catalogue reach.
+        const catalog = pickerEntries.value.filter((entry) => !isTrialProvider(entry.provider) || offered.value.includes(entry.provider));
+        const matched = filterEntries([...(leadRows ?? []), ...catalog], query.value, rail.value, leadAwareReady, isOlderEntry);
         // Ranked hits first, custom entry last, so Enter takes the real match; search stays flat, no family folding.
         const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);
         return [flatSection(`search`, rows)];

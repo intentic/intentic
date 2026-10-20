@@ -11,8 +11,10 @@ import {
     lanesOf,
     type PickerEntry,
     pickerBlocks,
+    offeredProviders,
     pickerSections,
     promotesFreeAccess,
+    retiresTrial,
 } from "./modelPickerState";
 import { endpointProviders, LOCAL_MODELS_GROUP } from "../../providers/providerCatalog";
 
@@ -312,6 +314,36 @@ test("promotes free access only while nothing but the free trial is ready", () =
     expect(promotesFreeAccess([`claude`, `gemini`, TRIAL_PROVIDER], readyOnly(`claude`))).toBe(false);
     // Google itself connected: nothing left to promote.
     expect(promotesFreeAccess([`claude`, `gemini`, TRIAL_PROVIDER], readyOnly(`gemini`))).toBe(false);
+});
+
+// The trial is the floor under nothing connected. Once the reader's own account runs, its chip only crowded the rail
+// past the picker's width; a local model alone is no substitute, so it keeps the trial on offer.
+describe("retiring the free trial", () => {
+    const LOCAL = `endpoint/ollama-a`;
+    beforeEach(() => {
+        endpointProviders.value = [
+            { id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` },
+            { id: LOCAL, label: `Ollama A`, kind: `localmodel` },
+        ];
+    });
+
+    test("keeps the trial while only it or a local model can run", () => {
+        expect(retiresTrial([TRIAL_PROVIDER, LOCAL, `claude`], readyOnly(TRIAL_PROVIDER, LOCAL))).toBe(false);
+        expect(offeredProviders(`claude`, readyOnly(LOCAL))).toContain(TRIAL_PROVIDER);
+    });
+
+    test("drops the trial from the rail and the list once an account of the reader's own runs", () => {
+        const ready = readyOnly(`claude`, TRIAL_PROVIDER);
+
+        expect(offeredProviders(`claude`, ready)).not.toContain(TRIAL_PROVIDER);
+        expect(pickerSections(MIXED, `claude`, undefined, ready).map((section) => section.key)).not.toContain(TRIAL_PROVIDER);
+    });
+
+    test("keeps a retired trial while the conversation is on it", () => {
+        const ready = readyOnly(`claude`, TRIAL_PROVIDER);
+
+        expect(pickerSections(MIXED, TRIAL_PROVIDER, undefined, ready)[0]?.key).toBe(TRIAL_PROVIDER);
+    });
 });
 
 test("ranks a runnable match above a locked one, however well the locked id matched", () => {

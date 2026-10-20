@@ -8,6 +8,7 @@ import {
     type ModelOption,
     acpProviders,
     endpointProviders,
+    isLocalModelProvider,
     modelOptionsFor,
     newerVersionOf,
     providerGroup,
@@ -239,12 +240,29 @@ const accessRank = (provider: AgentProvider): number => {
 export const promotesFreeAccess = (providers: readonly AgentProvider[], isReady: (provider: AgentProvider) => boolean): boolean =>
     !providers.some((provider) => !isTrialProvider(provider) && isReady(provider));
 
+// Whether the free trial has done its job: an account, a key or an agent of the reader's own can run here. A local
+// model alone does not retire it (small weights are no substitute for a frontier model), and neither does the trial
+// itself. Retired, it leaves the rail and the list: one more chip there pushed the rail past the picker's width.
+export const retiresTrial = (providers: readonly AgentProvider[], isReady: (provider: AgentProvider) => boolean): boolean =>
+    providers.some((provider) => !isTrialProvider(provider) && !isLocalModelProvider(provider) && isReady(provider));
+
+// Every provider the picker offers, in PROVIDERS order then endpoints then ACP agents: the one list the rail and the
+// sections both read. A retired trial stays only while it is the conversation's own pick, which the list must show.
+export const offeredProviders = (activeProvider: AgentProvider, isReady: (provider: AgentProvider) => boolean): readonly AgentProvider[] => {
+    const providers: AgentProvider[] = [
+        ...PROVIDERS.map((option) => option.value),
+        ...endpointProviders.value.map((endpoint) => endpoint.id),
+        ...acpProviders.value.map((agent) => agent.id),
+    ];
+    return retiresTrial(providers, isReady) ? providers.filter((provider) => !isTrialProvider(provider) || provider === activeProvider) : providers;
+};
+
 export interface PickerSection extends PickerLane {
     readonly groups: readonly FamilyGroup[];
     readonly total: number;
 }
 
-// One section per lane (respecting `rail`): active provider's lane first, then connected providers, then locked
+// One section per lane (respecting `rail`) over offeredProviders: active provider's lane first, then connected providers, then locked
 // ones, cheapest first until something is connected (promotesFreeAccess), in PROVIDERS order after. Empty sections are
 // kept for the component's loading/error/empty row.
 export const pickerSections = (
@@ -253,11 +271,7 @@ export const pickerSections = (
     rail: string | undefined,
     isReady: (provider: AgentProvider) => boolean,
 ): readonly PickerSection[] => {
-    const providers: AgentProvider[] = [
-        ...PROVIDERS.map((option) => option.value),
-        ...endpointProviders.value.map((endpoint) => endpoint.id),
-        ...acpProviders.value.map((agent) => agent.id),
-    ];
+    const providers = offeredProviders(activeProvider, isReady);
     // Active provider leads regardless of connection; then connected first; cost only ranks within the locked band,
     // and only for a reader who has connected nothing yet.
     const byCost = promotesFreeAccess(providers, isReady);
