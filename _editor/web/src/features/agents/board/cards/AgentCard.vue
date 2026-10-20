@@ -37,7 +37,8 @@ import { attentionReason, retryLand, reviewAction, reviewBesideDrill, workspaceO
 import { cardFailure, type FamilyChip, type StandingChip, standingChip } from "../../../../models/agent-status/agentStatus-chips";
 import { type FleetLane, laneOf, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { activityLine, agentDisplayTitle, agentStandingMeta, contextPct, cornerInk, loopMeta } from "../../../../models/agent-status/agentStatus-meta";
-import { conflictIsYours, limited, limitScheduled, scheduledCount, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
+import { conflictIsYours, goesBySelf, limited, turnWorking, unregistered } from "../../../../models/agent-status/agentStatus-standing";
+import { bookedGroups } from "../../../../models/conversations/drafts/bookings";
 import { landedAway, landedDelivery } from "../../fleet/agentStatus-land";
 import CardStamps from "../../../../parts/fleet/CardStamps.vue";
 import { useCardStamps } from "../../../../models/fleet/board/useCardStamps";
@@ -205,7 +206,7 @@ const familyRows = computed(() => (takesFamily.value ? [{ label: t(`agents.words
 // Everything is kept, except what would go by itself: a message scheduled in it is cancelled (the sandbox's archive.ts),
 // since at its time it would only meet a conversation filed away. Said before the press, as the one thing it loses.
 const archiveHint = computed((): Tip => {
-    const cancels = scheduledCount(props.agent);
+    const cancels = bookedGroups(props.agent.queue).reduce((count, group) => count + group.messages.length, 0);
     return {
         title: t(`agents.agentCard.archive`),
         rows: familyRows.value,
@@ -218,13 +219,12 @@ const enterKey = formatChord(`enter`, isApplePlatform());
 // Drill-in label, undefined for a draft (nothing to review); desktop only, since a mobile tap navigates there.
 const review = computed(() => (mobile.value ? undefined : reviewAction(props.agent)));
 // A turn a spent allowance stranded, sent again from the card: offered only where that is still the reader's press to
-// make. Not once a resend or a move is booked, which goes by itself (limitScheduled: the card has left Attention for
-// that reason, and its corner already says when it goes; the chat keeps its own press for going sooner). Not in the
-// archive, where every press waits for a restore (a resend would un-archive it as a side effect, as a resolve would),
-// and not on another sandbox's card: the resend addresses this sandbox's daemon, which holds no such turn.
+// make. Not once something carries it on by itself (`next`: the card has left Attention for that reason, and its corner
+// says when it goes; the chat keeps its own press for going sooner). Not in the archive, where every press waits for a
+// restore (a resend would un-archive it as a side effect), nor on another sandbox's card, whose daemon holds no such turn.
 const resendable = computed(
     () =>
-        limited(props.agent) && props.agent.limitHeld === true && !limitScheduled(props.agent) && props.agent.archivedAt === undefined && localOnly.value,
+        limited(props.agent) && props.agent.limitHeld === true && !goesBySelf(props.agent) && props.agent.archivedAt === undefined && localOnly.value,
 );
 // The drill-in is the Attention card's way on, spelled out in the summary row (a header icon on every other lane),
 // unless Send again holds that seat. Nothing is lost there: a stranded card's drill-in is "Open chat" (drillTarget),
@@ -715,7 +715,7 @@ const grab = (event: PointerEvent): void => {
                 >
             </p>
             <p v-else-if="match !== undefined" class="flex min-w-0 items-start gap-2 text-2xs text-muted" :class="dense ? 'w-full' : ''">
-                <Icon name="search" class="mt-px shrink-0 text-2xs text-subtle" />
+                <Icon name="search" class="shrink-0 text-2xs text-subtle" />
                 <MatchLine :snippet="match" :needle="needle" :match-case="matchCase" class="line-clamp-2 min-w-0 flex-1 leading-4" />
             </p>
 
@@ -746,7 +746,7 @@ const grab = (event: PointerEvent): void => {
                 data-reach
                 v-tooltip.top.lines="reach.detail"
             >
-                <Icon :name="reach.tone === `warning` ? `exclamation-triangle` : `cloud-upload`" class="mt-px shrink-0 text-2xs" />
+                <Icon :name="reach.tone === `warning` ? `exclamation-triangle` : `cloud-upload`" class="shrink-0 text-2xs" />
                 <span class="line-clamp-2 min-w-0 flex-1 leading-4">{{ reach.text }}</span>
             </p>
 
@@ -828,7 +828,7 @@ const grab = (event: PointerEvent): void => {
 
             <!-- Same seat, the refusals the agent cannot touch: a fact, not a press. Nothing on the card can commit the edits in its way, a button that only changed the view read as one that did nothing, and the card leaves this seat by itself once they are committed. The footer's review link names the files. -->
             <p v-else-if="yoursToClear" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
-                <Icon name="file-edit" class="mt-0.5 shrink-0 text-2xs text-warning" /><span class="min-w-0">{{
+                <Icon name="file-edit" class="shrink-0 text-2xs text-warning" /><span class="min-w-0">{{
                     overlapLine ?? (settingsPages === undefined ? words.clearYoursHint : t(`agents.agentCard.settingsNotSaved`, { pages: settingsPages }))
                 }}</span>
             </p>
@@ -841,7 +841,7 @@ const grab = (event: PointerEvent): void => {
                     class="inline-flex shrink-0 items-start gap-1.5 text-2xs leading-snug"
                     :class="away.offerReland ? `text-warning` : `text-muted`"
                 >
-                    <Icon :name="away.icon" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0"
+                    <Icon :name="away.icon" class="shrink-0 text-2xs" /><span class="min-w-0"
                         >{{ away.text
                         }}<template v-if="away.hint !== undefined">
                             <span class="text-subtle"> ({{ away.hint }})</span></template
@@ -872,7 +872,7 @@ const grab = (event: PointerEvent): void => {
                 class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug"
                 :class="delivery.warm ? `text-warning` : `text-muted`"
             >
-                <Icon :name="delivery.icon" class="mt-0.5 shrink-0 text-2xs" /><span class="line-clamp-2 min-w-0">{{ delivery.text }}</span>
+                <Icon :name="delivery.icon" class="shrink-0 text-2xs" /><span class="line-clamp-2 min-w-0">{{ delivery.text }}</span>
             </p>
 
             <!-- Land now, or Review & land ahead of it, or a collaborator's Request land (CardLandPresses). -->

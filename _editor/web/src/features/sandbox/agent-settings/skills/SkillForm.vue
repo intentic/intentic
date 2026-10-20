@@ -55,7 +55,7 @@ const save = (): void => {
 <template>
     <div class="flex flex-col gap-4">
         <div class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.skillForm.called`) }}</span>
+            <span class="ui-field-label">{{ t(`sandbox.skillForm.called`) }}</span>
             <input
                 :value="name"
                 type="text"
@@ -76,7 +76,7 @@ const save = (): void => {
 
         <!-- The field most likely to be typed carelessly, and the only one whose carelessness is invisible afterward. -->
         <div class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.skillForm.toUse`) }}</span>
+            <span class="ui-field-label">{{ t(`sandbox.skillForm.toUse`) }}</span>
             <div class="ui-field-shell px-0.5 py-1" :class="{ 'opacity-50': disabled }">
                 <ProseField
                     v-model="description"
@@ -92,7 +92,7 @@ const save = (): void => {
         </div>
 
         <div class="flex flex-col gap-1.5">
-            <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.skillForm.whatShouldDo`) }}</span>
+            <span class="ui-field-label">{{ t(`sandbox.skillForm.whatShouldDo`) }}</span>
             <!-- No Write/Preview toggle: markup shows only in the block holding the caret. -->
             <div class="ui-field-shell p-3" :class="{ 'opacity-50': disabled }" style="--prose-measure: 76ch">
                 <MarkdownDocument

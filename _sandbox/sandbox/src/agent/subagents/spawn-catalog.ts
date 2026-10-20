@@ -3,25 +3,26 @@ import type { AgentLoop, AgentProvider } from "@intentic/sandbox-contract/schema
 import { loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
     bindingWindow,
+    fleetCapacity,
     gatingWindows,
     SPENT_UTILIZATION,
     type ModelRef,
     type RefusalsOnFile,
+    type ServiceFacts,
     serviceStates,
 } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Model } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import type { Services } from "../../composition.js";
-import { askableLimit, type FleetReading, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
-import { observedOwnLimit } from "../../usage/observed-accounts.js";
 import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
 import { poolName, type RunOut } from "../../usage/run-outs.js";
 import { runningOn } from "../run/turn/turn-pulse.js";
 
 // What a parent may spend on a child right now: connected providers, their models' headroom, and how much. Reads happen
-// once per provider, not per model. Three states: measured with room, measured full (left out), or unmeasured (marked
-// unmetered); this is advice, not a whitelist, nothing validates a spawn against it.
+// once per provider, not per model, and every model is judged by the one rule the spawn gate, the role ladder and the
+// picker read (plan-pools.ts fleetCapacity): servable with room measured, servable unmeasured (marked unmetered), or
+// spent (left out, by name). The gate refuses a spawn the same rule calls spent (child-listing.ts, spentRung).
 
 /** Remaining headroom in the pool gating this model, when the plan publishes one, and whose reading it is. */
 export interface ModelHeadroom {
@@ -82,25 +83,12 @@ export interface SpawnableProvider {
     readonly lastRunOut?: RunOut;
 }
 
-// Every connected account as the serviceability rule reads it, per provider, in as few round trips as there are
-// providers: Claude's with its seat marks and revokes (usage/serviceability.ts), the translator's four with their benches
-// in one management call. A provider absent from the map has nothing on file, read as unmetered rather than empty.
-const fleetReadings = async (services: Services): Promise<Map<AgentProvider, readonly FleetReading[]>> => {
-    const readings = new Map<AgentProvider, readonly FleetReading[]>();
-    const [claude, routed] = await Promise.all([accountFactsOf(services, "claude").catch(() => []), services.cliProxy.accounts().catch(() => undefined)]);
-    if (claude.length > 0) {
-        readings.set("claude", claude);
-    }
-    for (const [provider, accounts] of Object.entries(routed ?? {})) {
-        if (accounts.length > 0) {
-            readings.set(
-                provider as AgentProvider,
-                accounts.map((account) => ({ account: account.name, label: account.label, usage: account.usage, cooling: account.cooling })),
-            );
-        }
-    }
-    return readings;
-};
+// Every connected account of a provider as the serviceability rule reads it (usage/serviceability.ts accountFactsOf):
+// the same facts for every provider, Claude's seat marks, the translator's benches and a door's plain rows alike. An
+// unreadable list leaves the provider with nothing on file, read as unmetered rather than empty.
+const factsOf = async (services: Services, provider: AgentProvider): Promise<readonly ServiceFacts[]> =>
+    // allow(silent-catch): the listing is advice, and one provider's trouble must not silence the rest.
+    accountFactsOf(services, provider).catch(() => []);
 
 // The pool a figure is about, by the name a person uses: always where the account has another pool the model spends,
 // else only one the plan scopes to some models (an undivided allowance is just "the allowance").
@@ -117,14 +105,14 @@ const otherPools = (usage: AccountUsage | undefined, model: ModelRef, binding: U
             return pool === undefined ? [] : [{ pool, percentLeft: Math.max(0, Math.round(SPENT_UTILIZATION - window.utilization)) }];
         });
 
-type Roomy = { readonly reading: FleetReading; readonly room: number };
+type Roomy = { readonly reading: ServiceFacts; readonly room: number };
 const roomiest = (rows: readonly Roomy[]): Roomy | undefined =>
     rows.reduce<Roomy | undefined>((most, next) => (most === undefined || next.room > most.room ? next : most), undefined);
 
 // Most room any one account the rule calls ready has left for this model, judged with the provider's standing refusal;
 // undefined if none has proven room. A reading that can still be re-read wins over one that cannot, whatever it says:
 // a stale figure is quoted only when it is all there is, and then marked stale.
-const bestHeadroom = (readings: readonly FleetReading[], model: ModelRef, refusals: RefusalsOnFile): ModelHeadroom | undefined => {
+const bestHeadroom = (readings: readonly ServiceFacts[], model: ModelRef, refusals: RefusalsOnFile): ModelHeadroom | undefined => {
     const states = serviceStates(readings, refusals, model);
     const ready = readings.flatMap((reading) => {
         const state = states.get(reading.account);
@@ -150,7 +138,7 @@ const bestHeadroom = (readings: readonly FleetReading[], model: ModelRef, refusa
 };
 
 // The fleet's standing beside the best figure; undefined while every account can serve.
-const standingOf = (readings: readonly FleetReading[], states: ReadonlyMap<string, AccountState>, ready: number): AccountsStanding | undefined => {
+const standingOf = (readings: readonly ServiceFacts[], states: ReadonlyMap<string, AccountState>, ready: number): AccountsStanding | undefined => {
     if (ready === readings.length) {
         return undefined;
     }
@@ -168,11 +156,11 @@ const standingOf = (readings: readonly FleetReading[], states: ReadonlyMap<strin
  */
 export const bestRoomFor = async (services: Services, provider: AgentProvider, model: string): Promise<number | undefined> => {
     try {
-        const readings = (await fleetReadings(services)).get(provider) ?? [];
+        const readings = await factsOf(services, provider);
         if (readings.length === 0) {
             return undefined;
         }
-        const refusals = (await services.providerRefusals.onFile())[provider];
+        const refusals = (await services.providerRefusals.onFile())[provider] ?? [];
         return bestHeadroom(readings, { id: model }, refusals)?.percentLeft;
     } catch {
         // allow(silent-catch): a cap is advice; an unreadable reading caps nothing, as before there was one.
@@ -180,60 +168,40 @@ export const bestRoomFor = async (services: Services, provider: AgentProvider, m
     }
 };
 
-// `spent` and `reopensAt` describe what was left out: a provider fully at the cap still reports via a renewal instant
-// instead of vanishing from the listing.
-// Both counts at zero means nothing was measured, not that it is exhausted.
-const exhausted = (limit: TurnLimit): boolean => limit.spent > 0 && limit.withHeadroom === 0;
-
 // Earliest instant among those given, ignoring undefineds; any one pool reopening makes the provider spendable again.
 const soonest = (instants: readonly (number | undefined)[]): number | undefined =>
     instants.reduce<number | undefined>((best, at) => (at !== undefined && (best === undefined || at < best) ? at : best), undefined);
 
-/**
- * What a provider's OWN records say of one model, for a provider whose accounts these readings never cover.
- * `fleetReadings` is fed by Claude's store and the translator's accounts, so a native provider authenticating on its own
- * (Cursor, Devin) reads as unmeasured however spent it is — which is how a spent Cursor model stayed listed as "not
- * metered" through seven refused spawns (2026-10-13). A provider module's own `turnLimit` is the seam for it, the same
- * one the role ladder reads.
- */
-export type OwnLimit = (model: string) => Promise<TurnLimit | undefined>;
-
 // `refusals` are the provider's refusals on file, read beside the readings: a plan that just said no ("usage limit, try
-// again at 3:38 PM") is spent in the very next listing, whatever its usage endpoint still reports.
-const spendable = async (
+// again at 3:38 PM") is spent in the very next listing, whatever its usage endpoint still reports, and a Cursor model it
+// refused is spent though Cursor publishes no reading at all (2026-10-13: listed as "not metered" through seven refused
+// spawns, when only the role ladder read its refusals).
+const spendable = (
     provider: NativeProvider,
     catalog: { models: Model[] },
-    readings: readonly FleetReading[],
+    readings: readonly ServiceFacts[],
     refusals: RefusalsOnFile,
-    ownLimit: OwnLimit | undefined,
     load: { readonly running?: Readonly<Record<string, number>> | undefined; readonly lastRunOut?: RunOut | undefined } = {},
-): Promise<SpawnableProvider> => {
-    // A provider with readings is judged on them; one with none falls back to its own records, where it keeps any.
-    const own = readings.length === 0 ? ownLimit : undefined;
-    const judged = await Promise.all(
-        catalog.models.map(async (model) => {
-            const ref: ModelRef = { id: model.id, label: model.label };
-            // allow(silent-catch): a failed own-record read leaves the model unmeasured, as it was before one was ever
-            // kept; this listing is advice, and its whole point is that one provider's trouble never silences the rest.
-            const mine = own === undefined ? undefined : await own(model.id).catch(() => undefined);
-            return { model, ref, limit: mine ?? askableLimit(readings, ref, refusals) };
-        }),
-    );
-    const out = judged.filter((row) => exhausted(row.limit));
+): SpawnableProvider => {
+    const judged = catalog.models.map((model) => {
+        const ref: ModelRef = { id: model.id, label: model.label };
+        return { model, ref, capacity: fleetCapacity(readings, refusals, ref) };
+    });
+    const out = judged.flatMap((row) => (row.capacity.kind === "spent" ? [{ ...row, capacity: row.capacity }] : []));
     const rows = judged
-        .filter((row) => !exhausted(row.limit))
+        .filter((row) => row.capacity.kind !== "spent")
         .map((row) => {
             const headroom = bestHeadroom(readings, row.ref, refusals);
             return { id: row.model.id, label: row.model.label, ...(headroom === undefined ? {} : { headroom }) };
         });
-    const reopensAt = soonest(out.map((row) => row.limit.reopensAt));
+    const reopensAt = soonest(out.map((row) => row.capacity.reopensAt));
     return {
         id: provider,
         label: PROVIDERS.find((row) => row.value === provider)?.label ?? provider,
         models: rows,
         spent: out.length,
         // What was left out, by name: a spawn onto one of them is refused naming it, not merely counted (children.ts).
-        spentModels: out.map((row) => ({ id: row.model.id, label: row.model.label, ...opt("reopensAt", row.limit.reopensAt) })),
+        spentModels: out.map((row) => ({ id: row.model.id, label: row.model.label, ...opt("reopensAt", row.capacity.reopensAt) })),
         ...(reopensAt === undefined ? {} : { reopensAt }),
         loops: loopsOf(provider),
         ...opt("running", load.running),
@@ -262,26 +230,17 @@ export const spawnableProviders = async (services: Services): Promise<readonly S
     const refusalsRead = async (): Promise<Record<string, readonly ProviderRefusal[]>> => services.providerRefusals.onFile();
     // allow(silent-catch): a run-out record that cannot be read only costs the listing its rate, never its levels.
     const runOutsRead = async (): Promise<Record<string, RunOut>> => services.runOuts.read();
-    const [ready, readings, refusals, runOuts] = await Promise.all([
+    const [ready, refusals, runOuts] = await Promise.all([
         services.providerReadiness(),
-        fleetReadings(services),
         refusalsRead().catch((): Record<string, readonly ProviderRefusal[]> => ({})),
         runOutsRead().catch((): Record<string, RunOut> => ({})),
     ]);
-    const rows = await Promise.all(
+    return Promise.all(
         NATIVE_PROVIDERS.filter((provider) => ready[provider]).map(async (provider) => {
-            const mine = readings.get(provider) ?? [];
-            const [catalog, own] = await Promise.all([
-                services.providerCatalogs[provider].models().catch(() => ({ models: [] })),
-                // Only for a provider these readings do not cover; its ledger is read once here, not once per model.
-                // allow(silent-catch): an unreadable ledger leaves the provider unmeasured, which is how it read before
-                // one was ever kept; this listing is advice, and one provider's trouble must not silence the rest.
-                mine.length === 0 ? observedOwnLimit(services, provider).catch(() => undefined) : undefined,
-            ]);
-            return spendable(provider, catalog, mine, refusals[provider], own, { running: runningByModel(provider), lastRunOut: runOuts[provider] });
+            const [catalog, readings] = await Promise.all([services.providerCatalogs[provider].models().catch(() => ({ models: [] })), factsOf(services, provider)]);
+            return spendable(provider, catalog, readings, refusals[provider] ?? [], { running: runningByModel(provider), lastRunOut: runOuts[provider] });
         }),
     );
-    return rows;
 };
 
 // Reopen time in words rather than an absolute instant, since the daemon does not know the reader's timezone.

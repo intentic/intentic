@@ -70,4 +70,12 @@ describe(`where a conversation stands with the privacy shield before the send`, 
         expect(privacyStanding(statusOf({ trusted: [`cursor`] }), `cursor`, CURSOR, `c-1`, undefined, `omen`)).toBeUndefined();
         expect(privacyStanding(statusOf({ mode: `watch` }), `cursor`, CURSOR, `c-1`, undefined, `omen`)).toBeUndefined();
     });
+
+    // The strip reads the daemon's own verdict (privacy-egress.ts), so a grant is said wherever it lets the provider read
+    // this conversation as it is: a conversation granted on a runner and brought back here still sends Claude its values.
+    test(`a grant reads as granted on every route, the gateway's included`, () => {
+        const status = statusOf({ conversations: [{ conversationId: `c-1`, provider: `claude` }] });
+        expect(privacyStanding(status, `claude`, CLAUDE_CODE, `c-1`)?.kind).toBe(`granted`);
+        expect(privacyStanding(status, `claude`, CLAUDE_CODE, `c-2`)).toBeUndefined();
+    });
 });

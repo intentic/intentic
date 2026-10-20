@@ -1,6 +1,6 @@
 import type { AccountState, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { bindingWindow, type ModelRef, type RefusalsOnFile, refusalVerdict, type ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
+import { bindingWindow, type ModelRef, type RefusalsOnFile, reopensAtOf, refusalVerdict, type ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Logger } from "pino";
 import { opt } from "../../opt.js";
 
@@ -51,9 +51,6 @@ const evidence = (facts: ServiceFacts, state: AccountState, refusal: ProviderRef
         ...(state.kind === "ready" ? { room: state.room } : {}),
     };
 };
-
-const refusalList = (refusals: RefusalsOnFile): readonly ProviderRefusal[] =>
-    refusals === undefined ? [] : "kind" in refusals ? [refusals] : refusals;
 
 /** An account that could not serve and now can: the moment a parent waiting on capacity wants to hear. */
 export interface AccountReopened {
@@ -107,10 +104,8 @@ const REOPEN_GRACE_MS = 1_000;
 
 // When an account that cannot serve says it can again (epoch ms); undefined where its verdict names no instant.
 const reopenOf = (state: AccountState): number | undefined => {
-    if (state.kind === "spent" && state.reopensAt !== undefined) {
-        return state.reopensAt * 1000;
-    }
-    return state.kind === "blocked" && state.until !== undefined ? state.until * 1000 : undefined;
+    const at = reopensAtOf(state);
+    return at === undefined ? undefined : at * 1000;
 };
 
 // One timer per provider and question (a model's pools, or none), armed for the soonest reopen still ahead among its
@@ -166,7 +161,7 @@ export const createAccountStateLog = (logger: Pick<Logger, "info">, now: () => n
     return {
         note: (provider, facts, states, refusals, model) => {
             armReopen(provider, model, states);
-            const standing = refusalList(refusals)
+            const standing = refusals
                 .filter((refusal) => refusalVerdict(refusal, facts, now()) === "standing")
                 .toSorted((left, right) => right.at - left.at);
             for (const entry of facts) {

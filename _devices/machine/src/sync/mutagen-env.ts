@@ -1,6 +1,5 @@
 import { basename, join } from "node:path";
-import { pathExists, readJsonIfExists, writeFileAtomic } from "@intentic/base/fs";
-import { z } from "zod";
+import { pathExists, writeFileAtomic } from "@intentic/base/fs";
 import { baseDir } from "../config.js";
 
 /* WHERE THIS AGENT'S MUTAGEN KEEPS ITS STATE (2026-10-18). Mutagen keeps its daemon, its sessions and its forwards in
@@ -37,25 +36,10 @@ export const childEnv = (command: string, env?: NodeJS.ProcessEnv): NodeJS.Proce
     env ?? (isMutagenCommand(command) ? mutagenEnv() : undefined);
 
 // THE MOVE OFF THE SHARED DIRECTORY'S RECORD (mutagen-move.ts): written once every session of this agent's there has
-// ended, so a move that failed is tried at the next start, and holding the pauses still to carry over to the sessions
-// the watcher makes again (mutagen.ts createSession).
+// ended, so a move that failed is tried at the next start. The pauses it carried are the pairings' own facts now
+// (holds.ts), so all it keeps is when.
 const movedPath = join(baseDir, "mutagen-moved.json");
-const MovedSchema = z.object({ movedAt: z.string(), paused: z.array(z.string()) });
-type Moved = z.infer<typeof MovedSchema>;
-
-const writeMoved = async (moved: Moved): Promise<void> => await writeFileAtomic(movedPath, `${JSON.stringify(moved)}\n`);
 
 export const movedAlready = async (): Promise<boolean> => await pathExists(movedPath);
 
-export const recordMove = async (paused: readonly string[]): Promise<void> => await writeMoved({ movedAt: new Date().toISOString(), paused: [...paused] });
-
-// Whether a session of this name was paused when the move ended it.
-export const carriedPause = async (name: string): Promise<boolean> => (await readJsonIfExists(movedPath, MovedSchema))?.paused.includes(name) === true;
-
-// Taken off once its session is made again, so a later create (after an unpair, say) starts as it should.
-export const dropCarriedPause = async (name: string): Promise<void> => {
-    const moved = await readJsonIfExists(movedPath, MovedSchema);
-    if (moved?.paused.includes(name) === true) {
-        await writeMoved({ ...moved, paused: moved.paused.filter((held) => held !== name) });
-    }
-};
+export const recordMove = async (): Promise<void> => await writeFileAtomic(movedPath, `${JSON.stringify({ movedAt: new Date().toISOString() })}\n`);

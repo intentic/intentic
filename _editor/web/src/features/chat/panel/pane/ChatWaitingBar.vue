@@ -4,7 +4,6 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { retryHydrate } from "../../../../models/conversations/run/useChat-sessions";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
-import { useMemoryAnswer } from "../../transcript/held/memoryAnswer";
 import { useReopenPress } from "../../transcript/held/heldPresses";
 import { useLimitResend } from "./scheduledSend";
 import { memoryShare, sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
@@ -26,7 +25,7 @@ const props = defineProps<{
 const emit = defineEmits<{ approve: []; keepPlanning: [] }>();
 
 const t = useT();
-const { conversation, messages, waitsOn, staged, ending, waiting, resumeQueue } = usePaneView();
+const { conversation, messages, waitsOn, staged, ending, waiting, resumeQueue, next } = usePaneView();
 const root = useTemplateRef<HTMLElement>(`root`);
 
 // A turn a person already ended owes nobody an answer, whatever it is still unwinding. Read per frame of a streamed turn,
@@ -104,8 +103,9 @@ const sendHeld = (): Promise<void> => resumeQueue(heldIds.value);
 // On an account spent until a reopen still ahead the bar offers what the line does: book them for then, Send anyway
 // stepping back to a quiet press (heldPresses.ts).
 const reopen = useReopenPress(() => memoryShown.value, useLimitResend(() => conversation.value).arm);
-// Whether the sandbox sends it by itself once memory frees up, so the bar never calls stuck what is about to go.
-const { sendsItself } = useMemoryAnswer();
+// Whether the sandbox sends it by itself once memory frees up, as the card says (`next`), so the bar never calls stuck
+// what is about to go.
+const sendsItself = computed(() => next.value?.kind === `room`);
 const memoryLine = computed(() => {
     const share = memoryShare(detail.value);
     const said = share === undefined ? t(`chat.chatWaitingBar.heldMemory`) : t(`chat.chatWaitingBar.heldMemoryShare`, { share });

@@ -162,11 +162,11 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [tooltip-words](tooltip-words.mjs) | a hover label longer than a word or two, where a `Tip` card belongs (ratcheted) |
 | [tailwind](tailwind-bypass.mjs) | arbitrary colours or pixel sizes in class attributes |
 | [display](display-descenders.mjs) | clipped display type without descender clearance |
-| [marks](mark-alignment.mjs) | a mark placed by a hand-tuned offset instead of `.mark` |
-| [rows](row-tiers.mjs) | a list row that sets its own density or padding |
+| [marks](mark-alignment.mjs) | a mark or an `<Icon>` placed by a hand-tuned offset instead of `.mark` / `.ui-icon` |
+| [rows](row-tiers.mjs) | a list row that sets its own density, padding or height; a section header drawn or decorated by hand; a card in a card; sections with nothing spacing them |
 | [buttons](button-tiers.mjs) | a hand-styled action button instead of `<Button>` |
 | [inputs](input-tiers.mjs) | a hand-styled field instead of `ui-field-box` |
-| [recipes](recipe-tiers.mjs) | a kit recipe (`ui.iconButton`, `ui.textButton`, …) handed a size, an ink or a radius its variants own, a retired recipe name, or `ui-chip-on` by hand |
+| [recipes](recipe-tiers.mjs) | a kit recipe (`ui.iconButton`, `ui.textButton`, …) handed a size, an ink or a radius its variants own, a retired recipe name (`ui.sectionLabel` outside the kit), `ui-chip-on` by hand, or a selection marked a second way (ratcheted: `baselines/selection-tints.json`) |
 | [tones](tone-tiers.mjs) | a status colour at an opacity (`bg-danger/10`) written outside `_editor/ui/src/lib/tone.ts` |
 | [run-settings](run-settings-tier.mjs) | effort, thinking or speed controls drawn outside `PickerRunSettings.vue` |
 | [model-labels](model-labels.mjs) | a model named by its raw id |

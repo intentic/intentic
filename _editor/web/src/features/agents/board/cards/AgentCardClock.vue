@@ -10,9 +10,6 @@ import { activityIcon } from "../../../../models/agent-status/agentStatus-meta";
 import { turnInFlight, watching } from "../../../../models/agent-status/agentStatus-standing";
 import { promptLine, selfStart, selfStartTicks, watchLine } from "../../../../models/agent-status/agentStatus-clock";
 import { cacheCooling, cacheWarm, warmMark } from "../../../../models/fleet/promptCache";
-import { effectivePolicy } from "../../../../models/conversations/endings/turnBreak";
-import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
-import { rpcQuery } from "../../../../client/sandbox/rpcQuery";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import AgentCardDate from "../../../../parts/fleet/AgentCardDate.vue";
 
@@ -43,18 +40,11 @@ const { mobile } = useDevice();
 // On the sandbox's clock: every instant this corner counts to or from is one the sandbox stamped (sandboxClock.ts).
 const tick = useNow(() => turnInFlight(props.agent) || watching(props.agent) || selfStartTicks(props.agent) || cacheWarm(props.agent));
 const now = computed(() => sandboxNow(tick.value));
-// When the card goes again by itself, one reading for all of it (agentStatus.selfStart): a spent allowance's resend or
-// move, or when it is back when nothing is booked; a message held for memory once its answer is to send it when memory
-// frees; messages booked for a time or another agent's land. The chip says why it waits, this says what goes and when,
-// which is also why a card resting in Active is there. The answers to the limit and to memory are read whole (this
-// conversation's own, else the sandbox's), as the card's menu reads them, so the corner can say when "Send again" is
-// chosen but nothing is booked to do it.
-const { query: settings } = useSandboxQuery(rpcQuery(`settings.get`));
-const answers = computed(() => ({
-    limit: effectivePolicy(`limit`, props.agent, settings.data.value),
-    memory: effectivePolicy(`memory`, props.agent, settings.data.value),
-}));
-const goes = computed(() => selfStart(props.agent, now.value, answers.value, props.titleOf));
+// When the card goes again by itself, read off the card's own `next` (agentStatus.selfStart): a spent allowance's resend
+// or move, or when it is back when nothing carries it on; a message held for memory sent once memory frees; messages
+// booked for a time or another agent's land. The chip says why it waits, this says what goes and when, which is also why
+// a card resting in Active is there.
+const goes = computed(() => selfStart(props.agent, now.value, props.titleOf));
 // A held turn or held message takes the corner from the watch, the cache and the date: a watch firing into a shut window
 // or a full sandbox runs nothing (turn-admission holds its words back), so the hold's end is the next moment the card
 // can move. A message booked for later does not: a watch's wake would run before it, and a live turn's readout speaks
@@ -97,7 +87,6 @@ const goesTip = computed((): Tip | undefined => {
             title: t(`agents.agentStatus.usageLimit`),
             tone: `warning`,
             rows: [provider, { label: t(`agents.agentCard.reopens`), value: formatWhen(corner.clock.at, now.value) }],
-            ...(corner.unbooked === true ? { note: t(`agents.agentCard.resendNotBooked`) } : {}),
         };
     }
     const at = corner.kind === `resend` && corner.clock !== undefined ? [{ label: t(`agents.agentCard.resendsAt`), value: formatWhen(corner.clock.at, now.value) }] : [];
@@ -128,13 +117,7 @@ const coolingTip = computed((): Tip | undefined =>
         <AgentCardDate :at="agent.archivedAt" archived />
     </span>
     <!-- Takes the date's slot: "resends 02:00", "sends in 12m", "back in 27m" tell the reader something to plan around, unlike "last active". -->
-    <!-- Amber when "Send again" is the answer but nothing is booked to send it: the press is still the reader's. -->
-    <span
-        v-else-if="shown !== undefined"
-        class="inline-flex shrink-0 items-center gap-1"
-        :class="shown.kind === `back` && shown.unbooked === true ? 'text-warning' : undefined"
-        v-tooltip.top="goesTip"
-    >
+    <span v-else-if="shown !== undefined" class="inline-flex shrink-0 items-center gap-1" v-tooltip.top="goesTip">
         <Icon name="clock" class="shrink-0 text-2xs" />
         <span class="tabular-nums">{{ shown.text }}</span>
     </span>
@@ -172,7 +155,7 @@ const coolingTip = computed((): Tip | undefined =>
     <!-- Fills what the line leaves it, words in a size container like the running readout's below, so they never wrap the corner. -->
     <span v-if="prompt !== undefined" class="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-warning" v-tooltip.top="prompt.hint">
         <span class="@container min-w-4 flex-1 truncate text-right"
-            ><Icon name="terminal" class="mr-1.5 inline-block align-[-0.1em] text-2xs" /><span class="hidden @[4.5rem]:inline">{{
+            ><Icon name="terminal" class="mr-1.5 text-2xs" /><span class="hidden @[4.5rem]:inline">{{
                 t(`agents.agentStatus.waitingForInput`)
             }}</span></span
         >
@@ -195,7 +178,7 @@ const coolingTip = computed((): Tip | undefined =>
         <!-- Readout and its hint wrap together, separately from the press beside them. -->
         <span class="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-link" v-tooltip.top="watch.hint">
             <span class="@container min-w-4 flex-1 truncate text-right"
-                ><Icon name="eye" class="mr-1.5 inline-block align-[-0.1em] text-2xs" /><span class="hidden @[4.5rem]:inline">{{
+                ><Icon name="eye" class="mr-1.5 text-2xs" /><span class="hidden @[4.5rem]:inline">{{
                     watch.text
                 }}</span></span
             >
@@ -224,7 +207,7 @@ const coolingTip = computed((): Tip | undefined =>
             <!-- Inline, inside the clipped words, so it rides next to them when they fit and survives first when they don't. Glyph follows whichever fact leads: running children if any, else the tool the agent itself is using. -->
             <Icon
                 :name="(agent.subagents?.running ?? 0) > 0 ? 'users' : activityIcon(agent.activity?.tool)"
-                class="mr-1.5 inline-block align-[-0.1em] text-2xs"
+                class="mr-1.5 text-2xs"
             /><span class="hidden @[4.5rem]:inline">{{ activityText ?? t(`ui.status.working`) }}</span></span
         >
         <span v-if="agent.startedAt !== undefined" class="shrink-0 tabular-nums">{{ formatElapsed((now - agent.startedAt) / 1000) }}</span>

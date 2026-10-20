@@ -1,9 +1,8 @@
 // environment: the overlay Dockerfile extending the sandbox image
 import { z } from "zod";
-// The approved file is daemon-composed (pinned FROM + capability fragments + the owner-approved custom section). Status
-// is derived, never stored:
-// applied: sha256(approved) === appliedHash.
-// pending rebuild: approved present but hashes differ.
+// The approved overlay is daemon-composed (pinned FROM + capability fragments + the owner-approved custom section) from its
+// inputs on every read. Status is derived, never stored:
+// pending rebuild: rebuildPending(approved.hash, appliedHash) (state/sandbox-build.ts); applied otherwise.
 // proposed: proposal present with a hash different from custom's.
 
 const environmentFileSchema = z.object({ content: z.string(), hash: z.string() });
@@ -45,10 +44,10 @@ export type RuntimeInstall = z.infer<typeof RuntimeInstallSchema>;
 // (`environment propose`) clears its tool's entries.
 export const SettledDraftSchema = z.object({ tool: z.string(), hash: z.string(), at: z.number() });
 export type SettledDraft = z.infer<typeof SettledDraftSchema>;
-// One overlay the daemon composed, by the hash a rebuild is stamped with, and the custom-section blocks it carried (each
-// by name and the hash of its trimmed steps). Kept so "is this tool in the image" is answered against the overlay the
-// running container was actually built from, which is rarely the newest one composed: every approval, capability change
-// and daemon update composes again, and a rebuild builds whatever was newest when it started.
+// One overlay the daemon composed, by the hash a rebuild is stamped with, and the sections it carried, each by the hash
+// of its trimmed steps: capability fragments unnamed, custom-section blocks by name. Kept so "is this in the image" is
+// answered against the overlay the running container was actually built from, which is rarely the newest one composed:
+// every approval, capability change and daemon update composes again, and a rebuild builds whatever was newest then.
 export const EnvironmentCompositionSchema = z.object({
     hash: z.string(),
     at: z.number(),

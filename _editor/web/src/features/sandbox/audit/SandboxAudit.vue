@@ -11,6 +11,7 @@ import {
     InfoHint,
     Notice,
     type NoticeModel,
+    SectionHeader,
     SegmentedControl,
     SkeletonRows,
     StatusBadge,
@@ -298,9 +299,8 @@ const rowTone = (entry: AuditEntry): `default` | `warning` | `danger` => {
             <!-- `overflow-clip`, not `hidden`: it rounds the rows' corners without becoming the scroller the day headings stick to. -->
             <div v-else class="overflow-clip rounded-xl bg-card shadow-sm">
                 <div v-for="day in days" :key="day.label">
-                    <div class="sticky top-0 z-1 flex items-center justify-between border-b border-line-subtle bg-card px-4 py-2">
-                        <h3 class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ day.label }}</h3>
-                        <span class="text-2xs tabular-nums text-subtle">{{ t(`sandbox.sandboxAudit.dayRecords`, { count: day.records }, day.records) }}</span>
+                    <div class="sticky top-0 z-1 border-b border-line-subtle bg-card px-4 py-2">
+                        <SectionHeader :label="day.label" :heading="3" density="dense" />
                     </div>
                     <div class="flex flex-col divide-y divide-line-subtle/50">
                         <DisclosureRow

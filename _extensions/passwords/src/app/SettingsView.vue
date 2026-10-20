@@ -1,6 +1,6 @@
 <!-- Passwords' settings on this computer: where passwords are remembered from, how it unlocks and locks, the recovery key, places never saved for, and import. -->
 <script setup lang="ts">
-import { Button, Icon, messageOr, Notice, ToggleSwitch, ui } from "@intentic/extension-ui";
+import { Button, Icon, messageOr, Notice, Section, ToggleSwitch, ui } from "@intentic/extension-ui";
 import type { KeyringOrigin } from "@intentic/sandbox-contract/schemas/keyring";
 import { originKey } from "@intentic/sandbox-contract/policy/keyring-origins";
 import { computed, onMounted, ref, shallowRef } from "vue";
@@ -102,10 +102,9 @@ const forget = (origin: KeyringOrigin): Promise<void> =>
         <Notice v-if="error" tone="danger" size="sm" @dismiss="error = undefined">{{ error }}</Notice>
 
         <section class="flex flex-col gap-3">
-            <div class="flex flex-col gap-1">
-                <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`app.settings.remember`) }}</h3>
+            <Section :label="t(`app.settings.remember`)" :heading="3">
                 <p class="text-xs text-muted">{{ t(`app.settings.rememberHelp`) }}</p>
-            </div>
+            </Section>
             <div class="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
                 <div v-for="source in sources" :key="source.source" class="flex items-center gap-3 px-4 py-3">
                     <div class="flex min-w-0 flex-1 flex-col">
@@ -134,34 +133,33 @@ const forget = (origin: KeyringOrigin): Promise<void> =>
             </div>
         </section>
 
-        <section v-if="settings" class="flex flex-col gap-3">
-            <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`app.settings.unlock`) }}</h3>
-            <p class="text-xs text-muted">{{ unlockNote }}</p>
-            <div class="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
-                <label class="flex items-center gap-3 px-4 py-3">
-                    <span class="flex-1 text-sm text-content">{{ t(`app.settings.autoLock`) }}</span>
-                    <select :class="ui.input({ size: `sm` }, `w-auto`)" :value="settings.autoLockMinutes" :disabled="waiting !== undefined" @change="onLockMinutes">
-                        <option v-for="option in lockOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                    </select>
-                </label>
-                <label class="flex items-center gap-3 px-4 py-3">
-                    <span class="flex-1 text-sm text-content">{{ t(`app.settings.lockOnSleep`) }}</span>
-                    <ToggleSwitch
-                        :model-value="settings.lockOnSleep"
-                        :disabled="waiting !== undefined"
-                        @update:model-value="(on: boolean) => update(`sleep`, { lockOnSleep: on })"
-                    />
-                </label>
+        <Section v-if="settings" :label="t(`app.settings.unlock`)" :heading="3">
+            <div class="flex flex-col gap-3">
+                <p class="text-xs text-muted">{{ unlockNote }}</p>
+                <div class="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
+                    <label class="flex items-center gap-3 px-4 py-3">
+                        <span class="flex-1 text-sm text-content">{{ t(`app.settings.autoLock`) }}</span>
+                        <select :class="ui.input({ size: `sm` }, `w-auto`)" :value="settings.autoLockMinutes" :disabled="waiting !== undefined" @change="onLockMinutes">
+                            <option v-for="option in lockOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                        </select>
+                    </label>
+                    <label class="flex items-center gap-3 px-4 py-3">
+                        <span class="flex-1 text-sm text-content">{{ t(`app.settings.lockOnSleep`) }}</span>
+                        <ToggleSwitch
+                            :model-value="settings.lockOnSleep"
+                            :disabled="waiting !== undefined"
+                            @update:model-value="(on: boolean) => update(`sleep`, { lockOnSleep: on })"
+                        />
+                    </label>
+                </div>
             </div>
-        </section>
+        </Section>
 
-        <section class="flex flex-col gap-2">
-            <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`app.settings.recovery`) }}</h3>
+        <Section :label="t(`app.settings.recovery`)" :heading="3">
             <p class="text-xs text-muted">{{ t(`app.settings.recoveryHelp`) }}</p>
-        </section>
+        </Section>
 
-        <section v-if="settings" class="flex flex-col gap-2">
-            <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`app.settings.neverSave`) }}</h3>
+        <Section v-if="settings" :label="t(`app.settings.neverSave`)" :heading="3">
             <p v-if="settings.neverSave.length === 0" class="text-xs text-muted">{{ t(`app.settings.neverSaveEmpty`) }}</p>
             <div v-else class="flex flex-wrap gap-1.5">
                 <span v-for="origin in settings.neverSave" :key="originKey(origin)" :class="ui.chip(`gap-1 pr-1`)">
@@ -177,12 +175,13 @@ const forget = (origin: KeyringOrigin): Promise<void> =>
                     </button>
                 </span>
             </div>
-        </section>
+        </Section>
 
-        <section class="flex flex-col gap-2">
-            <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`app.settings.import`) }}</h3>
-            <p class="text-xs text-muted">{{ t(`app.settings.importHelp`) }}</p>
-            <ImportPanel :port="port" @imported="emit(`changed`)" />
-        </section>
+        <Section :label="t(`app.settings.import`)" :heading="3">
+            <div class="flex flex-col gap-2">
+                <p class="text-xs text-muted">{{ t(`app.settings.importHelp`) }}</p>
+                <ImportPanel :port="port" @imported="emit(`changed`)" />
+            </div>
+        </Section>
     </section>
 </template>

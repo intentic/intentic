@@ -2,6 +2,8 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { unstubbed } from "@intentic/testing";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
+import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Services } from "../../../composition.js";
 import { privacySliceFake } from "../../../privacy/privacy-slice.testing.js";
 import { tokenOf } from "../../../privacy/tokens.js";
@@ -48,21 +50,18 @@ const arm = (frames: (planned: Planned) => AsyncGenerator<AgentEvent>, refusal?:
 
 const services = (adapter: Adapter, policy: Parameters<typeof privacySliceFake>[0] = {}) => {
     const privacy = privacySliceFake(policy);
-    const refusals = { record: jest.fn(async () => {}), clear: jest.fn(async () => {}) };
-    const observed = { record: jest.fn(async () => {}) };
+    const refusals = { record: jest.fn(async (_provider: string, _refusal: ProviderRefusal) => {}), settle: jest.fn(async () => {}) };
     const fake = unstubbed<Services>("services", {
         privacyShield: privacy.privacyShield,
         adapters: { for: () => adapter, all: [adapter] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
         cards: unstubbed<Services["cards"]>("cards", {}),
         providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", refusals),
-        observedLimits: unstubbed<Services["observedLimits"]>("observedLimits", observed),
-        headroom: unstubbed<Services["headroom"]>("headroom", { refresh: async () => undefined }),
+        headroom: unstubbed<Services["headroom"]>("headroom", { refresh: async () => undefined, read: async () => ({}) }),
         claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { clear: async () => {} }),
-        modelCooldowns: unstubbed<Services["modelCooldowns"]>("modelCooldowns", { clear: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
     });
-    return { fake, refusals, observed, ledger: privacy.privacyLedger };
+    return { fake, refusals, ledger: privacy.privacyLedger };
 };
 
 // Every request runs under an issued execution context (workload/agent-execution.ts), here the workspace's own view.
@@ -129,7 +128,10 @@ test("plans a sealed request on the runtime's own arm and answers with what its 
     expect(context.attachmentPaths).toEqual([]);
     // Its words on the wire settle what Cursor last refused on that account for the model it ran on, as a turn's do, and
     // only what was filed before the request went out.
-    expect(refusals.clear).toHaveBeenCalledWith("cursor", "cursor-one", "composer-2.5", expect.any(Number));
+    await waitFor(
+        () => expect(refusals.settle).toHaveBeenCalledWith("cursor", expect.objectContaining({ account: "cursor-one", model: "composer-2.5", askedAt: expect.any(Number) })),
+        SETTLES,
+    );
 });
 
 test("runs in the issued context's view, not wherever the workspace happens to be", async () => {
@@ -220,13 +222,17 @@ test("a spent allowance is filed by the turn's classifier against its account an
         yield { kind: "error", code: "rate_limit", message: "You've hit your usage limit for Composer.", resetsAt: 1_900_000_000 };
         yield { kind: "done" };
     });
-    const { fake, refusals, observed } = services(adapter);
+    const { fake, refusals } = services(adapter);
 
     await expect(runSealedRequest(fake, ask())).rejects.toThrow("You've hit your usage limit for Composer.");
-    expect(refusals.record).toHaveBeenCalledWith("cursor", expect.objectContaining({ kind: "limit", account: "cursor-one", model: "composer-2.5" }));
-    expect(observed.record).toHaveBeenCalledWith("cursor", "cursor-one", "composer-2.5", expect.objectContaining({ message: "You've hit your usage limit for Composer." }));
+    // One record, against the account and model, in the provider's own words: what every surface reads.
+    expect(refusals.record).toHaveBeenCalledTimes(1);
+    expect(refusals.record).toHaveBeenCalledWith(
+        "cursor",
+        expect.objectContaining({ kind: "limit", account: "cursor-one", model: "composer-2.5", message: "You've hit your usage limit for Composer." }),
+    );
     // Nothing was said, so nothing was settled.
-    expect(refusals.clear).not.toHaveBeenCalled();
+    expect(refusals.settle).not.toHaveBeenCalled();
 });
 
 test("a retry deferred past a helper's patience ends it; a brief one is waited out", async () => {
@@ -291,8 +297,10 @@ const fleet = (spentOn: readonly string[]) => {
         holdsSession: unstubbed<Adapter>("adapter", {}).holdsSession,
     };
     const built = services(adapter);
-    built.observed.record.mockImplementation(async (...args: unknown[]) => {
-        filed.add(String(args[1]));
+    built.refusals.record.mockImplementation(async (_provider, refusal) => {
+        if (refusal.account !== undefined) {
+            filed.add(refusal.account);
+        }
     });
     return { ...built, asked };
 };

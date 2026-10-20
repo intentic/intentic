@@ -261,7 +261,7 @@ const stopFrames = (run: Run, next: Pulled): AgentEvent[] => {
         return [];
     }
     if (next === EXPIRED) {
-        return [{ kind: "error", code: "provider-outage", message: `Muse Code went quiet: ${run.clock.expiry()}. It was stopped; send again to carry on.` }];
+        return [{ kind: "error", code: "provider-outage", message: `Muse Code went quiet: ${run.clock.expiry()}. It was stopped; send again to carry on.`, own: true }];
     }
     const reason = next !== SETTLED && next.kind === "exit" ? next.reason : undefined;
     return [{ kind: "error", message: reason ?? "Muse Code exited mid-turn." }];
@@ -419,7 +419,7 @@ export const createMuseAgent = (options: MuseAgentOptions = {}) => {
     return async function* runMuseAgent(request: MuseRequest): AsyncGenerator<AgentEvent> {
         const binary = await binaryOf();
         if (binary === undefined) {
-            yield { kind: "error", message: MUSE_CLI_MISSING };
+            yield { kind: "error", message: MUSE_CLI_MISSING, own: true };
             yield { kind: "done" };
             return;
         }

@@ -25,8 +25,7 @@ import { heldDistros, SUPERVISOR_ENV, supervisedByWindows, updateMachineConfig, 
 import { UPGRADE_ENV } from "../environments/machine-upgrade.js";
 import { sweepBin } from "../release.js";
 import { assertSupervisor, machineLauncher, readResident, retireResident, startResident } from "./supervision.js";
-import { mirrorHeartbeatPath, readState } from "../sync/config.js";
-import { pairingSlugs } from "../sync/swap-pause.js";
+import { mirrorHeartbeatPath, readState,pairingSlugs } from "../sync/config.js";
 import { runMirrorWatch } from "../sync/mirror.js";
 import { startUpkeep } from "../upkeep/reconcile.js";
 import { MACHINE_VERSION } from "../version.js";

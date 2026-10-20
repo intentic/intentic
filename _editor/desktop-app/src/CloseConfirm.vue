@@ -57,10 +57,10 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
                 <button
                     ref="keep"
                     type="button"
-                    class="flex w-full cursor-pointer items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay focus-visible:border-primary-500 focus-visible:outline-none"
+                    class="flex w-full cursor-pointer items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay focus-visible:border-primary-500 focus-visible:outline-none text-xs"
                     v-action="() => choose(`tray`)"
                 >
-                    <Icon name="compress" class="mt-0.5 shrink-0 text-accent" />
+                    <Icon name="compress" class="shrink-0 text-accent" />
                     <span class="min-w-0 flex-1">
                         <span class="block text-xs font-medium">{{ t(`desktop.closeConfirm.keepIntenticInTray`) }}</span>
                         <span class="block text-2xs text-muted">{{ t(`desktop.closeConfirm.keepsRunningInBackground`) }}</span>
@@ -72,10 +72,10 @@ onUnmounted(() => window.removeEventListener(`keydown`, onKey));
 
                 <button
                     type="button"
-                    class="flex w-full cursor-pointer items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay focus-visible:border-primary-500 focus-visible:outline-none"
+                    class="flex w-full cursor-pointer items-start gap-3 rounded-lg bg-card shadow-sm p-3 text-left transition-colors hover:bg-overlay focus-visible:border-primary-500 focus-visible:outline-none text-xs"
                     v-action="() => choose(`quit`)"
                 >
-                    <Icon name="sign-out" class="mt-0.5 shrink-0 text-muted" />
+                    <Icon name="sign-out" class="shrink-0 text-muted" />
                     <span class="min-w-0 flex-1">
                         <span class="block text-xs font-medium">{{ t(`desktop.closeConfirm.quitIntentic`) }}</span>
                         <span class="block text-2xs text-muted">{{ t(`desktop.closeConfirm.closesCompletelyStartAgain`) }}</span>

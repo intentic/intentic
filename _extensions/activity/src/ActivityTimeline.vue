@@ -1,16 +1,6 @@
 <script setup lang="ts">
-import {
-    ui,
-    Icon,
-    Notice,
-    noticeOf,
-    ScrollFrame,
-    SkeletonRows,
-    SkeletonSnapshot,
-    timeWindowWords,
-    type TimeWindow,
-    vSkeletonSource,
-} from "@intentic/extension-ui";
+import type { Loaded } from "@intentic/extension-api";
+import { ui, Await, Icon, Notice, noticeOf, ScrollFrame, SkeletonRows, timeWindowWords, type TimeWindow } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { byDay, type Episode, type Source } from "./episodes";
 import EpisodeRow from "./EpisodeRow.vue";
@@ -18,13 +8,14 @@ import { t } from "./i18n.js";
 
 /* The selected source's story, newest first. */
 
-const { episodes, source, window, truncated, isLoading } = defineProps<{
+const { episodes, source, window, truncated, loaded } = defineProps<{
     episodes: readonly Episode[];
     // The rail's selection resolved to its live facts; absent when every source is shown.
     source: Source | undefined;
     window: TimeWindow;
     truncated: boolean;
-    isLoading: boolean;
+    // The feed's read: the episodes above are drawn from it once it has answered.
+    loaded: Loaded<unknown>;
 }>();
 
 const days = computed(() => byDay(episodes, Date.now()));
@@ -44,38 +35,39 @@ const days = computed(() => byDay(episodes, Date.now()));
         <div class="pb-2">
             <!-- THE FEED'S OWN SHAPE WHILE IT IS FETCHED, rather than a blank box that fills in one jump: the feed as it last
                  looked here, or until it has been seen once, a day divider and a run of rows at the row's real spacing. -->
-            <SkeletonSnapshot v-if="isLoading && episodes.length === 0" of="activity.feed" :label="t(`activityTimeline.loadingActivity`)">
-                <div role="status" aria-busy="true" :aria-label="t(`activityTimeline.loadingActivity`)">
-                    <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
-                        <span class="skeleton block h-2 w-16" />
-                        <span class="skeleton block h-2 w-12" />
+            <Await :of="loaded" imprint="activity.feed" :label="t(`activityTimeline.loadingActivity`)">
+                <template #default>
+                    <div v-if="days.length > 0">
+                        <!-- Day labels are sticky signposts, not dividers, and they stick to the PAGE now that the card has no scroller of its own. -->
+                        <div v-for="(day, dayIndex) in days" :key="day.label" :class="dayIndex > 0 ? `mt-2` : ``">
+                            <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
+                                <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ day.label }}</span>
+                                <span class="text-2xs tabular-nums text-subtle">
+                                    {{ t(`activityTimeline.entries`, { count: day.episodes.length }, day.episodes.length) }}
+                                </span>
+                            </div>
+                            <div class="flex flex-col divide-y divide-line-subtle/50">
+                                <EpisodeRow v-for="episode in day.episodes" :key="episode.key" :episode="episode" />
+                            </div>
+                        </div>
                     </div>
-                    <!-- The outline is the ROW's own, at the tier the feed actually draws, rather than a second hand-built guess at this row's shape. -->
-                    <div class="flex flex-col divide-y divide-line-subtle/50">
-                        <SkeletonRows :rows="6" density="compact" description />
+                    <p v-else :class="ui.emptyState('px-4 py-10')">
+                        {{ t(`activityTimeline.nothingEntriesAppearMessage`, { window: timeWindowWords(window) }) }}
+                    </p>
+                </template>
+                <template #fallback>
+                    <div role="status" aria-busy="true" :aria-label="t(`activityTimeline.loadingActivity`)">
+                        <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
+                            <span class="skeleton block h-2 w-16" />
+                            <span class="skeleton block h-2 w-12" />
+                        </div>
+                        <!-- The outline is the ROW's own, at the tier the feed actually draws, rather than a second hand-built guess at this row's shape. -->
+                        <div class="flex flex-col divide-y divide-line-subtle/50">
+                            <SkeletonRows :rows="6" density="compact" description />
+                        </div>
                     </div>
-                </div>
-            </SkeletonSnapshot>
-
-            <!-- One element around the days, so the feed is imprinted whole. -->
-            <div v-else-if="days.length > 0" v-skeleton-source="`activity.feed`">
-                <!-- Day labels are sticky signposts, not dividers, and they stick to the PAGE now that the card has no scroller of its own. -->
-                <div v-for="(day, dayIndex) in days" :key="day.label" :class="dayIndex > 0 ? `mt-2` : ``">
-                    <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ day.label }}</span>
-                        <span class="text-2xs tabular-nums text-subtle">
-                            {{ t(`activityTimeline.entries`, { count: day.episodes.length }, day.episodes.length) }}
-                        </span>
-                    </div>
-                    <div class="flex flex-col divide-y divide-line-subtle/50">
-                        <EpisodeRow v-for="episode in day.episodes" :key="episode.key" :episode="episode" />
-                    </div>
-                </div>
-            </div>
-
-            <p v-else-if="episodes.length === 0 && !isLoading" v-skeleton-source="`activity.feed`" :class="ui.emptyState('px-4 py-10')">
-                {{ t(`activityTimeline.nothingEntriesAppearMessage`, { window: timeWindowWords(window) }) }}
-            </p>
+                </template>
+            </Await>
 
             <!-- A capped feed must identify itself as incomplete. -->
             <p v-if="truncated" class="flex items-center justify-center gap-1.5 px-4 py-3 text-2xs text-muted">

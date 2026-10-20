@@ -58,8 +58,8 @@ const remove = async (): Promise<void> => {
 
 <template>
     <section v-if="leftovers.length > 0 || failure !== undefined" class="flex flex-col gap-2 rounded-xl bg-card p-4 shadow-sm">
-        <div v-if="leftovers.length > 0" class="flex items-start gap-2.5">
-            <Icon name="box" class="mt-0.5 shrink-0 text-subtle" />
+        <div v-if="leftovers.length > 0" class="flex items-start gap-2.5 text-sm">
+            <Icon name="box" class="shrink-0 text-subtle" />
             <div class="min-w-0 flex-1">
                 <p class="text-sm leading-tight font-semibold">{{ t(`desktop.leftovers.title`, { count: leftovers.length }, leftovers.length) }}</p>
                 <p class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.leftovers.detail`, { names }) }}</p>

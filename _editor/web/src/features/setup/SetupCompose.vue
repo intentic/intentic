@@ -22,7 +22,7 @@ const bootstrap = computed(() => composeBootstrap(props.args));
     <div class="flex flex-col gap-3">
         <!-- What this tab is actually FOR, said before the YAML rather than left to be inferred from it. -->
         <p class="flex items-start gap-2 text-xs text-muted">
-            <Icon name="eye" class="mt-0.5 shrink-0 text-subtle" />
+            <Icon name="eye" class="shrink-0 text-subtle" />
             <span class="min-w-0">{{ t(`setup.setupCompose.noScriptRunsOn`) }}</span>
         </p>
         <Code :code="yaml" lang="yaml" :label="t(`setup.setupCompose.n1AddServicesTo`)" :wrap="false" :clamp-lines="mobile ? 8 : undefined" />
@@ -36,7 +36,7 @@ const bootstrap = computed(() => composeBootstrap(props.args));
             {{ t(`setup.setupCompose.desktopSyncIsntPart`) }} <b>{{ t(`setup.setupCompose.desktopSync`) }}</b> {{ t(`setup.setupCompose.card`) }}
         </p>
         <p v-if="args.platformUrl" class="flex items-start gap-2 text-xs text-warning">
-            <Icon name="box" class="mt-0.5 shrink-0" />
+            <Icon name="box" class="shrink-0" />
             <!-- min-w-0 + break-words: the image reference is one unbreakable token wider than a phone, and a flex child defaults to min-content width. -->
             <span class="min-w-0 break-words"
                 >{{ t(`setup.setupCompose.localDevComposePulls`) }} <b>{{ t(`setup.setupCompose.published`) }}</b> <code>{{ args.image }}</code>

@@ -59,8 +59,8 @@ const line = computed(() => {
         <span class="min-w-0">{{ status.title }}</span>
     </p>
     <div v-else-if="status" class="flex flex-col gap-2.5 rounded-lg border border-line-subtle bg-canvas/40 p-3.5" role="status" aria-live="polite">
-        <div class="flex items-start gap-2.5">
-            <Icon :name="status.icon" :spin="status.spin" class="mt-px shrink-0 text-sm" :class="TONE[status.tone]" aria-hidden="true" />
+        <div class="flex items-start gap-2.5 text-xs">
+            <Icon :name="status.icon" :spin="status.spin" class="shrink-0 text-sm" :class="TONE[status.tone]" aria-hidden="true" />
             <div class="flex min-w-0 flex-1 flex-col gap-1">
                 <p class="text-xs font-medium text-content tabular-nums">{{ status.title }}</p>
                 <p v-if="status.detail" class="text-2xs text-muted">{{ status.detail }}</p>
@@ -76,8 +76,8 @@ const line = computed(() => {
                 <span class="min-w-0">{{ line.text }}</span>
             </li>
         </ul>
-        <p v-if="status.failure" class="flex gap-1.5 pl-6 text-2xs text-warning">
-            <Icon name="exclamation-triangle" class="mt-px shrink-0" aria-hidden="true" />
+        <p v-if="status.failure" class="flex items-start gap-1.5 pl-6 text-2xs text-warning">
+            <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
             <span class="min-w-0">{{ t(`sandbox.autoUpdate.failure`, { message: status.failure }) }}</span>
         </p>
         <Notice v-if="notice" :of="notice" />

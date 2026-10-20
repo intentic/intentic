@@ -297,11 +297,11 @@ describe("a turn its conversation would not take", () => {
     // Busy is a wait a client knows by its code; archived has no code, since no wait lifts it.
     test("says why and ends, busy by its code and archived in words", () => {
         expect([...refusedBegin("busy")]).toStrictEqual([
-            { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." },
+            { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish.", own: true },
             { kind: "done" },
         ]);
         expect([...refusedBegin("archived")]).toStrictEqual([
-            { kind: "error", message: "This conversation is archived: only a person's message reopens it." },
+            { kind: "error", message: "This conversation is archived: only a person's message reopens it.", own: true },
             { kind: "done" },
         ]);
     });
@@ -407,7 +407,7 @@ test("a disk refusal before composition reaches chat once, settles, and does not
             throw error;
         },
     };
-    const frame = { kind: "error", code: "sandbox-disk-low", message: error.message } as const;
+    const frame = { kind: "error", code: "sandbox-disk-low", message: error.message, own: true } as const;
     expect(await drain(placedTurn(conversations, "c", place))).toEqual([frame, { kind: "done" }]);
     expect(steps).toEqual([
         ["frame", "c", frame],
@@ -426,6 +426,6 @@ test("an unattended checkout refusal does not imply a person's composer holds th
         throw error;
     } };
     expect(await drain(placedTurn(conversations, "c", place, undefined, true))).toEqual([
-        { kind: "error", code: "sandbox-disk-low", message: error.message, unattended: true }, { kind: "done" },
+        { kind: "error", code: "sandbox-disk-low", message: error.message, own: true, unattended: true }, { kind: "done" },
     ]);
 });

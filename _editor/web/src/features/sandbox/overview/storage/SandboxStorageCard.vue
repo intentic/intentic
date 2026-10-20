@@ -150,7 +150,7 @@ const cleanedNotice = computed<NoticeModel | undefined>(() => {
                                 : formatDateTime(scan.finishedAt)
                         "
                     >
-                        <Icon v-if="stale" name="history" class="mr-1 inline-block align-[-0.125em]" />{{
+                        <Icon v-if="stale" name="history" class="mr-1" />{{
                             t(`sandbox.sandboxStorageCard.measured`, { when: timeAgo(scan.finishedAt, { now, days: true }) })
                         }}
                     </span>

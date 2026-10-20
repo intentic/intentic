@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BrandMark, Button, ui, Modal, Notice, type NoticeModel, Picker, type PickerOption, vAction } from "@intentic/ui";
+import { BrandMark, Button, Modal, Notice, type NoticeModel, Picker, type PickerOption, Section, ui, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { INVENTORY_SERVICES, type InventoryServiceDescriptor } from "@intentic/capability-catalog";
 import { INVENTORY_NAME_MAX, INVENTORY_NAME_RE, inventoryIdentifier } from "@intentic/sandbox-contract/schemas/inventory";
@@ -274,8 +274,7 @@ const submit = async (): Promise<void> => {
 
         <!-- STEP 1: the catalog, your apps, then the self-hosted services. -->
         <div v-else class="flex flex-col gap-4">
-            <div v-if="workspaceApps.length > 0 || appsError">
-                <span :class="ui.sectionLabel('mb-2 block')">{{ t(`views.addWantDialog.apps`) }}</span>
+            <Section v-if="workspaceApps.length > 0 || appsError" :label="t(`views.addWantDialog.apps`)">
                 <Notice v-if="appsNotice" :of="appsNotice" class="mb-2" />
                 <!-- Choices are rows on the dialog's ground, not cards on it: the wash under the pointer is the affordance, and the
                      grid reaches out by the rows' padding so the marks line up with the label above. -->
@@ -298,12 +297,10 @@ const submit = async (): Promise<void> => {
                         </div>
                     </button>
                 </div>
-            </div>
+            </Section>
 
-            <div>
-                <span v-if="workspaceApps.length > 0 || appsError" :class="ui.sectionLabel('mb-2 block')">{{
-                    t(`views.words.selfHostedServices`)
-                }}</span>
+            <!-- Headed only when the apps above are: alone, the services are the whole step. -->
+            <Section :label="workspaceApps.length > 0 || appsError ? t(`views.words.selfHostedServices`) : undefined">
                 <div class="-mx-2.5 grid grid-cols-2 gap-x-1 gap-y-0.5">
                     <button
                         v-for="service in INVENTORY_SERVICES"
@@ -319,7 +316,7 @@ const submit = async (): Promise<void> => {
                         </div>
                     </button>
                 </div>
-            </div>
+            </Section>
         </div>
 
         <template v-if="selected" #footer>

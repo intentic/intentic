@@ -475,6 +475,18 @@ export const takeImprint = (root: Element, { now = Date.now(), budgetMs = BUDGET
     return { v: IMPRINT_VERSION, at: now, t: capture.table, root: imprinted };
 };
 
+/**
+ * Whether `root` shows nothing at all: no words, and nothing inside but wrappers that lay out as their children
+ * (`display: contents`) and show nothing either. Hidden content is not nothing: it is not on screen to be measured.
+ */
+export const rendersNothing = (root: Element): boolean =>
+    [...root.childNodes].every((node) =>
+        node instanceof Text ? !/\S/.test(node.data) : !(node instanceof Element) || (getComputedStyle(node).display === `contents` && rendersNothing(node)),
+    );
+
+/** The imprint of a region that showed nothing: drawn as nothing, where the fallback would promise rows. */
+export const emptyImprint = (now = Date.now()): SkeletonImprint => ({ v: IMPRINT_VERSION, at: now, t: [], root: { e: `div` } });
+
 /** Whether two imprints would draw the same, ignoring when each was taken. */
 export const sameImprint = (left: SkeletonImprint, right: SkeletonImprint): boolean =>
     JSON.stringify(left.root) === JSON.stringify(right.root) && JSON.stringify(left.t) === JSON.stringify(right.t);

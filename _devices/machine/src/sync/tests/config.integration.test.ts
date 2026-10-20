@@ -353,3 +353,31 @@ describe("a sandbox's fate on its pairings", () => {
         expect(moved === undefined ? undefined : pairingTransport(moved)).toBe("ssh");
     });
 });
+
+// (2026-10-20) The pause markers of the builds before holds.ts are read as the facts they stood for, never as a pause of
+// their own: the swap's as a swap under way (cleared by the watcher's next reading of ic), the container's as away, the
+// drive's as its reading. The unreachable hour and "gone" say nothing more than the clock and the mark beside them.
+describe("a pairing written before holds", () => {
+    it("reads each pause marker as the fact it stood for, and drops it at the next write", async () => {
+        await writeFile(
+            syncStatePath,
+            JSON.stringify({
+                pairings: [
+                    {
+                        ...local,
+                        fileSyncAutoPaused: true,
+                        fileSyncSwapPaused: true,
+                        fileSyncPausedFor: "container-trashed",
+                        fileSyncLowDisk: { since: 1, freeBytes: 2, totalBytes: 3, paused: ["intentic-x"] },
+                    },
+                    { ...web, fileSyncPausedFor: "gone", goneSince: 5 },
+                ],
+            }),
+        );
+        const [held, gone] = (await readState()).pairings;
+        expect(held).toEqual({ ...local, swapSince: expect.any(Number), containerAway: "trashed", lowDisk: { since: 1, freeBytes: 2, totalBytes: 3 } });
+        expect(gone).toEqual({ ...web, goneSince: 5 });
+        await setMirrorOff(web.sandboxId, true);
+        expect(await readFile(syncStatePath, "utf8")).not.toContain("fileSync");
+    });
+});

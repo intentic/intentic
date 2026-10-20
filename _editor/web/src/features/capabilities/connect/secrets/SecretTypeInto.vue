@@ -142,7 +142,7 @@ const typedSentence = computed(() => {
                 {{ t(`capabilities.typeInto.typing`, { machine: device ?? `` }) }}
             </p>
             <p v-else-if="phase === `typed`" class="flex items-start gap-1.5 text-xs text-content" role="status">
-                <Icon name="check" class="mt-0.5 shrink-0 text-success" />
+                <Icon name="check" class="shrink-0 text-success" />
                 <span>{{ typedSentence }}</span>
             </p>
             <p v-else class="text-2xs text-muted">{{ t(`capabilities.typeInto.explain`, { machine: device ?? ``, seconds }) }}</p>

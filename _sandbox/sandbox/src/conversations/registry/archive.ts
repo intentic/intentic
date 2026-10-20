@@ -233,7 +233,7 @@ export const forgetConversations = async (deps: AgentArchiveDeps, removed: reado
 const SETTLED_CHILD: ReadonlySet<AgentSummary["status"]> = new Set(["landed", "idle", "error", "interrupted", "stopped"]);
 
 // Whether a child goes when its parent is filed: settled before the parent last moved, and waiting on nothing (no
-// flag raised, no land that broke, no re-run booked, no watch armed, no message unsent). Left behind, it would stand
+// flag raised, no land that broke, nothing carrying it on by itself (`next`), no watch armed, no message unsent). Left behind, it would stand
 // alone on the board once its parent is gone, an error card in Attention days after the work it belonged to landed.
 // The board reads the same line (agentStatus.heardByParent) to keep such a child from calling the reader.
 export const goesWithParent = (child: AgentSummary, parent: AgentSummary): boolean =>
@@ -242,7 +242,7 @@ export const goesWithParent = (child: AgentSummary, parent: AgentSummary): boole
     child.updatedAt < parent.updatedAt &&
     !Object.values(child.attention).some((flag) => flag === true) &&
     child.landFailure === undefined &&
-    child.limitScheduled !== true &&
+    child.next === undefined &&
     (child.watches ?? []).length === 0 &&
     child.unsentAt === undefined;
 

@@ -1,13 +1,13 @@
-import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
+import type { AgentErrorCode } from "@intentic/sandbox-contract/events/agent-events";
 import { t } from "@intentic/ui/i18n";
 import type { AgentStanding } from "./agentStatus-standing";
 
-// WHAT KIND OF FAILURE ENDED A TURN, as the reader acts on it. The daemon codes every failure it can classify
-// (agent-events.ts's error codes, carried on the card as `failureCode`); the card used to read only two of them (a spent
-// allowance, a memory hold) and call every other one "Error", so an organization switching Claude Code off, a provider
-// timing out and a model that no longer exists all wore the same word as a crash, beside a red paragraph of the
-// provider's English. Grouped by what the reader does next, not by provider: the corner names the kind, and the kind
-// decides where the card's way on leads.
+// WHAT KIND OF FAILURE ENDED A TURN, as the reader acts on it, for every surface that says one: the board's corner names
+// the kind, and the chat's notice leads a provider's words with the kind's own line (failureView.ts). The daemon codes
+// every failure it can classify (agent-events.ts's error codes, carried on the card as `failureCode` and on the notice
+// row); the card used to read only two of them and call every other one "Error", so an organization switching Claude Code
+// off, a provider timing out and a model that no longer exists all wore the same word as a crash. Grouped by what the
+// reader does next, not by provider; a failure nothing coded has no kind, and each surface says so in its own words.
 export type FailureKind =
     // The account signs in but is refused service: an organization or plan that switched it off.
     | `access`
@@ -30,13 +30,24 @@ export type FailureKind =
     // Held at the door for want of room, as a memory hold is.
     | `held`
     // The runtime stopped partway without failing outright; the work may be half done.
-    | `cutShort`;
+    | `cutShort`
+    // The harness read the message as a slash command it does not have; the model never saw it.
+    | `command`
+    // The runtime warned about a turn it went on with: a note, not an ending.
+    | `advisory`;
 
-// Every code the daemon sends that names one of these, checked against the wire's own list so a renamed code is a build
-// error. A code missing here reads as the plain "Error" it always did, so a new one is never misnamed, only left unnamed
-// until it is added.
-type FailureCode = NonNullable<Extract<TurnFact, { kind: "error" }>["code"]>;
+// Every code the wire names, each with its kind: a code added to the contract fails the build here until it has one, so no
+// surface draws a failure it has no word for.
 const KINDS_BY_CODE = {
+    rate_limit: `limit`,
+    "session-not-found": `cutShort`,
+    "codex-advisory": `advisory`,
+    "unknown-command": `command`,
+    "agent-busy": `held`,
+    "sandbox-memory-low": `held`,
+    "sandbox-disk-low": `held`,
+    "tools-unenforced": `held`,
+    "agent-domain-refused": `held`,
     "claude-not-entitled": `access`,
     "account-not-entitled": `access`,
     "subscription-required": `access`,
@@ -61,14 +72,18 @@ const KINDS_BY_CODE = {
     "workspace-setup": `held`,
     "turn-cap": `cutShort`,
     "harness-incomplete": `cutShort`,
-} as const satisfies Partial<Record<FailureCode, FailureKind>>;
-// Looked up by the card's code, which the roster carries as a bare string.
+} as const satisfies Record<AgentErrorCode, FailureKind>;
+// Looked up by a bare string, since the roster and a row carry the code as one: a newer sandbox's code this build has no
+// word for reads as no kind, never as a wrong one.
 const KIND_OF_CODE = new Map<string, FailureKind>(Object.entries(KINDS_BY_CODE));
+
+/** The kind a failure code names; undefined for none, and for a code this build does not know. */
+export const kindOfCode = (code: string | undefined): FailureKind | undefined => (code === undefined ? undefined : KIND_OF_CODE.get(code));
 
 // The kind an `error` card's failure is, or undefined for one nothing classified (and for every other status: a refused
 // start says "Didn't start" whatever refused it, since that is the half of it the reader did not know).
 export const failureKind = (agent: Pick<AgentStanding, "status" | "failureCode">): FailureKind | undefined =>
-    agent.status === `error` && agent.failureCode !== undefined ? KIND_OF_CODE.get(agent.failureCode) : undefined;
+    agent.status === `error` ? kindOfCode(agent.failureCode) : undefined;
 
 // The corner's word for each kind. Short, since the chip is `shrink-0` beside the agent's name: no longer than the
 // longest word the corner already wears ("Question for you").
@@ -85,6 +100,8 @@ const kindWords = () =>
         privacy: t(`agents.agentStatus.privacyHold`),
         held: t(`agents.agentStatus.held`),
         cutShort: t(`agents.agentStatus.cutShort`),
+        command: t(`agents.agentStatus.unknownCommand`),
+        advisory: t(`agents.agentStatus.warned`),
     }) as const satisfies Record<FailureKind, string>;
 export const failureWord = (kind: FailureKind): string => kindWords()[kind];
 

@@ -495,10 +495,10 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                 v-for="way in waysRows"
                 :key="way.key"
                 type="button"
-                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
                 @click="way.press"
             >
-                <Icon :name="way.icon" class="mt-0.5 text-xs text-subtle" />
+                <Icon :name="way.icon" class="text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-sm text-content md:text-xs">{{ way.title }}</span>
                     <span class="text-2xs text-subtle">{{ way.note }}</span>

@@ -1,3 +1,4 @@
+import { codedFailure } from "../../agent/run/frames/error-frames.js";
 import type { McpServer, NewSessionRequest } from "@agentclientprotocol/sdk";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
@@ -368,10 +369,11 @@ test("a form the agent asks parks on a question card, and the picks go back as t
     expect(said(events)).toBe(`form:${JSON.stringify({ action: "accept", content: { target: "prod", notify: true } })}`);
 });
 
-test("a spent allowance in the agent's own words is coded, so the turn is held until it resets", async () => {
+test("a spent allowance in the agent's own words goes out as said, and the door codes it so the turn is held", async () => {
     const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);
     const events = await collect(agent, request("spent-allowance"));
-    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit" }));
+    const failure = events.find((event) => event.kind === "error");
+    expect(failure?.kind === "error" ? [failure.code, codedFailure(failure).code] : undefined).toEqual([undefined, "rate_limit"]);
 });
 
 describe("a command the daemon runs for the agent passes the owner's rulebook first", () => {

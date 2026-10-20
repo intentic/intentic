@@ -46,7 +46,10 @@ describe(`sectionsOf`, () => {
         ]);
     });
 
-    it(`captions only the section whose heading doesn't say why a row is in it`, () => {
-        expect(sectionsOf([entry(`knowledge`, `knowledge`), entry(`mystery`)]).map((section) => section.caption)).toEqual([undefined, undefined]);
+    it(`heads a section with its label alone: no words beside a section header`, () => {
+        expect(sectionsOf([entry(`knowledge`, `knowledge`), entry(`mystery`)]).map((section) => Object.keys(section).toSorted())).toEqual([
+            [`entries`, `id`, `label`],
+            [`entries`, `id`, `label`],
+        ]);
     });
 });

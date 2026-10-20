@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import type { WorkspaceFile } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type App, computed, createApp, defineComponent, h, nextTick, provide, ref, useSlots } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { REVEAL_DELAY_MS } from "@intentic/ui";
+import { MINIMUM_HOLD_MS, REVEAL_DELAY_MS } from "@intentic/ui";
 
 // The daemon's two reads, stood in for at the viewer's seams: a file's text window, and its bytes. Each text read says
 // whose copy it asked for, since a surface may read another than the Workspace's. An answer may take its time (a
@@ -220,7 +220,9 @@ describe(`a change heard while the tab first reads its file`, () => {
         await settle();
         firstRead?.();
         await settle();
-        await pastReveal();
+        // A wait once shown holds long enough to register before the text replaces it.
+        await new Promise((resolve) => setTimeout(resolve, MINIMUM_HOLD_MS));
+        await nextTick();
         expect(waitDrawn(element)).toBe(false);
         expect(element.querySelector(`.code-view`)?.getAttribute(`data-editable`)).toBe(`true`);
         expect(reads.map((read) => read.path)).toEqual([`fresh.txt`, `fresh.txt`]);

@@ -75,13 +75,18 @@ export const context: TurnContext = {
 // its own name (via `unstubbed`), never a bare undefined.
 // What a turn on a remembered Claude account reads to learn whether that account can still serve it: no account held
 // here, so nothing is judged and the turn runs where routing points.
-const noClaudeAccounts = (): Pick<Services, "claudeStore" | "claudeSeats" | "claudeSeatCheck" | "accountUsage" | "providerRefusals"> => ({
+const noClaudeAccounts = (): Pick<
+    Services,
+    "claudeStore" | "claudeSeats" | "claudeSeatCheck" | "accountUsage" | "providerAccounts" | "providerRefusals"
+> => ({
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [] }),
     claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
     // Nothing is marked, so nothing is re-tested.
     claudeSeatCheck: unstubbed<Services["claudeSeatCheck"]>("claudeSeatCheck", {}),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({}) }),
-    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}), onFile: async () => ({}) }),
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
+    // No provider's own door lists an account.
+    providerAccounts: async () => [],
 });
 
 // OpenCode with no xAI sign-in, booted the way the privacy shield wants it (off here): nothing to delegate to, nothing

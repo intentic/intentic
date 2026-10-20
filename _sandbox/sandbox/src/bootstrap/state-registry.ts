@@ -7,7 +7,6 @@ import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { activityLogDocument } from "../activity/activity-store.js";
 import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
-import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
 import { spawnedChildrenDocument } from "../agent/subagents/spawned-children.js";
 import { scriptRunsDocument } from "../agent/subagents/workflows/script-run-store.js";
 import { keptJobRecordsDocument } from "../agent/tools/jobs/kept-job-records.js";
@@ -108,10 +107,9 @@ import { skippedUpdateDocument } from "../system/updates/update-skip.js";
 import { workspaceIdentityDocument } from "../system/workspace-identity.js";
 import { accountUsageDocument } from "../usage/account-usage.js";
 import { providerAnswersDocument } from "../usage/drift/answer-vocabulary.js";
-import { modelCooldownsDocument } from "../usage/model-cooldowns.js";
 import { modelRefusalsDocument } from "../usage/model-refusals.js";
-import { observedLimitsDocument } from "../usage/observed-limits.js";
 import { providerRefusalsDocument } from "../usage/provider-refusals.js";
+import { refusalLedgerStep } from "../usage/refusal-ledger-step.js";
 import { runOutsDocument } from "../usage/run-outs.js";
 import { usageParksDocument } from "../usage/usage-parks.js";
 import { usageLedgerDocument } from "../usage/usage-store.js";
@@ -125,7 +123,6 @@ import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js"
 const documentsPart1 = (): readonly DocumentSpec[] => [
     activityLogDocument,
     claudeSeatsDocument,
-    pausedChildrenDocument,
     spawnedChildrenDocument,
     scriptRunsDocument,
     keptJobRecordsDocument,
@@ -167,9 +164,6 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     engineStateDocument,
     runtimeInstallsDocument,
     extensionSettingsDocument,
-];
-
-const documentsPart2 = (): readonly DocumentSpec[] => [
     extensionUpdatePolicyDocument,
     extensionUpdatesDocument,
     extensionUsageDocument,
@@ -191,6 +185,9 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     runnerPairConsumedDocument,
     syncPairConsumedDocument,
     webextEnrollmentsDocument,
+];
+
+const documentsPart2 = (): readonly DocumentSpec[] => [
     webextPairConsumedDocument,
     peerToolsDocument,
     conversationGrantsDocument,
@@ -214,9 +211,6 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     keyringNeedsDocument,
     keyringCopiesDocument,
     keyringDevicesDocument,
-];
-
-const documentsPart3 = (): readonly DocumentSpec[] => [
     keyringSyncMailboxDocument,
     secretHostGuardsDocument,
     secretProgramGuardsDocument,
@@ -246,9 +240,7 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
     workspaceIdentityDocument,
     accountUsageDocument,
     providerAnswersDocument,
-    modelCooldownsDocument,
     modelRefusalsDocument,
-    observedLimitsDocument,
     providerRefusalsDocument,
     runOutsDocument,
     usageParksDocument,
@@ -265,7 +257,6 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
 export const stateDocuments = (): readonly DocumentSpec[] => [
     ...documentsPart1(),
     ...documentsPart2(),
-    ...documentsPart3(),
 ];
 
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.
@@ -281,5 +272,6 @@ export const stateSteps = (): readonly StructuralStep[] =>
         landCheckLeftoversStep,
         pushChecksLeftoversStep,
         stateRegroupStep,
+        refusalLedgerStep,
         workflowGateTokensStep,
     ].toSorted((a, b) => a.id.localeCompare(b.id));

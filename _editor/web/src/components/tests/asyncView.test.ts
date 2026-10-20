@@ -1,8 +1,9 @@
-// Navigation completes while the chunk is still in flight; the outline only shows past the reveal delay, then
-// swaps to the real view. Owns the failure path: a dead chunk gets the stale-window reload, anything else a notice with
-// retry.
+// Navigation completes while the chunk is still in flight; the outline only shows past the reveal delay, holds long
+// enough to register, then swaps to the real view. Owns the failure path: a dead chunk gets the stale-window reload,
+// anything else a notice with retry.
 import "@intentic/testing/dom";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { MINIMUM_HOLD_MS } from "@intentic/ui";
 import { type App, type Component, createApp, defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter, RouterView, type Router } from "vue-router";
 import { asyncView } from "../asyncView";
@@ -73,6 +74,9 @@ it(`completes the navigation before the chunk arrives, reveals the outline only 
 
     land({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) });
     await settle();
+    // An outline once shown stays long enough to register, the view mounted under it, then gives way.
+    expect(el.querySelector(`[data-outline]`)).not.toBeNull();
+    await advanceTimersByTimeAsync(MINIMUM_HOLD_MS);
     expect(el.querySelector(`[data-view]`)).not.toBeNull();
     expect(el.querySelector(`[data-outline]`)).toBeNull();
 });

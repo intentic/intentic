@@ -263,6 +263,8 @@ describe(`turn runs`, () => {
         expect(turnRunOf(deps.conversations, `c-throw`)!.rows.at(-1)).toEqual({
             role: `notice`,
             text: `adapter exploded`,
+            // A harness's own words, which nothing named: the unclassified kind, coded as a failure all the same.
+            noticeCode: { code: `failed`, params: { message: `adapter exploded` } },
             openedAt: AT,
             run: turnRunOf(deps.conversations, `c-throw`)!.id,
             rowId: ID,

@@ -5,7 +5,6 @@ import { errorMessage, stderrOf } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import type { AgentSpan, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
-import type { Logger } from "pino";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { headSha } from "../../git/changes/changes.js";
 import { pruneEmptiedDirs } from "../../git/changes/changes-index.js";
@@ -16,6 +15,8 @@ import { branchSha, mainBranchOf } from "../../git/agent-refs.js";
 import { withConversationTrailer } from "../../git-identity.js";
 import { writeChangesPatch, writePatch } from "./land-patch.js";
 import { reconcileLockfile } from "./lockfile-reconcile.js";
+import { type Rederived, rederiveAll, UNDERIVED } from "./rederive.js";
+import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 import { assertLinked } from "../worktrees/checkout-link.js";
@@ -37,6 +38,8 @@ export interface LandOutcome extends LandResult {
     readonly adjudicated: boolean;
     // Repos whose lockfile could not be regenerated for a manifest the delta changed; the land went ahead without it.
     readonly lockfileFailures?: readonly LockfileFailure[];
+    // What each written repo's own fixers derived again in the tree the land wrote into (rederive.ts).
+    readonly derived?: readonly Rederived[];
     // A landed tip moved with nothing written: a net-zero delta (an edit and its revert). The books must keep it or a
     // later land re-reports the delta, but `changed` stays false: nothing reached a tree, so nothing is announced.
     readonly advanced?: true;
@@ -46,13 +49,6 @@ export interface LockfileFailure {
     readonly repo: string;
     readonly reason: string;
 }
-
-// Said by every door a land goes through, since pnpm's reason is the only account of why the lockfile lags its manifest.
-export const reportLockfileFailures = (logger: Logger, id: string, outcome: LandOutcome): void => {
-    for (const { repo, reason } of outcome.lockfileFailures ?? []) {
-        logger.warn({ id, repo, reason }, "agents: lockfile could not be regenerated for a changed manifest");
-    }
-};
 
 // `git apply --check`, the exit code as a throw: undefined when the patch applies, else the stderr, which names every
 // file patch that failed since git checks the whole list before giving up. `reverse` tells a clash from content main
@@ -193,10 +189,10 @@ const classifyDelta = async (
     refused: string,
     git: GitRunner,
 ): Promise<DeltaReport> => {
-    const rows = parseNameStatusZ((await git(main, ["diff", "--name-status", "-z", "-M", from, tip])).stdout);
+    const rows = parseNameStatusZ((await git(main, ["diff", "--name-status", "-z", "-M", from, tip, ...UNDERIVED])).stdout);
     const changes = rows.map(deltaChangeOf);
     // Numstat, not a patch string search: a binary file has both counts omitted, keyed on the destination path.
-    const stats = parseNumstatZ((await git(main, ["diff", "--numstat", "-z", "-M", from, tip])).stdout);
+    const stats = parseNumstatZ((await git(main, ["diff", "--numstat", "-z", "-M", from, tip, ...UNDERIVED])).stdout);
     const isBinary = (path: string): boolean => {
         const counts = stats.get(path);
         return counts !== undefined && counts.additions === undefined && counts.deletions === undefined;
@@ -325,7 +321,7 @@ export const outstandingConflicts = async (
                     return;
                 }
                 const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.patch`);
-                if ((await writePatch(main, patchPath, [from, tip], git)) === 0) {
+                if ((await writePatch(main, patchPath, [from, tip, ...UNDERIVED], git)) === 0) {
                     return;
                 }
                 // Applies whole or already whole: nothing refuses today, whatever refused before.
@@ -424,7 +420,7 @@ const refusedWrite = async (write: RepoLandWrite, error: unknown, git: GitRunner
     const changes =
         write.kind === "subset"
             ? write.changes
-            : parseNameStatusZ((await git(write.main, ["diff", "--name-status", "-z", "-M", write.from, write.tip])).stdout).map(deltaChangeOf);
+            : parseNameStatusZ((await git(write.main, ["diff", "--name-status", "-z", "-M", write.from, write.tip, ...UNDERIVED])).stdout).map(deltaChangeOf);
     const named = changesNamedIn(gitSaid(error), changesByPath(changes));
     if (named.size === 0) {
         throw error;
@@ -584,7 +580,7 @@ const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlannin
     }
     const target = { main, repo, base, tip, from } satisfies RepoLandTarget;
     const patchPath = join(run.patchDir, `${repo.replaceAll("/", "_")}.patch`);
-    if ((await writePatch(main, patchPath, [from, tip], git)) === 0) {
+    if ((await writePatch(main, patchPath, [from, tip, ...UNDERIVED], git)) === 0) {
         // Net-zero delta: nothing to apply, but the tip must advance or a future land re-reports it.
         return { plan: { next: { repo, base, landedTip: tip } }, changed: false, advanced: true, diff };
     }
@@ -678,7 +674,9 @@ export const landAgent = async (
                 if (written.conflicts.length > 0) {
                     return { landed: false, changed, repos: written.repos, diff, adjudicated: true, conflicts: written.conflicts, ...resolving, ...target };
                 }
-                return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...target };
+                // Every write went through, under the same locks: the tree it wrote derives its own files (rederive.ts).
+                const derived = opt("derived", await rederiveAll(plannings.flatMap(({ plan }) => (plan.write === undefined ? [] : [plan.write])), git));
+                return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...derived, ...target };
             },
         );
         return lockfileFailures.length === 0 ? outcome : { ...outcome, lockfileFailures };

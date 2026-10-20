@@ -1,16 +1,17 @@
-import type { PersonalDataClass, PrivacyDictionaryPolicy, PrivacyRule, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
-import { detectPersonalData, normalizeAllowed, type PersonalDataSpan } from "@intentic/privacy-detect";
+import { allowKey, type PersonalDataClass, type PrivacyDictionaryPolicy, type PrivacyRule, type PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
+import { type Candidate, createGate, detectorCandidates, type Gate } from "@intentic/privacy-detect";
 import { createLexicon, type Lexicon } from "@intentic/privacy-detect/lexicon";
 import { createKnownMatcher, type KnownMatcher, type Spelling } from "./known-matcher.js";
 
-// The detectors as the owner set them: the built-in ones over the name lists they left on and added, and their own
-// rules (privacy policy `dictionary` and `rules`). Everything that finds personal data for the shield reads through one
-// of these, so a list switched off or a rule added holds alike for the gateway, a hooked runtime's channels, a push and
-// a share. Built once per configuration and kept while it is in force: a lexicon and a matcher over a few thousand terms
-// cost milliseconds, a policy is read on every request.
+// The detectors as the owner set them: the built-in ones over the name lists they left on and added, their own rules
+// (privacy policy `dictionary` and `rules`), and the gate every find passes under their kinds and never-masked values.
+// Everything that finds personal data for the shield reads through one of these, so a list switched off, a rule added
+// or a value never masked holds alike for the gateway, a hooked runtime's channels, a push and a share. Built once per
+// configuration and kept while it is in force: a lexicon and a matcher over a few thousand terms cost milliseconds, a
+// policy is read on every request.
 
 // One find, and the owner's rule that made it when one did.
-export interface PolicySpan extends PersonalDataSpan {
+export interface PolicySpan extends Candidate {
     readonly rule?: string;
 }
 
@@ -18,10 +19,10 @@ export interface PolicyDetector {
     // Identifies what this detector finds, for memo keys: two policies with the same key find the same.
     readonly key: string;
     readonly lexicon: Lexicon;
-    readonly classes: ReadonlySet<PersonalDataClass>;
-    readonly allow: ReadonlySet<string>;
-    // Sorted by start and non-overlapping; where a rule and a detector find the same stretch, the detector's stands.
-    readonly detect: (text: string) => PolicySpan[];
+    // The one gate (@intentic/privacy-detect detect.ts) every candidate passes, the vault's and the model's included.
+    readonly gate: Gate;
+    // What the detectors and the owner's rules propose in a text, before the gate.
+    readonly candidates: (text: string) => PolicySpan[];
 }
 
 export type DetectorPolicy = Pick<PrivacyShieldPolicy, "classes" | "allow" | "dictionary" | "rules">;
@@ -76,24 +77,6 @@ const patternSpans = ({ rule, regex, group }: CompiledPattern, text: string, emi
     }
 };
 
-// Detector finds first, so on a tie of length and class the detector's span (no rule) is the one kept: a value the
-// detectors would find anyway is theirs, and the vault goes on matching it after the rule is switched off.
-const merge = (detected: readonly PolicySpan[], ruled: readonly PolicySpan[]): PolicySpan[] => {
-    if (ruled.length === 0) {
-        return [...detected];
-    }
-    const all = [...detected, ...ruled].toSorted((left, right) => left.start - right.start || right.end - right.start - (left.end - left.start));
-    const kept: PolicySpan[] = [];
-    let covered = 0;
-    for (const span of all) {
-        if (span.start >= covered) {
-            kept.push(span);
-            covered = span.end;
-        }
-    }
-    return kept;
-};
-
 // The lexicon the name rules read under the owner's dictionary: the built-in lists less those switched off, and their
 // own lists that are on.
 export const dictionaryLexicon = (config: PrivacyDictionaryPolicy): Lexicon =>
@@ -101,10 +84,9 @@ export const dictionaryLexicon = (config: PrivacyDictionaryPolicy): Lexicon =>
 
 const buildDetector = (policy: DetectorPolicy, key: string, warn: (message: string) => void): PolicyDetector => {
     const classes = new Set<PersonalDataClass>(policy.classes);
-    const allow = new Set(policy.allow.map(normalizeAllowed));
     const lexicon = dictionaryLexicon(policy.dictionary);
-    // A rule counts as the kind it masks as: switching that kind off stops it too.
-    const rules = policy.rules.filter((rule) => rule.on && classes.has(rule.class));
+    // A rule counts as the kind it masks as: switching that kind off stops it too, at the gate.
+    const rules = policy.rules.filter((rule) => rule.on);
     const terms: KnownMatcher<PrivacyRule> = createKnownMatcher(
         rules
             .filter((rule) => rule.match === "terms")
@@ -119,16 +101,11 @@ const buildDetector = (policy: DetectorPolicy, key: string, warn: (message: stri
     return {
         key,
         lexicon,
-        classes,
-        allow,
-        detect: (text) => {
-            const detected = detectPersonalData(text, { classes, allow, lexicon });
-            const ruled: PolicySpan[] = [];
+        gate: createGate({ classes, allow: new Set(policy.allow.map(allowKey)), lexicon }),
+        candidates: (text) => {
+            const found: PolicySpan[] = detectorCandidates(text, { classes, lexicon });
             const emit = (start: number, end: number, rule: PrivacyRule): void => {
-                const value = text.slice(start, end);
-                if (!allow.has(normalizeAllowed(value))) {
-                    ruled.push({ start, end, class: rule.class, value, rule: rule.id });
-                }
+                found.push({ start, end, class: rule.class, value: text.slice(start, end), by: "rule", rule: rule.id });
             };
             for (const hit of terms.find(text)) {
                 emit(hit.start, hit.end, hit.payload);
@@ -136,7 +113,7 @@ const buildDetector = (policy: DetectorPolicy, key: string, warn: (message: stri
             for (const pattern of patterns) {
                 patternSpans(pattern, text, emit);
             }
-            return merge(detected, ruled);
+            return found;
         },
     };
 };
@@ -145,7 +122,7 @@ const buildDetector = (policy: DetectorPolicy, key: string, warn: (message: stri
 const detectorKey = (policy: DetectorPolicy): string =>
     JSON.stringify([
         [...policy.classes].toSorted(),
-        [...new Set(policy.allow.map(normalizeAllowed))].toSorted(),
+        [...new Set(policy.allow.map(allowKey))].toSorted(),
         policy.dictionary.off.toSorted(),
         policy.dictionary.lists.filter((list) => list.on).map((list) => [list.kind, list.matching, list.words]),
         policy.rules

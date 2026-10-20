@@ -2,7 +2,6 @@ import type {
     PrivacyDictionary,
     PrivacyImagePair,
     PrivacyKnownSource,
-    PrivacyLedgerEntry,
     PrivacyPreviewSpan,
     PrivacyShieldPolicy,
     PrivacyShieldStatus,
@@ -33,7 +32,7 @@ export const shieldRefusal = (cause: Error | null, ownerOnly: string, failed: st
 };
 
 export function usePrivacyShield() {
-    const { query, error } = useSandboxQuery(rpcQuery(`privacy.status`));
+    const { query, loaded } = useSandboxQuery(rpcQuery(`privacy.status`));
 
     const save = useMutation(
         {
@@ -83,16 +82,15 @@ export function usePrivacyShield() {
         },
         isSaving: computed<boolean>(() => save.isPending.value),
         saveError: computed<Error | null>(() => save.error.value),
-        isLoading: query.isLoading,
-        error,
+        loaded,
     };
 }
 
 // The gateway's own record of what it did. Read under its route's key, so the daemon's `privacy-log` push refreshes it
 // without a poll (queryKeys.ts maps the push to this read).
 export function usePrivacyLog() {
-    const { query, error } = useSandboxQuery(rpcQuery(`privacy.log`));
-    return { entries: computed<PrivacyLedgerEntry[]>(() => query.data.value ?? []), isLoading: query.isLoading, error };
+    const { loaded } = useSandboxQuery(rpcQuery(`privacy.log`));
+    return { loaded };
 }
 
 // The values behind the tokens the activity shows, read from the vault for the owner alone: anybody else is refused
@@ -131,7 +129,7 @@ export function usePrivacyImage(id: Ref<string | undefined>) {
 // The datasets taught to the shield, and the owner's way to forget one. The agent teaches through its CLI, which this
 // panel never does.
 export function usePrivacySources() {
-    const { query, error } = useSandboxQuery(rpcQuery(`privacy.sources`));
+    const { query, loaded } = useSandboxQuery(rpcQuery(`privacy.sources`));
 
     const forget = useMutation(
         {
@@ -155,8 +153,7 @@ export function usePrivacySources() {
             await forget.mutateAsync(source).catch(() => undefined);
         },
         forgetError: computed<Error | null>(() => forget.error.value),
-        isLoading: query.isLoading,
-        error,
+        loaded,
     };
 }
 

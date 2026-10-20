@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
                 :class="[
                     vertical ? 'w-full min-w-0' : '',
                     selects(group)
-                        ? 'bg-primary-500/14 text-content'
+                        ? 'ui-row-select-horizontal ui-row-select-on text-content'
                         : gi === activeGroupIndex
                           ? 'bg-overlay text-content'
                           : 'text-muted hover:bg-content/6 hover:text-content',

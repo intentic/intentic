@@ -8,10 +8,13 @@ import { opt } from "../../opt.js";
 import type { AgentsRegistry } from "../registry/agents-registry.js";
 import { reposOf } from "../registry/agents-store.js";
 import { createPathLists, type ExpiryTracker } from "../registry/expiry.js";
+import { derivedChanges, UNDERIVED } from "./rederive.js";
 
 // Per-file attribution for the Changes panel, derived from git, never recorded separately: land patches landedTip's
 // range in and records the tip (land.ts), so the claim is the diff back to the merge-base, not the frozen creation base
-// a rebase would inflate. A path expires from the claim once the user commits it.
+// a rebase would inflate. A path expires from the claim once the user commits it. A file the repository derives is no
+// branch's: no land carries it, the land writes it again in the tree (rederive.ts), and while it differs from HEAD it is
+// the newest landing's, so it rides the next commit of landed work, whose sources it was derived from.
 
 // One landing identified by what it did, not who did it: the same agent landing twice makes two claims, both measured.
 const landingKey = (repo: string, head: string, tip: string): string => `${repo} ${head} ${tip}`;
@@ -24,6 +27,17 @@ interface Landing {
     readonly head: string;
     readonly at: number;
 }
+
+// Every derived path that differs from HEAD, as the newest landing's (the claim this file's head describes).
+const claimDerived = async (dir: string, landings: readonly Landing[], origins: Record<string, string[]>, git: GitRunner): Promise<void> => {
+    const [newest] = landings;
+    if (newest === undefined) {
+        return;
+    }
+    for (const path of await derivedChanges(dir, git)) {
+        origins[path] = [newest.id];
+    }
+};
 
 export interface AgentOrigins {
     // path -> ids that landed it, newest first; empty when nothing here is attributable.
@@ -55,9 +69,8 @@ export const createAgentOrigins = (
         if (hit !== undefined) {
             return hit;
         }
-        const { stdout } = await git(dir, ["diff", "--name-only", "--no-renames", "-z", ...args]);
         // Copied out of stdout, never sliced: a sliced path would pin the whole parent listing here.
-        const paths = materializedPaths(stdout);
+        const paths = materializedPaths((await git(dir, ["diff", "--name-only", "--no-renames", "-z", ...args, ...UNDERIVED])).stdout);
         cache.set(key, paths);
         return paths;
     };
@@ -199,6 +212,7 @@ export const createAgentOrigins = (
             for (const landing of landings) {
                 await claim(repo, dir, head, landing, origins);
             }
+            await claimDerived(dir, landings, origins, git);
             answers.set(repo, { key, origins });
             return origins;
         },

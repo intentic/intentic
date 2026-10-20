@@ -18,7 +18,7 @@ export interface AgentHistoryEntry extends AgentHistoryCommit {
 export function useAgentHistory(agentId: Ref<string>, enabled: Ref<boolean>, at?: Ref<string | undefined>) {
     const reach = computed(() => at?.value);
     // Stale whenever the review is: agentReviewKeys invalidates the two together.
-    const { query, error } = useSandboxQuery(
+    const { query, error, loaded } = useSandboxQuery(
         {
             ...rpcQuery(`agents.history`, () => ({ id: agentId.value }), { at: reach }),
             enabled: computed(() => agentId.value !== `` && enabled.value),
@@ -66,9 +66,9 @@ export function useAgentHistory(agentId: Ref<string>, enabled: Ref<boolean>, at?
         // roads other than a commit since the land.
         unaccounted: computed(() => query.data.value?.unaccounted ?? 0),
         fetching: query.isFetching,
-        // Whether the walk has answered at all. The panel's wait reads this, not `fetching`: a later refresh over an
-        // answer already drawn is not another wait, and drawing one would take the reader's place away.
-        loaded: computed(() => query.data.value !== undefined),
+        // What the panel has of the walk. Its wait reads this, not `fetching`: a later refresh over an answer already
+        // drawn is not another wait, and drawing one would take the reader's place away.
+        loaded,
         error,
     };
 }

@@ -287,10 +287,10 @@ const onClockKey = (event: KeyboardEvent): void => {
         </div>
 
         <!-- What leaving now would book, said the way the pill will say it; or what is missing, or what is wrong. -->
-        <p class="mx-1 mt-1.5 flex items-start gap-2 border-t border-line-subtle px-1.5 pt-2 pb-1" aria-live="polite">
+        <p class="mx-1 mt-1.5 flex items-start gap-2 border-t border-line-subtle px-1.5 pt-2 pb-1 text-sm md:text-xs" aria-live="polite">
             <Icon
                 :name="summary.tone === `ok` ? `send` : summary.tone === `warn` ? `exclamation-circle` : `calendar`"
-                class="mt-0.5 shrink-0 text-xs"
+                class="shrink-0 text-xs"
                 :class="summary.tone === `warn` ? `text-warning` : `text-subtle`"
             />
             <span class="flex min-w-0 flex-col">

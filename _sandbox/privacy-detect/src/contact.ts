@@ -1,4 +1,4 @@
-import { afterEscape, digitsOf, type Emit, isDigit, isWordChar, jsonKeyWordsBefore, keywordBefore } from "./text.js";
+import { afterEscape, digitsOf, type Emit, isDigit, isWordChar, jsonKeyWordsBefore, keywordBefore, partOfDecimal } from "./text.js";
 
 // E-mail addresses and phone numbers.
 
@@ -127,12 +127,17 @@ const FIXED_LENGTH: ReadonlyArray<readonly [string, number]> = [
     ["48", 11],
 ];
 
+// Digits standing alone between separators. One is a country code (`+1 …`) or a trunk zero (`0 22 …`); two or more are
+// a list of numbers written a digit at a time (a shell loop's `for i in 1 2 3 …`), which no number is grouped like.
+const LONE_DIGIT = /(?:^|[ .()-])\d(?=[ .()-]|$)/gu;
+
 // How a run is written can say it is no phone whatever its digits: an IPv4 address (four dotted groups, each at most
-// 255), a separator of two characters other than a bracket's (the " -" of a diff stat's signed counts), or separators
-// of two kinds. A bracketed area code and the gap after a country code may differ from the rest: a North American
-// number written with "+1 (", a dashed one after "+1 ", a Polish landline with its area code as "(0-22)".
+// 255), a separator of two characters other than a bracket's (the " -" of a diff stat's signed counts), separators of
+// two kinds, or digits written one at a time. A bracketed area code and the gap after a country code may differ from
+// the rest: a North American number written with "+1 (", a dashed one after "+1 ", a Polish landline with its area code
+// as "(0-22)".
 const notPhoneShaped = (run: string, separators: readonly string[]): boolean => {
-    if (separators.some((separator) => separator.replaceAll(/[()]/g, "").length > 1)) {
+    if (separators.some((separator) => separator.replaceAll(/[()]/g, "").length > 1) || (run.match(LONE_DIGIT) ?? []).length > 1) {
         return true;
     }
     const afterBrackets = separators.slice(separators.findLastIndex((separator) => /[()]/.test(separator)) + 1);
@@ -172,7 +177,13 @@ const placeholderNumber = (national: string): boolean => {
     return steps.size === 1 && (steps.has(0) || steps.has(1) || steps.has(9));
 };
 
-const isPhone = (text: string, run: string, start: number): boolean => {
+// Whether something before a number calls it a phone: a keyword ("tel.", "komórka") or the JSON key it stands under.
+const namedPhone = (text: string, start: number): boolean =>
+    keywordBefore(text, start, PHONE_KEYWORD, 30) || jsonKeyWordsBefore(text, start).some((word) => PHONE_KEY_WORD.test(word));
+
+// `vouched`: something other than the text around it says the number is a phone (the vault found it beside a keyword
+// before), which stands in for the keyword a bare nine-digit run needs. The shape is asked of it all the same.
+const isPhone = (text: string, run: string, start: number, vouched: boolean): boolean => {
     const digits = digitsOf(run);
     const separators = [...run.matchAll(/\d([ .()-]+)(?=\d)/g)].map((match) => match[1] ?? "");
     if (notPhoneShaped(run, separators) || placeholderNumber(nationalPart(run, digits))) {
@@ -204,40 +215,39 @@ const isPhone = (text: string, run: string, start: number): boolean => {
     // Nine digits bare, or in a grouping no format above claims, are a number like any other unless something calls
     // them a phone.
     const national = digits.length === 9 || (digits.length === 11 && digits.startsWith("48"));
-    const named = keywordBefore(text, start, PHONE_KEYWORD, 30) || jsonKeyWordsBefore(text, start).some((word) => PHONE_KEY_WORD.test(word));
+    const named = vouched || namedPhone(text, start);
     return national && !digits.startsWith("0") && named && !amount;
 };
 
 // What may follow a phone number: not a port, more of a dotted number, or the rest of a host name.
 const PORT_OR_MORE = /^(?:[:.]\d|\.\p{L})/u;
 
+// Whether the digits at start..end are a phone number where they stand: written as one, not part of something else (a
+// slug, an id, a range, a path, a port, a host name, a time, a decimal), and called one unless `vouched`. The finder
+// reads every digit run through it, and a number the vault knows is read through it wherever it comes back
+// (standalone.ts), so what makes a run no phone is decided here once.
+export const phoneAt = (text: string, start: number, end: number, vouched: boolean): boolean => {
+    const run = text.slice(start, end);
+    const before = text[start - 1];
+    // Joined by a hyphen to a word or a number before it, a run is part of a slug, an id or a range; after a colon and a
+    // digit, it is a port after a host's address, or the part of a time or a ratio after its colon.
+    const joinedBefore =
+        (isWordChar(before) && !afterEscape(text, start)) ||
+        before === "+" ||
+        before === "/" ||
+        (before === "-" && isWordChar(text[start - 2])) ||
+        (before === ":" && isDigit(text[start - 2]));
+    const joinedAfter = isWordChar(text[end]) || PORT_OR_MORE.test(text.slice(end));
+    const unbalanced = run.replace(/[^()]/g, "").length % 2 === 1;
+    return !joinedBefore && !joinedAfter && !unbalanced && !partOfDecimal(text, start, end) && isPhone(text, run, start, vouched);
+};
+
 export const findPhones = (text: string, emit: Emit): void => {
     for (const match of text.matchAll(DIGIT_RUN)) {
-        let run = match[0];
-        const start = match.index;
         // A closing bracket the run picked up without an opening one belongs to the text around it.
-        if (run.endsWith(")") && !run.includes("(")) {
-            run = run.slice(0, -1);
-        }
-        const before = text[start - 1];
-        // Joined by a hyphen to a word or a number before it, a run is part of a slug, an id or a range.
-        if (
-            (isWordChar(before) && !afterEscape(text, start)) ||
-            before === "+" ||
-            before === "/" ||
-            (before === "-" && isWordChar(text[start - 2]))
-        ) {
-            continue;
-        }
-        if (isWordChar(text[start + run.length]) || run.replace(/[^()]/g, "").length % 2 === 1 || PORT_OR_MORE.test(text.slice(start + run.length))) {
-            continue;
-        }
-        // A port after a host's address, or the part of a time or a ratio after its colon.
-        if (before === ":" && isDigit(text[start - 2])) {
-            continue;
-        }
-        if (isPhone(text, run, start)) {
-            emit(start, start + run.length, "phone");
+        const run = match[0].endsWith(")") && !match[0].includes("(") ? match[0].slice(0, -1) : match[0];
+        if (phoneAt(text, match.index, match.index + run.length, false)) {
+            emit(match.index, match.index + run.length, "phone");
         }
     }
 };

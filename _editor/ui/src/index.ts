@@ -167,6 +167,8 @@ export {
     type DeviceSandboxGroup,
     type DeviceSandboxResources,
     type DeviceSandboxRow,
+    // Why a folder's sync is not running, and whether Resume is the owner's to press; decides which way Pause points.
+    folderHold,
     // Whether the device is off this sandbox's ports; decides which way a Stop/Start button points.
     mirroringOff,
     // Whether a pairing has a file-sync session at all; decides whether Pause syncing has anything to act on.
@@ -270,7 +272,15 @@ export { default as ResizeSeam } from "./components/layout/ResizeSeam.vue";
 // Anchored panel on desktop, bottom sheet on a phone, behind one open flag.
 export { default as ResponsiveOverlay } from "./components/overlays/ResponsiveOverlay.vue";
 export { default as Row } from "./components/rows/Row.vue";
+// A list: the one section header over the rows' card. A label over things that are not rows is a <Section>; the header
+// alone, where a section's markup belongs to something else (a status bar's panel, a picker's group), is
+// <SectionHeader>. None of the three can say a count, a caption or a fill: the header is decided here, once.
 export { default as RowGroup } from "./components/rows/RowGroup.vue";
+export { default as Section } from "./components/rows/Section.vue";
+export { default as SectionHeader } from "./components/rows/SectionHeader.vue";
+// A box a view drew itself that is a surface, so a group or card laid on it draws none (Modal, Card, a group's card and
+// the overlays say so on their own).
+export { SurfaceGround } from "./components/overlays/surfaceGround.js";
 // Non-record lines on a group's surface (empty state, explanatory sentence, add-one prompt), drawn at the
 // group's own tier.
 export { default as RowNote } from "./components/rows/RowNote.vue";
@@ -286,6 +296,10 @@ export { seriesColor } from "./components/charts/seriesAccent.js";
 // Loading placeholder built from real <Row>s so it can't drift from the list it stands in for. A single bar
 // needs no component: use the `skeleton` class directly.
 export { default as SkeletonRows } from "./components/feedback/SkeletonRows.vue";
+// A region's wait, drawn from its read's `Loaded` (`@intentic/extension-api`): nothing for a moment, then the region as it last
+// looked in this sandbox (its fallback until seen once), the answer, or the failure in words. The one way a view draws
+// "not here yet"; the two parts below are its insides, exported for extensions built before it.
+export { default as Await } from "./components/feedback/Await.vue";
 // A placeholder drawn exactly as its content last looked in this sandbox: `v-skeleton-source="name"` on the content
 // takes its imprint once settled, `<SkeletonSnapshot of="name">` draws it, with its slot as the fallback until one exists.
 export { default as SkeletonSnapshot } from "./components/feedback/SkeletonSnapshot.vue";
@@ -375,7 +389,7 @@ export { useLatest } from "./composables/useLatest.js";
 export { type SettledOptions, useSettled } from "./composables/useSettled.js";
 // Gates when a loading placeholder may appear; a fast response resolves within the reveal delay so nothing
 // flashes for a normal round trip.
-export { REVEAL_DELAY_MS, useLoadingReveal } from "./composables/loadingReveal.js";
+export { MINIMUM_HOLD_MS, REVEAL_DELAY_MS, useLoadingReveal } from "./composables/loadingReveal.js";
 export { type HoverIntent, type HoverIntentOptions, useHoverIntent } from "./composables/useHoverIntent.js";
 // A menu the pointer opens and a press pins, with the corridor that keeps it up on the way to it.
 export { type HoverMenu, useHoverMenu } from "./composables/useHoverMenu.js";

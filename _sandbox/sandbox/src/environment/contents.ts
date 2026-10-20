@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 import type { EnvironmentContents, EnvironmentItem } from "@intentic/sandbox-contract/schemas/environment";
+import { rebuildPending } from "@intentic/sandbox-contract/state/sandbox-build";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
-import { customPath, proposalPath } from "./environment.js";
+import { proposalPath } from "./environment.js";
+import { carriedBy, composeEnvironment, customPath, runningBuild } from "./overlay.js";
 import { blockCommands, blockProse, blockTools, detailOf, type OverlayBlock, purposeOf, splitBlocks, uniqueBlocks } from "./overlay-blocks.js";
 import { listPacks } from "../image/packs.js";
 import { privacyPackFragments } from "./privacy-pack.js";
@@ -149,8 +151,11 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
         probePackages(tooling.flatMap((tools) => tools.packages)),
     ]);
 
-    // Fallback state for a block with nothing probeable to check (a runtime directive, ENV-only fragment).
-    const built = services.config.sandbox.environmentHash !== "";
+    // A block waits for a rebuild only while one is pending (state/sandbox-build.ts), and then only when the running
+    // build does not carry its steps and nothing it installs answers a probe either. Read off the probe alone, a block
+    // whose binary sits off PATH waited forever under a card saying nothing was pending (2026-10).
+    const waiting = rebuildPending((await composeEnvironment(services))?.hash, runningBuild(services.config.sandbox).overlay);
+    const carried = waiting ? await carriedBy(services) : undefined;
 
     const items: EnvironmentItem[] = [];
     for (const [index, candidate] of candidates.entries()) {
@@ -167,9 +172,8 @@ export const readEnvironmentContents = async (services: Services): Promise<Envir
         const purpose = purposeOf(prose);
         const detail = detailOf(prose, purpose);
         const commands = blockCommands(candidate.block.body);
-        // Observed beats inferred: a block whose commands answer is active regardless of hashes.
-        const pending = bins.length > 0 || modules.length > 0;
-        const state = candidate.state ?? (tools.length > 0 ? "active" : pending ? "after-rebuild" : built ? "active" : "after-rebuild");
+        const arrives = waiting && tools.length === 0 && carried?.has(sha256Hex(candidate.block.body.trim())) !== true;
+        const state = candidate.state ?? (arrives ? "after-rebuild" : "active");
         items.push({
             id: `${candidate.origin}:${candidate.block.name}`,
             name: displayName(candidate.block.name, tools),

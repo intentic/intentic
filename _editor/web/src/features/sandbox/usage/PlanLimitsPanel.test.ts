@@ -16,7 +16,6 @@ jest.mock(`vue-router`, () => ({ ...vueRouterOriginal, RouterLink: RouterLinkStu
 
 const { default: PlanLimitsPanel } = await import("./PlanLimitsPanel.vue");
 const { accountsLoaded, providerAccounts, translatorAccounts, usageByAccount } = await import("../../../models/providers/providerAccounts");
-const { judgeAccountStores } = await import("../../../testing/judgedAccounts");
 
 const NO_ROUTED: TranslatorAccounts = { codex: [], grok: [], kimi: [], gemini: [] };
 
@@ -34,8 +33,6 @@ let app: App | undefined;
 const mount = (accounts: OauthAccount[], routed: TranslatorAccounts = NO_ROUTED): HTMLElement => {
     providerAccounts.value = { claude: accounts };
     translatorAccounts.value = routed;
-    // As a current daemon lists them: every row carrying the verdict it was judged by.
-    judgeAccountStores();
     accountsLoaded.value = true;
     const el = document.createElement(`div`);
     document.body.append(el);

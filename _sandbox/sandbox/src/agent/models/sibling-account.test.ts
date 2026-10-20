@@ -18,11 +18,12 @@ const fakeServices = (params: {
     readonly limitMoveCarryUnder?: number;
     readonly override?: boolean;
     readonly seats?: Record<string, SeatRefusal>;
-}): Pick<Services, "claudeStore" | "claudeSeats" | "cliProxy" | "providerRefusals" | "accountUsage" | "agents" | "sandboxSettings"> => ({
+}): Pick<Services, "claudeStore" | "claudeSeats" | "cliProxy" | "providerAccounts" | "providerRefusals" | "accountUsage" | "agents" | "sandboxSettings"> => ({
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...params.accounts] }),
     claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => params.seats ?? {} }),
     cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {}),
-    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}), onFile: async () => ({}) }),
+    providerAccounts: async () => [],
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage }),
     agents: unstubbed<Services["agents"]>("agents", {
         entry: () =>

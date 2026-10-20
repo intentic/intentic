@@ -55,8 +55,8 @@ const flip = async (slug: string, allowed: boolean): Promise<void> => {
 
 <template>
     <section v-if="status" class="flex flex-col gap-3 rounded-xl border border-line p-4" :aria-busy="changing !== undefined">
-        <header class="flex items-start gap-2.5">
-            <Icon name="desktop" class="mt-0.5 shrink-0 text-subtle" />
+        <header class="flex items-start gap-2.5 text-sm">
+            <Icon name="desktop" class="shrink-0 text-subtle" />
             <div class="min-w-0 flex-1">
                 <h2 class="text-sm leading-tight font-semibold">{{ t(`desktop.os.windows.title`) }}</h2>
                 <p class="mt-1 text-xs text-muted">{{ t(`desktop.os.windows.lead`) }}</p>

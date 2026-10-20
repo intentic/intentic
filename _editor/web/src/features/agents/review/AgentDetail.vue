@@ -3,6 +3,7 @@ import { useAudience } from "../../../app/useAudience";
 import { deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
 import {
     Avatar,
+    Await,
     Button,
     ConfirmDialog,
     ui,
@@ -11,8 +12,8 @@ import {
     ResponsiveOverlay,
     type Tip,
     useDevice,
-    useLoadingReveal,
 } from "@intentic/ui";
+import { useLoaded } from "@intentic/extension-api";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, onMounted, onUnmounted, provide, ref, useTemplateRef, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
@@ -378,12 +379,11 @@ const crossToAgent = (): void => {
 // answering for this id (`settling`); remotely, the box named by `?sandbox=` answering at all. Both used to leave the
 // screen empty or, across sandboxes, print "hasn't answered yet" about a wait usually over in a blink.
 const looking = computed(() => (remote.value ? !heardFrom.value && !remoteSilent.value && fleetAgent.value === undefined : settling.value));
-// Drawn past the same thresholds as every other skeleton in the app, keyed on the agent so walking from one review to
-// the next starts a fresh wait instead of inheriting the last one's hold.
-const outline = useLoadingReveal(looking, agentId);
-// The header's half of it: with no roster entry there is no status, so its place is held as a bar rather than left as
-// a gap that fills in later and shifts everything beside it.
-const headerOutline = computed(() => outline.value && fleetAgent.value === undefined);
+// The same wait as the page's body reads it (<Await>): walking from one review to the next is a fresh wait each time.
+const lookup = useLoaded(() => ({ data: looking.value ? undefined : agentId.value, error: undefined, fetching: looking.value, wanted: true }));
+// The header's half of it: with no roster entry there is no status, so its place is held as a bar from the first frame
+// rather than left as a gap (or the word "Agent") that fills in later and shifts everything beside it.
+const headerOutline = computed(() => looking.value && fleetAgent.value === undefined);
 // The title's, one step narrower: an open conversation can name the agent before the roster answers, and a name in
 // hand beats a bar every time.
 const unnamed = computed(() => headerOutline.value && named.value === undefined);
@@ -653,41 +653,39 @@ const confirmHandOver = async (): Promise<void> => {
             </template>
         </SwipePages>
         <!-- Still asking about this id: the review's frame and one line saying so, never another agent's review replayed. -->
-        <template v-else-if="looking">
-            <AgentReviewOutline v-if="outline" :label="t(`agents.agentDetail.openingAgentsReview`)" />
-        </template>
-        <!-- A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess. -->
-        <p v-else-if="remote && !reviewable" class="px-3.5 py-3 text-xs text-muted">
-            {{ remoteUnavailable }}
-        </p>
-        <!-- The review alone: a desktop's (its chat is the docked panel) and any remote agent's. -->
-        <template v-else-if="agentId !== '' && reviewable">
-            <AgentReviewPanel
-                :agent-id="agentId"
-                :at="remoteBox"
-                :changes="changes"
-                :streaming="streaming"
-                :writing="writing"
-                class="min-h-0 flex-1"
-                @chat="view = 'chat'"
-            />
-            <!-- In plain words the review ends in its press, where the header would have carried it (landOffered). -->
-            <div v-if="maker && landPending" class="shrink-0 border-t border-line bg-card px-4 py-3">
-                <AgentLandPress
-                    :block="mobile"
-                    :can-ship="canShip"
-                    :requested="fleetAgent?.landRequested !== undefined"
-                    :land-disabled="!canLand"
-                    :requesting="requestingLand"
-                    :land-hint="landHint"
-                    :request-hint="requestLandHint"
-                    :fix="fixPress"
-                    @land="pressLand"
-                    @request="requestLand"
-                    @fix="changes.fixConflicts()"
+        <Await v-else :of="lookup" :label="t(`agents.agentDetail.openingAgentsReview`)">
+            <template #fallback><AgentReviewOutline :label="t(`agents.agentDetail.openingAgentsReview`)" /></template>
+            <!-- A remote agent with no review has three distinct reasons, told apart rather than collapsed into one guess. -->
+            <p v-if="remote && !reviewable" class="px-3.5 py-3 text-xs text-muted">{{ remoteUnavailable }}</p>
+            <!-- The review alone: a desktop's (its chat is the docked panel) and any remote agent's. -->
+            <template v-else-if="agentId !== '' && reviewable">
+                <AgentReviewPanel
+                    :agent-id="agentId"
+                    :at="remoteBox"
+                    :changes="changes"
+                    :streaming="streaming"
+                    :writing="writing"
+                    class="min-h-0 flex-1"
+                    @chat="view = 'chat'"
                 />
-            </div>
-        </template>
+                <!-- In plain words the review ends in its press, where the header would have carried it (landOffered). -->
+                <div v-if="maker && landPending" class="shrink-0 border-t border-line bg-card px-4 py-3">
+                    <AgentLandPress
+                        :block="mobile"
+                        :can-ship="canShip"
+                        :requested="fleetAgent?.landRequested !== undefined"
+                        :land-disabled="!canLand"
+                        :requesting="requestingLand"
+                        :land-hint="landHint"
+                        :request-hint="requestLandHint"
+                        :fix="fixPress"
+                        @land="pressLand"
+                        @request="requestLand"
+                        @fix="changes.fixConflicts()"
+                    />
+                </div>
+            </template>
+        </Await>
 
         <!-- The phone's switcher, from the title above; desktop switches chats on the docked panel's own strip. -->
         <ChatSwitcherSheet v-if="mobile" v-model="switcherOpen" @select="switchTo" @close="closeTabs" @open="openPast" @new="startAgent()" />

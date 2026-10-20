@@ -1,6 +1,7 @@
-// What a machine can decide about a change, written into the tree so no model has to type it. A conversation's
-// worktree runs these before its land (the sandbox's worktree-fixers.ts), so what they write rides the land that caused
-// it. By hand they do the same for any checkout of this repository:
+// What a machine can decide about a change, written into the tree so no model has to type it. Every land runs these in
+// the tree it writes into, on what it landed (the sandbox's conversations/land/rederive.ts), so a derived file there is
+// always the one that tree's sources make, and a lowered baseline is written for the change that earned it. By hand
+// they do the same for any checkout of this repository:
 //
 //   node _tools/scripts/verify/fixers.mjs --worktree <dir> --paths a,b,c     (or --paths-file <file>, or --since <rev>)
 //
@@ -70,57 +71,53 @@ export const tightenBaselines = (root, changed) => {
         .map((check) => `${check.id} (baseline lowered)`);
 };
 
-const CONTRACT_SOURCES ="_shared/sandbox-contract/src/";
-const CONTRACT_LOCK = "_shared/sandbox-contract/contract.lock.json";
-const LOCK_WRITER = "_shared/sandbox-contract/scripts/write-lock.mjs";
-
-// Rewrites the wire-contract lock from the emitted dist when a contract source changed; answers whether the lock moved.
-export const regenerateContractLock = (root, changed) => {
-    if (!(changed ?? []).some((path) => path.startsWith(CONTRACT_SOURCES)) || !existsSync(join(root, LOCK_WRITER))) {
-        return false;
-    }
-    const before = git(root, "hash-object", CONTRACT_LOCK);
-    spawnSync(process.execPath, [join(root, LOCK_WRITER)], { cwd: root, stdio: "ignore" });
-    return git(root, "hash-object", CONTRACT_LOCK) !== before;
-};
-
-const DAEMON = "_sandbox/sandbox";
-const STATE_SHAPES = `${DAEMON}/src/store/generated/state-shapes.json`;
-const SHAPES_WRITER = "src/store/shapes/write-state-shapes.ts";
-
-const INDEXES_WRITER = "scripts/write-indexes.mjs";
-
-// Rewrites the daemon's generated indexes (its scripts/write-indexes.mjs: the state registry, the raw route index and the slice registry)
-// when a daemon source changed, ahead of the shapes, whose freeze reads the registry. Answers whether either moved.
-export const regenerateDaemonIndexes = (root, changed) => {
-    if (!(changed ?? []).some((path) => path.startsWith(`${DAEMON}/src/`)) || !existsSync(join(root, DAEMON, INDEXES_WRITER))) {
-        return false;
-    }
-    const result = spawnSync(process.execPath, [INDEXES_WRITER], { cwd: join(root, DAEMON), encoding: "utf8" });
-    return result.status === 0 && /^daemon indexes: wrote /m.test(result.stdout ?? "");
-};
-
-// Freezes any new shape of a stored document and rewrites the type-level checks that every frozen shape still converts
-// to today's schema (the daemon's store/shapes/write-state-shapes.ts), when a daemon or contract source changed. The
-// typecheck after it is what judges: this only records, the way the contract lock does. Answers whether the file moved.
-export const regenerateStateShapes = (root, changed) => {
-    const touches = (changed ?? []).some((path) => path.startsWith(`${DAEMON}/src/`) || path.startsWith(CONTRACT_SOURCES));
-    if (!touches || !existsSync(join(root, DAEMON, SHAPES_WRITER))) {
-        return false;
-    }
-    const before = existsSync(join(root, STATE_SHAPES)) ? git(root, "hash-object", STATE_SHAPES) : "";
-    spawnSync(process.execPath, ["--import", "tsx", SHAPES_WRITER, "--freeze"], { cwd: join(root, DAEMON), stdio: "ignore" });
-    return existsSync(join(root, STATE_SHAPES)) && git(root, "hash-object", STATE_SHAPES) !== before;
-};
-
-// Emits the contract's declarations and dist, which the lock is written from and the shape writer reads, in `root`
-// alone: in a worktree nothing has emitted them yet.
-const emitContract = (root) => {
-    const tsgo = join(root, "node_modules/.bin/tsgo");
-    if (existsSync(tsgo)) {
-        spawnSync(tsgo, ["-b", "_shared/sandbox-contract"], { cwd: root, stdio: "ignore" });
-    }
-};
+// Each derived file's writer: the changed paths that call for it, and the command that writes it, run from `cwd`. What
+// `writes` names is `merge=derived` in .gitattributes, so no land carries it and a rebase keeps the side it lands on;
+// a land runs this in the tree it writes into instead. The layer tables and the translations are the exception: a
+// generated region inside a hand-written README, and what a machine may decide about a hand-written catalog (dropping
+// what English no longer has), both merged like the rest of the file. In this order: the shapes freeze reads the registry the daemon's
+// indexes write.
+//
+// From source, never from a build: `bun` with the `@intentic/src` condition reads every workspace package's own src/,
+// so a writer answers for the tree as it stands in any checkout with an install. The lock and the shapes used to read
+// whatever dist an earlier build had left: in a worktree there was none, and the shapes freeze crashed on a dist that
+// lacked a module new in the contract, so the stored shapes fell behind main's schemas unseen.
+const CONTRACT_SOURCES = "_shared/sandbox-contract/src/";
+const DAEMON_SOURCES = "_sandbox/sandbox/src/";
+const under = (...prefixes) => (_root, path) => prefixes.some((prefix) => path.startsWith(prefix));
+const FROM_SOURCE = ["bun", "--conditions=@intentic/src"];
+export const DERIVED = [
+    {
+        id: "contract lock",
+        wants: under(CONTRACT_SOURCES),
+        cwd: "_shared/sandbox-contract",
+        argv: [...FROM_SOURCE, "scripts/write-lock.mjs"],
+        writes: ["_shared/sandbox-contract/contract.lock.json"],
+    },
+    {
+        id: "daemon indexes",
+        wants: under(DAEMON_SOURCES),
+        cwd: "_sandbox/sandbox",
+        argv: [process.execPath, "scripts/write-indexes.mjs"],
+        writes: ["_sandbox/sandbox/src/bootstrap/state-registry.ts", "_sandbox/sandbox/src/app-raw-routes.ts", "_sandbox/sandbox/src/bootstrap/slices/slice-registry.ts"],
+    },
+    {
+        id: "state shapes",
+        wants: under(DAEMON_SOURCES, CONTRACT_SOURCES),
+        cwd: "_sandbox/sandbox",
+        argv: [...FROM_SOURCE, "src/store/shapes/write-state-shapes.ts", "--freeze"],
+        writes: ["_sandbox/sandbox/src/store/generated/state-shapes.json"],
+    },
+    { id: "layer tables", wants: touchesTables, cwd: ".", argv: [process.execPath, "_tools/checks/layer-tables.mjs", "--fix"], writes: [] },
+    // A translation keeps only what English still says: a key `en.json` dropped leaves every other language's copy too.
+    {
+        id: "translations",
+        wants: (_root, path) => /\/locales\/[\w-]+\.json$/.test(path),
+        cwd: ".",
+        argv: [process.execPath, "_tools/checks/i18n-catalogs.mjs", "--fix"],
+        writes: [],
+    },
+];
 
 // Each dirty path's content (or its absence), so a fixer's write shows even on a file the change had already modified.
 const dirtyContents = (root) =>
@@ -131,24 +128,23 @@ const dirtyContents = (root) =>
             .map((line) => line.slice(3).trim().split(" -> ").at(-1))
             .map((path) => [path, existsSync(join(root, path)) ? git(root, "hash-object", path)?.trim() : "absent"]),
     );
+const snapshot = (root) => JSON.stringify([...dirtyContents(root)]);
 
-const LAYER_TABLES = "_tools/checks/layer-tables.mjs";
-
-// Rewrites the generated layers table in a layered package's README when its layers.json or that README changed (the
-// layer-tables check, _tools/scripts/tools/layer-tables.mjs). Answers whether a README moved.
-export const regenerateLayerTables = (root, changed) => {
-    if (!(changed ?? []).some((path) => touchesTables(root, path)) || !existsSync(join(root, LAYER_TABLES))) {
-        return false;
-    }
-    const result = spawnSync(process.execPath, [join(root, LAYER_TABLES), "--fix"], { cwd: root, encoding: "utf8" });
-    return /^rewrote /m.test(result.stdout ?? "");
-};
+// Runs, in `root`, every writer whose inputs `changed` touches; answers the ids of those that moved a file. A writer
+// whose directory the tree lacks has nothing to write.
+export const writeDerived = (root, changed) =>
+    DERIVED.filter((writer) => changed.some((path) => writer.wants(root, path)) && existsSync(join(root, writer.cwd)))
+        .filter((writer) => {
+            const before = snapshot(root);
+            spawnSync(writer.argv[0], writer.argv.slice(1), { cwd: join(root, writer.cwd), stdio: "ignore" });
+            return snapshot(root) !== before;
+        })
+        .map((writer) => writer.id);
 
 /**
  * Every machine fixer scoped to `changed` (repo-relative paths), in `root`: rustfmt on the crates it touched, the
- * ratcheted baselines it beat, the contract lock when it changed the contract, the daemon's generated indexes when it
- * changed a daemon source, the stored shapes when it changed a daemon or contract source, and a layered package's README table when it changed its layers.json or README. Answers
- * which ran and which paths they wrote.
+ * ratcheted baselines it beat, and every derived file whose sources it reached (DERIVED). Answers which ran and which
+ * paths they wrote.
  */
 export const fixChange = (root, changed) => {
     const before = dirtyContents(root);
@@ -156,25 +152,7 @@ export const fixChange = (root, changed) => {
     if (rustfmtAvailable(root) && formatCrates(root, touchedCrates(root, changed)).length > 0) {
         ran.push("rustfmt");
     }
-    ran.push(...tightenBaselines(root, changed));
-    const contract = changed.some((path) => path.startsWith(CONTRACT_SOURCES));
-    if (contract || changed.some((path) => path.startsWith(`${DAEMON}/src/`))) {
-        if (contract) {
-            emitContract(root);
-        }
-        if (regenerateContractLock(root, changed)) {
-            ran.push("contract lock");
-        }
-        if (regenerateDaemonIndexes(root, changed)) {
-            ran.push("daemon indexes");
-        }
-        if (regenerateStateShapes(root, changed)) {
-            ran.push("state shapes");
-        }
-    }
-    if (regenerateLayerTables(root, changed)) {
-        ran.push("layer tables");
-    }
+    ran.push(...tightenBaselines(root, changed), ...writeDerived(root, changed));
     const after = dirtyContents(root);
     const wrote = [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).toSorted();
     return { ran, wrote };

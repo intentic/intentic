@@ -15,6 +15,20 @@ test("every argument after the pathspec separator is marked literal", () => {
     ]);
 });
 
+// A name that only looks like magic is still a name; the tree's top and an attribute selection are the caller's words.
+test("the tree's top and a selection by attribute pass as written, and nothing else does", () => {
+    expect(literalPathspecs(["diff", "a", "b", "--", ":/", ":(exclude,attr:merge=derived)", ":(attr:merge=derived)"])).toEqual([
+        "diff",
+        "a",
+        "b",
+        "--",
+        ":/",
+        ":(exclude,attr:merge=derived)",
+        ":(attr:merge=derived)",
+    ]);
+    expect(literalPathspecs(["diff", "--", ":(glob)*.ts", ":/x", "(attr:x)"])).toEqual(["diff", "--", ":(literal):(glob)*.ts", ":(literal):/x", ":(literal)(attr:x)"]);
+});
+
 // An option merely starting with `--` (not equal to it) is not the separator, e.g. `--cached`, `--ignore-unmatch`.
 test("a long option is not the separator", () => {
     expect(literalPathspecs(["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", "a.txt"])).toEqual([

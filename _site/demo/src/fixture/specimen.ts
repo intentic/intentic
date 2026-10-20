@@ -4,6 +4,7 @@ import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { KEY_EXPIRE_PROGRAM, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
 import { PAYOUTS_PAGE } from "./pages";
 
+
 // THE TRANSCRIPT SPECIMEN: one conversation holding every row, card, notice and fold the chat column can draw, in an
 // order a real session could have produced, so the column's rhythm, type and colour are judged on one page against
 // the real components. Opened as a tab only in a dev build (openChats.ts); the published demo never shows it.
@@ -13,6 +14,15 @@ export const SPECIMEN_SESSION = `ses_01j9specimen`;
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
+
+// The Claude CLI's safeguard flag as a sandbox in use wrote it into a transcript, paragraphs and all.
+const SAFEGUARD_FLAG = [
+    `API Error: Opus 5.5's safeguards flagged this session (https://www.anthropic.com/legal/aup). You may be seeing this for the first time: Opus 5.5 is more capable and has stronger safeguards as a result, which can sometimes flag non-cybersecurity work. Claude Code can't respond to your last message with Opus 5.5.`,
+    `Try rephrasing the request in a new session or change your model.`,
+    `Learn more: https://support.claude.com/en/articles/8106465`,
+    "Details: `[cyber]`",
+    `Request ID: req_011CfmGgktqWtwzpffP3NhAk`,
+].join(`\n\n`);
 
 // A parent's message to a running child, clipped where the daemon clips one for its card.
 const CHILD_MESSAGE = `I reviewed your landed code while finishing accessibility. Please check concurrent platform mutations before finalising the ownership claims: addMember/removeMember read lastAdmin and then write outside a transaction, so two admins can concurrently demote/remove each other and leave zero admins; sandbox.delete checks orgId before trashSandbox, and eraseAccount checks bound ownership before its transaction, so a concurrent bind can race the guard. Please make these constraints atomic using the platform's existing transaction/row-lock conventions and add meaningful concurrent tests where…`;
@@ -240,7 +250,26 @@ const messages: TranscriptRow[] = [
         tools: [subagent, ...repeatedReads, failedBash],
         todos: todos(1, 1),
     },
-    { role: `notice`, text: `Claude usage limit reached. Send again once it resets.` },
+    // Failures as the fold writes them: every one coded. The sandbox's own sentence is its line; a provider's words sit
+    // behind a press under their kind's line; a failure nothing named is the unclassified kind.
+    {
+        role: `notice`,
+        text: `Claude usage limit reached. Send again once it resets.`,
+        noticeCode: { code: `failed`, params: { message: `Claude usage limit reached. Send again once it resets.`, error: `rate_limit`, own: true } },
+    },
+    {
+        role: `notice`,
+        text: SAFEGUARD_FLAG,
+        noticeCode: { code: `failed`, params: { message: SAFEGUARD_FLAG, error: `safeguard-flagged` } },
+    },
+    {
+        role: `notice`,
+        text: `Claude Code process exited with code 143. stderr: Ignoring 13 permissions.allow entries from .claude/settings.json`,
+        noticeCode: {
+            code: `failed`,
+            params: { message: `Claude Code process exited with code 143. stderr: Ignoring 13 permissions.allow entries from .claude/settings.json` },
+        },
+    },
     { role: `notice`, text: `Switched to Claude: your next message starts a fresh session with the conversation so far carried over.` },
     { role: `notice`, text: `Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it.` },
     { role: `notice`, text: `Continued in the same session, re-reading all of it.` },

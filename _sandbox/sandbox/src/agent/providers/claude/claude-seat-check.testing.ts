@@ -1,6 +1,6 @@
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { pino } from "pino";
-import type { ProviderRefusalStore } from "../../../usage/provider-refusals.js";
+import { memoryProviderRefusalStore, type ProviderRefusalStore } from "../../../usage/provider-refusals.js";
 import { type ClaudeSeatCheck, createClaudeSeatCheck, type SeatProbe } from "./claude-seat-check.js";
 import type { ClaudeSeatStore, SeatRefusal } from "./claude-seats.js";
 
@@ -18,21 +18,8 @@ export const memorySeats = (seats: Record<string, SeatRefusal>): ClaudeSeatStore
     },
 });
 
-/** A refusal store over a record the test holds, keyed by provider as the file is. */
-export const memoryRefusals = (refusals: Record<string, ProviderRefusal> = {}): ProviderRefusalStore => ({
-    read: async () => ({ ...refusals }),
-    onFile: async () => Object.fromEntries(Object.entries(refusals).map(([provider, refusal]) => [provider, [refusal]])),
-    record: async (provider, refusal) => {
-        refusals[provider] = refusal;
-    },
-    clear: async (provider, account) => {
-        const stored = refusals[provider];
-        if (stored !== undefined && (stored.account === undefined || stored.account === account)) {
-            delete refusals[provider];
-        }
-    },
-    onChange: () => () => {},
-});
+/** The real refusal ledger, held in memory, seeded with what each provider has on file: no stand-in to drift. */
+export const seededRefusals = (refusals: Record<string, readonly ProviderRefusal[]> = {}): ProviderRefusalStore => memoryProviderRefusalStore(refusals);
 
 export interface ScriptedSeatCheck {
     readonly check: ClaudeSeatCheck;
@@ -51,7 +38,7 @@ export const scriptedSeatCheck = (options: {
     readonly now?: () => number;
 }): ScriptedSeatCheck => {
     const probes: string[] = [];
-    const refusals = options.refusals ?? memoryRefusals();
+    const refusals = options.refusals ?? seededRefusals();
     const check = createClaudeSeatCheck({
         seats: options.seats,
         refusals: () => refusals,

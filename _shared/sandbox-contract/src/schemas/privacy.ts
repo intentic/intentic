@@ -42,6 +42,10 @@ export type PrivacyNames = z.infer<typeof PrivacyNamesSchema>;
 
 export const PRIVACY_TRUSTED_MAX = 200;
 export const PRIVACY_ALLOW_MAX = 1000;
+
+// How a never-masked value (policy `allow`) is compared with what the shield finds, by the detectors and by the editor
+// that keeps the list: case, Unicode composition and runs of whitespace do not tell two values apart.
+export const allowKey = (value: string): string => value.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
 export const PRIVACY_CONVERSATIONS_MAX = 200;
 
 // The owner's own additions to what the shield finds. The policy travels whole on every write, so each is kept to what a

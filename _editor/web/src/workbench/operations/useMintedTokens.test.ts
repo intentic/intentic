@@ -88,7 +88,9 @@ describe(`useMintedTokens`, () => {
         third.stop();
     });
 
-    it(`exposes an initial loading state while the first list query is out`, async () => {
+    // clear-ember-6q (10-19): the list drew as "no tokens" while its first read was out. It is a wait until this owner's
+    // list is read, a failure in words when the read gives up, and a wait again for the next owner, never the last one's.
+    it(`waits for the first list, then draws it`, async () => {
         let finishList: (tokens: readonly string[]) => void = () => {};
         const source: TokenSource<string, never, string> = {
             ...refusing,
@@ -101,20 +103,18 @@ describe(`useMintedTokens`, () => {
         if (minted === undefined) {
             throw new Error(`the scope did not run`);
         }
-        expect(minted.initialLoading.value).toBe(true);
-        expect(minted.loading.value).toBe(true);
+        expect(minted.loaded.value.state).toBe(`waiting`);
         expect(minted.tokens.value).toEqual([]);
 
         finishList([`token-1`]);
         await settled();
 
-        expect(minted.initialLoading.value).toBe(false);
-        expect(minted.loading.value).toBe(false);
+        expect(minted.loaded.value).toMatchObject({ state: `ready`, data: [`token-1`] });
         expect(minted.tokens.value).toEqual([`token-1`]);
         scope.stop();
     });
 
-    it(`clears the initial loading state even when the list query rejects`, async () => {
+    it(`says a list that did not load, rather than drawing it empty`, async () => {
         let rejectList: (err: Error) => void = () => {};
         const source: TokenSource<string, never, string> = {
             ...refusing,
@@ -127,17 +127,17 @@ describe(`useMintedTokens`, () => {
         if (minted === undefined) {
             throw new Error(`the scope did not run`);
         }
-        expect(minted.initialLoading.value).toBe(true);
+        expect(minted.loaded.value.state).toBe(`waiting`);
 
         rejectList(new Error(`failed`));
         await settled();
 
-        expect(minted.initialLoading.value).toBe(false);
+        expect(minted.loaded.value).toMatchObject({ state: `failed`, error: `failed` });
         expect(minted.notice.value?.tone).toBe(`danger`);
         scope.stop();
     });
 
-    it(`resets initial loading when the owner changes`, async () => {
+    it(`waits again for a new owner's list, never showing the last owner's`, async () => {
         const owner = ref(`user-1`);
         let finishList: (tokens: readonly string[]) => void = () => {};
         const source: TokenSource<string, never, string> = {
@@ -152,14 +152,14 @@ describe(`useMintedTokens`, () => {
         if (minted === undefined) {
             throw new Error(`the scope did not run`);
         }
-        expect(minted.initialLoading.value).toBe(true);
         finishList([`token-1`]);
         await settled();
-        expect(minted.initialLoading.value).toBe(false);
+        expect(minted.loaded.value.state).toBe(`ready`);
 
         owner.value = `user-2`;
         await settled();
-        expect(minted.initialLoading.value).toBe(true);
+        expect(minted.loaded.value.state).toBe(`waiting`);
+        expect(minted.tokens.value).toEqual([]);
         scope.stop();
     });
 });

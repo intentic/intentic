@@ -75,6 +75,7 @@ export const extensionUiNames = [
     "InfoDialog",
     "InfoHint",
     "InfoTable",
+    "InlineRename",
     "Markdown",
     "MarkdownDocument",
     "MarkdownFigure",
@@ -102,6 +103,9 @@ export const extensionUiNames = [
     "ResponsiveOverlay",
     "Row",
     "RowGroup",
+    "RowNote",
+    "Section",
+    "SectionHeader",
     "ScrollFrame",
     "SearchBar",
     "SegmentedControl",
@@ -109,6 +113,7 @@ export const extensionUiNames = [
     "similarity",
     "sinceOf",
     "SkeletonRows",
+    "Await",
     "SkeletonSnapshot",
     "vSkeletonSource",
     "SplitView",
@@ -155,6 +160,26 @@ export const extensionUiDeprecated = [
         name: "RepoRail",
         use: "RepoPicker",
         deprecated: "2026-10-15",
+        removableIn: "3.0.0",
+    },
+    {
+        // A view wired its own wait from these three, and each one it got wrong was a skeleton for ever, none at all, or
+        // the wrong one. <Await :of="loaded" imprint="…"> owns the reveal, the remembered look and what it is taken from.
+        name: "SkeletonSnapshot",
+        use: "Await",
+        deprecated: "2026-10-20",
+        removableIn: "3.0.0",
+    },
+    {
+        name: "vSkeletonSource",
+        use: "Await",
+        deprecated: "2026-10-20",
+        removableIn: "3.0.0",
+    },
+    {
+        name: "useLoadingReveal",
+        use: "Await",
+        deprecated: "2026-10-20",
         removableIn: "3.0.0",
     },
 ];

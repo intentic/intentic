@@ -1677,7 +1677,7 @@ describe("hooks on the door's gate", () => {
         const { runner, calls } = fakeCodexRunner([]);
         const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, allowedTools: ["Read"] } });
         expect(calls).toHaveLength(0);
-        expect(events).toEqual([{ kind: "error", message: UNGATED_LIST }, { kind: "done" }]);
+        expect(events).toEqual([{ kind: "error", message: UNGATED_LIST, own: true }, { kind: "done" }]);
     });
 
     test("a tool list turns off what no hook sees and cuts each server to its listed tools", async () => {
@@ -1745,7 +1745,7 @@ describe("a rate limit Codex waits out inside the turn", () => {
                 { kind: "session", sessionId: "thr-limit" },
                 { kind: "provider_retry", attempt: 1, maxAttempts: 5, status: 429 },
                 // Coded, so classify-failure holds it for the reset; the interrupt it caused is not said as a second failure.
-                { kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER },
+                { kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER, own: true },
                 { kind: "done" },
             ]);
             expect(stopped()).toBe(true);
@@ -1764,7 +1764,7 @@ describe("a rate limit Codex waits out inside the turn", () => {
                 kind: "codex-endpoint",
                 baseUrl: "http://127.0.0.1:8317",
                 authToken: "local",
-                allowance: { vendor: "openai", limit: async () => ({ spent: 1, withHeadroom: 0, reopensAt: Math.floor(Date.now() / 1000) + 4 * 3600 }) },
+                allowance: { vendor: "openai", capacity: async () => ({ kind: "spent", accounts: 1, reopensAt: Math.floor(Date.now() / 1000) + 4 * 3600 }) },
             },
         };
         jest.useFakeTimers();
@@ -1773,7 +1773,7 @@ describe("a rate limit Codex waits out inside the turn", () => {
             // A second of the clock, against the two minutes patience would have waited.
             await advanceTimersByTimeAsync(1_000);
             expect(stopped()).toBe(true);
-            expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER }]);
+            expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER, own: true }]);
         } finally {
             jest.useRealTimers();
         }
@@ -1785,7 +1785,7 @@ describe("a rate limit Codex waits out inside the turn", () => {
         try {
             const events = collect(createTestAgent(runner), request);
             await advanceTimersByTimeAsync(RATE_LIMIT_PATIENCE_MS);
-            expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER }]);
+            expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER, own: true }]);
         } finally {
             jest.useRealTimers();
         }

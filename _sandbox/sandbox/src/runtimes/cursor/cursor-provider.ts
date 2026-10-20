@@ -32,7 +32,7 @@ import { createCursorHookService, type CursorHookService } from "./cursor-hooks.
 import { cursorReadiness } from "./cursor-readiness.js";
 import { cursorSdk } from "./cursor-sdk.js";
 import { type CursorAccountDeps, cursorAccountDoor } from "./accounts/cursor-accounts.js";
-import { cursorAccountForTurn, cursorTurnLimit } from "./cursor-usage.js";
+import { cursorAccountForTurn } from "./cursor-usage.js";
 import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 
 // Everything Cursor contributes to the daemon, listed in runtimes/runtime-table.ts; the directory's other files keep
@@ -70,7 +70,7 @@ export const createCursorSlice = (input: { readonly authRoot: string; readonly l
 // and the seams its MCP tools and browser stack are mounted from.
 export type CursorPlanDeps = TurnToolsDeps &
     HarnessServersDeps &
-    Pick<Services, "capabilities" | "config" | "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "observedLimits" | "privacyShield" | "workspace">;
+    Pick<Services, "capabilities" | "config" | "cursorAgent" | "cursorModels" | "cursorStore" | "files" | "providerRefusals" | "privacyShield" | "workspace">;
 
 // Credential rides the request as a key, not an env var: Cursor runs inside this daemon, where an env var is
 // daemon-wide, unlike Codex's or OpenCode's processes.
@@ -215,8 +215,6 @@ export const cursorProvider: ProviderModule<CursorProviderDeps> = {
     // surviving recreation. Reads the file-backed store, not a live probe: no runtime needed, survives the module being
     // absent.
     packs: async (services) => ((await readCursorCredentials(join(services.authRoot, "cursor"))).length > 0 ? ["cursor"] : []),
-    // Cursor publishes no allowance to poll, so its reading is what it has already refused, per account and per model.
-    turnLimit: cursorTurnLimit,
     secretEntries: async (services) =>
         (await services.cursorStore.list()).map((account) =>
             providerAccountEntry("cursor", "Cursor", account.id, account.label, authStateRelPath("cursor", `${account.id}.json`)),

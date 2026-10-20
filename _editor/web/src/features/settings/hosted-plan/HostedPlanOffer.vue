@@ -110,8 +110,8 @@ const assurances = computed(() => [
 
     <Card>
         <div class="grid grid-cols-1 gap-x-6 gap-y-3 @lg:grid-cols-3">
-            <div v-for="item in assurances" :key="item.title" class="flex gap-2.5">
-                <Icon :name="item.icon" class="mt-0.5 shrink-0 text-sm text-success" />
+            <div v-for="item in assurances" :key="item.title" class="flex items-start gap-2.5 text-xs">
+                <Icon :name="item.icon" class="shrink-0 text-sm text-success" />
                 <div class="min-w-0">
                     <p class="text-xs font-semibold text-content">{{ item.title }}</p>
                     <p class="text-xs text-muted">{{ item.body }}</p>

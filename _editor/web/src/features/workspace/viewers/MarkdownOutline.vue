@@ -1,6 +1,6 @@
 <!-- The outline lists headings as navigation targets, not a code minimap. -->
 <script setup lang="ts">
-import { ui, SearchBar } from "@intentic/ui";
+import { SearchBar, SectionHeader } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { matchHeadings, type OutlineHeading } from "./markdownOutline";
 import { useT } from "@intentic/ui/i18n";
@@ -40,7 +40,7 @@ watch(
 
 <template>
     <nav :aria-label="t(`workspace.markdownOutline.documentOutline`)" class="flex min-h-0 w-full flex-col gap-2">
-        <span :class="ui.sectionLabel({ size: `xs` })" class="shrink-0 pl-3">{{ t(`workspace.words.outline`) }}</span>
+        <SectionHeader :label="t(`workspace.words.outline`)" density="dense" class="shrink-0 pl-3" />
 
         <SearchBar
             v-if="filterable"

@@ -18,7 +18,8 @@ import { attachedRows, runAgentTurn, startedRun } from "../../harness/route-turn
 import { createTurnResumeScheduler } from "../run/turn/turn-resume.js";
 import { ROOM_SETTLE_MS } from "../run/turn/holds/room-holds.js";
 import { FIRST_RECHECK_MS, type SeatProbe } from "../providers/claude/claude-seat-check.js";
-import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../providers/claude/claude-seat-check.testing.js";
+import { BACK_ON, memorySeats, scriptedSeatCheck, seededRefusals, STILL_OFF } from "../providers/claude/claude-seat-check.testing.js";
+import { fleetCapacityOf } from "../../usage/serviceability/serviceability.js";
 
 // Exercises the agent routes over the daemon's HTTP surface, as the browser does. Shared fakes and client live in
 // route-services.testing.ts and its siblings.
@@ -1186,10 +1187,10 @@ test("a rate-limited turn is filed as a limit even when the provider's wording i
                     yield { kind: "done" };
                 },
                 providerRefusals: {
-                    read: async () => ({}),
                     onFile: async () => ({}),
                     record: async (_provider, refusal) => void filed.push({ kind: refusal.kind, message: refusal.message }),
-                    clear: async () => {},
+                    settle: async () => {},
+                    drop: async () => false,
                     onChange: () => () => {},
                 },
             }),
@@ -1199,13 +1200,31 @@ test("a rate-limited turn is filed as a limit even when the provider's wording i
     expect(filed).toEqual([{ kind: "limit", message: "429 RESOURCE_EXHAUSTED: no headroom left" }]);
 });
 
+// The translator's own reading of the subscription already showed the pool full, reopening at a known instant: the one
+// verdict every surface reads (fleetCapacityOf) names that instant, and the held turn is booked for it.
+const spentSubscription = (reopensAt: number) => ({
+    ...codexConnectedProxy,
+    accounts: async () => ({
+        codex: [
+            {
+                name: "codex-user.json",
+                label: "user@example.com",
+                usage: { measuredAt: Date.now() - 60_000, windows: [{ kind: "five_hour", utilization: 100, resetsAt: reopensAt, gates: "all" as const }] },
+            },
+        ],
+        grok: [],
+        kimi: [],
+        gemini: [],
+    }),
+});
+
 test("a spent allowance on a native runtime carries the reset the translator already knew", async () => {
     const reopensAt = Math.floor(Date.now() / 1000) + 7_200;
     const client = clientFor(
         createApp(
             services({
                 config: withTranslator,
-                cliProxy: { ...codexConnectedProxy, turnLimit: async () => ({ spent: 1, withHeadroom: 0, reopensAt }) },
+                cliProxy: spentSubscription(reopensAt),
                 // Exactly what codex-agent.ts emits: coded, with nothing else on it to read.
                 async *codexAgent() {
                     yield { kind: "error", code: "rate_limit", message: "429 You've hit your usage limit." };
@@ -1217,54 +1236,67 @@ test("a spent allowance on a native runtime carries the reset the translator alr
 
     const { facts } = await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-native-limit", agent: "codex" });
 
-    expect(facts).toContainEqual(
-        expect.objectContaining({
-            kind: "error",
-            code: "rate_limit",
-            message: "429 You've hit your usage limit.",
-            held: expect.objectContaining({ ran: false }),
-            resetsAt: reopensAt,
-        }),
-    );
+    // The gate before the provider and the reset after it read the same verdict: what the records call spent is held for
+    // the instant they name, never sent to be refused, whichever of the two speaks first.
+    expect(facts).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit", held: expect.objectContaining({ ran: false }), resetsAt: reopensAt }));
 });
 
-// The bug behind a picker full of green rings over a model that refuses on sight: the translator picks the credential
-// itself and benches each one per MODEL, so a routed refusal is a fact about the model that no account ring can carry.
-test("a routed spent allowance benches the model it refused, to the reset the frame resolved", async () => {
+// The bug behind a picker full of green rings over a model that refuses on sight (2026-10-09): the translator picks the
+// credential itself, so a routed refusal names no account and is a fact about the model. Filed once, in the one ledger,
+// it reads that model spent wherever any surface asks, until its pool reopens, and leaves the provider's other models be.
+test("a routed spent allowance is filed against the model it refused, which every surface then reads spent", async () => {
     const reopensAt = Math.floor(Date.now() / 1000) + 7_200;
-    const filed: { provider: string; model: string; until: number }[] = [];
-    const client = clientFor(
-        createApp(
-            services({
-                config: withTranslator,
-                cliProxy: { ...codexConnectedProxy, turnLimit: async () => ({ spent: 1, withHeadroom: 0, reopensAt }) },
-                modelCooldowns: {
-                    cooling: async () => new Map(),
-                    record: async (provider, model, cooldown) => void filed.push({ provider, model, until: cooldown.until }),
-                    clear: async () => {},
-                },
-                async *codexAgent() {
-                    yield { kind: "error", code: "rate_limit", message: "429 You've hit your usage limit." };
-                    yield { kind: "done" };
-                },
+    const refusals = seededRefusals();
+    const composed = services({
+        config: withTranslator,
+        cliProxy: {
+            ...codexConnectedProxy,
+            accounts: async () => ({
+                codex: [
+                    {
+                        name: "codex-user.json",
+                        label: "user@example.com",
+                        usage: { measuredAt: Date.now() - 60_000, windows: [{ kind: "five_hour", utilization: 10, resetsAt: reopensAt, gates: "all" as const }] },
+                    },
+                ],
+                grok: [],
+                kimi: [],
+                gemini: [],
             }),
-        ),
-    );
+        },
+        providerRefusals: refusals,
+        async *codexAgent() {
+            yield { kind: "error", code: "rate_limit", message: "429 You've hit your usage limit." };
+            yield { kind: "done" };
+        },
+    });
+    const client = clientFor(createApp(composed));
 
-    await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-model-cooldown", agent: "codex", model: "gpt-5.6-sol" });
+    await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-model-refusal", agent: "codex", model: "gpt-5.6-sol" });
 
-    // Epoch seconds on the frame, epoch ms in the store, since this one is read against Date.now().
-    expect(filed).toEqual([{ provider: "codex", model: "gpt-5.6-sol", until: reopensAt * 1000 }]);
+    await waitFor(async () => expect((await refusals.onFile())["codex"]).toMatchObject([{ kind: "limit", model: "gpt-5.6-sol" }]), SETTLES);
+    expect((await refusals.onFile())["codex"]?.[0]?.account).toBeUndefined();
+    expect(await fleetCapacityOf(composed, "codex", { id: "gpt-5.6-sol" })).toMatchObject({ kind: "spent", reopensAt });
 });
 
 // A native provider's accounts are picked by the daemon, so one account's spent allowance says nothing about the
-// sibling's. Benching the model there would take a runnable rung off every account at once.
-test("a spent allowance on a natively-picked provider benches no model", async () => {
-    const filed: string[] = [];
+// sibling's: the refusal is filed against the account that refused, never the model across them all.
+test("a spent allowance on a natively-picked provider is filed against the account that refused", async () => {
+    const filed: { account?: string | undefined; model?: string | undefined }[] = [];
     const client = clientFor(
         createApp(
             services({
-                modelCooldowns: { cooling: async () => new Map(), record: async (_p, model) => void filed.push(model), clear: async () => {} },
+                claudeStore: {
+                    read: async (id) => ({ id, label: id, connectedAt: 0, accessToken: `tok-${id}` }),
+                    list: async () => ["acct-1", "acct-2"].map((id) => ({ id, label: id, connectedAt: 0 })),
+                },
+                providerRefusals: {
+                    onFile: async () => ({}),
+                    record: async (_provider, refusal) => void filed.push({ account: refusal.account, model: refusal.model }),
+                    settle: async () => {},
+                    drop: async () => false,
+                    onChange: () => () => {},
+                },
                 async *agent() {
                     yield { kind: "error", code: "rate_limit", message: "Claude usage limit reached." };
                     yield { kind: "done" };
@@ -1273,9 +1305,9 @@ test("a spent allowance on a natively-picked provider benches no model", async (
         ),
     );
 
-    await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-native-no-cooldown", agent: "claude", model: "opus" });
+    await runAgentTurn(client, { prompt: "carry on", conversationId: "conv-native-refusal", agent: "claude", model: "opus", account: "acct-1" });
 
-    expect(filed).toEqual([]);
+    await waitFor(() => expect(filed).toEqual([{ account: "acct-1", model: "opus" }]), SETTLES);
 });
 
 test("a spent allowance goes out bare when the pool reading names no reset", async () => {
@@ -1283,7 +1315,7 @@ test("a spent allowance goes out bare when the pool reading names no reset", asy
         createApp(
             services({
                 config: withTranslator,
-                cliProxy: { ...codexConnectedProxy, turnLimit: async () => ({ spent: 30, withHeadroom: 1 }) },
+                cliProxy: codexConnectedProxy,
                 async *codexAgent() {
                     yield { kind: "error", code: "rate_limit", message: "429 You've hit your usage limit." };
                     yield { kind: "done" };

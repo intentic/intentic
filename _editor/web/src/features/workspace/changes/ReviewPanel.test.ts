@@ -113,13 +113,18 @@ const landing = (title: string): AgentSummary => ({
     attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
 });
 
-it(`shows each committing repo once when detailed progress takes over`, async () => {
+// One line for a commit however it is known: the daemon's word for it (another tab's, or this one's before its run is
+// read) and the run this tab follows say it in the same words, once, in the same place; the run adds only its Stop.
+const occurrences = (text: string, part: string): number => text.split(part).length - 1;
+
+it(`says a commit once, in the same words, whether the daemon or the run it follows is telling`, async () => {
     const el = await mount();
     await answer({
         repos: [{ repo: `root`, branch: `main`, conflicted: [], staged: [{ path: `main.ts`, status: `modified` }], unstaged: [] }],
         committing: [`root`],
     });
-    expect(el.textContent).toContain(`Committing root…`);
+    expect(occurrences(el.textContent ?? ``, `Committing in root…`)).toBe(1);
+    expect(buttonNamed(el, `Stop`)).toBeUndefined();
 
     followedRuns.value = new Map([[`root`, {
         run: { status: `running`, id: `run`, repo: `root`, op: `commit`, phase: `committing`, command: `git commit`, output: `` },
@@ -127,14 +132,13 @@ it(`shows each committing repo once when detailed progress takes over`, async ()
         lostContact: false,
     }]]);
     await settle();
-    expect(el.textContent).toContain(`Committing in root…`);
-    expect(el.textContent).not.toContain(`Committing root…`);
+    expect(occurrences(el.textContent ?? ``, `Committing in root…`)).toBe(1);
     expect(buttonNamed(el, `Stop`)).toBeInstanceOf(HTMLButtonElement);
 
     followedRuns.value = new Map();
     await settle();
-    expect(el.textContent).toContain(`Committing root…`);
-    expect(el.textContent).not.toContain(`Committing in root…`);
+    expect(occurrences(el.textContent ?? ``, `Committing in root…`)).toBe(1);
+    expect(buttonNamed(el, `Stop`)).toBeUndefined();
 });
 
 it(`waits only for the first answer, then keeps it while the daemon is asked again`, async () => {
@@ -429,4 +433,92 @@ it(`asks before a commit-all that would take thousands of files, and goes ahead 
     await settle();
     expect(indexRunStart).toHaveBeenLastCalledWith({ repo: `root`, op: `commit`, message: `feat: everything`, target: {}, confirmed: true });
     expect(commit).toHaveBeenCalledTimes(1);
+});
+
+// sunny-anchor (10-17): the press changed size all through a commit, its count following the review as each repo's
+// commit landed. The press reads its face off the commit's own record while it runs, so it says what it said when it
+// was pressed, however the review moves under it.
+it(`keeps the press as it was pressed while the commit runs, however the review moves under it`, async () => {
+    const el = await mount();
+    const tree = (staged: number): GitChanges => ({
+        repos: [
+            {
+                repo: `root`,
+                branch: `main`,
+                conflicted: [],
+                staged: Array.from({ length: staged }, (_, index) => ({ path: `f${index}.ts`, status: `modified` as const })),
+                unstaged: [{ path: `left.ts`, status: `modified` }],
+            },
+        ],
+    });
+    await answer(tree(2));
+    commitMessage.value = `fix: both`;
+    await settle();
+    let finish!: () => void;
+    commit.mockImplementationOnce(
+        () =>
+            new Promise<CommitResult>((resolve) => {
+                // As the daemon answers it: the repo's rows as they stand after the commit.
+                finish = () => resolve({ committed: true, changes: tree(1).repos[0] });
+            }),
+    );
+    const face = (): string | undefined => buttonNamed(el, `Commit`)?.textContent?.replace(/\s+/g, ` `).trim();
+    expect(face()).toBe(`Commit 2`);
+    buttonNamed(el, `Commit`)?.click();
+    await settle();
+
+    queryClient.setQueryData(changesKey(), tree(1));
+    await settle();
+    expect(face()).toBe(`Commit 2`);
+
+    finish();
+    await settle();
+    await settle();
+    expect(face()).toBe(`Commit 1`);
+});
+
+// kind-aspen-604 (10-11): a reader who looks away and comes back must still be told the work runs. The commit's record is
+// the changes model's, not the panel's: a panel opened again mid-commit draws the press as it was pressed, and its line.
+it(`draws a commit still running in a panel opened again, as it was pressed`, async () => {
+    const tree = (staged: number): GitChanges => ({
+        repos: [
+            {
+                repo: `root`,
+                branch: `main`,
+                conflicted: [],
+                staged: Array.from({ length: staged }, (_, index) => ({ path: `f${index}.ts`, status: `modified` as const })),
+                unstaged: [{ path: `left.ts`, status: `modified` }],
+            },
+        ],
+    });
+    const face = (el: HTMLElement): string | undefined => buttonNamed(el, `Commit`)?.textContent?.replace(/\s+/g, ` `).trim();
+    const first = await mount();
+    await answer(tree(2));
+    commitMessage.value = `fix: both`;
+    await settle();
+    let finish!: () => void;
+    commit.mockImplementationOnce(
+        () =>
+            new Promise<CommitResult>((resolve) => {
+                finish = () => resolve({ committed: true, changes: tree(1).repos[0] });
+            }),
+    );
+    buttonNamed(first, `Commit`)?.click();
+    await settle();
+    // The bar's one line, ahead of the press: where the run is.
+    const said = (el: HTMLElement): string | undefined => el.textContent?.match(/^[^…]*…/)?.[0];
+    expect(said(first)).toBe(`Waiting for root to be free…`);
+
+    app?.unmount();
+    document.body.innerHTML = ``;
+    queryClient.setQueryData(changesKey(), tree(1));
+    const again = await mount();
+    await settle();
+    expect(face(again)).toBe(`Commit 2`);
+    expect(said(again)).toBe(`Waiting for root to be free…`);
+
+    finish();
+    await settle();
+    await settle();
+    expect(face(again)).toBe(`Commit 1`);
 });

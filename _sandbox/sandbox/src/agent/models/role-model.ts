@@ -10,7 +10,7 @@ import { endpointConfigOf } from "../../endpoints/local-model.js";
 import { mentionsSpentAllowance } from "../../engines/failure-sentences.js";
 import { type DeclaredWindow, declaredWindow, helperOverflow, helperPromptRoom } from "../prompt/window/context-budget.js";
 import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "../../engines/role-answer.js";
-import { rungLimit, spentRung } from "./role-model-quota.js";
+import { rungCapacity, spentRung } from "./role-model-quota.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { runSealedRequest } from "../run/sealed/sealed-request.js";
 import { opt } from "../../opt.js";
@@ -257,8 +257,8 @@ export const askRoleModel = async <T>(
         if (held === undefined) {
             return (await spentRung(services, choice, now))?.reason;
         }
-        const limit = await rungLimit(services, choice);
-        if (limit !== undefined && limit.withHeadroom > 0 && (limit.roomMeasuredAt ?? 0) > held.at) {
+        const capacity = await rungCapacity(services, choice);
+        if (capacity?.kind === `serving` && (capacity.roomMeasuredAt ?? 0) > held.at) {
             refusals.delete(modelPinKey(choice));
             return undefined;
         }

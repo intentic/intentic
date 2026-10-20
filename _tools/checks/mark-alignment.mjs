@@ -1,10 +1,18 @@
 #!/usr/bin/env node
-// A mark beside text is placed by `.mark` (_site/site/src/styles/global.css), sized to `1lh` and centered on the line's
-// own leading; no flexbox alignment gets this right at every wrap. Refuses a vertical offset on a mark written anywhere
-// else. Rendered geometry is checked separately, in a browser (check-alignment.mjs).
+// A mark beside text is placed by one rule, never by an offset typed at the call site, which is right only for the one
+// size it was typed at.
+// - The site: `.mark` (_site/site/src/styles/global.css), sized to `1lh` and centered on the line's own leading; no
+//   flexbox alignment gets this right at every wrap. Refuses a vertical offset on a mark written anywhere else.
+// - The editor and its extensions: `<Icon>`, whose `.ui-icon` (_editor/ui/src/styles/utilities.css) sits on the text it
+//   labels and, leading an `items-start` line, centres itself on that line's first row from the line's own height.
+//   Refuses a vertical offset on an `<Icon>`, and a glyph-led line whose first words state a type size the line itself
+//   does not (lib/kit-decisions.mjs's `glyphFindings`, where its tests read it).
+// Rendered geometry is checked separately, in a browser (check-alignment.mjs).
 import { readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
+import { glyphFindings } from "./lib/kit-decisions.mjs";
 import { subjectFiles } from "./lib/repo.mjs";
+import { blank, templatesUnder } from "./lib/templates.mjs";
 
 const root = repoRoot(import.meta.url);
 
@@ -91,12 +99,22 @@ for (const path of tracked) {
     }
 }
 
+// The editor's glyphs.
+const editor = templatesUnder(`_editor`, `_extensions`);
+for (const path of editor) {
+    findings.push(...glyphFindings(path, blank(readFileSync(`${root}/${path}`, `utf8`))));
+}
+
 if (findings.length > 0) {
     for (const { at, why } of findings) {
         console.error(`${at}  ${why}`);
     }
-    console.error(`\n${findings.length} hand-placed mark(s). The rule is \`.mark\` in _site/site/src/styles/global.css; the way to use it is Bullet.astro or Point.astro.`);
+    console.error(
+        `\n${findings.length} hand-placed mark(s). On the site the rule is \`.mark\` in _site/site/src/styles/global.css (Bullet.astro, Point.astro); in the editor it is \`.ui-icon\` in _editor/ui/src/styles/utilities.css.`,
+    );
     process.exit(1);
 }
 
-console.log(`${tracked.length} site files: every mark beside text is placed by \`.mark\`, and the only vertical offset is the wordmark lockup's`);
+console.log(
+    `${tracked.length} site files and ${editor.length} editor templates: every mark beside text is placed by \`.mark\` or \`.ui-icon\`, and the only vertical offset is the wordmark lockup's`,
+);

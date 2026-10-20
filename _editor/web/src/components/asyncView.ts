@@ -1,14 +1,15 @@
-import { loadChunk, Notice, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
-import { type Component, computed, defineComponent, h, nextTick, onMounted, ref, shallowRef, watch, withDirectives } from "vue";
+import { Await, Notice } from "@intentic/ui";
+import { type Component, computed, defineComponent, h, nextTick, onMounted, watch } from "vue";
 import { useRouter } from "vue-router";
 import { t } from "@intentic/ui/i18n";
 import { finishBoot } from "../app/perf/boot";
+import { useChunkLoaded, viewChunk } from "./viewChunk";
 
-// Wraps a route's `() => import(...)` so navigation completes immediately; `outline` shows only past the same
-// reveal-delay thresholds data skeletons use. Owns the failure path, invisible to router.onError once navigation lands:
-// a dead chunk gets `loadChunk`'s one reload onto the page just landed on (the outline stays while it goes), anything
-// else a notice with retry. A view with an outline is imprinted per path once it has drawn (`v-skeleton-source`), so the
-// next wait for its chunk draws that page as it last looked, and `outline` only until it has been seen once.
+// Wraps a route's `() => import(...)` so navigation completes immediately, and waits for the chunk as every view waits
+// (<Await>, over viewChunk.ts): a dead chunk gets loadChunk's one reload onto the page just landed on, anything else a
+// notice with retry. A view with an outline is remembered per path (`route:<path>`): the next wait for it draws the
+// page as it last looked, the outline only until it has been seen once, and its first reads are waited for under that
+// look too. A view without one draws nothing until its code is here, then waits for itself.
 
 type Loader = () => Promise<{ readonly default: Component }>;
 
@@ -38,87 +39,55 @@ export const warmView = (component: Component): void => {
 
 export const asyncView = (load: Loader, outline?: Component, options: { readonly mobile?: MobilePrefetch } = {}): Component => {
     // One fetch shared by the prefetcher and every mount; survives unmounts, so a revisit renders synchronously.
-    const resolved = shallowRef<Component | undefined>(undefined);
-    let inflight: Promise<void> | undefined;
-    const start = (): Promise<void> => {
-        inflight ??= load()
-            .then((module) => {
-                resolved.value = module.default;
-            })
-            .catch((error: unknown) => {
-                // A later retry re-fetches rather than replaying this rejection forever.
-                inflight = undefined;
-                throw error;
-            });
-        return inflight;
-    };
-    const fetchChunk = (): Promise<void> => start();
-    registered.push(options.mobile === undefined ? { load: fetchChunk } : { load: fetchChunk, mobile: options.mobile });
+    const chunk = viewChunk(async () => (await load()).default);
+    registered.push(options.mobile === undefined ? { load: chunk.fetch } : { load: chunk.fetch, mobile: options.mobile });
 
     const wrapper = defineComponent({
         name: `AsyncView`,
         setup() {
             const router = useRouter();
-            const loading = ref(false);
-            const failure = ref<string | undefined>(undefined);
-            const attempt = (): void => {
-                if (resolved.value !== undefined) {
-                    return;
-                }
-                failure.value = undefined;
-                loading.value = true;
-                // Only a mount answers a dead chunk with a reload, never the idle prefetcher; one in flight never
-                // settles, so the outline stays until the page is replaced.
-                loadChunk(start, router.resolve(router.currentRoute.value.fullPath).href)
-                    .catch((error: unknown) => {
-                        failure.value = String(error);
-                    })
-                    .finally(() => {
-                        loading.value = false;
-                    });
-            };
-            attempt();
+            const view = useChunkLoaded(() => chunk);
             // The page load ends where its first view has drawn (app/perf/boot.ts; a no-op after the first).
             const drawn = (): void => finishBoot(String(router.currentRoute.value.name ?? router.currentRoute.value.path));
             onMounted(() => {
-                if (resolved.value !== undefined) {
+                if (chunk.landed() !== undefined) {
                     drawn();
                 }
             });
-            watch(resolved, (shown) => {
-                if (shown !== undefined) {
-                    void nextTick(drawn);
-                }
-            });
-            // One loader per wrapper: one subject per wait, so the label can stay empty.
-            const revealed = useLoadingReveal(
-                loading,
-                computed(() => ``),
+            watch(
+                () => chunk.landed(),
+                (shown) => {
+                    if (shown !== undefined) {
+                        void nextTick(drawn);
+                    }
+                },
             );
             // Per path, not per route: one hub's sections are different pages.
-            const imprint = computed(() => `route:${router.currentRoute.value.path}`);
+            const imprint = computed(() => (outline === undefined ? undefined : `route:${router.currentRoute.value.path}`));
 
-            return () => {
-                if (resolved.value !== undefined) {
-                    const view = h(resolved.value);
-                    return outline === undefined ? view : withDirectives(view, [[vSkeletonSource, imprint.value]]);
-                }
-                if (failure.value !== undefined) {
-                    return h(`div`, { class: `ui-page` }, [
-                        h(Notice, {
-                            of: {
-                                tone: `danger`,
-                                title: t(`common.asyncView.viewCouldntLoad`),
-                                detail: failure.value,
-                                action: { label: t(`ui.action.tryAgain`), run: attempt },
-                            },
-                        }),
-                    ]);
-                }
-                return revealed.value && outline !== undefined ? h(SkeletonSnapshot, { of: imprint.value }, { default: () => h(outline) }) : null;
-            };
+            return () =>
+                h(
+                    Await,
+                    { of: view.value, imprint: imprint.value },
+                    {
+                        default: ({ data }: { readonly data: Component }) => h(data),
+                        // Without an outline the wait is only marked busy: a page drawn before its code would be a guess.
+                        fallback: () => (outline === undefined ? h(`div`, { class: `contents`, "aria-busy": `true` }) : h(outline)),
+                        failed: ({ error, retry }: { readonly error: string; readonly retry: (() => void) | undefined }) =>
+                            h(`div`, { class: `ui-page` }, [
+                                h(Notice, {
+                                    of: {
+                                        tone: `danger`,
+                                        title: t(`common.asyncView.viewCouldntLoad`),
+                                        detail: error,
+                                        action: retry === undefined ? undefined : { label: t(`ui.action.tryAgain`), run: retry },
+                                    },
+                                }),
+                            ]),
+                    },
+                );
         },
     });
-    loaderOf.set(wrapper, fetchChunk);
+    loaderOf.set(wrapper, chunk.fetch);
     return wrapper;
 };

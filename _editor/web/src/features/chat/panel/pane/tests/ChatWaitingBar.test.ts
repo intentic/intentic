@@ -1,10 +1,9 @@
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { IconStub } from "@intentic/ui/testing";
-import { computed, createApp, h, nextTick, ref } from "vue";
+import { computed, createApp, h, nextTick } from "vue";
 import { NO_ATTENTION } from "../../../../../models/agent-status/agentStatus-lanes";
 import type { AgentStanding } from "../../../../../models/agent-status/agentStatus-standing";
-import * as agentsOriginal from "../../../../../models/fleet/useAgents";
 import * as sessionsOriginal from "../../../../../models/conversations/run/useChat-sessions";
 
 // What waits on the reader, pinned over the composer: the card the agent is parked on, before and after this window drew
@@ -12,15 +11,6 @@ import * as sessionsOriginal from "../../../../../models/conversations/run/useCh
 
 const retryHydrate = jest.fn();
 jest.mock("../../../../../models/conversations/run/useChat-sessions", () => ({ ...sessionsOriginal, retryHydrate }));
-
-// This conversation's own answer to the memory wall, as the roster carries it; absent, the wall's default (send once
-// memory frees up) answers, since the sandbox's settings are not loaded here.
-const memoryOverride = ref<`wait` | `resend` | undefined>();
-const realUseAgents = agentsOriginal.useAgents;
-jest.mock("../../../../../models/fleet/useAgents", () => ({
-    ...agentsOriginal,
-    useAgents: () => ({ ...realUseAgents(), agentById: () => (memoryOverride.value === undefined ? undefined : { memoryPolicy: memoryOverride.value }) }),
-}));
 
 const { Conversation } = await import("../../../../../models/conversations/session/conversation");
 const { conversationView, PANE_VIEW } = await import("../../../../../models/conversations/panel/useChat-view");
@@ -55,7 +45,6 @@ const mountBar = (chat: Chat, card?: AgentStanding, inside?: HTMLElement) => {
 };
 
 afterEach(() => {
-    memoryOverride.value = undefined;
     unmount?.();
     unmount = undefined;
     retryHydrate.mockClear();
@@ -141,6 +130,9 @@ describe(`a card the agent is parked on`, () => {
 // the figures, and the two ways on.
 describe(`a message held for low memory`, () => {
     const SENTENCE = `Sandbox memory is low: 4.9 GiB resident + 2.4 GiB swapped, against 8.0 GiB. Starting another agent now can slow the running ones down.`;
+    // The card as the sandbox derives it where its answer is to send once memory frees (`next`), the one reading the bar,
+    // the lane and the card's corner take.
+    const sending: AgentStanding = { status: `error`, attention: NO_ATTENTION, failureCode: `sandbox-memory-low`, failure: SENTENCE, next: { kind: `room` } };
 
     it(`says held with the figures, sends on Send anyway, and folds away on Wait`, async () => {
         const chat = new Conversation(`c1`);
@@ -150,7 +142,7 @@ describe(`a message held for low memory`, () => {
             paused: `refused`,
         };
         const resume = jest.spyOn(chat.turn, `resume`).mockResolvedValue(undefined);
-        const bar = mountBar(chat, { status: `error`, attention: NO_ATTENTION, failureCode: `sandbox-memory-low`, failure: SENTENCE });
+        const bar = mountBar(chat, sending);
         await nextTick();
 
         expect(bar.rows()).toEqual([[`Held: sandbox memory is low (4.9/8.0 GiB) · sends once memory frees up`, `Send anyway`, `Wait`]]);
@@ -163,9 +155,8 @@ describe(`a message held for low memory`, () => {
         expect(bar.rows()).toEqual([]);
     });
 
-    // Where the chat's answer is to wait for a press, the bar promises nothing goes by itself.
+    // Where nothing carries it on (its answer is to wait for a press), the bar promises nothing goes by itself.
     it(`says only held where the chat waits for a press`, async () => {
-        memoryOverride.value = `wait`;
         const chat = new Conversation(`c1`);
         chat.queue.value = {
             items: [{ id: `m-1`, text: `make it pass antivirus`, voice: `person`, queuedAt: 1_000, revision: 1 }],
@@ -201,7 +192,7 @@ describe(`a message held for low memory`, () => {
         footer.getBoundingClientRect = box(600, 800);
         line.getBoundingClientRect = box(560, 580);
         try {
-            const bar = mountBar(chat, { status: `error`, attention: NO_ATTENTION, failureCode: `sandbox-memory-low`, failure: SENTENCE }, footer);
+            const bar = mountBar(chat, sending, footer);
             await nextTick();
             await nextTick();
             expect(bar.rows()).toEqual([]);

@@ -34,6 +34,7 @@ import type { TurnContext } from "../../providers/adapter.js";
 import { opt } from "../../../opt.js";
 import { EXPERIMENTS } from "./experiments.js";
 import { type ConversationEntry, type TurnPremise, type TurnRuntime, premiseOf, turnRuntime } from "./turn-premise.js";
+import { runtimeRoute } from "../../../privacy/privacy-trust.js";
 
 // Every read a turn is planned on, each timed under the `turn.plan.*` span diagnostics read and run beside the others
 // wherever nothing orders them, so the decision after it is pure. A read that hinges on a decision waits for the premise.
@@ -224,7 +225,6 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "endpointModels"
     | "iq"
     | "logger"
-    | "observedLimits"
     | "resources"
     | "perf"
     | "personas"
@@ -233,22 +233,12 @@ export type TurnFactsDeps = ServiceabilityDeps &
     | "workspace"
 >;
 
-// Asked of every turn, since a policy can change between two of them. A policy that cannot be read refuses: the shield
-// may be on, and a turn that runs past it cannot be taken back.
-const privacyRefusalOf = async (
-    services: Pick<Services, "privacyShield" | "perf">,
-    runtime: TurnRuntime,
-    conversationId: string | undefined,
-): Promise<string | undefined> => {
-    try {
-        const verdict = await services.perf.track("turn.plan.privacy", { provider: runtime.provider }, () =>
-            services.privacyShield.admit(runtime.provider, runtime.harness, conversationId),
-        );
-        return verdict.allowed ? undefined : verdict.reason;
-    } catch (error) {
-        return error instanceof Error ? error.message : "the privacy shield's policy could not be read";
-    }
-};
+// Asked of every turn, since a policy can change between two of them: the shield's verdict on the route the turn's runtime
+// reaches its provider by (privacy-trust.ts runtimeRoute).
+const privacyRefusalOf = (services: Pick<Services, "privacyShield" | "perf">, runtime: TurnRuntime, conversationId: string | undefined): Promise<string | undefined> =>
+    services.perf.track("turn.plan.privacy", { provider: runtime.provider }, () =>
+        services.privacyShield.refusal({ provider: runtime.provider, conversationId, route: runtimeRoute(runtime.provider, runtime.harness) }),
+    );
 
 export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn, context: TurnContext): Promise<TurnFacts> => {
     // First, so a held turn costs no settings read, capability list, dependency probe or persona load.

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { STATE_DIR } from "@intentic/constants";
-import { SkeletonSnapshot, ui, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
+import { useLoaded } from "@intentic/extension-api";
+import { Await, ui } from "@intentic/ui";
 import { computed, provide } from "vue";
 import { useDiffStat } from "../changes/useDiffStat";
 import { useWorkspaceTabs } from "../../../models/workspace/tabs/useWorkspaceTabs";
@@ -70,13 +71,15 @@ const directoryUiDir = computed<string | undefined>(() => {
 
 // What the open diff shows once its comments are stripped, for the bar above it (useDiffStat).
 const { stat: diffStat, onStat: setDiffStat } = useDiffStat(computed(() => activeTab.value?.id));
-// Gap between clicking a changed file and its content arriving; decides only whether the panes below deserve an outline
-// skeleton. A warmed or cached diff lands in the same tick, so usually not.
-const diffPending = computed(() => activeTab.value?.kind === `diff` && activeTab.value.pending === true);
-const diffOutline = useLoadingReveal(
-    diffPending,
-    computed(() => activeTab.value?.id ?? ``),
-);
+// The open diff, waited for between clicking a changed file and its content arriving (a warmed or cached diff lands in
+// the same tick): whether the file is binary is part of the answer, so the viewer mounts once, with content.
+const diffTab = computed(() => (activeTab.value?.kind === `diff` ? activeTab.value : undefined));
+const diff = useLoaded(() => ({
+    data: diffTab.value?.pending === true ? undefined : diffTab.value,
+    error: undefined,
+    fetching: diffTab.value?.pending === true,
+    wanted: diffTab.value !== undefined,
+}));
 </script>
 
 <template>
@@ -134,28 +137,28 @@ const diffOutline = useLoadingReveal(
                 :deletions="activeTab.deletions"
             />
             <div class="min-h-0 flex-1">
-                <!-- Wait for file type detection before mounting a viewer. The wait draws this file's diff as it last
-                     looked, here or in an agent's review, and the shared diff outline before it has been seen. -->
-                <template v-if="activeTab.pending">
-                    <SkeletonSnapshot v-if="diffOutline" :of="`diff:${activeTab.path}`" :label="t(`workspace.diffSkeleton.readingFile`)">
-                        <DiffSkeleton />
-                    </SkeletonSnapshot>
-                </template>
-                <!-- One box around whichever viewer FileDiffPane picks, so the diff's imprint has a root that stays put. -->
-                <div v-else v-skeleton-source="`diff:${activeTab.path}`" class="h-full">
-                    <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, shared with the two other surfaces rendering this diff. -->
-                    <FileDiffPane
-                        :key="activeTab.id"
-                        :path="activeTab.path"
-                        :before="activeTab.before"
-                        :after="activeTab.after"
-                        :binary="activeTab.binary"
-                        :partial="activeTab.partial"
-                        :before-raw="activeTab.beforeRaw"
-                        :after-raw="activeTab.afterRaw"
-                        @stat="setDiffStat"
-                    />
-                </div>
+                <!-- The wait draws this file's diff as it last looked, here or in an agent's review, and the shared diff
+                     outline before it has been seen. -->
+                <Await :of="diff" :imprint="`diff:${activeTab.path}`" :label="t(`workspace.diffSkeleton.readingFile`)">
+                    <template #default="{ data: shown }">
+                        <!-- One box around whichever viewer FileDiffPane picks, so the diff's imprint has a root that stays put. -->
+                        <div class="h-full">
+                            <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, shared with the two other surfaces rendering this diff. -->
+                            <FileDiffPane
+                                :key="shown.id"
+                                :path="shown.path"
+                                :before="shown.before"
+                                :after="shown.after"
+                                :binary="shown.binary"
+                                :partial="shown.partial"
+                                :before-raw="shown.beforeRaw"
+                                :after-raw="shown.afterRaw"
+                                @stat="setDiffStat"
+                            />
+                        </div>
+                    </template>
+                    <template #fallback><DiffSkeleton /></template>
+                </Await>
             </div>
         </template>
         <div v-else-if="activeTab?.kind === 'directory'" class="min-h-0 flex-1">

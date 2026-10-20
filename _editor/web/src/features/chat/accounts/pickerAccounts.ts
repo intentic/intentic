@@ -6,12 +6,13 @@ import type { ModelRef } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { computed, type Ref } from "vue";
 import { offeredLoops, selectedLoop } from "../../../models/providers/offeredLoops";
-import { providerRefusals, translatorAccounts } from "../../../models/providers/providerAccounts";
+import { translatorAccounts } from "../../../models/providers/providerAccounts";
 import {
     accountFacts,
     accountState,
     formatAge,
     formatReset,
+    lastRefusalOf,
     liveUsage,
     oldestMovableReading,
     PLAN_LIMIT_BANDS,
@@ -156,7 +157,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     // Same refusal when no row can carry it: a single account, or a routed refusal naming none.
     const unplacedRefusal = computed(() => {
         const note = providerRefusalNote.value;
-        const refused = providerRefusals.value[provider.value]?.account;
+        const refused = lastRefusalOf(provider.value)?.account;
         if (note?.current !== true) {
             return undefined;
         }
@@ -176,7 +177,7 @@ export const usePickerAccounts = (provider: Ref<AgentProvider>, harness: Ref<Age
     // Rows decorated with a subtitle (identity or connect date), ring headroom, and any refusal on that account. In the
     // provider's own order, which is what a turn's placement breaks ties by; the list draws them in pickerOrder.
     const accountRows = computed(() => {
-        const refusal = providerRefusals.value[provider.value];
+        const refusal = lastRefusalOf(provider.value);
         const note = providerRefusalNote.value;
         const readable = reportsPlanLimits(provider.value);
         return accounts.value.map((entry) => {

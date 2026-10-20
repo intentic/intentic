@@ -5,8 +5,7 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { Conversation } from "../../../models/conversations/session/conversation";
-import { providerAccounts, setAccountUsage } from "../../../models/providers/providerAccounts";
-import { judgedOauth } from "../../../testing/judgedAccounts";
+import { providerAccounts, providerRefusals, setAccountUsage } from "../../../models/providers/providerAccounts";
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 import { setDaemonRoutes } from "../../../client/sandbox/useDaemonRoutes";
 import { useChat } from "../../../models/conversations/run/useChat";
@@ -205,6 +204,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     providerAccounts.value = { ...providerAccounts.value, claude: [] };
+    providerRefusals.value = {};
     // A reset claim's answer is the account's, kept on the operations ledger beyond the strip that pressed it.
     forgetOperations();
 });
@@ -414,13 +414,12 @@ it(`leaves the outage waiting until somebody answers for it`, async () => {
     expect(continueButton()?.disabled).toBe(false);
 });
 
-// The account the chat runs on reads spent until a named reopen (epoch s), the verdict the daemon stamps on its row.
+// The account the chat runs on reads spent until a named reopen (epoch s): the provider refused it, "try again at …",
+// and that refusal is on file, as the daemon holds it.
 const spentAccount = (reopensInMs: number): number => {
     const reopensAt = Math.round((Date.now() + reopensInMs) / 1_000);
-    providerAccounts.value = {
-        ...providerAccounts.value,
-        claude: [{ id: `acc-1`, label: `Claude`, email: `a@b.c`, connectedAt: 1, state: { kind: `spent`, reopensAt } }],
-    };
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, label: `Claude`, email: `a@b.c`, connectedAt: 1 }] };
+    providerRefusals.value = { claude: [{ at: Date.now(), kind: `limit`, message: `usage limit reached`, account: `acc-1`, resetsAt: reopensAt }] };
     return reopensAt;
 };
 
@@ -555,14 +554,13 @@ it(`names a wait that has outlasted the busy threshold`, async () => {
 // A second connected subscription lets a spent allowance's held turn move there in one press, instead of switching
 // accounts and pressing Continue separately.
 
-// Two connections: the first spent, the second with room, the state this offer exists for. Listed as a current daemon
-// lists them, each with its verdict; an older daemon's rows (`judged: false`) carry none.
-const twoAccounts = (spentPercent: number, roomPercent: number, judged = true): void => {
+// Two connections: the first spent, the second with room, the state this offer exists for.
+const twoAccounts = (spentPercent: number, roomPercent: number): void => {
     const rows = [
         { id: `acc-1`, email: `first@b.c` },
         { id: `acc-2`, email: `second@b.c` },
     ] as never;
-    providerAccounts.value = { ...providerAccounts.value, claude: judged ? judgedOauth(rows) : rows };
+    providerAccounts.value = { ...providerAccounts.value, claude: rows };
     setAccountUsage(`claude`, `acc-1`, { windows: [{ kind: `five_hour`, utilization: spentPercent, gates: `all` }], measuredAt: Date.now() });
     setAccountUsage(`claude`, `acc-2`, { windows: [{ kind: `five_hour`, utilization: roomPercent, gates: `all` }], measuredAt: Date.now() });
 };
@@ -614,7 +612,7 @@ it(`offers the other account by name on a spent allowance, and re-runs the held 
 // press an older editor fell back on, and the card says the sandbox needs an update and how.
 it(`offers no other account on a sandbox too old to move a conversation, and says it needs an update`, async () => {
     setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `agent.switchAccount`));
-    twoAccounts(99, 10, false);
+    twoAccounts(99, 10);
     const conversation = limitChat();
     conversation.registered.value = true;
     const moved = jest.spyOn(conversation.turn, `continueOn`);

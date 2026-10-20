@@ -27,6 +27,7 @@ import {
     readState,
     setAutoHealOff,
     setMirrorOff,
+    setOwnerPaused,
     setPortIgnored,
     type SyncMode,
     type SyncState,
@@ -38,16 +39,8 @@ import { retireMirroredPort, retirePairingMirror } from "./mirror.js";
 import { asidePrefix } from "./project/adopt.js";
 import { attachCommands } from "./attach-commands.js";
 import { projectCommands } from "./project/project-commands.js";
-import {
-    existingSyncSessions,
-    healDerivedConflicts,
-    resumeSessions,
-    retireOrphanSessions,
-    runMutagen,
-    sessionName,
-    startMutagenDaemon,
-    syncSessionNames,
-} from "./mutagen.js";
+import { existingSyncSessions, healDerivedConflicts, readAllSessions, retireOrphanSessions, sessionName, startMutagenDaemon } from "./mutagen.js";
+import { adoptOwnerPauses, HOLD_WORDS, holdSessions, syncHeld, syncHolds } from "./holds.js";
 import { ensureMutagen } from "./binary/mutagen-binary.js";
 import { forget } from "./forget-command.js";
 import { revokeEnrollment, syncsAFolder, uninstallPairings } from "./uninstall.js";
@@ -678,20 +671,6 @@ const sandboxFlag = {
     },
 } as const;
 
-// The sessions a pause/resume can actually name, and which pairings that covers. `mutagen sync pause a b` is
-// all-or-nothing: one unresolved name fails the call for every other pairing in it, so a pairing whose sandbox was
-// unreachable when its session was due to be created used to take the whole command down with Mutagen's own
-// "did not match any sessions". Pure and exported so that rule is checkable without a Mutagen daemon.
-export const syncSwitchPlan = (
-    syncing: readonly Pairing[],
-    held: readonly string[],
-): { readonly names: readonly string[]; readonly acted: readonly Pairing[]; readonly idle: readonly Pairing[] } => {
-    const running = new Set(held);
-    const covered = (pairing: Pairing): string[] => syncSessionNames(pairing).filter((name) => running.has(name));
-    const acted = syncing.filter((pairing) => covered(pairing).length > 0);
-    return { names: acted.flatMap(covered), acted, idle: syncing.filter((pairing) => covered(pairing).length === 0) };
-};
-
 // Each pairing by its key: the sandbox id, or `<sandboxId>~<name>` for a folder attached to it.
 const named = (pairings: readonly Pairing[]): string => pairings.map(pairingKey).join(", ");
 
@@ -726,14 +705,16 @@ const noteIfStopped = async (ui: Ui): Promise<void> => {
     }
 };
 
-// Pause/resume act on file sync only: mirroring rides the resident agent, not a Mutagen pause.
+// Pause/resume act on file sync only: mirroring rides the resident agent, not a Mutagen pause. Each is the owner's word
+// recorded on the pairing (config.ts `ownerPausedAt`), kept through a swap, a reconnect and a session made again, and
+// Mutagen is made to agree at once (holds.ts) rather than at the watcher's next pass. A resume lifts the owner's pause
+// alone: a pairing something else still holds says why, and carries on by itself once that ends.
 const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
     pairingCommand<SandboxFlags>(
         brief,
         sandboxFlag,
         `No sandbox is paired on this device, so there is nothing to ${verb}. Desktop sync starts from a sandbox's Desktop sync card.`,
         async (selected, _flags, ui) => {
-            const done = verb === "pause" ? "paused" : "resumed";
             // The projects host holds no folder of its own: its folders' sessions are theirs.
             const syncing = selected.filter((pairing) => pairing.mode === "sync" && pairing.projectsHost !== true);
             if (syncing.length === 0) {
@@ -744,45 +725,27 @@ const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
             }
             ui.act(`${verb === "pause" ? "Pausing" : "Resuming"} file sync`);
             const mutagen = await ensureMutagen();
-            // Both sessions of the pair, and only names the daemon holds: one it can't resolve fails the whole call.
-            const held = existingSyncSessions(
-                mutagen,
-                syncing.flatMap((pairing) => syncSessionNames(pairing)),
-            );
-            if (held === undefined) {
-                throw new Error(
-                    explain(
-                        `File sync was not ${done}.`,
-                        "Mutagen did not answer when asked which sessions it holds.",
-                        "run the same command again in a moment.",
-                    ),
-                );
+            const live = readAllSessions(mutagen);
+            if (live === undefined) {
+                throw new Error(explain(`File sync was not ${verb}d.`, "Mutagen did not answer when asked which sessions it holds.", "run the same command again in a moment."));
             }
-            const plan = syncSwitchPlan(syncing, held);
-            if (plan.names.length === 0) {
-                // Not a failure: a sandbox that has never answered has no session yet, and the agent creates one when it does.
-                ui.done(
-                    `No file-sync session is running for ${named(syncing)}, so nothing was ${done}. Syncing starts when the sandbox answers again.`,
-                );
-                return;
+            const now = Date.now();
+            await adoptOwnerPauses((await readState()).pairings, live, now);
+            const keys = new Set(syncing.map(pairingKey));
+            for (const key of keys) {
+                // state is a single file; serial keeps the writes ordered
+                await setOwnerPaused(key, verb === "pause" ? now : undefined);
             }
-            if (verb === "pause") {
-                runMutagen(mutagen, ["sync", "pause", ...plan.names]);
-            } else if (!(await resumeSessions(mutagen, plan.names))) {
-                // One session per call, read back after (mutagen.ts `resumeSessions`): a single call over both stopped at
-                // the first that could not reach the sandbox and left the rest paused, while saying it failed.
-                throw new Error(
-                    explain(
-                        "File sync was not resumed.",
-                        "Mutagen still holds some of its sessions paused, or did not answer when asked.",
-                        "run the same command again in a moment.",
-                    ),
-                );
+            const after = (await readState()).pairings;
+            const behind = await holdSessions(mutagen, after, ui.note, now);
+            if ([...keys].some((key) => behind.has(key))) {
+                throw new Error(explain(`File sync was not ${verb}d.`, `Mutagen did not take the ${verb} of every session.`, "run the same command again in a moment."));
             }
-            if (plan.idle.length > 0) {
-                ui.note(`No file-sync session to ${verb} for ${named(plan.idle)}.`);
+            const stillHeld = after.filter((pairing) => keys.has(pairingKey(pairing)) && syncHeld(pairing, now));
+            for (const pairing of verb === "resume" ? stillHeld : []) {
+                ui.note(`${pairingKey(pairing)} stays held while ${syncHolds(pairing, now).map((hold) => HOLD_WORDS[hold]).join(" and ")}; it carries on by itself once that ends.`);
             }
-            ui.done(`${verb === "pause" ? "Paused" : "Resumed"} file sync for ${named(plan.acted)}.`);
+            ui.done(`${verb === "pause" ? "Paused" : "Resumed"} file sync for ${named(syncing)}.`);
         },
     );
 

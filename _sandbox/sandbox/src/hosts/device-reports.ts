@@ -16,11 +16,10 @@ import {
     type HostSummary,
     HOST_NATIVE_ENVIRONMENT,
 } from "@intentic/sandbox-contract/schemas/hosts";
-import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { ORPCError } from "@orpc/server";
 import { refuseUnsupported } from "./device-feature-gates.js";
 import type { Services } from "../composition.js";
-import { approvedPath } from "../environment/environment.js";
+import { composeEnvironment } from "../environment/overlay.js";
 import type { SyncEnrollmentRow } from "../peers/desktop-sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
@@ -505,14 +504,15 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
                         .then((settings) => (Object.keys(settings.settings).length === 0 ? undefined : emitDefinitionToml(settings)))
                         // allow(silent-catch): settings ride along best-effort; the runner is built without them, never refused
                         .catch(() => undefined);
-                    // Absent is no overlay; a read that failed throws, or the runner would be built without it.
-                    const overlay = await services.files.read(approvedPath(services));
+                    // The overlay this sandbox wants, composed now; none is no overlay, and a compose that failed throws, or
+                    // the runner would be built without it.
+                    const overlay = await composeEnvironment(services);
                     return {
                         ...input,
                         parentUrl,
                         pair: services.runners.mintPairing(input.slug, { host: id }).token,
                         ...(definition !== undefined ? { definition } : {}),
-                        ...(overlay !== undefined && overlay !== "" ? { overlay, overlayHash: sha256Hex(overlay) } : {}),
+                        ...(overlay === undefined ? {} : { overlay: overlay.content, overlayHash: overlay.hash }),
                     };
                 })()
               : input;

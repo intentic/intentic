@@ -143,8 +143,8 @@ const repair = async (): Promise<void> => {
     <!-- Title, one sentence, then the action row: the reader learns what is wrong, why, and the one thing that fixes it,
          without a paragraph. What the fix does is said beside its button, quietly, rather than above it as prose. -->
     <section v-if="notices.length > 0" :class="toneTint(`warning`, `strong`, `flex flex-col gap-4 rounded-lg border px-4 py-3`)">
-        <div v-for="(notice, index) of notices" :key="`${notice.fault}:${index}`" class="flex items-start gap-3">
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
+        <div v-for="(notice, index) of notices" :key="`${notice.fault}:${index}`" class="flex items-start gap-3 text-sm">
+            <Icon name="exclamation-triangle" class="shrink-0 text-warning" aria-hidden="true" />
             <div class="flex min-w-0 flex-1 flex-col gap-1">
                 <p class="text-sm font-medium text-content">{{ notice.title }}</p>
                 <p class="text-xs text-muted">{{ notice.detail }}</p>

@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { useLoaded } from "@intentic/extension-api";
 import {
+    Await,
     BottomSheet,
     Button,
     clipboardOf,
@@ -12,13 +14,10 @@ import {
     PullToRefresh,
     SearchBar,
     SegmentedControl,
-    SkeletonSnapshot,
     toneHover,
     toneWash,
     ui,
-    useLoadingReveal,
     usePageBack,
-    vSkeletonSource,
 } from "@intentic/ui";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -137,11 +136,14 @@ watch(
     { immediate: true },
 );
 
-// The gap between clicking a changed file and its content arriving, gated rather than drawn at once.
-const diffOutline = useLoadingReveal(
-    computed(() => diffTab.value?.pending === true),
-    computed(() => diffTab.value?.id ?? ``),
-);
+// The gap between clicking a changed file and its content arriving: whether the file is binary is part of the answer,
+// so the viewer mounts once, with content.
+const diff = useLoaded(() => ({
+    data: diffTab.value?.pending === true ? undefined : diffTab.value,
+    error: undefined,
+    fetching: diffTab.value?.pending === true,
+    wanted: diffTab.value !== undefined,
+}));
 
 // Presence: announces which file this tab has open.
 watch(openPath, (path) => reportOpenPath(path), { immediate: true });
@@ -344,30 +346,27 @@ const onPick = (event: Event): void => {
                 <WorkspaceScopeChip />
             </div>
             <div class="min-h-0 flex-1">
-                <template v-if="diffTab">
-                    <!-- Still being read; whether the file is binary is part of the answer, so the viewer mounts once, with content.
-                         Meanwhile this file's diff as it last looked stands in, or the shared diff outline before it has been seen. -->
-                    <template v-if="diffTab.pending">
-                        <SkeletonSnapshot v-if="diffOutline" :of="`diff:${diffTab.path}`" :label="t(`workspace.diffSkeleton.readingFile`)">
-                            <DiffSkeleton />
-                        </SkeletonSnapshot>
+                <!-- While it is read, this file's diff as it last looked stands in, or the shared diff outline before it has been seen. -->
+                <Await v-if="diffTab" :of="diff" :imprint="`diff:${diffTab.path}`" :label="t(`workspace.diffSkeleton.readingFile`)">
+                    <template #default="{ data: shown }">
+                        <!-- One box around whichever viewer FileDiffPane picks, so the diff's imprint has a root that stays put. -->
+                        <div class="h-full">
+                            <!-- Bytes, a patch, or two sides: FileDiffPane decides, as on desktop; an image stacks its sides on a phone. -->
+                            <FileDiffPane
+                                :key="shown.id"
+                                :path="shown.path"
+                                :before="shown.before"
+                                :after="shown.after"
+                                :binary="shown.binary"
+                                :partial="shown.partial"
+                                :before-raw="shown.beforeRaw"
+                                :after-raw="shown.afterRaw"
+                                @stat="setDiffStat"
+                            />
+                        </div>
                     </template>
-                    <!-- One box around whichever viewer FileDiffPane picks, so the diff's imprint has a root that stays put. -->
-                    <div v-else v-skeleton-source="`diff:${diffTab.path}`" class="h-full">
-                        <!-- Bytes, a patch, or two sides: FileDiffPane decides, as on desktop; an image stacks its sides on a phone. -->
-                        <FileDiffPane
-                            :key="diffTab.id"
-                            :path="diffTab.path"
-                            :before="diffTab.before"
-                            :after="diffTab.after"
-                            :binary="diffTab.binary"
-                            :partial="diffTab.partial"
-                            :before-raw="diffTab.beforeRaw"
-                            :after-raw="diffTab.afterRaw"
-                            @stat="setDiffStat"
-                        />
-                    </div>
-                </template>
+                    <template #fallback><DiffSkeleton /></template>
+                </Await>
                 <FileViewer
                     v-else-if="openPath"
                     :path="openPath"
@@ -676,7 +675,7 @@ const onPick = (event: Event): void => {
                 </button>
                 <!-- Where a link points; no hover on a phone, so this sheet is the only place a row can say it. -->
                 <p v-if="sheetEntry.link" class="flex min-h-12 items-start gap-3 px-3 py-3 text-sm text-muted">
-                    <Icon :name="sheetEntry.link.state === undefined ? 'link' : 'link-broken'" class="mt-0.5 shrink-0 text-base text-subtle" />
+                    <Icon :name="sheetEntry.link.state === undefined ? 'link' : 'link-broken'" class="shrink-0 text-base text-subtle" />
                     <span class="min-w-0 break-all"
                         >{{ t(`workspace.workspaceMobile.linkTo`) }} {{ sheetEntry.link.to
                         }}<template v-if="sheetEntry.link.state === 'broken'">{{ t(`workspace.workspaceMobile.nothing`) }}</template

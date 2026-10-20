@@ -14,7 +14,7 @@ const enabled = defineModel<boolean>({ required: true });
 
 <template>
     <p v-if="project !== ``" class="flex min-w-0 items-start gap-2 text-xs text-muted">
-        <Icon name="folder" class="mt-0.5 shrink-0" />
+        <Icon name="folder" class="shrink-0" />
         <span class="flex min-w-0 flex-col gap-0.5">
             <span>{{ t(`setup.setupSyncOption.syncsWithFolderYouPicked`) }}</span>
             <code class="min-w-0 truncate">{{ project }}</code>

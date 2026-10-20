@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AgentSummarySchema } from "../schemas/agents.js";
-import { AccountUsageSchema, ProviderRefusalSchema } from "../schemas/providers/plan-limits.js";
+import { AccountUsageSchema, type ProviderRefusal, ProviderRefusalSchema } from "../schemas/providers/plan-limits.js";
 import { MemberRoleSchema } from "../schemas/shared.js";
 import { WorkspaceTreeDeltaSchema } from "../schemas/workspace/workspace-tree.js";
 
@@ -147,10 +147,20 @@ export const AccountUsageChangedSchema = z.object({
 });
 export type AccountUsageChanged = z.infer<typeof AccountUsageChangedSchema>;
 
-// A provider's last refusal was recorded or settled, the observed half of "can I run on this". `refusal` absent means
-// settled, nothing stands.
-export const ProviderRefusalChangedSchema = z.object({ kind: z.literal("providerRefusal"), provider: z.string(), refusal: ProviderRefusalSchema.optional() });
+// A provider's refusals on file changed (one recorded, settled or forgotten), the observed half of "can I run on this":
+// every one it still holds, so a window judges by exactly what the daemon does. Empty means nothing stands. A daemon at
+// the floor sends only its last `refusal` (absent: settled), so `refusals` stays optional; read both with refusalsOf.
+export const ProviderRefusalChangedSchema = z.object({
+    kind: z.literal("providerRefusal"),
+    provider: z.string(),
+    refusals: z.array(ProviderRefusalSchema).optional(),
+    refusal: ProviderRefusalSchema.optional(),
+});
 export type ProviderRefusalChanged = z.infer<typeof ProviderRefusalChangedSchema>;
+
+// Every refusal a frame says stands, from a daemon that sends the whole list or one at the floor that sends its last.
+export const refusalsOf = (event: ProviderRefusalChanged): readonly ProviderRefusal[] =>
+    event.refusals ?? (event.refusal === undefined ? [] : [event.refusal]);
 
 // What moved in the shared tree, once the daemon's resident copy re-listed a batch: a tab holding the generation it
 // counts from patches its tree, and one holding any other fetches it afresh.

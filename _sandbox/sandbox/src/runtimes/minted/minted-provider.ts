@@ -134,7 +134,7 @@ export const seedModelsOf = (provider: MintedProvider): readonly Model[] => SEED
 // that also serves endpoints, so it sits in the runtime table beside ACP's. What's left is what every provider owes: a
 // catalog, a readiness rung, and its secrets-inventory rows; Meta adds the program its own loop runs.
 // What a minted module reads: its own slice, and the logger its sign-in reports through.
-export type MintedProviderDeps = Pick<Services, "authRoot" | "logger" | "minted" | "headroom" | "observedLimits" | "providerRefusals" | "hostHub" | "webextHub">;
+export type MintedProviderDeps = Pick<Services, "authRoot" | "logger" | "minted" | "headroom" | "providerRefusals" | "hostHub" | "webextHub">;
 
 // Whatever an install threw, as errorMessage reads it.
 type Thrown = Parameters<typeof errorMessage>[0];

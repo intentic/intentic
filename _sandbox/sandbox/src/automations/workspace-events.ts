@@ -5,7 +5,7 @@ import type { Services } from "../composition.js";
 import { firedBy } from "./fire/fire-sessions.js";
 import { fireAutomation } from "./scheduler.js";
 import { perDaemon } from "./durable/daemon-memory.js";
-import { addWorkspaceEvent, consumeInbox, dropWorkspaceBacklog, workspaceBacklog } from "./durable/inbox-store.js";
+import { addWorkspaceEvent, consumeInbox, dropWorkspaceBacklog, type WorkspaceEntry } from "./durable/inbox-store.js";
 
 // Chores: automations triggered by a WorkspaceEvent the daemon both emits and consumes, no webhook or token involved.
 // Serial on two levels: a per-chore FIFO queue coalesces by agent (oldest dropped past QUEUE_MAX), and one shared chain
@@ -96,10 +96,10 @@ const enqueue = async (services: Services, id: string, event: WorkspaceEvent): P
 };
 
 // At boot (fire-resume.ts), after the journalled fires: what still waited for each chore, back in its queue in order.
-export const resumeWorkspaceInbox = async (services: Services): Promise<void> => {
+export const resumeWorkspaceInbox = async (services: Services, rows: readonly WorkspaceEntry[]): Promise<void> => {
     const queues = queuesOf.of(services);
     const ids = new Set<string>();
-    for (const entry of await workspaceBacklog(services)) {
+    for (const entry of rows) {
         const queue = queues.get(entry.automationId) ?? { waiting: [], running: false };
         queue.waiting.push({ id: entry.id, event: entry.event });
         queues.set(entry.automationId, queue);

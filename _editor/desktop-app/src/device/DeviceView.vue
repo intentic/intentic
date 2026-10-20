@@ -8,7 +8,7 @@ import {
     Page,
     PageAction,
     PageHeader,
-    RowGroup,
+    Section,
     SandboxResourcesDialog,
     SandboxVerbs,
     type Tip,
@@ -286,8 +286,8 @@ onMounted(() => {
 
             <!-- A SETUP HANDED OVER FROM THE WORKSPACE leads the page while it is here: the one thing on it with minutes of its own. -->
             <section v-if="setupMode" class="flex flex-col gap-4 rounded-xl bg-card shadow-sm p-5">
-                <header class="flex items-start gap-3">
-                    <Icon name="box" class="mt-1 shrink-0 text-lg text-link" />
+                <header class="flex items-start gap-3 text-base">
+                    <Icon name="box" class="shrink-0 text-lg text-link" />
                     <div class="min-w-0 flex-1">
                         <h2 class="text-base leading-tight font-semibold">
                             {{ t(`desktop.app.settingUp`) }} {{ pending?.name ?? t(`desktop.app.sandbox`) }}
@@ -321,7 +321,7 @@ onMounted(() => {
                 <!-- THIS PC'S OWN SETUP COMES FIRST: parked, the header's one line says so, and the card for this PC above
                      does it; the setup carries on by itself after. `=== false`, not `!`: unknown is a real third state here. -->
                 <p v-if="!pcParked && dockerReady === false && !expired && requirements.length === 0" class="flex items-start gap-2.5 text-xs text-subtle">
-                    <Icon name="box" class="mt-0.5 shrink-0 text-warning" />
+                    <Icon name="box" class="shrink-0 text-warning" />
                     <span v-if="info?.os === `windows`">{{ t(`desktop.app.sandboxRunsInDocker`) }}</span>
                     <span v-else>{{ t(`desktop.app.sandboxRunsInDocker2`) }}</span>
                 </p>
@@ -344,7 +344,7 @@ onMounted(() => {
 
                 <!-- A user-ended run isn't a failure, but still gets said out loud rather than just stopping silently. -->
                 <p v-if="wasStopped && !pcParked" class="flex items-start gap-2.5 text-xs text-subtle">
-                    <Icon name="times" class="mt-0.5 shrink-0" />
+                    <Icon name="times" class="shrink-0" />
                     <span>{{ t(`desktop.app.stoppedInstallNothingElse`) }}</span>
                 </p>
 
@@ -401,8 +401,8 @@ onMounted(() => {
 
             <!-- A sync enrollment in flight: folder picked in the system dialog, same script as the card's one-liner, narrating here. -->
             <section v-if="syncSetup" class="flex flex-col gap-3 rounded-xl bg-card shadow-sm p-4">
-                <div class="flex items-start gap-2.5">
-                    <Icon name="sync" class="mt-0.5 text-link" />
+                <div class="flex items-start gap-2.5 text-sm">
+                    <Icon name="sync" class="text-link" />
                     <div class="min-w-0 flex-1">
                         <h2 class="text-sm leading-tight font-semibold">
                             {{
@@ -538,7 +538,7 @@ onMounted(() => {
             </template>
 
             <!-- One row per sandbox with its folder, ports, image and verbs, in the workspace Devices tab's own group. -->
-            <RowGroup v-if="groups.length > 0" :label="t(`desktop.app.sandboxesOnDevice`)" :flat="true" :undivided="true">
+            <Section v-if="groups.length > 0" :label="t(`desktop.app.sandboxesOnDevice`)">
                 <div class="flex flex-col">
                     <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows">
                         <template #actions="{ group }">
@@ -559,7 +559,7 @@ onMounted(() => {
                                 class="flex items-start gap-1.5 text-2xs text-subtle"
                                 v-tooltip.top="{ title: t(`desktop.device.keptByTitle`), note: t(`desktop.device.keptByNote`) }"
                             >
-                                <Icon name="server" class="mt-0.5 shrink-0" />
+                                <Icon name="server" class="shrink-0" />
                                 <span>{{ t(`desktop.device.keptBy`, { place: keptByOf(group.sandbox?.slug) }) }}</span>
                             </p>
                             <DeviceRunLog
@@ -575,7 +575,7 @@ onMounted(() => {
                         </template>
                     </DeviceDetail>
                 </div>
-            </RowGroup>
+            </Section>
 
             <!-- NO SANDBOX HERE YET: what one is for, where it can run, and the one step to it. Never while a setup or a
                  sync is on the page, which is the sandbox arriving, nor before the machine has been read, nor while the
@@ -628,7 +628,7 @@ onMounted(() => {
             </DeviceAgentGroup>
             <!-- This computer's other environments with an agent of their own (a WSL distro's), which keep the sandboxes set up there. -->
             <p v-if="agentsElsewhere.length > 0" class="flex items-start gap-2.5 text-xs text-subtle">
-                <Icon name="server" class="mt-0.5 shrink-0" />
+                <Icon name="server" class="shrink-0" />
                 <span>{{ t(`desktop.device.agentsElsewhere`, { places: agentsElsewhere.join(`, `) }) }}</span>
             </p>
             <!-- The way back to Docker Desktop, last and in the quietest ink: Intentic's engine is where sandboxes belong on a

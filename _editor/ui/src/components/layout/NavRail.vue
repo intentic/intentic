@@ -1,30 +1,22 @@
 <!-- The index column: a filter, pinned rows, grouped selectable rows, a footnote. -->
 <script setup lang="ts" generic="T">
-import { computed } from "vue";
-import { ui } from "../../lib/ui.js";
 import type { NavGroup } from "./navRail.js";
 import SearchBar from "../forms/SearchBar.vue";
+import { ROW_TIERS } from "../rows/row.js";
+import SectionHeader from "../rows/SectionHeader.vue";
 import { seriesColor } from "../charts/seriesAccent.js";
 import { useT } from "../../i18n/index.js";
 
 const t = useT();
 
-const {
-    filterable = false,
-    stickyHeadings = false,
-    placeholder,
-} = defineProps<{
+const { filterable = false, placeholder } = defineProps<{
     groups: readonly NavGroup<T>[];
     filterable?: boolean;
-    stickyHeadings?: boolean;
     placeholder?: string;
 }>();
 
 /* The model stays unnamed so generic threading remains intact. */
 const query = defineModel<string>({ default: `` });
-
-// A stuck heading needs an opaque background to scroll rows under, and the rail always sits on the page.
-const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 bg-canvas` : ``));
 </script>
 
 <template>
@@ -48,15 +40,18 @@ const headingClass = computed(() => (stickyHeadings ? `sticky top-0 z-10 bg-canv
         <div class="ui-softscroll min-h-0 flex-1 overflow-y-auto pr-2">
             <!-- THE GAP BETWEEN GROUPS RIDES THE SECTION, not the heading. -->
             <section v-for="group in groups" :key="group.key" class="pt-3 first:pt-0">
-                <h3 v-if="group.label !== undefined" class="flex items-center gap-2 pb-1 pl-2 pr-1" :class="headingClass">
-                    <span
-                        v-if="group.accent !== undefined"
-                        class="size-1.5 shrink-0 rounded-full"
-                        :style="{ background: seriesColor(group.accent) }"
-                        aria-hidden="true"
-                    ></span>
-                    <span :class="ui.sectionLabel({ size: `xs` }, `min-w-0 truncate`)">{{ group.label }}</span>
-                </h3>
+                <!-- The rail's own tier's header, and it scrolls with its rows: a pinned one needs a fill to scroll under, and a band behind a header is what the documentation rail was fixed for three times. -->
+                <SectionHeader
+                    v-if="group.label !== undefined"
+                    :label="group.label"
+                    :heading="3"
+                    density="dense"
+                    :class="[ROW_TIERS.dense.headingGap, ROW_TIERS.dense.headingInset]"
+                >
+                    <template v-if="group.accent !== undefined" #mark>
+                        <span class="size-1.5 shrink-0 rounded-full" :style="{ background: seriesColor(group.accent) }" aria-hidden="true"></span>
+                    </template>
+                </SectionHeader>
                 <!-- A HAIRLINE BETWEEN ROWS, because these rows are ROUNDED AND TINTED. -->
                 <div class="flex flex-col gap-0.5">
                     <slot v-for="(item, index) in group.items" name="row" :item="item" :index="index" :group="group" />

@@ -166,6 +166,10 @@ export const underClaim = async <T>(
     }
 };
 
+// What a turn starting leaves of what carries a card on: a held turn's re-run or memory hold is the turn it replaces,
+// while messages booked for later keep their own time (conversation-next.ts).
+const keptSends = (next: FleetAgent["next"]): FleetAgent["next"] => (next?.kind === `send` || next?.kind === `land` ? next : undefined);
+
 // A turn this browser knows went, as the daemon publishes one that began (agents-registry summaryOf): nothing parked,
 // and no conflict, causes, failure or unfinished check, all of which it derives from the status the turn replaces.
 export const asStarted = <T extends FleetAgent>(card: T, startedAt: number): T => ({
@@ -178,9 +182,7 @@ export const asStarted = <T extends FleetAgent>(card: T, startedAt: number): T =
     failureCode: undefined,
     limitResetsAt: undefined,
     limitHeld: undefined,
-    limitScheduled: undefined,
-    limitMoving: undefined,
-    limitNextAt: undefined,
+    next: keptSends(card.next),
     unfinished: undefined,
     activity: undefined,
     unread: false,
@@ -221,9 +223,7 @@ const asLanding = <T extends FleetAgent>(card: T): T => ({
     failureCode: undefined,
     limitResetsAt: undefined,
     limitHeld: undefined,
-    limitScheduled: undefined,
-    limitMoving: undefined,
-    limitNextAt: undefined,
+    next: keptSends(card.next),
     unread: false,
 });
 

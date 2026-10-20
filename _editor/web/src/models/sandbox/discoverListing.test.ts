@@ -131,11 +131,11 @@ describe(`how the list is grouped and searched`, () => {
         toListing(entry({ name: `acme.standup`, description: `Yesterday, today, blockers.` }), []),
     ];
 
-    test(`verified leads, and each group keeps the caption the website uses`, () => {
+    test(`verified leads, and each group is headed by its label alone`, () => {
         const sections = listingSections(listings);
         expect(sections.map((section) => section.id)).toEqual([`verified`, `listed`]);
         expect(sections[0]?.listings).toHaveLength(1);
-        expect(sections[1]?.caption).toBe(``);
+        expect(Object.keys(sections[1] ?? {}).toSorted()).toEqual([`id`, `label`, `listings`]);
     });
 
     test(`a group nothing landed in is not a heading over nothing`, () => {

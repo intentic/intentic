@@ -126,7 +126,7 @@ export const updateAllEngines = async (): Promise<void> => {
 };
 
 export function useEngines() {
-    const { query } = useSandboxQuery({
+    const { query, loaded } = useSandboxQuery({
         queryKey: ENGINES_KEY,
         queryFn: () => sandboxRaw(`GET /engines`),
     });
@@ -135,7 +135,6 @@ export function useEngines() {
 
     // A boolean, not the ref: reaching through vue-query's object in a template doesn't unwrap it (see useEnvironment).
     const isFetching = computed<boolean>(() => query.isFetching.value);
-    const isLoading = computed<boolean>(() => query.isLoading.value);
 
     // Rows with an update waiting; derived here since the shell's own banner counts the same thing.
     const updatable = computed<readonly EngineRow[]>(() => engines.value.filter((engine: EngineRow) => engine.offered !== undefined));
@@ -157,7 +156,7 @@ export function useEngines() {
         updatable,
         query,
         isFetching,
-        isLoading,
+        loaded,
         isAnyBusy,
         updatingAll,
         actionNotice,

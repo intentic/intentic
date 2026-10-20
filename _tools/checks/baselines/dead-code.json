@@ -476,8 +476,8 @@
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/turn/recovery/interrupted-ledger.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/agent/run/turn/message-receipts.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/run/turn/recovery/interrupted-ledger.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/agent/run/turn/turn-admission.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/agent/run/turn/turn-interactions.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/agent/subagents/children.ts": "standing when the check arrived (2026-10-16)",
@@ -731,7 +731,6 @@
     "_sandbox/sandbox/src/runtimes/cursor/cursor-hooks.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/cursor/cursor-shield.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/cursor/cursor-tools.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/sandbox/src/runtimes/cursor/cursor-usage.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/devin/accounts/devin-credentials.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/devin/models/devin-catalog.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/runtimes/gemini/gemini-models.ts": "standing when the check arrived (2026-10-16)",
@@ -813,7 +812,6 @@
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/usage/observed-accounts.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/wallet/wallet-ledger.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/webchat/webchat.routes.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/webext/webext-peer.ts": "standing when the check arrived (2026-10-16)",

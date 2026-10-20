@@ -1,20 +1,10 @@
 import type { Tip } from "@intentic/ui";
 import { formatClock, formatElapsed, formatWhen } from "@intentic/ui/format";
+import type { AgentNext } from "@intentic/sandbox-contract/schemas/agent-next";
 import type { AgentWatch } from "@intentic/sandbox-contract/schemas/agents";
-import type { TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { t } from "@intentic/ui/i18n";
 import { CLOCK_FROM_MS } from "./agentStatus-meta";
-import {
-    type AgentStanding,
-    limitClosed,
-    limited,
-    limitMoveBooked,
-    limitScheduled,
-    memoryHeld,
-    promptHeldJob,
-    scheduledCount,
-    soonestHold,
-} from "./agentStatus-standing";
+import { type AgentStanding, limitClosed, promptHeldJob } from "./agentStatus-standing";
 
 // An instant a card's corner counts to (a spent allowance's reopen, a scheduled message's time), in the few characters
 // the corner has: whole minutes while that is a wait a person can hold (rounded up, as the chat's own press counts
@@ -54,126 +44,73 @@ export const limitCountdown = (agent: AgentStanding, now: number): LimitClock | 
 export const limitBack = (clock: LimitClock): string =>
     clock.wait ? t(`agents.agentCard.backIn`, { limitBackAt: clock.text }) : t(`agents.agentCard.back`, { limitBackAt: clock.text });
 
-// A spent allowance's words for a card's "when" corner, and what they hang on. A booked move names where it is going,
-// since it goes on the resume pass's next beat, seconds away, whatever the refused account's reset says. A booked resend
-// says when it goes, and that it goes in a moment once that instant has passed (the resume pass lets it go on its next
-// beat), which is also what tells a card resting in Active why it is there. One nothing is booked for says when the
-// allowance is back, and nothing once it is: the corner is the ordinary date's again, beside the card's own press.
-// `unbooked` marks a card whose answer to the limit is to go again by itself (`answer`, the conversation's own or the
-// sandbox's) while nothing is booked to: no turn was held to re-run, or the daemon that held it has restarted (one older
-// than limit-hold.ts kept none). Its menu says "Send again" all the same, so the card must say a press is still owed.
-type LimitCorner =
+/**
+ * WHEN A CARD GOES AGAIN BY ITSELF, read off the one thing that says so: the card's `next` (agent-next.ts), which the
+ * sandbox derives from what the conversation holds by the rules its movers act by, so this corner, the lane and the chat
+ * cannot disagree about whether or when. The chip beside the title says why it waits (Usage limit, Memory low,
+ * Scheduled); this corner, in the date's seat, says what goes and when: a held turn's re-run ("resends 02:00") or move
+ * ("moving to …"), a memory hold's send once memory frees, messages booked for a time or another agent's land. Nothing
+ * carries it on: a spent allowance's corner says when it is back, for the press the card still owes.
+ */
+type SelfStart =
     | { readonly kind: `moving`; readonly text: string; readonly account: string }
     | { readonly kind: `resend`; readonly text: string; readonly clock?: LimitClock }
-    | { readonly kind: `back`; readonly text: string; readonly clock: LimitClock; readonly unbooked?: true };
-export const limitCorner = (agent: AgentStanding, now: number, answer?: TurnBreakPolicy): LimitCorner | undefined => {
-    if (!limited(agent)) {
-        return undefined;
-    }
-    const moving = limitMoveBooked(agent) ? agent.limitMoving : undefined;
-    if (moving !== undefined) {
-        return { kind: `moving`, account: moving, text: t(`agents.agentCard.movingTo`, { account: moving }) };
-    }
-    const clock = limitCountdown(agent, now);
-    if (limitScheduled(agent)) {
-        if (clock === undefined) {
-            return { kind: `resend`, text: t(`agents.agentCard.resendsShortly`) };
-        }
-        return {
-            kind: `resend`,
-            clock,
-            text: clock.wait
-                ? t(`agents.agentCard.resendsIn`, { limitBackAt: clock.text })
-                : t(`agents.agentCard.resends`, { limitBackAt: clock.text }),
-        };
-    }
-    if (clock === undefined) {
-        return undefined;
-    }
-    return { kind: `back`, clock, text: limitBack(clock), ...(answer !== undefined && answer !== `wait` ? { unbooked: true as const } : {}) };
-};
-
-/**
- * A low-memory hold's corner, the limit's twin (limitCorner): once the conversation's answer to the memory wall is to send
- * it when memory frees up, the card says it goes by itself, so a card resting in Attention reads as waiting, not stuck.
- * Only while the person's words wait in its queue, which is the hold the card can see; undefined on a hold left for a press.
- */
-export const memoryCorner = (agent: AgentStanding, answer: TurnBreakPolicy): string | undefined =>
-    // A refusal's hold stands only while a message it holds still waits (conversation-queue.ts, `next`).
-    memoryHeld(agent) && agent.queue?.paused === `refused` && answer !== `wait` ? t(`agents.agentCard.sendsWhenRoom`) : undefined;
+    | { readonly kind: `back`; readonly text: string; readonly clock: LimitClock }
+    | { readonly kind: `room`; readonly text: string }
+    | { readonly kind: `send`; readonly text: string; readonly count: number; readonly clock?: LimitClock; readonly after?: string };
 
 // The few characters of a title a corner names another agent by; past them the hover has it whole.
 const CORNER_TITLE = 24;
 const cornerTitle = (title: string): string => (title.length > CORNER_TITLE ? `${title.slice(0, CORNER_TITLE - 1).trimEnd()}…` : title);
 
-/**
- * Messages a person booked for later (sendLater.ts), in the corner a spent allowance's resend uses and the same grammar:
- * "sends in 12m", "sends 14:05", "sends Thu 09:00", "sends after <agent> lands", and "sends in a moment" once the instant
- * has passed and the sandbox's deadline is due. The soonest booking speaks; `count` is how many wait, for the hover.
- */
-export const sendCorner = (
-    agent: Pick<AgentStanding, "queue">,
-    now: number,
-    titleOf?: (conversationId: string) => string | undefined,
-): Extract<SelfStart, { readonly kind: `send` }> | undefined => {
-    const hold = soonestHold(agent.queue);
-    if (hold === undefined) {
-        return undefined;
+// A held turn's re-run: where a move takes it, else when it goes, "in a moment" once that instant has passed (the pass
+// lets it go on its next beat).
+const rerunCorner = (next: Extract<AgentNext, { kind: `rerun` }>, now: number): SelfStart => {
+    if (next.onto !== undefined) {
+        return { kind: `moving`, account: next.onto, text: t(`agents.agentCard.movingTo`, { account: next.onto }) };
     }
-    const count = Math.max(1, scheduledCount(agent));
-    if (hold.after !== undefined) {
-        const title = titleOf?.(hold.after);
-        return {
-            kind: `send`,
-            count,
-            after: title ?? t(`chat.sendLater.anotherAgent`),
-            text: t(`chat.chatHeld.sendsAfter`, { title: title === undefined ? t(`chat.sendLater.anotherAgent`) : cornerTitle(title) }),
-        };
-    }
-    const clock = hold.until === undefined ? undefined : countdownTo(hold.until, now, true);
+    const clock = countdownTo(next.at, now);
     if (clock === undefined) {
-        return { kind: `send`, count, text: t(`chat.chatHeld.sendsShortly`) };
+        return { kind: `resend`, text: t(`agents.agentCard.resendsShortly`) };
     }
-    return {
-        kind: `send`,
-        count,
-        clock,
-        text: clock.wait ? t(`chat.chatHeld.sendsIn`, { wait: clock.text }) : t(`agents.agentCard.sends`, { at: clock.text }),
-    };
+    return { kind: `resend`, clock, text: clock.wait ? t(`agents.agentCard.resendsIn`, { limitBackAt: clock.text }) : t(`agents.agentCard.resends`, { limitBackAt: clock.text }) };
 };
 
-/**
- * WHEN A CARD GOES AGAIN BY ITSELF, one reading for every way it does. A conversation starts again with nobody pressing
- * in three cases: a turn a spent allowance stranded, re-run at the reset or moved to another account (limit-hold.ts); a
- * message held for memory, sent once memory frees (turn-admission); and messages a person booked for a time or another
- * agent's land (sendLater.ts). The sandbox keeps each as a deadline or a condition on the conversation, and the card
- * says each the same way: the chip beside the title says why it waits (Usage limit, Memory low, Scheduled), and this
- * corner, in the date's seat, says what goes and when. Read once here, so the three never again drift into three
- * grammars (a scheduled card said "Scheduled" and then the date it was last active, where a limited one said
- * "resends 02:00"). A held turn outranks a held message, and a message held for memory one booked for later, since the
- * card can only go one way first.
- */
-type SelfStart =
-    | LimitCorner
-    | { readonly kind: `room`; readonly text: string }
-    | { readonly kind: `send`; readonly text: string; readonly count: number; readonly clock?: LimitClock; readonly after?: string };
-export const selfStart = (
-    agent: AgentStanding,
-    now: number,
-    answers: { readonly limit?: TurnBreakPolicy; readonly memory?: TurnBreakPolicy },
-    titleOf?: (conversationId: string) => string | undefined,
-): SelfStart | undefined => {
-    const limit = limitCorner(agent, now, answers.limit);
-    if (limit !== undefined) {
-        return limit;
+// Messages booked for later, in the resend's grammar: "sends in 12m", "sends 14:05", "sends after <agent> lands", and
+// "sends in a moment" once the instant has passed. The soonest booking speaks; `count` is how many wait, for the hover.
+const sendCorner = (next: Extract<AgentNext, { kind: `send` | `land` }>, now: number, titleOf?: (conversationId: string) => string | undefined): SelfStart => {
+    if (next.kind === `land`) {
+        const title = titleOf?.(next.after);
+        const after = title ?? t(`chat.sendLater.anotherAgent`);
+        return { kind: `send`, count: next.count, after, text: t(`chat.chatHeld.sendsAfter`, { title: title === undefined ? after : cornerTitle(title) }) };
     }
-    const room = answers.memory === undefined ? undefined : memoryCorner(agent, answers.memory);
-    return room !== undefined ? { kind: `room`, text: room } : sendCorner(agent, now, titleOf);
+    const clock = countdownTo(next.at, now, true);
+    if (clock === undefined) {
+        return { kind: `send`, count: next.count, text: t(`chat.chatHeld.sendsShortly`) };
+    }
+    return { kind: `send`, count: next.count, clock, text: clock.wait ? t(`chat.chatHeld.sendsIn`, { wait: clock.text }) : t(`agents.agentCard.sends`, { at: clock.text }) };
 };
 
-// Whether a card's corner counts to an instant, so its clock must tick: a shut allowance, or a message booked for a time.
+export const selfStart = (agent: AgentStanding, now: number, titleOf?: (conversationId: string) => string | undefined): SelfStart | undefined => {
+    const next = agent.next;
+    switch (next?.kind) {
+        case `rerun`:
+            return rerunCorner(next, now);
+        case `room`:
+            return { kind: `room`, text: t(`agents.agentCard.sendsWhenRoom`) };
+        case `send`:
+        case `land`:
+            return sendCorner(next, now, titleOf);
+        default: {
+            const clock = limitCountdown(agent, now);
+            return clock === undefined ? undefined : { kind: `back`, clock, text: limitBack(clock) };
+        }
+    }
+};
+
+// Whether a card's corner counts to an instant, so its clock must tick: a shut allowance, a re-run or a booked send.
 export const selfStartTicks = (agent: AgentStanding, now: number = Date.now()): boolean =>
-    limitClosed(agent, now) || soonestHold(agent.queue)?.until !== undefined;
+    limitClosed(agent, now) || agent.next?.kind === `rerun` || agent.next?.kind === `send`;
 
 // The watch a card's clock counts to: the first deadline to arrive is the next moment the card definitely moves. One
 // definition, since the chat's own watch row asks the same question about the same conversation.

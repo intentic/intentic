@@ -1,5 +1,6 @@
 // agents: the conversation fleet
 import { LandingDeliverySchema } from "./project-delivery.js";
+import { AgentNextSchema } from "./agent-next.js";
 import { z } from "zod";
 import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ConversationQueueSchema, ForkedFromSchema, FreshSessionSchema } from "./agent.js";
 import { LoopStateSchema } from "./loops.js";
@@ -297,18 +298,10 @@ export const AgentSummarySchema = z.object({
     // Epoch seconds the spent allowance reopens; absent means genuinely unknown (Grok, Cursor) — never guess one.
     limitResetsAt: z.number().optional().describe("When the spent allowance reopens, in epoch seconds. Absent when the provider publishes no instant."),
     limitHeld: z.boolean().optional().describe("Whether the refused turn is held whole, so sending again re-runs it instead of appending to it."),
-    // Whether the daemon has already booked a retry at the reset; the one thing that keeps a stranded card out of the Attention lane.
-    limitScheduled: z.boolean().optional().describe("Whether the held turn is already booked to go again at the reset, so nobody has to press anything."),
-    // Account a booked move is sending the held turn to; set alongside `limitScheduled`, cleared by the move's own turn.
-    limitMoving: z.string().optional().describe("The account the held turn is being moved to by the owner's policy, while that move is booked."),
-    // The resume pass's own instant for the booked re-run, the one it fires by (limit-due.ts), so a card states when it
-    // goes rather than inferring it from the reset: they differ once the account it goes on is still spent at the reset.
-    limitNextAt: z
-        .number()
-        .optional()
-        .describe(
-            "When the held turn goes again by itself, in epoch seconds, while it is booked to (limitScheduled): later than the reset where the account it goes on is still spent, and already past for a booked move, which goes on the next pass. Absent while only a press sends it.",
-        ),
+    // The one answer to "does it go by itself, and when" (agent-next.ts), derived from what it holds every time it is read.
+    next: AgentNextSchema.optional().describe(
+        "What carries it on next with nobody pressing anything, and when: a held turn re-run, a message held for memory, or messages booked for later. Absent when only a press moves it.",
+    ),
     provider: AgentProviderSchema.describe("Which model provider it runs on."),
     harness: AgentHarnessSchema.describe("Which agentic loop it runs on."),
     // Latched with the conversation, so the card can say where work runs without asking anything else.

@@ -119,7 +119,7 @@ watch(
                 @pointerleave="onLeave"
             >
                 <p class="flex min-w-0 items-start gap-1.5 text-xs font-medium leading-snug text-content">
-                    <Icon name="shield" class="mt-0.5 shrink-0 text-2xs text-accent" /><span class="min-w-0">{{ line }}</span>
+                    <Icon name="shield" class="shrink-0 text-2xs text-accent" /><span class="min-w-0">{{ line }}</span>
                 </p>
                 <ChatCommandBlock :program="program" />
             </div>

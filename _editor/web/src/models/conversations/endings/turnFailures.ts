@@ -10,9 +10,12 @@ import type { TurnClient } from "../session/turnClient";
 import { importOrReload } from "../../../lib/staleChunk";
 import { markNeedsReauth, providerAccounts } from "../../providers/providerAccounts";
 
-// Maps a turn failure's code to what this window does: whether the user is needed (the error line) or merely informed, and
-// whether the turn returns on its own. The daemon owns the failure's transcript line and keeps a refused message in the
-// conversation's queue, held; recovery state for the auto-resuming codes lives here.
+// Maps a turn failure's code to what this window does: what it reloads, what it waits for, and whether the turn returns on
+// its own. The daemon owns the failure's transcript line, the one place a failure is said (failure-rows.ts: every failure
+// leaves a coded row, drawn by failureView.ts), and keeps a refused message in the conversation's queue, held. The error
+// line never repeats a failure's words: it says only what this window adds (where to install an engine, how to sign an
+// agent in), in the reader's language. A frame's words copied onto it were the second rendering of the same failure,
+// raw where the row was not (21e4260d93, 2026-10-19). Recovery state for the auto-resuming codes lives here.
 
 type TurnError = Extract<TurnFact, { kind: "error" }>;
 
@@ -69,12 +72,23 @@ export class TurnFailures {
     // regardless, so the board draws the stop this chat shows from this (TabFacts.resumeWithdrawn). Cleared as a turn starts.
     readonly resumeWithdrawn = ref<string | undefined>();
 
+    // Whether this turn ended on a failure this window cannot fix itself and nothing brings back by itself: the tab reads
+    // it as failed. A wait (a spent allowance, an outage being retried, a renewal, a fresh session) is not one, nor is a
+    // failure the composer already offers the fix for. Its words are the transcript row's, never the error line's.
+    // Cleared as a turn starts.
+    readonly crashed = ref(false);
+
     // Whether this turn's last failure said it comes back by itself, as the sandbox reads one (comingBackNow): a re-mint,
     // a retry or a re-run is booked, a spent allowance's reset is not.
     private promised = false;
 
     // Whether this turn failed at all; a turn that ended on none proves the account it ran on still signs in.
     private failed = false;
+
+    /** Whether the turn now ending failed, whatever it failed on: the transcript's row says what. */
+    get failedTurn(): boolean {
+        return this.failed;
+    }
 
     // A turn that outgrew the model's window, which the daemon re-runs in a fresh session; watched once the stream ends.
     private freshSession = false;
@@ -110,9 +124,9 @@ export class TurnFailures {
                 this.markReauth(error, message);
                 return;
             case `codex-reauth`:
-                // Same badge as claude-reauth, but also the error line: no held message here to replay instead.
+                // Same badge as claude-reauth; the transcript's row says what happened. No held message replays it.
                 this.markReauth(error, message);
-                this.host.error.value = message;
+                this.crashed.value = true;
                 return;
             case `claude-token-refused`:
                 this.applyAuthRefusedError(error);
@@ -153,37 +167,35 @@ export class TurnFailures {
         }
     }
 
-    // Failures this window cannot fix itself: the error line; where nothing was processed yet the daemon holds the message.
+    // Failures this window cannot fix itself, said by the transcript's row; where nothing was processed yet the daemon
+    // holds the message.
     private applyUnhandledError(error: TurnError): void {
-        const { message, code } = error;
+        const { code } = error;
         if (code === `context-overflow`) {
             this.applyOverflowError(error);
             return;
         }
+        this.crashed.value = true;
         if (MODEL_REFUSED.has(code)) {
             importOrReload(
                 () => import(`../accounts/useChat-catalog`),
                 (chat) => chat.loadProviderModels(this.host.selection.provider.value),
             );
-            this.host.error.value = message;
             return;
         }
         if (code === `engine-version-floor`) {
-            // Nothing ran (old engine refused): message held in the queue for retry. Error text adds where to install a
-            // newer engine, since the daemon's own message can't say that.
+            // Nothing ran (old engine refused): message held in the queue for retry. Where to install a newer engine is all
+            // this adds, since the daemon's row can't say that; that the message is held is the row's to say.
             const floor = error.engine?.floor;
-            // Where to install is all this adds; that the message is held is the transcript notice's line to say.
-            this.host.error.value = `${message} ${
-                floor === undefined ? t(`chat.turnFailures.installNewerEngine`) : t(`chat.turnFailures.installNewerEngineFloor`, { floor })
-            }`;
+            this.host.error.value =
+                floor === undefined ? t(`chat.turnFailures.installNewerEngine`) : t(`chat.turnFailures.installNewerEngineFloor`, { floor });
             return;
         }
         if (code === `acp-auth-required`) {
             // The agent refuses every turn until it is signed in, and only its own login command does that: say where.
-            this.host.error.value = `${message} ${t(`chat.turnFailures.signAgentIn`)}`;
+            this.host.error.value = t(`chat.turnFailures.signAgentIn`);
             return;
         }
-        this.host.error.value = message;
         // Continue only for an unknown code, since a named one re-fails; `held` makes the press re-run the kept turn.
         if (code === undefined) {
             this.host.pickUp.value = {
@@ -237,12 +249,12 @@ export class TurnFailures {
         this.host.pickUp.value = error.held === undefined ? { reason: `flagged` } : { reason: `flagged`, held: error.held };
     }
 
-    // Provider outage with a resume in flight: muted notice naming when it retries, not the error line, since it
-    // isn't the user's fault. No `outage` (attempts spent) falls back to the error line and returns the message.
+    // Provider outage with a resume in flight: muted notice naming when it retries, since it isn't the user's fault. No
+    // `outage` (attempts spent): the row says so, and nothing comes back by itself.
     private applyOutageError(error: TurnError): void {
-        const { message, outage } = error;
+        const { outage } = error;
         if (outage === undefined) {
-            this.host.error.value = message;
+            this.crashed.value = true;
             return;
         }
         const scheduled = error.autoResume === `scheduled`;
@@ -271,10 +283,10 @@ export class TurnFailures {
     }
 
     // A turn that outgrew the model's window: the daemon re-runs it once in a fresh session by itself, holding its queue
-    // for that run, and this window watches for it rather than raising the error line. A re-run that overflows too raises it.
+    // for that run, and this window watches for it. A re-run that overflows too is only the row's to say.
     private applyOverflowError(error: TurnError): void {
         if (error.autoResume !== `scheduled`) {
-            this.host.error.value = error.message;
+            this.crashed.value = true;
             return;
         }
         this.host.error.value = null;
@@ -319,6 +331,7 @@ export class TurnFailures {
         this.outageResume.value = undefined;
         this.credentialRenewal.value = undefined;
         this.resumeWithdrawn.value = undefined;
+        this.crashed.value = false;
         this.promised = false;
         this.failed = false;
         this.freshSession = false;

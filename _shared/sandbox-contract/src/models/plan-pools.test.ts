@@ -4,11 +4,11 @@ import {
     currentWindows,
     gatesModel,
     gatingWindows,
-    pinRefused,
+    judgedReading,
+    fleetCapacity,
     readingHeadroom,
     preferredAccount,
     refusalVerdict,
-    refusedHeadroom,
     roomiestAccount,
     scopedWindow,
     uncoveredModels,
@@ -166,7 +166,7 @@ test("spent is the contract's one line: 99.5% still has room, 100% is spent unti
     expect(readingHeadroom(usage(window({ kind: "five_hour", utilization: 100 })))).toEqual({ kind: "spent" });
     expect(readingHeadroom(undefined)).toEqual({ kind: "unknown" });
     expect(readingHeadroom(CLAUDE, { id: "claude-haiku-4-5" })).toEqual({ kind: "ready", room: 70 });
-    expect(readingHeadroom(CLAUDE, { id: "claude-opus-4-6" })).toEqual({ kind: "spent" });
+    expect(readingHeadroom(CLAUDE, { id: "claude-opus-4-6" })).toEqual({ kind: "spent", pool: "Opus" });
 });
 
 // Anthropic reports whole percents: an account read at 100 kept serving turns for hours, so that reading is the line,
@@ -182,7 +182,7 @@ test("a pool read at 100 in whole percents is at the line with no room, until a 
     const facts = { account: "a", usage: { ...atLine, measuredAt: 2_000 } };
     const refused = refusal({ kind: "limit", account: "a" });
     expect(refusalVerdict(refused, [facts])).toBe("standing");
-    expect(serviceStates([facts], refused).get("a")).toEqual({ kind: "spent", reopensAt: 900 });
+    expect(serviceStates([facts], [refused]).get("a")).toEqual({ kind: "spent", reopensAt: 900 });
 });
 
 test("with no model named, an account is spent only when no model can run on it", () => {
@@ -233,15 +233,15 @@ test("a revoked sign-in outranks a lost seat, which outranks a bench, whatever t
 
 test("a standing refusal blocks by its kind, and a limit refusal pins only the pool its model spends", () => {
     const facts = { account: "a", usage: CLAUDE };
-    expect(serviceState(facts, refusal({ kind: "auth" }))).toEqual({ kind: "blocked", fix: "reconnect", reason: "no." });
-    expect(serviceState(facts, refusal({ kind: "entitlement" }))).toEqual({ kind: "blocked", fix: "admin", reason: "no." });
+    expect(serviceState(facts, [refusal({ kind: "auth" })])).toEqual({ kind: "blocked", fix: "reconnect", reason: "no." });
+    expect(serviceState(facts, [refusal({ kind: "entitlement" })])).toEqual({ kind: "blocked", fix: "admin", reason: "no." });
     // Refused on Haiku: the 5-hour/weekly binding pool (seven_day, 30%) reads full, so Haiku is spent too.
-    expect(serviceState(facts, refusal({ kind: "limit", model: "claude-haiku-4-5" }), { id: "claude-haiku-4-5" })).toEqual({ kind: "spent" });
+    expect(serviceState(facts, [refusal({ kind: "limit", model: "claude-haiku-4-5" })], { id: "claude-haiku-4-5" })).toEqual({ kind: "spent" });
     // Refused on Opus: its own slice was already full; Haiku keeps the room its pools show.
-    expect(serviceState(facts, refusal({ kind: "limit", model: "claude-opus-4-6" }), { id: "claude-haiku-4-5" })).toEqual({ kind: "ready", room: 70 });
+    expect(serviceState(facts, [refusal({ kind: "limit", model: "claude-opus-4-6" })], { id: "claude-haiku-4-5" })).toEqual({ kind: "ready", room: 70 });
     // No reading at all: the refusal is the evidence, unless it was about another model.
-    expect(serviceState({ account: "a" }, refusal({ kind: "limit" }))).toEqual({ kind: "spent" });
-    expect(serviceState({ account: "a" }, refusal({ kind: "limit", model: "opus" }), { id: "haiku" })).toEqual({ kind: "unknown" });
+    expect(serviceState({ account: "a" }, [refusal({ kind: "limit" })])).toEqual({ kind: "spent" });
+    expect(serviceState({ account: "a" }, [refusal({ kind: "limit", model: "opus" })], { id: "haiku" })).toEqual({ kind: "unknown" });
 });
 
 test("a refusal stands until a later reading contradicts it, and never past its account's disconnection", () => {
@@ -286,7 +286,7 @@ test("a nameless refusal over several accounts is answered by any of them readin
     ];
     const codex = refusal({ kind: "limit", at: filed, model: "gpt-6.1-sol", resetsAt: Date.parse("2026-10-20T13:53:00Z") / 1000, unmetered: true });
     expect(refusalVerdict(codex, accounts, now)).toBe("answered");
-    expect(Object.fromEntries(serviceStates(accounts, codex, undefined, now))).toEqual({
+    expect(Object.fromEntries(serviceStates(accounts, [codex], undefined, now))).toEqual({
         "free-1": { kind: "ready", room: 100 },
         "free-2": { kind: "ready", room: 100 },
         team: { kind: "ready", room: 100 },
@@ -311,14 +311,14 @@ test("a spent allowance with the provider's own reset stands until that instant,
     // Over several, the translator benches the one it refused and routes on, so another's room still answers it.
     expect(refusalVerdict(refusal(until), [{ account: "a", usage: room }, { account: "b", usage: room }], 9_999)).toBe("answered");
     // Spent until the instant the provider named, not the pool's own reset.
-    expect(serviceStates([{ account: "a", usage: room }], refusal({ ...until, account: "a" }), undefined, 9_999).get("a")).toEqual({ kind: "spent", reopensAt: 10 });
+    expect(serviceStates([{ account: "a", usage: room }], [refusal({ ...until, account: "a" })], undefined, 9_999).get("a")).toEqual({ kind: "spent", reopensAt: 10 });
 });
 
 test("a provider's accounts are judged together: a standing refusal lands only on the account it names", () => {
     const room = at(500, window({ kind: "five_hour", utilization: 40 }));
-    const states = serviceStates([{ account: "a", usage: room }, { account: "b", usage: room }], refusal({ kind: "entitlement", account: "a" }));
+    const states = serviceStates([{ account: "a", usage: room }, { account: "b", usage: room }], [refusal({ kind: "entitlement", account: "a" })]);
     expect(Object.fromEntries(states)).toEqual({ a: { kind: "blocked", fix: "admin", reason: "no." }, b: { kind: "ready", room: 60 } });
-    const answered = serviceStates([{ account: "a", usage: at(2_000, window({ kind: "five_hour", utilization: 40 })) }], refusal({ kind: "limit", account: "a" }));
+    const answered = serviceStates([{ account: "a", usage: at(2_000, window({ kind: "five_hour", utilization: 40 })) }], [refusal({ kind: "limit", account: "a" })]);
     expect(answered.get("a")).toEqual({ kind: "ready", room: 60 });
 });
 
@@ -339,7 +339,7 @@ test("each account answers to the newest refusal on file that still stands over 
         b: { kind: "blocked", fix: "reconnect", reason: "no." },
     });
     // Only the provider's last one: the first account is back at the line, no room but not proven spent.
-    expect(serviceStates(accounts, elsewhere, undefined, 9_999).get("a")).toEqual({ kind: "ready", room: 0 });
+    expect(serviceStates(accounts, [elsewhere], undefined, 9_999).get("a")).toEqual({ kind: "ready", room: 0 });
     // Past the instant the provider named, its refusal is over and the reading speaks alone.
     expect(serviceStates(accounts, [elsewhere, own], undefined, 20_000).get("a")).toEqual({ kind: "ready", room: 0 });
     // A newer refusal on the same account outranks the older one.
@@ -421,19 +421,75 @@ test("a pool the provider stopped reporting is dropped once its window closes, n
 test("a standing refusal pins the pool its model spends, reopening when the provider said, for every surface alike", () => {
     const reading = at(2_000, window({ kind: "five_hour", utilization: 0, resetsAt: 20_000 }), window({ kind: "seven_day", utilization: 0, resetsAt: 600_000 }));
     const said = refusal({ kind: "limit", model: "gpt-6.1-sol", resetsAt: 9_000 });
-    expect(pinRefused(reading, said)?.windows.map((entry) => [entry.kind, entry.utilization, entry.resetsAt])).toEqual([
+    expect(judgedReading(reading, [said])?.windows.map((entry) => [entry.kind, entry.utilization, entry.resetsAt])).toEqual([
         ["five_hour", 100, 9_000],
         ["seven_day", 0, 600_000],
     ]);
-    expect(refusedHeadroom(reading, said)).toEqual({ kind: "spent", reopensAt: 9_000 });
+    expect(serviceState({ account: "a", usage: reading }, [said], undefined, 0)).toEqual({ kind: "spent", reopensAt: 9_000 });
     // Where it named no instant, the pinned pool keeps its own reset, and that is when it reopens.
-    expect(refusedHeadroom(reading, { ...said, resetsAt: undefined })).toEqual({ kind: "spent", reopensAt: 20_000 });
-    // No pool to pin: the refusal itself is the evidence for its own model, and none for another's.
-    expect(pinRefused(undefined, said)).toBeUndefined();
-    expect(refusedHeadroom(undefined, said)).toEqual({ kind: "spent", reopensAt: 9_000 });
-    expect(refusedHeadroom(undefined, said, { id: "gpt-6-luna" })).toEqual({ kind: "unknown" });
-    // The daemon's verdict is this rule.
-    expect(serviceState({ account: "a", usage: reading }, said, undefined, 0)).toEqual(refusedHeadroom(reading, said));
+    expect(serviceState({ account: "a", usage: reading }, [{ ...said, resetsAt: undefined }], undefined, 0)).toEqual({ kind: "spent", reopensAt: 20_000 });
+    // No reading at all (a plan that publishes none): the refusal is a pool of its own, for its own model and no other's.
+    expect(judgedReading(undefined, [said])?.windows).toEqual([
+        { kind: "refused:gpt-6.1-sol", label: "GPT 6.1 Sol", utilization: 100, gates: { models: ["gpt-6.1-sol"] }, resetsAt: 9_000 },
+    ]);
+    expect(serviceState({ account: "a" }, [said], undefined, 0)).toEqual({ kind: "spent", reopensAt: 9_000, pool: "GPT 6.1 Sol" });
+    expect(serviceState({ account: "a" }, [said], { id: "gpt-6-luna" }, 0)).toEqual({ kind: "unknown" });
+});
+
+// 2026-10-09/10-20: a routed model's bench (model-cooldowns.json) and the provider's last refusal were two copies of one
+// refusal, and the picker greyed by one while the rail judged by the other. One ledger: every refusal standing over an
+// account is laid on its reading, so two models refused on two pools both read spent.
+test("every refusal standing over an account is laid on it, not only the provider's last", () => {
+    const reading = at(
+        500,
+        window({ kind: "five_hour", utilization: 10, resetsAt: 7_000 }),
+        window({ kind: "model:Opus", label: "Opus", utilization: 40, resetsAt: 8_000, gates: { models: ["opus"] } }),
+    );
+    const opus = refusal({ kind: "limit", account: "a", model: "claude-opus-5-5", at: 1_000 });
+    const sonnet = refusal({ kind: "limit", account: "a", model: "claude-sonnet-5", at: 2_000, resetsAt: 7_000 });
+    const states = (model: string) => serviceStates([{ account: "a", usage: reading }], [opus, sonnet], { id: model }, 5_000).get("a");
+    expect(states("claude-opus-5-5")).toEqual({ kind: "spent", reopensAt: 8_000, pool: "Opus" });
+    expect(states("claude-sonnet-5")).toEqual({ kind: "spent", reopensAt: 7_000 });
+    // A spent allowance refused after a refused sign-in says the sign-in worked: the newest word on the account decides.
+    const revoked = refusal({ kind: "auth", account: "a", at: 1_500 });
+    expect(serviceStates([{ account: "a", usage: reading }], [revoked, sonnet], { id: "claude-sonnet-5" }, 5_000).get("a")).toEqual({ kind: "spent", reopensAt: 7_000 });
+});
+
+// 2026-10-17: a Kimi credential benched for thirty minutes, its five-hour window two hours from reopening, was re-run at
+// thirty minutes and refused again. A bench is a floor under the account's reopening, never the reopening itself.
+test("a translator bench lifts only once the pools it holds have reopened too", () => {
+    const full = at(500, window({ kind: "five_hour", utilization: 100, resetsAt: 9_000 }));
+    expect(serviceState({ account: "a", usage: full, cooling: { until: 2_000, reason: "429" } }, [], undefined, 1_000_000)).toEqual({
+        kind: "blocked",
+        fix: "wait",
+        reason: "429",
+        until: 9_000,
+    });
+});
+
+// The answer every gate, listing and picker reads (2026-10-13: Sol subagents spawned onto a Codex whose every account
+// was refused, while the picker greyed the row; 2026-10-19: Auto read the readings alone).
+test("a provider's capacity for a model is spent only when no account can serve it, and says when one is back", () => {
+    const room = at(5_000, window({ kind: "five_hour", utilization: 30, resetsAt: 9_000 }));
+    const accounts = [
+        { account: "a", usage: room },
+        { account: "b", usage: room },
+    ];
+    const a = refusal({ kind: "limit", account: "a", model: "sol", resetsAt: 8_000, at: 4_000 });
+    const b = refusal({ kind: "limit", account: "b", model: "sol", resetsAt: 7_000, at: 4_000 });
+    expect(fleetCapacity(accounts, [a, b], { id: "sol" }, 6_000_000)).toEqual({ kind: "spent", accounts: 2, reopensAt: 7_000, pool: undefined });
+    expect(fleetCapacity(accounts, [a], { id: "sol" }, 6_000_000)).toEqual({ kind: "serving", serving: 1, accounts: 2, roomMeasuredAt: 5_000 });
+    // An account nothing has measured may still answer: it keeps the model servable.
+    expect(fleetCapacity([...accounts, { account: "c" }], [a, b], { id: "sol" }, 6_000_000)).toEqual({ kind: "serving", serving: 1, accounts: 3, roomMeasuredAt: undefined });
+    // No account at all says nothing either way.
+    expect(fleetCapacity([], [a], { id: "sol" })).toEqual({ kind: "unknown" });
+    // A plan that publishes no reading (Cursor's) is spent for a model every account refused, and only that model.
+    const cursor = [{ account: "x" }, { account: "y" }];
+    const refused = [refusal({ kind: "limit", account: "x", model: "composer-2.5" }), refusal({ kind: "limit", account: "y", model: "composer-2.5" })];
+    expect(fleetCapacity(cursor, refused, { id: "composer-2.5" }, 2_000).kind).toBe("spent");
+    expect(fleetCapacity(cursor, refused, { id: "gpt-6" }, 2_000).kind).toBe("serving");
+    // An account refused outright is blocked for every model.
+    expect(fleetCapacity([{ account: "x" }], [refusal({ kind: "entitlement", account: "x" })], { id: "gpt-6" }, 2_000).kind).toBe("spent");
 });
 
 test("an answer on one model covers another only where every pool the other spends gates it too", () => {

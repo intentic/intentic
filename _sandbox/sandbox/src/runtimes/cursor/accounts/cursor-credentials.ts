@@ -179,6 +179,6 @@ export const cancelCursorLogin = (handshake: string): void => {
 
 // Accounts a turn could actually run on, oldest connection first (first-connected-is-default, where nothing else
 // decides). The one place expiry gates rather than warns: a dead key would otherwise fail the turn with a 401 the store
-// already knew. Which of them serves is cursor-usage.ts's question, since that needs the ledger this file never reads.
+// already knew. Which of them serves is cursor-usage.ts's question, since that needs the refusals this file never reads.
 export const liveCursorAccounts = async (store: CursorStore): Promise<StoredCursorAccount[]> =>
     (await store.credentials()).filter((account) => account.apiKeyExpiresAtMs === undefined || account.apiKeyExpiresAtMs > Date.now());

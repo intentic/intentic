@@ -130,8 +130,8 @@ watch(
         :aria-busy="copying !== undefined"
         data-os-drives
     >
-        <header class="flex items-start gap-2.5">
-            <Icon :name="copying ? `spinner` : `save`" :spin="copying !== undefined" class="mt-0.5 shrink-0 text-link" />
+        <header class="flex items-start gap-2.5 text-sm">
+            <Icon :name="copying ? `spinner` : `save`" :spin="copying !== undefined" class="shrink-0 text-link" />
             <div class="min-w-0 flex-1">
                 <h2 class="text-sm leading-tight font-semibold">{{ t(`desktop.os.drives.title`) }}</h2>
                 <p class="mt-1 text-xs text-muted">{{ summary }}</p>

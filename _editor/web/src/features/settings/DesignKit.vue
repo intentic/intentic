@@ -1,59 +1,60 @@
 <!-- Dev-only page (behind `import.meta.env.DEV`) showing every shared component, state and scale together so drift between them is visible on one screen. -->
 <script setup lang="ts">
 import {
-    type ButtonLook,
     AnchoredOverlay,
+    Await,
     Avatar,
-    Beacon,
     BarChart,
+    Beacon,
     BrandMark,
     Button,
+    type ButtonLook,
     Card,
     ChangeStatusMark,
-    ui,
-    Code,
     CoachMark,
+    Code,
     CodeField,
     ConfirmDialog,
     CopyButton,
-    StatusTally,
+    DeviceAgentGroup,
+    DeviceDetail,
+    DeviceRunLog,
+    diffMark,
     DiffStat,
+    DisclosureRow,
     EmptyState,
     FilterBar,
     InfoDialog,
     InfoHint,
     InfoTable,
     InlineRename,
-    DeviceAgentGroup,
-    DeviceDetail,
-    DeviceRunLog,
-    mirroringOff,
     MarkdownDocument,
+    mirroringOff,
     Modal,
     Notice,
     Page,
     PageAction,
     PageHeader,
-    ScrollFrame,
     Picker,
     type PickerOption,
     ProgressRing,
     ProseField,
     ResponsiveOverlay,
-    DisclosureRow,
     Row,
     RowGroup,
     RowNote,
     SandboxResourcesDialog,
     SandboxVerbs,
+    ScrollFrame,
     SearchBar,
+    Section,
+    SectionHeader,
     SegmentedControl,
     SkeletonRows,
-    SkeletonSnapshot,
     StatStrip,
     StatusBadge,
+    StatusTally,
     type StatusVariant,
-    diffMark,
     type Tone,
     toneDot,
     toneHover,
@@ -61,10 +62,10 @@ import {
     tonePlate,
     toneTint,
     toneWash,
+    ui,
     useTextSize,
     useTheme,
     Verdict,
-    vSkeletonSource,
 } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { useT } from "@intentic/ui/i18n";
@@ -116,6 +117,7 @@ const PANEL_HEIGHTS = [
     { name: `h-figure`, value: `min(26rem, 50dvh)`, share: 50 },
 ] as const;
 // The kit's six tones (tone.ts); a StatusBadge's variant is one of them.
+const KIT_WAITING = { state: `waiting`, since: Date.now(), retry: undefined } as const;
 const TONES: readonly Tone[] = [`success`, `danger`, `warning`, `info`, `neutral`, `primary`];
 const STATUS_VARIANTS: readonly StatusVariant[] = TONES;
 
@@ -244,7 +246,7 @@ const pickedTier = ref(`collaborator`);
             <DesignKitAssistants />
             <!-- Scales -->
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Type scale</h2>
+                <SectionHeader label="Type scale" :heading="2" />
                 <RowGroup>
                     <Row v-for="name in TEXT_SIZES" :key="name" :title="name">
                         <template #meta><span :class="name">The quick brown fox jumps</span></template>
@@ -253,7 +255,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Role colours</h2>
+                <SectionHeader label="Role colours" :heading="2" />
                 <p class="text-xs text-muted">These flip between light and dark. Reach for these before any numbered step.</p>
                 <div class="flex flex-wrap gap-3">
                     <div v-for="role in ROLE_COLORS" :key="role.name" class="flex flex-col items-center gap-1">
@@ -264,7 +266,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Chart series</h2>
+                <SectionHeader label="Chart series" :heading="2" />
                 <p class="text-xs text-muted">Assign a slot to a thing once, never by rank. Slot order is part of the contrast guarantee.</p>
                 <div class="flex flex-wrap gap-3">
                     <div v-for="slot in SERIES" :key="slot.name" class="flex flex-col items-center gap-1">
@@ -275,7 +277,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Radii</h2>
+                <SectionHeader label="Radii" :heading="2" />
                 <div class="flex flex-wrap gap-3">
                     <div v-for="name in RADII" :key="name" class="flex flex-col items-center gap-1">
                         <span class="h-12 w-12 border border-line-strong bg-overlay" :class="name"></span>
@@ -285,7 +287,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Widths and heights</h2>
+                <SectionHeader label="Widths and heights" :heading="2" />
                 <p class="text-xs text-muted">
                     Each carries its own viewport clamp, which is the half a hand-written width forgets. Narrow the window and watch them stop.
                 </p>
@@ -323,7 +325,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Tones</h2>
+                <SectionHeader label="Tones" :heading="2" />
                 <p class="text-xs text-muted">
                     Six tones, named for what a state means rather than its colour, and one helper for each way a tone is drawn. A tinted box is
                     `strong` when it should be read and `soft` when it only belongs to a state; its rim width, radius and ink stay the caller's.
@@ -373,7 +375,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Notice</h2>
+                <SectionHeader label="Notice" :heading="2" />
                 <p class="text-xs text-muted">
                     The app's one tinted message box. `:of` when the message is data, the slot when the view wrote it: both wear the same box.
                 </p>
@@ -412,7 +414,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">EmptyState</h2>
+                <SectionHeader label="EmptyState" :heading="2" />
                 <p class="text-xs text-muted">
                     What a surface shows in place of its content: nothing yet, a read that failed, a wait. The fill is the caller's (flex-1, h-full, an
                     overlay's inset-0); `panel` for a pane or tab, `page` for the whole of one.
@@ -441,7 +443,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Containers</h2>
+                <SectionHeader label="Containers" :heading="2" />
                 <p class="text-xs text-muted">
                     Card is the box. ScrollFrame is the box that scrolls itself: it owns the contract, so a view never writes one. A docked pane that
                     fills a region the shell already framed wants neither.
@@ -462,24 +464,24 @@ const pickedTier = ref(`collaborator`);
 
             <!-- Lists -->
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Rows</h2>
+                <SectionHeader label="Rows" :heading="2" />
                 <div class="grid gap-4 md:grid-cols-2">
-                    <RowGroup v-skeleton-source="`kit.rows`" label="States">
-                        <Row title="Plain row" description="A title and its description" />
-                        <Row title="With facts" description="Facts are muted and never focusable">
-                            <template #meta><span class="text-2xs text-subtle">3 files</span><DiffStat :additions="12" :deletions="4" /></template>
-                        </Row>
-                        <Row title="With a control" description="Actions carry their own hit area">
-                            <template #control><Button size="small" tier="boring" label="Open" /></template>
-                        </Row>
-                        <Row title="Navigational" description="Interactive, with a chevron" interactive chevron />
-                    </RowGroup>
-                    <!-- The States group's own imprint once it has settled: until then, the hand-drawn rows. -->
-                    <SkeletonSnapshot of="kit.rows">
-                        <RowGroup label="Loading">
-                            <SkeletonRows :rows="4" description control />
+                    <Await :of="{ state: `ready`, data: undefined, refreshing: false, refreshError: undefined }" imprint="kit.rows">
+                        <RowGroup label="States">
+                            <Row title="Plain row" description="A title and its description" />
+                            <Row title="With facts" description="Facts are muted and never focusable">
+                                <template #meta><span class="text-2xs text-subtle">3 files</span><DiffStat :additions="12" :deletions="4" /></template>
+                            </Row>
+                            <Row title="With a control" description="Actions carry their own hit area">
+                                <template #control><Button size="small" tier="boring" label="Open" /></template>
+                            </Row>
+                            <Row title="Navigational" description="Interactive, with a chevron" interactive chevron />
                         </RowGroup>
-                    </SkeletonSnapshot>
+                    </Await>
+                    <!-- The same region waiting: the States group as it last looked here, until then its fallback. -->
+                    <Await :of="KIT_WAITING" imprint="kit.rows">
+                        <template #fallback><RowGroup label="Loading"><SkeletonRows :rows="4" description control /></RowGroup></template>
+                    </Await>
                     <!-- Default `#below` is full-width; `indent` starts it under the row's name, for a block rather than a continuing sentence. -->
                     <RowGroup label="Below: flush, and indented">
                         <Row icon="sitemap" title="Flush" description="The default: the block starts at the group's edge">
@@ -494,14 +496,13 @@ const pickedTier = ref(`collaborator`);
                 </div>
 
                 <!-- compact is <RowGroup>'s default; dense is the navigator rail, comfortable a card's masthead. -->
-                <h3 :class="ui.sectionLabel({ size: `xs` })">Tiers, and the lines that are not rows</h3>
+                <SectionHeader label="Tiers, and the lines that are not rows" density="dense" :heading="3" />
                 <div class="grid gap-4 md:grid-cols-3">
                     <RowGroup
                         v-for="tier in [`comfortable`, `compact`, `dense`] as const"
                         :key="tier"
                         :density="tier"
                         :label="tier"
-                        :caption="tier === `compact` ? `every list — the default` : tier === `dense` ? `navigator rails` : `card mastheads`"
                     >
                         <!-- Mark size comes from the `#lead` slot's `mark`, not a literal number, so the columns can't drift apart. -->
                         <Row title="A record" description="Its mark is the tier's">
@@ -515,9 +516,9 @@ const pickedTier = ref(`collaborator`);
                 </div>
 
                 <!-- Show each disclosure shape with its hit area and body. -->
-                <h3 :class="ui.sectionLabel({ size: `xs` })">Disclosure rows</h3>
+                <SectionHeader label="Disclosure rows" density="dense" :heading="3" />
                 <div class="grid gap-4 md:grid-cols-2">
-                    <RowGroup label="hit=header · body=rail" caption="evidence about the row, hung off its title">
+                    <RowGroup label="hit=header · body=rail">
                         <DisclosureRow v-model:open="kitRail" title="A turn that failed" description="Claude · from discord">
                             <template #lead><Icon name="sparkles" class="text-xs text-link" /></template>
                             <template #meta><span>4m 2s</span><span>2h ago</span></template>
@@ -534,7 +535,7 @@ const pickedTier = ref(`collaborator`);
                         </DisclosureRow>
                     </RowGroup>
 
-                    <RowGroup label="hit=pair · body=drawer" caption="a place of its own; the headline's link keeps its own press">
+                    <RowGroup label="hit=pair · body=drawer">
                         <DisclosureRow v-model:open="kitDrawer" body="drawer" hit="pair" :toggle-label="t(`a11yKit.toggleDetails`)">
                             <template #lead><Icon name="wrench" class="text-sm text-subtle" /></template>
                             <!-- The link underline follows its text, not the full row. -->
@@ -560,9 +561,9 @@ const pickedTier = ref(`collaborator`);
 
             <!-- Shown here since the desktop app's manager window (which draws the same two blocks) can't be opened in a browser. -->
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">A device's agent and its sandboxes</h2>
+                <SectionHeader label="A device's agent and its sandboxes" :heading="2" />
                 <DeviceAgentGroup :panel="KIT_AGENT" subject="this device" />
-                <RowGroup label="Sandboxes on this device" :flat="true" :undivided="true">
+                <Section label="Sandboxes on this device">
                     <div class="flex flex-col">
                         <DeviceDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES">
                             <template #actions="{ group }">
@@ -589,7 +590,7 @@ const pickedTier = ref(`collaborator`);
                             </template>
                         </DeviceDetail>
                     </div>
-                </RowGroup>
+                </Section>
                 <DeviceRunLog
                     :lines="[`intentic: pulling ghcr.io/intentic/sandbox:stable`, `intentic: recreating the container`, `ready`]"
                     :running="true"
@@ -598,7 +599,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Badges and marks</h2>
+                <SectionHeader label="Badges and marks" :heading="2" />
                 <div class="flex flex-wrap items-center gap-2">
                     <StatusBadge v-for="variant in STATUS_VARIANTS" :key="variant" :variant="variant" :label="variant" />
                 </div>
@@ -631,7 +632,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Hover labels</h2>
+                <SectionHeader label="Hover labels" :heading="2" />
                 <p class="text-xs text-muted">A string is a word or two. Anything more is a Tip: a short title, figures as rows, one short note.</p>
                 <div class="flex flex-wrap items-center gap-3">
                     <Button data-kit-tip="label" size="small" tier="boring" v-tooltip.top="`Archive`">Label</Button>
@@ -666,7 +667,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Figures</h2>
+                <SectionHeader label="Figures" :heading="2" />
                 <p class="text-xs text-muted">
                     Four shapes that look alike in a list of names and are not: a tally line, a stat strip, a bar chart, and a verdict.
                 </p>
@@ -694,7 +695,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Controls</h2>
+                <SectionHeader label="Controls" :heading="2" />
 
                 <!-- Every tier in every state, one grid, since the differences are only checkable side by side. -->
                 <div class="overflow-x-auto">
@@ -740,19 +741,19 @@ const pickedTier = ref(`collaborator`);
                     <button type="button" :class="ui.addTile(`px-3 py-1.5`)">ui.addTile</button>
                     <button type="button" :class="ui.overlayChip()"><Icon name="copy" class="text-2xs" />ui.overlayChip</button>
                 </div>
-                <!-- A group's heading: the size follows the surface, the tone only when the group IS a state. -->
+                <!-- A group's heading: the size follows the tier, the tone only when the group IS a state; no count, caption or fill. -->
                 <div class="flex flex-wrap items-baseline gap-x-6 gap-y-2">
                     <span class="flex items-baseline gap-2">
-                        <span :class="ui.sectionLabel()">Connections</span>
-                        <span class="font-mono text-3xs text-subtle">ui.sectionLabel()</span>
+                        <SectionHeader label="Connections" />
+                        <span class="font-mono text-3xs text-subtle">&lt;SectionHeader&gt;</span>
                     </span>
                     <span class="flex items-baseline gap-2">
-                        <span :class="ui.sectionLabel({ size: `xs` })">Your apps</span>
-                        <span class="font-mono text-3xs text-subtle">{ size: "xs" }</span>
+                        <SectionHeader label="Your apps" density="dense" />
+                        <span class="font-mono text-3xs text-subtle">density="dense"</span>
                     </span>
                     <span class="flex items-baseline gap-2">
-                        <span :class="ui.sectionLabel({ tone: `danger` })">Failed</span>
-                        <span class="font-mono text-3xs text-subtle">{ tone: "danger" }</span>
+                        <SectionHeader label="Failed" tone="danger" />
+                        <span class="font-mono text-3xs text-subtle">tone="danger"</span>
                     </span>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
@@ -761,7 +762,7 @@ const pickedTier = ref(`collaborator`);
                 </div>
                 <!-- tabindex isn't needed to see focus — click into any field. -->
                 <div class="flex flex-col gap-2">
-                    <span :class="ui.sectionLabel({ size: `xs` })">Fields: every variant against every state</span>
+                    <SectionHeader label="Fields: every variant against every state" density="dense" />
                     <!-- `minmax(0, 1fr)`, not bare `1fr`: a grid item's implicit min-width is auto and won't shrink otherwise. -->
                     <div
                         class="grid max-w-read-lg items-center gap-x-3 gap-y-2 text-2xs text-subtle"
@@ -916,7 +917,7 @@ const pickedTier = ref(`collaborator`);
             </section>
 
             <section class="flex flex-col gap-4">
-                <h2 :class="ui.sectionLabel()">Overlays</h2>
+                <SectionHeader label="Overlays" :heading="2" />
                 <p class="text-xs text-muted">
                     Every one of these measures its room against the window its anchor is in, which is what makes them right inside a floating panel.
                 </p>

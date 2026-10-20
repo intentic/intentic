@@ -17,7 +17,9 @@ import { useSaveActions } from "./useSaveActions";
 import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
 import { useT } from "@intentic/ui/i18n";
 import CommitField from "../commit/CommitField.vue";
+import IndexRunLine from "../commit/IndexRunLine.vue";
 import IndexRunPrompt from "../commit/IndexRunPrompt.vue";
+import { useRunLine } from "../commit/runLine";
 import ChangeRowName from "../../../../components/ChangeRowName.vue";
 import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
 
@@ -167,12 +169,12 @@ const namePlaceholder = computed(() => {
 
 const blockedByConflicts = computed(() => scannable.value.some((repo: RepoChanges) => repo.conflicted.length > 0));
 const savingNow = computed(() => changes.committing.value.length > 0);
-// A slow run's own line (IndexRunPrompt) has the bar's reading room, and says more than "Saving…" does.
-const slowRun = ref(false);
+// A run's own line (runLine.ts) has the bar's reading room, and says more than "Saving…" does.
+const runLine = useRunLine();
 const saveReady = computed(() => pending.value > 0 && !blockedByConflicts.value && !changes.actionBusy.value && !savingNow.value);
-// The count Save carries, held as pressed while the save runs: its own staging reaches the change feed mid-run, and a
-// count changing under the spinner resizes the button for nothing.
-const saveCount = computed<number>((held) => (savingNow.value && held !== undefined ? held : pending.value));
+// The count Save carries, read off the save's own record while it runs: its own staging reaches the change feed
+// mid-run, and a count changing under the spinner resizes the button for nothing.
+const saveCount = computed<number>(() => changes.press.value?.face.count ?? pending.value);
 const saveFailure = computed(() => changes.failures.value.get(COMMIT_SCOPE));
 
 const doSave = async (): Promise<void> => {
@@ -180,7 +182,7 @@ const doSave = async (): Promise<void> => {
         return;
     }
     // `true`: staging the whole tree first is what makes one press record everything, index or no index.
-    await changes.commitRepos(actions.dirtyRepos.value, savedAs.value, true);
+    await changes.commitRepos(actions.dirtyRepos.value, savedAs.value, true, { label: t(`ui.action.save`), count: pending.value });
     // Keeps the name on failure — it's the one thing here the maker typed by hand.
     if (changes.failures.value.get(COMMIT_SCOPE) === undefined) {
         actions.versionName.value = ``;
@@ -233,11 +235,12 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
                 @submit="doSave"
             />
             <div class="flex items-center justify-end gap-1">
-                <!-- A slow stage or commit run, with its Stop, in the same room, so it never adds a row under the box. -->
-                <IndexRunPrompt @progress="slowRun = $event.length > 0" />
+                <!-- A stage or commit run, with its Stop, in the same room, so it never adds a row under the box. -->
+                <IndexRunPrompt />
+                <IndexRunLine v-if="runLine !== undefined" :line="runLine" />
                 <!-- What a press under way is doing, in the room beside the presses, so the presses never reword themselves:
                      each keeps its face and width under its spinner from click to answer. -->
-                <span v-if="!slowRun && (savingNow || actions.backingUp.value)" class="min-w-0 flex-1 truncate text-2xs text-muted" aria-live="polite">{{
+                <span v-else-if="savingNow || actions.backingUp.value" class="min-w-0 flex-1 truncate text-2xs text-muted" aria-live="polite">{{
                     savingNow ? t(`workspace.savePanel.saving`) : t(`workspace.savePanel.backingUp`)
                 }}</span>
                 <Button

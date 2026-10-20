@@ -43,7 +43,7 @@ const steps = computed<readonly string[]>(() => guide.value?.steps ?? []);
 
         <!-- Permissions line comes before the steps, since it decides whether the token about to be made is the right one. -->
         <p v-if="scopes" class="flex items-start gap-2 text-xs leading-relaxed text-muted">
-            <Icon name="key" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+            <Icon name="key" class="shrink-0 text-2xs text-subtle" />
             <span class="min-w-0">
                 <span
                     v-for="(part, index) in scopeParts"

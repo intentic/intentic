@@ -85,7 +85,7 @@ async function* refusedSignIn(store: DevinStore, accountId: string, events: Asyn
             if (stored !== undefined) {
                 await store.write({ ...stored, refusedAt: Date.now() });
             }
-            yield { kind: "error", message: "Devin no longer accepts this account's sign-in. Connect it again in Sandbox ▸ Models." };
+            yield { kind: "error", message: "Devin no longer accepts this account's sign-in. Connect it again in Sandbox ▸ Models.", own: true };
             continue;
         }
         yield event;

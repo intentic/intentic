@@ -1,4 +1,5 @@
 import type { RepoChecksSummary } from "@intentic/sandbox-contract/schemas/settings";
+import { mapLoaded } from "@intentic/extension-api";
 import { useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
@@ -12,7 +13,7 @@ import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 // the settings only change when somebody edits them here.
 
 export function useRepoChecks() {
-    const { query, error } = useSandboxQuery(rpcQuery(`settings.repoChecks`));
+    const { query, error, loaded } = useSandboxQuery(rpcQuery(`settings.repoChecks`));
 
     const adopt = useMutation(
         {
@@ -36,7 +37,7 @@ export function useRepoChecks() {
     return {
         repos,
         error,
-        isLoading: query.isLoading,
+        loaded: computed(() => mapLoaded(loaded.value, (answer) => answer.repos)),
         busy: computed(() => adopt.isPending.value),
         // The repository whose adoption is in flight, so only that row's control goes quiet.
         pending: computed<string | undefined>(() => (adopt.isPending.value ? adopt.variables.value?.repo : undefined)),

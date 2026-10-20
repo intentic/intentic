@@ -62,11 +62,11 @@ defineExpose({ reveal });
 
 <template>
     <section ref="block" class="flex flex-col gap-3" :aria-labelledby="headingId">
-        <div class="flex items-start gap-2.5">
+        <div class="flex items-start gap-2.5 text-sm">
             <Icon
                 :name="phase === `failed` ? `exclamation-circle` : phase === `starting` ? `spinner` : `sign-in`"
                 :spin="phase === `starting`"
-                class="mt-0.5 shrink-0"
+                class="shrink-0"
                 :class="phase === `failed` ? `text-danger` : `text-accent`"
             />
             <div class="flex min-w-0 flex-1 flex-col gap-0.5">

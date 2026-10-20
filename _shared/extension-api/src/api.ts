@@ -5,6 +5,7 @@ import type { Component, ComputedRef, MaybeRefOrGetter, Ref } from "vue";
 import type { DiffPayload } from "./diff.js";
 import type { Disposable } from "./disposable.js";
 import type { CapabilityFacts, RepoFacts } from "./facts.js";
+import type { Loaded } from "./loaded.js";
 
 // The host API an extension programs against; there is no ambient global. Arrives as
 // activate(api, context); everything registered returns a Disposable pushed onto context.subscriptions.
@@ -158,6 +159,9 @@ export interface SandboxQueryResult<Selected> {
     // Why the read failed, said in words, or undefined. A schema refusing the daemon's answer is the editor and the
     // sandbox disagreeing about a version, and reads as that, not as the issue list `query.error.message` carries.
     readonly error: ComputedRef<string | undefined>;
+    // What the view has of it, for the kit's <Await :of>: waiting (asked, or held while the sandbox wakes), ready,
+    // failed, or idle (the view's own `enabled` is off). Draw from this, never from `isLoading`/`isPending`.
+    readonly loaded: ComputedRef<Loaded<Selected>>;
 }
 
 // A view's runtime registration; `id`, `label` and `surface` must match a `contributes.views` entry in

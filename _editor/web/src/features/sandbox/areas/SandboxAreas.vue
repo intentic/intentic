@@ -2,6 +2,7 @@
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
 import { isSandboxPath } from "@intentic/sandbox-contract/policy/fence-paths";
 import {
+    Await,
     Button,
     ConfirmDialog,
     DisclosureRow,
@@ -11,17 +12,14 @@ import {
     RowGroup,
     RowNote,
     SkeletonRows,
-    SkeletonSnapshot,
     StatusBadge,
     ui,
-    vSkeletonSource,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import FolderPicker from "../devices/FolderPicker.vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { usePersonaReach } from "../access/usePersonaReach";
 import { useAreas } from "./useAreas";
 
@@ -37,16 +35,15 @@ const t = useT();
 const sandbox = useSandbox();
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 
-const { areas, error, isLoading, save, remove } = useAreas();
-const outline = useSandboxOutline(isLoading);
+const { areas, loaded, save, remove } = useAreas();
 
 // The two things no row can say for itself: the list wouldn't read, or a delete came back refused.
 const pageError = ref<NoticeModel>();
-const pageNotice = computed<NoticeModel | undefined>(
-    () =>
-        pageError.value ??
-        (error.value === undefined ? undefined : { tone: `danger`, title: t(`sandbox.sandboxAreas.couldntReadAreas`), detail: error.value }),
-);
+const unread = (detail: string): NoticeModel => ({ tone: `danger`, title: t(`sandbox.sandboxAreas.couldntReadAreas`), detail });
+const pageNotice = computed<NoticeModel | undefined>(() => {
+    const read = loaded.value;
+    return pageError.value ?? (read.state === `ready` && read.refreshError !== undefined ? unread(read.refreshError) : undefined);
+});
 
 interface AreaDraft {
     /** The id it was saved under. A grant points at the id, so a rename moves the name and never this. */
@@ -255,24 +252,19 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
 
         <!-- The empty state must not show before we know whether areas exist; the list's shape stands in while loading,
              drawn as the list (or its empty state) last looked in this sandbox. -->
-        <template v-if="isLoading">
-            <SkeletonSnapshot v-if="outline" of="sandbox.areas" :label="t(`sandbox.sandboxAreas.readingAreas`)">
+        <Await :of="loaded" imprint="sandbox.areas" :label="t(`sandbox.sandboxAreas.readingAreas`)">
+            <template #fallback>
                 <RowGroup :label="t(`sandbox.sandboxAreas.areas`)">
                     <div role="status" aria-busy="true">
                         <span class="sr-only">{{ t(`sandbox.sandboxAreas.readingAreas`) }}</span>
                         <SkeletonRows :rows="2" description control />
                     </div>
                 </RowGroup>
-            </SkeletonSnapshot>
-        </template>
+            </template>
+            <template #failed="{ error }"><Notice :of="unread(error)" /></template>
 
-        <template v-else>
             <!-- No area is a finished answer, not a half-set-up sandbox: it means everyone sees everything. -->
-            <div
-                v-if="areas.length === 0 && !adding"
-                v-skeleton-source="`sandbox.areas`"
-                :class="ui.emptyState('flex flex-col items-center gap-3 py-8')"
-            >
+            <div v-if="areas.length === 0 && !adding" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
                 <Icon name="folder-open" class="text-xl text-subtle" />
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxAreas.everyoneSeesWhole`) }}</span>
@@ -284,7 +276,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
                 <span v-else class="text-xs text-subtle">{{ t(`sandbox.sandboxAreas.onlyOwnerEdits`) }}</span>
             </div>
 
-            <RowGroup v-else v-skeleton-source="`sandbox.areas`" :label="t(`sandbox.sandboxAreas.areas`)">
+            <RowGroup v-else :label="t(`sandbox.sandboxAreas.areas`)">
                 <template #actions>
                     <Button v-if="isOwner && !adding" :label="t(`sandbox.sandboxAreas.newArea`)" size="small" tier="boring" @click="startAdd">
                         <template #icon><Icon name="plus" /></template>
@@ -411,7 +403,7 @@ const assistantsIn = (area: Area): string[] => namesOf([area.id]);
 
                 <RowNote v-if="!isOwner">{{ t(`sandbox.sandboxAreas.onlyOwnerEdits`) }}</RowNote>
             </RowGroup>
-        </template>
+        </Await>
 
         <!-- Deleting an area takes the grant away, never the folders, and the daemon refuses while somebody holds it. -->
         <ConfirmDialog

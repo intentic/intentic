@@ -22,6 +22,7 @@ import {
     noteJobShell,
     noteModelRequest,
     openBackgroundJob,
+    leftJobs,
     restoreBackgroundJobs,
     settledBackgroundJobs,
     sweepJobEnds,
@@ -188,7 +189,7 @@ describe("background job registry", () => {
         const adopted = planted("conv-restart", { adopted: true });
         const never = planted("conv-restart");
         expect(backgroundJobSessions(actors)).not.toContain(adopted.session);
-        const restored = restoreBackgroundJobs(actors).map((job) => job.id);
+        const restored = restoreBackgroundJobs(actors, leftJobs()).map((job) => job.id);
         expect(restored).toContain(adopted.id);
         expect(restored).toContain(never.id);
         expect(backgroundJobSessions(actors)).toContain(adopted.session);
@@ -220,7 +221,7 @@ describe("background job registry", () => {
     it("ends a restored job whose command never ran rather than taking it back", () => {
         const job = planted("conv-restart-never", { adopted: true });
         rmSync(join(job.dir, "cmd"));
-        expect(restoreBackgroundJobs(actors).map((entry) => entry.id)).not.toContain(job.id);
+        expect(restoreBackgroundJobs(actors, leftJobs()).map((entry) => entry.id)).not.toContain(job.id);
         expect(readFileSync(jobStatusPath(job), "utf8")).toBe("never-ran\n");
     });
 
@@ -228,7 +229,7 @@ describe("background job registry", () => {
         const done = planted("conv-restart-done");
         finish(done);
         const old = planted("conv-restart-old");
-        restoreBackgroundJobs(actors, old.startedAt + JOB_MAX_MS + 1);
+        restoreBackgroundJobs(actors, leftJobs(), old.startedAt + JOB_MAX_MS + 1);
         expect(backgroundJobSessions(actors)).not.toContain(done.session);
         expect(backgroundJobSessions(actors)).not.toContain(old.session);
     });
@@ -242,7 +243,7 @@ describe("background job registry", () => {
         expect(keptJobDirs(root)).toContain(kept.dir);
         expect(keptJobDirs(root)).not.toContain(awaited.dir);
         expect(keptJobSessions(root)).toContain(kept.session);
-        expect(restoreBackgroundJobs(actors, Date.now()).map((job) => job.id)).toContain(kept.id);
+        expect(restoreBackgroundJobs(actors, leftJobs(), Date.now()).map((job) => job.id)).toContain(kept.id);
         expect(backgroundJobSessions(actors, Date.now())).toContain(kept.session);
         // Once it exits it is an ordinary ending, and nothing spares its session any more.
         finish(kept);
@@ -256,7 +257,7 @@ describe("background job registry", () => {
         dirs.push(stray);
         writeFileSync(join(stray, "job.json"), "{ not json");
         const malformed = planted("conv-malformed", { turn: { agent: 42 } });
-        expect(restoreBackgroundJobs(actors).map((job) => job.id)).not.toContain(malformed.id);
+        expect(restoreBackgroundJobs(actors, leftJobs()).map((job) => job.id)).not.toContain(malformed.id);
     });
 
     it("names a job by the agent's description of the call, else by its command", () => {

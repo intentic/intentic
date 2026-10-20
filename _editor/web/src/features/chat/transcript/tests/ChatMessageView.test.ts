@@ -1755,7 +1755,7 @@ describe(`a low-memory hold`, () => {
             role: `notice`,
             text: `Free trial used up for today. The run stopped partway. The changes it made so far are kept: continue with another model to pick up from here.`,
             noticeAction: `switchModel`,
-            noticeCode: { code: `stoppedPartway`, params: { message: `Free trial used up for today.`, error: `trial-exhausted`, switchModel: true } },
+            noticeCode: { code: `stoppedPartway`, params: { message: `Free trial used up for today.`, error: `trial-exhausted`, own: true, switchModel: true } },
         };
         pane.messages = [opener, row];
         const idle = mount(row);
@@ -1804,7 +1804,8 @@ describe(`a sandbox notice with a code`, () => {
     });
 });
 
-// A provider's failure says what happened in one line, and everything else it said is a press away (providerFailure.ts).
+// A provider's failure says what happened in one line of this build's own, and everything it said is a press away
+// (failureView.ts), whichever path it came by.
 describe(`a provider's failure`, () => {
     // The Claude CLI's safeguard flag as a sandbox in use wrote it into a transcript.
     const SAID = [
@@ -1821,7 +1822,8 @@ describe(`a provider's failure`, () => {
 
     it(`draws one line naming what happened, under the warning glyph, with the rest folded away`, () => {
         const element = mount(flagged());
-        expect(element.textContent).toContain(`Opus 5.5's safeguards flagged this session.`);
+        expect(element.textContent).toContain(`The model's safeguards flagged this turn.`);
+        expect(element.textContent).not.toContain(`API Error`);
         expect(element.textContent).not.toContain(`Request ID`);
         expect(element.textContent).not.toContain(`You may be seeing this`);
         expect(iconsOf(element)).toEqual([`exclamation-triangle`]);
@@ -1853,18 +1855,29 @@ describe(`a provider's failure`, () => {
         expect(details.querySelectorAll(`.copy-stub`)).toHaveLength(3);
     });
 
-    // A short failure is already one line: there is nothing to fold, so nothing to open.
-    it(`leaves a short failure whole, with no details to open`, () => {
-        const element = mount({ id: 32, ...foldTurn([], [{ kind: `error`, code: `safeguard-flagged`, message: `Flagged.` }]).at(-1)! });
-        expect(element.textContent).toContain(`Flagged.`);
-        expect(element.querySelector(`button[aria-expanded]`)).toBeNull();
-        expect(iconsOf(element)).toEqual([`exclamation-triangle`]);
+    // However short, a provider's words are not the line: how long they ran never decided what the reader sees. Only the
+    // sandbox's own sentence is drawn whole, with nothing behind it.
+    it(`keeps a short provider's words behind the press too, and draws the sandbox's own sentence whole`, () => {
+        const short = mount({ id: 32, ...foldTurn([], [{ kind: `error`, code: `safeguard-flagged`, message: `Flagged.` }]).at(-1)! });
+        expect([short.textContent?.includes(`Flagged.`), short.querySelector(`button[aria-expanded]`)?.textContent?.trim()]).toEqual([false, `Details`]);
+        expect(iconsOf(short)).toEqual([`exclamation-triangle`]);
+        app?.unmount();
+        const own = `Free trial unavailable. Failed agent steps are not counted. Retry, or connect a model of your own.`;
+        const worded = mount({ id: 35, ...foldTurn([], [{ kind: `error`, code: `trial-unavailable`, message: own, own: true }]).at(-1)! });
+        expect([worded.textContent?.includes(own), worded.querySelector(`button[aria-expanded]`)]).toEqual([true, null]);
     });
 
-    // A sandbox older than its failure codes wrote the provider's words alone; they read the same.
-    it(`folds a row with no code by its words`, () => {
+    // A failure nobody named is drawn as one, not as its words: the unclassified kind, the words behind the press.
+    it(`names a failure nothing coded as unclassified`, () => {
+        const element = mount({ id: 36, ...foldTurn([], [{ kind: `error`, message: `stdout maxBuffer length exceeded` }]).at(-1)! });
+        expect(element.textContent).toContain(`The agent stopped on an error this app does not recognize.`);
+        expect(element.textContent).not.toContain(`maxBuffer`);
+    });
+
+    // A sandbox older than its failure codes wrote the provider's words alone: the unclassified kind, by their marks.
+    it(`reads a row with no code by its marks, as the unclassified kind`, () => {
         const element = mount({ id: 33, role: `notice`, text: SAID });
-        expect(element.textContent).toContain(`Opus 5.5's safeguards flagged this session.`);
+        expect(element.textContent).toContain(`The agent stopped on an error this app does not recognize.`);
         expect(element.querySelector(`button[aria-expanded="false"]`)?.textContent?.trim()).toBe(`Details`);
     });
 

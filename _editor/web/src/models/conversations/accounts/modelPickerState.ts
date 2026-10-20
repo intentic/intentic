@@ -28,9 +28,6 @@ export interface PickerEntry extends TurnPick {
     readonly label: string;
     readonly description?: string;
     readonly badges?: readonly ModelBadge[];
-    // Epoch seconds; set only while every credential that serves this model is refused. Still pickable: the wait is
-    // what a reader needs, and a row that disappeared for an hour would teach them to distrust the list.
-    readonly availableAt?: number;
     // Set where the model may run one-shot helper jobs only. Listed and not pickable for a chat, so the reader sees why
     // a model they connected is not theirs to chat with; pickable for a helper job.
     readonly helperOnly?: HelperOnly;
@@ -54,7 +51,6 @@ const entryFor = (provider: AgentProvider, option: ModelOption): PickerEntry => 
         label: option.label,
         ...(option.description !== undefined ? { description: option.description } : {}),
         ...(option.badges !== undefined ? { badges: option.badges } : {}),
-        ...(option.availableAt !== undefined ? { availableAt: option.availableAt } : {}),
     };
     return option.helperOnly === undefined ? entry : { ...entry, helperOnly: option.helperOnly };
 };

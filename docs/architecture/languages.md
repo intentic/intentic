@@ -37,7 +37,7 @@ Inside the editor's own catalog, a word's key says who owns its meaning, not who
 - `shared.*` holds a noun, or the state a thing is in, that means the same in every feature saying it: the sections' own names, Agent, Model, Running. The same English is not a reason to share a key. "Access" the sandbox section and "Access" a capability's grant are two keys.
 - `<area>.words.*` holds a word several of one feature's components say. A phrase another feature borrows stays with the feature it belongs to.
 
-Every top-level section of the editor's catalog is typed in [`app/i18n/index.ts`](../../_editor/web/src/app/i18n/index.ts), and `i18nSections.test.ts` fails on one that is not.
+The editor's catalog types vue-i18n's message schema whole: [`app/i18n/index.ts`](../../_editor/web/src/app/i18n/index.ts) extends it with `en.json`'s own type, so a new section needs no declaration.
 
 An extension builds its catalog and translator in one call, `extensionI18n` from [`_shared/extension-ui/src/i18n.ts`](../../_shared/extension-ui/src/i18n.ts), and the host mounts it before calling `activate`. The loader stays a literal template (`import(\`./locales/${locale}.json\`)`) so the bundler emits one chunk per language.
 

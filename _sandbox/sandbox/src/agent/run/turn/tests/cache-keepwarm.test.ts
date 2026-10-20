@@ -103,7 +103,7 @@ const harness = (frames: readonly AgentEvent[], opts: { usage?: AccountUsage; ke
         claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", {
             read: async () => (opts.seatRefusal === undefined ? {} : { acct: { at: 0, reason: opts.seatRefusal } }),
         }),
-        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}), onFile: async () => ({}) }),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
         accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {
             read: async () => (opts.usage === undefined ? {} : { acct: opts.usage }),
         }),

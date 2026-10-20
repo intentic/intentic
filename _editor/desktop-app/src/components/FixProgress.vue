@@ -170,10 +170,10 @@ const stateWord = (state: string): string | undefined => {
 
 <template>
     <section class="flex flex-col gap-3 rounded-xl border border-line bg-canvas p-4" :aria-busy="running">
-        <div class="flex items-start gap-2.5">
-            <Icon v-if="running" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
-            <Icon v-else-if="settled" name="check-circle" class="mt-0.5 shrink-0 text-success" />
-            <Icon v-else name="wrench" class="mt-0.5 shrink-0 text-accent" />
+        <div class="flex items-start gap-2.5 text-sm">
+            <Icon v-if="running" name="spinner" spin class="shrink-0 text-link" />
+            <Icon v-else-if="settled" name="check-circle" class="shrink-0 text-success" />
+            <Icon v-else name="wrench" class="shrink-0 text-accent" />
             <div class="min-w-0 flex-1">
                 <h3 class="text-sm leading-tight font-semibold">{{ heading }}</h3>
                 <p v-if="running" class="mt-0.5 text-2xs text-subtle" role="status">{{ now }}</p>
@@ -186,11 +186,11 @@ const stateWord = (state: string): string | undefined => {
 
         <!-- Every check ic has named, in its order, each with the state it last said; what is wrong and what closes it only where something is. -->
         <ul v-if="view.checks.length > 0" class="flex flex-col gap-2">
-            <li v-for="check in view.checks" :key="check.id" class="flex items-start gap-2.5">
+            <li v-for="check in view.checks" :key="check.id" class="flex items-start gap-2.5 text-xs">
                 <Icon
                     :name="iconOf(check.state)"
                     :spin="check.state === `fixing`"
-                    class="mt-0.5 shrink-0 text-xs"
+                    class="shrink-0 text-xs"
                     :class="toneOf(check.state)"
                     aria-hidden="true"
                 />

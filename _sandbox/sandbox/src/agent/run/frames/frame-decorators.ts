@@ -85,8 +85,8 @@ export async function* withSilentEnding(frames: AsyncIterable<AgentEvent>, silen
         if (event.kind === "done") {
             const message = silent();
             if (message !== undefined) {
-                // Uncoded on purpose: it lets the chat answer with a Continue press, not a dead end.
-                yield { kind: "error", message };
+                // Uncoded on purpose: it lets the chat answer with a Continue press, not a dead end. Worded here, so its own line.
+                yield { kind: "error", message, own: true };
             }
         }
         yield event;

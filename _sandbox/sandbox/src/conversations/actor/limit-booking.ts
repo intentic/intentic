@@ -3,15 +3,12 @@ import type { HeldRecord } from "./conversation-state.js";
 
 /* WHETHER A SPENT ALLOWANCE'S HELD TURN GOES AGAIN BY ITSELF, AND WHEN: ONE RULE FOR EVERYTHING THAT SAYS SO. The resume
    pass fires by it (limit-due.ts, through turn-resume.ts runLimitHold), the failure frame states it (classify-failure.ts
-   limitFrame), and the card's `limitScheduled` and `limitNextAt` are projected from it (agents-registry.ts, limit-ending.ts),
-   with the wall in front of the account read on the same beat for both. That projection is what files a stranded card
-   in Active rather than Attention (agent-lanes.ts laneOf), so a card is in Active exactly when this rule says something
-   will send it. Before 2026-10-19 three places decided it from three inputs: the frame from the refusal's reset, a
-   changed answer from the stored ending's reset, the pass from the hold's own reopen plus a fresh read of the answer.
-   They drifted apart. A child whose reset lay past its horizon read "resends …" in Active after any answer while nothing
-   would fire it. A sandbox-wide answer changed in Settings left every held card filed by the old one. An account picked
-   mid-hold kept a booking the hold no longer had. The pass now holds the stored booking to this rule on every beat
-   (held-standing.ts keepLimitBooking), so whatever path changes a hold or its answer, the card follows within a beat. */
+   limitFrame), and the card's `next` is derived from it every time the card is read (conversation-next.ts), so a card is
+   in Active exactly when this rule says something will send it. Its inputs are facts on the hold (its reopen, a booked
+   move, a person's pick, the wall in front of where it goes as the pass last read it) and the conversation's answer to
+   the limit: never a copy of its own output. Before 2026-10-20 that output was copied onto the stored ending at the
+   failure and re-synced by the pass every beat, and every path that changed a hold or its answer between beats left the
+   card saying what the pass would no longer do. */
 
 /**
  * The instant (ms) a limit hold goes at its reset, or undefined: none named, or one already past when it was refused,
@@ -33,19 +30,19 @@ export interface LimitBooking {
  * move at once while that answer is still to move, else its reset under any answer that sends. Undefined when only a
  * press sends it: no hold, a fired one, another kind of hold, an answer to wait, or no reset to go at.
  *
- * `wallUntil` (ms) is when the allowance in front of where it would go reopens, where the records call that account
- * spent now (limit-due.ts reads it on every beat). It only ever pushes a booking later, never books a hold that has
- * none: a hold left untimed on purpose (a child past its horizon) stays a press's. The instant stored on the hold was
- * judged once, when the refusal or a pick made it, and was trusted from then on: a pick that judged a spent account open
- * stored "now", and the next beat sent the turn to be refused (2026-10-19). Absent where nobody read the wall (an answer
- * changed in Settings, agents-registry.ts): the stored instant stands until the next beat reads it.
+ * The hold's `walledUntil` (ms) is when the allowance in front of where it would go reopens, where the records called
+ * that account spent when the pass last read it (limit-due.ts). It only ever pushes a booking later, never books a hold
+ * that has none: a hold left untimed on purpose (a child past its horizon) stays a press's. The instant stored on the
+ * hold is judged once, when the refusal or a pick made it: a pick that judged a spent account open stored "now", and
+ * the next beat sent the turn to be refused (2026-10-19).
  */
-export const limitBooking = (held: HeldRecord | undefined, policy: TurnBreakPolicy, wallUntil?: number): LimitBooking | undefined => {
+export const limitBooking = (held: HeldRecord | undefined, policy: TurnBreakPolicy): LimitBooking | undefined => {
     if (held?.reason !== "limit" || held.fired || !breakArmed(policy)) {
         return undefined;
     }
     const booked = held.move !== undefined && policy === "move" ? { at: held.recordedAt, moving: held.move.account } : timedBooking(held);
-    return booked === undefined || wallUntil === undefined || wallUntil <= booked.at ? booked : { ...booked, at: wallUntil };
+    const wall = held.walledUntil;
+    return booked === undefined || wall === undefined || wall <= booked.at ? booked : { ...booked, at: wall };
 };
 
 const timedBooking = (held: HeldRecord): LimitBooking | undefined => {

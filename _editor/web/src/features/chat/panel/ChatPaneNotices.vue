@@ -96,7 +96,7 @@ const activeAccountReauth = computed(() => {
         class="flex items-start gap-2 rounded-xl border px-3 py-2 text-left text-2xs text-warning"
         :class="toneTint(`warning`, `strong`)"
     >
-        <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />
+        <Icon name="exclamation-triangle" class="shrink-0" />
         <span
             >{{ activeAccountReauth.detail ?? t(`chat.chatPaneNotices.accountNeedsToReconnected`) }}
             <span class="font-semibold underline">{{ t(`ui.action.reconnect`) }}</span></span

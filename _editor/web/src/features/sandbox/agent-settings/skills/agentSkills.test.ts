@@ -6,7 +6,7 @@ import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extens
 import { type SandboxSettings, type SkillSummary, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
 import { stubGlobal } from "@intentic/testing/bun";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Needs jsdom: useDevice reads window.matchMedia and environment.ts reads window.env at import.
@@ -23,8 +23,7 @@ jest.mock(`../../environment/useSkills`, () => ({
     useSkills: () => ({
         skills,
         settings,
-        error: ref(undefined),
-        isLoading: ref(false),
+        loaded: computed(() => ({ state: `ready`, data: [skills.value, settings.value], refreshing: false, refreshError: undefined })),
         save: { mutate: jest.fn() },
         remove: { mutate: removeMutate },
         setEnabled,

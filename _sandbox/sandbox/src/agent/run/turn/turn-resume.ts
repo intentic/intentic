@@ -17,13 +17,13 @@ import { planRevision } from "../../prompt/plan-revision.js";
 import type { Services } from "../../../composition.js";
 import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript, recordUnrecordedRuns, runLogFor } from "../../../sessions/turn-transcript.js";
 import { carriedRun, drawnOf, dropRunLog, recordSettledTurn, saidMidTurn } from "./recovery/cut-turn-rows.js";
-import { offerAnswerWords, restoreParkedCard } from "./recovery/restored-offers.js";
+import { offerAnswerWords, permissionAnswer, restoreParkedCard } from "./recovery/restored-offers.js";
 import type { Caller } from "../../../auth/auth.js";
 import { POST_PLAN_MODE } from "../agent.js";
 import { formatAnswers } from "../../../sessions/vocabulary/question-answers.js";
 import { OUTAGE_MAX_ATTEMPTS, outageRetryDue, outageRetryFired, providerOutage } from "../../providers/provider-health.js";
 import { type Routing, routingFor, sameLoop, sessionFor } from "../../../conversations/registry/routing.js";
-import { consumeEntry, type JournalEntry, type JournalledTurn, parkedRestoreSpent, resumeBars, spendAttempt } from "../../../store/journals/turn-journal.js";
+import { consumeEntry, type JournalledTurn, parkedRestoreSpent, resumeBars, spendAttempt } from "../../../store/journals/turn-journal.js";
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
 import { refusedBegin } from "../placement/turn-placement.js";
 import { routeTurn } from "./turn-routing.js";
@@ -36,7 +36,8 @@ import { spentRung } from "../../models/role-model-quota.js";
 import { recordInterrupted } from "./recovery/interrupted-ledger.js";
 import { previousRun } from "../../../system/boot/restarts/boot-marker.js";
 import { restartCost } from "../../../system/boot/restarts/restart-record.js";
-import { notResumedReason, type RestartResume, restartResume } from "./recovery/restart-resume-policy.js";
+import { notResumedReason, type RestartResume } from "./recovery/restart-resume-policy.js";
+import { defineInFlight } from "../../../seams/restart/in-flight.js";
 import { spentUntil } from "./holds/allowance-gate.js";
 import { releaseRoomHolds } from "./holds/room-holds.js";
 import { limitDue } from "./holds/limit-due.js";
@@ -521,7 +522,7 @@ const runLimitHold = async (services: Services, conversationId: string, held: He
         heldBehind(services, pass.told, conversationId, held, due.walledUntil);
     }
     if (due.booking.at <= now) {
-        await dispatch(false)(services, held, due.routing, now);
+        await dispatch(false)(services, due.held, due.routing, now);
         return;
     }
     pass.due(due.booking.at);
@@ -691,15 +692,11 @@ const rehydrateParkedTurn = async (services: Services, entry: JournalledTurn, dr
             return reply.cancelled === true || reply.answers === undefined ? undefined : resumed(formatAnswers(request.questions, reply, services.workspace.root));
         }
         if (request.kind === "permission" && reply.kind === "permission") {
-            if (reply.decision === "deny") {
-                const feedback = reply.feedback?.trim() ?? "";
-                // Feedback is a redirection the turn takes; a bare deny ends it.
-                return feedback === "" ? undefined : resumed(feedback);
+            const { words, grant } = permissionAnswer(request, reply);
+            if (grant) {
+                services.conversations.send(conversationId, { kind: "grant-restored", tool: request.toolName, always: reply.decision === "always" });
             }
-            // A one-shot grant, no waiting tool call to feed; `always` still carries the don't-ask-again flavour
-            // through.
-            services.conversations.send(conversationId, { kind: "grant-restored", tool: request.toolName, always: reply.decision === "always" });
-            return resumed(`The user allowed ${request.toolName}: run it and continue where the session left off.`);
+            return words === undefined ? undefined : resumed(words);
         }
         // A page ask or a gate's offer: its call died with the daemon, so the answer is told in the words it would have
         // answered with (restored-offers.ts).
@@ -885,27 +882,29 @@ const settleParked = async (services: Services, entry: JournalledTurn, reason: s
     );
 };
 
-// Runs once at boot, before anything else starts a turn on these conversations. Surviving means never settled; each
-// entry is consumed (spent or deleted) before it restarts, so a turn that kills the daemon can't loop the boot. An
-// automation's interrupted fire is its scheduler's to re-fire (automations/fire-resume.ts). `policy`: whether this
-// boot resumes what the restart cut at all (restart-resume-policy.ts), decided once for every pass; absent, it is the
-// settings' autoResumeOnRestart alone, with no owner's ask and no storm. `cost`: what the restart cost the turns it cut (restart-record.ts), told to each one it re-runs,
-// so it knows whether its background commands still run and /tmp still holds what it wrote; read off this boot's marker.
-export const resumeInterruptedTurns = async (
+// Every turn journalled when the gate opens is one the daemon died under (bootstrap/restart/in-flight-kinds.ts), each consumed (spent or
+// deleted) before it restarts, so a turn that kills the daemon can't loop the boot; then what waited in a queue goes.
+export const interruptedTurnsInFlight = defineInFlight({
+    name: "interrupted turns",
+    read: async (services: Pick<Services, "turnJournal">) => (await services.turnJournal.list()).filter((entry): entry is JournalledTurn => entry.kind === "turn"),
+    recover: async (services: Services, left, resume) => {
+        await recoverCutTurns(services, left, resume);
+        for (const conversationId of services.agents.ids()) {
+            if ((services.agents.entry(conversationId)?.queue?.items.length ?? 0) > 0) {
+                void services.turns.drain(conversationId);
+            }
+        }
+    },
+});
+
+// `cost`: what the restart cost the turns it cut (restart-record.ts), told to each it re-runs; read off this boot's marker.
+export const recoverCutTurns = async (
     services: Services,
+    interrupted: readonly JournalledTurn[],
+    resume: RestartResume,
     now: number = Date.now(),
-    policy?: RestartResume,
     cost: string | undefined = restartCostNow(),
 ): Promise<void> => {
-    const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {
-        services.logger.warn({ err: error }, "turn journal: unreadable at boot, no interrupted turn is resumed");
-        return [];
-    });
-    const interrupted = listed.filter((entry): entry is JournalledTurn => entry.kind === "turn");
-    if (interrupted.length === 0) {
-        return;
-    }
-    const resume = policy ?? (await settingsResume(services));
     const resumedWhy = resume.resume && resume.asked ? "the owner asked this restart to pick up after" : "autoResumeOnRestart";
     for (const entry of interrupted) {
         // A turn that ended but whose record refused it is written down, and never run again.
@@ -988,10 +987,6 @@ const notResumedWhy = (resume: RestartResume, spent: boolean): string => {
     }
     return spent ? "its one re-run is already spent" : "it is older than a re-run is wanted";
 };
-
-// The policy a pass called without one runs under: the setting alone, as a boot with no ask and no storm would decide.
-export const settingsResume = async (services: Pick<Services, "sandboxSettings">): Promise<RestartResume> =>
-    restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: (await services.sandboxSettings.get()).autoResumeOnRestart });
 
 // What every line about a journalled turn a restart cut says of it: which conversation, the run it was, the session it
 // ran in, and where it ran.

@@ -626,7 +626,7 @@ export class TurnClient {
             host.pickUp.value = { reason: `stopped` };
         }
         // A turn that ran to its own end, nobody stopping it and nothing failing: the funnel's last milestone.
-        if (phase.kind === `running` && phase.ending === undefined && host.error.value === null) {
+        if (phase.kind === `running` && phase.ending === undefined && host.error.value === null && !host.failures.failedTurn) {
             noteTurnCompleted(host.selection.provider.value);
         }
         const waiters = this.settleWaiters;

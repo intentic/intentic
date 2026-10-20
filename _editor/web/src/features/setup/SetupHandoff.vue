@@ -43,14 +43,14 @@ const send = async (): Promise<void> => {
     <div class="flex flex-col gap-2.5">
         <!-- The heading a phone needed all along: which device this step belongs to. -->
         <p v-if="!sent" class="flex items-start gap-2.5 text-xs text-muted">
-            <Icon name="desktop" class="mt-0.5 shrink-0 text-link" />
+            <Icon name="desktop" class="shrink-0 text-link" />
             <span class="min-w-0">{{ t(`setup.setupHandoff.notOnPhoneNeeds`) }}</span>
         </p>
 
         <template v-if="sent">
             <!-- Green on the two words that are the confirmation, and nowhere else. -->
             <p class="flex items-start gap-2.5 text-xs text-muted">
-                <Icon name="check" class="mt-0.5 shrink-0 text-success" />
+                <Icon name="check" class="shrink-0 text-success" />
                 <span class="min-w-0">
                     <span class="font-medium text-success"
                         >{{ t(`setup.setupHandoff.sentTo`) }} <span class="break-words">{{ email }}</span

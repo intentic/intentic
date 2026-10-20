@@ -1,10 +1,10 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { providerLabel, reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import { roomiestAccount } from "@intentic/sandbox-contract/models/plan-pools";
+import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { Services } from "../../../composition.js";
 import { FIRST_RECHECK_MS, LONGEST_RECHECK_MS } from "../claude/claude-seat-check.js";
 import { serviceabilities, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
-import { accountRefusal, pickObservedAccount } from "../../../usage/observed-limits.js";
 
 // A turn that runs on the account its conversation remembers, when that account can no longer serve: an organisation
 // took the seat away, or the provider refused the account's entitlement. The unnamed pick never lands there (the one
@@ -22,9 +22,9 @@ import { accountRefusal, pickObservedAccount } from "../../../usage/observed-lim
 // A spent account is the limit move's (bookLimitMove), a revoked sign-in is fixed in place by reconnecting (its refusal
 // holds the turn for that), and a bench that lifts by itself is waited out; none of those moves a conversation here.
 
-// The seat's re-test is Claude's alone (agent/providers/claude/claude-seat-check.ts). Cursor's accounts are judged from
-// the refusal ledger instead (usage/observed-limits.ts), the only measurement its API gives.
-export type BlockedAccountDeps = ServiceabilityDeps & Pick<Services, "claudeSeatCheck" | "cursorStore" | "observedLimits">;
+// The seat's re-test is Claude's alone (agent/providers/claude/claude-seat-check.ts); every provider's accounts are judged
+// by the one rule, which reads a Cursor account refused outright (`[role_forbidden]`) off the refusal ledger.
+export type BlockedAccountDeps = ServiceabilityDeps & Pick<Services, "claudeSeatCheck">;
 
 export type AccountRoute =
     // Run where routingFor points.
@@ -38,9 +38,9 @@ const KEEP: AccountRoute = { kind: "keep" };
 
 /**
  * Where a turn goes when the account its conversation remembers is blocked. `named` is the account the turn itself
- * names, `remembered` the one routingFor fills in from the conversation's profile. Claude and Cursor: a routed
- * provider's translator balances its own credentials, Claude's accounts carry the seat and entitlement marks, and
- * Cursor's carry the account-wide refusals its ledger files.
+ * names, `remembered` the one routingFor fills in from the conversation's profile. Any provider whose accounts a turn
+ * names (a routed provider's translator balances its own credentials): Claude's carry the seat marks, and every one's
+ * the entitlement refusals on file.
  */
 export const offBlockedAccount = async (
     deps: BlockedAccountDeps,
@@ -52,13 +52,7 @@ export const offBlockedAccount = async (
     },
 ): Promise<AccountRoute> => {
     const { provider, named, remembered, model } = turn;
-    if (named !== undefined || remembered === undefined) {
-        return KEEP;
-    }
-    if (provider === "cursor") {
-        return offRefusedCursorAccount(deps, remembered, model);
-    }
-    if (provider !== "claude") {
+    if (named !== undefined || remembered === undefined || KeyedProviderSchema.safeParse(provider).success) {
         return KEEP;
     }
     // One reading for both questions, judged for the model the turn spends, as the limit move's destination is.
@@ -68,32 +62,20 @@ export const offBlockedAccount = async (
         return KEEP;
     }
     // Access an admin turned back on is found here, when the probe is due; the turn then runs where it was routed.
-    if (await deps.claudeSeatCheck.recheck(remembered)) {
+    const probed = provider === "claude";
+    if (probed && (await deps.claudeSeatCheck.recheck(remembered))) {
         return KEEP;
     }
-    const to = roomiestAccount(accounts.filter((account) => account.id !== remembered))?.id;
-    return to === undefined ? { kind: "held", account: remembered, reason: state.reason } : { kind: "move", from: remembered, to, reason: state.reason };
-};
-
-// A Cursor account the server refused outright (`[role_forbidden]`, filed account-wide in the observed ledger) is moved
-// off the same way a seatless Claude account is: to a live account with no such refusal, the one that still has the
-// model where one is named. With nowhere to go the turn runs where it was routed and is refused in a second, which tells
-// whoever asked; it is never held, since nothing here re-tests a Cursor account and the hold would wait out a day.
-const offRefusedCursorAccount = async (deps: BlockedAccountDeps, remembered: string, model: string | undefined): Promise<AccountRoute> => {
-    const refusal = accountRefusal(await deps.observedLimits.spent("cursor", remembered));
-    if (refusal === undefined) {
-        return KEEP;
+    // Proven room; where the plan publishes no reading to prove any (Cursor's), an account nothing has refused.
+    const others = accounts.filter((account) => account.id !== remembered);
+    const unread = reportsPlanLimits(provider) ? undefined : others.find((account) => account.state.kind === "unknown");
+    const to = (roomiestAccount(others) ?? unread)?.id;
+    if (to !== undefined) {
+        return { kind: "move", from: remembered, to, reason: state.reason };
     }
-    // Live as cursor-credentials.ts liveCursorAccounts reads them, asked of the store this seam already holds: the
-    // runtime's own module is not this layer's to import.
-    const now = Date.now();
-    const others = (await deps.cursorStore.credentials()).filter(
-        (account) => account.id !== remembered && (account.apiKeyExpiresAtMs === undefined || account.apiKeyExpiresAtMs > now),
-    );
-    const readings = await Promise.all(others.map(async (account) => ({ account: account.id, spent: await deps.observedLimits.spent("cursor", account.id) })));
-    const serving = readings.filter((reading) => accountRefusal(reading.spent) === undefined);
-    const to = model === undefined || model === "" ? serving[0]?.account : pickObservedAccount(serving, { id: model })?.account;
-    return to === undefined ? KEEP : { kind: "move", from: remembered, to, reason: refusal.message };
+    // With nowhere to go, only an account a probe re-tests is held for it; any other runs where it was routed and is
+    // refused in a second, which tells whoever asked, since a hold nothing re-tests would wait out a day.
+    return probed ? { kind: "held", account: remembered, reason: state.reason } : KEEP;
 };
 
 const minutes = (ms: number): number => Math.round(ms / 60_000);

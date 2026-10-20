@@ -119,7 +119,7 @@ const runningTip = computed(() =>
             :class="toneFill(`warning`, `strong`, toneInk(`warning`), `mx-4 mb-3 flex flex-col gap-1 rounded-lg px-3 py-2 text-2xs`)"
         >
             <li v-for="warning in body.warnings" :key="warning" class="flex min-w-0 items-start gap-2">
-                <Icon name="exclamation-circle" class="mt-px shrink-0" aria-hidden="true" />
+                <Icon name="exclamation-circle" class="shrink-0" aria-hidden="true" />
                 <span class="min-w-0 break-words leading-4">{{ warning }}</span>
             </li>
         </ul>

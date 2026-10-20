@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, EmptyState, formatCount, Meter, Notice, Picker, SegmentedControl, SkeletonSnapshot, ui, useAgentRunPick, vSkeletonSource } from "@intentic/ui";
+import { Await, Card, EmptyState, formatCount, Meter, Notice, Picker, SegmentedControl, ui, useAgentRunPick } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { shellModelPicking } from "../../../models/conversations/accounts/shellModelPicking";
 import RefactorAction from "./RefactorAction.vue";
@@ -24,12 +24,14 @@ const { openFile, openHealth } = useWorkspaceTabs();
 
 const repoRef = computed(() => repo);
 const churnWindow = ref<ChurnWindow>(`all`);
-const { health, loading, error, refresh } = useCodebaseHealth(repoRef, churnWindow);
+const { health, loading, error, refresh, loaded } = useCodebaseHealth(repoRef, churnWindow);
 const { options } = useRepos();
 // One picker for every row: a caret's pick starts its run at once and clears (RefactorAction), so no row inherits it.
 const refactorPick = useAgentRunPick(shellModelPicking, `refactor-run`);
 
 const totals = computed(() => health.value?.totals);
+// How many files qualify as hotspots at all; the list below is capped.
+const hotspotCount = computed(() => totals.value?.hotspots ?? 0);
 // Dormancy is measured from the read, not a live clock; recomputes only when the report or window changes.
 const rows = computed(() => hotspotRows(health.value?.hotspots ?? [], health.value?.modules ?? [], churnWindow.value, Date.now()));
 const modules = computed(() => moduleRows(health.value?.modules ?? []));
@@ -44,14 +46,24 @@ const stats = computed(() => {
     }
     return [
         { key: `files`, label: t(`shared.files`), value: figures.files, note: t(`workspace.codebaseHealth.indexedIgnoringBuildOutput`) },
-        { key: `symbols`, label: t(`workspace.codebaseHealth.symbols`), value: figures.symbols, note: t(`workspace.codebaseHealth.functionsTypesClasses`) },
+        {
+            key: `symbols`,
+            label: t(`workspace.codebaseHealth.symbols`),
+            value: figures.symbols,
+            note: t(`workspace.codebaseHealth.functionsTypesClasses`),
+        },
         {
             key: `complexity`,
             label: t(`workspace.codebaseHealth.branchPoints`),
             value: figures.complexity,
             note: t(`workspace.codebaseHealth.perFile`, { files: perFile(figures.complexity, figures.files) }),
         },
-        { key: `hotspots`, label: t(`workspace.codebaseHealth.hotspots`), value: figures.hotspots, note: t(`workspace.codebaseHealth.filesBothChurnBranching`) },
+        {
+            key: `hotspots`,
+            label: t(`workspace.codebaseHealth.hotspots`),
+            value: figures.hotspots,
+            note: t(`workspace.codebaseHealth.filesBothChurnBranching`),
+        },
     ];
 });
 
@@ -99,32 +111,32 @@ const MODULE_COLUMNS = `grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-c
 
         <div class="min-h-0 flex-1 overflow-auto">
             <div class="@container mx-auto flex w-full max-w-4xl flex-col gap-4 p-4">
-                <!-- First read: the report as it last looked in this sandbox, else a drawn outline of one. -->
-                <SkeletonSnapshot v-if="totals === undefined && loading" :of="`health:${repo}`" :label="t(`workspace.codebaseHealth.readingIndex`)">
-                    <div role="status" aria-busy="true" class="flex flex-col gap-4">
-                        <span class="sr-only">{{ t(`workspace.codebaseHealth.readingIndex`) }}</span>
-                        <Card class="grid grid-cols-2 gap-4 @2xl:grid-cols-4" aria-hidden="true">
-                            <div v-for="tile in 4" :key="tile" class="flex flex-col gap-2">
-                                <span class="skeleton block h-2.5 w-14" />
-                                <span class="skeleton block h-5 w-16" />
-                                <span class="skeleton block h-2 w-24" />
-                            </div>
-                        </Card>
-                        <Card class="flex flex-col gap-3" aria-hidden="true">
-                            <span class="skeleton block h-3.5 w-24" />
-                            <div v-for="line in 6" :key="line" class="flex items-center gap-3">
-                                <span class="skeleton block h-3 w-40" />
-                                <span class="flex-1" />
-                                <span class="skeleton block h-1 w-24" />
-                                <span class="skeleton block h-3 w-12" />
-                            </div>
-                        </Card>
-                    </div>
-                </SkeletonSnapshot>
-
-                <EmptyState v-else-if="totals === undefined" icon="wave-pulse" :title="t(`workspace.codebaseHealth.noReportYet`)" class="py-12" />
-
-                <div v-else v-skeleton-source="`health:${repo}`" class="flex flex-col gap-4">
+                <!-- First read: the report as it last looked in this sandbox, else a drawn outline of one. A read that failed
+                     with nothing to show is said in the strip above. -->
+                <Await :of="loaded" :imprint="`health:${repo}`" :label="t(`workspace.codebaseHealth.readingIndex`)">
+                    <template #fallback>
+                        <div role="status" aria-busy="true" :aria-label="t(`workspace.codebaseHealth.readingIndex`)" class="flex flex-col gap-4">
+                            <Card class="grid grid-cols-2 gap-4 @2xl:grid-cols-4" aria-hidden="true">
+                                <div v-for="tile in 4" :key="tile" class="flex flex-col gap-2">
+                                    <span class="skeleton block h-2.5 w-14" />
+                                    <span class="skeleton block h-5 w-16" />
+                                    <span class="skeleton block h-2 w-24" />
+                                </div>
+                            </Card>
+                            <Card class="flex flex-col gap-3" aria-hidden="true">
+                                <span class="skeleton block h-3.5 w-24" />
+                                <div v-for="line in 6" :key="line" class="flex items-center gap-3">
+                                    <span class="skeleton block h-3 w-40" />
+                                    <span class="flex-1" />
+                                    <span class="skeleton block h-1 w-24" />
+                                    <span class="skeleton block h-3 w-12" />
+                                </div>
+                            </Card>
+                        </div>
+                    </template>
+                    <template #failed>
+                        <EmptyState icon="wave-pulse" :title="t(`workspace.codebaseHealth.noReportYet`)" class="py-12" />
+                    </template>
                     <!-- Unrelated counts share no axis, so they sit as a strip of figures rather than a chart. -->
                     <Card class="p-0">
                         <dl class="grid grid-cols-2 @2xl:grid-cols-4">
@@ -132,7 +144,11 @@ const MODULE_COLUMNS = `grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-c
                                 v-for="(stat, index) in stats"
                                 :key="stat.key"
                                 class="flex min-w-0 flex-col gap-1 border-line-subtle px-4 py-3"
-                                :class="[index % 2 === 1 ? `border-l` : ``, index >= 2 ? `border-t @2xl:border-t-0` : ``, index === 2 ? `@2xl:border-l` : ``]"
+                                :class="[
+                                    index % 2 === 1 ? `border-l` : ``,
+                                    index >= 2 ? `border-t @2xl:border-t-0` : ``,
+                                    index === 2 ? `@2xl:border-l` : ``,
+                                ]"
                             >
                                 <dt class="truncate text-2xs text-muted">{{ stat.label }}</dt>
                                 <dd class="truncate text-xl leading-none font-semibold text-content">{{ formatCount(stat.value) }}</dd>
@@ -145,8 +161,8 @@ const MODULE_COLUMNS = `grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-c
                         <header class="flex flex-col gap-1">
                             <div class="flex items-baseline justify-between gap-3">
                                 <h3 class="text-sm font-semibold text-content">{{ t(`workspace.codebaseHealth.hotspots`) }}</h3>
-                                <span v-if="totals.hotspots > rows.length" class="shrink-0 text-2xs text-subtle tabular-nums">{{
-                                    t(`workspace.codebaseHealth.shownOf`, { count: rows.length, hotspots: formatCount(totals.hotspots) })
+                                <span v-if="hotspotCount > rows.length" class="shrink-0 text-2xs text-subtle tabular-nums">{{
+                                    t(`workspace.codebaseHealth.shownOf`, { count: rows.length, hotspots: formatCount(hotspotCount) })
                                 }}</span>
                             </div>
                             <p class="text-xs leading-relaxed text-muted">{{ t(`workspace.codebaseHealth.hotspotsLead`) }}</p>
@@ -157,9 +173,11 @@ const MODULE_COLUMNS = `grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-c
                             <div class="col-span-6 grid grid-cols-subgrid items-end border-b border-line-subtle pb-1.5 text-2xs text-subtle">
                                 <span class="text-right">#</span>
                                 <span>{{ t(`workspace.codebaseHealth.file`) }}</span>
-                                <span v-tooltip.top="{ title: t(`workspace.codebaseHealth.risk`), note: t(`workspace.codebaseHealth.riskNote`) }" class="cursor-help">{{
-                                    t(`workspace.codebaseHealth.risk`)
-                                }}</span>
+                                <span
+                                    v-tooltip.top="{ title: t(`workspace.codebaseHealth.risk`), note: t(`workspace.codebaseHealth.riskNote`) }"
+                                    class="cursor-help"
+                                    >{{ t(`workspace.codebaseHealth.risk`) }}</span
+                                >
                                 <span class="text-right">{{ t(`workspace.codebaseHealth.commits2`) }}</span>
                                 <!-- Wraps onto two lines in a narrow pane, so the heading never claims more width than its figures. -->
                                 <span class="w-min justify-self-end text-right @sm:w-auto">{{ t(`workspace.codebaseHealth.branchPoints`) }}</span>
@@ -194,7 +212,13 @@ const MODULE_COLUMNS = `grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-c
                                             >
                                         </span>
                                         <!-- One hue for every bar; length already encodes magnitude, so colour must not. -->
-                                        <Meter :value="row.share" :tone="row.ask.dormant ? `muted` : `accent`" grow :grow-step="index" class="w-8 @sm:w-14 @lg:w-20 @2xl:w-28" />
+                                        <Meter
+                                            :value="row.share"
+                                            :tone="row.ask.dormant ? `muted` : `accent`"
+                                            grow
+                                            :grow-step="index"
+                                            class="w-8 @sm:w-14 @lg:w-20 @2xl:w-28"
+                                        />
                                         <span class="text-right text-xs text-muted tabular-nums">{{ formatCount(row.commits) }}</span>
                                         <span class="text-right text-xs text-muted tabular-nums">{{ formatCount(row.complexity) }}</span>
                                     </button>
@@ -221,7 +245,9 @@ const MODULE_COLUMNS = `grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-c
                             <p class="text-xs leading-relaxed text-muted">{{ t(`workspace.codebaseHealth.rankedByPagerankOver`) }}</p>
                         </header>
 
-                        <p v-if="modules.length === 0" class="py-2 text-xs text-subtle">{{ t(`workspace.codebaseHealth.nothingInRepositoryExports`) }}</p>
+                        <p v-if="modules.length === 0" class="py-2 text-xs text-subtle">
+                            {{ t(`workspace.codebaseHealth.nothingInRepositoryExports`) }}
+                        </p>
                         <!-- No bar here; rank is the claim, not the export count. -->
                         <ul v-else :class="MODULE_COLUMNS">
                             <li
@@ -236,7 +262,9 @@ const MODULE_COLUMNS = `grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-c
                                 >
                                     <span class="text-right text-2xs text-subtle tabular-nums">{{ index + 1 }}</span>
                                     <span class="flex min-w-0 flex-col @2xl:flex-row @2xl:items-baseline @2xl:gap-2">
-                                        <span class="max-w-full truncate text-xs text-content @2xl:shrink-0" v-tooltip.top.overflow="module.name">{{ module.name }}</span>
+                                        <span class="max-w-full truncate text-xs text-content @2xl:shrink-0" v-tooltip.top.overflow="module.name">{{
+                                            module.name
+                                        }}</span>
                                         <span
                                             v-if="module.dir"
                                             class="min-w-0 truncate text-left text-2xs text-subtle [direction:rtl]"
@@ -260,7 +288,7 @@ const MODULE_COLUMNS = `grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-c
                             </li>
                         </ul>
                     </Card>
-                </div>
+                </Await>
             </div>
         </div>
     </div>

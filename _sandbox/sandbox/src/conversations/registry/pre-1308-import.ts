@@ -200,7 +200,7 @@ const endingOf = (old: OldAgent): Ending => {
             return { kind: "stopped" };
         case "error":
             return old.failureCode === "rate_limit"
-                ? { kind: "limited", ...opt("failure", old.failure), ...opt("resetsAt", old.limitResetsAt), held: false, scheduled: false }
+                ? { kind: "limited", ...opt("failure", old.failure), ...opt("resetsAt", old.limitResetsAt), held: false }
                 : { kind: "failed", ...opt("failure", old.failure), ...opt("code", old.failureCode) };
     }
 };

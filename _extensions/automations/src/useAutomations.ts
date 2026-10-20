@@ -138,7 +138,7 @@ export function useAutomations() {
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.readKey(`automations.list`);
 
-    const { query, error } = api.sandbox.query({
+    const { query, loaded } = api.sandbox.query({
         queryKey,
         queryFn: () => api.sandbox.rpc.automations.list(),
         select: (answer): AutomationSummary[] => answer.automations,
@@ -173,8 +173,7 @@ export function useAutomations() {
     });
     return {
         automations: computed<AutomationSummary[]>(() => query.data.value ?? []),
-        error,
-        isLoading: query.isLoading,
+        loaded,
         save,
         setEnabled,
         remove,

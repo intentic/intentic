@@ -209,6 +209,7 @@ const ROSETTE = { height: `11px`, width: `11px` };
                     :style="[step, STONE]"
                     aria-hidden="true"
                 ></span>
+                <!-- allow(recipes): the caption under the stage wears the label's type; it heads nothing, so it is no section header -->
                 <p :class="ui.sectionLabel({ size: `xs` }, `mt-2 truncate px-3 text-center`)">{{ caption }}</p>
             </template>
         </div>

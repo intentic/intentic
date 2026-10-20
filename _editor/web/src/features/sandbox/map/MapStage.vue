@@ -155,7 +155,7 @@ const stroke = (state: `rest` | `on` | `off`): string => (state === `on` ? `var(
                     </div>
                 </div>
                 <p v-if="!map.rosterRead" class="flex items-start gap-1.5 px-1 text-xs text-subtle">
-                    <Icon name="lock" class="mt-0.5 shrink-0" />
+                    <Icon name="lock" class="shrink-0" />
                     <span>{{ t(`sandbox.sandboxMap.rosterHidden`) }}</span>
                 </p>
             </section>

@@ -35,13 +35,9 @@ export const sameAccount = <T extends OauthAccount>(stored: readonly T[], arrivi
     return matches.find((account) => account.needsReauth === true) ?? matches[0];
 };
 
-/** Everything the daemon keeps about an account beside its credential: its usage snapshot, refusals naming it, its observed ledger. */
-export const forgetAccountState = async (
-    deps: Pick<Services, "headroom" | "providerRefusals" | "observedLimits">,
-    provider: NativeProvider,
-    id: string,
-): Promise<void> => {
-    await Promise.all([deps.headroom.clear(provider, id), deps.providerRefusals.clear(provider, id), deps.observedLimits.clear(provider, id)]);
+/** Everything the daemon keeps about an account beside its credential: its usage snapshot and the refusals naming it. */
+export const forgetAccountState = async (deps: Pick<Services, "headroom" | "providerRefusals">, provider: NativeProvider, id: string): Promise<void> => {
+    await Promise.all([deps.headroom.clear(provider, id), deps.providerRefusals.drop(provider, (refusal) => refusal.account === id)]);
 };
 
 // Of one identity's rows, the one that goes on: a working credential over a revoked one, then the newest sign-in.

@@ -1,4 +1,4 @@
-import { afterEscape, isDigit } from "@intentic/privacy-detect/text";
+import { afterEscape } from "@intentic/privacy-detect/text";
 
 // Finds every value the vault already holds, wherever it stands as a whole word, in each spelling its kind allows
 // (`Spelling`). Indexed by the first few characters of each value as compared rather than as one automaton: the vault
@@ -9,8 +9,8 @@ import { afterEscape, isDigit } from "@intentic/privacy-detect/text";
 // `Mark` from `mark`). `case`: in any case (an e-mail address, whose dots and dashes are its own). `folded`: in any
 // case, with its spaces, line breaks, hyphens and underscores anywhere or nowhere (a full name, a document or account
 // number): `Jan Kowalski`, `JAN  KOWALSKI`, `jan_kowalski`, `JanKowalski`, `ACME-0042-XK`, `acme0042xk`.
-// Never with a separator between nearly every digit, though: a number written a digit at a time is a list of numbers
-// (a shell loop's `for i in 1 2 3 …`), not a phone or an account written out (`digitByDigit`).
+// Whether a spelling found is the value where it stands (not a decimal's places, not a list of digits) is the
+// caller's to say (`find`'s `accept`): the matcher knows strings, not kinds.
 export type Spelling = "exact" | "case" | "folded";
 
 export interface KnownValue<C> {
@@ -27,7 +27,8 @@ export interface KnownMatch<C> {
 }
 
 export interface KnownMatcher<C> {
-    readonly find: (text: string) => KnownMatch<C>[];
+    // `accept` turns a match down where it stands, and the next shorter value at that place is tried instead.
+    readonly find: (text: string, accept?: (start: number, end: number, payload: C) => boolean) => KnownMatch<C>[];
     readonly size: number;
 }
 
@@ -91,22 +92,11 @@ const endAt = <C>(text: string, at: number, candidate: Candidate<C>): number | u
 // Whole-word on each side the value itself is a word on: `Ala` is not found inside `Alabama`, and a PESEL not inside a
 // longer number, while a value that ends in punctuation needs nothing after it. The letter of a JSON escape before it
 // (`\n` in raw JSON text) is the escape's, not a word's.
-// Nor where a digit at its edge continues a decimal: a float's places once found as a card number (`0.55899…99`) are a
-// float's wherever they come back. A decimal point only, as the card detector reads it (@intentic/privacy-detect text.ts partOfDecimal).
 const boundedAt = <C>(text: string, start: number, end: number, candidate: Candidate<C>): boolean => {
     const before = candidate.lead === "" && isWordChar(text[start - 1]) && !afterEscape(text, start);
     const after = isWordChar(candidate.units.at(-1)) && isWordChar(text[end]);
-    const fractionBefore = candidate.lead === "" && isDigit(candidate.units[0]) && text[start - 1] === "." && isDigit(text[start - 2]);
-    const fractionAfter = isDigit(candidate.units.at(-1)) && text[end] === "." && isDigit(text[end + 1]);
-    return !before && !after && !fractionBefore && !fractionAfter;
+    return !before && !after;
 };
-
-// A number a folded spelling matched with two lone digits or more, each standing between separators: no number is
-// grouped like that, while one lone digit is a country code (`+1 …`) or a trunk zero (`0 22 …`). Numbers only: an
-// address's house and flat numbers stand alone as a matter of course (`Długa 5 m 3`).
-const NUMBER_SPELLED = /^[\p{N}\s_-]+$/u;
-const LONE_DIGITS = /(?:^|[\s_-])\p{N}(?=[\s_-]|$)/gu;
-const digitByDigit = (matched: string): boolean => NUMBER_SPELLED.test(matched) && (matched.match(LONE_DIGITS) ?? []).length >= 2;
 
 // The places a value can start in a text: each word's first character, and the character after an escape's letter.
 const wordStarts = (text: string): number[] =>
@@ -144,7 +134,7 @@ export const createKnownMatcher = <C>(values: readonly KnownValue<C>[]): KnownMa
     const length = (candidate: Candidate<C>): number => candidate.lead.length + candidate.units.length;
     return {
         size: values.length,
-        find: (text) => {
+        find: (text, accept = () => true) => {
             if (byPrefix.size === 0) {
                 return [];
             }
@@ -161,11 +151,7 @@ export const createKnownMatcher = <C>(values: readonly KnownValue<C>[]): KnownMa
                         continue;
                     }
                     const end = endAt(text, at, candidate);
-                    if (
-                        end === undefined ||
-                        !boundedAt(text, start, end, candidate) ||
-                        (candidate.spelling === "folded" && digitByDigit(text.slice(at, end)))
-                    ) {
+                    if (end === undefined || !boundedAt(text, start, end, candidate) || !accept(start, end, candidate.payload)) {
                         continue;
                     }
                     found.push({ start, end, payload: candidate.payload });

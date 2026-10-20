@@ -146,6 +146,15 @@ const SPENT_QUOTA =
 export const mentionsSpentAllowance = (text: string): boolean =>
     isUsageLimitText(text) || SPENT_ALLOWANCE_PHRASES.some((phrase) => text.toLowerCase().includes(phrase)) || SPENT_QUOTA.test(text);
 
+// Wider than mentionsSpentAllowance, since by the time a vendor's own retries surface a sentence they are already spent.
+// The translator's own word for a model every credential of which it benched on a 429 counts too ("All credentials for
+// model … are cooling down"): the Claude loop read it as the rate limit it is, every other loop as a dead turn.
+const RATE_LIMITED = /rate.?limit|resource.?(?:has been )?exhausted|too many requests|\b429\b|\bcredentials for model .+ are cooling down\b/i;
+
+// A refusal driven by quota or allowance, not a real failure: the chat offers a retry-later notice instead of a Continue
+// that would just re-fail.
+export const isRateLimited = (message: string): boolean => mentionsSpentAllowance(message) || RATE_LIMITED.test(message);
+
 /* An allowance an organisation's admin grants, which no usage endpoint reads, so a refusal in these words stands against
    every reading: Cursor's "ask your admin to increase your limit", a team's spend limit.
    NOT Codex's "To get more access now, send a request to your admin or try again at 5:46 PM", which is only how a

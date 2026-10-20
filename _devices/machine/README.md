@@ -108,8 +108,9 @@ flowchart LR
   sandbox's, in this environment or another of this PC's (see [What folder sync owns](#what-folder-sync-owns)), and a
   set-up-again that would change where a paired sandbox's folder syncs. It is **copy-first** unless
   its owner opted into two-way: see [Copy-first projects](#copy-first-projects).
-  Attaching the same folder again keeps its session and the watcher's pause and outage records, so an automatic pause
-  still resumes when its reason ends. The host's enrollment and transport settings are refreshed.
+  Attaching the same folder again keeps its session and every fact that holds its sync (see
+  [File sync runs or holds still by one rule](#file-sync-runs-or-holds-still-by-one-rule)). The host's enrollment and
+  transport settings are refreshed.
 - **Through Docker** ([`sync/endpoint.ts`](src/sync/endpoint.ts)): with `setup --transport auto`, the default, a
   project's sandbox is reached through this machine's own Docker engine when the container `ic` named after the
   pairing URL's slug is running there with that URL as its `SANDBOX_PUBLIC_URL`. Anything else stays on ssh: a hosted
@@ -124,10 +125,10 @@ flowchart LR
   - (2026-10-05) The transport is no longer decided once: the container is asked after on every prepare and every
     minute (`checkContainers` in [`sync/gone-watch.ts`](src/sync/gone-watch.ts)). A stopped container, or an engine that
     does not answer, changes nothing. A container the engine no longer holds is looked up in ic: still listed (a swap
-    moving it) changes nothing; in ic's trash pauses the folder's sync with that reason. When the sandbox still answers
-    at its address, whether ic holds it nowhere or cannot say, it lives elsewhere now and the pairing moves onto ssh
-    (paused instead without an enrollment to ride); in neither and silent, the sandbox is gone (below); otherwise its
-    sync is paused until the container is back.
+    moving it) changes nothing; in ic's trash holds the folder's sync still (`containerAway: "trashed"`). When the
+    sandbox still answers at its address, whether ic holds it nowhere or cannot say, it lives elsewhere now and the
+    pairing moves onto ssh (held instead without an enrollment to ride); in neither and silent, the sandbox is gone
+    (below); otherwise its sync holds still until the container is back (`containerAway: "missing"`).
 
   (2026-10-01) Measured on Docker Desktop from Windows and from WSL: a session was up in 2–4 s, against up to 90 s
   through the tunnel. Bind-mounting the folder into the container was rejected: a land or an agent's `rm -rf` would
@@ -170,9 +171,9 @@ flowchart LR
   host key the enrollment carries when it carries one (a sandbox reads its sshd's public key off its history volume and
   answers with it, `SyncEnrollmentAnswerSchema` in the contract), else with nothing, so `accept-new` records the key
   the sandbox presents now, as it does for an older sandbox. Outside an enrollment a changed key is still refused. A sandbox whose ports poll has failed for ten
-  minutes has its forwards taken off localhost, and they come back with its first answer; after an hour its sessions
-  are paused, an hour counted from `unreachableSince` in `sync.json` (2026-10-05: it was counted in memory, so an agent
-  restarted more often than hourly never paused a dead sandbox's sessions). A sandbox that no longer exists is another
+  minutes has its forwards taken off localhost, and they come back with its first answer; after an hour its sync holds
+  still, an hour counted from `unreachableSince` in `sync.json` (2026-10-05: it was counted in memory, so an agent
+  restarted more often than hourly never held a dead sandbox's sessions). A sandbox that no longer exists is another
   matter: see [Sandboxes that are gone](#sandboxes-that-are-gone). `sync uninstall` ends every session and forward of
   this agent's and stops its Mutagen daemon, which serves this agent alone (below), starting it first if it was down so
   every session is really ended; the synced folders keep their files. It runs the agent's own Mutagen in `bin/` and
@@ -432,7 +433,8 @@ the container, the forwards, the swap pause, the report's `sandboxId`. `sync.jso
 
 - The sandbox's own pairing polls its ports; with no host, the first folder attached to it does. The poll is also how the
   sandbox's liveness and a revoked enrollment are noticed. Every other folder follows that answer
-  (`followSandbox`): paused after an hour of no answer, resumed on the first. A folder never mirrors a port, whatever
+  (`followSandbox`): it shares the sandbox's `unreachableSince`, so it holds still after an hour of no answer and carries
+  on with the first. A folder never mirrors a port, whatever
   `mirrorOff` says. It carries the sandbox's switch only so the report says the same of it.
 - A revoked enrollment drops every pairing of the sandbox, since they share its token.
 - The report goes to each sandbox once (`reportCarriers`), and `scopedReport` carries all of its pairings, host and
@@ -507,11 +509,11 @@ Two witnesses can say a sandbox is gone ([`sync/gone.ts`](src/sync/gone.ts)); ab
 What follows is the same for both ([`sync/gone-watch.ts`](src/sync/gone-watch.ts)):
 
 - **Marked.** Every pairing of the sandbox gets `goneSince` (first heard), `goneCheckedAt` and `goneBy` (`edge` or
-  `local`) in `sync.json`. Its sessions are paused with the watcher's own marker, `fileSyncPausedFor: "gone"`; a pause
-  somebody else made is left alone. Its ports come off localhost, its tunnel listener closes, no report is posted to
-  it, nothing is created for it, and its folders do nothing more. One line says so, with the day it will be retired.
-- **Asked again** at most hourly (one ports poll), whatever the outcome. An answer clears all three fields, lifts the
-  pause, and the next pass puts the ports back. A sandbox ic listed again (restored from its trash) is cleared at once
+  `local`) in `sync.json`, which is what holds its file sync still. Its ports come off localhost, its tunnel listener
+  closes, no report is posted to it, nothing is created for it, and its folders do nothing more. One line says so, with
+  the day it will be retired.
+- **Asked again** at most hourly (one ports poll), whatever the outcome. An answer clears all three fields, which lets
+  its sync go, and the next pass puts the ports back. A sandbox ic listed again (restored from its trash) is cleared at once
   when ic was the witness; the edge's word is withdrawn only by the sandbox answering.
 - **Retired** once seven days (the trash window) have passed since it was first said to be gone, on a verdict asked
   within the last hour, so an agent that was off for a week asks once first. Retiring ([`sync/retire.ts`](src/sync/retire.ts))
@@ -562,11 +564,11 @@ whose it is.
   environment the watcher (and `sync uninstall`) moves off the old directory
   ([`sync/mutagen-move.ts`](src/sync/mutagen-move.ts)): each of this agent's sync sessions there is carried, not made
   again. It is paused, its state files (`sessions/<id>` and `archives/<id>`, the last state both sides agreed on) are
-  copied into the new directory, it is terminated in the old one, and this agent's daemon, started again, loads it and
-  resumes what was running. Made again from nothing, a two-way session would bring back what one side deleted while it
+  copied into the new directory, it is terminated in the old one, and this agent's daemon, started again, loads it. A
+  session that was paused there is the owner's pause (`ownerPausedAt`), and the watcher's next pass resumes the rest. Made again from nothing, a two-way session would bring back what one side deleted while it
   could not sync and read a one-sided edit as a conflict; nothing could be flushed first, since the move runs before the
   transport is up. Forwards are terminated and made again. A session that cannot be carried is terminated and made again
-  by the watcher, paused if it was (`mutagen-moved.json` holds the names until then). The old daemon is stopped only
+  by the watcher, paused if it was, since its pause was declared the same way. The old daemon is stopped only
   when nothing else is left in it or the move started it; one of another Mutagen version is stopped and started with
   this agent's copy for the move, then started again with the owner's own Mutagen where one is on PATH. Mutagen's own
   sign-in registration is removed only where it starts this agent's copy.
@@ -595,11 +597,10 @@ whose it is.
   up to a week. A clone the bridge started, or one already shallow, takes the sandbox's shallow boundary
   (`--update-shallow`), so a shallow sandbox repo no longer leaves a whole refused pack behind on every pass. Leftovers
   older than an hour from an earlier agent are cleared once per process. Holds are in `status` and the report.
-- **A nearly full drive pauses folder sync** (2026-10-18, [`sync/low-disk.ts`](src/sync/low-disk.ts)). Every pass
-  measures the drive holding each folder whose session writes there (not a copy-first project, which only sends).
-  Under 2% of the drive, clamped to 5–20 GiB, the pairing's sessions and git bridge pause (`fileSyncLowDisk`); they
-  resume once the floor and 2 GiB more are free. While paused, no other pause's lifting resumes them, and the pause is
-  put back once a minute in case one did. `status` and the device card say why, with the numbers.
+- **A nearly full drive holds folder sync still** (2026-10-18, [`sync/low-disk.ts`](src/sync/low-disk.ts)). Every
+  pass measures the drive holding each folder whose session writes there (not a copy-first project, which only sends).
+  Under 2% of the drive, clamped to 5–20 GiB, the pairing's sync and git bridge hold still (`lowDisk`); they carry on
+  once the floor and 2 GiB more are free. `status` and the device card say why, with the numbers.
 - **Keys and enrollments per environment.** A newly made key is commented `<hostname>-<environment>`, so the sandbox
   files a new enrollment under that name. An existing key keeps its comment (a sandbox older than this agent would read
   a changed comment on the same key as a second machine holding sync); the sandbox tells existing ones apart by machine
@@ -642,17 +643,26 @@ whose it is.
   each side's sandboxes to that side, a sandbox made from WSL had nobody backing it up, preparing its update or tidying
   after it, so each environment now runs them for its own. Both back off from a slug that keeps failing, as auto-prepare does, and each has its switch
   beside the update ones (`intentic-machine updates --backups off`, `--tidy off`).
-- **File sync holds still while its sandbox is swapped here** ([`sync/swap-pause.ts`](src/sync/swap-pause.ts)). A
+- **File sync holds still while its sandbox is swapped here** ([`sync/holds.ts`](src/sync/holds.ts) `holdsSync`). A
   pairing's local slug is the first label of its sandbox's public hostname (what ic names a sandbox with one) or the
-  id in it (what ic names one from its connect token), so the mapping is exact. Its sessions are paused through the
-  cutover and the first quarter hour of probation, and past that while the sandbox does not answer, then resumed; a
-  pause somebody made is left alone. Only this environment's records count: a distro syncing a sandbox the Windows side
-  swaps is not paused. (2026-10-19) Every resume the agent makes (after a swap, an outage, a gone verdict, a full
-  drive, and `sync resume`) goes one session per call, awaited, and is checked by listing the sessions afterwards
-  ([`sync/mutagen.ts`](src/sync/mutagen.ts) `resumeSessions`). A pause's mark stays until that check passes, and the
-  next pass tries again. Before this, one `mutagen sync resume` over both sessions stopped at the first that could not
-  reach a sandbox still coming up. It also ran blocking, which froze the transport it connects through. Its exit code
-  was taken as the answer, so after a rebuild one session was often left paused with no mark to lift it.
+  id in it (what ic names one from its connect token), so the mapping is exact. Its sync holds still (`swapSince`)
+  through the cutover and the first quarter hour of probation, and past that while the sandbox does not answer. Only
+  this environment's records count: a distro syncing a sandbox the Windows side swaps is not held.
+- **File sync runs or holds still by one rule** (2026-10-20, [`sync/holds.ts`](src/sync/holds.ts)). Seven facts on a
+  pairing hold its sync still: the owner's `sync pause` (`ownerPausedAt`), the sandbox said to be gone (`goneSince`),
+  its container away or in ic's trash (`containerAway`), a swap (`swapSince`), an hour without an answer
+  (`unreachableSince`), and a nearly full drive (`lowDisk`). Each is kept by the one rule that observes it, and none of
+  them touches Mutagen. Every pass, after the rules have run, `holdSessions` reads every session in one listing and
+  makes Mutagen agree: what runs while anything holds it is paused, and what is paused while nothing does is resumed,
+  one session per call and read back (`resumeSessions`), tried again each pass until Mutagen took it. A session is made
+  paused while its pairing is held. `sync resume` lifts the owner's pause alone and says what else still holds it; the
+  report carries the holds as `heldBy`, so a page offers Resume only for the owner's pause. Before this, each reason
+  paused and resumed Mutagen itself behind a marker of its own (`fileSyncAutoPaused`, `fileSyncSwapPaused`,
+  `fileSyncPausedFor`, `fileSyncLowDisk`, translated on read into the facts above), set only when it found the session
+  running, and a person's pause had no record at all. A marker cleared before the resume took (fair-moth, 2026-10-19),
+  one a reattach dropped (swift-cedar, 2026-10-17), or a pause another reason found in place left sync paused with
+  nothing to lift it, or lifted one somebody still meant. The first pass of this build takes every paused session no
+  fact explains as the owner's, once (`sync-owner-pauses-adopted`).
 - (2026-10-15) **Nothing downloaded replaces a binary until the release vouches for it**
   ([`release-verify.ts`](src/release/release-verify.ts)). Before an upgrade runs the new agent (and the Windows launcher
   beside it), before ic is put in place ([`tools/ic-binary.ts`](src/device/tools/ic-binary.ts)), and before setup

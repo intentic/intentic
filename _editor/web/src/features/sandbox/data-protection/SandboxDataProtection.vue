@@ -127,8 +127,8 @@ const pageNotice = computed<NoticeModel | undefined>(() =>
                 :aria-selected="step === tile.key"
                 :aria-controls="panelId"
                 :tabindex="step === tile.key ? 0 : -1"
-                class="ui-row-select flex min-w-0 items-start gap-3 rounded-xl border px-3 py-2.5 text-left"
-                :class="step === tile.key ? `ui-row-select-on border-primary-500/60` : `border-line`"
+                class="ui-row-select flex min-w-0 items-start gap-3 rounded-xl border border-line px-3 py-2.5 text-left"
+                :class="{ 'ui-row-select-on': step === tile.key }"
                 @click="step = tile.key"
                 @keydown="(event: KeyboardEvent) => focusTile(event, index)"
             >

@@ -79,12 +79,6 @@ test("a routed answer contradicts its provider's readings only when all of them 
 });
 
 // A refusal this sandbox recorded itself is settled by the same answer on its own path; it is no reading to be wrong.
-test("pools recorded from refusals are not checked", async () => {
-    const { deps, contradicted } = harness({ acct: reading([spentFor(["composer"], { kind: "observed:composer-2.5", gates: "all" })]) });
-    await checkAnswered(deps, "cursor", "acct", "composer-2.5", ASKED_AT);
-    expect(contradicted).toEqual([]);
-});
-
 test("a check that fails is logged, never thrown into the answered turn", async () => {
     const { deps, written } = harness({});
     const failing = { ...deps, headroom: { ...deps.headroom, read: async () => { throw new Error("disk gone"); } } };

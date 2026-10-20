@@ -15,8 +15,8 @@ import { contextTrimLine, contextTrimNotice } from "../schemas/context-trim.js";
 import { keptWarmLine, keptWarmNotice } from "../schemas/keep-warm.js";
 import { handedOffLine, handedOffNotice } from "../schemas/providers/handoff.js";
 import { isLandConflict } from "../events/land-conflict.js";
-import { anotherModelClears, turnedAwayCode } from "../policy/turned-away.js";
-import { stoppedPartwayRow, undeliveredRow } from "../events/undelivered.js";
+import { turnedAwayCode } from "../policy/turned-away.js";
+import { errorRow, RENEWAL_WITHDRAWN, RENEWING } from "../events/failure-rows.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
 import { needRowText } from "../events/need-wake.js";
@@ -192,117 +192,6 @@ const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRo
         noticeAction: (event.deps?.started.length ?? 0) > 0 ? "depsInstall" : "landHold",
         noticeCode: noticeCode({ code: "landed", params: deps === undefined ? undefined : { deps: deps.missing, queued: deps.deferred || undefined } }),
     };
-};
-
-// A failure's own sentence and code, which every coded error row carries ahead of what it adds.
-const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): { message: string; error?: string } =>
-    event.code === undefined ? { message: event.message } : { message: event.message, error: event.code };
-
-// The press a memory hold offers: the raise rides along only when the hold carried a ceiling to size it by, since a
-// stall names none and raising one would not clear it.
-const memoryPress = (event: Extract<AgentEvent, { kind: "error" }>): "sendAnyway" | "sandboxMemory" =>
-    event.memory === undefined ? "sendAnyway" : "sandboxMemory";
-
-// A memory hold is asked once and never again that spell (resource-budget.ts), so the next send always runs. A turn the
-// sandbox started itself (a fix press, a peer's message, a re-run) was never in a composer: its message stays above, and
-// the press asks the sandbox to run the turn it kept rather than sending a queue that holds nothing.
-const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
-    const unattended = event.unattended === true;
-    const memory = event.code === "sandbox-memory-low";
-    const said = failureOf(event);
-    if (event.held !== undefined && !unattended) {
-        return {
-            role: "notice",
-            text: memory
-                ? `${event.message} Nothing has run yet: the message above is kept here, and sending it anyway starts it.`
-                : `${event.message} Nothing has run yet: the message above is kept here to send again once that is sorted.`,
-            noticeAction: memory ? memoryPress(event) : "sendAgain",
-            sandboxHeld: true,
-            noticeCode: noticeCode({ code: "kept", params: { ...said, memory: memory || undefined } }),
-        };
-    }
-    if (!memory || unattended) {
-        return undeliveredRow(said, unattended);
-    }
-    return {
-        role: "notice",
-        text: `${event.message} Your message is held: send it again to start anyway.`,
-        noticeAction: memoryPress(event),
-        noticeCode: noticeCode({ code: "memoryHeld", params: said }),
-    };
-};
-
-// What an armed credential renewal promises, and what its row says instead once a later failure in the same run took
-// that promise back (TranscriptFold.withdrawRenewal).
-const RENEWING = "The credential is being renewed and this turn continues automatically.";
-const RENEWAL_WITHDRAWN =
-    "The credential was being renewed, but the turn stopped before it could continue: it will not carry on by itself, so press Continue to pick it back up.";
-
-// Row for a turn-ending error: the provider's own message plus one clause on what happens next. The live wait itself is
-// drawn by the chat, not stored here. `ran`: an assistant row stands, so a door refusal stopped the turn partway.
-const errorRow = (event: Extract<AgentEvent, { kind: "error" }>, ran: boolean): TranscriptRow => {
-    const { message, code } = event;
-    const said = failureOf(event);
-    switch (code) {
-        case "provider-outage": {
-            const retry = retryClause(event);
-            return retry === undefined
-                ? {
-                      role: "notice",
-                      text: `${message} Nothing is retrying it, so the turn is waiting here.`,
-                      noticeCode: noticeCode({ code: "outageWaiting", params: said }),
-                  }
-                : { role: "notice", text: `${message} ${retry.text}`, noticeCode: retry.code };
-        }
-        case "claude-token-refused":
-            return event.autoResume === "scheduled"
-                ? {
-                      role: "notice",
-                      text: `${message} ${RENEWING}`,
-                      noticeWait: "credentialRenewal",
-                      noticeCode: noticeCode({ code: "renewing", params: said }),
-                  }
-                : {
-                      role: "notice",
-                      text: `${message} Reconnect the account to pick this conversation back up.`,
-                      noticeCode: noticeCode({ code: "reconnect", params: said }),
-                  };
-        case "rate_limit":
-            return { role: "notice", text: message };
-        default:
-            break;
-    }
-    if (!turnedAwayCode(code)) {
-        const retry = retryClause(event);
-        if (retry !== undefined) {
-            return { role: "notice", text: `${message} ${retry.text}`, noticeCode: retry.code };
-        }
-        // A failure the sandbox names by code is coded too, so a reader that words that failure itself can; the
-        // provider's own uncoded words are only ever themselves.
-        return code === undefined ? { role: "notice", text: message } : { role: "notice", text: message, noticeCode: noticeCode({ code: "failed", params: said }) };
-    }
-    return ran && event.held === undefined ? stoppedPartwayRow(said, anotherModelClears(code)) : heldRow(event);
-};
-
-// What a laddered wall's automatic re-runs are doing, said on the failure's own row so the count stays in the record.
-const retryClause = (event: Extract<AgentEvent, { kind: "error" }>): { text: string; code: NonNullable<TranscriptRow["noticeCode"]> } | undefined => {
-    const { retries } = event;
-    if (retries === undefined) {
-        return undefined;
-    }
-    const said = failureOf(event);
-    if (event.autoResume === "scheduled") {
-        return {
-            text: `Retrying by itself: attempt ${retries.made + 1} of ${retries.max}.`,
-            code: noticeCode({ code: "retrying", params: { ...said, attempt: retries.made + 1, of: retries.max } }),
-        };
-    }
-    return retries.made >= retries.max
-        ? {
-              text: `Retried ${retries.made} of ${retries.max} times by itself; nothing more is sent automatically.`,
-              code: noticeCode({ code: "retried", params: { ...said, made: retries.made, of: retries.max } }),
-          }
-        : undefined;
 };
 
 // The turn's opening user row: text, timestamp, attachments, the message's id, and whatever the daemon later stamps onto

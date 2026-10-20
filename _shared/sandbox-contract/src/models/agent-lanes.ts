@@ -1,17 +1,8 @@
 import type { AgentAttention } from "../schemas/agents.js";
 import type { AutomationApproval } from "../schemas/automations.js";
+import { goesBySelf } from "../schemas/agent-next.js";
 import { parentOf } from "./agent-starter.js";
-import {
-    type AgentStanding,
-    blocked,
-    heardByParent,
-    limitScheduled,
-    onlyOwnerCanAnswer,
-    scheduledSend,
-    turnInFlight,
-    turnWorking,
-    watching,
-} from "./agent-standing.js";
+import { type AgentStanding, blocked, heardByParent, onlyOwnerCanAnswer, turnInFlight, turnWorking, watching } from "./agent-standing.js";
 
 // The lane every surface files a conversation in, and what of a fleet calls the person. Moved here from the editor
 // (_editor/web/src/models/agent-status/agentStatus-lanes.ts, which re-exports it) on 2026-10-16, so the daemon's
@@ -50,7 +41,7 @@ export const NO_ATTENTION: AgentAttention = {
 // "finished" needs no explicit timer since auto-land already flips a cleanly-completed turn to landed/idle within
 // ms, and any follow-up message moves the card back to active. Unread stays a badge, not a lane.
 export const laneOf = (agent: AgentStanding): FleetLane => {
-    // A spent allowance nothing is booked for reaches Attention through `blocked` alone, no branch of its own, and ahead
+    // A spent allowance nothing carries on reaches Attention through `blocked` alone, no branch of its own, and ahead
     // of the `watching` branch below: a watch is the agent's own plan for waiting, a spent allowance an obstacle in
     // the way of it, and a watch firing into a shut window runs nothing (turn-admission.ts holds its words back).
     if (blocked(agent) || agent.status === "awaiting" || agent.status === "conflict") {
@@ -74,15 +65,10 @@ export const laneOf = (agent: AgentStanding): FleetLane => {
     if (watching(agent)) {
         return "active";
     }
-    // A stranded turn booked to go again is Active: at the reset, or on the resume pass's next beat for a move to another
-    // account. Reached only because `blocked` let it through; stated explicitly or the card would fall through to
-    // Finished, which would announce as over work that resumes by itself.
-    if (limitScheduled(agent)) {
-        return "active";
-    }
-    // Messages booked for later are the same: the conversation starts again by itself, at a time or once the agent it
-    // waits for has landed, so filing it Finished would announce as done work that has not started yet.
-    if (scheduledSend(agent)) {
+    // Whatever carries it on by itself (`next`: a held turn re-run or moved, a send once memory frees, messages booked
+    // for a time or another agent's land) is Active: filing it Finished would announce as over work that resumes or has
+    // not started yet. An ending it answers reached here because `blocked` let it through on the same reading.
+    if (goesBySelf(agent)) {
         return "active";
     }
     // `landed`/`idle`/`ready` all finish here: `ready` is work held on the branch because auto-land is off, still

@@ -200,7 +200,7 @@ const cancel = async (): Promise<void> => {
     <div class="flex flex-col gap-4">
         <template v-if="plan === undefined">
             <!-- Connected devices go first, since a connected machine needs no archive or file dialog. -->
-            <RowGroup v-if="hosts.length > 0" flat :label="t(`sandbox.words.devices`)">
+            <RowGroup v-if="hosts.length > 0" :label="t(`sandbox.words.devices`)">
                 <Row
                     v-for="host in hosts"
                     :key="host.id"
@@ -302,7 +302,7 @@ const cancel = async (): Promise<void> => {
             <div class="flex items-center gap-2">
                 <StatusBadge variant="info" :label="plan.name ?? sourceLabel(plan.source)" />
             </div>
-            <RowGroup flat :label="t(`sandbox.arrivalPanel.whatWouldLand`)">
+            <RowGroup :label="t(`sandbox.arrivalPanel.whatWouldLand`)">
                 <Row
                     v-for="item in plan.items"
                     :key="item.id"
@@ -341,7 +341,7 @@ const cancel = async (): Promise<void> => {
                 </Row>
             </div>
 
-            <RowGroup v-if="plan.needsAction.length > 0" flat :label="t(`sandbox.arrivalPanel.wontHappenByItself`)">
+            <RowGroup v-if="plan.needsAction.length > 0" :label="t(`sandbox.arrivalPanel.wontHappenByItself`)">
                 <Row v-for="action in plan.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
             </RowGroup>
 
@@ -381,14 +381,10 @@ const cancel = async (): Promise<void> => {
             </div>
             <!-- Taking the source's name and logo renames what the owner is looking at, so it is said, never silent. -->
             <p v-if="adopted" class="text-2xs text-subtle">{{ adopted }}</p>
-            <!-- Label is a slot so a failure group can wear its own tone without RowGroup knowing about tones. -->
-            <RowGroup v-if="report.failed.length > 0" flat>
-                <template #label
-                    ><span :class="ui.sectionLabel({ tone: `danger` })">{{ t(`sandbox.arrivalPanel.didntLand`) }}</span></template
-                >
+            <RowGroup v-if="report.failed.length > 0" :label="t(`sandbox.arrivalPanel.didntLand`)" tone="danger">
                 <Row v-for="failure in report.failed" :key="failure.id" :title="failure.label" :description="failure.error" />
             </RowGroup>
-            <RowGroup v-if="report.needsAction.length > 0" flat :label="t(`sandbox.arrivalPanel.finishArrival`)">
+            <RowGroup v-if="report.needsAction.length > 0" :label="t(`sandbox.arrivalPanel.finishArrival`)">
                 <Row v-for="action in report.needsAction" :key="action.subject" :title="action.subject" :description="action.detail" />
             </RowGroup>
             <p v-if="report.refused.length > 0" class="text-2xs text-warning">

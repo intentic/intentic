@@ -1026,6 +1026,7 @@ test("a rate_limit assistant error is tagged with a code and a human message, no
             kind: "error",
             code: "rate_limit",
             message: "Claude usage limit reached. Send again once it resets.",
+            own: true,
         },
         { kind: "done" },
     ]);
@@ -1204,7 +1205,7 @@ test("a retry storm past the in-turn bound ends the turn as an outage rather tha
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
-        { kind: "error", code: "provider-outage", message: expect.stringMatching(/8.*500|500.*8/) },
+        { kind: "error", code: "provider-outage", message: expect.stringMatching(/8.*500|500.*8/), own: true },
         { kind: "done" },
     ]);
 });
@@ -1273,7 +1274,7 @@ test("a free-trial retry ends immediately with trial-specific recovery instead o
 
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
-        { kind: "error", code: "trial-unavailable", message: expect.stringMatching(/failed messages|not counted|Free trial unavailable/i) },
+        { kind: "error", code: "trial-unavailable", message: expect.stringMatching(/failed messages|not counted|Free trial unavailable/i), own: true },
         { kind: "done" },
     ]);
 });
@@ -1295,7 +1296,7 @@ test("a free-trial rate limit names the trial allowance and never Claude", async
 
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
-        { kind: "error", code: "trial-exhausted", message: expect.stringMatching(/trial.*used|Free trial used up/i) },
+        { kind: "error", code: "trial-exhausted", message: expect.stringMatching(/trial.*used|Free trial used up/i), own: true },
         { kind: "done" },
     ]);
     expect(events.map((event) => JSON.stringify(event)).join(` `)).not.toContain(`Claude`);
@@ -1346,6 +1347,7 @@ test("a usage-limit retry parks the turn at its reset instead of masquerading as
                 kind: "error",
                 code: "rate_limit",
                 message: expect.stringMatching(/usage limit/i),
+                own: true,
                 resetsAt: Date.parse("2026-07-30T20:15:00.000Z") / 1000,
             },
             { kind: "done" },
@@ -1375,7 +1377,7 @@ test("a routed usage-limit retry names the vendor that refused and takes its res
                     authToken: "local",
                     allowance: {
                         vendor,
-                        limit: async () => ({ pool, spent, withHeadroom: 0, reopensAt }),
+                        capacity: async () => ({ kind: "spent", accounts: spent, pool, reopensAt }),
                     },
                 },
             },
@@ -1392,13 +1394,10 @@ test("a routed usage-limit retry names the vendor that refused and takes its res
     }
 });
 
-// A refusal with headroom still on an account is a cooldown, not a spent pool: CLIProxyAPI balances across credentials,
-// so one cooling account isn't exhaustion.
-test("a routed refusal with an account still holding headroom reads as a cooldown, not a spent allowance", async () => {
+// A refusal while an account may still serve the model is not a spent pool: CLIProxyAPI balances across credentials,
+// so one refused account isn't exhaustion, and the frame names no reset to wait for.
+test("a routed refusal with an account still able to serve says so, not a spent allowance", async () => {
     const vendor = "Google";
-    const pool = "Claude and GPT models";
-    const spent = 30;
-    const headroom = 1;
     const events = await collect(
         {
             ...request,
@@ -1406,17 +1405,17 @@ test("a routed refusal with an account still holding headroom reads as a cooldow
                 kind: "routed",
                 baseUrl: "http://127.0.0.1:8788",
                 authToken: "local",
-                allowance: { vendor, limit: async () => ({ pool, spent, withHeadroom: headroom }) },
+                allowance: { vendor, capacity: async () => ({ kind: "serving", serving: 1, accounts: 31 }) },
             },
         },
         fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
     );
-    const failure = events.find((event) => event.kind === "error") as { message: string; code: string } | undefined;
+    const failure = events.find((event) => event.kind === "error") as { message: string; code: string; resetsAt?: number } | undefined;
     expect(failure?.code).toBe("rate_limit");
     expect(failure?.message).toContain(vendor);
-    expect(failure?.message).toContain(pool);
-    expect(failure?.message).toContain(String(headroom));
-    expect(failure?.message).toMatch(/headroom|cooling/i);
+    expect(failure?.message).toContain("1/31");
+    expect(failure?.message).toMatch(/may still serve/i);
+    expect(failure?.resetsAt).toBeUndefined();
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
@@ -1430,14 +1429,14 @@ test("a routed usage-limit retry with no quota reading on file carries no reset 
                 kind: "routed",
                 baseUrl: "http://127.0.0.1:8788",
                 authToken: "local",
-                allowance: { vendor: "Google", limit: async () => ({ pool: "Claude and GPT models", spent: 0, withHeadroom: 0 }) },
+                allowance: { vendor: "Google", capacity: async () => ({ kind: "unknown" }) },
             },
         },
         fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
     );
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
-        { kind: "error", code: "rate_limit", message: expect.stringMatching(/Google.*usage limit/i) },
+        { kind: "error", code: "rate_limit", message: expect.stringMatching(/Google.*usage limit/i), own: true },
         { kind: "done" },
     ]);
 });
@@ -1457,7 +1456,7 @@ test("a routed refusal takes the translator's own reset_seconds over the recorde
                     authToken: "local",
                     allowance: {
                         vendor: "Google",
-                        limit: async () => ({ pool: "Claude and GPT models", spent: 31, withHeadroom: 0, reopensAt: 9_999_999 }),
+                        capacity: async () => ({ kind: "spent", accounts: 31, pool: "Claude and GPT models", reopensAt: 9_999_999 }),
                     },
                 },
             },
@@ -1482,6 +1481,7 @@ test("a routed refusal takes the translator's own reset_seconds over the recorde
                 kind: "error",
                 code: "rate_limit",
                 message: expect.stringContaining("Google usage limit reached"),
+                own: true,
                 resetsAt: Math.ceil(Date.parse("2026-07-31T15:32:33.000Z") / 1000) + 40,
             },
             { kind: "done" },
@@ -2501,7 +2501,7 @@ test("a thrown error from the SDK is reported as an error event, then done", asy
 test("a thrown error from a free-trial SDK turn uses the refundable trial failure", async () => {
     expect(await collect({ ...request, credential: { kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" } }, throwing)).toEqual([
         { kind: "session", sessionId: "s" },
-        { kind: "error", code: "trial-unavailable", message: expect.stringMatching(/failed messages|not counted|Free trial unavailable/i) },
+        { kind: "error", code: "trial-unavailable", message: expect.stringMatching(/failed messages|not counted|Free trial unavailable/i), own: true },
         { kind: "done" },
     ]);
 });

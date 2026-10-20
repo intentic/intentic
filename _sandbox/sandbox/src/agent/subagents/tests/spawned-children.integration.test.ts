@@ -29,7 +29,8 @@ import { createDomainEvents } from "../../../seams/domain-events.js";
 import { answerChild, cancelChild, resetChildrenForTest, sendToChild, spawnChild } from "../children.js";
 import { SEATS } from "../child-records.js";
 import { FAN_OUT } from "../fan-out-governor.js";
-import { restoreSpawnedChildren, settleRestoredChildren } from "../child-restore.js";
+import { cutChildrenInFlight, spawnedChildrenInFlight } from "../child-restore.js";
+import { readKinds, RESUMES } from "../../../seams/restart/in-flight.testing.js";
 import { waitForSubagent } from "../subagents.js";
 import { noteQueuedReport, queuedChildReportId } from "../waiting/queued-reports.js";
 import { waitForWork } from "../waiting/work-wait.js";
@@ -146,7 +147,12 @@ const heldFixture = async (settings: Partial<SandboxSettings> = {}) => {
         const fleet = memoryFleet(store);
         await fleet.agents.init();
         const services = servicesFor(fleet, body);
-        const cut = await restoreSpawnedChildren(services);
+        // Both kinds read before either recovers, as the boot reads them before the gate opens.
+        const [restoring, cut] = await readKinds(services, [spawnedChildrenInFlight, cutChildrenInFlight]);
+        if (restoring === undefined || cut === undefined) {
+            throw new Error("the children kinds could not be read");
+        }
+        await restoring.recover(RESUMES);
         return { fleet, services, cut };
     };
     return { root, before, servicesFor, reboot };
@@ -177,7 +183,7 @@ describe("starts held across a restart", () => {
         const last = await spawned(services, "last");
         expect((await spawnedChildren(kit.root, quiet).list()).map((entry) => entry.state)).toEqual(["held", "held", "held"]);
         const restored = await kit.reboot(recordTurns(turns));
-        expect(restored.cut).toEqual([first, cancelled, last]);
+        expect(restored.cut.count).toBe(3);
         expect(await sendToChild(restored.services, parent, first, "hello")).toEqual({ ok: false, message: "It has not started: it waits for one of your running children to end, since you are at the most that may run at once. Wait for it, then send again." });
         expect(await answerChild(restored.services, parent, first, {})).toEqual({ ok: false, message: "It is not waiting on anything right now." });
         expect(await cancelChild(restored.services, parent, cancelled)).toMatchObject({ ok: true });
@@ -186,7 +192,7 @@ describe("starts held across a restart", () => {
         resetChildrenForTest(restored.fleet.conversations);
         const again = await kit.reboot(recordTurns(turns));
         expect(await endedIn(again.fleet, cancelled)).toMatchObject({ outcome: "finished", matched: { status: "killed" } });
-        await settleRestoredChildren(again.services, again.cut);
+        await again.cut.recover(RESUMES);
         expect(await endedIn(again.fleet, last)).toMatchObject({ outcome: "finished", matched: { status: "completed" } });
         expect(turns).toEqual(["first", "last"]);
         expect(again.fleet.conversations.holdings(SEATS).get(parent.conversationId)).toEqual({ live: 0, total: 2 });
@@ -202,12 +208,12 @@ describe("starts held across a restart", () => {
         const cancelled = await spawned(services, "cancelled");
         const last = await spawned(services, "last");
         const restored = await kit.reboot(recordTurns(turns));
-        expect(restored.cut).toEqual([first, cancelled, last]);
+        expect(restored.cut.count).toBe(3);
         expect(restored.fleet.conversations.holdings(SEATS).get(parent.conversationId)).toEqual({ live: 3, total: 3 });
         expect(await sendToChild(restored.services, parent, last, "hello")).toEqual({ ok: false, message: "It has not started: it waits for a sibling on its provider to be answered first, or for a seat on it to free. Wait for it, then send again." });
         expect(await cancelChild(restored.services, parent, cancelled)).toMatchObject({ ok: true });
         expect(restored.fleet.conversations.holdings(SEATS).get(parent.conversationId)).toEqual({ live: 2, total: 2 });
-        await settleRestoredChildren(restored.services, restored.cut);
+        await restored.cut.recover(RESUMES);
         expect(await endedIn(restored.fleet, last)).toMatchObject({ outcome: "finished", matched: { status: "completed" } });
         expect(turns).toEqual(["first", "last"]);
         expect(restored.fleet.conversations.holdings(SEATS).get(parent.conversationId)).toEqual({ live: 0, total: 2 });
@@ -222,7 +228,7 @@ describe("starts held across a restart", () => {
         const restored = await kit.reboot(recordTurns(turns));
         const live = holdParent(restored.fleet);
         try {
-            await settleRestoredChildren(restored.services, restored.cut);
+            await restored.cut.recover(RESUMES);
             expect(turns).toEqual([]);
             const requestId = live.run.rows.findLast((row) => row.permission?.status === "pending")?.permission?.requestId;
             expect(typeof requestId).toBe("string");
@@ -244,7 +250,7 @@ describe("starts held across a restart", () => {
         const live = holdParent(kit.before);
         const id = await spawned(kit.servicesFor(kit.before, recordTurns(turns)), "needs owner");
         const restored = await kit.reboot(recordTurns(turns));
-        await settleRestoredChildren(restored.services, restored.cut);
+        await restored.cut.recover(RESUMES);
         expect(await endedIn(restored.fleet, id)).toMatchObject({ outcome: "finished", matched: { status: "failed", error: expect.stringContaining("there is no live turn on which to raise its approval card") } });
         expect(turns).toEqual([]);
         expect((await spawnedChildren(kit.root, quiet).list())[0]).toMatchObject({ state: "settled", ending: { status: "failed" } });

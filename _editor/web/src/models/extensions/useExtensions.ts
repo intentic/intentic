@@ -24,7 +24,7 @@ const previewUpdate = (id: string, ref?: string) => sandboxRpc.extensions.update
 export const removalPlan = (id: string) => sandboxRpc.extensions.removalPlan({ id });
 
 export function useExtensions() {
-    const { query, error } = useSandboxQuery(rpcQuery(`extensions.list`));
+    const { query, error, loaded } = useSandboxQuery(rpcQuery(`extensions.list`));
     const extensions = computed<ExtensionSummary[]>(() => query.data.value?.extensions ?? []);
     // Workspace-extension directories that failed to enumerate, and why; the only feedback their author gets.
     const invalid = computed<InvalidWorkspaceExtension[]>(() => query.data.value?.invalid ?? []);
@@ -123,7 +123,7 @@ export function useExtensions() {
         // List has arrived or failed for good; gates decisions that must not fire against the empty pre-fetch state.
         settled: computed(() => query.isFetched.value || query.isError.value),
         error,
-        isLoading: query.isLoading,
+        loaded,
         refetch: query.refetch,
     };
 }

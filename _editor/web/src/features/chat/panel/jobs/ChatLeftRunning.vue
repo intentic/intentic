@@ -139,7 +139,7 @@ const preview = (job: AgentJob): void => {
 <template>
     <div v-if="visible" class="chat-left-running flex flex-col gap-1.5 rounded-xl bg-card shadow-sm px-3 py-2 text-2xs text-muted" role="status">
         <div class="flex items-start gap-2">
-            <Icon :name="wakes ? `clock` : `server`" class="mt-0.5 shrink-0" />
+            <Icon :name="wakes ? `clock` : `server`" class="shrink-0" />
             <div class="flex min-w-0 flex-col">
                 <span class="font-medium text-content">{{ t(`chat.chatLeftRunning.title`) }}</span>
                 <span class="text-subtle">{{

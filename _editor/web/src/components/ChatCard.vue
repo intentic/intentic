@@ -40,8 +40,8 @@ const {
         :data-card-live="status === undefined ? `` : undefined"
     >
         <!-- The icon rides in the mark column every option row under it also uses, so the title and the labels start on one edge. -->
-        <div class="chat-card-header" :class="prose ? `items-start` : `items-center`">
-            <Icon :name="icon" class="text-sm" :class="[status === undefined ? iconClass : `text-subtle`, { 'mt-0.5': prose }]" />
+        <div class="chat-card-header text-xs" :class="prose ? `items-start` : `items-center`">
+            <Icon :name="icon" class="text-sm" :class="status === undefined ? iconClass : `text-subtle`" />
             <!-- A prose title wraps in full; a name truncates, with the full text on hover. One size and weight for both:
                  which kind a title is was never something a reader could see, so it may not set how loud it is. -->
             <!-- Semibold, not medium: with no rim or ground left on a card, weight is what keeps the ask above the labels answering it. -->

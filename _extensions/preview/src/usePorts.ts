@@ -1,6 +1,5 @@
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import { useQueryClient } from "@tanstack/vue-query";
-import { computed } from "vue";
 import { host } from "./host";
 
 // Sandbox's listening TCP ports via the daemon's `ports` procedures, the generic complement to panels; `forward`
@@ -12,9 +11,10 @@ export function usePorts() {
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.readKey(`ports.list`);
 
-    const { query, error } = api.sandbox.query({
+    const { loaded } = api.sandbox.query({
         queryKey,
         queryFn: () => api.sandbox.rpc.ports.list(),
+        select: (answer): PortSummary[] => answer.ports,
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
@@ -30,9 +30,7 @@ export function usePorts() {
     };
 
     return {
-        ports: computed<PortSummary[]>(() => query.data.value?.ports ?? []),
-        error,
-        isLoading: query.isLoading,
+        loaded,
         forward,
         unforward,
     };

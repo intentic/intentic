@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { perDaemon } from "./durable/daemon-memory.js";
-import { addListenerMessage, consumeInbox, listenerBacklog } from "./durable/inbox-store.js";
+import { addListenerMessage, consumeInbox, type ListenerEntry } from "./durable/inbox-store.js";
 import { channelAnswerSink } from "../extensions/listener/listener-deliver.js";
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { ListenerMessage, ListenerStop, ListenerStopAnswer } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
@@ -450,8 +450,8 @@ const pushListener = (services: Services, id: string, provider: ListenerMessage[
 // At boot (fire-resume.ts), after the journalled fires: every message still in the inbox goes back into its thread's
 // batcher, in arrival order, and fires like a fresh one. The sender's live stream died with the daemon, so the answer
 // goes where a held wake's does: a Visitor chat's outbox, else the channel's thread.
-export const resumeListenerInbox = async (services: Services): Promise<void> => {
-    for (const entry of await listenerBacklog(services)) {
+export const resumeListenerInbox = async (services: Services, rows: readonly ListenerEntry[]): Promise<void> => {
+    for (const entry of rows) {
         const { origin, thread, lane } = entry.context;
         const sink = services.outboxStreamFor(origin) ?? channelAnswerSink(services, origin);
         pushListener(services, entry.automationId, origin.provider, DEBOUNCE_MS, thread, entry.line, {

@@ -141,7 +141,17 @@
         "historyTooLong": "dem letzten Abruf ging die Zeit aus",
         "historyShallow": "die Kopie in der Sandbox ist ein flacher Klon",
         "historyFailed": "Git hat den letzten Abruf abgelehnt",
-        "historyRetry": "nächster Versuch {when}"
+        "historyRetry": "nächster Versuch {when}",
+        "held": "angehalten",
+        "fileSyncingHeld": "Dateisync angehalten",
+        "heldBy": {
+            "gone": "Angehalten, weil diese Sandbox angeblich nicht mehr existiert. Der Sync läuft von selbst weiter, wenn sie wieder antwortet.",
+            "containerMissing": "Angehalten, solange der Container dieser Sandbox nicht im Docker dieses Computers ist. Der Sync läuft von selbst weiter, sobald er zurück ist.",
+            "containerTrashed": "Angehalten, weil diese Sandbox auf diesem Computer im Papierkorb liegt. Wiederherstellen bringt ihren Sync zurück.",
+            "swap": "Angehalten, während diese Sandbox auf diesem Computer aktualisiert oder neu gebaut wird. Der Sync läuft von selbst weiter, sobald die neue Version hält.",
+            "unreachable": "Angehalten, weil diese Sandbox seit einer Stunde nicht antwortet. Der Sync läuft von selbst weiter, sobald sie antwortet.",
+            "other": "Vom Agenten dieses Computers angehalten. Der Sync läuft von selbst weiter."
+        }
     },
     "imageView": {
         "actualSize": "Originalgröße",
@@ -264,5 +274,9 @@
     },
     "coachMark": {
         "notNow": "Nicht jetzt"
+    },
+    "await": {
+        "couldntLoad": "Konnte nicht geladen werden",
+        "stillWaiting": "Wird noch geladen · {elapsed}"
     }
 }

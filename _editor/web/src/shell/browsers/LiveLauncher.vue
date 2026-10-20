@@ -3,7 +3,7 @@
      search box as its start page, the way a new browser tab offers the places one goes. What is already on the strip
      reads as open, and picking it brings it to front rather than opening it twice. -->
 <script setup lang="ts">
-import type { IconName } from "@intentic/ui";
+import { type IconName, SectionHeader } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 
@@ -61,7 +61,7 @@ const shown = computed(() => (variant === `page` ? groups.filter((group) => grou
 
     <div v-else class="flex w-full flex-col gap-4">
         <section v-for="group in shown" :key="group.label" class="flex flex-col gap-1.5">
-            <h3 class="px-1 text-3xs font-medium uppercase tracking-wide text-subtle">{{ group.label }}</h3>
+            <SectionHeader :label="group.label" :heading="3" density="dense" />
             <div class="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">
                 <button
                     v-for="item in group.items"

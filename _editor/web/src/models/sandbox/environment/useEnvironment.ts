@@ -1,17 +1,18 @@
+import { rebuildPending } from "@intentic/sandbox-contract/state/sandbox-build";
 import { ORIGIN_HOST, sandboxSlugOf } from "@intentic/sandbox-run";
 import { computed } from "vue";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { ENVIRONMENT } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
-// The sandbox's composed environment overlay (.intentic/local/environment.approved.Dockerfile), read via /environment.
+// The sandbox's environment overlay as composed on this read, and the one its container was built from, via /environment.
 // Shared by the Environment card, the shell's rebuild banner and the capabilities page, so they derive from one deduped
 // query.
 
 export const ENVIRONMENT_KEY = ENVIRONMENT.of();
 
 export function useEnvironment() {
-    const { query } = useSandboxQuery({
+    const { query, loaded } = useSandboxQuery({
         queryKey: ENVIRONMENT_KEY,
         queryFn: () => sandboxRaw(`GET /environment`),
     });
@@ -25,15 +26,10 @@ export function useEnvironment() {
         const current = state.value;
         return current?.proposal !== undefined && current.proposal.hash !== current.custom?.hash ? current.proposal : undefined;
     });
-    // Approved but not what the running container was built from, a rebuild is pending.
-    const pending = computed(() => {
-        const current = state.value;
-        return current?.approved !== undefined && current.approved.hash !== current.appliedHash ? current.approved : undefined;
-    });
-    const applied = computed(() => {
-        const current = state.value;
-        return current?.approved !== undefined && current.approved.hash === current.appliedHash ? current.approved : undefined;
-    });
+    // The approved overlay, as the one a rebuild would build or the one the running container was built from.
+    const waiting = computed(() => rebuildPending(state.value?.approved?.hash, state.value?.appliedHash));
+    const pending = computed(() => (waiting.value ? state.value?.approved : undefined));
+    const applied = computed(() => (waiting.value ? undefined : state.value?.approved));
 
     // Installs worth the owner's eye: recurring across sessions, or live in the container and doomed with it.
     const recurring = computed(() => state.value?.recurring ?? []);
@@ -46,5 +42,5 @@ export function useEnvironment() {
     // not the registry, so every "update" surface offers the rebuild instead.
     const localImage = computed(() => state.value?.localImage);
 
-    return { state, query, isFetching, proposal, pending, applied, recurring, serverManaged, slug, localImage };
+    return { state, query, loaded, isFetching, proposal, pending, applied, recurring, serverManaged, slug, localImage };
 }

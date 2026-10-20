@@ -1641,8 +1641,8 @@ const { floats } = useBrowsersFloating();
                             v-else
                             class="pointer-events-auto flex w-full max-w-2xl flex-col gap-2 rounded-lg border border-warning-600/40 bg-card p-3 shadow-lg"
                         >
-                            <div class="flex items-start gap-2">
-                                <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
+                            <div class="flex items-start gap-2 text-xs">
+                                <Icon name="exclamation-triangle" class="shrink-0 text-sm text-warning" />
                                 <!-- Kept on separate lines from the instruction below it: joined, a message ending in a period collides with a clause starting with a colon. -->
                                 <div class="min-w-0 flex-1">
                                     <div class="text-xs text-content">

@@ -292,11 +292,11 @@ const source = computed<{ words: string; mark?: string }>(() => {
                     <div class="flex flex-col gap-2.5">
                         <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
                         <ul v-else-if="readiness" class="flex flex-col gap-1">
-                            <li v-for="check in readiness" :key="check.id" class="flex gap-1.5 text-2xs">
+                            <li v-for="check in readiness" :key="check.id" class="flex items-start gap-1.5 text-2xs">
                                 <Icon
                                     :name="check.status === `pass` ? `check` : check.status === `warn` ? `exclamation-triangle` : `times`"
                                     :class="check.status === `pass` ? `text-success` : check.status === `warn` ? `text-warning` : `text-danger`"
-                                    class="mt-0.5 shrink-0"
+                                    class="shrink-0"
                                 />
                                 <span class="text-content"
                                     >{{ check.label }} <span class="text-subtle">· {{ check.detail }}</span></span

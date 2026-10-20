@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, CopyButton, Icon, Notice, noticeOf, SearchBar } from "@intentic/extension-ui";
+import { Button, CopyButton, Icon, Notice, noticeOf, SearchBar, SectionHeader, ui } from "@intentic/extension-ui";
 import { computed, nextTick, ref } from "vue";
 import AutomationFields from "./AutomationFields.vue";
 import { host } from "./host";
@@ -200,7 +200,7 @@ const finish = (id: string): void => {
                     />
                     <div class="@container flex max-h-panel flex-col gap-2 overflow-y-auto">
                         <template v-for="group in recipeGroups" :key="group.label">
-                            <span :class="ui.sectionLabel({ size: `xs` }, 'px-0.5 pt-1 first:pt-0')">{{ group.label }}</span>
+                            <SectionHeader :label="group.label" density="dense" />
                             <div class="grid gap-1.5 @lg:grid-cols-2 @3xl:grid-cols-3">
                                 <button
                                     v-for="recipe in group.items"
@@ -217,7 +217,7 @@ const finish = (id: string): void => {
                                         class="mt-0.5 h-4 w-4 shrink-0"
                                         alt=""
                                     />
-                                    <Icon v-else :name="glyph(recipe.icon) ?? 'bolt'" class="mt-0.5 shrink-0 text-2xs" />
+                                    <Icon v-else :name="glyph(recipe.icon) ?? 'bolt'" class="shrink-0 text-2xs" />
                                     <!-- Stacked, not a row: at this width a note beside the title crowded it into truncating. -->
                                     <span class="min-w-0 flex-1">
                                         <span class="block truncate font-medium">{{ recipe.title }}</span>

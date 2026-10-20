@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
 import type { Services } from "../composition.js";
 import type { Config } from "../env.config.js";
-import { composeEnvironment } from "../environment/environment.js";
+import { type ComposedOverlay, composeEnvironment } from "../environment/overlay.js";
 import type { ExtensionHost } from "./extension-inventory/installed-extensions.js";
 import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { capabilitiesDocument, type CapabilitiesStore, fileCapabilitiesStore, vaultManifestSecrets, withSecretVault } from "./capabilities-store.js";
@@ -27,7 +27,7 @@ export interface CapabilitiesSlice {
     readonly openBrowserAccount: (input: OpenAccountInput) => Promise<string>;
     // Where an account signs in (account-sign-in.ts): what type_credential holds a live page's host to.
     readonly accountSignInUrls: (capability: Capability) => Promise<readonly string[]>;
-    readonly composeEnvironment: () => Promise<string | undefined>;
+    readonly composeEnvironment: () => Promise<ComposedOverlay | undefined>;
 }
 
 export interface CapabilitiesDeps {

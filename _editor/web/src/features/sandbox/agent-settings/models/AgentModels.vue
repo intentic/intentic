@@ -3,7 +3,7 @@ import { AUTO_MODEL_GUIDANCE_MAX } from "@intentic/sandbox-contract/schemas/sett
 import { MODEL_ROLE_IDS, type ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import type { SetupSettings } from "@intentic/sandbox-contract/models/model-setups";
-import { Button, MarkdownDocument, Modal, Notice, ResponsiveOverlay, ui } from "@intentic/ui";
+import { Button, MarkdownDocument, Modal, Notice, ResponsiveOverlay, RowGroup, Section } from "@intentic/ui";
 import { computed, nextTick, provide, ref, shallowRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useTrimmedDraft } from "../../../../lib/useDraft";
@@ -212,14 +212,11 @@ const draggedName = computed(() => (drag.dragged.value === undefined ? `` : role
     <div id="models" class="flex flex-col gap-4">
         <!-- The jobs on no setup: where a fresh sandbox's jobs all start, since nothing runs a job nobody placed. Shown while
              it holds any, and while a job is in flight as the place to take one off its setup. -->
-        <!-- Not a <RowGroup>: what sits under these headings are cards and a drop zone, not rows on one surface. -->
-        <section v-if="view.unassigned.length > 0 || drag.dragging.value" class="flex flex-col gap-2.5">
-            <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1">
-                <h2 :class="ui.sectionLabel()">{{ t(`sandbox.agentModels.notAssigned`) }}</h2>
-                <span class="min-w-0 text-2xs text-subtle">{{ t(`sandbox.agentModels.notAssignedCaption`) }}</span>
+        <!-- Not a <RowGroup>: what sits under these headings are cards and a drop zone, not rows on one surface. What a
+             section is for is its first line, under the header, never words beside it. -->
+        <Section v-if="view.unassigned.length > 0 || drag.dragging.value" :label="t(`sandbox.agentModels.notAssigned`)" :heading="2">
+            <template v-if="view.unassigned.length > 0" #actions>
                 <Button
-                    v-if="view.unassigned.length > 0"
-                    class="ml-auto"
                     size="small"
                     tier="boring"
                     icon="sparkles"
@@ -227,7 +224,8 @@ const draggedName = computed(() => (drag.dragged.value === undefined ? `` : role
                     :disabled="!loaded"
                     @click="placeSuggested"
                 />
-            </div>
+            </template>
+            <p class="mb-2.5 text-2xs text-subtle">{{ t(`sandbox.agentModels.notAssignedCaption`) }}</p>
             <div
                 data-setup-drop="unassigned"
                 class="flex min-h-12 flex-wrap items-center gap-1.5 rounded-xl border border-dashed p-3 transition-colors"
@@ -246,22 +244,13 @@ const draggedName = computed(() => (drag.dragged.value === undefined ? `` : role
                 </ul>
                 <span v-else class="px-1 text-2xs text-subtle">{{ t(`sandbox.agentModels.dropToUnassign`) }}</span>
             </div>
-        </section>
+        </Section>
 
-        <section data-setting="agent-model-setups" class="flex flex-col gap-2.5">
-            <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-1">
-                <h2 :class="ui.sectionLabel()">{{ t(`sandbox.agentModels.setups`) }}</h2>
-                <span class="min-w-0 text-2xs text-subtle">{{ t(`sandbox.agentModels.setupsCaption`) }}</span>
-                <Button
-                    class="ml-auto"
-                    size="small"
-                    tier="quiet"
-                    icon="plus"
-                    :label="t(`sandbox.agentModels.newSetup`)"
-                    :disabled="!loaded"
-                    @click="makeSetup"
-                />
-            </div>
+        <Section data-setting="agent-model-setups" :label="t(`sandbox.agentModels.setups`)" :heading="2">
+            <template #actions>
+                <Button size="small" tier="quiet" icon="plus" :label="t(`sandbox.agentModels.newSetup`)" :disabled="!loaded" @click="makeSetup" />
+            </template>
+            <p class="mb-2.5 text-2xs text-subtle">{{ t(`sandbox.agentModels.setupsCaption`) }}</p>
             <div class="flex flex-col gap-3">
                 <SetupCard
                     v-for="setup in view.setups"
@@ -289,7 +278,7 @@ const draggedName = computed(() => (drag.dragged.value === undefined ? `` : role
                     {{ t(`sandbox.agentModels.dropForNew`) }}
                 </div>
             </div>
-        </section>
+        </Section>
     </div>
 
     <!-- The chip in flight, riding the pointer; pointer-events off so the page underneath answers the hit test. -->

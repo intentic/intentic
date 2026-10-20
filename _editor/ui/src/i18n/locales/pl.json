@@ -206,7 +206,17 @@
         "historyTooLong": "ostatniemu pobieraniu skończył się czas",
         "historyShallow": "kopia w sandboksie to płytki klon",
         "historyFailed": "git odrzucił ostatnie pobieranie",
-        "historyRetry": "kolejna próba {when}"
+        "historyRetry": "kolejna próba {when}",
+        "held": "wstrzymane",
+        "fileSyncingHeld": "synchronizacja plików wstrzymana",
+        "heldBy": {
+            "gone": "Wstrzymane, bo ten sandbox podobno już nie istnieje. Synchronizacja wznowi się sama, jeśli znów odpowie.",
+            "containerMissing": "Wstrzymane, dopóki kontenera tego sandboxa nie ma w Dockerze na tym komputerze. Synchronizacja wznowi się sama, gdy wróci.",
+            "containerTrashed": "Wstrzymane, bo ten sandbox jest w koszu na tym komputerze. Przywrócenie go przywraca też synchronizację.",
+            "swap": "Wstrzymane na czas aktualizacji lub przebudowy tego sandboxa na tym komputerze. Synchronizacja wznowi się sama, gdy nowa wersja się utrzyma.",
+            "unreachable": "Wstrzymane, bo ten sandbox nie odpowiada od godziny. Synchronizacja wznowi się sama, gdy odpowie.",
+            "other": "Wstrzymane przez agenta tego komputera. Synchronizacja wznowi się sama."
+        }
     },
     "imageView": {
         "actualSize": "Rozmiar rzeczywisty",
@@ -429,5 +439,9 @@
     },
     "coachMark": {
         "notNow": "Nie teraz"
+    },
+    "await": {
+        "couldntLoad": "Nie udało się tego wczytać",
+        "stillWaiting": "Wciąż wczytuję · {elapsed}"
     }
 }

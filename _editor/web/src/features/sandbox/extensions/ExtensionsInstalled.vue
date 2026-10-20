@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, PendingWorkspaceExtension } from "@intentic/sandbox-contract/schemas/extension-updates";
-import { Button, ui, type NoticeModel, Row, RowGroup, SkeletonRows, SkeletonSnapshot, StatusBadge, vSkeletonSource } from "@intentic/ui";
+import { Await, Button, ui, type NoticeModel, Row, RowGroup, RowNote, SkeletonRows, StatusBadge } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type ExtensionSection, sectionsOf } from "../../extensions/extensionCategories";
 import { hostStateWord } from "../../extensions/extensionState";
 import { useExtensionList } from "../../extensions/useExtensionList";
-import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { dismissOperation, useOperations } from "../../../workbench/operations/operations";
 import ExtensionDetail from "./ExtensionDetail.vue";
@@ -46,8 +45,7 @@ const emit = defineEmits<{
     detail: [open: boolean];
 }>();
 
-const { entries, invalid, pending: waiting, unlisted, setEnabled, approve, remove, clearDev, isLoading, error } = useExtensionList();
-const outline = useSandboxOutline(isLoading);
+const { entries, invalid, pending: waiting, unlisted, setEnabled, approve, remove, clearDev, loaded, error } = useExtensionList();
 // The list query's own message, in the words of the view that asked for it.
 watch(
     () => error.value,
@@ -111,9 +109,9 @@ const sections = computed<ExtensionSection[]>(() => [
 ]);
 
 // Three distinct empty reasons: an attention row still counts as a match, so 'nothing matches' would be visibly false
-// while one sits above.
+// while one sits above. Only drawn once the list is read (<Await>), so none of them speaks for a list still on its way.
 const emptyNote = computed<string | undefined>(() => {
-    if (isLoading.value || healthy.value.length > 0) {
+    if (healthy.value.length > 0) {
         return undefined;
     }
     if (entries.value.length === 0) {
@@ -260,11 +258,8 @@ const confirmRemove = async (): Promise<void> => {
         />
         <template v-else>
             <!-- Written in this workspace and not approved in its current shape: nothing of it runs until the yes, so it leads. -->
-            <RowGroup
-                v-if="waiting.length > 0"
-                :label="t(`sandbox.extensionsInstalled.waitingForApproval`)"
-                :caption="t(`sandbox.extensionsInstalled.waitingCaption`)"
-            >
+            <RowGroup v-if="waiting.length > 0" :label="t(`sandbox.extensionsInstalled.waitingForApproval`)">
+                <RowNote :label="t(`sandbox.extensionsInstalled.waitingCaption`)" />
                 <Row v-for="extension in waiting" :key="extension.id">
                     <template #title>
                         <span class="block truncate">{{ extension.id }}</span>
@@ -307,55 +302,55 @@ const confirmRemove = async (): Promise<void> => {
                 </Row>
             </RowGroup>
 
-            <!-- Sections render nothing while the read is out, so this outline gives the wait the list's own shape instead of a
-                 sentence: the list as it last looked in this sandbox, or until then a group of placeholder rows. -->
-            <template v-if="isLoading">
-                <SkeletonSnapshot
-                    v-if="outline"
-                    of="sandbox.extensions.installed"
-                    :label="t(`sandbox.extensionsInstalled.readingSandboxsExtensions`)"
-                >
+            <!-- Sections render nothing while the read is out, so the wait takes the list's own shape instead of a sentence: the
+                 list as it last looked in this sandbox, or until then a group of placeholder rows. A failed read says so in the
+                 section's notice region (`notice`), so nothing is drawn here for it. -->
+            <Await :of="loaded" imprint="sandbox.extensions.installed" :label="t(`sandbox.extensionsInstalled.readingSandboxsExtensions`)">
+                <template #fallback>
                     <RowGroup :label="t(`sandbox.words.installed`)">
                         <div role="status" aria-busy="true">
                             <span class="sr-only">{{ t(`sandbox.extensionsInstalled.readingSandboxsExtensions`) }}</span>
                             <SkeletonRows :rows="3" description control />
                         </div>
                     </RowGroup>
-                </SkeletonSnapshot>
-            </template>
-            <!-- The sections and the empty note as one box (never empty once read: no healthy row means a note), spaced as the
-                 column it sits in. -->
-            <div v-else v-skeleton-source="`sandbox.extensions.installed`" class="flex flex-col gap-6">
-                <RowGroup v-for="section in sections" :key="section.id" :label="section.label" :caption="section.caption">
-                    <ExtensionRow
-                        v-for="entry in section.entries"
-                        :key="entry.extension.id"
-                        :data-extension="entry.extension.id"
-                        :entry="entry"
-                        :pending="extensionBusy(entry.extension.id, extensionIdOf(entry.extension.manifest))"
-                        @toggle="(enabled) => toggle(entry.extension, enabled)"
-                        @open="openExtension(entry.extension.id)"
-                    />
-                </RowGroup>
+                </template>
+                <template #failed />
+                <!-- The sections and the empty note as one box (never empty once read: no healthy row means a note), spaced as
+                     the column it sits in. -->
+                <div class="flex flex-col gap-6">
+                    <RowGroup v-for="section in sections" :key="section.id" :label="section.label">
+                        <ExtensionRow
+                            v-for="entry in section.entries"
+                            :key="entry.extension.id"
+                            :data-extension="entry.extension.id"
+                            :entry="entry"
+                            :pending="extensionBusy(entry.extension.id, extensionIdOf(entry.extension.manifest))"
+                            @toggle="(enabled) => toggle(entry.extension, enabled)"
+                            @open="openExtension(entry.extension.id)"
+                        />
+                    </RowGroup>
 
-                <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
-                    <span>{{ emptyNote }}</span>
-                    <!-- An empty list is the moment to answer 'where do extensions come from', not just point at another surface. -->
-                    <button v-if="entries.length === 0" type="button" :class="ui.textButton()" @click="emit(`browse`)">
-                        {{ t(`sandbox.extensionsInstalled.discoverWhatPeoplePublished`) }}
-                    </button>
-                    <!-- The empty state answers the active filter before offering reset. -->
-                    <button v-if="matches.length === 0 && publishedMatches > 0" type="button" :class="ui.textButton()" @click="emit(`browse`)">
-                        {{ t(`sandbox.extensionsInstalled.publishedMatches`, { count: publishedMatches, query: query.trim() }, publishedMatches) }}
-                    </button>
-                    <Button
-                        v-if="matches.length === 0 && entries.length > 0"
-                        size="small"
-                        :label="t(`ui.action.clearFilter`)"
-                        @click="emit(`clear`)"
-                    />
+                    <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
+                        <span>{{ emptyNote }}</span>
+                        <!-- An empty list is the moment to answer 'where do extensions come from', not just point at another surface. -->
+                        <button v-if="entries.length === 0" type="button" :class="ui.textButton()" @click="emit(`browse`)">
+                            {{ t(`sandbox.extensionsInstalled.discoverWhatPeoplePublished`) }}
+                        </button>
+                        <!-- The empty state answers the active filter before offering reset. -->
+                        <button v-if="matches.length === 0 && publishedMatches > 0" type="button" :class="ui.textButton()" @click="emit(`browse`)">
+                            {{
+                                t(`sandbox.extensionsInstalled.publishedMatches`, { count: publishedMatches, query: query.trim() }, publishedMatches)
+                            }}
+                        </button>
+                        <Button
+                            v-if="matches.length === 0 && entries.length > 0"
+                            size="small"
+                            :label="t(`ui.action.clearFilter`)"
+                            @click="emit(`clear`)"
+                        />
+                    </div>
                 </div>
-            </div>
+            </Await>
 
             <!-- Unenumerated workspace extensions are listed with their reason. -->
             <RowGroup v-if="invalid.length > 0" :label="t(`sandbox.extensionsInstalled.notLoadable`)">

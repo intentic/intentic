@@ -1,6 +1,7 @@
 import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
 import type { GitActionResult, GitCommit, GitCommitDiff } from "@intentic/sandbox-contract/schemas/git/git-history";
 import type { GitDiffSide } from "@intentic/sandbox-contract/schemas/git/git";
+import { useLoaded } from "@intentic/extension-api";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host.js";
@@ -32,6 +33,15 @@ export function useGitLog(repo: Ref<string>) {
 
     const commits = computed<readonly GitCommit[]>(() => query.data.value?.pages.flatMap((page) => page.commits) ?? []);
     const branch = computed(() => query.data.value?.pages[0]?.branch);
+    // The log as the graph draws it: wanted whenever it is shown, so one held while the sandbox wakes is a wait, never an
+    // empty history.
+    const loaded = useLoaded(() => ({
+        data: query.data.value,
+        error: query.error.value?.message,
+        fetching: query.isFetching.value,
+        wanted: true,
+        retry: () => void query.refetch(),
+    }));
 
     // Changed files for a commit (vs its first parent), then one file's diff at that commit; both keyed to the current
     // repo.
@@ -59,7 +69,7 @@ export function useGitLog(repo: Ref<string>) {
         hasMore: computed(() => query.hasNextPage.value),
         fetchingMore: computed(() => query.isFetchingNextPage.value),
         loadMore: (): void => void query.fetchNextPage(),
-        error: computed(() => query.error.value?.message),
+        loaded,
         refresh: (): Promise<void> => invalidate(),
         commitFiles,
         commitFileDiff,

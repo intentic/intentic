@@ -15,9 +15,10 @@ import {
     hostRunningSandbox,
 } from "@intentic/sandbox-contract/schemas/devices";
 import type { IntenticLine } from "@intentic/sandbox-contract/events/system-events";
+import { type Loaded, mapLoaded } from "@intentic/extension-api";
 import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { computed, type ComputedRef, type Ref } from "vue";
+import { computed, type ComputedRef } from "vue";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
@@ -43,22 +44,20 @@ export function useDevices({ poll = true }: { poll?: boolean } = {}): {
     sharedIdentities: ComputedRef<SharedIdentity[]>;
     /** When this list landed here: the clock every freshness verdict on a device is judged against. */
     readAt: ComputedRef<number>;
-    error: ComputedRef<string | undefined>;
-    isLoading: Ref<boolean>;
+    /** The list as the view has it: waited for until the first read lands, never an empty list while held. */
+    loaded: ComputedRef<Loaded<Device[]>>;
     refetch: () => void;
     /** The same re-read, settling once the answer has landed: for a caller that says "looking" until it has. */
     reread: () => Promise<void>;
 } {
-    const { query, error } = useSandboxQuery({ ...rpcQuery(`system.devices`), refetchInterval: poll ? POLL_MS : false });
+    const { query, loaded } = useSandboxQuery({ ...rpcQuery(`system.devices`), refetchInterval: poll ? POLL_MS : false });
     return {
         devices: computed(() => query.data.value?.devices ?? []),
         cardlessHosts: computed(() => query.data.value?.cardlessHosts ?? []),
         sharedIdentities: computed(() => query.data.value?.sharedIdentities ?? []),
         // Restored with the cache on reload, so a hydrated list is aged from when it was actually read, not from now.
         readAt: computed(() => query.dataUpdatedAt.value),
-        error,
-        // True only for the first fetch; a refetch must never blank an already-populated list.
-        isLoading: query.isLoading,
+        loaded: computed(() => mapLoaded(loaded.value, (answer) => answer.devices)),
         refetch: () => void query.refetch(),
         reread: async () => {
             await query.refetch();

@@ -62,7 +62,18 @@ jest.mock(`../../../models/sandbox/devices/useDevices`, () => {
     // loaded inside a mock factory deadlocks bun's synchronous link of the graph that named it.
     return {
         ...useDevicesOriginal,
-        useDevices: () => ({ devices, cardlessHosts: cardless, sharedIdentities: identities, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
+        useDevices: () => ({
+            devices,
+            cardlessHosts: cardless,
+            sharedIdentities: identities,
+            readAt,
+            loaded: computed(() =>
+                devicesLoading.value
+                    ? { state: `waiting`, since: 0, retry: undefined }
+                    : { state: `ready`, data: devices.value, refreshing: false, refreshError: undefined },
+            ),
+            refetch: () => {},
+        }),
         withdrawDeviceKey: (id: string) => {
             withdrawn.push(id);
             cardless.value = cardless.value.filter((key) => key.id !== id);
@@ -556,7 +567,7 @@ it(`offers Start, and no Stop, on a sandbox that is not running`, async () => {
 });
 
 // The versions this machine kept, when its agent can go back to any of them: Roll back becomes one row per version, and
-// the one chosen is named in the question and sent as the rollback's `to`. The newest is the plain rollback, sent
+// the one chosen is named in the question and sent as the rollback's `to`, as the exact image ic listed. The newest is the plain rollback, sent
 // without one.
 it(`offers each version the machine kept as its own Roll back, and sends the one chosen`, async () => {
     granted();
@@ -582,7 +593,7 @@ it(`offers each version the machine kept as its own Roll back, and sends the one
     expect(everything()).toContain(`The sandbox restarts onto 1.314.0, an older version this machine kept. Its files are kept.`);
     dialogButton(`Roll back`)?.click();
     await nextTick();
-    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `rollback`, to: `1.314.0` }]);
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `rollback`, to: `intentic-sandbox:kept-2` }]);
 });
 
 // Pinned as vocabulary rather than via the teleported overlay, since the model is what both apps read.

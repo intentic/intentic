@@ -15,7 +15,8 @@ import { liveRequestRun } from "../conversations/actor/card-deps.js";
 import { liveRunOf } from "../conversations/actor/conversation-holdings.js";
 import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
-import { approveDraft, composeEnvironment, proposeDraft, rejectDraft, toolStanding } from "../environment/environment.js";
+import { approveDraft, proposeDraft, rejectDraft, toolStanding } from "../environment/environment.js";
+import { composeEnvironment } from "../environment/overlay.js";
 import { onRuntimeChange } from "../seams/runtime-feed.js";
 import { deliverWake } from "../seams/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
@@ -197,7 +198,7 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
                 approve: (tool) => approveDraft(whole(), tool),
                 reject: (tool) => rejectDraft(whole(), tool),
                 standing: (subject) => toolStanding(whole(), subject),
-                composedHash: () => composeEnvironment(whole()),
+                composedHash: async () => (await composeEnvironment(whole()))?.hash,
             }),
             automation: automationNeed({
                 refuse: (automation) => refuseInvalidAutomation(whole(), automation),

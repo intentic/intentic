@@ -167,7 +167,7 @@ const runAgain = (stamp: Stamp): void => {
                                 <Icon name="eye-slash" class="shrink-0 text-warning" />{{ unviewedOf(stamp) }}
                             </span>
                         </span>
-                        <Icon v-if="stamp.by !== undefined" name="chevron-right" class="mt-1 shrink-0 text-2xs text-subtle" />
+                        <Icon v-if="stamp.by !== undefined" name="chevron-right" class="shrink-0 text-2xs text-subtle" />
                     </component>
                     <button
                         v-if="offersAgain(stamp)"

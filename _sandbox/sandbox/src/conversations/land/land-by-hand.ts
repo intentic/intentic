@@ -4,7 +4,8 @@ import type { Services } from "../../composition.js";
 import { reportChildConflict } from "./child-lands.js";
 import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
-import { landAgent, reportLockfileFailures } from "./land.js";
+import { landAgent } from "./land.js";
+import { reportLandRepairs } from "./rederive.js";
 import { intoOf, type LandTarget, landTargetOf, upstreamOf, underLeases } from "./land-target.js";
 import { keepLandFailure, settleParentBooks } from "./turn-landing.js";
 import { syncBeforeLand } from "./sync.js";
@@ -76,7 +77,7 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
             await keepLandFailure(services, entry.id, cause);
             throw cause;
         });
-    reportLockfileFailures(services.logger, entry.id, result);
+    reportLandRepairs(services.logger, entry.id, result);
     // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
     await services.agents.recordLanded(entry.id, result);
     // A spawned child's parent, still supervising, is told its press met a conflict and nothing reached the tree. A

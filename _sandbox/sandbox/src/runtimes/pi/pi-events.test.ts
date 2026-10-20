@@ -1,3 +1,4 @@
+import { codedFailure } from "../../agent/run/frames/error-frames.js";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { createPiEventMapper } from "./pi-events.js";
 
@@ -183,13 +184,15 @@ test("compaction reports its trigger and token movement; user echoes and lifecyc
     }
 });
 
-// Pi's own client passes the provider's sentence on; the shared rules code it for auto-resume.
-test("a provider's spent allowance, as Pi reports it, is coded so the turn waits for the reset", () => {
+// Pi's own client passes the provider's sentence on, as it said it; the door every runtime's frames go out by codes it
+// (codedFailure), so the turn waits for the reset whichever loop it ran on.
+test("a provider's spent allowance, as Pi reports it, goes out in its words and is coded at the door", () => {
     const mapper = createPiEventMapper(WORKSPACE_ROOT);
-    expect(mapper.map({ type: "auto_retry_end", success: false, finalError: "429 rate_limit_error: Too many requests" })).toEqual([
-        { kind: "error", message: "429 rate_limit_error: Too many requests", code: "rate_limit" },
-    ]);
-    expect(
-        mapper.map({ type: "message_end", message: { role: "assistant", stopReason: "error", errorMessage: "prompt is too long: maximum context length is 200000 tokens" } }),
-    ).toEqual([expect.objectContaining({ kind: "error", code: "context-overflow" })]);
+    const [spent] = mapper.map({ type: "auto_retry_end", success: false, finalError: "429 rate_limit_error: Too many requests" });
+    expect(spent).toEqual({ kind: "error", message: "429 rate_limit_error: Too many requests" });
+    const [outgrown] = mapper.map({
+        type: "message_end",
+        message: { role: "assistant", stopReason: "error", errorMessage: "prompt is too long: maximum context length is 200000 tokens" },
+    });
+    expect([spent, outgrown].map((frame) => (frame?.kind === "error" ? codedFailure(frame).code : undefined))).toEqual(["rate_limit", "context-overflow"]);
 });

@@ -165,7 +165,7 @@ export function useAgentChanges(
     agent?: Ref<(Pick<AgentSummary, `landedPresence`> & { readonly title?: string; readonly status?: string }) | undefined>,
 ) {
     const reach = computed(() => at?.value);
-    const { query, error } = useSandboxQuery(
+    const { query, error, loaded } = useSandboxQuery(
         {
             ...rpcQuery(`agents.diff`, () => ({ id: agentId.value }), { at: reach }),
             enabled: computed(() => agentId.value !== ``),
@@ -459,10 +459,10 @@ export function useAgentChanges(
         // A read is in flight: what a spinner rides on. True for background refreshes too, so nothing deciding what the
         // panel SAYS may read it — see `loaded`.
         fetching: query.isFetching,
-        // This agent's diff has been answered and is still held. The panel's waits and empty sentences are claims about
-        // the branch, so they wait for this: the same watcher batch that refreshes the workspace review invalidates
-        // every agent diff beside it (systemEvents), about once a second while files land.
-        loaded: computed(() => query.data.value !== undefined),
+        // What the panel has of this agent's diff. Its waits and empty sentences are claims about the branch, so they wait
+        // for an answer, not for a read: the same watcher batch that refreshes the workspace review invalidates every
+        // agent diff beside it (systemEvents), about once a second while files land.
+        loaded,
         error,
         refresh: query.refetch,
         fileDiff,

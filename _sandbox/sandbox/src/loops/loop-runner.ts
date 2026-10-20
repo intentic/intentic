@@ -329,8 +329,13 @@ export const resumeCapped = async <R extends { readonly resumed: number }>(
     return resumed;
 };
 
-export const resumeLoops = async (services: Services, policy: RestartResume, ownedByWorkflow: ReadonlySet<string> = new Set()): Promise<string[]> => {
-    const stranded = (await services.loops.list()).filter(
+export const resumeLoops = async (
+    services: Services,
+    policy: RestartResume,
+    ownedByWorkflow: ReadonlySet<string> = new Set(),
+    candidates?: readonly LoopRecord[],
+): Promise<string[]> => {
+    const stranded = (candidates ?? (await services.loops.list())).filter(
         (record) =>
             record.state === "running" && !loopRunning(services.conversations, record.conversationId) && !ownedByWorkflow.has(record.conversationId),
     );

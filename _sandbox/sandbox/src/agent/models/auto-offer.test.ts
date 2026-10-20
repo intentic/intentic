@@ -1,21 +1,20 @@
-import type { AccountUsage, ProviderRefusal, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import { currentWindows } from "@intentic/sandbox-contract/models/plan-pools";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { claudeLimitRefusal } from "../providers/claude/claude-usage.testing.js";
 
 /* WHAT THE AUTO JUDGE MAY CHOOSE FROM, at the seam it reads: readiness, accounts and catalogs are all handed in, so a
-   test can state an allowance and see which models survive it. */
+   test can state an allowance and see which models survive it. The accounts reach it as they reach every gate
+   (serviceability.ts accountFactsOf), Claude's from its store and readings. */
 
 const ready = jest.fn<() => Record<string, boolean>>();
 const accountLists = jest.fn<() => Record<string, readonly OauthAccount[]>>();
-const routed = jest.fn<() => TranslatorAccounts>();
 
 jest.mock("../providers/provider-registry.js", () => ({
     providerReadiness: async () => ready(),
-    providerAccountLists: async () => accountLists(),
-    sharedProviderReads: () => ({ translatorAccounts: async () => routed() }),
 }));
 
 const { autoOffer } = await import("./auto-offer.js");
@@ -52,10 +51,20 @@ const catalogs = jest.fn<(provider: NativeProvider) => Promise<{ models: Model[]
 
 // The refusals on file a test sets: Claude's own word that an account is spent.
 let refused: readonly ProviderRefusal[] = [];
+const claudeAccounts = (): readonly OauthAccount[] => accountLists()["claude"] ?? [];
 const services = (): Services =>
     unstubbed<Services>("services", {
-        logger: unstubbed<Services["logger"]>("logger", { warn } as Partial<Services["logger"]>),
+        logger: unstubbed<Services["logger"]>("logger", { warn, info: () => undefined } as Partial<Services["logger"]>),
         providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: refused }) }),
+        claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => claudeAccounts().map(({ usage: _usage, ...row }) => row) }),
+        claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
+        // As the store reads its file: a window past its reset kept as lapsed, at the floor.
+        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {
+            read: async () =>
+                Object.fromEntries(
+                    claudeAccounts().flatMap((row) => (row.usage === undefined ? [] : [[row.id, { ...row.usage, windows: currentWindows(row.usage, NOW) }]])),
+                ),
+        }),
         providerCatalogs: new Proxy({} as Services["providerCatalogs"], {
             get: (_target, provider: string) => ({ models: () => catalogs(provider as NativeProvider) }),
         }),
@@ -67,7 +76,6 @@ beforeEach(() => {
     catalogs.mockReset();
     ready.mockReturnValue({ claude: true });
     accountLists.mockReturnValue({ claude: [] });
-    routed.mockReturnValue({} as TranslatorAccounts);
     catalogs.mockResolvedValue({ models: [OPUS, HAIKU], default: OPUS.id });
 });
 
@@ -109,7 +117,8 @@ test("an account's windows report what is LEFT, named by the pool's own length",
 });
 
 test("a window already past its reset is gone, not shown as spent", async () => {
-    // The pool it described no longer exists; carrying it forward would bench a model that is in fact free to run.
+    // The pool it described no longer exists; carrying it forward would bench a model that is in fact free to run. The
+    // store keeps it as lapsed, at the floor, which the judge is not shown as a reading.
     accountLists.mockReturnValue({ claude: [account("work", usage([session(100, AN_HOUR_AGO)]))] });
     const offer = await autoOffer(services(), NOW);
     expect(offer.accounts["claude"]).toEqual([{ id: "work", label: "work", windows: [] }]);

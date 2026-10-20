@@ -17,7 +17,6 @@ import { type CompatEntry, compatYaml, endpointCompatEntries, translatedEndpoint
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { engineBinary, engineReady, resolveEngine } from "../../engines/engine-resolve.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
-import { fleetLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HeadroomSource } from "../../usage/headroom.js";
 import { authFileCooling, fetchTranslatorUsage, type TranslatorAuthFile } from "../../usage/translator-usage.js";
 import type { AnswerWatch } from "../../usage/drift/answer-vocabulary.js";
@@ -230,8 +229,6 @@ export interface CliProxyClient {
     readonly headroom: HeadroomSource;
     // The one account a pushed reading can be filed under, only when a provider holds exactly one file.
     readonly sharedUsageKey: (provider: KeyedProvider) => Promise<string | undefined>;
-    // What the recorded quota says about the pool this turn's model spends, across the provider's accounts.
-    readonly turnLimit: (provider: KeyedProvider, model: string) => Promise<TurnLimit>;
     // Takes every credential that can serve no turn out of the proxy's rotation, answering with the names it benched.
     readonly benchUnusable: () => Promise<string[]>;
     // `redirect` asks for the loopback-redirect sign-in where a provider has both (Codex): the caller passes it only when
@@ -603,23 +600,9 @@ export const createCliProxyClient = (params: {
 
     // What keeps this credential from serving a turn, if anything. A missing project outranks the proxy's own verdict:
     // the proxy reports such a file as active, and a bench with no instant is exactly what it is, since no wait fixes
-    // it. No `until`, so fleet-limit counts it spent forever rather than promising a reopen.
+    // it. No `until`, so the serviceability rule reads it as blocked rather than promising a reopen.
     const benched = (provider: KeyedProvider, file: TranslatorAuthFile): { until?: number; reason?: string; verify?: string } | undefined =>
         projectless(provider, file) ? { reason: NO_PROJECT_REASON } : authFileCooling(file);
-
-    // Read from recorded snapshots, not the refusal itself, since CLIProxyAPI's 429 is only the fleet's last word,
-    // naming no account or reset. Errs early: a snapshot can miss an account that has since hit its wall.
-    const turnLimit = async (provider: KeyedProvider, model: string): Promise<TurnLimit> => {
-        const [files, stored] = await Promise.all([listFiles(), usageStore.read()]);
-        return fleetLimit(
-            providerFiles(files, provider).map((file) => ({
-                account: file.name,
-                usage: stored[usageKey(provider, file.name)],
-                cooling: benched(provider, file),
-            })),
-            { id: model },
-        );
-    };
 
     return {
         accounts: async () => {
@@ -642,7 +625,6 @@ export const createCliProxyClient = (params: {
             const files = providerFiles(await listFiles(), provider);
             return files.length === 1 && files[0] !== undefined ? usageKey(provider, files[0].name) : undefined;
         },
-        turnLimit,
         benchUnusable,
         connect: (provider, options) =>
             provider === "grok" || provider === "kimi"

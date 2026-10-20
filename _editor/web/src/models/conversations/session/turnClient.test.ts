@@ -119,7 +119,7 @@ const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<Composer
             harness: computed(() => `native` as const),
             ...selection,
         }),
-        failures: unstubbed<TurnFailures>(`failures`, { cancelProbe: jest.fn(), clear: jest.fn(), armRenewalProbe: jest.fn(), settled: jest.fn() }),
+        failures: unstubbed<TurnFailures>(`failures`, { cancelProbe: jest.fn(), clear: jest.fn(), armRenewalProbe: jest.fn(), settled: jest.fn(), failedTurn: false }),
         title: ref<string | null>(null),
         isolated: ref(true),
         runner: ref<string | undefined>(),

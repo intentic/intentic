@@ -15,9 +15,6 @@ export interface HeadroomReading {
     readonly windows: readonly UsageWindow[];
     // Endpoint's own stay-away on a 429, in ms; must not be retried on the next trigger while it holds.
     readonly retryAfterMs?: number;
-    // A read that succeeded and found no pools, as against one that failed. The only thing that may retire a snapshot:
-    // without it a source whose pools come and go (observed-limits.ts) can never take one back.
-    readonly empty?: boolean;
     // Why a read that found nothing failed, in the provider's words. Optional because every failure is recorded whether
     // or not the reader could say why (readOne): this only improves the words.
     readonly failure?: string;
@@ -33,8 +30,7 @@ export interface HeadroomTarget {
     // freshness that trigger asked for. A re-measure someone is watching (`maxAgeMs: 0`) is not held to it.
     readonly minAgeMs?: number;
     // The reader vouches each reading names every pool the account has: a pool one reading named and the next does not
-    // is the provider's change, kept and marked missing, never dropped. Unset for a source whose pools come and go by
-    // design (observed-limits.ts).
+    // is the provider's change, kept and marked missing, never dropped. Unset for a source that cannot vouch for that.
     readonly whole?: boolean;
     // The models this account serves, where the source knows them. Each reading is checked against them, so a model no
     // pool gates is said (`uncovered`) rather than read as covered by whatever pools there are.
@@ -250,22 +246,10 @@ export const createHeadroomService = (deps: {
                     await readFailed(target, reading.failure ?? "the provider is rate-limiting reads", until);
                     return;
                 }
-                // A failed read leaves the last snapshot standing; an empty list alone would misread as "no limits". Only a
-                // read that says it found nothing retires one, and only when there was one to retire — announcing an
-                // absence nobody was shown would redraw every open window each sweep.
+                // A failed read leaves the last snapshot standing; an empty list would misread as "no limits".
                 if (reading.windows.length > 0) {
                     succeeded(target.key);
                     await record(target.provider, target.key, await swept(target, reading.windows), target.whole === true);
-                    return;
-                }
-                if (reading.empty === true) {
-                    succeeded(target.key);
-                    // `read()` has already dropped windows that have reset, so a key still present is a reading someone was
-                    // actually shown — the only case worth announcing an absence for.
-                    if ((await deps.store.read())[target.key] !== undefined) {
-                        await deps.store.clear(target.key);
-                        announce(target.provider, target.key, undefined);
-                    }
                     return;
                 }
                 await readFailed(target, reading.failure ?? "the provider gave no reading");

@@ -322,15 +322,15 @@ describe("canArchive", () => {
     // Filed away by a press on the card itself, the conversation is done with: the sandbox cancels what was booked in it,
     // which the card's hint says first. A press that does not name the card (Clear, a parent's family) leaves it be.
     it("takes an agent holding a message booked for later by hand, and leaves it out of every bulk filing", () => {
-        const card = (queue: FleetAgent["queue"]): Pick<FleetAgent, "status" | "attention" | "queue"> => ({ status: `idle`, attention: none, queue });
-        const until = card({ items: [], revision: 1, paused: `scheduled`, until: 90_000 });
-        const after = card({ items: [], revision: 1, paused: `scheduled`, after: `brave-otter-k2` });
+        const card = (next: FleetAgent["next"]): Pick<FleetAgent, "status" | "attention" | "next"> => ({ status: `idle`, attention: none, next });
+        const until = card({ kind: `send`, at: 90_000, count: 1 });
+        const after = card({ kind: `land`, after: `brave-otter-k2`, count: 1 });
         expect(canArchive(until)).toBe(true);
         expect(canArchive(after)).toBe(true);
         expect(clearable(until)).toBe(false);
         expect(clearable(after)).toBe(false);
-        // Words held for a press (a stop, a refusal) wait for that press, wherever the conversation is filed.
-        const held = card({ items: [], revision: 1, paused: `stopped` });
+        // Words held for a press (a stop, a refusal) carry nothing on: they wait for that press, wherever it is filed.
+        const held = card(undefined);
         expect(canArchive(held)).toBe(true);
         expect(clearable(held)).toBe(true);
     });
@@ -1285,7 +1285,7 @@ describe("draft cards", () => {
         const conversation = new Conversation(`booked`);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
         const waiting = { id: `m-1`, text: `write the release notes`, voice: `person`, queuedAt: 1_000, revision: 1, until: 90_000 } as const;
-        setAgents([{ ...registered(`booked`), status: `idle`, queue: { items: [waiting], revision: 1, paused: `scheduled`, until: 90_000 } }], 1);
+        setAgents([{ ...registered(`booked`), status: `idle`, queue: { items: [waiting], revision: 1, paused: `scheduled`, until: 90_000 }, next: { kind: `send`, at: 90_000, count: 1 } }], 1);
         expect(activeIds()).toEqual([`booked`]);
         const standing = (): unknown => useAgents().lanes.value.active.map((card) => ({ id: card.id, status: card.status, unsent: card.unsent }));
         const asDraft = [{ id: `booked`, status: `draft`, unsent: true }];

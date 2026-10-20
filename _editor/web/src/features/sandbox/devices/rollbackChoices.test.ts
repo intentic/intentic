@@ -15,7 +15,8 @@ const kept = {
 it(`offers every kept version newest first, the newest as the plain rollback and the rest by what they are`, () => {
     expect(rollbackChoices(takesTo, kept)).toEqual([
         { version: `1.315.0`, to: undefined },
-        { version: `1.314.0`, to: `1.314.0` },
+        // Sent as the exact image `ic` listed, never the version it names (versions.rs ways_back).
+        { version: `1.314.0`, to: `intentic-sandbox:rollback-work-2` },
         // An image that would not say its version is named by its pinned image, and shown by its short digest.
         { version: `sandbox@sha256:0123456789ab`, to: `ghcr.io/intentic/sandbox@sha256:0123456789abcdef0123` },
     ]);
@@ -41,18 +42,18 @@ it(`tells kept builds that share a version apart by their image, and sends the i
     expect(rollbackChoices(takesTo, dev)).toEqual([
         { version: `0.0.0 (c6cc76cfeece)`, to: undefined },
         { version: `0.0.0 (f5eb7476ff5c)`, to: `intentic-sandbox-rollback-s1:f5eb7476ff5c` },
-        { version: `1.2.0`, to: `1.2.0` },
+        { version: `1.2.0`, to: `intentic-sandbox-rollback-s1:aaaaaaaaaaaa` },
     ]);
 });
 
-// A pruned dev build is "downloaded" as 0.0.0, which no registry has, and an older ic listed one such row per pruned pin.
-it(`offers no row that cannot be had, and one row per image`, () => {
-    const pruned = { image: `ghcr.io/intentic/sandbox:0.0.0`, version: `0.0.0`, download: true };
-    expect(rollbackChoices(takesTo, { rollbackTargets: [pruned, pruned, pruned] })).toEqual([]);
+// Which ways back can be had is ic's to say (versions.rs ways_back); the menu offers each distinct one once, so two rows
+// can never start the same rollback (2026-10-08, 2026-10-19: three rows of "0.0.0").
+it(`offers one row per image ic listed, each sent as that image`, () => {
     const release = { image: `ghcr.io/intentic/sandbox:1.2.0`, version: `1.2.0`, download: true };
     const local = { image: `intentic-sandbox-rollback-s1:c6cc76cfeece`, version: `0.0.0` };
-    expect(rollbackChoices(takesTo, { rollbackTargets: [local, pruned, release, release] })).toEqual([
+    expect(rollbackChoices(takesTo, { rollbackTargets: [local, release, release] })).toEqual([
         { version: `0.0.0`, to: undefined },
-        { version: `1.2.0`, to: `1.2.0` },
+        { version: `1.2.0`, to: `ghcr.io/intentic/sandbox:1.2.0` },
     ]);
+    expect(rollbackChoices(takesTo, { rollbackTargets: [release, release, release] })).toEqual([]);
 });

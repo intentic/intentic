@@ -15,7 +15,8 @@ import { childActor } from "../../../../auth/principal.js";
 import { resetChildrenForTest, spawnChild } from "../../children.js";
 import { isWorker } from "../../child-records.js";
 import { resetSubagents, waitForSubagent } from "../../subagents.js";
-import { awaitScriptRun, resetScriptRunsForTest, resumeScriptRuns, type ScriptRunStatus, startScriptRun, stopScriptRun } from "../script-runs.js";
+import { awaitScriptRun, resetScriptRunsForTest, type ScriptRunStatus, scriptRunsInFlight, startScriptRun, stopScriptRun } from "../script-runs.js";
+import { recoverKinds } from "../../../../seams/restart/in-flight.testing.js";
 import { callKey } from "../script-run-calls.js";
 import { scriptRunsDocument } from "../script-run-store.js";
 import { openDirectory } from "../../../../store/open-document.js";
@@ -288,7 +289,7 @@ describe("a run across a restart", () => {
             at: now,
         });
 
-        await resumeScriptRuns(services, { resume: true });
+        await recoverKinds(services, [scriptRunsInFlight]);
         gate.resolve();
 
         expect(await finished(services, "wfr-cut")).toMatchObject({ state: "done", result: "Ported.", calls: { total: 1 } });
@@ -312,7 +313,7 @@ describe("a run across a restart", () => {
             at: now,
         });
 
-        await resumeScriptRuns(services, { resume: false });
+        await recoverKinds(services, [scriptRunsInFlight], { resume: false, why: "off" });
 
         await waitFor(() => expect(told).toHaveLength(1), SETTLES);
         expect(told[0]).toContain('The sandbox restarted, and this restart resumes nothing. Run it again with resume: "wfr-left" to keep its finished calls.');

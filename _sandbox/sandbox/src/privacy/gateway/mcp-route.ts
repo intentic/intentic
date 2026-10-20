@@ -1,8 +1,8 @@
-import type { PersonalDataClass, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
+import type { ShieldVerdict } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";
-import type { PrivacyShield } from "../privacy-shield.js";
+import type { PrivacyShield, ShieldDecision } from "../privacy-shield.js";
 import { type Json, isList, isRecord, isText, restoreStrings, toJson } from "./protocols/walk.js";
 import { type SseEvent, sseAsyncTransform } from "./protocols/sse.js";
 import { emptyTally, maskingShield, watchingShield } from "./request-shield.js";
@@ -13,8 +13,8 @@ import type { RequestShield, RestoreText, ShieldTally } from "./shield-types.js"
 // answers to its own provider, past the gateway, so this is the one place those answers pass the daemon. The session
 // names the provider, the conversation and the server's own address; the request goes there with its own headers (its
 // bearer travels as it would have), tokens in what the model sent read back to their values, and what the server
-// answers is masked before the runtime, and so the model, reads it. Watching reads and logs and changes nothing; off or
-// trusted, a plain relay.
+// answers is masked before the runtime, and so the model, reads it, as the shield's verdict for the turn's seam says:
+// watching reads and logs and changes nothing; a passing verdict is a plain relay.
 
 export interface McpRouteDeps {
     readonly shield: PrivacyShield;
@@ -129,24 +129,10 @@ const rpcError = (status: number, message: string): Response =>
     });
 
 export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDeps) => {
-    const record = (session: { provider: string; conversationId?: string | undefined }, masking: boolean, tally: ShieldTally): void => {
-        if (Object.keys(tally.counts).length === 0 && tally.images === 0) {
-            return;
+    const record = (session: { provider: string; conversationId?: string | undefined }, verdict: ShieldVerdict, tally: ShieldTally): void => {
+        if (Object.keys(tally.counts).length > 0 || tally.images > 0) {
+            shield.note({ ...session, ...tally, verdict, action: verdict.kind === "mask" ? "masked" : "watched", protocol: "hooks:mcp" });
         }
-        void shield.ledger
-            .record({
-                at: new Date().toISOString(),
-                ...(session.conversationId !== undefined ? { conversationId: session.conversationId } : {}),
-                provider: session.provider,
-                trusted: false,
-                action: masking ? "masked" : "watched",
-                counts: tally.counts as Partial<Record<PersonalDataClass, number>>,
-                images: tally.images,
-                documents: tally.documents,
-                protocol: "hooks:mcp",
-                ...(tally.replacements.length > 0 ? { replacements: tally.replacements } : {}),
-            })
-            .catch((error: unknown) => warn("privacy shield: the log could not be written", error));
     };
 
     return async (c: Context<AppEnv>): Promise<Response> => {
@@ -154,18 +140,16 @@ export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDe
         if (session === undefined) {
             return c.json({ error: "unknown privacy MCP session" }, 404);
         }
-        let policy: PrivacyShieldPolicy;
-        let trusted: boolean;
+        let decision: ShieldDecision;
         try {
-            policy = await shield.policy();
-            trusted = await shield.trusted(policy, session.provider, session.conversationId);
+            decision = await shield.decide({ provider: session.provider, conversationId: session.conversationId, route: "hooks" });
         } catch (error) {
             warn("privacy shield: the policy could not be read, refusing the MCP request", error);
             return rpcError(502, "The privacy shield's policy could not be read, so this tool call was not sent.");
         }
-        const masking = policy.mode === "on" && !trusted;
-        const watching = policy.mode === "watch" && !trusted;
-        const reading = masking || watching;
+        const { policy, verdict } = decision;
+        const masking = verdict.kind === "mask";
+        const reading = masking || verdict.kind === "watch";
         const masker = reading ? await shield.masker(policy) : undefined;
 
         let body: string | undefined;
@@ -228,7 +212,7 @@ export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDe
                         ? await walker.mask(event.data ?? "")
                         : JSON.stringify(await shieldMessage(parsed, methods, walker, masking));
                 await shield.vault.commit();
-                record(session, masking, { ...tally, counts: { ...tally.counts }, replacements: [...tally.replacements] });
+                record(session, verdict, { ...tally, counts: { ...tally.counts }, replacements: [...tally.replacements] });
                 // Each event logged for what it alone added, so a stream that runs for a turn does not repeat itself.
                 for (const kind of Object.keys(tally.counts)) {
                     delete (tally.counts as Record<string, number>)[kind];
@@ -257,7 +241,7 @@ export const createMcpRoute = ({ shield, warn, fetch: send = fetch }: McpRouteDe
                 );
             }
         }
-        record(session, masking, tally);
+        record(session, verdict, tally);
         return new Response(masking ? answer : text, status);
     };
 };

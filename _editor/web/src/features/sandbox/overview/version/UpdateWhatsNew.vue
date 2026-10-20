@@ -1,7 +1,7 @@
 <!-- What an update brings, in the words of the people it is for: one change per line to scan, what it replaced a shade back
      under it (whatsNew.ts), and the tail of a long gap as one link rather than more lines. -->
 <script setup lang="ts">
-import { ui } from "@intentic/ui";
+import { SectionHeader, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { noteLines } from "./whatsNew";
@@ -19,7 +19,7 @@ const lines = computed(() => notes.map((note) => ({ note, ...noteLines(note) }))
 
 <template>
     <div class="flex flex-col gap-3.5">
-        <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.sandboxUpdateCard.whatsNew`) }}</h3>
+        <SectionHeader :label="t(`sandbox.sandboxUpdateCard.whatsNew`)" density="dense" :heading="3" />
         <ul class="flex flex-col gap-3">
             <li v-for="line in lines" :key="line.note" class="flex gap-3">
                 <!-- A small gold lozenge, the house's own mark, rather than a bullet that reads as a list of chores. -->

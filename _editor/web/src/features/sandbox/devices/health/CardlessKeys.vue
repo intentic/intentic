@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CardlessHost } from "@intentic/sandbox-contract/schemas/devices";
-import { Button, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, Row, RowGroup, RowNote } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -75,7 +75,8 @@ const withdraw = async (id: string): Promise<void> => {
 <template>
     <section v-if="canShip && keys.length > 0" class="flex flex-col gap-3">
         <Notice v-if="notice" :of="notice" />
-        <RowGroup :label="t(`sandbox.cardlessKeys.title`)" :caption="t(`sandbox.cardlessKeys.caption`)">
+        <RowGroup :label="t(`sandbox.cardlessKeys.title`)">
+            <RowNote :label="t(`sandbox.cardlessKeys.caption`)" />
             <!-- Titled by the name the computer was connected under: the one the owner once typed, not the connection key. -->
             <Row v-for="key in keys" :key="key.id" icon="key" :title="key.card" :description="describe(key)">
                 <template #control>

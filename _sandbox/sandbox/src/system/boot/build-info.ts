@@ -7,8 +7,9 @@ import { buildId, version } from "../../version.js";
 
 // WHICH BUILD IS RUNNING (2026-10-11). Every working-tree build is version 0.0.0, so "is my fix live?" took a dozen
 // calls of comparing mtimes. The source commit comes from INTENTIC_COMMIT (or SOURCE_COMMIT) when the image sets it,
-// else from build-info.json beside the package's package.json, which a build step writes; without either the commit is
-// simply absent. builtAt falls back to the newest file under the compiled tree, the same instant buildId() names.
+// else from build-info.json inside the compiled tree, which the image build writes (prepare-image-trees.sh); without
+// either the commit is simply absent, as it is for a checkout's dist mounted over the image's. builtAt falls back to
+// the newest file under the compiled tree, the same instant buildId() names.
 
 export interface BuildInfo {
     readonly version: string;
@@ -29,7 +30,7 @@ const StampFile = z.object({ commit: Stamp, builtAt: Stamp }).catch({});
 
 const stamped = (): z.infer<typeof StampFile> => {
     try {
-        return StampFile.parse(JSON.parse(readFileSync(join(packageRoot(import.meta.url), BUILD_INFO_FILE), "utf8")));
+        return StampFile.parse(JSON.parse(readFileSync(join(packageRoot(import.meta.url), "dist", BUILD_INFO_FILE), "utf8")));
     } catch {
         // allow(silent-catch): only an image build writes the stamp; a checkout without one, or a stamp it cannot read, is an unstamped build.
         return {};

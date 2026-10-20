@@ -2,8 +2,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { serialLock } from "@intentic/base/async";
 import type { PersonalDataSpan } from "@intentic/privacy-detect";
-import type { Lexicon } from "@intentic/privacy-detect/lexicon";
-import { fullNameAlone } from "@intentic/privacy-detect/standalone";
 import type { EntityRecognizer } from "./masker.js";
 
 // The local name model behind `names: "model"`: a Polish named-entity model (HerBERT fine-tuned for personal data, from
@@ -80,11 +78,11 @@ const windowsOf = (words: readonly Word[]): Word[][] => {
     return windows;
 };
 
-// What a run the model labelled is: a person only as a full name (@intentic/privacy-detect standalone.ts, held to the
-// owner's name lists), a location only as somebody's address, one with a house number in it.
-const kindOf = (tag: string, value: string, lexicon: Lexicon | undefined): PersonalDataSpan["class"] | undefined => {
+// What a run the model labelled proposes: a person, or a location with a house number in it as somebody's address. The
+// gate holds each to what its kind is alone (@intentic/privacy-detect standalone.ts): a person only as a full name.
+const kindOf = (tag: string, value: string): PersonalDataSpan["class"] | undefined => {
     if (tag === "PER") {
-        return fullNameAlone(value, lexicon) ? "person-name" : undefined;
+        return "person-name";
     }
     return tag === "LOC" && /\d/u.test(value) ? "address" : undefined;
 };
@@ -130,7 +128,7 @@ export const loadRecognizer = async (
         };
         const tensor = (values: readonly number[]): unknown => new Tensor("int64", BigInt64Array.from(values.map(BigInt)), [1, values.length]);
 
-        const labelWindow = async (text: string, window: readonly Word[], lexicon: Lexicon | undefined): Promise<PersonalDataSpan[]> => {
+        const labelWindow = async (text: string, window: readonly Word[]): Promise<PersonalDataSpan[]> => {
             const ids = [cls];
             const firstPiece: number[] = [];
             for (const word of window) {
@@ -152,7 +150,7 @@ export const loadRecognizer = async (
                 }
                 const score = open.scores.reduce((sum, value) => sum + value, 0) / open.scores.length;
                 const value = text.slice(open.start, open.end);
-                const kind = kindOf(open.tag, value, lexicon);
+                const kind = kindOf(open.tag, value);
                 if (kind !== undefined && score >= MIN_SCORE && CAPITALIZED.test(value)) {
                     spans.push({ start: open.start, end: open.end, class: kind, value });
                 }
@@ -183,7 +181,7 @@ export const loadRecognizer = async (
         // parallel would take every core from the turns it is shielding.
         const serially = serialLock();
         return {
-            find: async (text, lexicon) => {
+            find: async (text) => {
                 // Nothing capitalized, no name: most tool output (logs, code, numbers) is turned away before tokenizing.
                 if (!CAPITALIZED.test(text)) {
                     return [];
@@ -195,7 +193,7 @@ export const loadRecognizer = async (
                 const spans: PersonalDataSpan[] = [];
                 for (const window of windowsOf(words)) {
                     if (window.some((word) => CAPITALIZED.test(text.slice(word.start, word.end)))) {
-                        spans.push(...(await serially(() => labelWindow(text, window, lexicon))));
+                        spans.push(...(await serially(() => labelWindow(text, window))));
                     }
                 }
                 return spans;

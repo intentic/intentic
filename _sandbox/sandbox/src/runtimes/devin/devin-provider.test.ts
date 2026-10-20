@@ -149,7 +149,7 @@ test("a turn refused as signed out marks the account for a new sign-in and says 
     );
     const events = await run(services, turn());
     expect(written).toEqual([expect.objectContaining({ id: "a", refusedAt: expect.any(Number) })]);
-    expect(events[0]).toEqual({ kind: "error", message: expect.stringContaining("Sandbox ▸ Models") });
+    expect(events[0]).toEqual({ kind: "error", message: expect.stringContaining("Sandbox ▸ Models"), own: true });
 });
 
 test("every key refused: the turn is refused before spawning, naming the reconnect", async () => {

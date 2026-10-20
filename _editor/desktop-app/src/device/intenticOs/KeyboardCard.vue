@@ -35,8 +35,8 @@ const pickVariant = (variant: string | undefined): void => {
 
 <template>
     <section v-if="keyboard" class="flex flex-col gap-3 rounded-xl border border-line p-4" :aria-busy="keyboardChanging">
-        <header class="flex items-start gap-2.5">
-            <Icon :name="keyboardChanging ? `spinner` : `globe`" :spin="keyboardChanging" class="mt-0.5 shrink-0 text-link" />
+        <header class="flex items-start gap-2.5 text-sm">
+            <Icon :name="keyboardChanging ? `spinner` : `globe`" :spin="keyboardChanging" class="shrink-0 text-link" />
             <div class="min-w-0 flex-1">
                 <h2 class="text-sm leading-tight font-semibold">{{ t(`desktop.os.keyboard.title`) }}</h2>
                 <p class="mt-1 text-xs text-muted">{{ name }}</p>

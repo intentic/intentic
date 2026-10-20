@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui, Notice, SegmentedControl } from "@intentic/ui";
+import { Notice, Section, SegmentedControl, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import type { PersonaGrantable, PersonaPowersDraft } from "../models/sandbox/personas/personaRules";
@@ -154,16 +154,33 @@ const shellCaveat = computed(
         <div class="grid items-start gap-x-10 gap-y-6 @2xl:grid-cols-2">
             <!-- This section controls carried resources and the persona's location. -->
             <div class="flex flex-col gap-6">
-                <div class="flex flex-col gap-3">
-                    <span :class="ui.sectionLabel()">{{ t(`sandbox.personaPowersFields.inWorkspace`) }}</span>
+                <Section :label="t(`sandbox.personaPowersFields.inWorkspace`)">
+                    <div class="flex flex-col gap-3">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <Icon name="file-tree" :class="RAIL" />
+                            <span class="min-w-0 flex-1 text-sm text-content">{{ t(`shared.files`) }}</span>
+                            <SegmentedControl v-model="draft.files" :options="FILE_ACCESS" />
+                        </div>
 
-                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <Icon name="file-tree" :class="RAIL" />
-                        <span class="min-w-0 flex-1 text-sm text-content">{{ t(`shared.files`) }}</span>
-                        <SegmentedControl v-model="draft.files" :options="FILE_ACCESS" />
+                        <label v-for="shelf in WORKSPACE_SHELVES" :key="shelf.key" class="flex flex-col gap-0.5">
+                            <span class="flex items-center gap-2">
+                                <Icon :name="shelf.icon" :class="RAIL" />
+                                <span class="min-w-0 flex-1 text-sm text-content">{{ shelf.label }}</span>
+                                <ToggleSwitch v-model="draft[shelf.key]" />
+                            </span>
+                            <span :class="HINT">{{ shelf.hint }}</span>
+                        </label>
                     </div>
+                </Section>
 
-                    <label v-for="shelf in WORKSPACE_SHELVES" :key="shelf.key" class="flex flex-col gap-0.5">
+                <!-- The rail goes out with the slot, so whatever the parent renders there lines up with the rows above it. -->
+                <slot name="where" :rail="RAIL" />
+            </div>
+
+            <!-- Everything whose consequences leave this box. -->
+            <Section :label="t(`sandbox.personaPowersFields.reachingOut`)">
+                <div class="flex flex-col gap-3">
+                    <label v-for="shelf in OUTWARD_SHELVES" :key="shelf.key" class="flex flex-col gap-0.5">
                         <span class="flex items-center gap-2">
                             <Icon :name="shelf.icon" :class="RAIL" />
                             <span class="min-w-0 flex-1 text-sm text-content">{{ shelf.label }}</span>
@@ -171,69 +188,54 @@ const shellCaveat = computed(
                         </span>
                         <span :class="HINT">{{ shelf.hint }}</span>
                     </label>
-                </div>
 
-                <!-- The rail goes out with the slot, so whatever the parent renders there lines up with the rows above it. -->
-                <slot name="where" :rail="RAIL" />
-            </div>
+                    <!-- Shown only when it's load-bearing: something is bounded while the shell stays on. -->
+                    <Notice v-if="shellCaveat" tone="warning">
+                        {{ t(`sandbox.personaPowersFields.with`) }} <strong>{{ t(`sandbox.personaPowersFields.runCommands`) }}</strong>
+                        {{ t(`sandbox.personaPowersFields.onEveryOtherLimit`) }}
+                    </Notice>
 
-            <!-- Everything whose consequences leave this box. -->
-            <div class="flex flex-col gap-3">
-                <span :class="ui.sectionLabel()">{{ t(`sandbox.personaPowersFields.reachingOut`) }}</span>
-
-                <label v-for="shelf in OUTWARD_SHELVES" :key="shelf.key" class="flex flex-col gap-0.5">
-                    <span class="flex items-center gap-2">
-                        <Icon :name="shelf.icon" :class="RAIL" />
-                        <span class="min-w-0 flex-1 text-sm text-content">{{ shelf.label }}</span>
-                        <ToggleSwitch v-model="draft[shelf.key]" />
-                    </span>
-                    <span :class="HINT">{{ shelf.hint }}</span>
-                </label>
-
-                <!-- Shown only when it's load-bearing: something is bounded while the shell stays on. -->
-                <Notice v-if="shellCaveat" tone="warning">
-                    {{ t(`sandbox.personaPowersFields.with`) }} <strong>{{ t(`sandbox.personaPowersFields.runCommands`) }}</strong>
-                    {{ t(`sandbox.personaPowersFields.onEveryOtherLimit`) }}
-                </Notice>
-
-                <!-- The default all-access state collapses to one line. -->
-                <div v-for="group in GRANT_GROUPS" :key="group.key" class="flex flex-col gap-1.5">
-                    <label class="flex flex-col gap-0.5">
-                        <span class="flex items-center gap-2">
-                            <Icon :name="group.icon" :class="RAIL" />
-                            <span class="min-w-0 flex-1 text-sm text-content">{{ group.label }}</span>
-                            <ToggleSwitch
-                                :model-value="grantsAll(group.key)"
-                                :disabled="groupItems(group.kind).length === 0"
-                                @update:model-value="setGrantsAll(group.key, $event as boolean)"
-                            />
-                        </span>
-                        <span :class="HINT">
-                            {{
-                                groupItems(group.kind).length === 0
-                                    ? group.empty
-                                    : grantsAll(group.key)
-                                      ? t(`sandbox.personaPowersFields.allIncludingNewOnes`)
-                                      : t(`sandbox.personaPowersFields.pick`)
-                            }}
-                        </span>
-                    </label>
-                    <!-- Scoped values align with their row label and stay outside the checkbox control. -->
-                    <div v-if="!grantsAll(group.key) && groupItems(group.kind).length > 0" class="flex flex-wrap gap-2 pl-6">
-                        <button
-                            v-for="item in groupItems(group.kind)"
-                            :key="item.id"
-                            type="button"
-                            :aria-pressed="granted(group.key, item.id)"
-                            :class="ui.chip({ on: granted(group.key, item.id) }, `px-2.5 py-1 text-xs`, granted(group.key, item.id) && `font-medium`)"
-                            @click="toggleGrant(group.key, item.id, group.kind)"
-                        >
-                            {{ item.label }}
-                            <span v-if="item.detail !== undefined" class="ml-1 font-mono text-2xs text-subtle">{{ item.detail }}</span>
-                        </button>
+                    <!-- The default all-access state collapses to one line. -->
+                    <div v-for="group in GRANT_GROUPS" :key="group.key" class="flex flex-col gap-1.5">
+                        <label class="flex flex-col gap-0.5">
+                            <span class="flex items-center gap-2">
+                                <Icon :name="group.icon" :class="RAIL" />
+                                <span class="min-w-0 flex-1 text-sm text-content">{{ group.label }}</span>
+                                <ToggleSwitch
+                                    :model-value="grantsAll(group.key)"
+                                    :disabled="groupItems(group.kind).length === 0"
+                                    @update:model-value="setGrantsAll(group.key, $event as boolean)"
+                                />
+                            </span>
+                            <span :class="HINT">
+                                {{
+                                    groupItems(group.kind).length === 0
+                                        ? group.empty
+                                        : grantsAll(group.key)
+                                          ? t(`sandbox.personaPowersFields.allIncludingNewOnes`)
+                                          : t(`sandbox.personaPowersFields.pick`)
+                                }}
+                            </span>
+                        </label>
+                        <!-- Scoped values align with their row label and stay outside the checkbox control. -->
+                        <div v-if="!grantsAll(group.key) && groupItems(group.kind).length > 0" class="flex flex-wrap gap-2 pl-6">
+                            <button
+                                v-for="item in groupItems(group.kind)"
+                                :key="item.id"
+                                type="button"
+                                :aria-pressed="granted(group.key, item.id)"
+                                :class="
+                                    ui.chip({ on: granted(group.key, item.id) }, `px-2.5 py-1 text-xs`, granted(group.key, item.id) && `font-medium`)
+                                "
+                                @click="toggleGrant(group.key, item.id, group.kind)"
+                            >
+                                {{ item.label }}
+                                <span v-if="item.detail !== undefined" class="ml-1 font-mono text-2xs text-subtle">{{ item.detail }}</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </Section>
         </div>
     </div>
 </template>

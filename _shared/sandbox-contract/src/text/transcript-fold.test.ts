@@ -1,5 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { AgentEvent } from "../events/agent-events.js";
+import { type AgentErrorCode, AgentErrorCodeSchema, type AgentEvent } from "../events/agent-events.js";
 import { type TranscriptPatch, type TranscriptRow, TranscriptRowSchema } from "../events/transcript.js";
 import { sandboxNoticeOf } from "../events/sandbox-notice.js";
 import { watchWakePrompt } from "../events/watch-wake.js";
@@ -306,7 +306,8 @@ describe("foldTurn", () => {
         expect(foldOf("hi", events)).toEqual([
             { role: "user", text: "hi", sentAt: SENT_AT },
             { role: "assistant", text: "I'll take a look" },
-            { role: "notice", text: refusal },
+            // A failure nobody named is still a failure: coded, the unclassified kind, never bare words.
+            { role: "notice", text: refusal, noticeCode: { code: "failed", params: { message: refusal } } },
         ]);
         const outage: AgentEvent[] = [
             {
@@ -349,11 +350,16 @@ describe("foldTurn", () => {
             noticeCode: { code: "renewalWithdrawn", params: { message: "Token refused.", error: "claude-token-refused" } },
         };
         // The live window hears the rewrite as a patch on the row it already drew, then the stop's own row.
+        const stop: TranscriptRow = {
+            role: "notice",
+            text: "Claude Code returned an error result: 401.",
+            noticeCode: { code: "failed", params: { message: "Claude Code returned an error result: 401." } },
+        };
         expect(patches).toEqual([
             { op: "replace", index: 1, row: withdrawn },
-            { op: "append", row: { role: "notice", text: "Claude Code returned an error result: 401." } },
+            { op: "append", row: stop },
         ]);
-        expect(fold.rows.slice(1)).toEqual([withdrawn, { role: "notice", text: "Claude Code returned an error result: 401." }]);
+        expect(fold.rows.slice(1)).toEqual([withdrawn, stop]);
         // A renewal armed again keeps its promise.
         const again = new TranscriptFold(openingOf("hi"));
         again.apply(refused);
@@ -1096,14 +1102,23 @@ describe(`the code beside a notice's words`, () => {
         });
     });
 
-    it(`codes a failure the sandbox names, and leaves a provider's own words to themselves`, () => {
+    it(`codes every failure, says who worded it, and names an unnamed one as unclassified`, () => {
         const busy = `This agent is already running a turn, wait for it to finish.`;
-        expect(lastOf([{ kind: `error`, code: `agent-busy`, message: busy }])).toEqual({
+        expect(lastOf([{ kind: `error`, code: `agent-busy`, message: busy, own: true }])).toEqual({
             role: `notice`,
             text: busy,
-            noticeCode: { code: `failed`, params: { message: busy, error: `agent-busy` } },
+            noticeCode: { code: `failed`, params: { message: busy, error: `agent-busy`, own: true } },
         });
-        expect(lastOf([{ kind: `error`, message: `Overloaded.` }])).toEqual({ role: `notice`, text: `Overloaded.` });
+        expect(lastOf([{ kind: `error`, message: `Overloaded.` }])).toEqual({
+            role: `notice`,
+            text: `Overloaded.`,
+            noticeCode: { code: `failed`, params: { message: `Overloaded.` } },
+        });
+        // A spent allowance is a failure like any other: it was the one code left as bare words (2026-10-20: 41 rows a week).
+        expect(lastOf([{ kind: `error`, code: `rate_limit`, message: `You've hit your usage limit.` }])?.noticeCode).toEqual({
+            code: `failed`,
+            params: { message: `You've hit your usage limit.`, error: `rate_limit` },
+        });
         expect(lastOf([{ kind: `error`, code: `claude-token-refused`, message: `Token refused.` }])).toEqual({
             role: `notice`,
             text: `Token refused. Reconnect the account to pick this conversation back up.`,
@@ -1127,8 +1142,22 @@ describe(`the code beside a notice's words`, () => {
         const rows = events.flatMap((turn) => foldTurn(openingOf(`go`), turn, `stopped`)).filter((row) => row.noticeCode !== undefined);
         expect(rows.filter((row) => sandboxNoticeOf(row) === undefined)).toEqual([]);
         expect(new Set(rows.map((row) => row.noticeCode?.code))).toEqual(
-            new Set([`synced`, `compacted`, `intoParent`, `intoParentClash`, `landHeld`, `outageWaiting`, `memoryHeld`, `kept`, `renewalWithdrawn`, `stopped`]),
+            new Set([`synced`, `compacted`, `intoParent`, `intoParentClash`, `landHeld`, `outageWaiting`, `memoryHeld`, `kept`, `renewalWithdrawn`, `failed`, `stopped`]),
         );
+    });
+
+    // Every failure code the wire names, and none at all, folds to a failure row this build reads back: the class of row
+    // a reader had to recognise by its words cannot be written. A code added to the wire is held to it here.
+    it(`folds every failure, attended or not, ran or not, to a coded failure row`, () => {
+        const codes: readonly (AgentErrorCode | undefined)[] = [...AgentErrorCodeSchema.options, undefined];
+        const ran: AgentEvent = { kind: `tool_call`, id: `t1`, name: `Edit`, category: `edit`, status: `completed` };
+        for (const code of codes) {
+            const frame: AgentEvent = { kind: `error`, message: `Words.`, code };
+            for (const events of [[frame], [{ ...frame, unattended: true }], [{ ...frame, held: { ran: false } }], [ran, frame]]) {
+                const failure = foldTurn(openingOf(`go`), events, `settled`).at(-1);
+                expect({ code, coded: failure?.role === `notice` && sandboxNoticeOf(failure)?.code !== undefined }).toEqual({ code, coded: true });
+            }
+        }
     });
 
     // A newer sandbox's code must not cost an older app the whole page: the row parses, and the reader draws its words.

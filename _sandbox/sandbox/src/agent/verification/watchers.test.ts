@@ -383,7 +383,7 @@ describe("watchers", () => {
                 await advanceTimersByTimeAsync(downSeconds * 1000);
             }
             harness = harnessOf({ journal, ...runtime });
-            await restoreWatchers();
+            await restoreWatchers(await journal.list());
             await advanceTimersByTimeAsync(0);
         };
 
@@ -489,7 +489,7 @@ describe("watchers", () => {
             harness.stop();
             harness = harnessOf({ journal, check: { exitCode: 0, output: "done" } });
             harness.live.delete("conv-1");
-            await restoreWatchers();
+            await restoreWatchers(await journal.list());
             await advanceTimersByTimeAsync(0);
             expect(armedWatcherCount()).toBe(0);
             expect(harness.doors.started).toHaveLength(0);

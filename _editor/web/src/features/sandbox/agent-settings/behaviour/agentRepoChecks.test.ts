@@ -4,7 +4,7 @@
 import "@intentic/testing/dom";
 import type { RepoChecksSummary } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { timeAgo } from "@intentic/ui";
 
@@ -12,7 +12,14 @@ const repos = ref<RepoChecksSummary[] | undefined>([]);
 const adopt = jest.fn();
 
 jest.mock(`../../../../models/sandbox/environment/useRepoChecks`, () => ({
-    useRepoChecks: () => ({ repos, adopt, pending: ref(undefined), error: ref(undefined), isLoading: ref(false), busy: ref(false) }),
+    useRepoChecks: () => ({
+        repos,
+        adopt,
+        pending: ref(undefined),
+        error: ref(undefined),
+        loaded: computed(() => ({ state: `ready`, data: repos.value ?? [], refreshing: false, refreshError: undefined })),
+        busy: ref(false),
+    }),
 }));
 
 const { default: AgentRepoChecks } = await import("./AgentRepoChecks.vue");

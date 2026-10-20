@@ -203,6 +203,7 @@
         "@dagrejs/dagre": "catalog:",
         "@primeuix/themes": "catalog:",
         "@intentic/code-read": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@shikijs/langs": "catalog:",
         "@shikijs/themes": "catalog:",

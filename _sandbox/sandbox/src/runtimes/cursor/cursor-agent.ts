@@ -269,7 +269,7 @@ const shieldedStart = async (
         const root = anchor === undefined ? request.spec.cwd : join("/proc", String(anchor.pid), "root", request.spec.cwd);
         const instructions = await instructionRefusal(shield, root, "Cursor");
         if (instructions !== undefined) {
-            return { refused: { kind: "error", code: "privacy-instructions", message: instructions } };
+            return { refused: { kind: "error", code: "privacy-instructions", message: instructions, own: true } };
         }
         const masking = await shield.masking();
         const own = told.append === undefined ? undefined : await shield.mask(told.append, "instructions");
@@ -278,7 +278,7 @@ const shieldedStart = async (
         return { replace, append, masking, project: await projectMcp(shield, root) };
     } catch (error) {
         const message = `The privacy shield could not read this turn, so it was not sent to Cursor. ${error instanceof Error ? error.message : ""}`.trim();
-        return { refused: { kind: "error", code: "privacy-unshielded", message } };
+        return { refused: { kind: "error", code: "privacy-unshielded", message, own: true } };
     }
 };
 
@@ -509,7 +509,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             refusedReplacement(instructions, sawDelta, sendError, result);
             if (stalled) {
                 errored = true;
-                yield { kind: "error", message: CURSOR_STALLED, code: "provider-outage" };
+                yield { kind: "error", message: CURSOR_STALLED, code: "provider-outage", own: true };
             } else if (sendError !== undefined) {
                 errored = true;
                 yield await codedError(sendError, await cursorSdk());
@@ -556,7 +556,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         // request already offers no tool at all.
         const list = request.policy.sealed === true ? undefined : request.policy.allowedTools;
         if (list !== undefined && !(await listHeld(deps.hooks))) {
-            yield { kind: "error", message: CURSOR_LIST_HOOKS_MISSING };
+            yield { kind: "error", message: CURSOR_LIST_HOOKS_MISSING, own: true };
             yield { kind: "done" };
             return;
         }
@@ -571,7 +571,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
             const covered = deps.hooks.ready() && (await deps.hooks.covers().catch(() => false));
             const refusal = covered
                 ? await shieldedStart(shield, request, anchor, told)
-                : { refused: { kind: "error" as const, code: "privacy-unshielded" as const, message: CURSOR_HOOKS_MISSING } };
+                : { refused: { kind: "error" as const, code: "privacy-unshielded" as const, message: CURSOR_HOOKS_MISSING, own: true } };
             if ("refused" in refusal) {
                 yield refusal.refused;
                 yield { kind: "done" };
@@ -743,14 +743,14 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
     return async function* cursorAgent(request: AgentRequest<CursorCredential>, extras: CursorTurnExtras = {}): AsyncGenerator<AgentEvent> {
         const sdk = await cursorSdk();
         if (sdk === undefined) {
-            yield { kind: "error", message: CURSOR_SDK_MISSING };
+            yield { kind: "error", message: CURSOR_SDK_MISSING, own: true };
             yield { kind: "done" };
             return;
         }
         const apiKey = request.credential.apiKey;
         if (apiKey === "") {
             // Reached only when a request is built by hand; planCursorTurn already refuses first with the same code.
-            yield { kind: "error", message: "Connect your Cursor subscription in Sandbox ▸ Agent to run Cursor.", code: "subscription-required" };
+            yield { kind: "error", message: "Connect your Cursor subscription in Sandbox ▸ Agent to run Cursor.", code: "subscription-required", own: true };
             yield { kind: "done" };
             return;
         }

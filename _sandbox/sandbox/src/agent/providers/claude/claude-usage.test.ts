@@ -181,5 +181,5 @@ test("a test's Claude reading is filed as the reader files one: at the line unti
     expect(reading.windows).toEqual([{ kind: "five_hour", utilization: 100, resetsAt: 2_000_000_000, gates: "all", rounded: true }]);
     expect(serviceState({ account: "a", usage: reading }, undefined, undefined, 1_000)).toEqual({ kind: "ready", room: 0 });
     const refused = claudeLimitRefusal({ account: "a", resetsAt: 2_000_000_000, at: 500 });
-    expect(serviceState({ account: "a", usage: reading }, refused, undefined, 1_000)).toEqual({ kind: "spent", reopensAt: 2_000_000_000 });
+    expect(serviceState({ account: "a", usage: reading }, [refused], undefined, 1_000)).toEqual({ kind: "spent", reopensAt: 2_000_000_000 });
 });

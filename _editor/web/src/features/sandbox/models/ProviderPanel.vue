@@ -377,7 +377,7 @@ const otherName = computed(() => (otherLive === undefined ? `` : (providerSpec(o
 </script>
 
 <template>
-    <RowGroup :label="providerName">
+    <RowGroup :label="providerName" equal-rows>
         <!-- Adding one more is the list's own action, where every list keeps it; with nothing in the list, the card says it. -->
         <template v-if="rows.length > 0 && !signingInHere" #actions>
             <Button v-for="way in ways" :key="way.key" size="small" tier="boring" :label="way.label" :disabled="busy" @click="ask(way.via, way.variant)">

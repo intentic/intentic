@@ -89,12 +89,12 @@ const submit = async (): Promise<void> => {
         <div class="flex flex-col gap-4">
             <div class="flex items-end gap-2">
                 <label class="flex w-36 flex-col gap-1">
-                    <span :class="ui.sectionLabel()">{{ t(`sandbox.newExtensionDialog.publisher`) }}</span>
+                    <span class="ui-field-label">{{ t(`sandbox.newExtensionDialog.publisher`) }}</span>
                     <input v-model="publisher" :class="ui.input()" spellcheck="false" />
                 </label>
                 <span class="pb-2 text-subtle">.</span>
                 <label class="flex flex-1 flex-col gap-1">
-                    <span :class="ui.sectionLabel()">{{ t(`shared.name`) }}</span>
+                    <span class="ui-field-label">{{ t(`shared.name`) }}</span>
                     <input v-model="name" :class="ui.input()" placeholder="release-notes" spellcheck="false" autofocus @keyup.enter="submit()" />
                 </label>
             </div>
@@ -114,7 +114,7 @@ const submit = async (): Promise<void> => {
 
             <!-- Optional, and last: empty leaves a stub to edit by hand, filled starts an agent on it before dialog closes. -->
             <label class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel()">{{ t(`sandbox.newExtensionDialog.whatShouldDo`) }}</span>
+                <span class="ui-field-label">{{ t(`sandbox.newExtensionDialog.whatShouldDo`) }}</span>
                 <textarea v-model="wish" :class="ui.input()" rows="3" :placeholder="t(`sandbox.newExtensionDialog.showWhatShippedWeek`)"></textarea>
                 <span class="text-2xs text-subtle">
                     {{ t(`sandbox.newExtensionDialog.optionalSayInOwn`) }}

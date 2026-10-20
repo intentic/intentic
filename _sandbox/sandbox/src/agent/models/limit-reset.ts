@@ -4,6 +4,7 @@ import type { Services } from "../../composition.js";
 import { windowPeriod } from "@intentic/sandbox-contract/models/plan-pools";
 import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { accountLimitReset } from "../../usage/account-usage.js";
+import { fleetCapacityOf } from "../../usage/serviceability/serviceability.js";
 
 // Tries the account's own snapshot first (native Claude, filed per account), then the translator's per-model pool for
 // other routed providers, since those key by subscription, not account. Never throws; `undefined` is a real answer:
@@ -59,22 +60,22 @@ export const limitReopensAt = async (params: {
     if (stored !== undefined) {
         return stored;
     }
-    const routed = KeyedProviderSchema.safeParse(provider);
-    if (!routed.success || model === undefined || model === "") {
+    if (!KeyedProviderSchema.safeParse(provider).success || model === undefined || model === "") {
         return undefined;
     }
-    const limit = await services.cliProxy.turnLimit(routed.data, model).catch(() => undefined);
-    return limit?.reopensAt;
+    // allow(silent-catch): this answers "when", never throws; an unreadable verdict leaves nothing to say.
+    const capacity = await fleetCapacityOf(services, provider, { id: model }).catch(() => undefined);
+    return capacity?.kind === "spent" ? capacity.reopensAt : undefined;
 };
 
 /* THE SANDBOX'S OWN STANDING WORD ON A SPENT POOL. A refusal can name no instant (Codex hands over a 429 it was waiting
    out inside the turn, saying only "rate limit") while the pool it hit was refused minutes earlier, in the provider's
    own words, until a stated time: two turns on one Codex account were held with no reset and nothing to book them by,
    two minutes after a sibling on the same model was told "try again at 1:53 PM" (2026-10-19). Where nothing else knows
-   when the pool reopens, the last refusal on file for this provider's model (and account, where it names one) and the
-   model's bench say it, the later of the two while still ahead. Never throws; undefined where neither stands. */
+   when the pool reopens, the refusals on file for this provider's model (and account, where they name one) say it, the
+   latest while still ahead. Never throws; undefined where none stands. */
 export const standingReopensAt = async (params: {
-    readonly services: Pick<Services, "providerRefusals" | "modelCooldowns">;
+    readonly services: Pick<Services, "providerRefusals">;
     readonly provider: AgentProvider;
     readonly model: string | undefined;
     readonly account: string | undefined;
@@ -95,11 +96,8 @@ export const standingReopensAt = async (params: {
                 (refusal.account === undefined || (!routed && refusal.account === account)) &&
                 (refusal.model === undefined || refusal.model === model),
         )
-        .flatMap((refusal) => (refusal.resetsAt === undefined ? [] : [refusal.resetsAt]));
-    // allow(silent-catch): as above.
-    const bench = model === undefined ? undefined : (await services.modelCooldowns.cooling(provider).catch(() => undefined))?.get(model);
-    const instants = [...filed, ...(bench === undefined ? [] : [Math.ceil(bench.until / 1000)])].filter((at) => at > nowSeconds);
-    return instants.length === 0 ? undefined : Math.max(...instants);
+        .flatMap((refusal) => (refusal.resetsAt === undefined || refusal.resetsAt <= nowSeconds ? [] : [refusal.resetsAt]));
+    return filed.length === 0 ? undefined : Math.max(...filed);
 };
 
 /** When a spent pool reopens by everything the sandbox holds: a reading (limitReopensAt), else its standing word. */

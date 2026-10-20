@@ -1,4 +1,4 @@
-import { HOST_NATIVE_ENVIRONMENT } from "@intentic/sandbox-contract/schemas/hosts";
+import { environmentName, HOST_NATIVE_ENVIRONMENT, hostConnectionKey, machinePresence } from "@intentic/sandbox-contract/schemas/hosts";
 import { z } from "zod";
 import type { RpcMessage } from "../agent/tools/turn-mounts.js";
 import type { Services } from "../composition.js";
@@ -32,14 +32,11 @@ const crossingOf = (message: RpcMessage): { readonly named: string; readonly res
     return { named, rest: { ...message, params: { ...message.params, arguments: rest } } };
 };
 
-// A distro by the name WSL knows it by, which is what `in` takes; any other side by its key.
-const sideName = (environment: string): string => (environment.startsWith("wsl:") ? environment.slice("wsl:".length) : environment);
-
 const spokenList = (items: readonly string[]): string => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1) ?? ""}`);
 
 /** What the agent reads when the Windows side is down and its call did not name a side that is up. Exported for its test. */
 export const partlyConnectedRefusal = (card: string, awake: readonly string[], named: string | undefined): string => {
-    const names = awake.map(sideName);
+    const names = awake.map(environmentName);
     const crossings = awake.map((environment) => `in: "${environment}"`);
     const down =
         named === undefined
@@ -65,18 +62,21 @@ export const hostCallRoute =
         if (environment !== HOST_NATIVE_ENVIRONMENT) {
             return undefined;
         }
-        const awake = (await services.hosts.list()).filter(
-            (entry) => entry.card === card && entry.environment !== HOST_NATIVE_ENVIRONMENT && services.hostHub.online(entry.id),
-        );
+        // The machine's presence as every screen reads it (the contract's `machinePresence`), its native side being this
+        // very connection.
+        const sides = (await services.hosts.list())
+            .filter((entry) => entry.card === card && entry.environment !== HOST_NATIVE_ENVIRONMENT)
+            .map((entry) => ({ key: entry.environment, online: services.hostHub.online(entry.id) }));
+        const presence = machinePresence([{ key: HOST_NATIVE_ENVIRONMENT, online: false }, ...sides]);
         // Nothing of this computer answers: the door's own "not connected" stands, as it always has.
-        if (awake.length === 0) {
+        if (presence.kind !== "partly") {
             return undefined;
         }
         const crossing = crossingOf(message);
         // WSL's own names are case-blind (`wsl -d ArchLinux` finds archlinux), so a model's spelling is too.
-        const side = crossing === undefined ? undefined : awake.find((entry) => entry.environment.toLowerCase() === crossing.named.toLowerCase());
+        const side = crossing === undefined ? undefined : presence.awake.find((key) => key.toLowerCase() === crossing.named.toLowerCase());
         if (side !== undefined && crossing !== undefined) {
-            return { id: side.id, message: crossing.rest };
+            return { id: hostConnectionKey(card, side), message: crossing.rest };
         }
-        return { refusal: partlyConnectedRefusal(card, awake.map((entry) => entry.environment).toSorted(), crossing?.named) };
+        return { refusal: partlyConnectedRefusal(card, presence.awake, crossing?.named) };
     };

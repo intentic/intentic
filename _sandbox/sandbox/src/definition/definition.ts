@@ -23,7 +23,7 @@ import { version } from "../version.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
 import { secretFieldsOf } from "../capabilities/credentials/secret-fields.js";
 import type { Services } from "../composition.js";
-import { baseImageOf, customPath, pinnedBase } from "../environment/environment.js";
+import { baseImageOf, customPath, pinnedBase } from "../environment/overlay.js";
 import { remoteState } from "../git/remote/remote.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { stateRelPath } from "../state-paths.js";

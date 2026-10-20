@@ -3,7 +3,7 @@
 //! read, so a phone that filed a card differently would disagree with every other surface. The web's client-only
 //! statuses (a draft, a send not yet answered) never reach the wire and are left out.
 
-use super::agents::{AgentStatus, AgentSummary, QueuePause};
+use super::agents::{AgentStatus, AgentSummary};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -23,11 +23,7 @@ impl AgentSummary {
             return Lane::Finished;
         }
         // Each of these restarts by itself later, so filing it Finished would announce as over work that resumes.
-        if self.turn_in_flight()
-            || self.awaiting_wake == Some(true)
-            || self.limit_scheduled()
-            || self.scheduled_send()
-        {
+        if self.turn_in_flight() || self.awaiting_wake == Some(true) || self.next.is_some() {
             return Lane::Active;
         }
         Lane::Finished
@@ -67,22 +63,6 @@ impl AgentSummary {
         self.status == AgentStatus::Error && self.failure_code.as_deref() == Some("rate_limit")
     }
 
-    fn limit_scheduled(&self) -> bool {
-        self.limited() && self.limit_scheduled == Some(true)
-    }
-
-    /// Messages booked to go by themselves: a scheduled pause, or any item with a time or a conversation to wait for.
-    fn scheduled_send(&self) -> bool {
-        let Some(queue) = &self.queue else {
-            return false;
-        };
-        queue.paused == Some(QueuePause::Scheduled)
-            || queue
-                .items
-                .iter()
-                .any(|item| item.until.is_some() || item.after.is_some())
-    }
-
     fn land_broken(&self) -> bool {
         self.land_failure.is_some() && !self.turn_in_flight()
     }
@@ -112,18 +92,13 @@ impl AgentSummary {
         )
     }
 
-    /// An ending already answered by a booking: something goes by itself after it, so it no longer calls the reader.
-    fn booking_answers(&self) -> bool {
-        matches!(
-            self.status,
-            AgentStatus::Error | AgentStatus::Interrupted | AgentStatus::Stopped
-        ) && self.scheduled_send()
+    /// An ending nothing carries on (`next`): a dead end the reader owes a press. A Stop still unwinding rests here
+    /// whatever waits behind it.
+    fn dead_end(&self) -> bool {
+        self.status == AgentStatus::Stopping || (self.blocking_ending() && self.next.is_none())
     }
 
     fn blocked(&self) -> bool {
-        if self.limit_scheduled() {
-            return false;
-        }
         let ask = &self.attention;
         ask.plan
             || ask.question
@@ -133,7 +108,7 @@ impl AgentSummary {
             || (ask.need == Some(true) && self.status != AgentStatus::Running)
             || self.land_broken()
             || self.held_by_prompt()
-            || (self.blocking_ending() && !self.booking_answers())
+            || self.dead_end()
     }
 
     fn conflict_is_yours(&self) -> bool {
@@ -156,8 +131,7 @@ impl AgentSummary {
     fn heard_by_parent(&self, parent_at: i64) -> bool {
         self.blocking_ending()
             && self.status != AgentStatus::Stopping
-            && !self.limit_scheduled()
-            && !self.booking_answers()
+            && self.next.is_none()
             && !self.attention.question
             && !self.attention.conflict
             && !self.land_broken()
@@ -213,7 +187,7 @@ pub fn attention_cards(agents: &[AgentSummary], unsent: &dyn Fn(&AgentSummary) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wire::agents::{AgentAttention, AgentHarness, ConversationQueue, QueuedMessage};
+    use crate::wire::agents::{AgentAttention, AgentHarness, AgentNext};
     use crate::wire::lenient::Millis;
 
     fn agent(id: &str, status: AgentStatus) -> AgentSummary {
@@ -237,28 +211,48 @@ mod tests {
     }
 
     #[test]
-    fn a_booked_resend_answers_its_ending() {
+    fn whatever_carries_it_on_answers_its_ending() {
         let mut limited = agent("a", AgentStatus::Error);
         limited.failure_code = Some("rate_limit".into());
-        limited.limit_scheduled = Some(true);
+        assert_eq!(limited.lane(), Lane::Attention);
+        limited.next = Some(AgentNext::Rerun {
+            at: Millis(5_000),
+            onto: None,
+        });
         assert_eq!(limited.lane(), Lane::Active);
-        let mut stopped = agent("b", AgentStatus::Stopped);
-        stopped.queue = Some(ConversationQueue {
-            items: vec![QueuedMessage {
-                id: "m".into(),
-                text: "later".into(),
-                voice: "person".into(),
-                queued_at: Millis(1),
-                revision: 1,
-                until: Some(Millis(5_000)),
-                after: None,
-            }],
-            revision: 1,
-            paused: None,
-            until: None,
-            after: None,
+        let mut held = agent("b", AgentStatus::Error);
+        held.failure_code = Some("sandbox-memory-low".into());
+        held.next = Some(AgentNext::Room);
+        assert_eq!(held.lane(), Lane::Active);
+        let mut stopped = agent("c", AgentStatus::Stopped);
+        stopped.next = Some(AgentNext::Send {
+            at: Millis(5_000),
+            count: 1,
         });
         assert_eq!(stopped.lane(), Lane::Active);
+        let mut stopping = agent("d", AgentStatus::Stopping);
+        stopping.next = Some(AgentNext::Send {
+            at: Millis(5_000),
+            count: 1,
+        });
+        assert_eq!(stopping.lane(), Lane::Attention);
+        let mut idle = agent("e", AgentStatus::Idle);
+        idle.next = Some(AgentNext::Land {
+            after: "f".into(),
+            count: 2,
+        });
+        assert_eq!(idle.lane(), Lane::Active);
+    }
+
+    #[test]
+    fn a_next_kind_this_build_does_not_know_still_carries_it_on() {
+        let card: AgentSummary = serde_json::from_value(serde_json::json!({
+            "id": "a", "status": "error", "provider": "claude", "harness": "native", "updatedAt": 1000,
+            "attention": AgentAttention::default(), "next": { "kind": "someday", "when": 1 },
+        }))
+        .unwrap();
+        assert_eq!(card.next, Some(AgentNext::Other));
+        assert_eq!(card.lane(), Lane::Active);
     }
 
     #[test]

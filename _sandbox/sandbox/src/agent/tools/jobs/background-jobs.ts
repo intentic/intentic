@@ -112,7 +112,7 @@ type JobFate = "awaited" | "handed" | "stopped";
 // Who ended a job that did not exit by itself.
 export type JobStopper = NonNullable<AgentJob["stoppedBy"]>;
 
-interface JobRecord {
+export interface JobRecord {
     readonly historyRoot: string | undefined;
     readonly job: BackgroundJob;
     fate: JobFate | undefined;
@@ -494,27 +494,25 @@ export const restorableJobSessions = (root: string = tmpdir(), now = Date.now())
     return [...sessions];
 };
 
+/** Every job's record as its capture dir holds it, read before the gate opens: what a daemon before this one left. */
+export const leftJobs = (root: string = tmpdir()): readonly JobRecord[] =>
+    readdirSync(root, { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() && entry.name.startsWith(JOB_DIR_PREFIX) ? (recordOf(join(root, entry.name)) ?? []) : []));
+
 /** Once at boot: re-files the still-running jobs a dead daemon left, each as adopted as its own file says. */
-export const restoreBackgroundJobs = (actors: Actors, now: number = Date.now(), root: string = tmpdir()): readonly BackgroundJob[] => {
-    const jobs = actors.holdings(JOBS);
-    const restored: BackgroundJob[] = [];
-    for (const entry of readdirSync(root, { withFileTypes: true }).filter((candidate) => candidate.isDirectory() && candidate.name.startsWith(JOB_DIR_PREFIX))) {
-        const record = recordOf(join(root, entry.name));
-        // The old CLI cannot dispatch an unstarted call; a resumed turn issues a fresh call.
-        if (record !== undefined && !jobStarted(record.job)) {
-            endNeverRan(record.job);
-        }
-        if (record === undefined || jobs.has(record.job.id) || jobFinished(record.job) || expired(record, now)) {
-            continue;
-        }
-        jobs.hold(record.job.conversationId, record.job.id, record);
-        restored.push(record.job);
+export const restoreBackgroundJobs = (actors: Actors, left: readonly JobRecord[], now: number = Date.now()): readonly BackgroundJob[] => {
+    // The old CLI cannot dispatch an unstarted call; a resumed turn issues a fresh call.
+    for (const record of left.filter((candidate) => !jobStarted(candidate.job))) {
+        endNeverRan(record.job);
+    }
+    const restored = left.filter((record) => !jobFinished(record.job) && !expired(record, now));
+    for (const record of restored) {
+        actors.holdings(JOBS).hold(record.job.conversationId, record.job.id, record);
         followJob(actors, record);
     }
-    for (const conversationId of new Set(restored.map((job) => job.conversationId))) {
+    for (const conversationId of new Set(restored.map((record) => record.job.conversationId))) {
         publish(actors, conversationId);
     }
-    return restored;
+    return restored.map((record) => record.job);
 };
 
 // The stream's facts about a job, in arrival order: named, its completion notice queued, that notice read.

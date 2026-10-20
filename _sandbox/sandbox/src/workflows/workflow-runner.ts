@@ -10,6 +10,7 @@ import { resumeCapped, resumeLoops, runLoop, stopLoop } from "../loops/loop-runn
 import { resolvedBranches } from "./handover-branches.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
 import { stateRelPath } from "../state-paths.js";
+import { defineInFlight } from "../seams/restart/in-flight.js";
 
 // Scheduler: runs a graph of steps, each a loop, in dependency order; daemon-side since a workflow can run for hours
 // past a closed browser. No topological sort: each step is a memoized promise awaiting its dependencies. A step's
@@ -367,8 +368,8 @@ export const runWorkflow = async (services: Services, run: WorkflowRun): Promise
 
 // A run still `running` here is one the daemon died under; container recreation is the main way that happens. Past
 // RESUME_MAX tries, the run settles as `error` instead of coming back forever.
-const resumeWorkflowRuns = async (services: Services, policy: RestartResume, candidates?: readonly WorkflowRun[]): Promise<string[]> => {
-    const stranded = (candidates ?? (await services.workflowRuns.list())).filter((run) => run.state === "running" && !running.has(run.runId));
+const resumeWorkflowRuns = async (services: Services, policy: RestartResume, candidates: readonly WorkflowRun[]): Promise<string[]> => {
+    const stranded = candidates.filter((run) => run.state === "running" && !running.has(run.runId));
     const resumed = await resumeCapped(stranded, policy, {
         count: (run) => services.workflowRuns.countResume(run.runId),
         stop: async (run, detail) => {
@@ -406,12 +407,21 @@ const settleStepLoops = async (services: Services, run: WorkflowRun, state: "sto
     );
 };
 
-// One boot coordinator for both journals: workflow steps are loops, so launching the two recovery passes separately
-// would give one loop two drivers. Conversations owned by a running workflow are claimed first. `policy` is the boot's
-// one answer to whether anything the restart cut comes back (bootstrap/boot-resumes.ts), the same the turns and the
-// automation fires are given.
-export const resumeWorkflowExecution = async (services: Services, policy: RestartResume): Promise<void> => {
-    const runs = (await services.workflowRuns.list()).filter((run) => run.state === "running");
-    const owned = new Set(runs.flatMap((run) => run.steps.map((step) => step.conversationId)));
-    await Promise.all([resumeWorkflowRuns(services, policy, runs), resumeLoops(services, policy, owned)]);
-};
+// One boot recovery for both journals (bootstrap/restart/in-flight-kinds.ts): workflow steps are loops, so recovering the two
+// separately would give one loop two drivers. Conversations owned by a running workflow are claimed first. Both are read
+// before the gate opens, under the boot's one answer to whether anything the restart cut comes back.
+type Stranded = { readonly run: WorkflowRun } | { readonly loop: LoopRecord };
+
+export const workflowsInFlight = defineInFlight({
+    name: "loops and workflow runs",
+    read: async (services: Pick<Services, "workflowRuns" | "loops">): Promise<readonly Stranded[]> => [
+        ...(await services.workflowRuns.list()).filter((run) => run.state === "running").map((run) => ({ run })),
+        ...(await services.loops.list()).filter((loop) => loop.state === "running").map((loop) => ({ loop })),
+    ],
+    recover: async (services: Services, left, resume) => {
+        const runs = left.flatMap((entry) => ("run" in entry ? [entry.run] : []));
+        const owned = new Set(runs.flatMap((run) => run.steps.map((step) => step.conversationId)));
+        const loops = left.flatMap((entry) => ("loop" in entry ? [entry.loop] : []));
+        await Promise.all([resumeWorkflowRuns(services, resume, runs), resumeLoops(services, resume, owned, loops)]);
+    },
+});

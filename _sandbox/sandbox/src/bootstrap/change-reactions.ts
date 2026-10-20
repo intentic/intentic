@@ -5,7 +5,6 @@ import { invalidateContributions } from "../capabilities/contributions.js";
 import { extensionsRoot, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import { extensionDevDocument } from "../capabilities/extension-inventory/extension-dev.js";
 import { createShadowKeeper } from "../derived/shadow-keeper.js";
-import { recomposeOnInputChanges } from "../environment/recompose-on-change.js";
 import { extensionEnablementDocument } from "../capabilities/extension-inventory/extension-enablement.js";
 import { followExtensionDirs, stopPendingExtensionProcesses } from "../extensions/extension-processes.js";
 import { onListenerStatusMoved } from "../capabilities/status/listener-status.js";
@@ -88,10 +87,7 @@ export const startChangeReactions = ({ logger, role, services, shutdown, traits 
             }
         }),
     );
-    // The approved overlay follows its inputs however they moved, so a rebuild bakes what the card shows. Composed by the
-    // container's own daemon only, as at boot (boot-restores.ts).
     if (role.container) {
-        shutdown.push(recomposeOnInputChanges(services, subscribeWorkspaceChanges));
         startShadowKeeper({ logger, services, shutdown });
     }
     shutdown.push(startRepoWatch(services.workspace.root, logger));

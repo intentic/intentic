@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { ui, ResponsiveOverlay, SkeletonRows, SkeletonSnapshot, vAction, vSkeletonSource } from "@intentic/ui";
+import { Await, ui, ResponsiveOverlay, SkeletonRows, vAction } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
 import { sharedWorkspaceTreeKey } from "../../../models/workspace/tree/workspaceTreeKey";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 import { useT } from "@intentic/ui/i18n";
 
@@ -35,13 +34,10 @@ const picked = defineModel<string[]>({ required: true });
 
 // Shared workspace tree, under the explorer's own entry so opening this picker after the tree has drawn costs nothing.
 // Not scoped via scopeQuery: folders are workspace-relative regardless of which checkout is active.
-const { query } = useSandboxQuery({
+const { query, loaded } = useSandboxQuery({
     queryKey: sharedWorkspaceTreeKey(),
     queryFn: () => sandboxRpc.workspace.tree({}),
 });
-
-// Sandbox-scoped like other reads behind these panels, so switching sandboxes drops the outline.
-const outline = useSandboxOutline(query.isPending);
 
 // Only directories, and only non-ignored ones (node_modules, .git, gitignored), minus whatever the caller refuses.
 const foldersIn = (entries: readonly WorkspaceTreeEntry[]): readonly WorkspaceTreeEntry[] =>
@@ -170,51 +166,52 @@ const remove = (path: string): void => {
 
         <!-- Opens downward rather than the overlay's own default (above), which would land the tree over the field's own section heading. -->
         <ResponsiveOverlay v-model="open" :anchor="anchor" side="bottom" :header="t(`sandbox.folderPicker.chooseFolder`)" panel-class="w-80 p-1">
-            <!-- Holds the panel's height steady while the tree loads, rather than jumping once rows arrive. One name for the
-                 whole tree, whichever folders were open: the last listing seen is the likeliest next one. -->
-            <div v-if="query.isPending.value" role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`sandbox.folderPicker.readingWorkspace`) }}</span>
-                <SkeletonSnapshot v-if="outline" of="sandbox.folder-picker">
-                    <SkeletonRows :rows="5" density="dense" :control="false" />
-                </SkeletonSnapshot>
-            </div>
-            <div v-else-if="rows.length === 0" v-skeleton-source="`sandbox.folder-picker`" :class="ui.emptyState('py-4 text-xs')">
-                {{ t(`sandbox.folderPicker.noFoldersInWorkspace`) }}
-            </div>
-            <div v-else v-skeleton-source="`sandbox.folder-picker`" class="flex max-h-72 flex-col overflow-y-auto">
-                <div v-for="row in rows" :key="row.entry.path" class="flex items-center" :style="{ paddingLeft: `${row.depth * 0.75}rem` }">
-                    <!-- Opening and choosing are different intents, so different targets; a leaf keeps the same indent from a spacer so names stay in one column. -->
-                    <button
-                        v-if="openable(row.entry)"
-                        type="button"
-                        :class="ui.iconButton({ size: `sm` })"
-                        :aria-expanded="opened.has(row.entry.path)"
-                        :aria-label="opened.has(row.entry.path) ? t(`sandbox.folderPicker.collapse`, { path: row.entry.path }) : t(`sandbox.folderPicker.expand`, { path: row.entry.path })"
-                        v-action="() => expand(row.entry)"
-                    >
-                        <Icon
-                            :name="loading.has(row.entry.path) ? `spinner` : opened.has(row.entry.path) ? `chevron-down` : `chevron-right`"
-                            :spin="loading.has(row.entry.path)"
-                            class="text-2xs"
-                        />
-                    </button>
-                    <span v-else class="h-6 w-6 shrink-0" />
-
-                    <button
-                        type="button"
-                        :aria-pressed="isPicked(row.entry.path)"
-                        :class="[
-                            `flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors`,
-                            isPicked(row.entry.path) ? `bg-link/10 font-medium text-content` : `text-muted hover:bg-overlay hover:text-content`,
-                        ]"
-                        @click="choose(row.entry.path)"
-                    >
-                        <Icon :name="opened.has(row.entry.path) ? `folder-open` : `folder`" class="shrink-0 text-2xs" />
-                        <span class="truncate">{{ row.entry.name }}</span>
-                        <Icon v-if="isPicked(row.entry.path)" name="check" class="ml-auto shrink-0 text-2xs text-link" />
-                    </button>
+            <!-- One name for the whole tree, whichever folders were open: the last listing seen is the likeliest next one. -->
+            <Await :of="loaded" imprint="sandbox.folder-picker" :label="t(`sandbox.folderPicker.readingWorkspace`)">
+                <template #fallback>
+                    <div role="status" aria-busy="true">
+                        <span class="sr-only">{{ t(`sandbox.folderPicker.readingWorkspace`) }}</span>
+                        <SkeletonRows :rows="5" density="dense" :control="false" />
+                    </div>
+                </template>
+                <div v-if="rows.length === 0" :class="ui.emptyState('py-4 text-xs')">
+                    {{ t(`sandbox.folderPicker.noFoldersInWorkspace`) }}
                 </div>
-            </div>
+                <div v-else class="flex max-h-72 flex-col overflow-y-auto">
+                    <div v-for="row in rows" :key="row.entry.path" class="flex items-center" :style="{ paddingLeft: `${row.depth * 0.75}rem` }">
+                        <!-- Opening and choosing are different intents, so different targets; a leaf keeps the same indent from a spacer so names stay in one column. -->
+                        <button
+                            v-if="openable(row.entry)"
+                            type="button"
+                            :class="ui.iconButton({ size: `sm` })"
+                            :aria-expanded="opened.has(row.entry.path)"
+                            :aria-label="opened.has(row.entry.path) ? t(`sandbox.folderPicker.collapse`, { path: row.entry.path }) : t(`sandbox.folderPicker.expand`, { path: row.entry.path })"
+                            v-action="() => expand(row.entry)"
+                        >
+                            <Icon
+                                :name="loading.has(row.entry.path) ? `spinner` : opened.has(row.entry.path) ? `chevron-down` : `chevron-right`"
+                                :spin="loading.has(row.entry.path)"
+                                class="text-2xs"
+                            />
+                        </button>
+                        <span v-else class="h-6 w-6 shrink-0" />
+
+                        <button
+                            type="button"
+                            :aria-pressed="isPicked(row.entry.path)"
+                            :class="[
+                                `flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs transition-colors`,
+                                isPicked(row.entry.path) ? `ui-row-select-on font-medium text-content` : `text-muted hover:bg-overlay hover:text-content`,
+                            ]"
+                            @click="choose(row.entry.path)"
+                        >
+                            <Icon :name="opened.has(row.entry.path) ? `folder-open` : `folder`" class="shrink-0 text-2xs" />
+                            <span class="truncate">{{ row.entry.name }}</span>
+                            <Icon v-if="isPicked(row.entry.path)" name="check" class="ml-auto shrink-0 text-2xs text-link" />
+                        </button>
+                    </div>
+                </div>
+            </Await>
         </ResponsiveOverlay>
     </div>
 </template>

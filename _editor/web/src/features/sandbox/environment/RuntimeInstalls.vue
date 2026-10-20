@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EnvironmentRecurring } from "@intentic/sandbox-contract/schemas/environment";
-import { BrandMark, Code, DisclosureRow, RowGroup, ui } from "@intentic/ui";
+import { BrandMark, Code, DisclosureRow, RowGroup, RowNote, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { runtimeInstallVisual } from "./environmentVisual";
@@ -100,13 +100,9 @@ const brief = (entry: EnvironmentRecurring): string =>
 </script>
 
 <template>
-    <!-- `flat undivided`, like the sections above: this list is already inside the Environment card's own frame. -->
-    <RowGroup
-        flat
-        undivided
-        :label="t(`sandbox.runtimeInstalls.installedAtRuntime`)"
-        :caption="awaiting.length ? t(`sandbox.runtimeInstalls.notInImageEvery`) : undefined"
-    >
+    <!-- `undivided`, like the sections above; it lies on the Environment card's own surface, so it draws none. -->
+    <RowGroup undivided :label="t(`sandbox.runtimeInstalls.installedAtRuntime`)">
+        <RowNote v-if="awaiting.length" :label="t(`sandbox.runtimeInstalls.notInImageEvery`)" />
         <!-- The fold lives in the header, not as a row: it's a fact about the list, not an entry in it. -->
         <template v-if="dismissed.length" #actions>
             <button

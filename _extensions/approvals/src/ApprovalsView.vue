@@ -4,6 +4,7 @@ import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/auto
 import { roleAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import {
     appLink,
+    Await,
     BrandMark,
     Button,
     ConfirmDialog,
@@ -17,16 +18,13 @@ import {
     Row,
     RowGroup,
     SkeletonRows,
-    SkeletonSnapshot,
     SplitView,
     StatusBadge,
     timeAgo,
     ui,
     useAsyncAction,
-    useLoadingReveal,
     useNow,
     vAction,
-    vSkeletonSource,
 } from "@intentic/extension-ui";
 import { computed, onMounted, ref } from "vue";
 import ActionBody from "./ActionBody.vue";
@@ -54,17 +52,14 @@ const agentsLink = appLink(host().href(`/agents`), () => host().navigate(`/agent
 // instant: it starts a one-minute hold with a live countdown and a way to call it back. Sections are ordered by what's
 // owed: broken, needs review, about to happen, scheduled, done.
 
-const { approvals, invalid, isLoading, error: listError, save, remove } = useApprovals();
+const { approvals, invalid, loaded, save, remove } = useApprovals();
 const { held, unreadable: unreadableWakes, error: heldError, approve: approveWake, reject: rejectWake } = useHeldWakes();
 const { hookSets, ledgerUnreadable, error: hooksError, approve: approveHooks, dismiss: dismissHooks } = useHookRequests();
-// Only drawn once the wait has earned it; a warm queue answers within the reveal delay.
-const outline = useLoadingReveal(
-    isLoading,
-    computed(() => `approvals`),
-);
-// The list queries know they failed and nothing else; this page knows what the user came for.
-const listNotice = computed<NoticeModel | undefined>(() =>
-    listError.value === undefined ? undefined : { tone: `danger`, title: t(`approvalsView.couldntReadApprovals`), detail: listError.value },
+// The list queries know they failed and nothing else; this page knows what the user came for. A queue that never
+// answered says so in its own place; up here, only one whose last answer still stands.
+const listNoticeOf = (detail: string): NoticeModel => ({ tone: `danger`, title: t(`approvalsView.couldntReadApprovals`), detail });
+const listNotice = computed(() =>
+    loaded.value.state === `ready` && loaded.value.refreshError !== undefined ? listNoticeOf(loaded.value.refreshError) : undefined,
 );
 const heldNotice = computed<NoticeModel | undefined>(() =>
     heldError.value === undefined ? undefined : { tone: `danger`, title: t(`approvalsView.couldntReadHeldAutomations`), detail: heldError.value },
@@ -408,396 +403,397 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
             <div class="flex flex-col">
                 <!-- Skeleton rows distinguish loading from an empty approvals queue: the queue (or its empty note) as it last
                      looked here, hand-drawn rows until it has been seen once. -->
-                <template v-if="isLoading">
-                    <SkeletonSnapshot v-if="outline" of="approvals.queue" :label="t(`approvalsView.readingApprovalsQueue`)">
+                <Await :of="loaded" imprint="approvals.queue" :label="t(`approvalsView.readingApprovalsQueue`)">
+                    <template #fallback>
                         <RowGroup role="status" aria-busy="true">
                             <template #label><span class="skeleton block h-2.5 w-20" aria-hidden="true" /></template>
                             <span class="sr-only">{{ t(`approvalsView.readingApprovalsQueue`) }}</span>
                             <SkeletonRows :rows="3" description control />
                         </RowGroup>
-                    </SkeletonSnapshot>
-                </template>
+                    </template>
+                    <template #failed="{ error }"><Notice :of="listNoticeOf(error)" /></template>
 
-                <!-- Nothing at all. A reader arriving deliberately is owed an explanation, and the way to everything else that
-                     waits on them: what agents ask while they work is answered on the board, never here. -->
-                <div v-else-if="isEmpty" v-skeleton-source="`approvals.queue`" :class="ui.emptyState(`flex flex-col items-center gap-3 py-8`)">
-                    <p>{{ t(`approvalsView.nothingWaitingPostsAgent`) }}</p>
-                    <a v-bind="agentsLink" :class="ui.textButton()">{{ t(`approvalsView.seeWhatAgentsWaitOn`) }}</a>
-                </div>
+                    <!-- Nothing at all. A reader arriving deliberately is owed an explanation, and the way to everything else that
+                         waits on them: what agents ask while they work is answered on the board, never here. -->
+                    <div v-if="isEmpty" :class="ui.emptyState(`flex flex-col items-center gap-3 py-8`)">
+                        <p>{{ t(`approvalsView.nothingWaitingPostsAgent`) }}</p>
+                        <a v-bind="agentsLink" :class="ui.textButton()">{{ t(`approvalsView.seeWhatAgentsWaitOn`) }}</a>
+                    </div>
 
-                <div v-else v-skeleton-source="`approvals.queue`" class="flex flex-col gap-6">
-                    <!-- Broken first: the only state where the queue already tried and stopped. -->
-                    <RowGroup v-if="failed.length > 0" :label="t(`approvalsView.failed`)">
-                        <Row v-for="item in failed" :key="item.id">
-                            <template #lead>
-                                <BrandMark v-if="isPost(item)" :size="28" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
-                                <span v-else :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="bolt" /></span>
-                            </template>
-                            <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
-                            <template #control>
-                                <!-- Retry preserves the failed post; edit changes its length before retrying. -->
-                                <button
-                                    v-if="canShip && isPost(item)"
-                                    type="button"
-                                    :class="ui.iconButton({ size: `lg` }, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
-                                    :aria-label="t(`approvalsView.edit`, { item: headline(item) })"
-                                    :aria-pressed="edit.isEditing(item)"
-                                    v-tooltip.top="edit.isEditing(item) ? t(`approvalsView.doneEditing`) : t(`approvalsView.editPost`)"
-                                    v-action="() => toggleEdit(item)"
-                                >
-                                    <Icon name="pencil" />
-                                </button>
-                                <button
-                                    v-if="canShip"
-                                    type="button"
-                                    :class="ui.iconButton({ size: `lg`, tone: `danger` })"
-                                    :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
-                                    v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
-                                    @click="rejecting = item"
-                                >
-                                    <Icon name="trash" />
-                                </button>
-                                <Button
-                                    v-if="canShip"
-                                    :label="t(`approvalsView.retry`)"
-                                    size="small"
-                                    tier="boring"
-                                    :disabled="save.isPending.value"
-                                    @click="settled(() => save.mutateAsync({ ...item, status: `approved` }))"
-                                >
-                                    <template #icon><Icon name="refresh" /></template>
-                                </Button>
-                            </template>
-                            <template #below>
-                                <div :class="POST_COLUMN">
-                                    <template v-if="isPost(item)">
-                                        <PostEditor
-                                            v-if="edit.isEditing(item)"
-                                            :post="item"
-                                            v-model:content="edit.content.value"
-                                            v-model:title="edit.title.value"
-                                            @touch="edit.touch()"
-                                            @close="toggleEdit(item)"
-                                        />
-                                        <PostBody v-else :post="item" />
-                                    </template>
-                                    <ActionBody v-else :action="item" />
-                                    <!-- Failed rows show their reason as the primary content. -->
-                                    <Notice :of="noticeOf(item.error ?? t(`approvalsView.failedNoReason`))" class="mt-3 max-w-read" />
-                                    <div v-if="lengthOf(item)" :class="FACTS">
-                                        <span :class="isOver(item) ? `text-danger` : ``">{{ lengthOf(item) }}</span>
+                    <div v-else class="flex flex-col gap-6">
+                        <!-- Broken first: the only state where the queue already tried and stopped. -->
+                        <RowGroup v-if="failed.length > 0" :label="t(`approvalsView.failed`)">
+                            <Row v-for="item in failed" :key="item.id">
+                                <template #lead="{ mark }">
+                                    <BrandMark v-if="isPost(item)" :size="mark" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
+                                    <span v-else :class="ACTION_MARK" class="text-sm" :style="{ width: `${mark}px`, height: `${mark}px` }"><Icon name="bolt" /></span>
+                                </template>
+                                <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
+                                <template #control>
+                                    <!-- Retry preserves the failed post; edit changes its length before retrying. -->
+                                    <button
+                                        v-if="canShip && isPost(item)"
+                                        type="button"
+                                        :class="ui.iconButton({ size: `lg` }, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
+                                        :aria-label="t(`approvalsView.edit`, { item: headline(item) })"
+                                        :aria-pressed="edit.isEditing(item)"
+                                        v-tooltip.top="edit.isEditing(item) ? t(`approvalsView.doneEditing`) : t(`approvalsView.editPost`)"
+                                        v-action="() => toggleEdit(item)"
+                                    >
+                                        <Icon name="pencil" />
+                                    </button>
+                                    <button
+                                        v-if="canShip"
+                                        type="button"
+                                        :class="ui.iconButton({ size: `lg`, tone: `danger` })"
+                                        :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
+                                        v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
+                                        @click="rejecting = item"
+                                    >
+                                        <Icon name="trash" />
+                                    </button>
+                                    <Button
+                                        v-if="canShip"
+                                        :label="t(`approvalsView.retry`)"
+                                        size="small"
+                                        tier="boring"
+                                        :disabled="save.isPending.value"
+                                        @click="settled(() => save.mutateAsync({ ...item, status: `approved` }))"
+                                    >
+                                        <template #icon><Icon name="refresh" /></template>
+                                    </Button>
+                                </template>
+                                <template #below>
+                                    <div :class="POST_COLUMN">
+                                        <template v-if="isPost(item)">
+                                            <PostEditor
+                                                v-if="edit.isEditing(item)"
+                                                :post="item"
+                                                v-model:content="edit.content.value"
+                                                v-model:title="edit.title.value"
+                                                @touch="edit.touch()"
+                                                @close="toggleEdit(item)"
+                                            />
+                                            <PostBody v-else :post="item" />
+                                        </template>
+                                        <ActionBody v-else :action="item" />
+                                        <!-- Failed rows show their reason as the primary content. -->
+                                        <Notice :of="noticeOf(item.error ?? t(`approvalsView.failedNoReason`))" class="mt-3 max-w-read" />
+                                        <div v-if="lengthOf(item)" :class="FACTS">
+                                            <span :class="isOver(item) ? `text-danger` : ``">{{ lengthOf(item) }}</span>
+                                        </div>
+                                        <!-- The agent's own note about the post, under everything it is a note about. -->
+                                        <p v-if="noteOf(item)" :class="NOTE" v-tooltip.top="noteOf(item)">{{ noteOf(item) }}</p>
                                     </div>
-                                    <!-- The agent's own note about the post, under everything it is a note about. -->
-                                    <p v-if="noteOf(item)" :class="NOTE" v-tooltip.top="noteOf(item)">{{ noteOf(item) }}</p>
-                                </div>
-                            </template>
-                        </Row>
-                    </RowGroup>
+                                </template>
+                            </Row>
+                        </RowGroup>
 
-                    <RowGroup v-if="needsReview.length > 0" :label="t(`approvalsView.needsReview`)">
-                        <template v-if="needsReview.length > 1" #actions>
-                            <button
-                                v-if="canShip"
-                                type="button"
-                                :class="ui.textButton()"
-                                :disabled="save.isPending.value"
-                                @click="approvingAll = true"
-                            >
-                                {{ t(`approvalsView.approveAll`, { count: needsReview.length }) }}
-                            </button>
-                        </template>
-                        <Row v-for="item in needsReview" :key="item.id">
-                            <template #lead>
-                                <BrandMark v-if="isPost(item)" :size="28" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
-                                <span v-else :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="bolt" /></span>
-                            </template>
-                            <template #description>
-                                <ApprovalMeta
-                                    :name="nameOf(item)"
-                                    :target="targetOf(item)"
-                                    :acts-as="item.actsAs"
-                                    :note="
-                                        item.createdAt === undefined ? undefined : t(`approvalsView.proposed`, { createdAt: timeAgo(item.createdAt) })
-                                    "
-                                />
-                            </template>
-                            <!-- Edit, reject, approve, in escalating order; none moves or hides when the editor opens. -->
-                            <template #control>
-                                <button
-                                    v-if="canShip && isPost(item)"
-                                    type="button"
-                                    :class="ui.iconButton({ size: `lg` }, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
-                                    :aria-label="t(`approvalsView.edit`, { item: headline(item) })"
-                                    :aria-pressed="edit.isEditing(item)"
-                                    v-tooltip.top="edit.isEditing(item) ? t(`approvalsView.doneEditing`) : t(`approvalsView.editPost`)"
-                                    v-action="() => toggleEdit(item)"
-                                >
-                                    <Icon name="pencil" />
-                                </button>
+                        <RowGroup v-if="needsReview.length > 0" :label="t(`approvalsView.needsReview`)">
+                            <template v-if="needsReview.length > 1" #actions>
                                 <button
                                     v-if="canShip"
                                     type="button"
-                                    :class="ui.iconButton({ size: `lg`, tone: `danger` })"
-                                    :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
-                                    v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
-                                    @click="rejecting = item"
-                                >
-                                    <Icon name="trash" />
-                                </button>
-                                <Button
-                                    v-if="canShip"
-                                    :label="t(`approvalsView.approve`)"
-                                    size="small"
+                                    :class="ui.textButton()"
                                     :disabled="save.isPending.value"
-                                    @click="approve(item)"
+                                    @click="approvingAll = true"
                                 >
-                                    <template #icon><Icon name="check" /></template>
-                                </Button>
+                                    {{ t(`approvalsView.approveAll`, { count: needsReview.length }) }}
+                                </button>
                             </template>
-                            <template #below>
-                                <div :class="POST_COLUMN">
-                                    <!-- Read-only and edited bodies share the same column and measure. -->
-                                    <template v-if="isPost(item)">
-                                        <PostEditor
-                                            v-if="edit.isEditing(item)"
-                                            :post="item"
-                                            v-model:content="edit.content.value"
-                                            v-model:title="edit.title.value"
-                                            @touch="edit.touch()"
-                                            @close="toggleEdit(item)"
-                                        />
-                                        <PostBody v-else :post="item" />
-                                    </template>
-                                    <ActionBody v-else :action="item" />
+                            <Row v-for="item in needsReview" :key="item.id">
+                                <template #lead="{ mark }">
+                                    <BrandMark v-if="isPost(item)" :size="mark" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
+                                    <span v-else :class="ACTION_MARK" class="text-sm" :style="{ width: `${mark}px`, height: `${mark}px` }"><Icon name="bolt" /></span>
+                                </template>
+                                <template #description>
+                                    <ApprovalMeta
+                                        :name="nameOf(item)"
+                                        :target="targetOf(item)"
+                                        :acts-as="item.actsAs"
+                                        :note="
+                                            item.createdAt === undefined ? undefined : t(`approvalsView.proposed`, { createdAt: timeAgo(item.createdAt) })
+                                        "
+                                    />
+                                </template>
+                                <!-- Edit, reject, approve, in escalating order; none moves or hides when the editor opens. -->
+                                <template #control>
+                                    <button
+                                        v-if="canShip && isPost(item)"
+                                        type="button"
+                                        :class="ui.iconButton({ size: `lg` }, edit.isEditing(item) ? EDIT_ACTIVE : ``)"
+                                        :aria-label="t(`approvalsView.edit`, { item: headline(item) })"
+                                        :aria-pressed="edit.isEditing(item)"
+                                        v-tooltip.top="edit.isEditing(item) ? t(`approvalsView.doneEditing`) : t(`approvalsView.editPost`)"
+                                        v-action="() => toggleEdit(item)"
+                                    >
+                                        <Icon name="pencil" />
+                                    </button>
+                                    <button
+                                        v-if="canShip"
+                                        type="button"
+                                        :class="ui.iconButton({ size: `lg`, tone: `danger` })"
+                                        :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
+                                        v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
+                                        @click="rejecting = item"
+                                    >
+                                        <Icon name="trash" />
+                                    </button>
+                                    <Button
+                                        v-if="canShip"
+                                        :label="t(`approvalsView.approve`)"
+                                        size="small"
+                                        :disabled="save.isPending.value"
+                                        @click="approve(item)"
+                                    >
+                                        <template #icon><Icon name="check" /></template>
+                                    </Button>
+                                </template>
+                                <template #below>
+                                    <div :class="POST_COLUMN">
+                                        <!-- Read-only and edited bodies share the same column and measure. -->
+                                        <template v-if="isPost(item)">
+                                            <PostEditor
+                                                v-if="edit.isEditing(item)"
+                                                :post="item"
+                                                v-model:content="edit.content.value"
+                                                v-model:title="edit.title.value"
+                                                @touch="edit.touch()"
+                                                @close="toggleEdit(item)"
+                                            />
+                                            <PostBody v-else :post="item" />
+                                        </template>
+                                        <ActionBody v-else :action="item" />
 
-                                    <!-- Facts that decide the item, not describe it: when it runs, and whether a post fits. -->
-                                    <div :class="FACTS">
-                                        <ScheduleControl
-                                            :at="item.scheduledAt"
-                                            :label="headline(item)"
-                                            @change="patch(item, { scheduledAt: $event })"
-                                        />
-                                        <span v-if="lengthOf(item)" :class="isOver(item) ? `text-danger` : ``">{{ lengthOf(item) }}</span>
+                                        <!-- Facts that decide the item, not describe it: when it runs, and whether a post fits. -->
+                                        <div :class="FACTS">
+                                            <ScheduleControl
+                                                :at="item.scheduledAt"
+                                                :label="headline(item)"
+                                                @change="patch(item, { scheduledAt: $event })"
+                                            />
+                                            <span v-if="lengthOf(item)" :class="isOver(item) ? `text-danger` : ``">{{ lengthOf(item) }}</span>
+                                        </div>
+                                        <!-- The agent's own note about the post, under everything it is a note about. -->
+                                        <p v-if="noteOf(item)" :class="NOTE" v-tooltip.top="noteOf(item)">{{ noteOf(item) }}</p>
                                     </div>
-                                    <!-- The agent's own note about the post, under everything it is a note about. -->
-                                    <p v-if="noteOf(item)" :class="NOTE" v-tooltip.top="noteOf(item)">{{ noteOf(item) }}</p>
-                                </div>
-                            </template>
-                        </Row>
-                    </RowGroup>
+                                </template>
+                            </Row>
+                        </RowGroup>
 
-                    <!-- Found by a turn, not proposed by one: until the owner says yes to this exact set, turns run with every hook off. -->
-                    <RowGroup v-if="hooksVisible.length > 0" :label="t(`approvalsView.hooksWaiting`)">
-                        <Row v-for="request in hooksVisible" :key="request.digest" :title="t(`approvalsView.hookSetTitle`, { count: hookSetSize(request) }, hookSetSize(request))">
-                            <template #lead>
-                                <span :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="shield" /></span>
-                            </template>
-                            <template #description>
-                                <span class="block truncate">
-                                    {{ t(`approvalsView.hooksFound`) }} {{ timeAgo(request.seenAt) }}
-                                    <template v-if="request.dismissed === true"><span class="text-subtle"> · </span>{{ t(`approvalsView.keptOff`) }}</template>
-                                </span>
-                            </template>
-                            <template #control>
-                                <Button
-                                    v-if="canShip && request.dismissed !== true"
-                                    :label="t(`approvalsView.keepOff`)"
-                                    size="small"
-                                    tier="quiet"
-                                    :disabled="dismissHooks.isPending.value"
-                                    @click="keepHooksOff(request)"
-                                />
-                                <Button
-                                    v-if="canShip"
-                                    :label="t(`approvalsView.letThemRun`)"
-                                    size="small"
-                                    :disabled="approveHooks.isPending.value"
-                                    @click="letHooksRun(request)"
-                                >
-                                    <template #icon><Icon name="check" /></template>
-                                </Button>
-                            </template>
-                            <template #below>
-                                <div :class="POST_COLUMN"><HookSetBody :request="request" /></div>
-                            </template>
-                        </Row>
-                    </RowGroup>
+                        <!-- Found by a turn, not proposed by one: until the owner says yes to this exact set, turns run with every hook off. -->
+                        <RowGroup v-if="hooksVisible.length > 0" :label="t(`approvalsView.hooksWaiting`)">
+                            <Row v-for="request in hooksVisible" :key="request.digest" :title="t(`approvalsView.hookSetTitle`, { count: hookSetSize(request) }, hookSetSize(request))">
+                                <template #lead>
+                                    <span :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="shield" /></span>
+                                </template>
+                                <template #description>
+                                    <span class="block truncate">
+                                        {{ t(`approvalsView.hooksFound`) }} {{ timeAgo(request.seenAt) }}
+                                        <template v-if="request.dismissed === true"><span class="text-subtle"> · </span>{{ t(`approvalsView.keptOff`) }}</template>
+                                    </span>
+                                </template>
+                                <template #control>
+                                    <Button
+                                        v-if="canShip && request.dismissed !== true"
+                                        :label="t(`approvalsView.keepOff`)"
+                                        size="small"
+                                        tier="quiet"
+                                        :disabled="dismissHooks.isPending.value"
+                                        @click="keepHooksOff(request)"
+                                    />
+                                    <Button
+                                        v-if="canShip"
+                                        :label="t(`approvalsView.letThemRun`)"
+                                        size="small"
+                                        :disabled="approveHooks.isPending.value"
+                                        @click="letHooksRun(request)"
+                                    >
+                                        <template #icon><Icon name="check" /></template>
+                                    </Button>
+                                </template>
+                                <template #below>
+                                    <div :class="POST_COLUMN"><HookSetBody :request="request" /></div>
+                                </template>
+                            </Row>
+                        </RowGroup>
 
-                    <!-- One section for both hold shapes, since the reader's question is the same: run it, or not? -->
-                    <RowGroup v-if="heldVisible.length > 0" :label="t(`approvalsView.automationsHeld`)">
-                        <Row v-for="wake in heldVisible" :key="wake.id" :title="wakeName(wake)">
-                            <template #lead>
-                                <span :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="clock" /></span>
-                            </template>
-                            <template #description>
-                                <span class="block truncate">
-                                    <span>{{ t(`approvalsView.automation`, { automationId: wake.automationId }) }}</span>
-                                    <span class="text-subtle"> · </span>{{ t(`approvalsView.fired`) }} {{ timeAgo(wake.createdAt) }}
-                                </span>
-                            </template>
-                            <template #meta>
-                                <span v-if="wake.autoRunAt !== undefined" class="tabular-nums text-warning">{{ startsIn(wake.autoRunAt) }}</span>
-                            </template>
-                            <template #control>
-                                <Button
-                                    v-if="canShip"
-                                    :label="wake.autoRunAt !== undefined ? t(`approvalsView.cancel`) : t(`approvalsView.reject2`)"
-                                    size="small"
-                                    tier="quiet"
-                                    :disabled="rejectWake.isPending.value"
-                                    :aria-label="wake.autoRunAt !== undefined ? t(`approvalsView.cancelItem`, { item: wakeName(wake) }) : t(`approvalsView.reject`, { item: wakeName(wake) })"
-                                    @click="dropWake(wake)"
-                                />
-                                <Button
-                                    v-if="canShip"
-                                    :label="wake.autoRunAt !== undefined ? t(`approvalsView.startNow`) : t(`approvalsView.approve`)"
-                                    size="small"
-                                    :disabled="approveWake.isPending.value"
-                                    :aria-label="wake.autoRunAt !== undefined ? t(`approvalsView.startItem`, { item: wakeName(wake) }) : t(`approvalsView.approveItem`, { item: wakeName(wake) })"
-                                    @click="releaseWake(wake)"
-                                >
-                                    <template #icon><Icon name="check" /></template>
-                                </Button>
-                            </template>
-                            <template v-if="wake.payload" #below>
-                                <div :class="POST_COLUMN">
-                                    <code class="block max-w-read truncate font-mono text-2xs text-subtle" v-tooltip.top="wake.payload">{{
-                                        wake.payload
-                                    }}</code>
-                                </div>
-                            </template>
-                        </Row>
-                    </RowGroup>
+                        <!-- One section for both hold shapes, since the reader's question is the same: run it, or not? -->
+                        <RowGroup v-if="heldVisible.length > 0" :label="t(`approvalsView.automationsHeld`)">
+                            <Row v-for="wake in heldVisible" :key="wake.id" :title="wakeName(wake)">
+                                <template #lead>
+                                    <span :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="clock" /></span>
+                                </template>
+                                <template #description>
+                                    <span class="block truncate">
+                                        <span>{{ t(`approvalsView.automation`, { automationId: wake.automationId }) }}</span>
+                                        <span class="text-subtle"> · </span>{{ t(`approvalsView.fired`) }} {{ timeAgo(wake.createdAt) }}
+                                    </span>
+                                </template>
+                                <template #meta>
+                                    <span v-if="wake.autoRunAt !== undefined" class="tabular-nums text-warning">{{ startsIn(wake.autoRunAt) }}</span>
+                                </template>
+                                <template #control>
+                                    <Button
+                                        v-if="canShip"
+                                        :label="wake.autoRunAt !== undefined ? t(`approvalsView.cancel`) : t(`approvalsView.reject2`)"
+                                        size="small"
+                                        tier="quiet"
+                                        :disabled="rejectWake.isPending.value"
+                                        :aria-label="wake.autoRunAt !== undefined ? t(`approvalsView.cancelItem`, { item: wakeName(wake) }) : t(`approvalsView.reject`, { item: wakeName(wake) })"
+                                        @click="dropWake(wake)"
+                                    />
+                                    <Button
+                                        v-if="canShip"
+                                        :label="wake.autoRunAt !== undefined ? t(`approvalsView.startNow`) : t(`approvalsView.approve`)"
+                                        size="small"
+                                        :disabled="approveWake.isPending.value"
+                                        :aria-label="wake.autoRunAt !== undefined ? t(`approvalsView.startItem`, { item: wakeName(wake) }) : t(`approvalsView.approveItem`, { item: wakeName(wake) })"
+                                        @click="releaseWake(wake)"
+                                    >
+                                        <template #icon><Icon name="check" /></template>
+                                    </Button>
+                                </template>
+                                <template v-if="wake.payload" #below>
+                                    <div :class="POST_COLUMN">
+                                        <code class="block max-w-read truncate font-mono text-2xs text-subtle" v-tooltip.top="wake.payload">{{
+                                            wake.payload
+                                        }}</code>
+                                    </div>
+                                </template>
+                            </Row>
+                        </RowGroup>
 
-                    <!-- Approved rows remain directly below the review queue. -->
-                    <RowGroup v-if="goingAhead.length > 0" :label="t(`approvalsView.goingAhead`)">
-                        <Row v-for="item in goingAhead" :key="item.id" density="compact">
-                            <template #lead>
-                                <BrandMark v-if="isPost(item)" :size="22" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
-                                <span v-else :class="ACTION_MARK" class="h-6 w-6 text-xs"><Icon name="bolt" /></span>
-                            </template>
-                            <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
-                            <template #meta>
-                                <!-- A running approval has no cancel action after dispatch. -->
-                                <StatusBadge
-                                    v-if="item.status === `running`"
-                                    variant="info"
-                                    :label="t(`approvalsView.inProgress`)"
-                                    size="xs"
-                                    :dot="true"
-                                />
-                                <span v-else class="tabular-nums text-warning">{{ countdownWords((item.scheduledAt ?? 0) - now) }}</span>
-                            </template>
-                            <template v-if="item.status === `approved`" #control>
-                                <Button
-                                    v-if="canShip"
-                                    :label="t(`approvalsView.stop`)"
-                                    size="small"
-                                    tier="boring"
-                                    :disabled="save.isPending.value"
-                                    :aria-label="t(`approvalsView.stopPutBackIn`, { item: headline(item) })"
-                                    v-tooltip.top="{ title: t(`approvalsView.backToReview`), note: t(`approvalsView.wontGoAhead`) }"
-                                    @click="holdBack(item)"
-                                >
-                                    <template #icon><Icon name="undo" /></template>
-                                </Button>
-                            </template>
-                            <template #below>
-                                <div :class="QUIET_COLUMN">
-                                    <PostBody v-if="isPost(item)" :post="item" tone="quiet" />
-                                    <ActionBody v-else :action="item" tone="quiet" />
-                                </div>
-                            </template>
-                        </Row>
-                    </RowGroup>
+                        <!-- Approved rows remain directly below the review queue. -->
+                        <RowGroup v-if="goingAhead.length > 0" :label="t(`approvalsView.goingAhead`)">
+                            <Row v-for="item in goingAhead" :key="item.id">
+                                <template #lead="{ mark }">
+                                    <BrandMark v-if="isPost(item)" :size="mark" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
+                                    <span v-else :class="ACTION_MARK" class="text-xs" :style="{ width: `${mark}px`, height: `${mark}px` }"><Icon name="bolt" /></span>
+                                </template>
+                                <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
+                                <template #meta>
+                                    <!-- A running approval has no cancel action after dispatch. -->
+                                    <StatusBadge
+                                        v-if="item.status === `running`"
+                                        variant="info"
+                                        :label="t(`approvalsView.inProgress`)"
+                                        size="xs"
+                                        :dot="true"
+                                    />
+                                    <span v-else class="tabular-nums text-warning">{{ countdownWords((item.scheduledAt ?? 0) - now) }}</span>
+                                </template>
+                                <template v-if="item.status === `approved`" #control>
+                                    <Button
+                                        v-if="canShip"
+                                        :label="t(`approvalsView.stop`)"
+                                        size="small"
+                                        tier="boring"
+                                        :disabled="save.isPending.value"
+                                        :aria-label="t(`approvalsView.stopPutBackIn`, { item: headline(item) })"
+                                        v-tooltip.top="{ title: t(`approvalsView.backToReview`), note: t(`approvalsView.wontGoAhead`) }"
+                                        @click="holdBack(item)"
+                                    >
+                                        <template #icon><Icon name="undo" /></template>
+                                    </Button>
+                                </template>
+                                <template #below>
+                                    <div :class="QUIET_COLUMN">
+                                        <PostBody v-if="isPost(item)" :post="item" tone="quiet" />
+                                        <ActionBody v-else :action="item" tone="quiet" />
+                                    </div>
+                                </template>
+                            </Row>
+                        </RowGroup>
 
-                    <!-- Approved with time to spare; quiet by design, since the decision is made and the row need only say when. -->
-                    <RowGroup v-if="scheduled.length > 0" :label="t(`approvalsView.scheduled`)">
-                        <Row v-for="item in scheduled" :key="item.id" density="compact">
-                            <template #lead>
-                                <BrandMark v-if="isPost(item)" :size="22" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
-                                <span v-else :class="ACTION_MARK" class="h-6 w-6 text-xs"><Icon name="bolt" /></span>
-                            </template>
-                            <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
-                            <template #control>
-                                <div v-if="canShip" class="text-2xs text-subtle">
-                                    <ScheduleControl :at="item.scheduledAt" :label="headline(item)" @change="patch(item, { scheduledAt: $event })" />
-                                </div>
-                                <button
-                                    v-if="canShip"
-                                    type="button"
-                                    :class="ui.iconButton()"
-                                    :aria-label="t(`approvalsView.putBackInReview`, { item: headline(item) })"
-                                    v-tooltip.top="{ title: t(`approvalsView.backToReview`), note: t(`approvalsView.wontGoAhead`) }"
-                                    v-action="() => holdBack(item)"
-                                >
-                                    <Icon name="undo" />
-                                </button>
-                                <button
-                                    v-if="canShip"
-                                    type="button"
-                                    :class="ui.iconButton({ tone: `danger` })"
-                                    :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
-                                    v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
-                                    @click="rejecting = item"
-                                >
-                                    <Icon name="trash" />
-                                </button>
-                            </template>
-                            <template #below>
-                                <div :class="QUIET_COLUMN">
-                                    <PostBody v-if="isPost(item)" :post="item" tone="quiet" />
-                                    <ActionBody v-else :action="item" tone="quiet" />
-                                </div>
-                            </template>
-                        </Row>
-                    </RowGroup>
+                        <!-- Approved with time to spare; quiet by design, since the decision is made and the row need only say when. -->
+                        <RowGroup v-if="scheduled.length > 0" :label="t(`approvalsView.scheduled`)">
+                            <Row v-for="item in scheduled" :key="item.id">
+                                <template #lead="{ mark }">
+                                    <BrandMark v-if="isPost(item)" :size="mark" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" />
+                                    <span v-else :class="ACTION_MARK" class="text-xs" :style="{ width: `${mark}px`, height: `${mark}px` }"><Icon name="bolt" /></span>
+                                </template>
+                                <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
+                                <template #control>
+                                    <div v-if="canShip" class="text-2xs text-subtle">
+                                        <ScheduleControl :at="item.scheduledAt" :label="headline(item)" @change="patch(item, { scheduledAt: $event })" />
+                                    </div>
+                                    <button
+                                        v-if="canShip"
+                                        type="button"
+                                        :class="ui.iconButton()"
+                                        :aria-label="t(`approvalsView.putBackInReview`, { item: headline(item) })"
+                                        v-tooltip.top="{ title: t(`approvalsView.backToReview`), note: t(`approvalsView.wontGoAhead`) }"
+                                        v-action="() => holdBack(item)"
+                                    >
+                                        <Icon name="undo" />
+                                    </button>
+                                    <button
+                                        v-if="canShip"
+                                        type="button"
+                                        :class="ui.iconButton({ tone: `danger` })"
+                                        :aria-label="t(`approvalsView.reject`, { item: headline(item) })"
+                                        v-tooltip.top="{ title: t(`approvalsView.reject2`), note: t(`approvalsView.deletesFile`) }"
+                                        @click="rejecting = item"
+                                    >
+                                        <Icon name="trash" />
+                                    </button>
+                                </template>
+                                <template #below>
+                                    <div :class="QUIET_COLUMN">
+                                        <PostBody v-if="isPost(item)" :post="item" tone="quiet" />
+                                        <ActionBody v-else :action="item" tone="quiet" />
+                                    </div>
+                                </template>
+                            </Row>
+                        </RowGroup>
 
-                    <!-- History: nothing here can be acted on, so the row shows only what happened, where, when, and its result. -->
-                    <RowGroup v-if="done.length > 0" :label="t(`approvalsView.done`)">
-                        <Row v-for="item in done" :key="item.id" density="compact">
-                            <template #lead>
-                                <BrandMark v-if="isPost(item)" :size="22" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" :idle="true" />
-                                <span v-else :class="ACTION_MARK" class="h-6 w-6 text-xs opacity-60"><Icon name="bolt" /></span>
-                            </template>
-                            <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
-                            <template #meta>
-                                <a
-                                    v-if="resultHref(item)"
-                                    :href="resultHref(item)"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="text-link hover:underline"
-                                    v-tooltip.top="item.result"
-                                >
-                                    {{ t(`approvalsView.open`) }}<Icon name="external-link" class="ml-1 text-2xs" />
-                                </a>
-                                <span v-else-if="item.result" class="truncate text-subtle" v-tooltip.top="item.result">{{ item.result }}</span>
-                                <span v-if="item.finishedAt !== undefined" v-tooltip.top="formatTimestamp(item.finishedAt)">{{
-                                    timeAgo(item.finishedAt)
-                                }}</span>
-                            </template>
-                            <template #control>
-                                <button
-                                    v-if="canShip"
-                                    type="button"
-                                    :class="ui.iconButton()"
-                                    :aria-label="t(`approvalsView.removeList`, { item: headline(item) })"
-                                    v-tooltip.top="{ title: t(`approvalsView.remove`), note: t(`approvalsView.nothingUndone`) }"
-                                    @click="rejecting = item"
-                                >
-                                    <Icon name="times" />
-                                </button>
-                            </template>
-                            <template #below>
-                                <div :class="QUIET_COLUMN">
-                                    <PostBody v-if="isPost(item)" :post="item" tone="quiet" />
-                                    <ActionBody v-else :action="item" tone="quiet" />
-                                </div>
-                            </template>
-                        </Row>
-                    </RowGroup>
-                </div>
+                        <!-- History: nothing here can be acted on, so the row shows only what happened, where, when, and its result. -->
+                        <RowGroup v-if="done.length > 0" :label="t(`approvalsView.done`)">
+                            <Row v-for="item in done" :key="item.id">
+                                <template #lead="{ mark }">
+                                    <BrandMark v-if="isPost(item)" :size="mark" :name="nameOf(item)" :logo="logoOfPlatform(item.platform)" :idle="true" />
+                                    <span v-else :class="ACTION_MARK" class="h-6 w-6 text-xs opacity-60"><Icon name="bolt" /></span>
+                                </template>
+                                <template #description><ApprovalMeta :name="nameOf(item)" :target="targetOf(item)" :acts-as="item.actsAs" /></template>
+                                <template #meta>
+                                    <a
+                                        v-if="resultHref(item)"
+                                        :href="resultHref(item)"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="text-link hover:underline"
+                                        v-tooltip.top="item.result"
+                                    >
+                                        {{ t(`approvalsView.open`) }}<Icon name="external-link" class="ml-1 text-2xs" />
+                                    </a>
+                                    <span v-else-if="item.result" class="truncate text-subtle" v-tooltip.top="item.result">{{ item.result }}</span>
+                                    <span v-if="item.finishedAt !== undefined" v-tooltip.top="formatTimestamp(item.finishedAt)">{{
+                                        timeAgo(item.finishedAt)
+                                    }}</span>
+                                </template>
+                                <template #control>
+                                    <button
+                                        v-if="canShip"
+                                        type="button"
+                                        :class="ui.iconButton()"
+                                        :aria-label="t(`approvalsView.removeList`, { item: headline(item) })"
+                                        v-tooltip.top="{ title: t(`approvalsView.remove`), note: t(`approvalsView.nothingUndone`) }"
+                                        @click="rejecting = item"
+                                    >
+                                        <Icon name="times" />
+                                    </button>
+                                </template>
+                                <template #below>
+                                    <div :class="QUIET_COLUMN">
+                                        <PostBody v-if="isPost(item)" :post="item" tone="quiet" />
+                                        <ActionBody v-else :action="item" tone="quiet" />
+                                    </div>
+                                </template>
+                            </Row>
+                        </RowGroup>
+                    </div>
+                </Await>
 
                 <!-- Rejecting deletes the file outright, no undo; a done row's version of this asks about the record only, and says so. -->
                 <ConfirmDialog

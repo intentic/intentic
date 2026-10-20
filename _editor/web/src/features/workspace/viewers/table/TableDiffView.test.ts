@@ -2,6 +2,7 @@
 // row struck through, and the count of rows that moved handed to the host.
 import "@intentic/testing/dom";
 import { type App, createApp, h, nextTick, ref } from "vue";
+import { MINIMUM_HOLD_MS, REVEAL_DELAY_MS } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import { type Sheet, type SheetDiff, tableDiff } from "./tableDiff";
 import type { TableDiffArgs } from "./tableDiffClient";
@@ -80,7 +81,10 @@ describe(`TableDiffView`, () => {
         app.directive(`tooltip`, {});
         app.mount(element);
 
-        expect(element.querySelector(`[role="status"]`)?.textContent).toBe(`Comparing the two versions…`);
+        // Drawn once the wait has lasted past the reveal threshold, so a diff that lands at once never flashes it.
+        await new Promise((settle) => setTimeout(settle, REVEAL_DELAY_MS + 20));
+        await nextTick();
+        expect(element.querySelector(`[role="status"]`)?.getAttribute(`aria-label`)).toBe(`Comparing the two versions…`);
         expect(element.querySelector(`table`)).toBeNull();
 
         pair.value = [[sheet(`S`, [`id`, `v`], [`1`, `old`])], [sheet(`S`, [`id`, `v`], [`1`, `fresh`])]];
@@ -90,6 +94,9 @@ describe(`TableDiffView`, () => {
         await new Promise((settle) => setTimeout(settle, 0));
 
         expect(element.querySelector(`ins`)?.textContent).toBe(`fresh`);
+        // Once shown, the wait holds long enough to register before the answer replaces it.
+        await new Promise((settle) => setTimeout(settle, MINIMUM_HOLD_MS));
+        await nextTick();
         expect(element.querySelector(`[role="status"]`)).toBeNull();
         expect(counts).toEqual([1]);
     });

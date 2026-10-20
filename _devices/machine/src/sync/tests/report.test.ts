@@ -20,12 +20,21 @@ const report = (state: SyncState) => buildReport(state, undefined, AGENT, 1_700_
 
 describe("buildReport", () => {
     // Read off the record, not Mutagen, so said even when Mutagen was not consulted.
-    it("says a pairing is paused for want of room, and which repos' history it stopped fetching", () => {
+    it("says a pairing is held for want of room, and which repos' history it stopped fetching", () => {
         const lowDisk = { since: 1, freeBytes: 3 * 1024 ** 3, totalBytes: 953 * 1024 ** 3 };
         const bridgeHolds = [{ repo: "firma-backup", reason: "stalled" as const, failures: 3, since: 2, retryAt: 3 }];
-        const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work", fileSyncLowDisk: lowDisk, bridgeHolds })] });
+        const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work", lowDisk, bridgeHolds })] });
         expect(built.pairings[0]?.lowDisk).toEqual(lowDisk);
+        expect(built.pairings[0]?.heldBy).toEqual(["low-disk"]);
         expect(built.pairings[0]?.bridgeHolds).toEqual(bridgeHolds);
+    });
+
+    // Who holds a folder still is said off the record whatever Mutagen answered, owner first, so a page offers Resume
+    // only for the pause that is a person's to lift, and says the rest carry on by themselves (fair-moth, 2026-10-19).
+    it("says by whom a pairing's file sync is held, the owner's word first", () => {
+        const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work", swapSince: 5, ownerPausedAt: 6 })] });
+        expect(built.pairings[0]?.heldBy).toEqual(["owner", "swap"]);
+        expect(report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work" })] }).pairings[0]?.heldBy).toBeUndefined();
     });
 
     it("names the folder each paired sandbox syncs into", () => {

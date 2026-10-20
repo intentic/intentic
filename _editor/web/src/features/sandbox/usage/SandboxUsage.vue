@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    Await,
     BarChart,
     Card,
     formatCompact,
@@ -8,12 +9,11 @@ import {
     Notice,
     type NoticeModel,
     NoticeStack,
+    Section,
     SegmentedControl,
-    SkeletonSnapshot,
     timeAgo,
     ui,
     vAction,
-    vSkeletonSource,
 } from "@intentic/ui";
 import { modelPinKey, parsePinned } from "@intentic/sandbox-contract/models/model-pins";
 import { localZone, sameClock, UTC } from "@intentic/sandbox-contract/time";
@@ -21,7 +21,6 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { modelLabelFor, providerDisplayLabel, providerGroup, providerGroupLabel } from "../../../models/providers/providerCatalog";
-import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSavings } from "./useSavings";
 import { useUsage } from "./useUsage";
 import PlanLimitsPanel from "./PlanLimitsPanel.vue";
@@ -64,11 +63,12 @@ const t = useT();
 
 const route = useRoute();
 const router = useRouter();
-const { rows, isLoading, isFetching, refetch, error } = useUsage();
-const outline = useSandboxOutline(isLoading);
-const usageNotice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: t(`sandbox.sandboxUsage.couldntReadSandboxsUsage`), detail: error.value },
-);
+const { rows, loaded, isFetching, refetch } = useUsage();
+const unread = (detail: string): NoticeModel => ({ tone: `danger`, title: t(`sandbox.sandboxUsage.couldntReadSandboxsUsage`), detail });
+const usageNotice = computed(() => {
+    const read = loaded.value;
+    return read.state === `ready` && read.refreshError !== undefined ? unread(read.refreshError) : undefined;
+});
 const { fleet } = useAgents();
 
 // filters: one row, above everything, scoping everything
@@ -241,11 +241,10 @@ const hasSpend = computed(() => current.value.length > 0);
             </button>
         </div>
 
-        <!-- Refetch dims the previous render instead of swapping in skeletons: no layout jump, numbers stay readable. -->
-        <div class="flex flex-col gap-6 transition-opacity" :class="isFetching && !isLoading ? `opacity-60` : ``">
-            <!-- Drawn as the page last looked in this sandbox, so a returning reader recognises it while the ledger sums; until
-                 then, a skeleton mirroring the real layout (hero, tiles, chart). -->
-            <SkeletonSnapshot v-if="isLoading && outline" of="sandbox.usage" :label="t(`sandbox.sandboxUsage.readingLedger`)">
+        <!-- Drawn as the page last looked in this sandbox, so a returning reader recognises it while the ledger sums; until
+             then, a skeleton mirroring the real layout (hero, tiles, chart). -->
+        <Await :of="loaded" imprint="sandbox.usage" :label="t(`sandbox.sandboxUsage.readingLedger`)">
+            <template #fallback>
                 <div role="status" aria-busy="true" class="flex flex-col gap-6">
                     <span class="sr-only">{{ t(`sandbox.sandboxUsage.readingLedger`) }}</span>
                     <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4" aria-hidden="true">
@@ -276,208 +275,207 @@ const hasSpend = computed(() => current.value.length > 0);
                         </div>
                     </Card>
                 </div>
-            </SkeletonSnapshot>
+            </template>
+            <template #failed="{ error }"><Notice :of="unread(error)" /></template>
 
-            <!-- `!isLoading`, not just the outline: a still-reading ledger hasn't earned the right to say "never run". -->
-            <p v-else-if="!isLoading && rows.length === 0" v-skeleton-source="`sandbox.usage`" :class="ui.emptyState(`py-8`)">
-                {{ t(`sandbox.sandboxUsage.noUsageYet`) }}
-            </p>
+            <!-- An answered ledger with no rows is the only thing that may say "never run". -->
+            <template #default="{ data: ledger, refreshing }">
+                <p v-if="ledger.length === 0" :class="ui.emptyState(`py-8`)">{{ t(`sandbox.sandboxUsage.noUsageYet`) }}</p>
 
-            <!-- Everything the ledger draws, in one box spaced as the column: its imprint is the whole page below the filters,
-                 while the column itself (which also holds the skeleton and takes the refetch dim) is never imprinted. -->
-            <div v-else-if="!isLoading" v-skeleton-source="`sandbox.usage`" class="flex flex-col gap-6">
-                <!-- Spend alone is hero-sized, the rest are stat tiles. Two to a row even on a phone, with the hero and the one
-                     tile that is a sentence rather than a chart spanning it: one to a row, four tiles were a screen and a
-                     half of mostly empty card before the first chart. -->
-                <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
-                    <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
-                        <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.spend`) }}</div>
-                        <div class="mt-1 truncate text-[clamp(1.5rem,13cqi,3rem)] font-semibold leading-none tabular-nums text-content">
-                            <!-- A floor, not a total, once a runtime that reports no cost is in the window. -->
-                            {{ totals.costKnown ? `` : `≥ ` }}{{ formatMoney(totals.costUsd, { compact: true }) }}
-                        </div>
-                        <div class="mt-auto flex flex-wrap items-baseline gap-x-1.5 pt-2 text-2xs" :class="deltaTone(spendDelta)">
-                            <template v-if="formatDelta(spendDelta) !== undefined">
-                                <span class="tabular-nums">{{ deltaArrow(spendDelta) }}{{ formatDelta(spendDelta) }}</span>
-                                <span class="text-subtle">{{ comparedTo }}</span>
-                            </template>
-                            <span v-else class="text-subtle">{{
-                                comparedTo === undefined ? t(`sandbox.words.allTime`) : t(`sandbox.sandboxUsage.noSpendInPrevious`)
-                            }}</span>
-                        </div>
-                    </Card>
+                <!-- Everything the ledger draws, spaced as the column. Refetch dims the previous render instead of swapping in
+                     skeletons: no layout jump, numbers stay readable. -->
+                <div v-else class="flex flex-col gap-6 transition-opacity" :class="refreshing ? `opacity-60` : ``">
+                    <!-- Spend alone is hero-sized, the rest are stat tiles. Two to a row even on a phone, with the hero and the one
+                         tile that is a sentence rather than a chart spanning it: one to a row, four tiles were a screen and a
+                         half of mostly empty card before the first chart. -->
+                    <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
+                        <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
+                            <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.spend`) }}</div>
+                            <div class="mt-1 truncate text-[clamp(1.5rem,13cqi,3rem)] font-semibold leading-none tabular-nums text-content">
+                                <!-- A floor, not a total, once a runtime that reports no cost is in the window. -->
+                                {{ totals.costKnown ? `` : `≥ ` }}{{ formatMoney(totals.costUsd, { compact: true }) }}
+                            </div>
+                            <div class="mt-auto flex flex-wrap items-baseline gap-x-1.5 pt-2 text-2xs" :class="deltaTone(spendDelta)">
+                                <template v-if="formatDelta(spendDelta) !== undefined">
+                                    <span class="tabular-nums">{{ deltaArrow(spendDelta) }}{{ formatDelta(spendDelta) }}</span>
+                                    <span class="text-subtle">{{ comparedTo }}</span>
+                                </template>
+                                <span v-else class="text-subtle">{{
+                                    comparedTo === undefined ? t(`sandbox.words.allTime`) : t(`sandbox.sandboxUsage.noSpendInPrevious`)
+                                }}</span>
+                            </div>
+                        </Card>
 
-                    <Card class="@container flex min-w-0 flex-col">
-                        <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.turns`) }}</div>
-                        <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
-                            {{ formatCompact(totals.turns) }}
-                        </div>
-                        <div class="mt-1 text-2xs tabular-nums" :class="deltaTone(turnsDelta)">
-                            {{ formatDelta(turnsDelta) === undefined ? `—` : `${deltaArrow(turnsDelta)}${formatDelta(turnsDelta)}` }}
-                        </div>
-                        <UsageSparkline :points="turnPoints" class="mt-auto pt-2 text-subtle" />
-                    </Card>
+                        <Card class="@container flex min-w-0 flex-col">
+                            <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.turns`) }}</div>
+                            <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
+                                {{ formatCompact(totals.turns) }}
+                            </div>
+                            <div class="mt-1 text-2xs tabular-nums" :class="deltaTone(turnsDelta)">
+                                {{ formatDelta(turnsDelta) === undefined ? `—` : `${deltaArrow(turnsDelta)}${formatDelta(turnsDelta)}` }}
+                            </div>
+                            <UsageSparkline :points="turnPoints" class="mt-auto pt-2 text-subtle" />
+                        </Card>
 
-                    <Card class="@container flex min-w-0 flex-col">
-                        <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.tokens`) }}</div>
-                        <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
-                            {{ formatCompact(totalTokens(totals)) }}
-                        </div>
-                        <div class="mt-1 text-2xs tabular-nums" :class="deltaTone(tokensDelta)">
-                            {{ formatDelta(tokensDelta) === undefined ? `—` : `${deltaArrow(tokensDelta)}${formatDelta(tokensDelta)}` }}
-                        </div>
-                        <UsageSparkline :points="tokenPoints" class="mt-auto pt-2 text-subtle" />
-                    </Card>
+                        <Card class="@container flex min-w-0 flex-col">
+                            <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.tokens`) }}</div>
+                            <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
+                                {{ formatCompact(totalTokens(totals)) }}
+                            </div>
+                            <div class="mt-1 text-2xs tabular-nums" :class="deltaTone(tokensDelta)">
+                                {{ formatDelta(tokensDelta) === undefined ? `—` : `${deltaArrow(tokensDelta)}${formatDelta(tokensDelta)}` }}
+                            </div>
+                            <UsageSparkline :points="tokenPoints" class="mt-auto pt-2 text-subtle" />
+                        </Card>
 
-                    <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
-                        <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.cacheHitRate`) }}</div>
-                        <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
-                            {{ cacheRate === undefined ? `—` : formatPercent(cacheRate) }}
-                        </div>
-                        <p class="mt-auto pt-2 text-2xs text-subtle">
-                            {{ t(`sandbox.sandboxUsage.promptInputCached`, { cacheReadTokens: formatCompact(totals.cacheReadTokens) }) }}
-                        </p>
-                    </Card>
-                </div>
-
-                <!-- Its own section, not phrased like the tiles above: spend and plan-week-remaining are different questions. -->
-                <PlanLimitsPanel />
-
-                <Card>
-                    <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                        <h3 class="text-sm font-semibold text-content">
-                            {{ preset === `all` ? t(`sandbox.sandboxUsage.spendPerPeriod`) : t(`sandbox.sandboxUsage.spendPerDay`) }}
-                        </h3>
-                        <span class="text-sm tabular-nums text-muted">{{ formatMoney(totals.costUsd) }}</span>
-                    </div>
-                    <UsageColumnChart v-if="hasSpend" :series="series" :providers="seriesProviders" />
-                    <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
-                </Card>
-
-                <div class="grid gap-3 @2xl:grid-cols-2">
-                    <Card>
-                        <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByModel`) }}</h3>
-                        <BarChart v-if="byModel.length > 0" :items="rankedBars(byModel)" :label-width="8" grow />
-                        <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
-                    </Card>
-                    <Card>
-                        <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByAgent`) }}</h3>
-                        <BarChart v-if="byAgent.length > 0" :items="rankedBars(byAgent)" :label-width="8" grow />
-                        <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
-                    </Card>
-                </div>
-
-                <!-- Keep measured usage separate from the experimental comparison. -->
-                <section v-if="hasSavings" class="@container">
-                    <div class="mb-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 px-0.5">
-                        <span :class="ui.sectionLabel()">{{ t(`sandbox.sandboxUsage.tokenSavings`) }}</span>
-                    </div>
-
-                    <!-- `items-start`: a short card stays short, not stretched to the tallest. -->
-                    <div class="grid items-start gap-3 @2xl:grid-cols-2">
-                        <SavingsCard
-                            :title="t(`sandbox.sandboxUsage.toolOutputAssistant`)"
-                            :value="`${savings?.input.savedPct ?? 0}%`"
-                            unit="of shell output removed"
-                            tone="success"
-                        >
-                            <template #hint>
-                                <span class="block font-medium">{{ t(`sandbox.sandboxUsage.realizedNotEstimated`) }}</span>
-                                <span class="block text-muted">{{ t(`sandbox.sandboxUsage.eachStageVsInput`) }}</span>
-                            </template>
-
-                            <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />
-                            <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noShellOutputCleaned`) }}</p>
-
-                            <!-- This comparison measures the whole pipeline, including raw commands. -->
-                            <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="mt-2 text-2xs text-muted">
-                                {{ t(`sandbox.sandboxUsage.holdoutControl`) }}
-                                <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span
-                                >{{ t(`sandbox.sandboxUsage.measuredAgainst`) }} {{ savings.input.holdout.heldOut }}
-                                {{ t(`sandbox.sandboxUsage.of`) }} {{ savings.input.holdout.heldOut + savings.input.holdout.cleaned }}
-                                {{ t(`sandbox.sandboxUsage.commandsLeftRawAt`) }}
+                        <Card class="@container col-span-2 flex min-w-0 flex-col @lg:col-span-1">
+                            <div class="text-xs text-muted">{{ t(`sandbox.sandboxUsage.cacheHitRate`) }}</div>
+                            <div class="mt-1 truncate text-[clamp(1.25rem,9cqi,1.75rem)] font-semibold leading-none tabular-nums text-content">
+                                {{ cacheRate === undefined ? `—` : formatPercent(cacheRate) }}
+                            </div>
+                            <p class="mt-auto pt-2 text-2xs text-subtle">
+                                {{ t(`sandbox.sandboxUsage.promptInputCached`, { cacheReadTokens: formatCompact(totals.cacheReadTokens) }) }}
                             </p>
-
-                            <!-- Age stated always: a frozen figure reads exactly like a live one otherwise. -->
-                            <template #footnote>
-                                {{ t(`sandbox.sandboxUsage.commandCount`, { count: formatCompact(savings?.input.commands ?? 0) }) }}
-                                {{ savingsPeriod }}
-                                <template v-if="savings?.input.updatedAt !== undefined">{{
-                                    t(`sandbox.sandboxUsage.lastCommand`, { updatedAt: timeAgo(savings.input.updatedAt, { days: true }) })
-                                }}</template>
-                            </template>
-                        </SavingsCard>
-                    </div>
-                </section>
-
-                <!-- How a distrusted number gets reconciled, and what discharges the palette's low-contrast fills. -->
-                <Card>
-                    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-                        <button
-                            type="button"
-                            class="flex min-w-0 flex-wrap cursor-pointer items-center gap-1.5 text-sm text-content"
-                            @click="tableOpen = !tableOpen"
-                        >
-                            <Icon :name="tableOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
-                            {{ t(`sandbox.sandboxUsage.showTable`) }}
-                            <span class="text-2xs text-subtle">{{
-                                t(`sandbox.sandboxUsage.rowsTurns`, { count: tableRows.length, turns: formatCompact(totals.turns) })
-                            }}</span>
-                        </button>
-                        <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="tableRows.length === 0" @click="exportCsv">
-                            <Icon name="download" />{{ t(`sandbox.sandboxUsage.exportCsv`) }}
-                        </button>
+                        </Card>
                     </div>
 
-                    <div v-if="tableOpen" class="mt-3 overflow-x-auto">
-                        <table class="w-full text-2xs">
-                            <thead class="text-left text-subtle">
-                                <tr class="border-b border-line-subtle">
-                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.day`) }}</th>
-                                    <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.words.provider`) }}</th>
-                                    <th class="py-1.5 pr-3 font-medium">{{ t(`shared.model`) }}</th>
-                                    <th class="py-1.5 pr-3 font-medium">{{ t(`shared.agent`) }}</th>
-                                    <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.turns`) }}</th>
-                                    <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.in`) }}</th>
-                                    <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.out`) }}</th>
-                                    <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.cached`) }}</th>
-                                    <th class="py-1.5 text-right font-medium">{{ t(`sandbox.sandboxUsage.cost`) }}</th>
-                                </tr>
-                            </thead>
-                            <tbody class="tabular-nums text-muted">
-                                <tr v-for="(row, index) in tableRows.slice(0, TABLE_LIMIT)" :key="index" class="border-b border-line/50">
-                                    <td class="py-1.5 pr-3 whitespace-nowrap">{{ row.day }}</td>
-                                    <!-- Swatches identify chart series; names identify billing cards. -->
-                                    <td class="py-1.5 pr-3">
-                                        <span class="flex items-center gap-1.5">
-                                            <span
-                                                class="size-2 shrink-0 rounded-2xs"
-                                                :style="{ background: providerColor(providerGroup(row.provider)) }"
-                                            />
-                                            {{ providerDisplayLabel(row.provider) }}
-                                        </span>
-                                    </td>
-                                    <td class="py-1.5 pr-3">{{ row.model === undefined ? `—` : modelLabelFor(row.provider, row.model) }}</td>
-                                    <td class="max-w-40 truncate py-1.5 pr-3">
-                                        {{ row.conversationId === undefined ? t(`sandbox.sandboxUsage.mainTree`) : agentTitle(row.conversationId) }}
-                                    </td>
-                                    <td class="py-1.5 pr-3 text-right">{{ row.turns }}</td>
-                                    <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.inputTokens) }}</td>
-                                    <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.outputTokens) }}</td>
-                                    <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.cacheReadTokens) }}</td>
-                                    <td class="py-1.5 text-right text-content">
-                                        {{ row.costKnown === false ? `≥ ` : `` }}{{ formatMoney(row.costUsd) }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <!-- Never silently truncate a money table: say what was cut, and where the rest is. -->
-                        <p v-if="tableRows.length > TABLE_LIMIT" class="mt-2 text-2xs text-subtle">
-                            {{ t(`sandbox.sandboxUsage.showingMostRecentRows`, { table_limit: TABLE_LIMIT, count: tableRows.length }) }}
-                        </p>
+                    <!-- Its own section, not phrased like the tiles above: spend and plan-week-remaining are different questions. -->
+                    <PlanLimitsPanel />
+
+                    <Card>
+                        <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                            <h3 class="text-sm font-semibold text-content">
+                                {{ preset === `all` ? t(`sandbox.sandboxUsage.spendPerPeriod`) : t(`sandbox.sandboxUsage.spendPerDay`) }}
+                            </h3>
+                            <span class="text-sm tabular-nums text-muted">{{ formatMoney(totals.costUsd) }}</span>
+                        </div>
+                        <UsageColumnChart v-if="hasSpend" :series="series" :providers="seriesProviders" />
+                        <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
+                    </Card>
+
+                    <div class="grid gap-3 @2xl:grid-cols-2">
+                        <Card>
+                            <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByModel`) }}</h3>
+                            <BarChart v-if="byModel.length > 0" :items="rankedBars(byModel)" :label-width="8" grow />
+                            <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
+                        </Card>
+                        <Card>
+                            <h3 class="mb-3 text-sm font-semibold text-content">{{ t(`sandbox.sandboxUsage.costByAgent`) }}</h3>
+                            <BarChart v-if="byAgent.length > 0" :items="rankedBars(byAgent)" :label-width="8" grow />
+                            <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noUsageInRange`) }}</p>
+                        </Card>
                     </div>
-                </Card>
-            </div>
-        </div>
+
+                    <!-- Keep measured usage separate from the experimental comparison. -->
+                    <Section v-if="hasSavings" class="@container" :label="t(`sandbox.sandboxUsage.tokenSavings`)">
+                        <!-- `items-start`: a short card stays short, not stretched to the tallest. -->
+                        <div class="grid items-start gap-3 @2xl:grid-cols-2">
+                            <SavingsCard
+                                :title="t(`sandbox.sandboxUsage.toolOutputAssistant`)"
+                                :value="`${savings?.input.savedPct ?? 0}%`"
+                                unit="of shell output removed"
+                                tone="success"
+                            >
+                                <template #hint>
+                                    <span class="block font-medium">{{ t(`sandbox.sandboxUsage.realizedNotEstimated`) }}</span>
+                                    <span class="block text-muted">{{ t(`sandbox.sandboxUsage.eachStageVsInput`) }}</span>
+                                </template>
+
+                                <SavingsStackBar v-if="composition !== undefined && composition.rawTokens > 0" :composition="composition" />
+                                <p v-else :class="ui.emptyState()">{{ t(`sandbox.sandboxUsage.noShellOutputCleaned`) }}</p>
+
+                                <!-- This comparison measures the whole pipeline, including raw commands. -->
+                                <p v-if="savings?.input.holdout.measuredSavedPct !== undefined" class="mt-2 text-2xs text-muted">
+                                    {{ t(`sandbox.sandboxUsage.holdoutControl`) }}
+                                    <span class="tabular-nums text-content">{{ savings.input.holdout.measuredSavedPct }}%</span
+                                    >{{ t(`sandbox.sandboxUsage.measuredAgainst`) }} {{ savings.input.holdout.heldOut }}
+                                    {{ t(`sandbox.sandboxUsage.of`) }} {{ savings.input.holdout.heldOut + savings.input.holdout.cleaned }}
+                                    {{ t(`sandbox.sandboxUsage.commandsLeftRawAt`) }}
+                                </p>
+
+                                <!-- Age stated always: a frozen figure reads exactly like a live one otherwise. -->
+                                <template #footnote>
+                                    {{ t(`sandbox.sandboxUsage.commandCount`, { count: formatCompact(savings?.input.commands ?? 0) }) }}
+                                    {{ savingsPeriod }}
+                                    <template v-if="savings?.input.updatedAt !== undefined">{{
+                                        t(`sandbox.sandboxUsage.lastCommand`, { updatedAt: timeAgo(savings.input.updatedAt, { days: true }) })
+                                    }}</template>
+                                </template>
+                            </SavingsCard>
+                        </div>
+                    </Section>
+
+                    <!-- How a distrusted number gets reconciled, and what discharges the palette's low-contrast fills. -->
+                    <Card>
+                        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                            <button
+                                type="button"
+                                class="flex min-w-0 flex-wrap cursor-pointer items-center gap-1.5 text-sm text-content"
+                                @click="tableOpen = !tableOpen"
+                            >
+                                <Icon :name="tableOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
+                                {{ t(`sandbox.sandboxUsage.showTable`) }}
+                                <span class="text-2xs text-subtle">{{
+                                    t(`sandbox.sandboxUsage.rowsTurns`, { count: tableRows.length, turns: formatCompact(totals.turns) })
+                                }}</span>
+                            </button>
+                            <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="tableRows.length === 0" @click="exportCsv">
+                                <Icon name="download" />{{ t(`sandbox.sandboxUsage.exportCsv`) }}
+                            </button>
+                        </div>
+
+                        <div v-if="tableOpen" class="mt-3 overflow-x-auto">
+                            <table class="w-full text-2xs">
+                                <thead class="text-left text-subtle">
+                                    <tr class="border-b border-line-subtle">
+                                        <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.sandboxUsage.day`) }}</th>
+                                        <th class="py-1.5 pr-3 font-medium">{{ t(`sandbox.words.provider`) }}</th>
+                                        <th class="py-1.5 pr-3 font-medium">{{ t(`shared.model`) }}</th>
+                                        <th class="py-1.5 pr-3 font-medium">{{ t(`shared.agent`) }}</th>
+                                        <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.turns`) }}</th>
+                                        <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.in`) }}</th>
+                                        <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.out`) }}</th>
+                                        <th class="py-1.5 pr-3 text-right font-medium">{{ t(`sandbox.sandboxUsage.cached`) }}</th>
+                                        <th class="py-1.5 text-right font-medium">{{ t(`sandbox.sandboxUsage.cost`) }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="tabular-nums text-muted">
+                                    <tr v-for="(row, index) in tableRows.slice(0, TABLE_LIMIT)" :key="index" class="border-b border-line/50">
+                                        <td class="py-1.5 pr-3 whitespace-nowrap">{{ row.day }}</td>
+                                        <!-- Swatches identify chart series; names identify billing cards. -->
+                                        <td class="py-1.5 pr-3">
+                                            <span class="flex items-center gap-1.5">
+                                                <span
+                                                    class="size-2 shrink-0 rounded-2xs"
+                                                    :style="{ background: providerColor(providerGroup(row.provider)) }"
+                                                />
+                                                {{ providerDisplayLabel(row.provider) }}
+                                            </span>
+                                        </td>
+                                        <td class="py-1.5 pr-3">{{ row.model === undefined ? `—` : modelLabelFor(row.provider, row.model) }}</td>
+                                        <td class="max-w-40 truncate py-1.5 pr-3">
+                                            {{
+                                                row.conversationId === undefined ? t(`sandbox.sandboxUsage.mainTree`) : agentTitle(row.conversationId)
+                                            }}
+                                        </td>
+                                        <td class="py-1.5 pr-3 text-right">{{ row.turns }}</td>
+                                        <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.inputTokens) }}</td>
+                                        <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.outputTokens) }}</td>
+                                        <td class="py-1.5 pr-3 text-right">{{ formatCompact(row.cacheReadTokens) }}</td>
+                                        <td class="py-1.5 text-right text-content">
+                                            {{ row.costKnown === false ? `≥ ` : `` }}{{ formatMoney(row.costUsd) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <!-- Never silently truncate a money table: say what was cut, and where the rest is. -->
+                            <p v-if="tableRows.length > TABLE_LIMIT" class="mt-2 text-2xs text-subtle">
+                                {{ t(`sandbox.sandboxUsage.showingMostRecentRows`, { table_limit: TABLE_LIMIT, count: tableRows.length }) }}
+                            </p>
+                        </div>
+                    </Card>
+                </div>
+            </template>
+        </Await>
     </div>
 </template>

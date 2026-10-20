@@ -2,7 +2,6 @@ import type { TranscriptPatch } from "@intentic/sandbox-contract/events/transcri
 import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
 import { t } from "@intentic/ui/i18n";
 import { importOrReload } from "../../../lib/staleChunk";
-import { setAccountUsage } from "../../providers/providerAccounts";
 import { boundSession } from "../run/turnRequest";
 import type { AttachEntry, TurnContext } from "../../../client/sandbox/streams/turnStream";
 import type { Conversation } from "./conversation";
@@ -98,15 +97,10 @@ const FACTS: { readonly [K in TurnFact["kind"]]: FactConsequence<K> } = {
     },
     // The turn's cost lives on the bubble it ended in; nothing to keep here.
     usage: () => undefined,
-    // Account-wide headroom, keyed by the serving account and stamped with read time so newest-wins. A replayed one
-    // (every attach replays the turn's facts) was read some time since the turn began, not now: stamped with the turn's
-    // start, it fills a gap for a window joining late but never beats a reading taken since.
-    account_usage: (conversation, fact, _turn, replay) => {
-        const measuredAt = replay ? conversation.turn.turnStartedAt.value : Date.now();
-        if (fact.account !== undefined && measuredAt !== undefined) {
-            setAccountUsage(conversation.selection.provider.value, fact.account, { windows: [...fact.windows], measuredAt });
-        }
-    },
+    // Account-wide headroom: the daemon files the reading the turn carried (frame-effects.ts fileAccountUsage) and pushes
+    // the account's reading as it stands then (`accountUsage`), continuity marks included. A copy written here from the
+    // raw frame was a second reading of one fact, which could outrank the daemon's by its later stamp.
+    account_usage: () => undefined,
     // The agent started running Bash in its tmux terminal; remembered so Bash cards can offer to watch it.
     terminal: (conversation, fact) => {
         conversation.agentTerminal.value = fact.session;

@@ -1,4 +1,5 @@
 import type { UsageRollupRow } from "@intentic/sandbox-contract/schemas/providers/usage";
+import { mapLoaded } from "@intentic/extension-api";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
@@ -8,14 +9,13 @@ import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 // selected window.
 
 export function useUsage() {
-    const { query, error } = useSandboxQuery(rpcQuery(`usage.rollup`, {}));
+    const { query, loaded } = useSandboxQuery(rpcQuery(`usage.rollup`, {}));
 
     return {
         rows: computed<readonly UsageRollupRow[]>(() => query.data.value?.rows ?? []),
-        // True only on first load; isFetching also fires on refetch, while the previous rows stay rendered.
-        isLoading: query.isLoading,
+        loaded: computed(() => mapLoaded(loaded.value, (answer) => answer.rows)),
+        // Also fires on refetch, while the previous rows stay rendered.
         isFetching: query.isFetching,
         refetch: query.refetch,
-        error,
     };
 }

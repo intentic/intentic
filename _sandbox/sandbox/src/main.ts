@@ -12,6 +12,8 @@ import { armSetupPairings, dropSupersededDeviceKeys } from "./bootstrap/boot-pai
 import type { BootPhase } from "./bootstrap/boot-phase.js";
 import { startBootRestores } from "./bootstrap/boot-restores.js";
 import { startBootResumes } from "./bootstrap/boot-resumes.js";
+import { readInFlight } from "./bootstrap/restart/in-flight-kinds.js";
+import type { LeftWork } from "./seams/restart/in-flight.js";
 import { startBootSchedulers } from "./bootstrap/boot-schedulers.js";
 import { startBootSweeps } from "./bootstrap/boot-sweeps.js";
 import { startChangeReactions } from "./bootstrap/change-reactions.js";
@@ -75,6 +77,8 @@ interface Ready {
     readonly stop: (exitCode?: number, cause?: StopCause) => void;
     // The hosted machine's idle-stop and alarm, running since before the boot chain; handed the alarm past the gate.
     readonly sleep: PlatformSleep | undefined;
+    // The work a restart cut, as an earlier process left it on file: recovered past the gate (boot-resumes.ts).
+    readonly left: readonly LeftWork[];
 }
 
 // Everything up to and including the gate opening. Throws whatever stops the boot short of it.
@@ -239,13 +243,13 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     forgetDaemonOnlyEnv();
     startPlatformPresence(phase, reach);
     const sleep = startPlatformSleep(phase);
-
     attempt.stage = "Running the boot chain";
     await runBootSteps(phase, runnerEnv);
     wireDependencyCoordinator(services);
-    // Converged state opens the gate; everything below is background machinery no queued request depends on.
+    // What a restart cut is read while the gate is still shut (bootstrap/restart/in-flight-kinds.ts); converged state then opens it.
+    const left = await readInFlight(phase);
     services.boot.finish();
-    return { phase, runnerEnv, prewarm, stop, sleep };
+    return { phase, runnerEnv, prewarm, stop, sleep, left };
 };
 
 // Starts one phase past the gate, so a phase that throws is named in the log and the phases after it still start: none
@@ -261,7 +265,7 @@ const startPhase = (logger: BootPhase["logger"], name: string, start: () => void
 };
 
 // Everything past the gate: none of it is a boot failure, and a throw here is only logged.
-const pastGate = async ({ phase, runnerEnv, prewarm, stop, sleep }: Ready, fault: BootFault | undefined): Promise<void> => {
+const pastGate = async ({ phase, runnerEnv, prewarm, stop, sleep, left }: Ready, fault: BootFault | undefined): Promise<void> => {
     const { config, logger, role, services } = phase;
     // This boot got all the way, so the last one's failure is no longer the news: the host reads the record's absence.
     if (role.container) {
@@ -297,7 +301,7 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop, sleep }: Ready, fault
     startPhase(logger, "sweeps", () => startBootSweeps(phase));
     startPhase(logger, "restores", () => startBootRestores(phase));
     const schedulersStarted = startPhase(logger, "schedulers", () => startBootSchedulers(phase));
-    const resumesStarted = startPhase(logger, "resumes", () => startBootResumes(phase));
+    const resumesStarted = startPhase(logger, "resumes", () => startBootResumes(phase, left));
     // Only once what keeps its promises runs: a boot whose schedulers failed leaves the last alarm standing for the
     // platform to try again, and keeps the whole idle window.
     if (schedulersStarted && resumesStarted && sleep !== undefined) {

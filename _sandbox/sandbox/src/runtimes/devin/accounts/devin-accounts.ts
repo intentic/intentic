@@ -27,7 +27,6 @@ export type DevinAccountDeps = Pick<
     | "devinModels"
     | "devinStore"
     | "headroom"
-    | "observedLimits"
     | "providerRefusals"
     | "hostHub"
     | "webextHub"

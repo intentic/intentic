@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AgentAccess } from "@intentic/sandbox-contract/schemas/members";
-import { Button, Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
+import { Button, Notice, type NoticeModel, Section, SegmentedControl } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import { type AccessDraft, draftGrant, draftProblem, drivesAgents } from "./accessGrant";
@@ -181,26 +181,24 @@ const signInId = useId();
 
         <p v-if="draft.manage" class="text-sm text-muted">{{ t(`sandbox.sandboxAccess.managesAll`) }}</p>
         <template v-else>
-            <div class="flex flex-col gap-2">
-                <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.sandboxAccess.agentsSection`) }}</span>
-                <SegmentedControl :model-value="draft.agents" :options="AGENTS" @update:model-value="pickAgents" />
-                <p class="text-xs text-muted">{{ AGENT_NOTES[draft.agents]() }}</p>
-            </div>
+            <Section :label="t(`sandbox.sandboxAccess.agentsSection`)">
+                <div class="flex flex-col gap-2">
+                    <SegmentedControl :model-value="draft.agents" :options="AGENTS" @update:model-value="pickAgents" />
+                    <p class="text-xs text-muted">{{ AGENT_NOTES[draft.agents]() }}</p>
+                </div>
+            </Section>
 
-            <div class="flex flex-col gap-2">
-                <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.sandboxAccess.seeSection`) }}</span>
+            <Section :label="t(`sandbox.sandboxAccess.seeSection`)">
                 <AreaPicker :picked="draft.see" :chat="draft.agents === `chat`" @change="pickSee" />
-            </div>
+            </Section>
 
-            <div v-if="draft.agents !== `chat`" class="flex flex-col gap-2">
-                <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.sandboxAccess.editSection`) }}</span>
+            <Section v-if="draft.agents !== `chat`" :label="t(`sandbox.sandboxAccess.editSection`)">
                 <EditPicker :edit="draft.edit" :see="draft.see" @change="(edit) => set({ edit })" />
-            </div>
+            </Section>
 
-            <div v-if="drivesAgents(draft.agents)" class="flex flex-col gap-2">
-                <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`sandbox.sandboxAccess.reachSection`) }}</span>
+            <Section v-if="drivesAgents(draft.agents)" :label="t(`sandbox.sandboxAccess.reachSection`)">
                 <ReachPicker :reach="draft.credentials" @change="(credentials) => set({ credentials })" />
-            </div>
+            </Section>
         </template>
 
         <div class="-mx-1 flex flex-col border-t border-line-subtle pt-3">

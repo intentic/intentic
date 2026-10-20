@@ -99,7 +99,6 @@
             "resends": "se reenvía {limitBackAt}",
             "resendsIn": "se reenvía en {limitBackAt}",
             "resendsShortly": "se reenvía en un momento",
-            "resendNotBooked": "«Send again» está elegido, pero no hay nada programado que lo envíe solo: pulsa «Send again» cuando vuelva.",
             "closeAgent": "Cerrar el agente",
             "closeDropsUnsent": "Se pierde el texto sin enviar",
             "closeKeepsRunning": "El turno sigue",
@@ -340,7 +339,9 @@
             "landProcessStopped": "El proceso de Git del espacio de trabajo se detuvo. Vuelve a intentar incorporar el trabajo de este agente.",
             "landTooManyPaths": "Este cambio incluye demasiadas rutas de archivos para incorporarlo de una vez. Reduce los cambios que se solapan en tu espacio de trabajo y vuelve a intentarlo.",
             "landOutputLimit": "Git devolvió más información de la que el espacio de trabajo pudo procesar. Reduce el tamaño del cambio y vuelve a intentarlo.",
-            "workspaceOverlap": "{count} archivos de tu espacio de trabajo se solapan con el trabajo de este agente. Confirma o descarta sus cambios y vuelve a intentarlo."
+            "workspaceOverlap": "{count} archivos de tu espacio de trabajo se solapan con el trabajo de este agente. Confirma o descarta sus cambios y vuelve a intentarlo.",
+            "unknownCommand": "Comando desconocido",
+            "warned": "Advertencia"
         },
         "agentsTile": {
             "countingEverySandbox": "Contando todos los sandboxes",
@@ -2247,6 +2248,30 @@
                 "goOn": "Sigue…",
                 "listeningDetail": "Escuchando «{word}» en este dispositivo. Haz clic para pausar una hora."
             }
+        },
+        "failure": {
+            "access": "El proveedor rechazó esta cuenta: su plan u organización no lo permite.",
+            "signedOut": "El proveedor ya no acepta el inicio de sesión de esta cuenta.",
+            "outage": "El proveedor no respondió.",
+            "model": "Este modelo no está disponible para esta cuenta.",
+            "contextFull": "La conversación es demasiado larga para este modelo.",
+            "update": "El motor de agente instalado es demasiado antiguo para este modelo.",
+            "flagged": "Las salvaguardas del modelo marcaron este turno.",
+            "limit": "Se alcanzó el límite de uso de esta cuenta.",
+            "privacy": "El escudo de privacidad retuvo este turno antes de enviar nada.",
+            "held": "El sandbox retuvo este turno.",
+            "cutShort": "El agente se detuvo antes de terminar.",
+            "command": "El agente leyó esto como un comando que no tiene.",
+            "advisory": "El agente terminó con una advertencia.",
+            "unclassified": "El agente se detuvo en un error que esta app no reconoce.",
+            "details": "Detalles",
+            "hideDetails": "Ocultar detalles",
+            "category": "Categoría",
+            "requestId": "ID de solicitud",
+            "messageId": "ID de mensaje",
+            "learnMore": "Más información",
+            "copyDetails": "Copiar detalles",
+            "copyValue": "Copiar {name}"
         }
     },
     "common": {
@@ -3188,8 +3213,6 @@
             "contents": "Contenido",
             "decideFirst": "Aprueba o rechaza primero el cambio de arriba, y una sola reconstrucción cubrirá ambos.",
             "noRebuildHere": "El contenedor de este sandbox no lo inició el instalador de intentic, así que no se puede reconstruir desde aquí. Reconstrúyelo donde se ejecuta, a partir de la receta de Receta.",
-            "nothingToRebuild": "No hay nada aprobado esperando a construirse, así que reconstruir no cambiaría nada. Si {names} sigue sin funcionar, pide a un agente que averigüe por qué.",
-            "nothingToRebuildDecide": "Todavía no hay nada aprobado esperando a construirse. Aprueba el cambio de arriba y aquí se ofrecerá su reconstrucción.",
             "onlySandboxMaintainerDecide": "Solo un responsable del sandbox puede decidir sobre los cambios de entorno.",
             "onlySandboxOwnerApprove": "Solo el propietario del sandbox o un responsable puede aprobar o rechazar este cambio.",
             "onlySandboxOwnerRebuild": "Solo el propietario del sandbox puede reconstruirlo.",
@@ -3808,7 +3831,6 @@
             "needMorePower": "¿Necesitas más potencia?",
             "noHourLimitNothing": ": sin límite de horas, nada medido, y el único sitio donde está tu GPU.",
             "ownDevice": "tu propio dispositivo",
-            "readingWhatSandboxReports": "Leyendo lo que este sandbox dice de sí mismo…",
             "removeLogo": "Quitar el logo",
             "renameSandbox": "Renombrar el sandbox",
             "resources": "Recursos",
@@ -4696,7 +4718,6 @@
             "presetThisMonth": "Este mes",
             "presetLastMonth": "Mes pasado",
             "presetLast30": "Últimos 30 días",
-            "dayRecords": "{count} entrada | {count} entradas",
             "target": "Objetivo",
             "actorTokenShort": "Clave «{label}»",
             "actorAgentShort": "Agente {id}",
@@ -6436,7 +6457,6 @@
             "agentEditing": "Un agente está editando {paths} ahora mismo. «{action}» lo registra a medio escribir. | Un agente está editando {paths} ahora mismo. «{action}» los registra a medio escribir.",
             "alsoTerminalChats": "También terminal y chats principales",
             "command": "Comando",
-            "committingNow": "Haciendo commit de {repos}…",
             "conflicts": "Conflictos",
             "couldntReadChanges": "No se pudieron leer los cambios",
             "couldntReadRepo": "No se pudo leer este repo",

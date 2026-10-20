@@ -127,10 +127,11 @@ whose steps are named in `agent/run/placement/turn-close.ts`:
 4. **Land**, a clean turn only (`turn-landing.ts`). Nothing lands while the conversation awaits a wake, since the wake
    is the turn that finishes the work; the skipped land is kept (`conversations/land/wake-held.ts`), and when that wake
    is disarmed without firing (a person stops the job or the watch), it runs after all, deciding as the close would
-   have and landing as a press does (`conversations/land/wake-held-land.ts`). Otherwise the repository's own machine fixers run in the worktree on what the
-   turn changed (`conversations/land/worktree-fixers.ts`, `_tools/scripts/verify/fixers.mjs` where the repository
-   ships it), so what they write rides this land. Then the rules decide, and it lands under the lease. Nothing runs
-   them on the main tree afterwards. With the owner's version rule standing, the land's claim is then committed
+   have and landing as a press does (`conversations/land/wake-held-land.ts`). Otherwise the rules decide, and it lands
+   under the lease. Every land, whichever door it goes through, leaves out the files the repository marks
+   `merge=derived` and then runs the repository's own fixers (`_tools/scripts/verify/fixers.mjs` where it ships them)
+   in the tree it wrote into, on what landed, so a derived file is always the one that tree's sources make
+   (`conversations/land/rederive.ts`). With the owner's version rule standing, the land's claim is then committed
    (`conversations/land/version-landed.ts`), the one place any land (a turn's, by hand, a conflict's re-land, a fix
    agent's) becomes a commit: a subject that narrates instead of describing a change is replaced there by one built
    from the claimed paths (`committableSubject`), whichever path drafted or stored it.

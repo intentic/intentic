@@ -63,17 +63,17 @@ const closeMenu = (event: MouseEvent): void => {
             <button
                 v-if="!isGuest"
                 type="button"
-                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
                 :class="{ 'ui-row-select-on': picked === undefined }"
                 :aria-selected="picked === undefined"
                 @click="emit(`picked`, undefined)"
             >
-                <Icon name="users" class="mt-0.5 shrink-0 text-xs text-subtle" />
+                <Icon name="users" class="shrink-0 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
                     <span class="text-sm text-content md:text-xs">{{ t(`chat.words.anyone`) }}</span>
                     <span class="text-2xs text-subtle">{{ t(`chat.chatPersonaMenu.everyAccountYouveConnected`) }}</span>
                 </span>
-                <Icon v-if="picked === undefined" name="check" class="ml-auto mt-0.5 shrink-0 text-2xs text-accent" aria-hidden="true" />
+                <Icon v-if="picked === undefined" name="check" class="ml-auto shrink-0 text-2xs text-accent" aria-hidden="true" />
             </button>
 
             <button
@@ -99,7 +99,7 @@ const closeMenu = (event: MouseEvent): void => {
                         {{ accountsOf(persona) }}<template v-if="!ready(persona)">{{ t(`chat.chatPersonaMenu.notSignedInYet`) }}</template>
                     </span>
                 </span>
-                <Icon v-if="persona.id === picked" name="check" class="ml-auto mt-1 shrink-0 text-2xs text-accent" aria-hidden="true" />
+                <Icon v-if="persona.id === picked" name="check" class="ml-auto shrink-0 text-2xs text-accent" aria-hidden="true" />
             </button>
 
             <!-- Link to the page that owns these personas, placed where a list's "manage" row always is. -->

@@ -25,7 +25,7 @@ const fetchLoopProgram = (provider: MintedProvider, logger: Services["logger"]):
 export const mintedAccountDoor =
     (provider: MintedProvider) =>
     (
-        services: Pick<Services, "minted" | "logger" | "headroom" | "observedLimits" | "providerRefusals" | "hostHub" | "webextHub">,
+        services: Pick<Services, "minted" | "logger" | "headroom" | "providerRefusals" | "hostHub" | "webextHub">,
     ): AccountDoor => {
         const slice = services.minted[provider];
         return {

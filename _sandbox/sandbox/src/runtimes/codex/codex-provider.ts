@@ -35,6 +35,7 @@ import { writeCodexConfig } from "./codex-config.js";
 import { codexReadiness } from "./codex-readiness.js";
 import { CODEX_BINARY_MISSING, codexBinary } from "./codex-path.js";
 import { resolveRoute, type RouteDeps, routeReadiness, routeSlug } from "../../agent/providers/routes/model-routes.js";
+import { fleetCapacityOf } from "../../usage/serviceability/serviceability.js";
 import { codexThreadExists } from "./codex-sessions.js";
 import { requireRootAgentExecution } from "../../workload/agent-execution.js";
 
@@ -111,13 +112,9 @@ const codexRoute = async (services: CodexPlanDeps, input: AgentTurn): Promise<Co
                 credential: { kind: "codex-endpoint", baseUrl: gateway ?? services.config.translator.url, authToken: services.config.translator.token },
             };
         }
-        const policy = await services.privacyShield.policy();
-        if (policy.mode === "on" && !(await services.privacyShield.trusted(policy, "codex", input.conversationId))) {
-            return {
-                ok: false,
-                message:
-                    "The privacy shield is on, and Codex here would call OpenAI with the container's own key, past the shield. Connect your ChatGPT subscription so it runs through the translator, or mark Codex as trusted in Sandbox ▸ Privacy shield.",
-            };
+        const refused = await services.privacyShield.refusal({ provider: "codex", conversationId: input.conversationId, route: "own-key" });
+        if (refused !== undefined) {
+            return { ok: false, message: refused };
         }
     } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : "the privacy shield's policy could not be read" };
@@ -165,7 +162,7 @@ const hostedCodexRoute = async (services: CodexPlanDeps, input: AgentTurn, provi
 const withCodexAllowance = (services: CodexPlanDeps, credential: CodexCredential, model: string): CodexCredential =>
     credential.kind !== "codex-endpoint" || credential.hosted !== undefined || credential.allowance !== undefined
         ? credential
-        : { ...credential, allowance: { vendor: PROVIDER_VENDOR.codex, limit: () => services.cliProxy.turnLimit("codex", model) } };
+        : { ...credential, allowance: { vendor: PROVIDER_VENDOR.codex, capacity: () => fleetCapacityOf(services, "codex", { id: model }) } };
 
 // Native Codex turns ride app-server behind the translator, with the turn's remote MCP servers (browsers, machines,
 // extension cards, mcp cards) and the daemon's own (ui, accounts, secrets, subagents, watch, deps, diagnostics, code, and

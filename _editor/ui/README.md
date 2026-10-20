@@ -49,8 +49,13 @@ flowchart LR
   its inks. `text-accent` is the accent as an ink (a tick, a selected glyph, a filling ring). It stays legible on
   paper, where the `primary-500` it replaced was 2.4:1. `<Button>` takes `tier` (`loud`,
   `accent`, `boring`, `quiet`) and `tone` rather than PrimeVue's `severity`/`text` (`src/components/primitives/button.ts`).
-  `RowGroup equal-rows` aligns simple settings rows to the tallest row on desktop; leave it off groups with drawers
-  or below-row content. `RowGroup`'s `lead` slot holds something about the whole group that is none of its rows (the
+  `RowGroup equal-rows` gives a settings group's rows one floor height on desktop (the tier's `floor`); a row never
+  states a height of its own. Leave it off groups with drawers or below-row content.
+- **One section header.** `SectionHeader` is the label over a part of a view, sized by its tier (`row.ts`: a page's,
+  or a rail's under `dense`), with `#info` beside the label and `#actions` at the line's end. `RowGroup` is it over the
+  rows' card, `Section` is it over anything else (cards, a grid, a form), and `NavRail` draws it per group. None can
+  carry a count, a caption or a fill, and the room under it is the tier's. A sentence a reader needs goes on the
+  group's surface as a `RowNote`. `ui.sectionLabel()` is its look, called by nothing else in this repository. `RowGroup`'s `lead` slot holds something about the whole group that is none of its rows (the
   Pipelines board's failing-branch card), drawn between the label and the rows so it never reads as one more row. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.
   `DisclosureRow` uses `ui-row-open` for one quiet surface behind its header and details. Handwritten expanded rows
   use the same class; `ui-row-select-on` is reserved for selection. The translucent `--ui-row-open-wash` token uses
@@ -105,9 +110,10 @@ flowchart LR
   second answer, and the commit last. Footer buttons take the default size. A link or a hint that isn't an answer
   goes first in the footer, with `mr-auto`. `#icon` puts a mark before the title. A confirm puts its question in
   `header` and the consequence in `description`, and leaves the body for the list it acts on.
-  A dialog is already a card, so nothing inside it draws another one. `Modal` tells its contents they sit on a dialog
-  (`overlays/dialogGround.ts`). A `RowGroup` there draws its rows and their hairlines with no surface, its rows start
-  where the dialog's text does, and a `Card` draws no box. Group things inside a dialog with space, a section label
+  A dialog is already a card, so nothing inside it draws another one. `Modal`, `Card`, a group's own card and the
+  overlays tell their contents they sit on a surface (`overlays/surfaceGround.ts`; `SurfaceGround` for a box a view
+  draws itself). A `RowGroup` there draws its rows and their hairlines with no surface, its rows start where the
+  surface's text does, and a `Card` draws no box. Group things inside a dialog with space, a section label
   or a rule. A status message is a `Notice` (`success` is one of its tones), and a choice is a row with a hover wash,
   not a bordered tile.
   `src/styles/dialog.css` draws the rest. It dims and slightly blurs the page behind the dialog, so the page stays
@@ -119,11 +125,21 @@ flowchart LR
 - **Lazy chunks.** Every dynamic import in the editor goes through `loadChunk` (`@intentic/ui/chunk`). A chunk a
   redeploy removed reloads the page once onto where the reader is, and any chunk that loads re-arms that reload.
   `installChunkRecovery` catches the preload failures Vite reports for imports nobody wrapped.
-- **Loading placeholders.** A view's loading placeholder is drawn exactly as that view last looked in this sandbox.
-  `v-skeleton-source="name"` on the content takes its imprint once it has settled (`src/lib/skeleton/skeletonImprint.ts`):
+- **Loading placeholders.** A region that is not here yet is drawn by `<Await :of="loaded" imprint="name">`
+  (`src/components/feedback/Await.vue`) from its read's `Loaded` (`@intentic/extension-api`: waiting, ready, failed or
+  idle), and by nothing else. It draws nothing for a fast answer, then the region exactly as it last looked in this
+  sandbox (its `#fallback` until it has been seen once), then the answer. It takes that look only from the answer on
+  screen, and remembers an answer that shows nothing as nothing. It holds the look while reads made inside the region
+  as it first draws are still out (for 2.5 s at most), says a wait that has run past five seconds with a way to ask
+  again, and says a failure in words. Every daemon read (`useSandboxQuery`, `api.sandbox.query`, an extension's own
+  `useQuery`) joins the region it is read in, and the route, hub-section and extension-view hosts are `<Await>`s, so a
+  view's first load is covered without the view asking. The editor's `viewWait.guard.test.ts` refuses a view that wires
+  the parts below itself. _2026-10-20: each view used to wire them with a loading flag of its own. Every one it got
+  wrong was a skeleton for ever, no skeleton, or another view's, fixed one view at a time while the next view broke._
+  Inside it, `v-skeleton-source="name"` on the content takes its imprint once it has settled (`src/lib/skeleton/skeletonImprint.ts`):
   the same elements and classes, each line of text a bar as wide as that line was, and each icon, picture, field and
   button a block of its measured size. No words are kept. `<SkeletonSnapshot of="name">` draws that imprint, and
-  draws its slot (the hand-drawn skeleton, usually `SkeletonRows`) until one exists. Badges and painted marks with
+  draws its slot (the region's `#fallback`, usually `SkeletonRows`) until one exists. Badges and painted marks with
   nothing in them (a status dot, a meter's fill) become neutral blocks, so a stale colour never reads as current. An
   SVG bigger than an icon (a graph's edges, a chart) keeps its space and draws nothing, and inline transforms are kept,
   since they are where a graph's nodes and a virtual list's rows sit. The imprint is taken again whenever the source

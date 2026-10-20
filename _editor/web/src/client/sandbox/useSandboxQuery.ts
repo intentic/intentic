@@ -1,12 +1,13 @@
 import { useQuery, type QueryFunction, type UseQueryOptions } from "@tanstack/vue-query";
+import { useLoaded } from "@intentic/extension-api";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { queryClient } from "../../lib/queryPersistence";
 import { readFailure } from "./useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../../app/perf/perf";
 
-// Daemon-backed vue-query wrapper: every read gates on the active daemon being reachable, and a failure
-// surfaces as the message the daemon threw.
+// Daemon-backed vue-query wrapper: every read gates on the active daemon being reachable, a failure surfaces as the
+// message the daemon threw, and `loaded` says what the view has of it (@intentic/extension-api's `Loaded`).
 
 const { reachable } = useSandbox();
 
@@ -39,5 +40,16 @@ export function useSandboxQuery<T, Selected = T>(options: UseQueryOptions<T, Err
         // plain handler doesn't have.
         queryClient,
     );
-    return { query, error: computed(() => (query.error.value === null ? undefined : readFailure(query.error.value))) };
+    const error = computed(() => (query.error.value === null ? undefined : readFailure(query.error.value)));
+    // What the view draws from: wanted is the caller's own gate alone, so a read held while the sandbox wakes is a wait,
+    // never an empty answer, and one the view has not asked for yet is never a wait. Joined to the <Await> region it is
+    // read in, which keeps that region's remembered look until it has answered.
+    const loaded = useLoaded<Selected>(() => ({
+        data: query.data.value,
+        error: error.value,
+        fetching: query.isFetching.value,
+        wanted: resolved.enabled === undefined || toValue(resolved.enabled) !== false,
+        retry: () => void query.refetch(),
+    }));
+    return { query, error, loaded };
 }

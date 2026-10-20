@@ -99,7 +99,6 @@
             "resends": "renvoi {limitBackAt}",
             "resendsIn": "renvoi dans {limitBackAt}",
             "resendsShortly": "renvoi dans un instant",
-            "resendNotBooked": "« Send again » est choisi, mais rien n'est prévu pour l'envoyer tout seul : appuyez sur « Send again » dès son retour.",
             "closeAgent": "Fermer l'agent",
             "closeDropsUnsent": "Texte non envoyé perdu",
             "closeKeepsRunning": "Le tour continue",
@@ -337,7 +336,9 @@
             "landProcessStopped": "Le processus Git de l’espace de travail s’est arrêté. Réessayez d’intégrer le travail de cet agent.",
             "landTooManyPaths": "Cette modification comprend trop de chemins de fichiers pour être intégrée en une fois. Réduisez les modifications qui se chevauchent dans votre espace de travail, puis réessayez.",
             "landOutputLimit": "Git a renvoyé plus d’informations que l’espace de travail ne pouvait traiter. Réduisez la taille de la modification, puis réessayez.",
-            "workspaceOverlap": "{count} fichiers de votre espace de travail chevauchent le travail de cet agent. Validez ou annulez leurs modifications, puis réessayez."
+            "workspaceOverlap": "{count} fichiers de votre espace de travail chevauchent le travail de cet agent. Validez ou annulez leurs modifications, puis réessayez.",
+            "unknownCommand": "Commande inconnue",
+            "warned": "Avertissement"
         },
         "agentsTile": {
             "countingEverySandbox": "Comptage de tous les sandboxes",
@@ -2238,6 +2239,30 @@
                 "goOn": "Continuez…",
                 "listeningDetail": "Écoute « {word} » sur cet appareil. Cliquez pour mettre en pause une heure."
             }
+        },
+        "failure": {
+            "access": "Le fournisseur a refusé ce compte : son forfait ou son organisation ne le permet pas.",
+            "signedOut": "Le fournisseur n'accepte plus la connexion de ce compte.",
+            "outage": "Le fournisseur n'a pas répondu.",
+            "model": "Ce modèle n'est pas disponible pour ce compte.",
+            "contextFull": "La conversation est trop longue pour ce modèle.",
+            "update": "Le moteur d'agent installé est trop ancien pour ce modèle.",
+            "flagged": "Les garde-fous du modèle ont signalé ce tour.",
+            "limit": "La limite d'utilisation de ce compte est atteinte.",
+            "privacy": "Le bouclier de confidentialité a retenu ce tour avant tout envoi.",
+            "held": "Le sandbox a retenu ce tour.",
+            "cutShort": "L'agent s'est arrêté avant d'avoir fini.",
+            "command": "L'agent a lu ceci comme une commande qu'il n'a pas.",
+            "advisory": "L'agent a terminé avec un avertissement.",
+            "unclassified": "L'agent s'est arrêté sur une erreur que cette app ne reconnaît pas.",
+            "details": "Détails",
+            "hideDetails": "Masquer les détails",
+            "category": "Catégorie",
+            "requestId": "ID de requête",
+            "messageId": "ID de message",
+            "learnMore": "En savoir plus",
+            "copyDetails": "Copier les détails",
+            "copyValue": "Copier {name}"
         }
     },
     "common": {
@@ -3178,8 +3203,6 @@
             "contents": "Contenu",
             "decideFirst": "Approuvez ou rejetez d'abord la modification ci-dessus : une seule reconstruction couvrira les deux.",
             "noRebuildHere": "Le conteneur de ce sandbox n'a pas été lancé par l'installateur d'intentic, il ne peut donc pas être reconstruit d'ici. Reconstruisez-le là où il tourne, à partir de la recette sous Recette.",
-            "nothingToRebuild": "Rien d'approuvé n'attend d'être construit, une reconstruction ne changerait donc rien. Si {names} ne fonctionne toujours pas, demandez à un agent d'en chercher la cause.",
-            "nothingToRebuildDecide": "Rien d'approuvé n'attend encore d'être construit. Approuvez la modification ci-dessus, et sa reconstruction sera proposée ici.",
             "onlySandboxMaintainerDecide": "Seul un mainteneur du sandbox peut décider des changements d'environnement.",
             "onlySandboxOwnerApprove": "Seul le propriétaire du sandbox ou un mainteneur peut approuver ou refuser ce changement.",
             "onlySandboxOwnerRebuild": "Seul le propriétaire du sandbox peut le reconstruire.",
@@ -3793,7 +3816,6 @@
             "needMorePower": "Besoin de plus de puissance ?",
             "noHourLimitNothing": ": pas de limite d'heures, rien de facturé à l'usage, et le seul endroit où se trouve votre GPU.",
             "ownDevice": "votre propre appareil",
-            "readingWhatSandboxReports": "Lecture de ce que ce sandbox dit de lui-même…",
             "removeLogo": "Retirer le logo",
             "renameSandbox": "Renommer le sandbox",
             "resources": "Ressources",
@@ -4676,7 +4698,6 @@
             "presetThisMonth": "Ce mois-ci",
             "presetLastMonth": "Le mois dernier",
             "presetLast30": "30 derniers jours",
-            "dayRecords": "{count} entrée | {count} entrées",
             "target": "Cible",
             "actorTokenShort": "Clé « {label} »",
             "actorAgentShort": "Agent {id}",
@@ -6357,7 +6378,6 @@
             "alsoTerminalChats": "Aussi terminal et chats principaux",
             "command": "Commande",
             "commit": "Committer",
-            "committingNow": "Commit de {repos} en cours…",
             "conflicts": "Conflits",
             "couldntReadChanges": "Impossible de lire les changements",
             "couldntReadRepo": "Impossible de lire ce dépôt",

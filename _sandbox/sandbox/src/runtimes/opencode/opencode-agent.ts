@@ -13,7 +13,7 @@ import { vendorShellEnv } from "../../agent/run/vendor-shell-env.js";
 import { workloadStamp } from "../../seams/workload-stamp.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
 import { DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, type TurnWatchdog, turnWatchdog, withTurnCap } from "../decorators/turn-watchdog.js";
-import { modelUnavailableFrame } from "../../agent/run/error-frames.js";
+import { modelUnavailableFrame } from "../../agent/run/frames/error-frames.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import type { TurnRelay } from "../daemon-tools/turn-relay.js";
@@ -269,7 +269,7 @@ const finished = async (consumed: Consumed, progress: TurnProgress): Promise<boo
 const expired = (consumed: Consumed, label: string): HandedOver | Error => {
     const why = `${label} turn on the OpenCode loop timed out: ${consumed.reading.clock.expiry()}.`;
     return consumed.reading.clock.capRemaining() > 0
-        ? { type: "intentic.failed", frame: { kind: "error", code: "provider-outage", message: why } }
+        ? { type: "intentic.failed", frame: { kind: "error", code: "provider-outage", message: why, own: true } }
         : new Error(why);
 };
 

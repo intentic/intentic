@@ -479,7 +479,7 @@ const rows: readonly Row[] = [
         effects: PROGRESS,
     },
     {
-        name: "a spent allowance is a failure even when scheduled, with every limit field from the one frame",
+        name: "a spent allowance is a failure even when scheduled, its reset and its hold from the one frame",
         from: running(),
         event: frame({
             kind: "error",
@@ -493,7 +493,7 @@ const rows: readonly Row[] = [
             {},
             {
                 lastAt: NOW,
-                failure: { kind: "limited", failure: "spent", resetsAt: 99, held: true, scheduled: true, moving: "acct-2" },
+                failure: { kind: "limited", failure: "spent", resetsAt: 99, held: true },
             },
         ),
         effects: PROGRESS,

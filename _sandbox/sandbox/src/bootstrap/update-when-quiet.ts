@@ -1,11 +1,12 @@
 import { hostRunningSandbox } from "@intentic/sandbox-contract/schemas/devices";
+import { builtFromCheckout } from "@intentic/sandbox-contract/state/sandbox-build";
 import { ORIGIN_HOST } from "@intentic/sandbox-run";
 import { fileRestartResume } from "../system/restart-resume.js";
 import type { BootPhase } from "./boot-phase.js";
 import { nextPromisedWake } from "./promised-wakes.js";
 import { workingNames } from "./working-now.js";
 import type { Services } from "../composition.js";
-import { containerFacts } from "../environment/environment.js";
+import { runningBuild } from "../environment/overlay.js";
 import { devices, manageDeviceSandbox } from "../hosts/device-reports.js";
 import { hostRunningSelf, ownSlug } from "../hosts/self-host.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
@@ -57,7 +58,7 @@ export const startAutoUpdate = ({ config, traits, role, services, logger, shutdo
         !config.sandbox.vm &&
         !isDevBuild &&
         config.sandbox.name !== ORIGIN_HOST &&
-        containerFacts(config.sandbox).localImage === undefined;
+        !builtFromCheckout(runningBuild(config.sandbox));
     if (!swappedByIc || slug === undefined) {
         return;
     }

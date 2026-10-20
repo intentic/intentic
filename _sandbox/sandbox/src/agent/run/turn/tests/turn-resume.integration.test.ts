@@ -17,7 +17,7 @@ import { sqliteAgentsStore } from "../../../../conversations/registry/agents-sto
 import { conversationsDbPath, openConversationsDb } from "../../../../store/conversations-db.js";
 import { fileHeldWakesStore } from "../../../../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../../../../automations/automations-store.js";
-import { resumeInterruptedFires } from "../../../../automations/fire-resume.js";
+import { resumeInterruptedFires } from "../../../../automations/durable/restart.testing.js";
 import type { Services } from "../../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { TranscriptAgent } from "../../../../sessions/agent-transcript.js";
@@ -38,7 +38,8 @@ import { turnRunOf } from "../../../../conversations/actor/conversation-holdings
 import { createDomainEvents } from "../../../../seams/domain-events.js";
 import type { Said, StartedRun, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
-import { createTurnResumeScheduler, fireHeldResume, resumeInterruptedTurns, startConversationTurn } from "../turn-resume.js";
+import { createTurnResumeScheduler, fireHeldResume, startConversationTurn } from "../turn-resume.js";
+import { resumeInterruptedTurns } from "../recovery/cut-turns.testing.js";
 import { nudgeResumesOn } from "../holds/resume-nudges.js";
 import type { HeldOf, HeldTurn } from "../holds/held-turn.js";
 import { TurnRun } from "../turn-runs.js";

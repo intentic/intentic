@@ -1,4 +1,4 @@
-import { cardOrder, cardStatus, type DeviceSandboxGroup, filesLine, idleHere, portsLine } from "@intentic/ui/device";
+import { cardOrder, cardStatus, type DeviceSandboxGroup, filesLine, folderHold, idleHere, portsLine } from "@intentic/ui/device";
 
 // A sandbox card's closed face (_editor/ui/src/components/sandbox/deviceDetail.ts): where it stands in a word, the
 // Files and Ports lines in plain words with each warning on the line it is about, and the order a machine's list is
@@ -47,6 +47,20 @@ it(`puts the folder on the Files line with only the news beside it`, () => {
 
 // The two holds the device puts on itself: a drive nearly full (a pause the owner ends by freeing room, so a warning, not
 // the quiet word a chosen pause wears) and repos whose git history stopped following while their files still sync.
+// fair-moth (2026-10-19): a sync the machine holds for a swap showed Resume, which the owner pressed after every rebuild.
+// Resume is the owner's to press only for their own pause; what the machine holds by itself says why and ends by itself.
+it(`offers Resume only for the owner's own pause, and says why the machine holds the rest`, () => {
+    const folder = { sandboxId: `a`, mode: `sync` as const, localDir: `/home/ada/a`, mutagenStatus: `watching`, paused: true };
+    expect(folderHold({ ...folder, heldBy: [`owner`, `swap`] })).toMatchObject({ word: `paused`, resumable: true });
+    expect(folderHold({ ...folder, heldBy: [`swap`] })).toMatchObject({ word: `held`, resumable: false, hint: expect.stringContaining(`updated or rebuilt`) });
+    expect(folderHold({ ...folder, heldBy: [`unreachable`] })?.hint).toContain(`has not answered for an hour`);
+    expect(folderHold({ ...folder, heldBy: [`a-reason-from-a-newer-agent`] })).toMatchObject({ word: `held`, resumable: false });
+    expect(filesLine(running(`a`, { folder: { ...folder, heldBy: [`gone`] } })).map((part) => part.text)).toEqual([`/home/ada/a`, `held`]);
+    // An agent older than `heldBy` only says Mutagen has it paused: a pause a person may lift, as before.
+    expect(folderHold(folder)).toMatchObject({ word: `paused`, resumable: true });
+    expect(folderHold({ ...folder, paused: false })).toBeUndefined();
+});
+
 it(`says a folder is paused for a full drive, and that some git history lags, as warnings`, () => {
     const folder = { sandboxId: `a`, mode: `sync` as const, localDir: `/home/ada/a`, mutagenStatus: `watching`, paused: true };
     const lowDisk = { freeBytes: 3 * 1024 ** 3, totalBytes: 953 * 1024 ** 3 };

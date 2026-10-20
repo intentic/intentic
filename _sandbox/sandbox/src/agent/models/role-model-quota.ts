@@ -1,13 +1,12 @@
-import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
+import type { FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
 import type { ModelChoice } from "@intentic/sandbox-contract/models/model-pins";
 import { renewsInWords } from "@intentic/sandbox-contract/models/model-offer";
 import type { Services } from "../../composition.js";
-import { askableLimit, type TurnLimit } from "../../usage/serviceability/fleet-limit.js";
-import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
-import { observedOwnLimit } from "../../usage/observed-accounts.js";
+import { fleetCapacityOf } from "../../usage/serviceability/serviceability.js";
 
-// Reads a rung's recorded quota instead of discovering it by asking and being refused; a rung whose every account is
-// spent is stepped over on that reading, scoped per-model through fleet-limit's own gates. Only ever says spent —
+// Reads a rung's capacity on file instead of discovering it by asking and being refused: a rung no connected account can
+// serve is stepped over, judged by the one rule the spawn listing, the account rows and the picker read (fleetCapacityOf),
+// so a gate never refuses what the listing offers, nor lets through what it calls spent. Only ever says spent —
 // undefined means nothing on file blocks the call.
 
 export interface SpentRung {
@@ -22,46 +21,21 @@ const spentSentence = (subject: string, pool: string | undefined, reopensAt: num
     return `${subject} out of ${allowance}${renews}.`;
 };
 
-// Async, so a store that throws as it is called rejects beside the facts read alongside it instead of stranding them.
-const refusalsOnFile = async (services: Services): Promise<Awaited<ReturnType<Services["providerRefusals"]["onFile"]>>> => services.providerRefusals.onFile();
+/** A rung's capacity on file, or undefined where the read failed: a failed lookup never fails the helper, it asks. */
+export const rungCapacity = async (services: Services, choice: ModelChoice, now: number = Date.now()): Promise<FleetCapacity | undefined> =>
+    // allow(silent-catch): a failed quota lookup should not fail the helper; it falls through to asking normally.
+    fleetCapacityOf(services, choice.provider, choice.model === "" ? undefined : { id: choice.model }, now).catch(() => undefined);
 
-// Fleet reading for a rung, or undefined when no quota is on file or the reading failed. Spent only when every connected
-// account is at cap; an unmeasured account keeps the rung askable. Claude's and a routed provider's accounts are judged
-// on the very facts and refusals the account rows and the spawn listing publish (askableLimit), so a gate never refuses
-// what the listing offers, nor lets through what it calls spent.
-export const rungLimit = async (services: Services, choice: ModelChoice, now: number = Date.now()): Promise<TurnLimit | undefined> => {
-    try {
-        if (choice.provider === `claude` || KeyedProviderSchema.safeParse(choice.provider).success) {
-            const [facts, refusals] = await Promise.all([accountFactsOf(services, choice.provider), refusalsOnFile(services)]);
-            return facts.length === 0 ? undefined : askableLimit(facts, { id: choice.model }, refusals[choice.provider], now);
-        }
-        // A provider keeping its own reading (Cursor's, what it has already refused, per account and per model) answers
-        // for itself; read from the pool instead, one account's spent Composer would bench the rung for every account.
-        const module = services.providerModules.find((candidate) => candidate.id === choice.provider);
-        if (module?.turnLimit !== undefined) {
-            return await module.turnLimit(services, choice.model);
-        }
-        // Left: a provider authenticating on its own with no reading of its own either (Devin). Its ledger is still the
-        // one measurement it can have, whether a refused turn filed it or somebody marked it by hand.
-        const own = await observedOwnLimit(services, choice.provider);
-        return own === undefined ? undefined : await own(choice.model);
-    } catch {
-        // A failed quota lookup should not fail the helper; fall through to asking normally.
-        return undefined;
-    }
-};
-
-// Whether a rung is known-spent; undefined means ask it. withHeadroom>0 means some account can serve it; both counts
-// zero means the pool is unmeasured, not blocked.
+// Whether a rung is known-spent; undefined means ask it.
 export const spentRung = async (services: Services, choice: ModelChoice, now: number = Date.now()): Promise<SpentRung | undefined> => {
-    const limit = await rungLimit(services, choice, now);
-    if (limit === undefined || limit.withHeadroom > 0 || limit.spent === 0) {
+    const capacity = await rungCapacity(services, choice, now);
+    if (capacity?.kind !== "spent") {
         return undefined;
     }
     const vendor = choice.provider === `claude` ? ` Claude` : ``;
-    const accounts = limit.spent === 1 ? `The connected${vendor} account is` : `All ${limit.spent} connected${vendor} accounts are`;
+    const accounts = capacity.accounts === 1 ? `The connected${vendor} account is` : `All ${capacity.accounts} connected${vendor} accounts are`;
     return {
-        reason: spentSentence(accounts, limit.pool, limit.reopensAt, now),
-        ...(limit.reopensAt === undefined ? {} : { reopensAt: limit.reopensAt }),
+        reason: spentSentence(accounts, capacity.pool, capacity.reopensAt, now),
+        ...(capacity.reopensAt === undefined ? {} : { reopensAt: capacity.reopensAt }),
     };
 };

@@ -1,17 +1,17 @@
 <!-- A hover preview of the file a `path:line` link names: the lines around that line, the top of a file named without one, or why there is nothing to show. -->
 <script setup lang="ts">
+import { useLoaded } from "@intentic/extension-api";
 import {
     AnchoredOverlay,
+    Await,
     type CodeToken,
     explorerColorClass,
     formatBytes,
     formatCount,
     iconForEntry,
-    SkeletonSnapshot,
     useHighlighter,
     useHoverIntent,
     useLatest,
-    vSkeletonSource,
 } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { basename, parentDir } from "@intentic/ui/path";
@@ -278,6 +278,12 @@ const openTarget = (): void => {
 
 // --- What the card draws. -----------------------------------------------------------------------------------------
 const view = computed(() => (file.value === undefined || target.value === undefined ? undefined : peekView(file.value, target.value.line)));
+const peek = useLoaded(() => ({
+    data: view.value,
+    error: failed.value ? t(`workspace.fileRefPeek.failed`) : undefined,
+    fetching: false,
+    wanted: target.value !== undefined,
+}));
 
 const shownPath = computed(() => file.value?.path ?? target.value?.written ?? ``);
 const name = computed(() => basename(shownPath.value));
@@ -308,9 +314,6 @@ const aside = computed(() => {
 // The one line the card says in place of code.
 const note = computed(() => {
     const shown = view.value;
-    if (failed.value) {
-        return t(`workspace.fileRefPeek.failed`);
-    }
     if (shown?.kind === `missing`) {
         return t(`workspace.fileRefPeek.notFound`);
     }
@@ -367,8 +370,6 @@ const rows = computed(() => {
 // Placeholder rows while reading, the card's full height, so it does not jump as the lines land. Uneven, like code.
 const PLACEHOLDER_WIDTHS = [58, 72, 44, 66, 30, 80, 52, 62, 38, 70, 48, 26];
 const placeholders = PLACEHOLDER_WIDTHS.slice(0, PEEK_SPAN);
-// Once a file has been seen, its next read is drawn as it looked: per file, since how tall the card stands (a short
-// file, a folder, a missing file's one line) is the thing the placeholder exists to hold.
 const imprintName = computed(() => `peek:${target.value?.written ?? ``}`);
 </script>
 
@@ -393,53 +394,64 @@ const imprintName = computed(() => `peek:${target.value?.written ?? ``}`);
                 <span v-if="aside !== undefined" class="shrink-0 text-2xs text-subtle tabular-nums">{{ aside }}</span>
             </div>
 
-            <template v-if="view?.kind === 'lines' && !failed">
-                <!-- One row per line, number and code side by side, so the marked line is one row's tint rather than a band laid over a block. Lines are cut, not wrapped or scrolled: a card the pointer passes through is glanced at, not read across. -->
-                <div v-skeleton-source="imprintName" class="min-h-0 overflow-hidden bg-canvas py-1.5 font-mono text-2xs leading-relaxed [tab-size:4]">
-                    <div
-                        v-for="row in rows"
-                        :key="row.number"
-                        :data-peek-line="row.number"
-                        :data-peek-marked="row.marked ? `` : undefined"
-                        class="flex"
-                        :class="row.marked ? `bg-primary-500/15 shadow-[inset_2px_0_0_var(--color-primary-500)]` : ``"
-                    >
-                        <span
-                            class="w-12 shrink-0 pr-3 text-right tabular-nums select-none"
-                            :class="row.marked ? `font-medium text-content` : `text-subtle`"
-                            >{{ row.number }}</span
+            <!-- Once a file has been seen, its next read is drawn as it looked: per file, since how tall the card stands (a
+                 short file, a folder, a missing file's one line) is the thing the placeholder exists to hold. -->
+            <Await :of="peek" :imprint="imprintName">
+                <template #default="{ data: shown }">
+                    <template v-if="shown.kind === 'lines'">
+                        <!-- One row per line, number and code side by side, so the marked line is one row's tint rather than a band laid over a block. Lines are cut, not wrapped or scrolled: a card the pointer passes through is glanced at, not read across. -->
+                        <div class="min-h-0 overflow-hidden bg-canvas py-1.5 font-mono text-2xs leading-relaxed [tab-size:4]">
+                            <div
+                                v-for="row in rows"
+                                :key="row.number"
+                                :data-peek-line="row.number"
+                                :data-peek-marked="row.marked ? `` : undefined"
+                                class="flex"
+                                :class="row.marked ? `bg-primary-500/15 shadow-[inset_2px_0_0_var(--color-primary-500)]` : ``"
+                            >
+                                <span
+                                    class="w-12 shrink-0 pr-3 text-right tabular-nums select-none"
+                                    :class="row.marked ? `font-medium text-content` : `text-subtle`"
+                                    >{{ row.number }}</span
+                                >
+                                <span class="min-w-0 flex-1 overflow-hidden pr-3 text-ellipsis whitespace-pre text-content"
+                                    ><template v-if="row.tokens !== undefined"
+                                        ><span v-for="(token, at) in row.tokens" :key="at" :style="token.htmlStyle">{{
+                                            token.content
+                                        }}</span></template
+                                    ><template v-else>{{ row.text }}</template></span
+                                >
+                            </div>
+                        </div>
+                        <!-- A line after the file's end: its last lines are shown, and this says why the named one isn't marked. -->
+                        <p
+                            v-if="shown.past && shown.total !== undefined && target?.line !== undefined"
+                            class="border-t border-line px-3 py-1.5 text-2xs text-muted"
                         >
-                        <span class="min-w-0 flex-1 overflow-hidden pr-3 text-ellipsis whitespace-pre text-content"
-                            ><template v-if="row.tokens !== undefined"
-                                ><span v-for="(token, at) in row.tokens" :key="at" :style="token.htmlStyle">{{ token.content }}</span></template
-                            ><template v-else>{{ row.text }}</template></span
-                        >
+                            {{ t(`workspace.fileRefPeek.past`, { line: formatCount(target.line), total: formatCount(shown.total) }) }}
+                        </p>
+                    </template>
+                    <p v-else-if="note !== undefined" class="px-3 py-2.5 text-2xs text-muted">{{ note }}</p>
+                    <ul v-else-if="shown.kind === 'folder'" class="flex flex-col gap-0.5 px-2 py-2">
+                        <li v-for="child in shown.names" :key="child" class="truncate px-1 text-xs text-content/80">{{ child }}</li>
+                        <li v-if="shown.count > shown.names.length" class="px-1 pt-1 text-2xs text-subtle">
+                            {{ t(`workspace.fileRefPeek.more`, { count: formatCount(shown.count - shown.names.length) }) }}
+                        </li>
+                    </ul>
+                </template>
+                <template #failed="{ error }">
+                    <p class="px-3 py-2.5 text-2xs text-muted">{{ error }}</p>
+                </template>
+                <!-- Reading: still placeholder rows in the code's own measure (no animation), so the card keeps its height. -->
+                <template #fallback>
+                    <div class="bg-canvas py-1.5 font-mono text-2xs leading-relaxed" aria-hidden="true">
+                        <div v-for="(width, index) in placeholders" :key="index" class="flex items-center">
+                            <span class="w-12 shrink-0">&nbsp;</span>
+                            <span class="skeleton h-2" :style="{ width: `${width}%` }"></span>
+                        </div>
                     </div>
-                </div>
-                <!-- A line after the file's end: its last lines are shown, and this says why the named one isn't marked. -->
-                <p
-                    v-if="view.past && view.total !== undefined && target?.line !== undefined"
-                    class="border-t border-line px-3 py-1.5 text-2xs text-muted"
-                >
-                    {{ t(`workspace.fileRefPeek.past`, { line: formatCount(target.line), total: formatCount(view.total) }) }}
-                </p>
-            </template>
-            <p v-else-if="note !== undefined" v-skeleton-source="imprintName" class="px-3 py-2.5 text-2xs text-muted">{{ note }}</p>
-            <ul v-else-if="view?.kind === 'folder'" v-skeleton-source="imprintName" class="flex flex-col gap-0.5 px-2 py-2">
-                <li v-for="child in view.names" :key="child" class="truncate px-1 text-xs text-content/80">{{ child }}</li>
-                <li v-if="view.count > view.names.length" class="px-1 pt-1 text-2xs text-subtle">
-                    {{ t(`workspace.fileRefPeek.more`, { count: formatCount(view.count - view.names.length) }) }}
-                </li>
-            </ul>
-            <!-- Reading: still placeholder rows in the code's own measure (no animation), so the card keeps its height. -->
-            <SkeletonSnapshot v-else :of="imprintName">
-                <div class="bg-canvas py-1.5 font-mono text-2xs leading-relaxed" aria-hidden="true">
-                    <div v-for="(width, index) in placeholders" :key="index" class="flex items-center">
-                        <span class="w-12 shrink-0">&nbsp;</span>
-                        <span class="skeleton h-2" :style="{ width: `${width}%` }"></span>
-                    </div>
-                </div>
-            </SkeletonSnapshot>
+                </template>
+            </Await>
         </div>
     </AnchoredOverlay>
 </template>

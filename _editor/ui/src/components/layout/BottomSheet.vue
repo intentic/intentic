@@ -5,8 +5,12 @@ import { onBeforeUnmount, ref, watch } from "vue";
 import { FLING, SETTLE, springTiming } from "../../motion/spring.js";
 import { commits, lockAxis, rubberBand, velocityTracker } from "../../motion/swipe.js";
 import { useBackDismiss } from "../../composables/useBackDismiss.js";
+import { provideSurfaceGround } from "../overlays/surfaceGround.js";
 
 const { header } = defineProps<{ header?: string }>();
+
+// A popover and a sheet are a surface: what lies on them draws none of its own (surfaceGround.ts).
+provideSurfaceGround();
 const visible = defineModel<boolean>({ required: true });
 
 useBackDismiss(visible);

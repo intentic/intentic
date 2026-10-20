@@ -1,7 +1,8 @@
 import sharp from "sharp";
 import type { OcrLine } from "@intentic/ocr/paddle-ocr";
 import { createMaskMemo, createMasker, excerptAround } from "../masker.js";
-import { redactStrings } from "../privacy-shield.js";
+import { type PrivacyShield, redactStrings } from "../privacy-shield.js";
+import { runtimeRoute } from "../privacy-trust.js";
 import type { LocalReaders } from "../readers.js";
 import { tokenOf } from "../tokens.js";
 import { maskJsonText, restoreJsonText } from "../gateway/protocols/json-text.js";
@@ -143,11 +144,18 @@ test("the owner reads a token back to its value, in either spelling; a token nev
     });
 });
 
-describe("whether a turn may run", () => {
+// THE verdict as every door asks it (sandbox-contract privacy-egress.ts): the doors' own reading of it here, with this
+// sandbox's capabilities for what is local and the sentence a refusal ends a turn with.
+describe("the verdict every door asks", () => {
+    const turn = (provider: string, harness: "native" | "claude-code", conversationId?: string) => ({ provider, conversationId, route: runtimeRoute(provider, harness) });
+    const passes = async (shield: PrivacyShield, provider: string, conversationId?: string): Promise<boolean> =>
+        (await shield.decide({ provider, conversationId, route: "gateway" })).verdict.kind === "pass";
+
     test("off or watching, every runtime runs", async () => {
         for (const mode of ["off", "watch"] as const) {
             const { privacyShield } = privacySliceFake({ policy: { mode } });
-            expect(await privacyShield.admit("cursor", "native")).toEqual({ allowed: true });
+            expect(await privacyShield.refusal(turn("pi", "native"))).toBeUndefined();
+            expect(await privacyShield.refusal({ provider: "cursor", conversationId: "c-1", route: "runner" })).toBeUndefined();
         }
     });
 
@@ -156,48 +164,56 @@ describe("whether a turn may run", () => {
     // is decided by its runtime.
     test("on, a runtime the shield reads (the gateway, or its hooks) runs whatever its provider, and one it can't read runs only if trusted", async () => {
         const { privacyShield } = privacySliceFake({ policy: { mode: "on" } });
-        expect(await privacyShield.admit("claude", "native")).toEqual({ allowed: true });
-        expect(await privacyShield.admit("codex", "native")).toEqual({ allowed: true });
-        expect(await privacyShield.admit("gemini", "native")).toEqual({ allowed: true });
-        expect(await privacyShield.admit("cursor", "native", "vivid-rowan-moks")).toEqual({ allowed: true });
-        expect((await privacyShield.admit("my-acp-agent", "native")).allowed).toBe(false);
-        expect((await privacyShield.admit("pi", "native")).allowed).toBe(false);
+        for (const provider of ["claude", "codex", "gemini", "cursor"]) {
+            expect([provider, await privacyShield.refusal(turn(provider, "native", "vivid-rowan-moks"))]).toEqual([provider, undefined]);
+        }
+        expect(await privacyShield.refusal(turn("my-acp-agent", "native"))).toEqual(expect.any(String));
+        expect(await privacyShield.refusal(turn("pi", "native"))).toEqual(expect.any(String));
         const trusting = privacySliceFake({ policy: { mode: "on", trusted: ["pi"] } });
-        expect(await trusting.privacyShield.admit("pi", "native")).toEqual({ allowed: true });
+        expect(await trusting.privacyShield.refusal(turn("pi", "native"))).toBeUndefined();
     });
 
-    // Decided by the runtime before a word is read, so the refusal must not read as a finding: it once sent the owner
-    // looking for personal data in a message that held none.
-    test("a refusal says nothing was read, why the runtime is the reason, and where the way on is", async () => {
+    // Decided by the route before a word is read, so the refusal must not read as a finding: it once sent the owner
+    // looking for personal data in a message that held none (2026-10-02), and a runner's did again (2026-10-11).
+    test("a refusal says nothing was read, why the route is the reason, and where the way on is", async () => {
         const { privacyShield } = privacySliceFake({ policy: { mode: "on" } });
-        const refused = await privacyShield.admit("pi", "native", "vivid-rowan-moks");
-        expect(refused.allowed).toBe(false);
-        const reason = refused.allowed ? "" : refused.reason;
+        const reason = (await privacyShield.refusal(turn("pi", "native", "vivid-rowan-moks"))) ?? "";
         expect(reason).toContain("before reading anything");
         expect(reason).toContain("nothing in what you sent was flagged");
         expect(reason).toContain("agent reads files and command output on its own");
         expect(reason).toContain("read this conversation as it is");
+        const runner = (await privacyShield.refusal({ provider: "cursor", conversationId: "vivid-rowan-moks", route: "runner" })) ?? "";
+        expect(runner).toContain("a runner would call Cursor from its own machine");
+        expect(runner).toContain("nothing in what you sent was flagged");
         // A turn with no conversation has none to grant, so it is not offered one.
-        const helper = await privacyShield.admit("pi", "native");
-        expect(helper.allowed ? "" : helper.reason).not.toContain("this conversation");
+        expect(await privacyShield.refusal(turn("pi", "native"))).not.toContain("this conversation");
     });
 
-    test("a grant for one conversation lets the provider run there and nowhere else", async () => {
+    test("a policy that can't be read refuses at every door rather than letting anything past", async () => {
+        const torn = { get: async () => { throw new Error("the file is torn"); }, set: async () => undefined };
+        const { privacyShield } = privacySliceFake({ policyStore: torn });
+        await expect(privacyShield.decide({ provider: "cursor", route: "hooks" })).rejects.toThrow("the file is torn");
+        for (const route of ["gateway", "hooks", "sealed", "runtime", "runner", "own-key", "shared-server"] as const) {
+            expect([route, await privacyShield.refusal({ provider: "cursor", route })]).toEqual([route, expect.stringContaining("the file is torn")]);
+        }
+    });
+
+    test("a grant for one conversation lets the provider through there and nowhere else, on every door", async () => {
         const { privacyShield } = privacySliceFake({
             policy: { mode: "on", conversations: [{ conversationId: "vivid-rowan-moks", provider: "pi" }] },
         });
-        expect(await privacyShield.admit("pi", "native", "vivid-rowan-moks")).toEqual({ allowed: true });
-        expect((await privacyShield.admit("pi", "native", "smart-moth-pq04")).allowed).toBe(false);
-        expect((await privacyShield.admit("pi", "native")).allowed).toBe(false);
+        expect(await privacyShield.refusal(turn("pi", "native", "vivid-rowan-moks"))).toBeUndefined();
+        expect(await privacyShield.refusal({ provider: "pi", conversationId: "vivid-rowan-moks", route: "runner" })).toBeUndefined();
+        expect(await privacyShield.refusal(turn("pi", "native", "smart-moth-pq04"))).toEqual(expect.any(String));
+        expect(await privacyShield.refusal(turn("pi", "native"))).toEqual(expect.any(String));
         // Granted to one provider, not to whatever the conversation switches to.
-        expect((await privacyShield.admit("my-acp-agent", "native", "vivid-rowan-moks")).allowed).toBe(false);
-        // The gateway reads the same grant, so a shieldable provider granted there would be relayed unmasked in it alone.
-        const policy = await privacyShield.policy();
-        expect(await privacyShield.trusted(policy, "pi", "vivid-rowan-moks")).toBe(true);
-        expect(await privacyShield.trusted(policy, "pi", "smart-moth-pq04")).toBe(false);
+        expect(await privacyShield.refusal(turn("my-acp-agent", "native", "vivid-rowan-moks"))).toEqual(expect.any(String));
+        // The gateway reads the same grant, so a shieldable provider granted there is relayed unmasked in it alone.
+        expect(await passes(privacyShield, "pi", "vivid-rowan-moks")).toBe(true);
+        expect(await passes(privacyShield, "pi", "smart-moth-pq04")).toBe(false);
     });
 
-    test("a model this machine serves is trusted whatever the list says, and the free trial never is", async () => {
+    test("a model this machine serves passes whatever the list says, and the free trial never does", async () => {
         const { privacyShield } = privacySliceFake({
             policy: { mode: "on" },
             capabilities: async () => [
@@ -205,22 +221,20 @@ describe("whether a turn may run", () => {
                 { id: "free-trial", kind: "endpoint", config: { baseUrl: "https://platform.intentic.dev/trial", protocol: "openai" } } as never,
             ],
         });
-        const policy = await privacyShield.policy();
-        expect(await privacyShield.trusted(policy, "endpoint/qwen")).toBe(true);
-        expect(await privacyShield.trusted(policy, "endpoint/free-trial")).toBe(false);
+        expect(await passes(privacyShield, "endpoint/qwen")).toBe(true);
+        expect(await passes(privacyShield, "endpoint/free-trial")).toBe(false);
     });
 
     // The trial's base URL goes through the platform tunnel, which listens on loopback: an address that reads as local
     // for a provider whose every request leaves for Intentic's servers and a vendor beyond them.
-    test("the free trial reached through the loopback tunnel is still neither local nor trusted", async () => {
+    test("the free trial reached through the loopback tunnel is still neither local nor passed", async () => {
         const capabilities = async () => [
             { id: "free-trial", kind: "endpoint", config: { baseUrl: "http://127.0.0.1:41234/trial/v1", protocol: "openai" } } as never,
             { id: "ollama", kind: "endpoint", config: { baseUrl: "http://127.0.0.1:11434/v1", protocol: "openai" } } as never,
         ];
         const { privacyShield } = privacySliceFake({ policy: { mode: "on" }, capabilities });
-        const policy = await privacyShield.policy();
-        expect(await privacyShield.trusted(policy, "endpoint/free-trial")).toBe(false);
-        expect(await privacyShield.trusted(policy, "endpoint/ollama")).toBe(true);
+        expect(await passes(privacyShield, "endpoint/free-trial")).toBe(false);
+        expect(await passes(privacyShield, "endpoint/ollama")).toBe(true);
         const providers = (await privacyShield.status()).providers.filter((provider) => provider.id.startsWith("endpoint/"));
         expect(providers.map(({ id, local }) => ({ id, local }))).toEqual([
             { id: "endpoint/free-trial", local: false },
@@ -236,9 +250,8 @@ describe("whether a turn may run", () => {
             { id: "gpu-box", kind: "endpoint", config: { baseUrl: "http://192.168.1.20:11434/v1", protocol: "openai" } } as never,
         ];
         const { privacyShield } = privacySliceFake({ policy: { mode: "on" }, capabilities });
-        const policy = await privacyShield.policy();
-        expect(await privacyShield.trusted(policy, "endpoint/lmstudio")).toBe(true);
-        expect(await privacyShield.trusted(policy, "endpoint/gpu-box")).toBe(false);
+        expect(await passes(privacyShield, "endpoint/lmstudio")).toBe(true);
+        expect(await passes(privacyShield, "endpoint/gpu-box")).toBe(false);
     });
 });
 
@@ -400,6 +413,17 @@ test("a page leaving this machine whole carries the kind of data instead of the 
     expect(await off.privacyShield.redactForDisplay(`PESEL ${PESEL}`)).toBe(`PESEL ${PESEL}`);
     const on = privacySliceFake({ policy: { mode: "on" } });
     expect(await on.privacyShield.redactForDisplay(`Jan Kowalski asked about PESEL ${PESEL}`)).toBe("‹person› asked about PESEL ‹national id›");
+});
+
+// A push and a share read through the masker's own gate, so what it keeps for a provider is what they label, and a word
+// the vault once learned as a name is left in a notification as it is left in a request.
+test("a page leaving this machine whole is labelled by the same gate a request is masked by", async () => {
+    const on = privacySliceFake({ policy: { mode: "on" } });
+    await on.privacyShield.vault.load();
+    on.privacyShield.vault.tokenFor("Grace", "person-name");
+    expect(await on.privacyShield.redactForDisplay("Grace period ends today")).toBe("Grace period ends today");
+    const masked = await (await on.privacyShield.masker(await on.privacyShield.policy())).mask("Grace period ends today");
+    expect(masked.text).toBe("Grace period ends today");
 });
 
 // A public share's payload is walked by redactStrings: a file name or a path can hold the data as well as a message can.

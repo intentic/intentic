@@ -59,13 +59,13 @@ const { state: workflowsPage } = useListedView(WORKFLOWS);
         <button
             v-if="picked"
             type="button"
-            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
             @click="
                 emit(`loop`, undefined);
                 emit(`workflow`, undefined);
             "
         >
-            <Icon name="times" class="mt-0.5 shrink-0 text-xs text-subtle" />
+            <Icon name="times" class="shrink-0 text-xs text-subtle" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`chat.chatRunThroughMenu.justChat`) }}</span>
                 <span class="text-2xs text-subtle">{{ t(`chat.chatRunThroughMenu.sendOnceOrdinaryMessage`) }}</span>
@@ -79,11 +79,11 @@ const { state: workflowsPage } = useListedView(WORKFLOWS);
                 v-for="design in loops"
                 :key="design.id"
                 type="button"
-                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
                 :class="{ 'ui-row-select-on': design.id === loop }"
                 @click="emit(`loop`, design)"
             >
-                <Icon name="repeat" class="mt-0.5 shrink-0 text-xs text-subtle" />
+                <Icon name="repeat" class="shrink-0 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-sm text-content md:text-xs">{{ design.name }}</span>
                     <!-- How it ends and how far it may go, computed from the loop; a control starting paid work must say what stops it up front. -->
@@ -99,11 +99,11 @@ const { state: workflowsPage } = useListedView(WORKFLOWS);
                 v-for="design in workflows"
                 :key="design.id"
                 type="button"
-                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
                 :class="{ 'ui-row-select-on': design.id === workflow }"
                 @click="emit(`workflow`, design)"
             >
-                <Icon name="sitemap" class="mt-0.5 shrink-0 text-xs text-subtle" />
+                <Icon name="sitemap" class="shrink-0 text-xs text-subtle" />
                 <span class="flex min-w-0 flex-col">
                     <span class="flex min-w-0 items-baseline gap-1.5">
                         <span class="truncate text-sm text-content md:text-xs">{{ design.name }}</span>

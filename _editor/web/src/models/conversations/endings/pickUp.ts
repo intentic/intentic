@@ -25,7 +25,7 @@ export interface PickUp {
     readonly nextAt?: number;
     /**
      * A spent allowance's held turn is on the daemon's books to go by itself (the frame's `autoResume`, the record's
-     * `scheduled`, the card's `limitScheduled`), so `nextAt` says when, and one past or never named goes on the next pass.
+     * `scheduled`, the card's `next`), so `nextAt` says when, and one past or never named goes on the next pass.
      */
     readonly booked?: true;
     /** How far a laddered wall's automatic re-runs have got (an outage's breaker, a stopped turn's rungs). */
@@ -133,9 +133,9 @@ export const withCardBooking = (pickUp: PickUp | undefined, card: AgentStanding 
     }
     const { readyAt: _ready, nextAt: _next, booked: _booked, held, ...rest } = pickUp;
     const timed: PickUp = card.limitResetsAt === undefined ? rest : { ...rest, readyAt: card.limitResetsAt * 1_000 };
-    const booked: PickUp = card.limitScheduled === true ? { ...timed, booked: true } : timed;
-    const when: PickUp = card.limitScheduled === true && card.limitNextAt !== undefined ? { ...booked, nextAt: card.limitNextAt * 1_000 } : booked;
-    return held === undefined ? when : { ...when, held: movingTo(held, card.limitMoving) };
+    const rerun = card.next?.kind === `rerun` ? card.next : undefined;
+    const when: PickUp = rerun === undefined ? timed : { ...timed, booked: true, nextAt: rerun.at };
+    return held === undefined ? when : { ...when, held: movingTo(held, rerun?.onto) };
 };
 
 // The held turn with the move the card says is booked for it, or none.

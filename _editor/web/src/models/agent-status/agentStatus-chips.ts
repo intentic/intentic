@@ -7,17 +7,7 @@ import { attentionReason, endingReason, landFailure } from "./agentStatus-attent
 import { failureGist, failureKind, failureTone, failureWord } from "./agentStatus-failure";
 import { laneOf } from "./agentStatus-lanes";
 import { agentDisplayTitle } from "./agentStatus-meta";
-import {
-    type AgentStanding,
-    limited,
-    limitMoveBooked,
-    limitScheduled,
-    memoryHeld,
-    scheduledSend,
-    soonestHold,
-    turnInFlight,
-    watching,
-} from "./agentStatus-standing";
+import { type AgentStanding, limited, memoryHeld, turnInFlight, watching } from "./agentStatus-standing";
 
 // One bit, "this session isn't done yet", for surfaces that name an agent by its output rather than itself (the
 // Changes panel's From legend). `laneOf` narrowed to a boolean rather than its own status list, so "finished" means
@@ -48,13 +38,10 @@ export const unfinishedMark = (agent: AgentStanding | undefined): { dot: string;
 // allowance's reset, one is being carried to another account. All restart themselves, so the label says which kind of
 // unfinished rather than claiming work.
 const activeLabel = (agent: AgentStanding): string => {
+    const next = agent.next;
     // A booked move names its destination.
-    const moving = limitMoveBooked(agent) ? agent.limitMoving : undefined;
-    if (moving !== undefined) {
-        return t(`agents.agentStatus.movingTo`, { account: moving });
-    }
-    if (limitScheduled(agent)) {
-        return t(`agents.agentCard.resendBooked`);
+    if (next?.kind === `rerun`) {
+        return next.onto === undefined ? t(`agents.agentCard.resendBooked`) : t(`agents.agentStatus.movingTo`, { account: next.onto });
     }
     if (turnInFlight(agent)) {
         return t(`agents.agentStatus.stillWorking`);
@@ -62,8 +49,8 @@ const activeLabel = (agent: AgentStanding): string => {
     if (watching(agent)) {
         return t(`agents.agentStatus.waitingOnCondition`);
     }
-    // Nothing running and something booked to go: scheduled, the word its corner wears, never "still working".
-    return scheduledSend(agent) ? t(`chat.chatHeld.scheduled`) : t(`agents.agentStatus.stillWorking`);
+    // Nothing running and something set to go: scheduled, the word its corner wears, never "still working".
+    return next === undefined ? t(`agents.agentStatus.stillWorking`) : t(`chat.chatHeld.scheduled`);
 };
 
 // "New" (never opened) vs. "Updated" (opened, then worked on since); the marker lives on the daemon entry so
@@ -129,15 +116,12 @@ export const standingChip = (
 // When a conversation's booked messages go, as its card's corner says on hover: "Tue 09:00", or "After <agent> lands"
 // for work waiting on another agent's land, that agent named by its card when one does (`titleOf`). Undefined for a
 // conversation nothing is booked on.
-export const scheduledWhen = (agent: Pick<AgentStanding, "queue">, titleOf?: (conversationId: string) => string | undefined): string | undefined => {
-    const hold = soonestHold(agent.queue);
-    if (hold === undefined) {
-        return undefined;
+const scheduledWhen = (agent: Pick<AgentStanding, "next">, titleOf?: (conversationId: string) => string | undefined): string | undefined => {
+    const next = agent.next;
+    if (next?.kind === `land`) {
+        return t(`chat.sendLater.afterLands`, { title: titleOf?.(next.after) ?? t(`chat.sendLater.anotherAgent`) });
     }
-    if (hold.after !== undefined) {
-        return t(`chat.sendLater.afterLands`, { title: titleOf?.(hold.after) ?? t(`chat.sendLater.anotherAgent`) });
-    }
-    return hold.until === undefined ? t(`chat.chatHeld.sendsShortly`) : formatWhen(hold.until);
+    return next?.kind === `send` ? formatWhen(next.at) : undefined;
 };
 
 // Children a family chip's hover names before counting the rest.

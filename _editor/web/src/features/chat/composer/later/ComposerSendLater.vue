@@ -133,7 +133,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
             <div
                 v-for="{ agent, lands } in shown"
                 :key="agent.id"
-                class="ui-row-select flex cursor-pointer items-start gap-2 rounded-lg px-2.5 py-1.5 max-md:py-3"
+                class="ui-row-select flex cursor-pointer items-start gap-2 rounded-lg px-2.5 py-1.5 max-md:py-3 text-sm md:text-xs"
                 :class="{ 'ui-row-select-on': pickedAfter === agent.id }"
                 role="button"
                 tabindex="0"
@@ -143,7 +143,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
                 <Icon
                     :name="agentStatusMeta(agent.status).icon"
                     :spin="agentStatusMeta(agent.status).spin"
-                    class="mt-0.5 shrink-0 text-xs"
+                    class="shrink-0 text-xs"
                     :class="agentStatusMeta(agent.status).class"
                 />
                 <span class="flex min-w-0 flex-1 flex-col">
@@ -162,7 +162,7 @@ const uncommitted = computed(() => props.conversation.isolated.value && byId(NAM
                 >
                     <Icon name="download" class="text-2xs text-link" />{{ t(`chat.sendLater.autoLand`) }}
                 </button>
-                <Icon v-if="pickedAfter === agent.id" name="check" class="mt-0.5 shrink-0 text-2xs text-accent" aria-hidden="true" />
+                <Icon v-if="pickedAfter === agent.id" name="check" class="shrink-0 text-2xs text-accent" aria-hidden="true" />
             </div>
             <p v-if="targets.length > 0 && uncommitted" class="flex flex-col items-start gap-1 px-2.5 py-1.5 text-2xs text-subtle">
                 <span>{{ t(`chat.sendLater.uncommitted`) }}</span>

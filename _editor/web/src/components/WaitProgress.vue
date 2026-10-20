@@ -27,7 +27,7 @@ const open = ref(false);
 <template>
     <div class="flex w-full min-w-0 flex-col gap-1.5 text-left">
         <p v-if="what" class="flex items-start gap-1.5 text-xs text-content">
-            <Icon name="spinner" spin class="mt-0.5 size-3 shrink-0 text-info" aria-hidden="true" />
+            <Icon name="spinner" spin class="size-3 shrink-0 text-info" aria-hidden="true" />
             <span>{{ what }}</span>
         </p>
         <Meter v-if="share !== undefined" :value="share" :label="t(`common.waitProgress.estimate`)" :valuetext="words.usual ?? words.elapsed" />

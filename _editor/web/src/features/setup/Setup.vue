@@ -53,7 +53,7 @@ import { probeDaemon } from "./setupAttach";
 import WaitProgress from "../../components/WaitProgress.vue";
 import { useSetupWaits } from "./flow/useSetupWaits";
 import { lockedReasonOf } from "./flow/commandHandoff";
-import { DEV_SANDBOX_IMAGE } from "./flow/installCommand";
+import { DEV_SANDBOX_IMAGE } from "@intentic/sandbox-contract/policy/overlay-lint";
 import { ladderOptionsOf } from "./flow/machineLadder";
 import { useAttachLane } from "./flow/useAttachLane";
 import { useCommandLane } from "./flow/useCommandLane";
@@ -555,7 +555,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                         <span class="entry-corner entry-corner-br"></span>
                         <!-- Explains why the page (not the reader) chose this lane; else 'give us your domain' reads as a missing step. -->
                         <p v-if="!provisionOffered" class="flex items-start gap-2 text-xs text-muted">
-                            <Icon name="info-circle" class="mt-0.5 shrink-0" />
+                            <Icon name="info-circle" class="shrink-0" />
                             <span>{{ t(`setup.setup.platformDoesntStartSandboxes`) }}</span>
                         </p>
                         <p class="text-xs text-muted">
@@ -936,7 +936,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 <!-- Failure state replaces the progress list. -->
                                 <template v-if="hostedWait.failure">
                                     <p class="flex items-start gap-2 text-xs text-content">
-                                        <Icon name="exclamation-circle" class="mt-0.5 shrink-0 text-warning" />
+                                        <Icon name="exclamation-circle" class="shrink-0 text-warning" />
                                         <span>{{ hostedWait.failure.problem }}</span>
                                     </p>
                                     <p class="text-xs text-muted">{{ hostedWait.failure.remedy }}</p>
@@ -989,7 +989,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             <!-- A full fleet offers only a capacity recheck. -->
                             <template v-else-if="hostedFull">
                                 <p class="flex items-start gap-2 text-xs text-content">
-                                    <Icon name="exclamation-circle" class="mt-0.5 shrink-0 text-warning" />
+                                    <Icon name="exclamation-circle" class="shrink-0 text-warning" />
                                     <span>{{ t(`setup.setup.outMachinesRightNow`) }}</span>
                                 </p>
                                 <p class="text-xs leading-relaxed text-muted">
@@ -1049,7 +1049,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             </template>
                             <!-- Theme's own placeholder surface (`ui-card-dashed`), not a hand-drawn dashed rectangle. -->
                             <div v-else class="ui-card ui-card-dashed flex items-start gap-2 rounded-none p-3 text-xs text-muted">
-                                <Icon name="lock" class="mt-0.5 shrink-0" />
+                                <Icon name="lock" class="shrink-0" />
                                 <span>{{ lockedReason }}</span>
                             </div>
                         </template>
@@ -1304,7 +1304,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
 
                             <!-- Claimed-but-silent differs from never-run: the command ran, so the terminal has the answer. -->
                             <p v-if="slowBuild" class="flex items-start gap-2 text-xs text-warning">
-                                <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
+                                <Icon name="exclamation-circle" class="shrink-0" />
                                 <!-- Check launch state, not visibility, before handing a command to the app. -->
                                 <!-- A re-run is safe only from a terminal: the app's second press starts a second install
                                      beside a first one it may still be running unseen (2026-10-12). -->

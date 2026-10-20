@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Deployment, ResourceView } from "@intentic/api-contract";
-import { Button, Card, StatusBadge } from "@intentic/ui";
+import { Button, Card, Section, SectionHeader, StatusBadge } from "@intentic/ui";
 import { computed, reactive } from "vue";
 import { statusLabel, statusVariant } from "../../features/extensions/reconcileStatus";
 import { groupAccent, resourceIcon, resourceLogoUrl } from "../../features/extensions/resourceVisual";
@@ -80,44 +80,42 @@ const logoFailed = reactive(new Set<string>());
         </p>
 
         <!-- Resolved non-secret inputs: the "what does this resolve to" answer, shown nowhere else. -->
-        <div v-if="configEntries.length > 0">
-            <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.resourceDetails.config`) }}</h4>
+        <Section v-if="configEntries.length > 0" :label="t(`views.resourceDetails.config`)" :heading="4" density="dense">
             <div class="flex flex-wrap gap-1">
                 <span v-for="[key, value] in configEntries" :key="key" class="rounded bg-overlay px-1.5 py-0.5 font-mono text-2xs text-subtle"
                     >{{ key }}={{ value }}</span
                 >
             </div>
-        </div>
+        </Section>
 
         <!-- Both directions of the dependency edges, as chips that re-select to navigate the graph. -->
-        <div v-if="resource.dependsOn.length > 0">
-            <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.resourceDetails.dependsOn`) }}</h4>
+        <Section v-if="resource.dependsOn.length > 0" :label="t(`views.resourceDetails.dependsOn`)" :heading="4" density="dense">
             <div class="flex flex-wrap gap-1">
                 <button v-for="dep in resource.dependsOn" :key="dep" type="button" class="ui-chip font-mono text-content" @click="selectedId = dep">
                     {{ dep }}
                 </button>
             </div>
-        </div>
-        <div v-if="requiredBy.length > 0">
-            <h4 class="mb-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.resourceDetails.requiredBy`) }}</h4>
+        </Section>
+        <Section v-if="requiredBy.length > 0" :label="t(`views.resourceDetails.requiredBy`)" :heading="4" density="dense">
             <div class="flex flex-wrap gap-1">
                 <button v-for="dep in requiredBy" :key="dep" type="button" class="ui-chip font-mono text-content" @click="selectedId = dep">
                     {{ dep }}
                 </button>
             </div>
-        </div>
+        </Section>
 
         <!-- Live reality join: is the planned resource actually running, and on what image. -->
         <div v-if="deployment" class="border-t border-line-subtle pt-2">
-            <div class="flex items-center gap-2">
-                <h4 class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`views.words.runningNow`) }}</h4>
-                <StatusBadge
-                    :variant="deployment.live ? 'success' : 'neutral'"
-                    :label="deployment.live ? t(`views.resourceDetails.live`) : t(`views.resourceDetails.notDeployed`)"
-                    size="xs"
-                    dot
-                />
-            </div>
+            <SectionHeader :label="t(`views.words.runningNow`)" :heading="4" density="dense">
+                <template #info>
+                    <StatusBadge
+                        :variant="deployment.live ? 'success' : 'neutral'"
+                        :label="deployment.live ? t(`views.resourceDetails.live`) : t(`views.resourceDetails.notDeployed`)"
+                        size="xs"
+                        dot
+                    />
+                </template>
+            </SectionHeader>
             <p class="mt-1 truncate font-mono text-2xs text-subtle">{{ deployment.image }}</p>
         </div>
     </Card>

@@ -16,13 +16,22 @@ export const NoticeCodeSchema = z.object({
 });
 export type NoticeCode = z.infer<typeof NoticeCodeSchema>;
 
+/** A failure's facts as every failure notice carries them (the `failure` params below), before the clause it adds. */
+export interface FailureSaid {
+    readonly message: string;
+    readonly error?: string | undefined;
+    readonly own?: boolean | undefined;
+}
+
 const count = z.number().int().nonnegative();
 
-// A failure's own sentence, which the notice's clause follows: the provider's words, or the sandbox's under `error`, its
-// failure code, for a reader that words a failure it knows itself.
+// A failure's own sentence, which the notice's clause follows, its failure code (`error`; absent for a failure nobody
+// named), and whether the sandbox worded the sentence (`own`). Absent `own`, the sentence is the provider's or the
+// harness's: a reader leads with its own line for the code and keeps those words behind a press.
 const failure = {
     message: z.string(),
     error: z.string().optional(),
+    own: z.boolean().optional(),
 };
 
 // The re-runs a resumed turn's row can name (events/resume.ts); a reason a reader does not know draws the row's text.

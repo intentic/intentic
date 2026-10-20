@@ -99,7 +99,7 @@ const signIn = async (): Promise<void> => {
             <Notice v-if="failure" tone="danger" class="text-2xs">{{ failure }}</Notice>
             <!-- What a reader who only came for their files needs to hear: nothing here depends on this. -->
             <p class="flex items-start gap-1.5 text-2xs text-subtle">
-                <Icon name="lock" class="mt-px shrink-0" />
+                <Icon name="lock" class="shrink-0" />
                 <span>{{ t(`local.agentsTile.filesStayHere`) }}</span>
             </p>
         </div>

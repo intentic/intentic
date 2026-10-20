@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SandboxSummary } from "@intentic/api-contract";
-import { Avatar, PageHeader, Row, RowGroup, SandboxLogo } from "@intentic/ui";
+import { Avatar, PageHeader, Row, RowGroup, SandboxLogo, SurfaceGround } from "@intentic/ui";
 import { computed, onMounted } from "vue";
 import { useSandboxAttention } from "../features/sandbox/overview/sandboxAttention";
 import { useRebuildOffer } from "../features/sandbox/environment/rebuild/useRebuildOffer";
@@ -74,7 +74,7 @@ const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } })
             <!-- A first run's checklist, the phone's door to it as the rail's ring is the desktop's: on top while it lasts,
                  since on a first run there is nothing else here yet to put first. -->
             <div v-if="tour.visible.value" class="rounded-xl border border-line bg-card" data-tour="ring">
-                <GettingStartedList fill />
+                <SurfaceGround><GettingStartedList fill /></SurfaceGround>
             </div>
             <!-- First on the page: the rail's sandbox badge is what brought the reader here, one row per pending item. -->
             <RowGroup v-if="sandboxAttention.length > 0" :label="t(`shared.needs`)">

@@ -15,9 +15,8 @@ import {
     pairingTransport,
     readState,
     removeSandboxPairings,
-    setFileSyncAutoPaused,
-    setFileSyncSwapPaused,
     setSandboxGone,
+    setSwapSince,
     setUnreachableSince,
     type SkippedPort,
     updateState,
@@ -32,6 +31,7 @@ import { readSwaps } from "../device/sandbox-rounds/ic-swaps.js";
 import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
+import { holdSessions, holdsSync, recordOf, RELEASE_FORWARDS_MS, shouldReleaseForwards, swapStep, syncHeld, syncHolds, UNREACHABLE_HOLD_MS } from "./holds.js";
 import { guardDisks } from "./low-disk.js";
 import {
     ensureSyncSession,
@@ -42,12 +42,9 @@ import {
     MUTAGEN_CALL_TIMEOUT_MS,
     mutagenForwardArgs,
     ourForwardSessions,
-    pauseRunningSync,
     type RelabelBudget,
     relabelBudget,
     retireOrphanSessions,
-    resumeAutoPausedSync,
-    resumeSwapPausedSync,
     runMutagenAsync,
     sayDaemonEventsTo,
     sessionLabels,
@@ -60,7 +57,6 @@ import { moveOffSharedMutagen } from "./mutagen-move.js";
 import { quieted } from "./repeats.js";
 import { deviceReport, scopedReport } from "./report.js";
 import { pairingSshConfig, writeManagedSshConfig } from "./ssh.js";
-import { holdsSync, recordOf, RELEASE_FORWARDS_MS, shouldReleaseForwards, swapPauseStep } from "./swap-pause.js";
 import { createTunnelPool, tunnelTargets } from "./tunnel.js";
 
 // Mirrors every workspace port in a paired sandbox onto the same port on this machine's localhost, over Mutagen
@@ -85,12 +81,6 @@ const REPORT_TIMEOUT_MS = 10_000;
 
 // Consecutive rejected polls before a pairing counts as revoked and gets dropped.
 const REVOKED_POLLS = 3;
-
-// Transient failures keep their sessions; only an uninterrupted hour pauses Mutagen's sessions, since otherwise it
-// reconnects forever for a deleted sandbox. Resumes automatically on the first healthy response. Measured on the
-// clock rather than in polls, because the backoff below is free to stretch what one poll is worth.
-const UNREACHABLE_PAUSE_MS = 60 * 60_000;
-export const shouldAutoPauseFileSync = (unreachableForMs: number): boolean => unreachableForMs >= UNREACHABLE_PAUSE_MS;
 
 // How long a pairing whose polls keep failing waits for its next one. The read is also the pairing's liveness probe,
 // so it never stops; but for a sandbox reached over its public URL each one is a DNS lookup and a TLS handshake
@@ -603,16 +593,18 @@ const absorbRejectedPoll = async (
     return true;
 };
 
-// Past the pause threshold, an unreachable sandbox's Mutagen sessions are stopped to end permanent reconnect/rescan
-// load. Returns whether this pass paused them, so the git bridge below doesn't immediately undo it. Before that, at ten
-// minutes, its forwarded ports come off localhost (swap-pause.ts): the reconcile of its first answer puts them back.
+// An unreachable sandbox's outage clock, kept on disk: past an hour it holds the sandbox's file sync still (holds.ts),
+// ending Mutagen's permanent reconnect and rescan load, until the first poll it answers clears the clock. Answers whether
+// it holds now, so the git bridge below waits too. Before that, at ten minutes, its forwarded ports come off localhost
+// (holds.ts): the reconcile of its first answer puts them back.
 const absorbUnreachablePoll = async (mutagen: string, pairing: Pairing, unreachable: Map<string, Unreachable>, log: Log): Promise<boolean> => {
     const now = Date.now();
     // The first failure of a run sets the clock; every later one only records that a poll was spent, so the hour
     // below is wall-clock and survives the backoff stretching the gaps between them. (2026-10-05) The clock is kept on
     // disk too (`unreachableSince`), written once per outage: kept in memory alone, an agent restarted more often than
-    // hourly started the hour over each time and never paused a dead sandbox's sessions.
-    const since = unreachable.get(pairing.sandboxId)?.since ?? pairing.unreachableSince ?? now;
+    // hourly started the hour over each time and never held a dead sandbox's sessions.
+    const before = unreachable.get(pairing.sandboxId);
+    const since = before?.since ?? pairing.unreachableSince ?? now;
     unreachable.set(pairing.sandboxId, { since, lastTried: now });
     if (pairing.unreachableSince === undefined) {
         await setUnreachableSince(pairing.sandboxId, since);
@@ -624,21 +616,11 @@ const absorbUnreachablePoll = async (mutagen: string, pairing: Pairing, unreacha
             `  ${pairing.sandboxId}: unreachable for ${RELEASE_FORWARDS_MS / 60_000} minutes; took its ${plural(mirrored, "port")} off localhost. They come back when it answers again.`,
         );
     }
-    return await pauseIfLongUnreachable(mutagen, pairing, now - since, log);
-};
-
-// Past an hour unreachable, a pairing's own sessions are paused (and the pause recorded as the watcher's, so it lifts
-// it): the sandbox's poll above says so for the pairing that polls, and for the folders attached to that sandbox too
-// (`followSandbox`).
-const pauseIfLongUnreachable = async (mutagen: string, pairing: Pairing, unreachableForMs: number, log: Log): Promise<boolean> => {
-    if (pairing.fileSyncAutoPaused === true || !shouldAutoPauseFileSync(unreachableForMs) || !pauseRunningSync(mutagen, pairing)) {
-        return false;
+    const holds = now - since >= UNREACHABLE_HOLD_MS;
+    if (holds && (before === undefined || before.lastTried - since < UNREACHABLE_HOLD_MS)) {
+        log(`  ${pairing.sandboxId}: unreachable for an hour; its file sync holds still to stop permanent reconnect and scanning load, and carries on when it answers.`);
     }
-    await setFileSyncAutoPaused(pairingKey(pairing), true);
-    log(
-        `  ${pairingKey(pairing)}: unreachable for one hour; paused its Mutagen sessions to stop permanent reconnect/scanning load. They resume automatically when it returns.`,
-    );
-    return true;
+    return holds;
 };
 
 /** Per-pairing tallies the failure handler reads and prunes, passed as one bag instead of positional maps. */
@@ -750,7 +732,7 @@ export const markPrepared = (prepared: Set<string>, pairing: Pairing): void => v
 const prepareSession = async (mutagen: string, pairing: Pairing, pending: Set<string>, relabels: RelabelBudget, say: Log): Promise<boolean> => {
     let converged = false;
     await guard(say, `${pairingKey(pairing)}: preparing its file sync`, async () => {
-        converged = await ensureSyncSession(mutagen, pairing, say, relabels);
+        converged = await ensureSyncSession(mutagen, pairing, say, syncHeld(pairing, Date.now()), relabels);
     });
     if (converged) {
         pending.delete(pairingKey(pairing));
@@ -760,18 +742,18 @@ const prepareSession = async (mutagen: string, pairing: Pairing, pending: Set<st
     return converged;
 };
 
-// A pairing whose sessions this watcher paused because its sandbox stopped answering. Paused sessions do nothing, so
+// A pairing held still because its sandbox stopped answering for an hour (holds.ts). Paused sessions do nothing, so
 // bringing them to new rules can wait: a replacement dials the sandbox first, once per session, and against one that
 // has been gone for an hour each dial can run to the tunnel's ten-second timeout. A dogfooding PC had 6 of its 8
 // pairings in this state: twelve such dials at every agent start, before mirroring or reporting began. Only while its
 // sessions exist, since a pairing that has none is not syncing anything and nothing else would create them.
-// (2026-10-05) So is a pairing whose sandbox is gone, or whose sessions the watcher holds for a reason of its own
-// (config.ts `fileSyncPausedFor`): nothing is made or replaced for a sandbox that is not there. A listing that did not
+// (2026-10-05) So is a pairing whose sandbox is gone, or whose container is away (config.ts `containerAway`): nothing
+// is made or replaced for a sandbox that is not there. A listing that did not
 // answer counts as sessions held, the side that makes nothing.
 const dormant = (mutagen: string, pairing: Pairing): boolean =>
     pairing.goneSince !== undefined ||
-    pairing.fileSyncPausedFor !== undefined ||
-    (pairing.fileSyncAutoPaused === true && (existingSyncSessions(mutagen, syncSessionNames(pairing)) ?? [undefined]).length > 0);
+    pairing.containerAway !== undefined ||
+    (syncHolds(pairing, Date.now()).includes("unreachable") && (existingSyncSessions(mutagen, syncSessionNames(pairing)) ?? [undefined]).length > 0);
 
 // BEFORE A FOLDER'S FIRST COPY, ITS SANDBOX IS TOLD OF IT. The daemon makes an attached folder's `/work/<name>` a
 // repository of its own once a report names it. A session that began filling `/work/<name>` first would leave those
@@ -915,40 +897,33 @@ const retryPendingSessions = async (
     }
 };
 
-// File sync held still for every pairing whose sandbox ic is swapping on this machine (swap-pause.ts): paused as the
-// swap begins, resumed once it has held, and the pause kept on disk so an agent restarted mid-swap still lifts it.
+// File sync held still for every pairing whose sandbox ic is swapping on this machine (holds.ts `holdsSync`): the swap's fact
+// written as it begins and cleared once it has held, so a restarted agent reads the swap off the record and ic alike.
 // Answers the pairings held this pass, whose git bridge and heal wait too: both would read a sandbox mid-swap.
 export const holdSyncDuringSwaps = async (
-    mutagen: string,
     pairings: readonly Pairing[],
     unreachable: ReadonlyMap<string, Unreachable>,
     say: Log,
     read: () => Promise<readonly SwapRecord[]> = readSwaps,
+    record: (key: string, since: number | undefined) => Promise<void> = setSwapSince,
 ): Promise<ReadonlySet<string>> => {
     const records = await read();
     const now = Date.now();
     const held = new Set<string>();
     for (const pairing of pairings) {
-        const record = recordOf(pairing, records);
-        const holds = holdsSync(record, now, !unreachable.has(pairing.sandboxId));
+        const holds = holdsSync(recordOf(pairing, records), now, !unreachable.has(pairing.sandboxId));
         if (holds) {
             held.add(pairing.sandboxId);
         }
-        const step = swapPauseStep(pairing, holds);
-        if (step === "pause" && pauseRunningSync(mutagen, pairing)) {
+        const step = swapStep(pairing, holds);
+        if (step !== undefined) {
             // state is a single file; serial keeps the writes ordered
-            await setFileSyncSwapPaused(pairingKey(pairing), true);
-            say(`  ${pairingKey(pairing)}: its sandbox is being swapped on this machine; file sync is paused until the new version has held.`);
-        } else if (step === "resume") {
-            // (2026-10-19) The mark comes off only once the resume took. It used to come off whatever the resume did, so a
-            // resume Mutagen did not take left the sync paused with nothing left to lift it (mutagen.ts `resumeSessions`).
-            if (await resumeSwapPausedSync(mutagen, pairing)) {
-                // ditto
-                await setFileSyncSwapPaused(pairingKey(pairing), false);
-                say(`  ${pairingKey(pairing)}: its sandbox's swap is settled; file sync resumed.`);
-            } else if (pairing.fileSyncLowDisk === undefined) {
-                say(`  ${pairingKey(pairing)}: its sandbox's swap is settled, but Mutagen did not take the resume of its file sync; trying again.`);
-            }
+            await record(pairingKey(pairing), step === "began" ? now : undefined);
+            say(
+                step === "began"
+                    ? `  ${pairingKey(pairing)}: its sandbox is being swapped on this machine; file sync holds still until the new version has held.`
+                    : `  ${pairingKey(pairing)}: its sandbox's swap is settled; file sync carries on.`,
+            );
         }
     }
     return held;
@@ -989,7 +964,7 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
     const { rejectedPolls, unreachable } = tracking;
     const swapping = swapHeld.has(pairing.sandboxId);
     const short = context.diskHeld.has(pairingKey(pairing));
-    let pausedThisPass = false;
+    let heldThisPass = false;
     try {
         const mirrored = await servePairing(context, pairing, base);
         rejectedPolls.delete(pairing.sandboxId);
@@ -1000,14 +975,9 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         if (goneLingers(context.pairings, pairing.sandboxId)) {
             await sandboxAnswered(fate, pairing.sandboxId);
         }
+        // So does the hold that outage put on its file sync, which is read off this clock (holds.ts).
         if (context.pairings.some((held) => held.sandboxId === pairing.sandboxId && held.unreachableSince !== undefined)) {
             await setUnreachableSince(pairing.sandboxId, undefined);
-        }
-        // Still pending if it was: a replacement put off while the sandbox slept is owed now that it answers. Not while
-        // its sandbox is mid-swap, which holds that sync still whoever paused it, nor while its drive is short of room.
-        if (!swapping && !short && (await resumeAutoPausedSync(mutagen, pairing))) {
-            await setFileSyncAutoPaused(pairingKey(pairing), false);
-            say(`  ${pairingKey(pairing)}: reachable again; resumed its automatically paused file sync`);
         }
         // A folder attached to its sandbox mirrors nothing, and its sandbox's forwards are not its to hand over or sweep.
         if (!isAttachedPairing(pairing)) {
@@ -1029,14 +999,14 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         if (outcome.drop) {
             return;
         }
-        pausedThisPass = outcome.paused;
+        heldThisPass = outcome.paused;
         // A transient tunnel blip must not kill the agent, log and try again next tick.
         say(`  ${pairingKey(pairing)}: reconcile skipped: ${errorMessage(error)}`);
     }
-    // Auto-paused pairings still get the probe above but skip the SSH-heavy git bridge below, as do those mid-swap, those
-    // whose drive is short of room, and those the watcher holds still for a reason of its own (a gone sandbox among them,
-    // until it answered just now). A bridge run already in flight for one of them is stopped with it.
-    if (pairing.fileSyncAutoPaused === true || pairing.fileSyncPausedFor !== undefined || pausedThisPass || swapping || short) {
+    // A held pairing still gets the probe above but skips the SSH-heavy git bridge below: held for anything but the outage
+    // as the pass began, held by this pass's outage (which the answer above clears), mid-swap or short of room. A bridge
+    // run already in flight for one of them is stopped with it.
+    if (syncHeld({ ...pairing, unreachableSince: undefined }, Date.now()) || heldThisPass || swapping || short) {
         stopBridge(tracking, pairing.sandboxId);
         return;
     }
@@ -1064,28 +1034,14 @@ export const pollingPairings = (pairings: readonly Pick<Pairing, "sandboxId" | "
     return polling;
 };
 
-// The whole pass of a folder attached to a sandbox that another pairing polls: its file sync paused after an hour of
-// that sandbox not answering and resumed once it answers, as the poller's own is, then the heal (which a copy-first
-// folder never needs). No ports, no git bridge: the folder is the owner's project, and the projects host mirrors. A
-// folder of a sandbox said to be gone was paused with the rest of it (gone-watch.ts), and does nothing more here.
+// The whole pass of a folder attached to a sandbox that another pairing polls: the heal, unless anything holds its file
+// sync still (holds.ts), the poller's outage among them, which it shares with every pairing of that sandbox. No ports,
+// no git bridge: the folder is the owner's project, and the projects host mirrors.
 const followSandbox = async (context: PassContext, pairing: Pairing): Promise<void> => {
     const { mutagen, tick, tracking, swapHeld, say } = context;
-    if (pairing.goneSince !== undefined || pairing.fileSyncPausedFor !== undefined) {
-        return;
-    }
     // The outage as the poller's pass recorded it, or as it stands on disk from before this agent started.
-    const down = tracking.unreachable.get(pairing.sandboxId)?.since ?? pairing.unreachableSince;
-    const swapping = swapHeld.has(pairing.sandboxId);
-    const short = context.diskHeld.has(pairingKey(pairing));
-    if (down === undefined) {
-        if (!swapping && !short && (await resumeAutoPausedSync(mutagen, pairing))) {
-            await setFileSyncAutoPaused(pairingKey(pairing), false);
-            say(`  ${pairingKey(pairing)}: reachable again; resumed its automatically paused file sync`);
-        }
-    } else if (await pauseIfLongUnreachable(mutagen, pairing, Date.now() - down, say)) {
-        return;
-    }
-    if (pairing.fileSyncAutoPaused === true || swapping || short) {
+    const outage = { ...pairing, unreachableSince: tracking.unreachable.get(pairing.sandboxId)?.since ?? pairing.unreachableSince };
+    if (syncHeld(outage, Date.now()) || swapHeld.has(pairing.sandboxId) || context.diskHeld.has(pairingKey(pairing))) {
         return;
     }
     await healPairing(mutagen, pairing, tick, say);
@@ -1355,7 +1311,7 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
     generation.signal.addEventListener("abort", () => stopBridges(tracking), { once: true });
     // Sandboxes with no machine-report route, retired from reporting for this watcher's lifetime.
     const reportUnsupported = new Set<string>();
-    const fate: FateSeams = { mutagen, releaseForwards: async (sandboxId) => await retirePairingMirror(mutagen, sandboxId), say };
+    const fate: FateSeams = { releaseForwards: async (sandboxId) => await retirePairingMirror(mutagen, sandboxId), say };
     const gone = async (pairing: Pairing): Promise<void> => await sandboxSaidGone(fate, pairing.sandboxId, "edge");
     const watch: Watch = {
         log,
@@ -1449,11 +1405,11 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
     }
     let swapHeld: ReadonlySet<string> = new Set();
     await guard(say, "holding file sync still during swaps", async () => {
-        swapHeld = await holdSyncDuringSwaps(mutagen, state.pairings, tracking.unreachable, say);
+        swapHeld = await holdSyncDuringSwaps(state.pairings, tracking.unreachable, say);
     });
     let diskHeld: ReadonlySet<string> = new Set();
     await guard(say, "measuring the drives synced folders are on", async () => {
-        diskHeld = await guardDisks(mutagen, state.pairings, tick, say);
+        diskHeld = await guardDisks(state.pairings, say);
     });
     stopBridges(tracking, state.pairings);
     // Ports this tick's earlier pairings already own, so a later one is told who holds a port it wanted. And whose
@@ -1478,6 +1434,10 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
     if (!watch.live()) {
         return "stop";
     }
+    // After every rule above has kept its fact this tick: Mutagen made to agree with what holds each pairing (holds.ts),
+    // before the report below reads it.
+    await guard(say, "holding file sync still where something holds it", async () => void (await holdSessions(mutagen, (await readState()).pairings, say)));
+    progress("holding file sync");
     // Runs after the pairings: servePairing just persisted this tick's ports, and the report re-reads that state, so
     // reporting last reports this tick, not the previous one.
     if (tick % REPORT_EVERY_TICKS === 0) {

@@ -14,6 +14,7 @@ import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { isAncestor } from "../../git/agent-refs.js";
 import { addedNames, declaredDependencies, isManifest } from "./manifest-dependencies.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import { UNDERIVED } from "./rederive.js";
 
 // Single source for an agent's changed-lines count, shared by the review's live diff and the fleet card's snapshot
 // taken at each land, so both report the same number.
@@ -370,14 +371,15 @@ export const presenceOf = async (
               ]);
 
     const head = await headSha(main, git);
-    // `--no-renames`: the rows this joins onto use rename detection and key by destination path, as these do too.
+    // `--no-renames`: the rows this joins onto use rename detection and key by destination path, as these do too. A path
+    // the repository derives is never told apart: no land carries it, the tree it lands in writes its own (rederive.ts).
     const [vsHead, vsWorktree] = await Promise.all([
         // Against main's history; an unborn main holds nothing, so nothing can be absorbed yet.
         head === undefined
             ? Promise.resolve(new Set(paths) as ReadonlySet<string>)
-            : pathSet(main, ["diff", "--name-only", "--no-renames", "-z", head, tip], git),
+            : pathSet(main, ["diff", "--name-only", "--no-renames", "-z", head, tip, ...UNDERIVED], git),
         // Against main's index and working tree, where a land leaves its content.
-        pathSet(main, ["diff", "--name-only", "--no-renames", "-z", tip], git),
+        pathSet(main, ["diff", "--name-only", "--no-renames", "-z", tip, ...UNDERIVED], git),
     ]);
 
     const untracked = await pathSet(main, ["ls-files", "--others", "--exclude-standard", "-z"], git);

@@ -269,19 +269,6 @@ export interface TurnWrites {
         readonly model: string;
         readonly refusal: Parameters<Services["modelRefusals"]["record"]>[2];
     }[];
-    readonly modelCooldowns: {
-        readonly provider: string;
-        readonly model: string;
-        readonly cooldown: Parameters<Services["modelCooldowns"]["record"]>[2];
-    }[];
-    readonly cooldownsCleared: { readonly provider: string; readonly model: string; readonly askedAt?: number }[];
-    readonly observedForgotten: { readonly provider: string; readonly account: string; readonly model: string; readonly askedAt?: number }[];
-    readonly observedLimits: {
-        readonly provider: string;
-        readonly account: string;
-        readonly model: string;
-        readonly limit: Parameters<Services["observedLimits"]["record"]>[3];
-    }[];
     readonly snapshots: { readonly trigger: Parameters<Services["history"]["snapshot"]>[0]; readonly label?: string }[];
     readonly checkpoints: {
         readonly conversationId: string;
@@ -293,28 +280,6 @@ export interface TurnWrites {
     readonly spans: { readonly name: string; readonly attrs: unknown }[];
 }
 
-// The three ledgers that bench a model rather than an account: what a plan never covered, what is cooling, and what an
-// account is out of. Their own factory so the builder below stays readable with each of them recording every write.
-const benchRecorders = (writes: TurnWrites): Pick<ServiceOverrides, "modelRefusals" | "modelCooldowns" | "observedLimits"> => ({
-    modelRefusals: {
-        refused: async () => new Set(),
-        record: async (provider, model, refusal) => void writes.modelRefusals.push({ provider, model, refusal }),
-    },
-    modelCooldowns: {
-        cooling: async () => new Map(),
-        record: async (provider, model, cooldown) => void writes.modelCooldowns.push({ provider, model, cooldown }),
-        clear: async (provider, model, askedAt) => void writes.cooldownsCleared.push({ provider, model, ...opt("askedAt", askedAt) }),
-    },
-    observedLimits: {
-        spent: async () => ({}),
-        record: async (provider, account, model, limit) => void writes.observedLimits.push({ provider, account, model, limit }),
-        clear: async () => {},
-        forget: async (provider, account, model, askedAt) => {
-            writes.observedForgotten.push({ provider, account, model, ...opt("askedAt", askedAt) });
-            return false;
-        },
-    },
-});
 
 // The stores a turn writes while it runs and as it settles, each recording every write and otherwise answering like an
 // empty one, and the spans it times; `snapshot` is the id every history capture answers with. Spread `overrides` into
@@ -332,10 +297,6 @@ export const recordingTurnStores = (
         seatsRefused: [],
         seatsCleared: [],
         modelRefusals: [],
-        modelCooldowns: [],
-        cooldownsCleared: [],
-        observedForgotten: [],
-        observedLimits: [],
         snapshots: [],
         checkpoints: [],
         ruleFirings: [],
@@ -349,11 +310,11 @@ export const recordingTurnStores = (
             activity: { append: async (event) => void writes.activity.push(event), list: async () => [] },
             usage: { record: async (turn) => void writes.usage.push(turn) },
             providerRefusals: {
-                read: async () => ({}),
                 onFile: async () => ({}),
                 record: async (provider, refusal) => void writes.providerRefusals.push({ provider, refusal }),
-                clear: async (provider, account, model, askedAt) =>
+                settle: async (provider, { account, model, askedAt }) =>
                     void writes.refusalsCleared.push({ provider, account, ...opt("model", model), ...opt("askedAt", askedAt) }),
+                drop: async () => false,
                 onChange: () => () => {},
             },
             // Every other member answers as the inert headroom above does.
@@ -367,7 +328,10 @@ export const recordingTurnStores = (
                 refuse: async (account, reason) => void writes.seatsRefused.push({ account, reason }),
                 clear: async (account) => void writes.seatsCleared.push(account),
             },
-            ...benchRecorders(writes),
+            modelRefusals: {
+                refused: async () => new Set(),
+                record: async (provider, model, refusal) => void writes.modelRefusals.push({ provider, model, refusal }),
+            },
             history: fakeHistory({
                 snapshot: async (trigger, label) => {
                     writes.snapshots.push({ trigger, ...(label === undefined ? {} : { label }) });

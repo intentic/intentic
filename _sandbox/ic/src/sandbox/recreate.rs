@@ -414,19 +414,15 @@ fn recreate(
             }
         }
         Mode::Rollback { to } => {
-            let pin = match to {
-                Some(to) => versions::resolve_to(&saved, to)?,
-                None => match saved.targets().into_iter().next() {
+            /* A pin is a local tag no registry has: one pruned outside ic is reached again through its version, and one that names none is no way back at all (versions.rs). */
+            let ways = versions::ways_back(&saved, &|image| docker::image_exists(image));
+            let versions::WayBack { pin, image: target } = match to {
+                Some(to) => versions::resolve_to(&ways, to)?,
+                None => match ways.into_iter().next() {
                     Some(previous) => previous,
-                    None => bail!("nothing to roll back to — this sandbox has not been updated since the rollback record existed.\n       The record is written on every update from now on; {}", record::record_path(&slug).display()),
+                    None if saved.targets().is_empty() => bail!("nothing to roll back to — this sandbox has not been updated since the rollback record existed.\n       The record is written on every update from now on; {}", record::record_path(&slug).display()),
+                    None => bail!("every version kept to go back to was removed from this machine outside ic, and none names a release to download instead — there is nothing to roll back to. The sandbox is untouched."),
                 },
-            };
-            /* A pin is a local tag no registry has: one pruned outside ic is reached again through its version (versions.rs). */
-            let Some(target) = versions::reachable(&pin, docker::image_exists(&pin.image)) else {
-                bail!(
-                    "the version to go back to ({}) was removed from this machine outside ic, and it names no release to download instead — there is nothing to roll back to. The sandbox is untouched.",
-                    pin.image
-                );
             };
             if target != pin.image {
                 said(

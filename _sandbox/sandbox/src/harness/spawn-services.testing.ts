@@ -54,11 +54,14 @@ export const spawnServices = (
         workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
         config: unstubbed<Services["config"]>("config", {
-            // Where a paused child is written down for the next boot (paused-children.ts): a scratch volume of the suite's.
+            // Where a child is written down for the next boot (its own file, children.ts): a scratch volume of the suite's.
             historyRoot: scratchHistory(),
-            // Only the fields the scheduler's parity read touches; the rest throw by name instead of being invented.
+            // Only the fields the scheduler's parity read touches (runningBuild); the rest throw by name instead of being
+            // invented. No base and no digest: a build from a checkout, which names only its image.
             sandbox: unstubbed<Services["config"]["sandbox"]>("config.sandbox", {
                 image: "ghcr.io/intentic/sandbox:2",
+                baseImage: "",
+                baseDigest: "",
                 channel: "stable",
                 environmentHash: "",
             }),
@@ -89,6 +92,10 @@ export const spawnServices = (
                 new Map(fleet.flatMap((runner) => (runner.inFlight === undefined ? [] : [[runner.id, runner.inFlight] as const]))),
         },
         cards: parkedCards(conversations),
+        // Nothing refused and no account any provider's own door lists: every model a spawn names is servable, by the one
+        // rule the spawn gate and the governor read (usage/serviceability/serviceability.ts).
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
+        providerAccounts: async () => [],
         // Heard by nobody: what reacts to a child's settled run is composition's to subscribe.
         events: createDomainEvents(() => {}),
     });

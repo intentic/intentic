@@ -297,8 +297,8 @@ const glyph = (step: UninstallStep): StepGlyph => {
         <!-- THE REVIEW: the ledger, the choice, the count, what stays. -->
         <div v-else-if="phase === `review` && inventory" class="flex flex-col gap-5">
             <ul class="-my-1 flex flex-col divide-y divide-line-subtle" :aria-label="t(`desktop.uninstall.lead`)">
-                <li v-for="row in rows" :key="row.id" class="flex items-start gap-3 py-2">
-                    <Icon :name="row.icon" class="mt-0.5 shrink-0 text-subtle" />
+                <li v-for="row in rows" :key="row.id" class="flex items-start gap-3 py-2 text-sm">
+                    <Icon :name="row.icon" class="shrink-0 text-subtle" />
                     <div class="min-w-0 flex-1">
                         <p class="flex min-w-0 items-baseline gap-2 text-sm leading-snug">
                             <span class="truncate font-medium text-content">{{ row.title }}</span>
@@ -371,7 +371,7 @@ const glyph = (step: UninstallStep): StepGlyph => {
                 </div>
             </fieldset>
             <p v-else class="flex items-start gap-2.5 text-sm leading-relaxed text-muted">
-                <Icon name="info-circle" class="mt-0.5 shrink-0 text-subtle" />
+                <Icon name="info-circle" class="shrink-0 text-subtle" />
                 <span>{{ t(`desktop.uninstall.noData`) }}</span>
             </p>
 
@@ -419,7 +419,7 @@ const glyph = (step: UninstallStep): StepGlyph => {
             <ul v-if="phase !== `running` && outcome && outcome.failed.length > 0" class="flex flex-col gap-3">
                 <li v-for="(failure, index) in outcome.failed" :key="index" :class="toneTint(`warning`, `soft`, `flex flex-col gap-1.5 rounded-lg border p-3`)">
                     <p class="flex items-start gap-2 text-sm font-medium text-content">
-                        <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
+                        <Icon name="exclamation-triangle" class="shrink-0 text-warning" />
                         <span>{{ failure.label }}</span>
                     </p>
                     <p class="pl-6 text-xs leading-relaxed break-words text-muted">{{ failure.problem }}</p>

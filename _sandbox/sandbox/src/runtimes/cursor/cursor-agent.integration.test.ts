@@ -949,7 +949,7 @@ describe("a turn carrying a tool list", () => {
     test("is refused before anything starts when the hooks that check it are not installed", async () => {
         const events = await collect(createCursorAgent(hooked(false))(listed([`Read`])));
         expect(create).not.toHaveBeenCalled();
-        expect(events).toEqual([{ kind: `error`, message: expect.stringContaining(`hooks that hold Cursor to that list`) }, { kind: `done` }]);
+        expect(events).toEqual([{ kind: `error`, message: expect.stringContaining(`hooks that hold Cursor to that list`), own: true }, { kind: `done` }]);
     });
 
     test("a turn with no list is offered Cursor's whole toolbox and asks nobody outside default mode", async () => {

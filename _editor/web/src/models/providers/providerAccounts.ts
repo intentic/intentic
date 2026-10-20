@@ -26,8 +26,9 @@ export const noTranslatorAccounts = (): TranslatorAccounts => {
 };
 export const translatorAccounts = sandboxRef<TranslatorAccounts>(() => noTranslatorAccounts());
 
-// When a provider last refused a turn; the observed half of "can I run", read beside the polled rings.
-export const providerRefusals = sandboxRef<Record<string, ProviderRefusal>>(() => ({}));
+// Every refusal the daemon holds on file, per provider, as it holds them: the observed half of "can I run", which every
+// verdict here judges by beside the polled rings (usageStatus.ts accountState), exactly as the daemon's own does.
+export const providerRefusals = sandboxRef<Record<string, readonly ProviderRefusal[]>>(() => ({}));
 
 // Every account's headroom, keyed `${provider}:${account}`; three writers, newest `measuredAt`
 // always wins.
@@ -81,7 +82,7 @@ export const accountsLoaded = sandboxRef(() => false);
 export const markNeedsReauth = (provider: AgentProvider, account: string, detail: string): void => {
     const accounts = providerAccounts.value[provider] ?? [];
     const marked = accounts.map((entry: OauthAccount) =>
-        entry.id === account ? Object.assign({}, entry, { needsReauth: true, detail, state: { kind: `blocked`, fix: `reconnect`, reason: detail } as const }) : entry,
+        entry.id === account ? Object.assign({}, entry, { needsReauth: true, detail }) : entry,
     );
     providerAccounts.value = { ...providerAccounts.value, [provider]: marked };
 };

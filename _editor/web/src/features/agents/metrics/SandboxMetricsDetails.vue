@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
-import { Meter, type Tip, ui } from "@intentic/ui";
+import { Meter, SectionHeader, type Tip, ui } from "@intentic/ui";
 import { formatBinaryBytes, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -109,9 +109,7 @@ const open = (id: string): void => {
 
         <!-- One kind a row, so the eye runs down names and sizes alike; the small kinds fold behind a line that sums them. -->
         <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex w-72 max-w-full shrink-0 flex-col gap-1.5">
-            <h4 v-tooltip.left="rolesTip" :class="ui.sectionLabel({ size: `xs` }, `cursor-help self-start`)">
-                {{ t(`agents.liveMetrics.rolesLabel`) }}
-            </h4>
+            <SectionHeader :label="t(`agents.liveMetrics.rolesLabel`)" density="dense" :heading="4" class="cursor-help self-start" v-tooltip.left="rolesTip" />
             <div
                 v-for="role in shownRoles"
                 :key="role.key"
@@ -146,9 +144,7 @@ const open = (id: string): void => {
         <!-- One conversation a row, its memory against the heaviest's and its CPU beside it; tinted when it holds a
              quarter of the box. Its title opens it; its whole reading is on hover. -->
         <div v-if="readout.sessions.length > 0" role="group" data-section="sessions" class="flex w-80 max-w-full shrink-0 flex-col gap-1.5">
-            <h4 v-tooltip.left="sessionsTip" :class="ui.sectionLabel({ size: `xs` }, `cursor-help self-start`)">
-                {{ t(`agents.liveMetrics.sessionsLabel`) }}
-            </h4>
+            <SectionHeader :label="t(`agents.liveMetrics.sessionsLabel`)" density="dense" :heading="4" class="cursor-help self-start" v-tooltip.left="sessionsTip" />
             <div
                 v-for="session in shownSessions"
                 :key="session.key"

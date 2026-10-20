@@ -45,12 +45,9 @@ pub struct AgentSummary {
     pub limit_resets_at: Option<Secs>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit_held: Option<bool>,
+    /// What carries it on with nobody pressing anything, and when; absent when only a press moves it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit_scheduled: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit_moving: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit_next_at: Option<Secs>,
+    pub next: Option<AgentNext>,
     /// The model provider, an open string (`claude`, `codex`, an extension's own).
     pub provider: String,
     pub harness: AgentHarness,
@@ -226,6 +223,27 @@ pub struct Checklist {
     pub done: f64,
     /// Never zero: a conversation that kept no list carries no checklist at all.
     pub total: f64,
+}
+
+/// What carries a conversation on by itself (`AgentNextSchema`): the one reading its lane and its corner take.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum AgentNext {
+    /// A held turn goes again at `at`, or moves `onto` another account.
+    Rerun {
+        at: Millis,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        onto: Option<String>,
+    },
+    /// Held for memory: it goes once memory has stayed free a while.
+    Room,
+    /// Messages booked for a time: the soonest at `at`.
+    Send { at: Millis, count: u32 },
+    /// Messages booked for after another conversation's work lands.
+    Land { after: String, count: u32 },
+    /// A kind this build does not know: still something that carries it on.
+    #[serde(other)]
+    Other,
 }
 
 /// Messages waiting for its next turn, and whether they are held.

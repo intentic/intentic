@@ -46,7 +46,7 @@ export const testProjects = (tree: readonly TreeEntry[], repo: string): string[]
 
 export function useTests(repo: Ref<string>) {
     const api = host();
-    const { query: treeQuery, error: treeError } = api.sandbox.query({
+    const { query: treeQuery, error: treeError, loaded } = api.sandbox.query({
         queryKey: api.sandbox.readKey(`workspace.tree`, {}),
         queryFn: () => api.sandbox.rpc.workspace.tree({}),
     });
@@ -59,7 +59,7 @@ export function useTests(repo: Ref<string>) {
     return {
         projects,
         error: computed(() => treeError.value ?? null),
-        isLoading: treeQuery.isLoading,
+        loaded,
         runTests,
     };
 }

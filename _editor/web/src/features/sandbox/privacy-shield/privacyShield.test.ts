@@ -1,4 +1,5 @@
 import {
+    allowKey,
     DEFAULT_PRIVACY_SHIELD,
     PERSONAL_DATA_CLASSES,
     PRIVACY_ALLOW_MAX,
@@ -13,7 +14,6 @@ import {
     activitySummary,
     allowAdding,
     allowEdited,
-    allowKey,
     allowListProblem,
     allowMarked,
     allowRemoving,

@@ -43,9 +43,6 @@ jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
     viewProcessLogs: jest.fn(),
 }));
-jest.mock(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
-}));
 jest.mock(`../../models/sandbox/devices/useLiveLinks`, () => ({
     importForticlient: jest.fn(),
     useLiveLinks: () => ({ links: ref([]), error: ref(undefined), open: jest.fn(), close: jest.fn() }),

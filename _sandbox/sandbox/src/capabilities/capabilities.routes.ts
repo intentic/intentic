@@ -12,7 +12,7 @@ import { callingExtension } from "../auth/grants.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { capabilityJobSession } from "../terminal/terminal-session.js";
-import { composeEnvironment } from "../environment/environment.js";
+import { composeEnvironment, rebuildNeeded } from "../environment/overlay.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";
 import { reconcileListenerProcesses, startAutoStartProcesses } from "../extensions/extension-processes.js";
@@ -249,13 +249,8 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
                 if (mintsEndpointProvider(input.kind)) {
                     await syncEndpointCompat(services);
                 }
-                // Folds this entry's image fragments into the overlay; upsert happens first so compose can see them.
-                const composedHash = await composeEnvironment(services);
-                if (
-                    (await services.environmentSources.capabilityFragments(entry)).length > 0 &&
-                    composedHash !== undefined &&
-                    composedHash !== services.config.sandbox.environmentHash
-                ) {
+                // This entry's image fragments join the overlay; upsert happens first so the compose sees them.
+                if ((await rebuildNeeded(services)) && (await services.environmentSources.capabilityFragments(entry)).length > 0) {
                     yield {
                         kind: "log",
                         message:

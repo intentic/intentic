@@ -17,7 +17,8 @@ import {
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { type ActivityFinding, activityFindings, activitySummary, allowKey, excerptParts, findingTokens } from "./privacyShield";
+import { allowKey } from "@intentic/sandbox-contract/schemas/privacy";
+import { type ActivityFinding, activityFindings, activitySummary, excerptParts, findingTokens } from "./privacyShield";
 import PrivacyImagePeek from "./PrivacyImagePeek.vue";
 import PrivacyProviderMark from "./PrivacyProviderMark.vue";
 import { usePrivacyReveal } from "../../../models/sandbox/usePrivacyShield";

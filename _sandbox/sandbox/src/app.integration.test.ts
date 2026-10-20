@@ -783,7 +783,7 @@ test("agent.run serves a Codex turn on the translator subscription over the loca
         kind: "codex-endpoint",
         baseUrl: "http://127.0.0.1:8788",
         authToken: "local-bearer",
-        allowance: { vendor: "ChatGPT", limit: expect.any(Function) },
+        allowance: { vendor: "ChatGPT", capacity: expect.any(Function) },
     });
 });
 
@@ -869,7 +869,7 @@ test("agent.run serves Kimi K3 on the Kimi Code subscription through the transla
         kind: "routed",
         baseUrl: "http://127.0.0.1:8788",
         authToken: "local-bearer",
-        allowance: { vendor: PROVIDER_VENDOR.kimi, limit: expect.any(Function) },
+        allowance: { vendor: PROVIDER_VENDOR.kimi, capacity: expect.any(Function) },
     });
     expect(seen?.spec.model).toBe("kimi-k3");
 });
@@ -1058,7 +1058,7 @@ test("agent.run serves Kimi on Codex through its own provider block on the trans
         baseUrl: "http://127.0.0.1:8788",
         authToken: "local-bearer",
         hosted: { id: "intentic-kimi", path: "/v1" },
-        allowance: { vendor: "Kimi Code", limit: expect.any(Function) },
+        allowance: { vendor: "Kimi Code", capacity: expect.any(Function) },
     });
 });
 

@@ -23,7 +23,7 @@ const entries = computed(() => [...conversation.value.turn.agentStatus.value.ent
         data-agent-status
     >
         <div v-for="entry in entries" :key="entry.key" class="flex min-w-0 items-start gap-2">
-            <Icon name="extensions" class="mt-px shrink-0 text-2xs" />
+            <Icon name="extensions" class="shrink-0 text-2xs" />
             <span v-if="entry.source" class="shrink-0 font-medium text-muted">{{ entry.source }}</span>
             <!-- A widget is several lines; past four it is a panel this row is not, and the whole of it is a hover away. -->
             <span class="line-clamp-4 min-w-0 whitespace-pre-wrap" v-tooltip.top.overflow="entry.text">{{ entry.text }}</span>

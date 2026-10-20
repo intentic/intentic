@@ -1,7 +1,7 @@
 import { unstubbed } from "@intentic/testing";
 import type { ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { pino } from "pino";
 import type { Services } from "../../composition.js";
-import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
 import { opt } from "../../opt.js";
 import { spentRung } from "./role-model-quota.js";
 import { claudeLimitRefusal, claudeWindows } from "../providers/claude/claude-usage.testing.js";
@@ -12,11 +12,13 @@ import { claudeLimitRefusal, claudeWindows } from "../providers/claude/claude-us
 const NOW = 1_700_000_000_000;
 const SECONDS = Math.floor(NOW / 1000);
 
-// Every provider's own module, as composition hands them in: only one keeping its own reading answers for itself. A
+// Every provider is judged the same way, by the one fleet rule the listing reads (serviceability.ts fleetCapacityOf): a
 // routed provider's accounts are the translator's rows, judged with the refusals on file as the listing judges them.
+const SILENT = pino({ level: `silent` });
 const routed = (accounts: Record<string, UsageWindow[] | undefined>, refusals: readonly ProviderRefusal[] = []): Services =>
     unstubbed<Services>(`services`, {
-        providerModules: PROVIDER_MODULES,
+        logger: SILENT,
+        providerAccounts: async () => [],
         cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
             accounts: async () => ({
                 codex: [],
@@ -32,6 +34,7 @@ const routed = (accounts: Record<string, UsageWindow[] | undefined>, refusals: r
 // spent (its pools are rounded).
 const claude = (accounts: Record<string, UsageWindow[] | undefined>, seats: Record<string, string> = {}, refusals: readonly ProviderRefusal[] = []): Services =>
     unstubbed<Services>(`services`, {
+        logger: SILENT,
         claudeStore: unstubbed<Services[`claudeStore`]>(`claudeStore`, {
             list: async () => Object.keys(accounts).map((id) => ({ id }) as Awaited<ReturnType<Services[`claudeStore`][`list`]>>[number]),
         }),
@@ -89,7 +92,8 @@ test("steps over a routed rung a standing refusal holds, whatever the reading st
 
 test("asks the rung when the reading itself cannot be taken", async () => {
     const broken = unstubbed<Services>(`services`, {
-        providerModules: PROVIDER_MODULES,
+        logger: SILENT,
+        providerAccounts: async () => [],
         cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
             accounts: async () => {
                 throw new Error(`management API unreachable`);
@@ -146,23 +150,26 @@ test("asks Claude when an account has no reading at all", async () => {
 
 test("says nothing about a rung on a user's own endpoint", async () => {
     await expect(
-        spentRung(unstubbed<Services>(`services`, { providerModules: PROVIDER_MODULES }), { provider: `endpoint/local`, model: `qwen` }, NOW),
+        spentRung(
+            unstubbed<Services>(`services`, { logger: SILENT, providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { onFile: async () => ({}) }) }),
+            { provider: `endpoint/local`, model: `qwen` },
+            NOW,
+        ),
     ).resolves.toBeUndefined();
 });
 
-// Cursor publishes no allowance, so its rung is read off what it has already refused, per account and per model.
+// Cursor publishes no allowance, so its rung is read off what it has already refused, per account and per model: the
+// refusals on file, judged by the same rule as every other provider's (2026-10-13: a ledger only the ladder read).
 const cursor = (accounts: Record<string, readonly string[]>): Services =>
     unstubbed<Services>(`services`, {
-        providerModules: PROVIDER_MODULES,
-        cursorStore: unstubbed<Services[`cursorStore`]>(`cursorStore`, {
-            credentials: async () => Object.keys(accounts).map((id) => ({ id, apiKey: `k`, connectedAt: 0 })),
-        }),
-        cursorModels: unstubbed<Services[`cursorModels`]>(`cursorModels`, {
-            models: async () => ({ models: [{ id: `composer-2.5`, label: `Composer 2.5` }], default: `composer-2.5` }),
-        }),
-        observedLimits: unstubbed<Services[`observedLimits`]>(`observedLimits`, {
-            spent: async (_provider, account) =>
-                Object.fromEntries((accounts[account] ?? []).map((model) => [model, { at: NOW, message: `429 usage limit reached` }])),
+        logger: SILENT,
+        providerAccounts: async (provider) => (provider === `cursor` ? Object.keys(accounts).map((id) => ({ id, label: id, connectedAt: 0 })) : []),
+        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, {
+            onFile: async () => ({
+                cursor: Object.entries(accounts).flatMap(([account, models]) =>
+                    models.map((model): ProviderRefusal => ({ at: NOW - 60_000, kind: `limit`, message: `429 usage limit reached`, account, model })),
+                ),
+            }),
         }),
     });
 

@@ -10,9 +10,9 @@ import { splitAttachments, withFileNote } from "../../sessions/vocabulary/attach
 import { opt } from "../../opt.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, planMode } from "../decorators/plan-mode.js";
 import { POST_PLAN_MODE } from "../../agent/run/agent.js";
-import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
+import { codedFailure, type FailureRule } from "../../agent/run/frames/error-frames.js";
 import { LIMIT_WAIT_HANDED_OVER, type LimitWait, limitWait, limitWaitOptions } from "./turn/limit-wait.js";
-import { isContextOverflowText } from "../../engines/failure-sentences.js";
+import { isRateLimited } from "../../engines/failure-sentences.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
 import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
 import { resultContent, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
@@ -301,14 +301,9 @@ const codexError = (event: Extract<CodexEvent, { type: "error" }>, retries: { co
     return { frames: [failureFrame(event.message, event.info)], errored: true };
 };
 
-// How Codex's failure sentences are coded when Codex gave no type, in this order: a spent allowance first, so the client
-// shows a muted reset countdown and holds the turn, then an unusable model, so it reloads the catalog and drops the bad
-// pin, then a thread past the model's window, which the daemon re-runs in a fresh one.
-const CODEX_FAILURES: readonly VendorRule[] = [
-    [isRateLimited, "rate_limit"],
-    [isCodexModelInvalid, "codex-model-invalid"],
-    [isContextOverflowText, "context-overflow"],
-];
+// Codex's own words for a model it cannot use, read before the sentences every runtime shares (codedFailure), so the
+// client reloads the catalog and drops the bad pin.
+const CODEX_FAILURES: readonly FailureRule[] = [[isCodexModelInvalid, "codex-model-invalid"]];
 
 // Waits before re-running a turn the translator never got to the model, in ms: long enough for a stalled resolver or a
 // refused dial to pass, short enough that the user is still watching. One entry per retry, so the list is the cap.
@@ -378,14 +373,14 @@ async function* consumeAttempt(
             if (shown === undefined) {
                 shown = event.message;
                 // A failure Codex typed is already coded; only an untyped one is read by its sentence.
-                yield event.code === undefined ? vendorFailureFrame(event, CODEX_FAILURES) : event;
+                yield codedFailure(event, CODEX_FAILURES);
             }
         }
     } catch (error) {
         // The app-server died: its own message stands only when the turn hasn't already said what went wrong.
         if (shown === undefined) {
             shown = thrownMessage(error);
-            yield vendorFailureFrame({ kind: "error", message: shown }, CODEX_FAILURES);
+            yield codedFailure({ kind: "error", message: shown }, CODEX_FAILURES);
         }
     }
     return attemptOutcome(shown);
@@ -853,7 +848,7 @@ const bypassed = (event: CodexEvent, context: CodexStreamContext): boolean => {
     return event.type === "item.started" && event.parent === undefined && HOOKED_ITEMS.has(event.item.type) && hooks.record(event.item.id) === undefined;
 };
 
-const handedOverFrame = (): ErrorFrame => ({ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER });
+const handedOverFrame = (): ErrorFrame => ({ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER, own: true });
 
 // Codex events that mean the provider answered: what it streamed, or a turn that went on to finish.
 const ANSWERING: ReadonlySet<CodexEvent["type"]> = new Set(["item.started", "item.updated", "item.completed", "item.delta", "turn.completed"]);
@@ -930,7 +925,7 @@ async function* streamEvents(
         if (bypassed(event, context)) {
             context.halt?.();
             capture.errored = true;
-            yield { kind: "error", message: UNGATED_CALL };
+            yield { kind: "error", message: UNGATED_CALL, own: true };
             continue;
         }
         if (aboutSubagent(event)) {
@@ -1233,7 +1228,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         const runGate = codexRunGate(request, { gate, taint });
         if (runGate === undefined && request.policy.allowedTools !== undefined) {
             release();
-            yield { kind: "error", message: UNGATED_LIST };
+            yield { kind: "error", message: UNGATED_LIST, own: true };
             yield { kind: "done" };
             return;
         }

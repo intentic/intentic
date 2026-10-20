@@ -1,5 +1,6 @@
 // Pins two wordings that cost something if wrong: marking a persona whose accounts are all signed out, and saving both
 // accounts on a persona that spans sites. jsdom: renders and reads the mounted DOM.
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import "@intentic/testing/dom";
 import { type Persona, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract/schemas/personas";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
@@ -32,8 +33,9 @@ jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({
         personas,
         connected,
         isConnected: (id: string) => connected.value.includes(id),
-        error: ref(undefined),
-        isLoading,
+        loaded: computed(() =>
+            isLoading.value ? { state: `waiting`, since: 0, retry: undefined } : { state: `ready`, data: personas.value, refreshing: false, refreshError: undefined },
+        ),
         save: { mutateAsync: save, isPending: ref(false) },
         remove: { mutateAsync: remove, isPending: ref(false) },
     }),
@@ -90,10 +92,12 @@ jest.mock(`../../../client/sandbox/sandboxClient`, () => ({
 const areas = ref([{ id: `handbook`, label: `Handbook`, folders: [`docs`] }]);
 jest.mock(`../areas/useAreas`, () => ({ useAreas: () => ({ areas }) }));
 jest.mock(`../../../client/sandbox/useSandboxQuery`, () => {
+    const answer = computed(() => ({ root: WORKSPACE_ROOT, tree: tree.value, hidden: 0, repos: nestedRepos.value }));
     return {
         useSandboxQuery: () => ({
-            query: { data: computed(() => ({ root: `/work`, tree: tree.value, hidden: 0, repos: nestedRepos.value })), isPending: shallow(false) },
+            query: { data: answer, isPending: shallow(false) },
             error: shallow(undefined),
+            loaded: computed(() => ({ state: `ready`, data: answer.value, refreshing: false, refreshError: undefined })),
         }),
     };
 });

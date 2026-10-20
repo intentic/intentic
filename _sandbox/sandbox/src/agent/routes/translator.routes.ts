@@ -8,9 +8,8 @@ import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
 import { type ArmedCatch, armLoopbackCatch, loopbackRedirectOf, loopbackWatchers } from "../providers/accounts/loopback-bridge.js";
 import { usageKey } from "../providers/translator.js";
-import { withRoutedStates } from "../../usage/serviceability/serviceability.js";
 
-export type TranslatorRoutesDeps = Pick<Services, "cliProxy" | "headroom" | "logger" | "providerRefusals" | "hostHub" | "webextHub">;
+export type TranslatorRoutesDeps = Pick<Services, "cliProxy" | "headroom" | "logger" | "hostHub" | "webextHub">;
 
 // How long a redirect sign-in's landing is watched for; the translator's own attempt lives about as long.
 const REDIRECT_WATCH_MS = 15 * 60_000;
@@ -61,8 +60,8 @@ export const createTranslatorRoutes = (services: TranslatorRoutesDeps) => {
                     benched.length === 0 ? undefined : services.logger.warn({ accounts: benched }, "translator: benched credentials that can serve no turn"),
                 )
                 .catch((error: unknown) => services.logger.warn({ err: error }, "translator: could not bench unusable credentials"));
-            // Each credential carries the one serviceability verdict, bench and the provider's last refusal included.
-            return withRoutedStates(services, accounts);
+            // Each credential carries the facts the one serviceability rule judges, its bench included, never a verdict.
+            return accounts;
         }),
         connect: i.connect.handler(async ({ input }) => {
             // Codex has both shapes: its redirect is one click where someone of the owner's watches loopback, and a

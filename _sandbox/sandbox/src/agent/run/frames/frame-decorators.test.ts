@@ -186,10 +186,10 @@ describe("the injected failure", () => {
         return out;
     };
 
-    test("goes out uncoded, just ahead of done", async () => {
+    test("goes out uncoded, in the sandbox's own words, just ahead of done", async () => {
         expect(await drain(withSilentEnding(stream(), () => "nothing to show"))).toStrictEqual([
             { kind: "delta", text: "x" },
-            { kind: "error", message: "nothing to show" },
+            { kind: "error", message: "nothing to show", own: true },
             { kind: "done" },
         ]);
     });

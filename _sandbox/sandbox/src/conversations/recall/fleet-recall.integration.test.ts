@@ -227,7 +227,7 @@ test("a live conversation answers what holds it now; one at rest has no now at a
             { id: "j0", label: "old build", session: "s", startedAt: 50, endedAt: 60, exitCode: 0 },
         ],
         limitHeld: true,
-        limitScheduled: true,
+        next: { kind: "rerun", at: 7_000_000 },
         limitResetsAt: 7_000,
     });
     expect((await fleetRecall(held, FAIR, HISTORY_ROOT, { diff: false })).now).toEqual({

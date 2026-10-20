@@ -1,7 +1,6 @@
 import type { AccountUsage, TranslatorAccount, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { CAPACITY_RAIL_PX, chatCapacity as readCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
-import { judgeAccountStores } from "../../../../testing/judgedAccounts";
+import { CAPACITY_RAIL_PX, chatCapacity, hasCapacity, railFitsBeside } from "./chatCapacity";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../../../../models/providers/providerAccounts";
 
 // The rail's offers must all still serve a turn, and everything it withholds must be accounted for: spent, refused,
@@ -26,12 +25,6 @@ const google = (index: number, percent: number): TranslatorAccount => ({
     label: `radarsuspam${index}@gmail.com`,
     usage: usage(percent),
 });
-
-// The rail as it reads the stores a current daemon filled: every account row carrying the verdict it was judged by.
-const chatCapacity = (...args: Parameters<typeof readCapacity>): ReturnType<typeof readCapacity> => {
-    judgeAccountStores(args[1]);
-    return readCapacity(...args);
-};
 
 afterEach(() => {
     providerAccounts.value = {};
@@ -168,7 +161,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
             claude: [claude({ id: `a`, label: `turned-away`, usage: usage(5) }), claude({ id: `b`, label: `fine`, usage: usage(40) })],
         };
         providerRefusals.value = {
-            claude: { at: NOW - 60_000, kind: `entitlement`, message: `Claude Code is not enabled for this account.`, account: `a` },
+            claude: [{ at: NOW - 60_000, kind: `entitlement`, message: `Claude Code is not enabled for this account.`, account: `a` }],
         };
 
         const [entry] = chatCapacity([], NOW).providers;
@@ -180,7 +173,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
     it(`takes a whole routed pool off the list when its refusal names no account`, () => {
         translatorAccounts.value = { ...NO_ROUTED, gemini: [google(1, 4), google(2, 11)] };
         providerRefusals.value = {
-            gemini: { at: NOW - 60_000, kind: `entitlement`, message: `Gemini for Google Cloud has not been enabled for this project.` },
+            gemini: [{ at: NOW - 60_000, kind: `entitlement`, message: `Gemini for Google Cloud has not been enabled for this project.` }],
         };
 
         const capacity = chatCapacity([], NOW);
@@ -193,7 +186,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
     // composer.
     it(`dates the return of a routed pool whose refusal was a spent quota`, () => {
         translatorAccounts.value = { ...NO_ROUTED, gemini: [google(1, 4)] };
-        providerRefusals.value = { gemini: { at: NOW - 60_000, kind: `limit`, message: `Quota exceeded for this project.` } };
+        providerRefusals.value = { gemini: [{ at: NOW - 60_000, kind: `limit`, message: `Quota exceeded for this project.` }] };
 
         const capacity = chatCapacity([], NOW);
         expect(capacity.providers).toEqual([]);
@@ -219,13 +212,13 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
             ],
         };
         providerRefusals.value = {
-            claude: {
+            claude: [{
                 at: NOW - 30_000,
                 kind: `limit`,
                 message: `You've reached your weekly limit for Claude Fable.`,
                 account: `a`,
                 model: `claude-fable-1`,
-            },
+            }],
         };
 
         const [entry] = chatCapacity([], NOW).providers;
@@ -254,7 +247,7 @@ describe(`what cannot serve a turn, whatever its pools say`, () => {
             ],
         };
         providerRefusals.value = {
-            claude: { at: NOW - 30_000, kind: `limit`, message: `You've reached your 5-hour limit.`, account: `a`, model: `claude-haiku-4-5` },
+            claude: [{ at: NOW - 30_000, kind: `limit`, message: `You've reached your 5-hour limit.`, account: `a`, model: `claude-haiku-4-5` }],
         };
 
         const capacity = chatCapacity([], NOW);

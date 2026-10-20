@@ -41,12 +41,7 @@ export const planOpenCodeRouteTurn = async (
     }
     const { route } = resolved;
     // The shared server fixes its providers' base URLs at spawn, so a shield turned on since may not be in front yet.
-    let refused: string | undefined;
-    try {
-        refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, route.shield);
-    } catch (error) {
-        refused = error instanceof Error ? error.message : "the privacy shield's policy could not be read";
-    }
+    const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, route.shield, input.conversationId);
     if (refused !== undefined) {
         return { ok: false, message: refused };
     }

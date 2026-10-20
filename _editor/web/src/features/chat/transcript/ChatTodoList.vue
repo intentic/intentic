@@ -153,7 +153,7 @@ const hint = computed(() =>
                             :class="dense && 'break-inside-avoid pb-1.5 last:pb-0'"
                             data-reveal
                         >
-                            <Icon v-if="dense" v-bind="todoIcon(todo)" class="mt-0.5 text-3xs" />
+                            <Icon v-if="dense" v-bind="todoIcon(todo)" class="text-3xs" />
                             <span v-else class="chat-mark"><Icon v-bind="todoIcon(todo)" class="text-xs" /></span>
                             <!-- Three inks for three states: done recedes, open waits a step down, and the one in hand reads at full ink.
                                  The tick already says done, so no strikethrough rules a line through every settled row. -->

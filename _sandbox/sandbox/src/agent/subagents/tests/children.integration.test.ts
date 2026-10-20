@@ -17,14 +17,14 @@ import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTa
 import { unstubbed } from "@intentic/testing";
 import { reportChildTurn } from "../child-report.js";
 import { childLandingWords } from "../../../conversations/land/child-lands.js";
-import { filePausedChildren } from "../paused-children.js";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { childActor } from "../../../auth/principal.js";
 import { spawnedChildren } from "../spawned-children.js";
-import { childRerunHorizonMs, childResultDoor, childResultOf } from "../child-records.js";
-import { RESTART_CUT, restoreSpawnedChildren, settleRestoredChildren } from "../child-restore.js";
+import { childRerunHorizonMs, childResultDoor, childResultOf, ledgerOf } from "../child-records.js";
+import { cutChildrenInFlight, RESTART_CUT, spawnedChildrenInFlight } from "../child-restore.js";
+import { readKinds, recoverKinds, RESUMES } from "../../../seams/restart/in-flight.testing.js";
 import type { ResultSchema } from "../child-result.js";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import {
@@ -1993,7 +1993,7 @@ describe("a child whose allowance runs out", () => {
             failureCode: "rate_limit",
             limitResetsAt: RESETS_AT,
             limitHeld: true,
-            limitScheduled: true,
+            next: { kind: "rerun" },
         });
         expect(settledRun.rerun).toEqual({ at: RESETS_AT });
 
@@ -2055,7 +2055,7 @@ describe("a child whose allowance runs out", () => {
         });
         expect(fleet.conversations.state(result.id)?.resume.held).toBeUndefined();
         // Nor does its card go on saying a re-run is booked, which would hold it, and its parent's card, in Active.
-        expect(fleet.agents.get(result.id)?.limitScheduled).toBeUndefined();
+        expect(fleet.agents.get(result.id)?.next).toBeUndefined();
         expect((await finishedIn(fleet, result.id)).matched).toMatchObject({
             status: "killed",
             error: "You've hit your usage limit. Stopped: its parent cancelled it.",
@@ -2068,7 +2068,7 @@ describe("a child whose allowance runs out", () => {
     });
 
     // The parent archived, purged or discarded stops its children with it: nothing re-runs for a parent that will never
-    // read the report. The pause is struck off the record a restart reads too, so no boot tells anyone about it later.
+    // read the report. The child's file no longer says paused either, so no boot puts the pause back.
     it("a parent leaving the board cancels its paused child as its own cancel would, and strikes the pause off", async () => {
         const { fleet, services } = await refusingFleet();
         const result = await spawnChild(services, parent, { prompt: "Review the audit", provider: "codex", model: "gpt-5.1-codex" });
@@ -2080,13 +2080,10 @@ describe("a child whose allowance runs out", () => {
             kind: "turn-held",
             held: { input: { conversationId: result.id, prompt: "Review the audit" }, reason: "limit", ran: true, reopensAt: RESETS_AT },
         }).settled;
-        const ledger = filePausedChildren(services.config.historyRoot, services.logger);
-        // A write queued behind every earlier one of the file, so the read after it sees them.
-        const settledLedger = async (): Promise<readonly string[]> => {
-            await ledger.forget(["nothing-of-this-suite"]);
-            return Object.keys(await ledger.read());
-        };
-        expect(await settledLedger()).toContain(result.id);
+        // The pause is a state of the child's own file, which the next boot reads it back from; the read waits for every
+        // write already queued for the child.
+        const stateOnFile = async (): Promise<string | undefined> => (await ledgerOf(services).list()).find((entry) => entry.id === result.id)?.state;
+        expect(await stateOnFile()).toBe("paused");
 
         expect(await cancelFamily(services, familyOf(services, [parent.conversationId]), "archived")).toEqual([
             { child: result.id, parent: parent.conversationId, move: { kind: "cancel" } },
@@ -2096,7 +2093,7 @@ describe("a child whose allowance runs out", () => {
             status: "killed",
             error: "You've hit your usage limit. Stopped: its parent cancelled it.",
         });
-        expect(await settledLedger()).not.toContain(result.id);
+        expect(await stateOnFile()).toBe("settled");
         // Its conversation stays; only what it would have run again is gone.
         expect(fleet.agents.get(result.id)).toMatchObject({ id: result.id });
         // A second end finds nothing left to stop.
@@ -2137,7 +2134,7 @@ describe("a child whose allowance runs out", () => {
         await turnRunOf(fleet.conversations, "top-1")?.waitUntilFinished();
         const summary = fleet.agents.get("top-1");
         expect(summary).toMatchObject({ failureCode: "rate_limit", limitResetsAt: RESETS_AT, limitHeld: true });
-        expect([summary?.limitPolicy, summary?.limitScheduled]).toEqual([undefined, undefined]);
+        expect([summary?.limitPolicy, summary?.next]).toEqual([undefined, undefined]);
     });
 });
 
@@ -2429,18 +2426,17 @@ describe("the fan-out governor", () => {
             }
             yield { kind: "done" };
         };
-        // The held start's own re-check of the records, parked until the cancel is in.
-        const cursor = unstubbed<Services["providerModules"][number]>("cursor module", {
-            id: "cursor",
-            turnLimit: async () => {
-                if (rechecking) {
-                    rechecked.resolve();
-                    await gate.promise;
-                }
-                return undefined;
-            },
-        });
-        const services = drivenBy(unstubbed<Services>("services", { ...spawnServices({}, [], actors), providerModules: [cursor] }), stream);
+        // The held start's own re-check of the records (the provider's accounts, read for the one verdict), parked until
+        // the cancel is in.
+        const base = spawnServices({}, [], actors);
+        const providerAccounts: Services["providerAccounts"] = async (provider) => {
+            if (rechecking && provider === "cursor") {
+                rechecked.resolve();
+                await gate.promise;
+            }
+            return base.providerAccounts(provider);
+        };
+        const services = drivenBy(unstubbed<Services>("services", { ...base, providerAccounts }), stream);
         const first = await spawnChild(services, parent, { prompt: "ws1", ...opus });
         const held = await spawnChild(services, parent, { prompt: "ws2", ...opus });
         if (!first.ok || !held.ok) {
@@ -2602,7 +2598,9 @@ describe("a child across a daemon restart", () => {
         await restart(root);
         expect(await sendToChild(services, parent, result.id, "also the lexer")).toEqual({ ok: false, message: "No such child of this conversation. `list` shows yours." });
 
-        expect(await restoreSpawnedChildren(services)).toEqual([]);
+        const [restoring, cut] = await readKinds(services, [spawnedChildrenInFlight, cutChildrenInFlight]);
+        expect(cut?.count).toBe(0);
+        await restoring?.recover(RESUMES);
 
         expect(await waitForSubagent(actors, parent.conversationId, { until: ["finished"], timeoutMs: 100 })).toMatchObject({ outcome: "unknown-target" });
         expect(await settled(result.id)).toMatchObject({
@@ -2632,19 +2630,80 @@ describe("a child across a daemon restart", () => {
         });
         await restart(root);
 
-        const cut = await restoreSpawnedChildren(services);
-        expect(cut).toEqual(["sub-cut"]);
+        const [restoring, cut] = await readKinds(services, [spawnedChildrenInFlight, cutChildrenInFlight]);
+        expect(cut?.count).toBe(1);
+        await restoring?.recover(RESUMES);
         expect(listSubagentSessions(actors).find((session) => session.id === "sub-cut")).toMatchObject({
             status: "pending",
             summary: "The sandbox restarted during its turn: waiting to see whether the turn resumes.",
         });
 
-        await settleRestoredChildren(services, cut);
+        await cut?.recover(RESUMES);
 
         expect(listSubagentSessions(actors).find((session) => session.id === "sub-cut")).toMatchObject({ status: "failed", error: RESTART_CUT });
         expect(told).toEqual([`Your subagent \`sub-cut\` ("Port the parser") stays stopped: ${RESTART_CUT}`]);
         const [onFile] = await spawnedChildren(root, { warn: () => {} }).list();
         expect(onFile).toMatchObject({ id: "sub-cut", state: "settled", ending: { status: "failed", error: RESTART_CUT } });
+    });
+
+    // A paused child as its file holds it: its turn ended on a spent allowance the sandbox books a re-run past.
+    const pausedOnFile = (root: string): void =>
+        spawnedChildren(root, { warn: () => {} }).write("sub-paused", {
+            parent: parent.conversationId,
+            spec: { prompt: "Port the parser", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" },
+            depth: 1,
+            cwd: WORKSPACE_ROOT,
+            startedAt: 1_000,
+            state: "paused",
+            pausedOn: "You've hit your usage limit.",
+            turns: 1,
+            at: 2_000,
+        });
+    const rowOf = (id: string) => listSubagentSessions(actors).find((session) => session.id === id);
+
+    // 2026-10-20: a second ledger of pauses told the parent "a restart drops that booking" while the re-run's hold had
+    // come back with the restart, and nothing watched the restored pause, so a re-run dropped later left the parent's
+    // wait on a paused child for good.
+    it("paused with its re-run booked again is paused on the same watch: its parent hears nothing until the re-run is dropped, then once", async () => {
+        const { services, root } = await restartable(doneAtOnce);
+        pausedOnFile(root);
+        await restart(root);
+        const [restoring, cut] = await readKinds(services, [spawnedChildrenInFlight, cutChildrenInFlight]);
+        await restoring?.recover(RESUMES);
+        // Its file still says paused while the boot has not looked yet.
+        expect((await ledgerOf(services).list()).map((entry) => entry.state)).toEqual(["paused"]);
+        // The re-run it booked comes back with its conversation's entry, before any kind runs (limit-hold.ts).
+        const reopensAt = Math.ceil(Date.now() / 60_000) * 60 + 2 * 60 * 60;
+        await actors.send("sub-paused", {
+            kind: "turn-held",
+            held: { input: { conversationId: "sub-paused", prompt: "Port the parser" }, reason: "limit", ran: true, reopensAt },
+        }).settled;
+
+        await cut?.recover(RESUMES);
+
+        expect(rowOf("sub-paused")).toMatchObject({ status: "paused" });
+        expect(told).toEqual([]);
+        expect((await ledgerOf(services).list()).map((entry) => entry.state)).toEqual(["paused"]);
+        actors.send("sub-paused", { kind: "resume-dropped" });
+        expect(await waitForSubagent(actors, parent.conversationId, { target: "sub-paused", until: ["finished"], timeoutMs: 10_000 })).toMatchObject({
+            matched: { status: "failed" },
+        });
+        expect(told).toHaveLength(1);
+        expect(told[0]).toStartWith('Your subagent `sub-paused` ("Port the parser") stays stopped: You\'ve hit your usage limit.');
+    });
+
+    it("paused with no re-run back stays stopped, said once on its row and to its parent with what stopped it", async () => {
+        const { services, root } = await restartable(doneAtOnce);
+        pausedOnFile(root);
+        await restart(root);
+
+        await recoverKinds(services, [spawnedChildrenInFlight, cutChildrenInFlight]);
+
+        const error =
+            "You've hit your usage limit. The sandbox restarted before the re-run it had booked, so it is not coming back by itself: send it a message to carry on, or cancel it.";
+        expect(rowOf("sub-paused")).toMatchObject({ status: "failed", error });
+        expect(told).toEqual([`Your subagent \`sub-paused\` ("Port the parser") stays stopped: ${error}`]);
+        expect(await ledgerOf(services).list()).toMatchObject([{ id: "sub-paused", state: "settled", ending: { status: "failed", error } }]);
     });
 
     it("whose cut turn came back is followed to its end, and its report reaches the parent's wait", async () => {
@@ -2667,11 +2726,12 @@ describe("a child across a daemon restart", () => {
             at: 2_000,
         });
         await restart(root);
-        const cut = await restoreSpawnedChildren(services);
+        const [restoring, cut] = await readKinds(services, [spawnedChildrenInFlight, cutChildrenInFlight]);
+        await restoring?.recover(RESUMES);
         // The turn journal resumes it, as the boot does once the records are back.
         expect(services.turns.run({ conversationId: "sub-resumed", prompt: "Port the parser" })).not.toBe("busy");
 
-        await settleRestoredChildren(services, cut);
+        await cut?.recover(RESUMES);
 
         expect(listSubagentSessions(actors).find((session) => session.id === "sub-resumed")).toMatchObject({ status: "running", summary: "" });
         expect(told).toEqual([]);
@@ -2693,7 +2753,7 @@ describe("a child across a daemon restart", () => {
             at: Date.now(),
         });
         await restart(root);
-        await restoreSpawnedChildren(services);
+        await recoverKinds(services, [spawnedChildrenInFlight]);
 
         expect(await spawnChild(services, parent, { prompt: "more", provider: "claude", model: "claude-sonnet-4-6" })).toEqual({
             ok: false,
@@ -2721,7 +2781,7 @@ describe("a child across a daemon restart", () => {
         });
         await restart(root);
 
-        expect(await restoreSpawnedChildren(archived)).toEqual([]);
+        await recoverKinds(archived, [spawnedChildrenInFlight, cutChildrenInFlight]);
 
         expect(listSubagentSessions(actors)).toEqual([]);
         expect(await spawnedChildren(root, { warn: () => {} }).list()).toEqual([]);

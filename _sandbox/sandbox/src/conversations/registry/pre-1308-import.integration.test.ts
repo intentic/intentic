@@ -171,7 +171,7 @@ const amberNew: PersistedAgent = {
     sessionId: "sess-a",
     compactedTurn: 3,
     // Held and booked were the old process's memory, which its own load dropped.
-    ending: { kind: "limited", failure: "spent", resetsAt: 1_900, held: false, scheduled: false },
+    ending: { kind: "limited", failure: "spent", resetsAt: 1_900, held: false },
     unfinished: UNFINISHED,
     postures: { autoLand: false, limit: "move", outage: "retry", stopped: "wait" },
     landing: {

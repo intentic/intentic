@@ -1,4 +1,5 @@
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
+import { mapLoaded } from "@intentic/extension-api";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
@@ -12,7 +13,7 @@ import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
 
 export function usePersonas() {
     const queryClient = useQueryClient();
-    const { query, error } = useSandboxQuery(rpcQuery(`personas.list`));
+    const { query, loaded } = useSandboxQuery(rpcQuery(`personas.list`));
 
     // Invalidates only this list; capabilities, environment and panels are unaffected.
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: rpcKey(`personas.list`) });
@@ -34,8 +35,7 @@ export function usePersonas() {
         connected,
         // Checked per account id, not per persona: a persona naming three accounts needs only one connected.
         isConnected: (capabilityId: string): boolean => connected.value.includes(capabilityId),
-        error,
-        isLoading: query.isLoading,
+        loaded: computed(() => mapLoaded(loaded.value, (answer) => answer.personas)),
         save,
         remove,
     };

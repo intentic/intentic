@@ -34,7 +34,10 @@ const PROFILE = { agent: "claude", harness: "native" } as const;
 
 // One conversation whose turn hit its allowance at `now`, held for the reset `reopensAt` (epoch s), under `limitPolicy`.
 const heldUntil = async (now: number, reopensAt: number, limitPolicy: TurnBreakPolicy, move?: { readonly account: string; readonly carry: boolean }) => {
-    const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences());
+    const settings = SandboxSettingsSchema.parse({ limitPolicy });
+    const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences(), {
+        settings: { get: async () => settings, onSet: () => () => undefined },
+    });
     await agents.init();
     await beginTurn(conversations, { conversationId: "c1", isolated: true, prompt: "go", profile: PROFILE }, now);
     conversations.send("c1", {
@@ -50,7 +53,7 @@ const heldUntil = async (now: number, reopensAt: number, limitPolicy: TurnBreakP
         services: {
             agents,
             conversations,
-            sandboxSettings: { get: async () => ({ limitPolicy }) },
+            sandboxSettings: { get: async () => settings },
             automations: { list: async () => [] },
             approvals: { list: async () => ({ approvals: [] }) },
             heldWakes: { list: async () => [] },
@@ -68,7 +71,7 @@ describe("the wake a booked spent-allowance resend promises", () => {
         const now = Date.now();
         const reopensAt = Math.ceil((now + 8 * 60_000) / 1000);
         const { agents, services } = await heldUntil(now, reopensAt, "resend");
-        expect(agents.get("c1")).toMatchObject({ limitHeld: true, limitScheduled: true });
+        expect(agents.get("c1")).toMatchObject({ limitHeld: true, next: { kind: "rerun", at: reopensAt * 1000 } });
         // Nothing runs: the wake is what holds the machine, not a turn.
         expect(workingNow(services, "idle-stop")).toEqual([]);
         expect(await nextPromisedWakeAt(services)).toBe(reopensAt * 1000);

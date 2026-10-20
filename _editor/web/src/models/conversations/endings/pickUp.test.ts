@@ -263,7 +263,7 @@ describe(`withCardBooking`, () => {
     const reopensAt = (NOW + 12 * 60_000) / 1_000;
 
     it(`takes the card's reset, booking, instant and move over the frame's, absent ones included`, () => {
-        expect(withCardBooking(refused, card({ limitResetsAt: reopensAt, limitScheduled: true, limitNextAt: reopensAt }))).toEqual({
+        expect(withCardBooking(refused, card({ limitResetsAt: reopensAt, next: { kind: `rerun`, at: reopensAt * 1_000 } }))).toEqual({
             reason: `limit`,
             readyAt: reopensAt * 1_000,
             nextAt: reopensAt * 1_000,
@@ -272,7 +272,7 @@ describe(`withCardBooking`, () => {
         });
         // Picked onto an account with room and not booked: nothing to wait for, nothing booked, no move.
         expect(withCardBooking(refused, card())).toEqual({ reason: `limit`, held: { ran: false } });
-        expect(withCardBooking(refused, card({ limitScheduled: true, limitMoving: `alice`, limitNextAt: reopensAt }))).toEqual({
+        expect(withCardBooking(refused, card({ next: { kind: `rerun`, at: reopensAt * 1_000, onto: `alice` } }))).toEqual({
             reason: `limit`,
             nextAt: reopensAt * 1_000,
             booked: true,
@@ -284,14 +284,14 @@ describe(`withCardBooking`, () => {
     // records knew, and the card moved to Active saying when (2026-10-19).
     it(`times a refusal that named no reset off the card`, () => {
         const untimed = { reason: `limit` as const, held: { ran: true } };
-        const timed = withCardBooking(untimed, card({ limitResetsAt: reopensAt, limitScheduled: true, limitNextAt: reopensAt }))!;
+        const timed = withCardBooking(untimed, card({ limitResetsAt: reopensAt, next: { kind: `rerun`, at: reopensAt * 1_000 } }))!;
         expect(timed).toEqual({ ...untimed, readyAt: reopensAt * 1_000, nextAt: reopensAt * 1_000, booked: true });
         expect(pickUpNext(timed, `resend`, NOW)).toBe(`Goes by itself about 12 min`);
     });
 
     // The account it goes on is still spent at the reset, so the pass goes later: the card's instant, not the reset.
     it(`says the card's instant where it is later than the reset`, () => {
-        const later = withCardBooking(refused, card({ limitResetsAt: reopensAt, limitScheduled: true, limitNextAt: reopensAt + 3_600 }))!;
+        const later = withCardBooking(refused, card({ limitResetsAt: reopensAt, next: { kind: `rerun`, at: (reopensAt + 3_600) * 1_000 } }))!;
         expect(later).toMatchObject({ readyAt: reopensAt * 1_000, nextAt: (reopensAt + 3_600) * 1_000 });
         expect(pickUpStatus(later, NOW)).toBe(`Limit reached · nothing ran · back about 12 min`);
         expect(pickUpNext(later, `resend`, NOW)).toBe(pickUpNext({ reason: `limit`, readyAt: (reopensAt + 3_600) * 1_000 }, `resend`, NOW));
@@ -300,9 +300,9 @@ describe(`withCardBooking`, () => {
     // A booked move goes on the next pass, so the card's instant is already past: now, never "never".
     it(`reads a booked move or a past instant as going now`, () => {
         const past = (NOW - 5_000) / 1_000;
-        const moved = withCardBooking(refused, card({ limitScheduled: true, limitMoving: `alice`, limitNextAt: past }))!;
+        const moved = withCardBooking(refused, card({ next: { kind: `rerun`, at: past * 1_000, onto: `alice` } }))!;
         expect(pickUpNext(moved, `move`, NOW)).toBe(`Moving to alice now`);
-        const due = withCardBooking({ reason: `limit`, held: { ran: true } }, card({ limitScheduled: true, limitNextAt: past }))!;
+        const due = withCardBooking({ reason: `limit`, held: { ran: true } }, card({ next: { kind: `rerun`, at: past * 1_000 } }))!;
         expect(pickUpNext(due, `resend`, NOW)).toBe(`Goes by itself shortly`);
     });
 

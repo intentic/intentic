@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { type Cross, placeAnchored, type Placement, type Side } from "../../lib/anchorPlacement.js";
+import { provideSurfaceGround } from "./surfaceGround.js";
 
 const {
     anchor,
@@ -25,6 +26,9 @@ const {
     // A menu-like panel: no frame, the shadow alone sets it off.
     menu?: boolean;
 }>();
+
+// A popover and a sheet are a surface: what lies on them draws none of its own (surfaceGround.ts).
+provideSurfaceGround();
 
 const open = defineModel<boolean>({ required: true });
 

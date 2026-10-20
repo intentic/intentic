@@ -152,16 +152,16 @@ const sessionNote = computed(() => {
                 class="rounded-lg border bg-canvas p-3.5"
                 :class="waitingOnYou(requirement.id) ? 'border-warning' : 'border-line'"
             >
-                <div class="flex items-start gap-3">
+                <div class="flex items-start gap-3 text-sm">
                     <!-- Live state overrides the static action icon once something is actually happening. A wait that is on
                          the person wears Windows' own shield rather than a spinner: a spinner says "nothing for you to do". -->
-                    <Icon v-if="waitingOnYou(requirement.id)" name="shield" class="mt-0.5 shrink-0 text-warning" />
-                    <Icon v-else-if="stateOf(requirement.id)?.state === `running`" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
-                    <Icon v-else-if="stateOf(requirement.id)?.state === `done`" name="check-circle" class="mt-0.5 shrink-0 text-success" />
+                    <Icon v-if="waitingOnYou(requirement.id)" name="shield" class="shrink-0 text-warning" />
+                    <Icon v-else-if="stateOf(requirement.id)?.state === `running`" name="spinner" spin class="shrink-0 text-link" />
+                    <Icon v-else-if="stateOf(requirement.id)?.state === `done`" name="check-circle" class="shrink-0 text-success" />
                     <Icon
                         v-else
                         :name="stateOf(requirement.id)?.state === `failed` ? `times` : ICON[requirement.action]"
-                        class="mt-0.5 shrink-0"
+                        class="shrink-0"
                         :class="
                             stateOf(requirement.id)?.state === `failed`
                                 ? 'text-danger'

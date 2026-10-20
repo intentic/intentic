@@ -2,6 +2,7 @@
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import {
     Avatar,
+    Await,
     Button,
     ui,
     ConfirmDialog,
@@ -12,9 +13,8 @@ import {
     Row,
     RowGroup,
     RowNote,
+    Section,
     SkeletonRows,
-    SkeletonSnapshot,
-    vSkeletonSource,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -35,7 +35,6 @@ import {
     storedPowers,
 } from "../../../models/sandbox/personas/personaRules";
 import { usePersonas } from "../../../models/sandbox/personas/usePersonas";
-import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
@@ -50,12 +49,10 @@ const props = defineProps<{
     open?: string;
 }>();
 
-const { personas, connected, isConnected, error, isLoading, save, remove } = usePersonas();
-const outline = useSandboxOutline(isLoading);
+const { personas, connected, isConnected, loaded, save, remove } = usePersonas();
 // The list query reports a bare message; this page names what the user came here to read.
-const listNotice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: t(`sandbox.sandboxPersonas.couldntReadPersonas`), detail: error.value },
-);
+const unread = (detail: string): NoticeModel => ({ tone: `danger`, title: t(`sandbox.sandboxPersonas.couldntReadPersonas`), detail });
+const listNotice = computed(() => (loaded.value.state === `ready` && loaded.value.refreshError !== undefined ? unread(loaded.value.refreshError) : undefined));
 // Logged-in browser profiles, each carrying its site's brand; one capability per account, so a twice-connected site
 // appears twice.
 const { accounts } = useBrowserAccounts();
@@ -138,8 +135,8 @@ watch(
 let landedOn: string | undefined;
 let arrived = false;
 watch(
-    [() => props.open, personas, isLoading],
-    ([asked, , loading], previous) => {
+    [() => props.open, personas, () => loaded.value.state === `ready`],
+    ([asked, , listed], previous) => {
         if (asked !== previous?.[0]) {
             landedOn = undefined;
         }
@@ -155,7 +152,7 @@ watch(
             }
             return;
         }
-        if (arrived || loading) {
+        if (arrived || !listed) {
             return;
         }
         arrived = true;
@@ -352,26 +349,21 @@ const confirmRemove = async (): Promise<void> => {
         <!-- The real empty state must not show before we know whether personas exist; the list's shape stands in while loading. -->
         <!-- Drawn as the list (or its empty state) last looked in this sandbox. Until then a <RowGroup> like the list itself,
              so it lands on the same tier as what it stands in for. -->
-        <template v-if="isLoading">
-            <SkeletonSnapshot v-if="outline" of="sandbox.personas" :label="t(`sandbox.sandboxPersonas.readingSandboxsPersonas`)">
+        <Await :of="loaded" imprint="sandbox.personas" :label="t(`sandbox.sandboxPersonas.readingSandboxsPersonas`)">
+            <template #fallback>
                 <RowGroup :label="t(`sandbox.sandboxPersonas.personas`)">
                     <div role="status" aria-busy="true">
                         <span class="sr-only">{{ t(`sandbox.sandboxPersonas.readingSandboxsPersonas`) }}</span>
                         <SkeletonRows :rows="2" description control />
                     </div>
                 </RowGroup>
-            </SkeletonSnapshot>
-        </template>
+            </template>
+            <template #failed="{ error }"><Notice :of="unread(error)" /></template>
 
-        <template v-else>
             <!-- Personas may exist without connected accounts. -->
 
             <!-- The empty state names the effects of having no personas. -->
-            <div
-                v-if="personas.length === 0 && newName === undefined"
-                v-skeleton-source="`sandbox.personas`"
-                :class="ui.emptyState('flex flex-col items-center gap-3 py-8')"
-            >
+            <div v-if="personas.length === 0 && newName === undefined" :class="ui.emptyState('flex flex-col items-center gap-3 py-8')">
                 <Avatar :size="40" />
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxPersonas.noPersonasYet`) }}</span>
@@ -385,7 +377,7 @@ const confirmRemove = async (): Promise<void> => {
                 </Button>
             </div>
 
-            <RowGroup v-else v-skeleton-source="`sandbox.personas`" :label="t(`sandbox.sandboxPersonas.personas`)" flat undivided>
+            <Section v-else :label="t(`sandbox.sandboxPersonas.personas`)">
                 <template #actions>
                     <Button
                         v-if="personas.length > 0 && newName === undefined"
@@ -468,8 +460,8 @@ const confirmRemove = async (): Promise<void> => {
                         <Notice v-if="saveError !== undefined" :of="saveError" />
                     </div>
                 </RowNote>
-            </RowGroup>
-        </template>
+            </Section>
+        </Await>
 
         <!-- Removing a persona, never an account, worth saying since only one of those is undoable by clicking again. -->
         <ConfirmDialog

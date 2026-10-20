@@ -399,12 +399,14 @@ describe(`a scheduled send`, () => {
     describe(`booked for an allowance the chat no longer runs on`, () => {
         const reopens = Math.round(Date.now() / 1_000) + 26 * 3_600;
         const kept = providerAccounts.value;
+        // A reading of the weekly pool at `percent`, reopening when the booking does.
+        const weekly = (percent: number) => ({ measuredAt: Date.now(), windows: [{ kind: `seven_day`, utilization: percent, resetsAt: reopens, gates: `all` as const }] });
         beforeEach(() => {
             providerAccounts.value = {
                 ...kept,
                 claude: [
-                    { id: `pro`, label: `Claude Pro`, connectedAt: 0, state: { kind: `spent`, reopensAt: reopens } },
-                    { id: `max`, label: `Claude Max`, connectedAt: 0, state: { kind: `ready`, room: 50 } },
+                    { id: `pro`, label: `Claude Pro`, connectedAt: 0, usage: weekly(100) },
+                    { id: `max`, label: `Claude Max`, connectedAt: 0, usage: weekly(50) },
                 ],
             };
         });
@@ -448,7 +450,7 @@ describe(`a scheduled send`, () => {
         });
 
         it(`says the account it waited for has room again when it reopened early`, async () => {
-            providerAccounts.value = { ...kept, claude: [{ id: `pro`, label: `Claude Pro`, connectedAt: 0, state: { kind: `ready`, room: 80 } }] };
+            providerAccounts.value = { ...kept, claude: [{ id: `pro`, label: `Claude Pro`, connectedAt: 0, usage: weekly(20) }] };
             const element = mount(bookedOn(`pro`));
             await nextTick();
 

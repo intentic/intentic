@@ -8,6 +8,9 @@ import {
     type NoticeModel,
     Row,
     RowGroup,
+    RowNote,
+    Section,
+    SectionHeader,
     SegmentedControl,
     SplitView,
     StatusBadge,
@@ -320,11 +323,8 @@ onBeforeUnmount(() => {
                         </RowGroup>
 
                         <!-- The gateway serving these connections, answering "is this still working" where the connector page is actually read. -->
-                        <RowGroup
-                            v-if="cardProcesses.length > 0"
-                            :label="t(`capabilities.capabilities.backgroundProcess`)"
-                            :caption="t(`capabilities.capabilities.relaysEventsToAgent`)"
-                        >
+                        <RowGroup v-if="cardProcesses.length > 0" :label="t(`capabilities.capabilities.backgroundProcess`)">
+                            <RowNote :label="t(`capabilities.capabilities.relaysEventsToAgent`)" />
                             <Row v-for="row in cardProcesses" :key="row.id">
                                 <!-- State dot goes in `#lead`, where every other list in the app puts one. -->
                                 <template #lead>
@@ -421,23 +421,22 @@ onBeforeUnmount(() => {
                         />
 
                         <!-- States the form's intent up front, since the same fields mean "add" or "change this one". -->
-                        <div
-                            v-if="editing || selected.singleton || selectedInstances.length > 0"
-                            class="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
-                        >
-                            <div :class="ui.sectionLabel()">
+                        <SectionHeader v-if="editing || selected.singleton || selectedInstances.length > 0" class="mt-1">
+                            <template #label>
                                 <!-- A singleton tile always says "Settings": it never adds a second anything, and has no name to show. -->
                                 <template v-if="selected.singleton">{{ t(`shared.settings`) }}</template>
                                 <template v-else-if="editing">
                                     {{ t(`capabilities.capabilities.editing`) }} <span class="font-mono normal-case">{{ editing.id }}</span>
                                 </template>
                                 <template v-else>{{ t(`capabilities.capabilities.addAnother`) }}</template>
-                            </div>
+                            </template>
                             <!-- Way out of an edit, beside what it's editing, not by the submit button, which stays reachable from anywhere already. -->
-                            <button v-if="editing && !selected.singleton" type="button" :class="ui.textButton({ size: `xs` })" @click="stopEditing">
-                                {{ t(`capabilities.capabilities.cancelAddAnotherInstead`) }}
-                            </button>
-                        </div>
+                            <template v-if="editing && !selected.singleton" #actions>
+                                <button type="button" :class="ui.textButton({ size: `xs` })" @click="stopEditing">
+                                    {{ t(`capabilities.capabilities.cancelAddAnotherInstead`) }}
+                                </button>
+                            </template>
+                        </SectionHeader>
 
                         <!-- No name box while editing or on a singleton tile: renaming moves state a form can't (askRename), so a second box here would be a lossy shortcut for it. -->
                         <label v-if="!selected.singleton && !editing" class="ui-field">
@@ -555,7 +554,7 @@ onBeforeUnmount(() => {
                         <!-- Why the grid badged this one: the claim plus the evidence that produced it, which "Not needed" dismisses. -->
                         <!-- The sentence the answers add up to, computed live so it matches what submit actually agrees to. -->
                         <p v-if="formSummary" class="flex items-start gap-2 rounded-lg bg-card shadow-sm px-3 py-2 text-xs text-content">
-                            <Icon name="info-circle" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                            <Icon name="info-circle" class="shrink-0 text-2xs text-subtle" />
                             {{ formSummary }}
                         </p>
 
@@ -653,9 +652,8 @@ onBeforeUnmount(() => {
 
                     <!-- Headings only when the grid spans more than one category; a single category's heading is already the page description. -->
                     <template v-else>
-                        <div v-for="group in groupedCatalog" :key="group.label" class="flex flex-col gap-2">
-                            <!-- Label alone: the category's own sentence is already the page description once the rail points at it. -->
-                            <div v-if="!inCategory" :class="ui.sectionLabel()">{{ group.label }}</div>
+                        <!-- Label alone: the category's own sentence is already the page description once the rail points at it. -->
+                        <Section v-for="group in groupedCatalog" :key="group.label" :label="inCategory ? undefined : group.label">
                             <!-- Container query, not viewport: how many tiles fit is a fact about this pane, not the screen. -->
                             <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
                                 <CatalogTile
@@ -696,7 +694,7 @@ onBeforeUnmount(() => {
                                     </template>
                                 </CatalogTile>
                             </div>
-                        </div>
+                        </Section>
                     </template>
 
                     <!-- Reachable only via the filter, since every slice the rail offers has something in it; answers about whichever list is actually on screen. -->

@@ -1,6 +1,6 @@
 <!-- The hub search's answers, in place of the hub's index while something is typed: grouped by hub, this hub first. -->
 <script setup lang="ts">
-import { Row, RowGroup, ui } from "@intentic/ui";
+import { Row, ROW_TIERS, RowGroup, SectionHeader, ui } from "@intentic/ui";
 import { sectionIcon } from "@intentic/ui/icons";
 import { useT } from "@intentic/ui/i18n";
 import { useRoute, useRouter } from "vue-router";
@@ -48,7 +48,13 @@ const words = (): string => search.query.value.trim();
         <template v-for="group in search.groups.value" :key="group.hub">
             <!-- The rail's own heading style, so an answer list reads as the index it stands in for. -->
             <section v-if="look === `rail`" role="group" :aria-label="group.heading" class="pt-3 first:pt-0">
-                <h3 aria-hidden="true" class="pb-1 pl-2 pr-1" :class="ui.sectionLabel({ size: `xs` })">{{ group.heading }}</h3>
+                <SectionHeader
+                    :label="group.heading"
+                    density="dense"
+                    :heading="3"
+                    aria-hidden="true"
+                    :class="[ROW_TIERS.dense.headingGap, ROW_TIERS.dense.headingInset]"
+                />
                 <div class="flex flex-col gap-0.5">
                     <a
                         v-for="(result, index) in group.results"

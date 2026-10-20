@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceDepEdge, WorkspaceDepUsage, WorkspacePackage } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
-import { Row, RowGroup, StatStrip } from "@intentic/extension-ui";
+import { Row, RowGroup, RowNote, StatStrip } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { areaMatrix, heightsOf, impliedEdges, isRuntime, usageOf, type Area, type Finding } from "./depModel";
 import { t } from "./i18n.js";
@@ -106,8 +106,8 @@ const usageTable = computed(() =>
                 v-for="finding in findings"
                 :key="`${finding.kind}:${finding.areas?.join(`>`) ?? ``}`"
                 :label="findingTitle(finding)"
-                :caption="findingCaption(finding)"
             >
+                <RowNote :label="findingCaption(finding)" />
                 <Row
                     v-for="edge in finding.edges"
                     :key="`${edge.from}>${edge.to}:${edge.type}`"

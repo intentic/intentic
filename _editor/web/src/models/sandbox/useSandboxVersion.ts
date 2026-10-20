@@ -97,8 +97,5 @@ export function useSandboxVersion(poll?: Ref<number | false>) {
         // A checkout-built base: the published release is not this sandbox's update, so the card offers the rebuild
         // that is.
         localImage,
-        // The info read is still out; without this, "the sandbox hasn't said" looks identical to "the sandbox says
-        // nothing".
-        isLoading: query.isLoading,
     };
 }

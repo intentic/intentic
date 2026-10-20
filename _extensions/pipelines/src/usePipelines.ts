@@ -48,7 +48,7 @@ export function usePipelines() {
     const spec = ciRunsQuery();
     const queryKey = spec.queryKey;
 
-    const { query, error } = api.sandbox.query({
+    const { query, loaded } = api.sandbox.query({
         ...spec,
         refetchInterval: ({ state }) => runsPollMs(state.data?.runs),
     });
@@ -77,9 +77,8 @@ export function usePipelines() {
         // Main-line branches failing right now, each with the one fix agent the daemon put on it; absent from a daemon
         // that keeps none, which reads the same as none failing.
         failures: computed(() => query.data.value?.failures ?? []),
-        error,
-        // isPending, not isLoading: true until the first response, including while `enabled` still gates the fetch.
-        isPending: query.isPending,
+        // Waiting until the first response, including while the sandbox is not answering yet; never an empty board.
+        loaded,
         rerun,
         cancel,
         fix,

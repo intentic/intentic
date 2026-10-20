@@ -4,6 +4,7 @@
 // restart that delay and blink to nothing in between. A chunk that fails is the error boundary's to say.
 import "@intentic/testing/dom";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { MINIMUM_HOLD_MS } from "@intentic/ui";
 import type { Activation, ViewRegistration } from "@intentic/extension-api";
 import { type App, type Component, createApp, defineComponent, h, nextTick, reactive } from "vue";
 
@@ -80,12 +81,13 @@ it(`draws one wait past the reveal delay, through the activation turning up, unt
 
     land(landed);
     await settle();
+    await advanceTimersByTimeAsync(MINIMUM_HOLD_MS);
     expect(waitShown(el)).toBeNull();
     // Inside a `contents` element: one thing to imprint, laid out as if nothing wrapped it.
     expect(el.querySelector(`.contents > [data-view]`)).not.toBeNull();
 });
 
-it(`leaves a failed chunk to the boundary's card, never a wait that runs on`, async () => {
+it(`says a failed chunk in the boundary's card, never a wait that runs on`, async () => {
     const { el } = mountView({ extension: registration(() => Promise.reject(new Error(`bundle gone`))), activation, waiting: false });
     await advanceTimersByTimeAsync(250);
     await settle();

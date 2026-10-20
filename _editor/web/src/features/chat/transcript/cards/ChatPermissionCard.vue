@@ -132,7 +132,7 @@ const allowItems = computed<MenuItem[]>(() => [
                 @repoint="staged = $event"
             />
             <span v-if="childReason" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-subtle" data-child-reason>
-                <Icon name="shield" class="mt-px shrink-0" aria-hidden="true" />
+                <Icon name="shield" class="shrink-0" aria-hidden="true" />
                 <span class="min-w-0"
                     ><span class="sr-only">{{ t(`chat.chatChildAgentAsk.whyAsked`) }} </span>{{ childReason }}</span
                 >

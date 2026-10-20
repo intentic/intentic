@@ -733,6 +733,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
             paused: `scheduled`,
             after: FEATURED_AGENT_ID,
         },
+        next: { kind: `land`, after: FEATURED_AGENT_ID, count: 1 },
     },
     ...spawnedChildren(now),
     ...freshSessions(now),

@@ -13,10 +13,11 @@ import {
     keptJobDirs,
     openBackgroundJob,
     restorableJobSessions,
+    leftJobs,
     restoreBackgroundJobs,
     settledBackgroundJobs,
 } from "./background-jobs.js";
-import { reportLostKeptJobs } from "./kept-job-records.js";
+import { keptJobReceipts, reportLostKeptJobs } from "./kept-job-records.js";
 
 // A restart between the agent's `keep` and its turn's end used to lose the keep (it lived only in memory), so the boot
 // sweep killed the kept dev server. Each test builds the state with one fleet, drops it, and runs the boot path's own
@@ -72,7 +73,7 @@ describe("a kept job across a restart", () => {
         const after = freshDaemon();
         expect(keptJobDirs(tmp)).toContain(job.dir);
         expect(restorableJobSessions(tmp)).toContain(job.session);
-        expect(restoreBackgroundJobs(after.actors, Date.now(), tmp).map((entry) => entry.id)).toEqual([job.id]);
+        expect(restoreBackgroundJobs(after.actors, leftJobs(tmp)).map((entry) => entry.id)).toEqual([job.id]);
         expect(backgroundJobSessions(after.actors)).toContain(job.session);
         // Adoption at boot settles unjudged jobs into completion watches; a kept one waits for its resumed turn instead.
         expect(settledBackgroundJobs(after.actors, "conv-kept-restart").running).toEqual([]);
@@ -91,7 +92,7 @@ describe("a kept job across a restart", () => {
         expect(sessions).toContain(building.session);
         expect(sessions).not.toContain(done.session);
         expect(restorableJobSessions(tmp, building.startedAt + JOB_MAX_MS + 1)).not.toContain(building.session);
-        expect(restoreBackgroundJobs(freshDaemon().actors, Date.now(), tmp).map((entry) => entry.id)).toEqual([building.id]);
+        expect(restoreBackgroundJobs(freshDaemon().actors, leftJobs(tmp)).map((entry) => entry.id)).toEqual([building.id]);
     });
 
     it("tells the conversation a kept job was lost when the container's /tmp went with it, once", async () => {
@@ -106,10 +107,10 @@ describe("a kept job across a restart", () => {
         rmSync(job.dir, { recursive: true, force: true });
         const appended: unknown[] = [];
         const activity = { append: async (entry: unknown) => void appended.push(entry) };
-        await reportLostKeptJobs(history, activity, temp("kept-proc-"));
+        await reportLostKeptJobs(history, await keptJobReceipts(history), activity, temp("kept-proc-"));
         expect(appended).toEqual([expect.objectContaining({ type: "job.lost", conversationId: "conv-kept-lost", content: expect.stringContaining("pnpm dev") })]);
         expect(readdirSync(join(history, "kept-jobs"))).toEqual([]);
-        await reportLostKeptJobs(history, activity, temp("kept-proc-"));
+        await reportLostKeptJobs(history, await keptJobReceipts(history), activity, temp("kept-proc-"));
         expect(appended).toHaveLength(1);
     });
 
@@ -123,7 +124,7 @@ describe("a kept job across a restart", () => {
         keepBackgroundJob(before.actors, "conv-kept-ended", ended.id, "dev server");
         writeFileSync(jobStatusPath(ended), "0\n");
         const appended: unknown[] = [];
-        await reportLostKeptJobs(history, { append: async (entry: unknown) => void appended.push(entry) }, procWithRunner(live.dir));
+        await reportLostKeptJobs(history, await keptJobReceipts(history), { append: async (entry: unknown) => void appended.push(entry) }, procWithRunner(live.dir));
         expect(appended).toEqual([]);
         expect(readdirSync(join(history, "kept-jobs"))).toEqual([`${live.id}.json`]);
     });

@@ -2,8 +2,7 @@ import { type ResumeNoticeReason, type SandboxNotice, sandboxNoticeOf } from "@i
 import type { TranscriptRow, WatchOutcome } from "@intentic/sandbox-contract/events/transcript";
 import { t } from "@intentic/ui/i18n";
 import type { Audience } from "../../../app/useAudience";
-import { memoryShare } from "./memoryTip";
-import { failureHeadline, looksLikeProviderFailure } from "./providerFailure";
+import { type FailureView, failureView, legacyFailure } from "./failureView";
 
 /*
  * The sandbox's own notice rows in the reader's language and words. The sandbox writes each as an English sentence
@@ -12,13 +11,11 @@ import { failureHeadline, looksLikeProviderFailure } from "./providerFailure";
  * build does not know (a sandbox older or newer than the app), is drawn from its text as before. The rows another
  * agent's words, a watch or an answered need open carry their facts as fields of their own, and are worded from those.
  * In English, for a developer, every line here is the sandbox's sentence word for word; sandboxNotice.test.ts holds
- * that against the fold itself. The one exception is a failure whose provider said more than a line: its line keeps the
- * first thing said (providerFailure.ts), and the row opens the rest as details (noticeFailure).
+ * that against the fold itself. The one exception is a failure in the provider's or the harness's words: its line is
+ * this build's own for the failure's kind (failureView.ts), and the row opens those words as details (noticeFailure).
  */
 
 type NoticeRow = Pick<TranscriptRow, "noticeCode" | "watchWake" | "needWake" | "agentWords"> & { readonly text?: string };
-
-type Failure = { readonly message: string; readonly error?: string | undefined };
 
 // The land outcomes, whole sentences per audience rather than a word swapped into one: "land" and "branch" for a
 // developer, "accept" and "draft" for a maker (workbench/views/vocabulary.ts).
@@ -76,20 +73,6 @@ const WATCH_WAKE = {
     broken: (note, elapsed) => t(`chat.sandboxNotice.watchWake.broken`, { note, elapsed }),
     "restart-expired": (note, elapsed) => t(`chat.sandboxNotice.watchWake.restartExpired`, { note, elapsed }),
 } as const satisfies Readonly<Record<WatchOutcome, (note: string, elapsed: string) => string>>;
-
-// A failure the sandbox itself worded, by its code, in the reader's language; any other failure's own sentence is the
-// provider's, and stays as it said it, down to its first sentence where it said more (providerFailure.ts): the rest
-// is the row's details. A memory hold keeps its figures, in a few characters.
-const failureWords = ({ message, error }: Failure): string => {
-    if (error === `agent-busy`) {
-        return t(`chat.sandboxNotice.agentBusy`);
-    }
-    if (error === `sandbox-memory-low`) {
-        const share = memoryShare(message);
-        return share === undefined ? t(`chat.sandboxNotice.memoryLow`) : t(`chat.sandboxNotice.memoryLowShare`, { share });
-    }
-    return failureHeadline(message, error) ?? message;
-};
 
 // A landed turn's dependency clause, a sentence of its own after the landed one.
 const dependencies = (deps: number | undefined, queued: boolean | undefined): string | undefined => {
@@ -173,9 +156,9 @@ const landLine = (notice: LandNotice, land: LandWords): string => {
     }
 };
 
-// A failure's own sentence, then what the sandbox did or will do about it.
+// A failure's own line (failureView.ts), then what the sandbox did or will do about it.
 const failureLine = (notice: FailureNotice): string => {
-    const message = failureWords(notice.params);
+    const message = failureView(notice.params).line;
     switch (notice.code) {
         case `retrying`:
             return t(`chat.sandboxNotice.retrying`, { message, attempt: notice.params.attempt, of: notice.params.of });
@@ -300,34 +283,18 @@ export const noticeLine = (row: NoticeRow, audience: Audience): string | undefin
     if (row.agentWords !== undefined) {
         return agentWordsLine(row.agentWords);
     }
-    // A provider's failure on a row with no code this build knows (a sandbox older than its codes, or words it does not
-    // name): its first sentence, the rest in the details.
-    return row.text !== undefined && looksLikeProviderFailure(row.text) ? failureHeadline(row.text) : undefined;
+    // A row written before failures were coded, recognised as a provider's failure by its marks: the unclassified line.
+    return row.text === undefined ? undefined : legacyFailure(row.text)?.line;
 };
 
-/** A failure row: what it said in full, and whether its line says less of it (so the full words are its details). */
-export interface NoticeFailure {
-    readonly said: string;
-    readonly folded: boolean;
-}
-
-/** The failure a row reports, coded or recognised by its words; undefined for every other notice. */
-export const noticeFailure = (row: NoticeRow): NoticeFailure | undefined => {
+/** The failure a row reports (its line, and the words its details hold); undefined for every other notice. */
+export const noticeFailure = (row: NoticeRow): FailureView | undefined => {
     const notice = sandboxNoticeOf(row);
     if (notice !== undefined) {
-        if (!isFailure(notice)) {
-            return undefined;
-        }
-        const { message, error } = notice.params;
-        // A failure the sandbox words itself is said whole already; only a provider's longer words fold.
-        const folded = error !== `agent-busy` && error !== `sandbox-memory-low` && failureHeadline(message, error) !== undefined;
-        return { said: message, folded };
+        return isFailure(notice) ? failureView(notice.params) : undefined;
     }
     const unworded = row.watchWake === undefined && row.needWake === undefined && row.agentWords === undefined;
-    if (!unworded || row.text === undefined || !looksLikeProviderFailure(row.text)) {
-        return undefined;
-    }
-    return { said: row.text, folded: failureHeadline(row.text) !== undefined };
+    return unworded && row.text !== undefined ? legacyFailure(row.text) : undefined;
 };
 
 // What a daemon says when a conversation's turn is already running, word for word: the resume refusal, an older build's

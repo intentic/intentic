@@ -64,9 +64,9 @@ test("a cancel during the shield's read ends the call: nothing is planned and th
         adapters: { for: () => adapter, all: [adapter] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root: WORKSPACE_ROOT }),
         cards: unstubbed<Services["cards"]>("cards", {}),
-        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { clear: async () => {} }),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { settle: async () => {} }),
+        headroom: unstubbed<Services["headroom"]>("headroom", { read: async () => ({}) }),
         claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { clear: async () => {} }),
-        modelCooldowns: unstubbed<Services["modelCooldowns"]>("modelCooldowns", { clear: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
     });
     void privacy;

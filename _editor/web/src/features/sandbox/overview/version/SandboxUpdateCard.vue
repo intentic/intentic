@@ -457,8 +457,8 @@ const finePrint = computed(
                          download that interrupts nothing. -->
                     <!-- Said only when the update waits for a press: one that takes itself already lists, above, the agents it is
                          waiting for, and never cuts them. -->
-                    <p v-if="midTurn > 0 && !isDownloading && !autoOn" class="flex gap-1.5 text-2xs text-warning">
-                        <Icon name="exclamation-triangle" class="mt-px shrink-0" aria-hidden="true" />
+                    <p v-if="midTurn > 0 && !isDownloading && !autoOn" class="flex items-start gap-1.5 text-2xs text-warning">
+                        <Icon name="exclamation-triangle" class="shrink-0" aria-hidden="true" />
                         <span>
                             {{ t(`sandbox.sandboxUpdateCard.midTurnRestart`, { count: midTurn }, midTurn) }}
                             {{ t(`sandbox.sandboxUpdateCard.waitFleetToSettle`) }}

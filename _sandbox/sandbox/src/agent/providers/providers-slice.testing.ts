@@ -2,7 +2,7 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { SliceFakeContext } from "../../harness/slice-fake.testing.js";
 import { PROVIDER_MODULES, RUNTIME_ADAPTERS } from "../../runtimes/runtime-table.js";
-import { providerReadiness } from "./provider-registry.js";
+import { providerAccountsOf, providerReadiness } from "./provider-registry.js";
 import type { ProvidersSlice } from "./providers-slice.js";
 
 // The providers slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
@@ -52,7 +52,6 @@ const emptyCliProxy = (overrides: ProvidersFakeOverrides["cliProxy"]) =>
         models: async () => [],
         headroom: { targets: async () => [] },
         sharedUsageKey: async () => undefined,
-        turnLimit: async () => ({ spent: 0, withHeadroom: 0 }),
         // Nothing connected, so nothing to take out of the rotation; the account list calls this on every read.
         benchUnusable: async () => [],
         ...overrides,
@@ -88,14 +87,12 @@ export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy 
         headroom: idleHeadroom(),
         // Nothing refused yet; both writes sit on the turn path, so any turn-running test touches this store.
         providerRefusals: {
-            read: async () => ({}),
             onFile: async () => ({}),
             record: async () => {},
-            clear: async () => {},
+            settle: async () => {},
+            drop: async () => false,
             onChange: () => () => {},
         },
-        // Nothing cooling; the write sits on the routed rate-limit path, so any refused routed turn touches this store.
-        modelCooldowns: { cooling: async () => new Map(), record: async () => {}, clear: async () => {} },
         // Nothing ran out yet; written beside every spent allowance's refusal, so any refused turn touches this store.
         runOuts: { read: async () => ({}), record: async () => {} },
         cliProxy: emptyCliProxy(cliProxy),
@@ -105,6 +102,7 @@ export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy 
         providerModules: PROVIDER_MODULES,
         adapters: RUNTIME_ADAPTERS,
         providerReadiness: () => providerReadiness(context.self()),
+        providerAccounts: (provider) => providerAccountsOf(context.self(), provider),
         async *agent() {
             yield { kind: "done" };
         },

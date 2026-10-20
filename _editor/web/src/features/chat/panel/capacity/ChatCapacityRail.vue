@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { SkeletonSnapshot, type Tip, type TipRow, ui, vSkeletonSource } from "@intentic/ui";
+import { useLoaded } from "@intentic/extension-api";
+import { Await, type Tip, type TipRow, ui } from "@intentic/ui";
 import { useRowReveal } from "@intentic/ui/motion";
 import { computed, onMounted, ref } from "vue";
 import ChatCapacityLane from "./ChatCapacityLane.vue";
@@ -28,6 +29,8 @@ onMounted(() => void refreshConnections());
 
 // Held accounts ride in so the age below counts only what a press could actually move; the line under it says the rest.
 const capacity = computed(() => chatCapacity(heldAccounts.value));
+// Unread isn't empty: until the accounts are read, the rail must not claim the fleet has nothing.
+const reading = useLoaded(() => ({ data: accountsLoaded.value ? capacity.value : undefined, error: undefined, fetching: false, wanted: true }));
 
 const measuredProviders = computed(() => capacity.value.providers.filter((entry) => entry.rows.some((row) => row.lanes.length > 0)));
 
@@ -216,101 +219,101 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
             </button>
         </div>
 
-        <!-- Unread isn't empty: until accounts load, this must not claim the fleet has nothing — drawn as the shape that's coming, not stated in words. -->
-        <SkeletonSnapshot v-if="!accountsLoaded" of="chat.capacity" :label="t(`sandbox.words.readingConnections`)">
-            <div class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-1" role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`sandbox.words.readingConnections`) }}</span>
-                <div v-for="index in 3" :key="index" class="flex flex-col gap-1.5" aria-hidden="true">
-                    <span class="skeleton block h-2.5 w-24" />
-                    <span class="skeleton block h-1 w-full rounded-full" />
-                </div>
-            </div>
-        </SkeletonSnapshot>
-
-        <!-- Gap widens with nesting depth (lane < account < provider); it must grow with lane count or multi-bar accounts read as one long ladder. -->
-        <div v-else ref="column" v-skeleton-source="`chat.capacity`" class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
-            <!-- Every provider spent at once is an ordinary end-of-week state, not an error, so it's stated plainly. -->
-            <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">{{ t(`chat.chatCapacityRail.nothingRoomRightNow`) }}</p>
-
-            <!-- One block per provider: the provider is the reader's actual choice here (accounts within it balance automatically). -->
-            <!-- A re-read that reorders providers slides them to their new places rather than jumping, so the one that moved is seen moving. -->
-            <TransitionGroup tag="div" class="flex flex-col gap-5" v-bind="motion">
-                <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
-                    <div class="flex items-center gap-1.5" data-reveal>
-                        <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
-                        <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
-                        <!-- Count, never a mean: 30 idle plus one spent isn't "3% used", it's one account you can't use. -->
-                        <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
-                            >{{ entry.ready }}/{{ entry.total }}</span
-                        >
+        <!-- Drawn as the shape that's coming while the accounts are read, not stated in words. -->
+        <Await :of="reading" imprint="chat.capacity" :label="t(`sandbox.words.readingConnections`)">
+            <template #fallback>
+                <div class="flex min-h-0 flex-1 flex-col gap-4 px-3 py-1" role="status" aria-busy="true" :aria-label="t(`sandbox.words.readingConnections`)">
+                    <div v-for="index in 3" :key="index" class="flex flex-col gap-1.5" aria-hidden="true">
+                        <span class="skeleton block h-2.5 w-24" />
+                        <span class="skeleton block h-1 w-full rounded-full" />
                     </div>
+                </div>
+            </template>
+            <!-- Gap widens with nesting depth (lane < account < provider); it must grow with lane count or multi-bar accounts read as one long ladder. -->
+            <div ref="column" class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-3">
+                <!-- Every provider spent at once is an ordinary end-of-week state, not an error, so it's stated plainly. -->
+                <p v-if="capacity.providers.length === 0" class="text-2xs text-muted">{{ t(`chat.chatCapacityRail.nothingRoomRightNow`) }}</p>
 
-                    <!-- One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two bar couldn't say which). -->
-                    <!-- Drawn row is decoration, the sentence below is the content (same split as UsageMeter): a bar means nothing to a screen reader. -->
-                    <TransitionGroup tag="div" class="flex flex-col gap-2.5" v-bind="motion">
-                        <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1" data-reveal>
-                            <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
-                                <span v-if="row.label !== undefined" class="col-span-3 min-w-0 truncate text-2xs text-muted">
-                                    {{ row.label }}
-                                </span>
-
-                                <ChatCapacityLane v-for="lane in row.lanes" :key="lane.kind" :lane="lane" :row="row" />
-
-                                <span v-if="row.lanes.length === 0" class="col-span-3 text-2xs text-subtle">
-                                    {{ row.note }}
-                                </span>
-                            </div>
-                            <span class="sr-only">{{ rowDetail(row, entry) }}</span>
+                <!-- One block per provider: the provider is the reader's actual choice here (accounts within it balance automatically). -->
+                <!-- A re-read that reorders providers slides them to their new places rather than jumping, so the one that moved is seen moving. -->
+                <TransitionGroup tag="div" class="flex flex-col gap-5" v-bind="motion">
+                    <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
+                        <div class="flex items-center gap-1.5" data-reveal>
+                            <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
+                            <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
+                            <!-- Count, never a mean: 30 idle plus one spent isn't "3% used", it's one account you can't use. -->
+                            <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
+                                >{{ entry.ready }}/{{ entry.total }}</span
+                            >
                         </div>
-                    </TransitionGroup>
 
-                    <!-- Never a silent cap: a partial list still says how many more have room. -->
-                    <span v-if="entry.hidden > 0" class="text-2xs text-subtle">{{
-                        t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
-                    }}</span>
-                </div>
-            </TransitionGroup>
+                        <!-- One lane per allowance (the 5-hour session and the week run out separately; one tightest-of-two bar couldn't say which). -->
+                        <!-- Drawn row is decoration, the sentence below is the content (same split as UsageMeter): a bar means nothing to a screen reader. -->
+                        <TransitionGroup tag="div" class="flex flex-col gap-2.5" v-bind="motion">
+                            <div v-for="row in entry.rows" :key="row.id" class="flex flex-col gap-1" data-reveal>
+                                <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1" aria-hidden="true">
+                                    <span v-if="row.label !== undefined" class="col-span-3 min-w-0 truncate text-2xs text-muted">
+                                        {{ row.label }}
+                                    </span>
 
-            <!-- Unmeasured providers collapsed to title row and grouped together -->
-            <div v-if="unmeasuredProviders.length > 0" class="flex flex-col gap-1.5">
-                <div v-for="entry in unmeasuredProviders" :key="entry.provider" data-reveal>
-                    <div class="flex items-center gap-1.5" aria-hidden="true">
-                        <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
-                        <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
-                        <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
-                            >{{ entry.ready }}/{{ entry.total }}</span
-                        >
-                        <span class="shrink-0 text-2xs text-subtle">{{ entry.rows[0]?.note }}</span>
-                    </div>
-                    <span class="sr-only">{{ entry.rows[0] ? rowDetail(entry.rows[0], entry) : entry.label }}</span>
-                    <span v-if="entry.hidden > 0" class="text-2xs text-subtle">{{
-                        t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
-                    }}</span>
-                </div>
-            </div>
+                                    <ChatCapacityLane v-for="lane in row.lanes" :key="lane.kind" :lane="lane" :row="row" />
 
-            <!-- Provider rows distinguish spent capacity from an unconnected provider. -->
-            <div v-if="capacity.out.length > 0 || capacity.blocked.length > 0" class="flex flex-col gap-1 border-t border-line pt-3" data-reveal>
-                <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`chat.chatCapacityRail.unavailable`) }}</span>
-                <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2">
-                    <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ entry.label }}</span>
-                    <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
-                </div>
-                <!-- Counted, not listed, one line per condition, shaped like the rows above it. Which accounts, the provider's
-                     own words and the fix ride the hover: this rail says what can't run, the Agent tab is where it's fixed. -->
-                <div v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="blockedTip(entry)">
-                    <div class="flex items-baseline gap-2" aria-hidden="true">
-                        <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{
-                            t(`chat.chatCapacityRail.cantServe`, { count: entry.count })
+                                    <span v-if="row.lanes.length === 0" class="col-span-3 text-2xs text-subtle">
+                                        {{ row.note }}
+                                    </span>
+                                </div>
+                                <span class="sr-only">{{ rowDetail(row, entry) }}</span>
+                            </div>
+                        </TransitionGroup>
+
+                        <!-- Never a silent cap: a partial list still says how many more have room. -->
+                        <span v-if="entry.hidden > 0" class="text-2xs text-subtle">{{
+                            t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
                         }}</span>
-                        <span class="shrink-0 text-2xs text-warning">{{ entry.reason }}</span>
                     </div>
-                    <span class="sr-only"
-                        >{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }} · {{ entry.reason }} ·
-                        {{ blockedDetail(entry) }}</span
-                    >
+                </TransitionGroup>
+
+                <!-- Unmeasured providers collapsed to title row and grouped together -->
+                <div v-if="unmeasuredProviders.length > 0" class="flex flex-col gap-1.5">
+                    <div v-for="entry in unmeasuredProviders" :key="entry.provider" data-reveal>
+                        <div class="flex items-center gap-1.5" aria-hidden="true">
+                            <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
+                            <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
+                            <span v-if="entry.total > 1" class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="countDetail(entry)"
+                                >{{ entry.ready }}/{{ entry.total }}</span
+                            >
+                            <span class="shrink-0 text-2xs text-subtle">{{ entry.rows[0]?.note }}</span>
+                        </div>
+                        <span class="sr-only">{{ entry.rows[0] ? rowDetail(entry.rows[0], entry) : entry.label }}</span>
+                        <span v-if="entry.hidden > 0" class="text-2xs text-subtle">{{
+                            t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
+                        }}</span>
+                    </div>
+                </div>
+
+                <!-- Provider rows distinguish spent capacity from an unconnected provider. -->
+                <div v-if="capacity.out.length > 0 || capacity.blocked.length > 0" class="flex flex-col gap-1 border-t border-line pt-3" data-reveal>
+                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`chat.chatCapacityRail.unavailable`) }}</span>
+                    <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2">
+                        <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ entry.label }}</span>
+                        <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
+                    </div>
+                    <!-- Counted, not listed, one line per condition, shaped like the rows above it. Which accounts, the provider's
+                         own words and the fix ride the hover: this rail says what can't run, the Agent tab is where it's fixed. -->
+                    <div v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="blockedTip(entry)">
+                        <div class="flex items-baseline gap-2" aria-hidden="true">
+                            <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{
+                                t(`chat.chatCapacityRail.cantServe`, { count: entry.count })
+                            }}</span>
+                            <span class="shrink-0 text-2xs text-warning">{{ entry.reason }}</span>
+                        </div>
+                        <span class="sr-only"
+                            >{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }} · {{ entry.reason }} ·
+                            {{ blockedDetail(entry) }}</span
+                        >
+                    </div>
                 </div>
             </div>
-        </div>
+        </Await>
     </section>
 </template>

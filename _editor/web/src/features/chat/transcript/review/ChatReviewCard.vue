@@ -96,7 +96,7 @@ const draftFix = (findings: readonly ReviewFinding[]): void => {
                     >
                         <Icon
                             :name="expanded.has(index) ? `chevron-down` : `chevron-right`"
-                            class="mt-0.5 shrink-0 text-3xs text-subtle"
+                            class="shrink-0 text-3xs text-subtle"
                             :class="{ invisible: detailOf(finding) === undefined }"
                         />
                         <span class="min-w-0" :class="finding.outcome === undefined ? `text-content` : `text-subtle`">

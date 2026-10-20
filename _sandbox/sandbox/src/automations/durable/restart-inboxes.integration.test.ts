@@ -11,6 +11,8 @@ import { WEBCHAT_PROVIDER } from "../../webchat/webchat-config.js";
 import { listenerInboxDocument, workspaceInboxDocument } from "./inbox-store.js";
 import { dispatchListenerMessage } from "../listeners.js";
 import { answeringWake, bootAutomations, daemonOn, hangingWake } from "./restart.testing.js";
+import { automationInboxesInFlight, interruptedFiresInFlight } from "../fire-resume.js";
+import { readKinds, RESUMES } from "../../seams/restart/in-flight.testing.js";
 import { automationIdle } from "../scheduler.js";
 import { dispatchWorkspaceEvent } from "../workspace-events.js";
 
@@ -36,7 +38,7 @@ const said = (id: string, channelId: string, content: string): ListenerMessage =
     timestamp: "2026-10-19T00:00:00.000Z",
 });
 
-const WORDS = ["first", "second", "third"];
+const WORDS = ["first", "second", "third", "fourth"];
 const wordOf = (prompt: string): string => WORDS.find((word) => prompt.includes(`"content":"${word}"`)) ?? "";
 
 test("channel messages waiting behind a running fire or in their debounce are answered once each after a restart", async () => {
@@ -70,6 +72,30 @@ test("channel messages waiting behind a running fire or in their debounce are an
     await waitFor(async () => expect(await replies("c2")).toEqual(["answer:third"]), SETTLES);
     expect(waitingMessages(root)).toEqual([]);
     expect(await after.services.turnJournal.list()).toEqual([]);
+});
+
+// What the boot replays is what it read before the gate opened: a message this daemon takes in while the replay runs is
+// its own to fire, never the replay's, so it is answered once. (Before 2026-10-20 a set of the ids each daemon carried kept
+// the replay off it.)
+test("a message that arrives after the boot read the inboxes is answered once, by its own fire, beside the replayed ones", async () => {
+    const root = mkdtempSync(join(tmpdir(), "restart-inbox-"));
+    const before = daemonOn(root, hangingWake([]));
+    await before.services.automations.upsert(automationConfig("desk", { trigger: { kind: "listener", provider: WEBCHAT_PROVIDER } }));
+    await dispatchListenerMessage(before.services, said("m3", "c2", "third"), 60_000);
+    expect(waitingMessages(root)).toEqual(["m3"]);
+    before.crash();
+
+    const ran: AgentTurn[] = [];
+    const after = daemonOn(root, answeringWake(ran, (prompt) => `answer:${wordOf(prompt)}`));
+    const left = await readKinds(after.services, [interruptedFiresInFlight, automationInboxesInFlight]);
+    await dispatchListenerMessage(after.services, said("m4", "c3", "fourth"), 5);
+    for (const work of left) {
+        await work.recover(RESUMES);
+    }
+    await waitFor(() => expect(ran.map((turn) => wordOf(turn.prompt)).toSorted()).toEqual(["fourth", "third"]), SETTLES);
+    await automationIdle("desk", after.services);
+    expect(ran).toHaveLength(2);
+    expect(waitingMessages(root)).toEqual([]);
 });
 
 const settled = (agentId: string): WorkspaceEvent => ({

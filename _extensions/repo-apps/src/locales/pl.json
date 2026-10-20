@@ -118,8 +118,8 @@
             "close": "Zamknij",
             "reach": "Wszystko, do czego sięga przez swoje zależności, i wszystko, na co może wpłynąć jego zmiana.",
             "lookInside": "Zajrzyj do środka",
-            "declares": "Deklaruje ({count})",
-            "declaredBy": "Deklarowany przez ({count})"
+            "declares": "Deklaruje",
+            "declaredBy": "Deklarowany przez"
         },
         "inside": {
             "declared": "Katalogi ułożone w warstwach z jego layers.json, najniższa na dole. Moduł może importować własną warstwę i każdą niższą.",

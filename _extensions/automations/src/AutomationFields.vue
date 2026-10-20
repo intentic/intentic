@@ -5,15 +5,16 @@ import { canonicalHarness, loopLabel } from "@intentic/sandbox-contract/models/a
 import { WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
 import {
     Button,
-    ui,
     formatDateTime,
     Icon,
     type IconName,
     Picker,
     type PickerOption,
     ProseField,
+    SectionHeader,
     SegmentedControl,
     ToggleSwitch,
+    ui,
     vAction,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
@@ -530,7 +531,7 @@ const setProvider = (provider: string): void => {
              The note is not, so an edit keeps the section for it alone. -->
         <section class="flex flex-col gap-2 pb-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">{{ nameLocked ? t(`automationFields.note`) : t(`automationFields.name`) }}</span>
+                <SectionHeader :label="nameLocked ? t(`automationFields.note`) : t(`automationFields.name`)" />
                 <span class="text-2xs text-subtle">{{ t(`automationFields.howYoullFindLater`) }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
@@ -565,7 +566,7 @@ const setProvider = (provider: string): void => {
         <!-- WHEN -->
         <section class="flex flex-col gap-3 py-4 first:pt-0 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">{{ t(`automationFields.when`) }}</span>
+                <SectionHeader :label="t(`automationFields.when`)" />
                 <span class="text-2xs text-subtle">{{ t(`automationFields.whatWakesAgent`) }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
@@ -900,7 +901,7 @@ const setProvider = (provider: string): void => {
 
                 <!-- CI has no held-open gateway: its events arrive by webhook, or by polling if that couldn't register. -->
                 <p v-if="isCi && delivery" class="flex items-start gap-1.5 text-xs" :class="DELIVERY_TONE[delivery.state]">
-                    <Icon :name="DELIVERY_ICON[delivery.state]" class="mt-0.5 shrink-0 text-2xs" />
+                    <Icon :name="DELIVERY_ICON[delivery.state]" class="shrink-0 text-2xs" />
                     <span>
                         {{ delivery.summary }}
                         <span v-if="delivery.detail" class="mt-1 block text-2xs text-subtle">{{ delivery.detail }}</span>
@@ -941,7 +942,7 @@ const setProvider = (provider: string): void => {
         <!-- IF: what decides, with no model, whether a fire goes ahead. -->
         <section class="flex flex-col gap-3 py-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">{{ t(`automationFields.if`) }}</span>
+                <SectionHeader :label="t(`automationFields.if`)" />
                 <span class="text-2xs text-subtle">{{ t(`automationFields.whatHasToBeTrue`) }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">
@@ -1097,7 +1098,7 @@ const setProvider = (provider: string): void => {
                         <pre class="max-h-32 overflow-auto font-mono text-2xs break-words whitespace-pre-wrap text-content">{{ shownCheck.result.saw }}</pre>
                     </div>
                     <p v-else-if="shownCheck !== undefined" class="flex items-start gap-1.5 text-xs text-danger">
-                        <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs" />
+                        <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
                         {{ shownCheck.error }}
                     </p>
                 </div>
@@ -1118,7 +1119,7 @@ const setProvider = (provider: string): void => {
         <!-- THEN -->
         <section class="flex flex-col gap-3 py-4 @2xl:flex-row @2xl:gap-6">
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">{{ t(`automationFields.then`) }}</span>
+                <SectionHeader :label="t(`automationFields.then`)" />
                 <span class="text-2xs text-subtle">{{ promptCaption }}</span>
                 <!-- Validation must agree with the trigger's payload shape. -->
                 <span v-if="recipeNote" class="mt-1 text-2xs text-subtle">{{ t(`automationFields.starter`, { recipeNote }) }}</span>
@@ -1177,7 +1178,7 @@ const setProvider = (provider: string): void => {
         <section class="flex flex-col gap-3 pt-4 @2xl:flex-row @2xl:gap-6">
             <!-- “How” distinguishes the agent's behavior from where it runs. -->
             <div class="flex flex-col gap-0.5 @2xl:w-48 @2xl:shrink-0">
-                <span :class="ui.sectionLabel()">{{ t(`automationFields.how`) }}</span>
+                <SectionHeader :label="t(`automationFields.how`)" />
                 <span class="text-2xs text-subtle">{{ t(`automationFields.whoRunsWhatPays`) }}</span>
             </div>
             <div class="flex min-w-0 flex-1 flex-col gap-3">

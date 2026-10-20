@@ -11,7 +11,9 @@ import type { Services } from "../composition.js";
 import { environmentSourcesOf } from "../environment-composers.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { readEnvironmentContents } from "./contents.js";
-import { customPath, proposalPath } from "./environment.js";
+import { proposalPath } from "./environment.js";
+import { composeEnvironment, customPath } from "./overlay.js";
+import { fileRuntimeInstallsStore } from "./runtime-installs.js";
 import { clearVersionCache } from "./version-probe.js";
 import { PROVIDER_MODULES } from "../runtimes/runtime-table.js";
 
@@ -58,6 +60,8 @@ const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Se
         }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: mkdtempSync(join(tmpdir(), "contents-")) }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile, write: writeWorkspaceFile, remove: removeWorkspacePath }),
+        // Composing keeps a record of each overlay, which is how a block is known to be in the running build.
+        runtimeInstalls: fileRuntimeInstallsStore(join(mkdtempSync(join(tmpdir(), "contents-ledger-")), "runtime-installs.json")),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
         authRoot: mkdtempSync(join(tmpdir(), "contents-auth-")),
@@ -97,9 +101,28 @@ test("groups what the owner approved, names it, and reads its version off the to
     expect(present?.detail?.length ?? 0).toBeGreaterThan(present?.purpose?.length ?? 0);
     expect(present?.commands).toBe("RUN echo pretend-install && node --version");
 
-    // Derived from the probe, not a hash comparison, so "after-rebuild" is per-item, not per-card.
+    // A stock container wanting this overlay waits for a rebuild, and the block whose command nothing answers is what waits.
     expect(custom[1]?.state).toBe("after-rebuild");
     expect(custom[1]?.tools).toEqual([]);
+});
+
+// The same container after the rebuild that carried both blocks. A block counted as waiting whenever its command did not
+// answer, a tool off PATH waited forever under a card that said nothing was pending, and the card drew a sentence for
+// that impossible state (2026-10). Waiting now needs a rebuild to be pending, and the running build not to carry it.
+test("a block the running build carries is active, however its command answers, and only a pending block waits", async () => {
+    clearVersionCache();
+    const before = stubServices();
+    await writeWorkspaceFile(customPath(before), CUSTOM);
+    const built = (await composeEnvironment(before))!;
+    const rebuilt = { ...stubServices([], built.hash), workspace: before.workspace, runtimeInstalls: before.runtimeInstalls };
+
+    const states = async (): Promise<Record<string, string>> =>
+        Object.fromEntries((await readEnvironmentContents(rebuilt)).items.filter((item) => item.origin === "custom").map((item) => [item.name, item.state]));
+    expect(await states()).toEqual({ "Node tools": "active", "Absent tool": "active" });
+
+    // Another block approved since: only it waits, while what the build carries stays active.
+    await writeWorkspaceFile(customPath(rebuilt), `${CUSTOM}\n# ---- later-tool ----\nRUN apt-get install -y another-missing-command-7q\n`);
+    expect(await states()).toEqual({ "Node tools": "active", "Absent tool": "active", "Later tool": "after-rebuild" });
 });
 
 test("a proposal's new blocks are marked as the decision the owner has not made yet", async () => {

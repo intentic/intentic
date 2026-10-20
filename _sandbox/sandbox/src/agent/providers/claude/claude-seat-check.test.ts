@@ -3,7 +3,7 @@ import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/provide
 import { unstubbed } from "@intentic/testing";
 import type { ClaudeStore, StoredAccount } from "./claude-credentials.js";
 import { claudeSeatProbe, FIRST_RECHECK_MS, LONGEST_RECHECK_MS, type SeatProbeFetch } from "./claude-seat-check.js";
-import { BACK_ON, memoryRefusals, memorySeats, scriptedSeatCheck, STILL_OFF } from "./claude-seat-check.testing.js";
+import { BACK_ON, seededRefusals, memorySeats, scriptedSeatCheck, STILL_OFF } from "./claude-seat-check.testing.js";
 
 // The way back for a seat mark: the probe's reading of the provider's answer, and the schedule that rations it. What
 // planning does with the answer is blocked-account.test.ts's; the whole path is agent.routes'.
@@ -82,21 +82,21 @@ describe("the schedule", () => {
 
     test("an answer lifts the mark, and an entitlement refusal filed for the account with it", async () => {
         const seats = marked();
-        const refusal: ProviderRefusal = { at: T0, kind: "entitlement", message: REFUSAL_TEXT, account: "a" };
-        const refusals = { claude: refusal };
-        const { check } = scriptedSeatCheck({ seats: memorySeats(seats), refusals: memoryRefusals(refusals), answer: () => BACK_ON, now: () => T0 + FIRST_RECHECK_MS });
+        const refusal: ProviderRefusal = { at: Date.now(), kind: "entitlement", message: REFUSAL_TEXT, account: "a" };
+        const refusals = seededRefusals({ claude: [refusal] });
+        const { check } = scriptedSeatCheck({ seats: memorySeats(seats), refusals, answer: () => BACK_ON, now: () => T0 + FIRST_RECHECK_MS });
 
         expect(await check.recheck("a")).toBe(true);
-        expect([Object.keys(seats), Object.keys(refusals)]).toEqual([[], []]);
+        expect([Object.keys(seats), await refusals.onFile()]).toEqual([[], {}]);
     });
 
     // A one-token answer on the smallest model says nothing about a pool that ran out.
     test("an answer leaves a spent account's limit refusal standing", async () => {
-        const refusals = { claude: { at: T0, kind: "limit", message: "usage limit reached", account: "a" } satisfies ProviderRefusal };
-        const { check } = scriptedSeatCheck({ seats: memorySeats(marked()), refusals: memoryRefusals(refusals), answer: () => BACK_ON, now: () => T0 + FIRST_RECHECK_MS });
+        const refusals = seededRefusals({ claude: [{ at: Date.now(), kind: "limit", message: "usage limit reached", account: "a" }] });
+        const { check } = scriptedSeatCheck({ seats: memorySeats(marked()), refusals, answer: () => BACK_ON, now: () => T0 + FIRST_RECHECK_MS });
 
         expect(await check.recheck("a")).toBe(true);
-        expect(Object.keys(refusals)).toEqual(["claude"]);
+        expect(Object.keys(await refusals.onFile())).toEqual(["claude"]);
     });
 
     test("a person's pick asks at once, and callers arriving together share one probe", async () => {

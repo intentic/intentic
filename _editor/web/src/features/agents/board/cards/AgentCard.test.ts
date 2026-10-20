@@ -739,6 +739,8 @@ const stranded = (over: Partial<FleetAgent> = {}): FleetAgent => ({
     ...over,
 });
 const sendAgainButton = (el: HTMLElement): HTMLButtonElement | undefined => textButton(el, `Send again`);
+// The re-run the sandbox derives for a stranded turn whose answer is to go again at its reset (AgentSummary.next).
+const resends = (agent: FleetAgent): FleetAgent => ({ ...agent, next: { kind: `rerun`, at: (agent.limitResetsAt ?? 0) * 1000 } });
 
 // It takes the drill-in's seat in the summary row: that drill-in is "Open chat", where a click on the card goes anyway.
 it(`offers Send again on a stranded turn nothing is booked for, in the drill-in's seat`, () => {
@@ -751,14 +753,14 @@ it(`offers Send again on a stranded turn nothing is booked for, in the drill-in'
 // witty-maple-9dtg: booked to go again at the reset, the card still offered to send it now, beside a corner saying it
 // would go by itself and a hover saying no press was needed.
 it(`offers no Send again once a resend is booked, and says when it goes`, () => {
-    const card = mount(stranded({ limitScheduled: true }));
+    const card = mount(resends(stranded()));
     expect(sendAgainButton(card)).toBeUndefined();
     expect(card.textContent).toContain(`resends in 40m`);
 });
 
 // A booked move goes on the resume pass's next beat, so the refused account's reset is not when anything happens.
 it(`names where a booked move is taking the turn, not the refused account's reset`, () => {
-    const card = mount(stranded({ limitScheduled: true, limitMoving: `Work` }));
+    const card = mount(stranded({ next: { kind: `rerun`, at: Date.now(), onto: `Work` } }));
     expect(sendAgainButton(card)).toBeUndefined();
     expect(card.textContent).toContain(`moving to Work`);
     expect(card.textContent).not.toContain(`resends in`);
@@ -777,7 +779,7 @@ it(`withholds Send again in the archive and on another sandbox's card`, () => {
 
 // ONE CLOCK PER CORNER. A watch firing into a shut window runs nothing, so the reset is the next moment the card moves.
 it(`keeps the limit's clock over a watch's, the watch's coming back once the limit has had its say`, () => {
-    const card = mount(watching(stranded({ limitScheduled: true })));
+    const card = mount(watching(resends(stranded())));
     expect(card.textContent).toContain(`resends in 40m`);
     expect(card.textContent).not.toContain(`pnpm verify gate`);
 });

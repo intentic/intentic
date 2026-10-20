@@ -53,7 +53,8 @@ export interface RuntimeInstallsStore {
     readonly settle: (drafts: readonly { readonly tool: string; readonly hash: string }[], at: number) => Promise<void>;
     readonly unsettle: (tool: string, hash: string) => Promise<void>;
     // Remembers one composed overlay (environment.ts composeEnvironment), so the overlay a container was built from can
-    // be read back by its hash after newer ones replaced it on disk. The same hash again keeps its first record.
+    // be read back by its hash after newer ones replaced it on disk. The same hash again keeps when it was first composed,
+    // and takes the newest description of its blocks: one hash is one content, which a newer daemon may describe more fully.
     readonly recordComposition: (composition: EnvironmentComposition) => Promise<void>;
     // Remembers drafts the daemon wrote on its own, until they are answered or thrown away (drift-sweep.ts).
     readonly offer: (offers: readonly EnvironmentOffer[]) => Promise<void>;
@@ -148,13 +149,15 @@ export const fileRuntimeInstallsStore = (path: string): RuntimeInstallsStore => 
             await file.update((current) => ({ ...current, settled: (current.settled ?? []).filter((entry) => !answered(entry)) }));
         },
         recordComposition: async (composition) => {
-            if ((await file.read()).compositions?.some((entry) => entry.hash === composition.hash) === true) {
+            const described = JSON.stringify(composition.blocks);
+            const same = (entry: EnvironmentComposition): boolean => entry.hash === composition.hash && JSON.stringify(entry.blocks) === described;
+            if ((await file.read()).compositions?.some(same) === true) {
                 return;
             }
             await file.update((current) => {
                 const kept = current.compositions ?? [];
                 return kept.some((entry) => entry.hash === composition.hash)
-                    ? current
+                    ? { ...current, compositions: kept.map((entry) => (entry.hash === composition.hash ? { ...entry, blocks: composition.blocks } : entry)) }
                     : { ...current, compositions: [...kept, composition].slice(-COMPOSITIONS_KEPT) };
             });
         },

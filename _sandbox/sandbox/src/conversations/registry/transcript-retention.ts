@@ -39,7 +39,7 @@ const idle = (deps: TranscriptRetentionDeps, agent: AgentSummary): boolean =>
     (agent.queue?.items.length ?? 0) === 0 &&
     (agent.watches ?? []).length === 0 &&
     agent.unsentAt === undefined &&
-    agent.limitScheduled !== true;
+    agent.next === undefined;
 
 // Every conversation aged past the window with nothing in it still to do; a parent only once every child of it goes too.
 export const agedConversations = (deps: TranscriptRetentionDeps, now: number, maxAgeMs: number): string[] => {

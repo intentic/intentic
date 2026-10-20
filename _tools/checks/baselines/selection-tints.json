@@ -1,0 +1,6 @@
+{
+    "_editor/web/src/features/workspace/changes/ReviewPanel.vue": {
+        "count": 1,
+        "why": "the changes list's picked file; ReviewPanel is being redesigned on its own (async view state), so its tint moves to ui-row-select-on there rather than in a parallel edit"
+    }
+}

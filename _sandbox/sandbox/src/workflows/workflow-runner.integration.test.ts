@@ -12,7 +12,8 @@ import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
-import { abandonRun, openRun, resumeWorkflowExecution, runWorkflow, stopWorkflowRun, workflowRunning } from "./workflow-runner.js";
+import { abandonRun, openRun, runWorkflow, stopWorkflowRun, workflowRunning, workflowsInFlight } from "./workflow-runner.js";
+import { recoverKinds } from "../seams/restart/in-flight.testing.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
@@ -442,7 +443,7 @@ test("restart recovery gives a workflow-owned loop only to the workflow schedule
         1,
     );
 
-    await resumeWorkflowExecution(drivenBy(services, claiming(root, prompts)), { resume: true, asked: false });
+    await recoverKinds(drivenBy(services, claiming(root, prompts)), [workflowsInFlight], { resume: true, asked: false });
     await waitFor(async () => expect((await services.workflowRuns.get(opened.runId))?.state).toBe("done"), SETTLES);
 
     expect(prompts).toHaveLength(1);
@@ -506,7 +507,7 @@ test("a boot that resumes nothing settles a stranded workflow run and its loop s
     });
     await services.loops.start({ ...loopOf(conversationId) }, 1);
 
-    await resumeWorkflowExecution(drivenBy(services, claiming(root, prompts)), restartResume({ ownerAsked: true, storm: true, autoResumeOnRestart: true }));
+    await recoverKinds(drivenBy(services, claiming(root, prompts)), [workflowsInFlight], restartResume({ ownerAsked: true, storm: true, autoResumeOnRestart: true }));
 
     const run = await services.workflowRuns.get(opened.runId);
     expect(run?.state).toBe("stopped");
@@ -553,7 +554,7 @@ test("a step the daemon died under carries its loop on: same record, next round,
     const services = fakeServices(root);
     const prompts: string[] = [];
 
-    await resumeWorkflowExecution(drivenBy(services, claimingRound(root, prompts)), { resume: true, asked: false });
+    await recoverKinds(drivenBy(services, claimingRound(root, prompts)), [workflowsInFlight], { resume: true, asked: false });
     await waitFor(async () => expect((await services.workflowRuns.get(runId))?.state).toBe("done"), SETTLES);
 
     const run = await services.workflowRuns.get(runId);
@@ -572,7 +573,7 @@ test("a step the daemon died under keeps its spend ceiling: one already reached 
     const services = fakeServices(root);
     const prompts: string[] = [];
 
-    await resumeWorkflowExecution(drivenBy(services, claimingRound(root, prompts)), { resume: true, asked: false });
+    await recoverKinds(drivenBy(services, claimingRound(root, prompts)), [workflowsInFlight], { resume: true, asked: false });
     await waitFor(async () => expect((await services.workflowRuns.get(runId))?.state).not.toBe("running"), SETTLES);
 
     const run = await services.workflowRuns.get(runId);

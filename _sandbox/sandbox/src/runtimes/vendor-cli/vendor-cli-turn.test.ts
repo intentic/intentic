@@ -165,7 +165,7 @@ test("a turn refused as signed out marks the account for a new sign-in and says 
     const h = harness([account("a")], [{ kind: "error", code: "acp-auth-required", message: "Authentication required" }, { kind: "done" }]);
     const events = await run(h, turn());
     expect(h.written).toEqual([expect.objectContaining({ id: "a", refusedAt: expect.any(Number) })]);
-    expect(events[0]).toEqual({ kind: "error", message: expect.stringContaining("Sandbox ▸ Models") });
+    expect(events[0]).toEqual({ kind: "error", message: expect.stringContaining("Sandbox ▸ Models"), own: true });
 });
 
 test("every sign-in refused: the turn is refused before spawning, naming the new sign-in", async () => {

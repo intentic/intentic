@@ -2,9 +2,9 @@
 import { CopyButton } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { type FailureFactKey, failureDetails } from "../../../../models/conversations/transcript/providerFailure";
+import { type FailureFactKey, failureDetails } from "../../../../models/conversations/transcript/failureView";
 
-// Everything a failure row folded behind its one line (providerFailure.ts), opened under it: the provider's prose with
+// What a failure row keeps behind its one line (failureView.ts), opened under it: the provider's prose with
 // its paragraphs and links kept, the ids a support request asks for, each with its own copy, and the whole message to
 // copy word for word. Opened by a press rather than a hover, since what it holds is meant to be clicked and selected.
 
@@ -14,9 +14,9 @@ const t = useT();
 const details = computed(() => failureDetails(said));
 
 const FACT_LABELS = {
-    category: () => t(`chat.providerFailure.category`),
-    request: () => t(`chat.providerFailure.requestId`),
-    message: () => t(`chat.providerFailure.messageId`),
+    category: () => t(`chat.failure.category`),
+    request: () => t(`chat.failure.requestId`),
+    message: () => t(`chat.failure.messageId`),
 } as const satisfies Readonly<Record<FailureFactKey, () => string>>;
 const facts = computed(() => details.value.facts.map((fact) => ({ ...fact, label: FACT_LABELS[fact.key]() })));
 </script>
@@ -40,7 +40,7 @@ const facts = computed(() => details.value.facts.map((fact) => ({ ...fact, label
                     <CopyButton
                         v-if="fact.key !== `category`"
                         :text="fact.value"
-                        :aria-label="t(`chat.providerFailure.copyValue`, { name: fact.label })"
+                        :aria-label="t(`chat.failure.copyValue`, { name: fact.label })"
                     />
                 </dd>
             </template>
@@ -52,10 +52,10 @@ const facts = computed(() => details.value.facts.map((fact) => ({ ...fact, label
                 target="_blank"
                 rel="noopener noreferrer"
                 class="touch-target inline-flex items-center gap-1 text-link hover:underline"
-                >{{ t(`chat.providerFailure.learnMore`) }}<Icon name="external-link" class="text-2xs"
+                >{{ t(`chat.failure.learnMore`) }}<Icon name="external-link" class="text-2xs"
             /></a>
             <!-- The message as the provider sent it, ids and links in place: what a bug report or a support ticket wants. -->
-            <CopyButton :text="said" :label="t(`chat.providerFailure.copyDetails`)" class="ml-auto" />
+            <CopyButton :text="said" :label="t(`chat.failure.copyDetails`)" class="ml-auto" />
         </div>
     </div>
 </template>

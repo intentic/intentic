@@ -1,6 +1,7 @@
 import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
+import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import type { SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { SetupLadder } from "@intentic/sandbox-contract/models/model-setups";
 import { join } from "node:path";
@@ -18,9 +19,7 @@ import { localTolerantFetch } from "../../system/tls/local-tls.js";
 import { tellPlatform, withTrialTurn } from "../../trial/trial-turn.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
 import type { HeadroomService } from "../../usage/headroom.js";
-import { fileModelCooldownStore, modelCooldownsDocument, type ModelCooldownStore } from "../../usage/model-cooldowns.js";
 import { fileModelRefusalStore, modelRefusalsDocument, type ModelRefusalStore } from "../../usage/model-refusals.js";
-import type { ObservedLimitStore } from "../../usage/observed-limits.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { fileProviderRefusalStore, providerRefusalsDocument, type ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { fileRunOutStore, runOutsDocument, type RunOutStore } from "../../usage/run-outs.js";
@@ -29,7 +28,7 @@ import { type HarnessRequest, runAgent } from "../run/agent.js";
 import { judgeCommand, type JudgeFacts } from "../tools/command-judge.js";
 import type { AgentRequest, ContainerCredential } from "./agent-request.js";
 import type { ProviderCatalog, ProviderModule } from "./provider-module.js";
-import { providerCatalogsOf, providerReadiness } from "./provider-registry.js";
+import { providerAccountsOf, providerCatalogsOf, providerReadiness } from "./provider-registry.js";
 import type { CliProxyClient } from "./translator.js";
 
 // Model providers: their modules, catalogs and readiness, the runtimes' adapters, and what each account has left.
@@ -40,6 +39,9 @@ export interface ProvidersSlice {
     // needed, since it reaches every provider module and each reads its own stores: a caller that only wants the
     // answer would otherwise have to take the whole of Services to ask for it.
     readonly providerReadiness: () => Promise<Record<NativeProvider, boolean>>;
+    // One native provider's own connected accounts, through the door its module publishes, as on file (no re-measure);
+    // empty for a provider with no door. Composed here for the same reason as readiness: every door reads its own stores.
+    readonly providerAccounts: (provider: NativeProvider) => Promise<readonly OauthAccount[]>;
     // Every native provider's module and every runtime's adapter (runtimes/runtime-table.ts), reached through here so no
     // reader below the planner imports a runtime directory back.
     readonly providerModules: readonly ProviderModule<ProviderDeps>[];
@@ -85,12 +87,6 @@ export interface ProvidersSlice {
     readonly providerRefusals: ProviderRefusalStore;
     // Which models this sandbox was refused on, finer-grained than providerRefusals; the picker drops them.
     readonly modelRefusals: ModelRefusalStore;
-    // Which models every credential is benched on right now, and when each reopens; the picker marks them, since
-    // unlike a modelRefusal this one comes back on its own.
-    readonly modelCooldowns: ModelCooldownStore;
-    // What each account has run out of, per model, for a plan that publishes no allowance to poll: the refusal itself
-    // is the reading, and the only one Cursor ever gives.
-    readonly observedLimits: ObservedLimitStore;
     // When each provider's allowance last ran out, and under how many of this sandbox's agents: the rate beside the
     // figure left that a parent fanning out reads (usage/run-outs.ts).
     readonly runOuts: RunOutStore;
@@ -107,7 +103,6 @@ export interface ProvidersDeps extends Pick<
     | "authRoot"
     | "accountUsage"
     | "headroom"
-    | "observedLimits"
     | "acpConnections"
     | "acpAgent"
     | "piAgent"
@@ -132,7 +127,7 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
             syncing = undefined;
         });
     };
-    // The refusal and cooldown stores decide what a picker skips; each change they make is logged, through the finished
+    // The refusal stores decide what a picker skips; each change they make is logged, through the finished
     // services' logger, resolved when a line is written since this slice is built before it is handed back.
     const log = (fields: Record<string, unknown>, message: string): void => whole().logger.info(fields, message);
     return {
@@ -140,10 +135,10 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
         usage: fileUsageStore(join(historyRoot, usageLedgerDocument.path)),
         providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path), { log }),
         modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path), { log }),
-        modelCooldowns: fileModelCooldownStore(join(historyRoot, modelCooldownsDocument.path), { log }),
         runOuts: fileRunOutStore(join(historyRoot, runOutsDocument.path)),
         providerCatalogs: providerCatalogsOf(built.providerModules, whole),
         providerReadiness: () => providerReadiness(whole()),
+        providerAccounts: (provider) => providerAccountsOf(whole(), provider),
         judgeCommand: (execution, input, signal) => judgeCommand(whole(), execution, input, signal),
         endpointModels: createEndpointCatalog(join(built.authRoot, "endpoints"), localTolerantFetch, { onChanged: resyncTranslator }),
         // The Claude Code loop over these actors, which hold the children and background commands a turn starts. A turn

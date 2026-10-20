@@ -208,6 +208,34 @@ export const HostEnvironmentSchema = z.object({
 });
 export type HostEnvironment = z.infer<typeof HostEnvironmentSchema>;
 
+// HOW MUCH OF ONE COMPUTER ANSWERS RIGHT NOW (2026-10-20), read off its environments' own sockets: the one answer
+// /capabilities, the Devices board and a call's routing give about a machine. `online` while its native side answers
+// (the one named after the card, which owns the screen and every tool but `run_command`'s crossing), whatever its
+// distros do, since a distro asleep beside a live Windows is the ordinary state of a PC; `partly` while the native side
+// does not and another environment does (a call naming that side still reaches it); `offline` while nothing does. Before
+// this the card read the native side alone and the board any side, so one PC was offline on one screen and live on the
+// next (2026-10-13), and "partly" was worked out twice more. A list with no native side at all (a machine seen only
+// through a distro's sync) is online while anything of it answers.
+export type MachinePresence =
+    | { readonly kind: "online" }
+    | { readonly kind: "partly"; readonly awake: readonly string[] }
+    | { readonly kind: "offline" };
+
+export const machinePresence = (environments: readonly Pick<HostEnvironment, "key" | "online">[]): MachinePresence => {
+    const native = environments.find((environment) => environment.key === HOST_NATIVE_ENVIRONMENT);
+    const awake = environments
+        .filter((environment) => environment.key !== HOST_NATIVE_ENVIRONMENT && environment.online)
+        .map((environment) => environment.key)
+        .toSorted();
+    if (native?.online === true || (native === undefined && awake.length > 0)) {
+        return { kind: "online" };
+    }
+    return awake.length > 0 ? { kind: "partly", awake } : { kind: "offline" };
+};
+
+// An environment by the name a person and `run_command`'s `in` know it by: a distro by its WSL name, the rest by key.
+export const environmentName = (key: string): string => (key.startsWith("wsl:") ? key.slice("wsl:".length) : key);
+
 export const HostSummarySchema = z.object({
     // The capability id, the machine's name, and the prefix of its tools (mcp__<id>__run_command). On a per-connection
     // row (`hostConnections`) it is that connection's key instead, and `card` names the machine.

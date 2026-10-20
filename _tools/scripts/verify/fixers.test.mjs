@@ -1,15 +1,16 @@
-// Pins which crates a change set touches and which baselines a change may lower, since both run unasked before a land.
+// Pins which crates a change set touches, which baselines a change may lower, and which derived files it writes again,
+// since all of them run unasked wherever a land writes.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { doorRule } from "../../checks/doors.rules.mjs";
 import { CHECKS } from "../../checks/manifest.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { adoptedOf, allowanceOf, tightenedOf } from "../../checks/lib/ratchet.mjs";
-import { crates, fixChange, regenerateDaemonIndexes, regenerateLayerTables, tightenBaselines, touchedCrates } from "./fixers.mjs";
+import { crates, DERIVED, fixChange, tightenBaselines, touchedCrates, writeDerived } from "./fixers.mjs";
 import { touchesTables } from "../tools/layer-tables.mjs";
 
 test("a crate is touched only by a path inside it, and build output is never walked", () => {
@@ -37,36 +38,45 @@ test("a layers table is regenerated only for a layers.json or a README beside on
         assert.equal(touchesTables(root, "pkg/README.md"), true);
         assert.equal(touchesTables(root, "plain/README.md"), false);
         assert.equal(touchesTables(root, "pkg/src/a.ts"), false);
-        // Nothing in scope: the check is never started, even in a tree that lacks it.
-        assert.equal(regenerateLayerTables(root, ["plain/README.md"]), false);
-        assert.equal(regenerateLayerTables(root, ["pkg/layers.json"]), false);
+        // Nothing in scope runs nothing; in scope, a tree without the check has nothing to write.
+        assert.deepEqual(writeDerived(root, ["plain/README.md"]), []);
+        assert.deepEqual(writeDerived(root, ["pkg/layers.json"]), []);
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
 });
 
-test("the daemon's indexes are regenerated only for a daemon source, and count as written only when the writer says so", () => {
-    const root = mkdtempSync(join(tmpdir(), "indexes-"));
-    const writer = join(root, "_sandbox/sandbox/scripts/write-indexes.mjs");
-    const ranMarker = join(root, "ran");
+test("a derived file is written again only for its own sources, and counts only when its writer moved it", () => {
+    const root = mkdtempSync(join(tmpdir(), "derived-"));
+    const out = join(root, "_sandbox/sandbox/src/app-raw-routes.ts");
     try {
+        spawnSync("git", ["init", "-q"], { cwd: root });
         // No writer in the tree: nothing to run, whatever changed.
-        assert.equal(regenerateDaemonIndexes(root, ["_sandbox/sandbox/src/app.ts"]), false);
+        assert.deepEqual(writeDerived(root, ["_sandbox/sandbox/src/app.ts"]), []);
         mkdirSync(join(root, "_sandbox/sandbox/scripts"), { recursive: true });
-        const stub = (said) => writeFileSync(writer, `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(ranMarker)}, "");\nconsole.log(${JSON.stringify(said)});\n`);
-        stub("daemon indexes: wrote src/app-raw-routes.ts (1 documents, 0 steps, 1 raw route tables)");
-        assert.equal(regenerateDaemonIndexes(root, ["_sandbox/sandbox/README.md", "_shared/sandbox-contract/src/index.ts"]), false);
-        assert.throws(() => readFileSync(ranMarker), { code: "ENOENT" });
-        assert.equal(regenerateDaemonIndexes(root, ["_sandbox/sandbox/src/app.ts"]), true);
-        assert.equal(readFileSync(ranMarker, "utf8"), "");
-        stub("daemon indexes: current (1 documents, 0 steps, 1 raw route tables)");
-        assert.equal(regenerateDaemonIndexes(root, ["_sandbox/sandbox/src/app.ts"]), false);
+        mkdirSync(dirname(out), { recursive: true });
+        writeFileSync(join(root, "_sandbox/sandbox/scripts/write-indexes.mjs"), `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(out)}, "routes\\n");\n`);
+        assert.deepEqual(writeDerived(root, ["_sandbox/sandbox/README.md", "docs/a.md"]), []);
+        assert.throws(() => readFileSync(out), { code: "ENOENT" });
+        assert.deepEqual(writeDerived(root, ["_sandbox/sandbox/src/app.ts"]), ["daemon indexes"]);
+        assert.equal(readFileSync(out, "utf8"), "routes\n");
+        // Idempotent: the same sources write the same file, which is no move.
+        assert.deepEqual(writeDerived(root, ["_sandbox/sandbox/src/app.ts"]), []);
     } finally {
         rmSync(root, { recursive: true, force: true });
     }
 });
 
-test("every check that keeps a baseline says so in the manifest, so the fixers before a land can tighten it", () => {
+// The two halves of one declaration: .gitattributes keeps every land and rebase off a derived file, and DERIVED is what
+// writes it again. A marked file nothing writes would never reach a tree again; a written file left unmarked would be
+// merged as text, the conflict this exists to end (contract.lock.json, 21 refused lands in two weeks of October).
+test("every file .gitattributes marks derived has a writer, and every writer's file is marked", () => {
+    const root = repoRoot(import.meta.url);
+    const marked = spawnSync("git", ["ls-files", "-z", "--", ":(attr:merge=derived)"], { cwd: root, encoding: "utf8" }).stdout.split("\0").filter(Boolean);
+    assert.deepEqual(marked.toSorted(), DERIVED.flatMap((writer) => writer.writes).toSorted());
+});
+
+test("every check that keeps a baseline says so in the manifest, so the fixers where a land writes can tighten it", () => {
     const checks = join(repoRoot(import.meta.url), "_tools/checks");
     // A check keeps one by calling ratchet() itself, or by running a door rule that is ratcheted (lib/doors.mjs).
     const keeps = (source) =>

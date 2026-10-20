@@ -6,6 +6,8 @@ import { WebSocket } from "ws";
 import type { Services } from "../composition.js";
 import { PEER_DEFLATE } from "../http/peer-deflate.js";
 import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
+import { runningBuild } from "../environment/overlay.js";
+import { opt } from "../opt.js";
 import { version } from "../version.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 import { createRunnerService } from "./runner-service.js";
@@ -27,15 +29,17 @@ export const startRunnerLink = (services: Services, identity: RunnerIdentity): P
             const definitionToml = await settingsDefinition(services)
                 .then((definition) => emitDefinitionToml(definition))
                 .catch(() => undefined);
+            const build = runningBuild(services.config.sandbox);
             return {
                 type: "runner-hello",
                 token: identity.token,
                 version,
                 image: services.config.sandbox.image === "" ? "dev" : services.config.sandbox.image,
-                ...(services.config.sandbox.baseImage !== "" ? { baseImage: services.config.sandbox.baseImage } : {}),
-                ...(services.config.sandbox.channel !== "" ? { channel: services.config.sandbox.channel } : {}),
-                ...(services.config.sandbox.environmentHash !== "" ? { overlayHash: services.config.sandbox.environmentHash } : {}),
-                ...(definitionToml !== undefined ? { definitionToml } : {}),
+                ...opt("baseImage", build.base === "" ? undefined : build.base),
+                ...opt("baseDigest", build.baseDigest),
+                ...opt("channel", services.config.sandbox.channel === "" ? undefined : services.config.sandbox.channel),
+                ...opt("overlayHash", build.overlay),
+                ...opt("definitionToml", definitionToml),
             };
         },
         attach: (ws) => handler.upgrade(ws as Parameters<RPCHandler<object>["upgrade"]>[0]),

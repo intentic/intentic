@@ -1,4 +1,4 @@
-import type { PublicFile, PublishResult } from "@intentic/sandbox-contract/schemas/public";
+import type { PublishResult } from "@intentic/sandbox-contract/schemas/public";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
@@ -13,7 +13,7 @@ export function usePublic() {
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.readKey(`public.list`);
 
-    const { query, error } = api.sandbox.query({
+    const { query, loaded } = api.sandbox.query({
         queryKey,
         queryFn: () => api.sandbox.rpc.public.list(),
     });
@@ -30,15 +30,11 @@ export function usePublic() {
         void invalidate();
     };
 
-    const files = computed<PublicFile[]>(() => query.data.value?.files ?? []);
     return {
-        files,
         // Outbox address; absent when the sandbox has no tunnel, which also signals nothing can be published.
         url: computed(() => query.data.value?.url),
-        // Files actually reachable, not merely sitting in the directory.
-        servedCount: computed(() => files.value.filter((file) => file.blocked === undefined).length),
-        error,
-        isLoading: query.isLoading,
+        // The listing itself, for the view's <Await>: waiting while the sandbox wakes, never an empty outbox.
+        loaded,
         publish,
         unpublish,
     };

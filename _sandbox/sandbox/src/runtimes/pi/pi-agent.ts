@@ -23,9 +23,9 @@ import { turnCheckReports, turnChecksNote, turnChecksNotice } from "../../agent/
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { opt } from "../../opt.js";
-import { vendorFailureFrame, withStderrTail } from "../decorators/vendor-errors.js";
+import { withStderrTail } from "../decorators/vendor-errors.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
-import { createPiEventMapper, PI_FAILURES } from "./pi-events.js";
+import { createPiEventMapper } from "./pi-events.js";
 import { answerExtensionUi, type PiDialog } from "./pi-extension-ui.js";
 import { createPiHooks, type PiHooks } from "./pi-hooks.js";
 import type { PiEvent, PiLaunch, PiProcess, PiResponse, PiSpawn, PiStarted } from "./pi-rpc.js";
@@ -160,7 +160,7 @@ async function* sendPrompt(proc: PiProcess, stop: AbortSignal, prompt: PiCommand
         return false;
     }
     if (!accepted.success) {
-        yield vendorFailureFrame({ kind: "error", message: withStderrTail(`Pi rejected the prompt: ${accepted.error ?? "unknown error"}`, proc.stderrTail()) }, PI_FAILURES);
+        yield { kind: "error", message: withStderrTail(`Pi rejected the prompt: ${accepted.error ?? "unknown error"}`, proc.stderrTail()) };
         return false;
     }
     return true;
@@ -266,7 +266,7 @@ async function* runPiTurn(
         // it, so the next send resumes the conversation.
         sendAbort();
         proc.kill();
-        yield { kind: "error", message: `Pi timed out: ${clock.expiry()}. It was stopped; send again to retry.` };
+        yield { kind: "error", message: `Pi timed out: ${clock.expiry()}. It was stopped; send again to retry.`, own: true };
         return settled(true);
     } finally {
         state.clock = undefined;

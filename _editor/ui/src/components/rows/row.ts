@@ -15,6 +15,14 @@ export type RowTone = `default` | `danger` | `warning` | `success` | `info`;
 // squeezing the title into one word per line. A floor, not a size — with room the headline still takes the rest.
 // `facePad` is what the row pays when `#lead` draws a face instead of a glyph (FACE_SIZES.row, half again the
 // tier's `mark`): the extra box comes out of the row's own vertical padding, so a faced row is the same height.
+// THE HEADER IS THE TIER'S TOO (<SectionHeader>, which <RowGroup>, <Section> and <NavRail> draw): `heading` is the
+// label's size, `headingLine` the line's own spacing, `headingLabel` how the label fits it, `headingInset` how far it
+// sits in from the rows' card under it (none on a dialog or a card, which are the surface), and `headingGap` the room
+// between the header and what it heads. The list or section owns the last two, not the header: a header alone in a
+// toolbar or a label column is the line and nothing else. A view never states any of the three, which is what let a dozen views each
+// grow a count, a caption or a band behind their header before the header had one owner.
+// `floor` is the one height a settings group's rows share (<RowGroup equal-rows>): a floor, not the tallest row, so a
+// row that wraps a wide control is the only tall one rather than the reason every row is.
 /* A tier is read in one place rather than reassembled from five ternaries down a template. */
 export const ROW_TIERS = {
     comfortable: {
@@ -26,6 +34,12 @@ export const ROW_TIERS = {
         description: `text-xs`,
         headline: `basis-56`,
         mark: 28,
+        heading: `sm`,
+        headingLine: `gap-x-2.5 gap-y-1`,
+        headingLabel: `min-w-0`,
+        headingInset: `px-1`,
+        headingGap: `mb-2.5`,
+        floor: `md:*:min-h-16`,
     },
     compact: {
         pad: `px-4 py-2.5`,
@@ -36,9 +50,16 @@ export const ROW_TIERS = {
         description: `text-2xs`,
         headline: `basis-44`,
         mark: 22,
+        heading: `sm`,
+        headingLine: `gap-x-2.5 gap-y-1`,
+        headingLabel: `min-w-0`,
+        headingInset: `px-1`,
+        headingGap: `mb-2.5`,
+        floor: `md:*:min-h-14`,
     },
     // Lowest of the three on purpose: the nav rail is a fixed 16rem and its rows carry a chip at most, so a
-    // wrap there would be the tier reflowing a column that was never short of room.
+    // wrap there would be the tier reflowing a column that was never short of room. Its heading truncates for the same
+    // reason, and sits in by the rail rows' own inset.
     dense: {
         pad: `px-2.5 py-2`,
         facePad: `px-2.5 py-0.5`,
@@ -48,6 +69,12 @@ export const ROW_TIERS = {
         description: `text-2xs`,
         headline: `basis-24`,
         mark: 18,
+        heading: `xs`,
+        headingLine: `gap-x-2 gap-y-0.5`,
+        headingLabel: `min-w-0 truncate`,
+        headingInset: `pl-2 pr-1`,
+        headingGap: `mb-1`,
+        floor: `md:*:min-h-12`,
     },
 } as const satisfies Record<RowDensity, Record<string, string | number>>;
 
@@ -107,7 +134,7 @@ export const useRowDensity = (own: () => RowDensity | undefined): ComputedRef<Ro
 };
 
 // WHERE A ROW'S TEXT STARTS. A group on a surface of its own insets its rows by the tier's padding; a group on a dialog
-// draws no surface (dialogGround.ts), so its rows start where the dialog's own words do, and their hairlines run the
+// draws no surface (surfaceGround.ts), so its rows start where the dialog's own words do, and their hairlines run the
 // same width. Published by <RowGroup>; a row outside a group keeps its tier's inset.
 const ROW_FLUSH_INLINE: InjectionKey<boolean> = Symbol(`ui.row.flushInline`);
 

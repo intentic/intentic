@@ -9,6 +9,7 @@ import {
     Icon,
     type IconName,
     ResponsiveOverlay,
+    Section,
     toneWash,
     ui,
     useNarrow,
@@ -278,22 +279,23 @@ const HOUR_LINES = {
 
         <!-- The agenda: the same week as a list of days, for a pane too narrow for seven columns. -->
         <div v-if="narrow" class="flex flex-col gap-4">
-            <div v-if="lane.length > 0" class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel({ size: `xs` }, `px-1`)">{{ t(`calendar.throughTheDay`) }}</span>
-                <button
-                    v-for="bar in lane"
-                    :key="bar.key"
-                    type="button"
-                    class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs"
-                    :class="bar.paused ? SLOT_TONE.paused : SLOT_TONE.upcoming"
-                    @click="open($event, { kind: `bar`, key: bar.key })"
-                >
-                    <Icon name="repeat" class="shrink-0 text-2xs" />
-                    <span class="min-w-0 truncate font-medium">{{ bar.automation.id }}</span>
-                    <span class="min-w-0 truncate opacity-75">{{ cadence(bar) }}</span>
-                    <span class="ml-auto w-14 shrink-0"><RunStrip :runs="bar.automation.runs" /></span>
-                </button>
-            </div>
+            <Section v-if="lane.length > 0" :label="t(`calendar.throughTheDay`)" density="dense">
+                <div class="flex flex-col gap-1">
+                    <button
+                        v-for="bar in lane"
+                        :key="bar.key"
+                        type="button"
+                        class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs"
+                        :class="bar.paused ? SLOT_TONE.paused : SLOT_TONE.upcoming"
+                        @click="open($event, { kind: `bar`, key: bar.key })"
+                    >
+                        <Icon name="repeat" class="shrink-0 text-2xs" />
+                        <span class="min-w-0 truncate font-medium">{{ bar.automation.id }}</span>
+                        <span class="min-w-0 truncate opacity-75">{{ cadence(bar) }}</span>
+                        <span class="ml-auto w-14 shrink-0"><RunStrip :runs="bar.automation.runs" /></span>
+                    </button>
+                </div>
+            </Section>
             <section v-for="day in agenda" :key="day.day" class="flex flex-col gap-1">
                 <h3 class="px-1 text-2xs font-semibold" :class="day.today ? `text-link` : `text-subtle`">
                     {{ day.today ? `${t(`calendar.today`)} · ` : `` }}{{ dayFormat.format(day.day) }}

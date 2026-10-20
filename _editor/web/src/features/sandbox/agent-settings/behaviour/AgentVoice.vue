@@ -228,197 +228,202 @@ const voicesFailure = computed<NoticeModel | undefined>(() =>
 </script>
 
 <template>
-    <RowGroup data-setting="agent-voice" :label="t(`sandbox.agentVoice.group`)">
-        <Row icon="volume-up" :title="t(`sandbox.agentVoice.replies`)" :description="t(`sandbox.agentVoice.repliesNote`)">
-            <template #control>
-                <ToggleSwitch
-                    :model-value="voice.replies"
-                    :disabled="!ready"
-                    :aria-label="t(`sandbox.agentVoice.replies`)"
-                    @update:model-value="(value: boolean) => saveVoice({ ...voice, replies: value })"
-                />
-            </template>
-        </Row>
-
-        <!-- Off by default: a laptop's speakers without echo cancellation feed its own voice back as the person's. -->
-        <Row icon="microphone" :title="t(`sandbox.agentVoice.interrupt`)" :description="t(`sandbox.agentVoice.interruptNote`)">
-            <template #control>
-                <ToggleSwitch
-                    :model-value="voice.interrupt"
-                    :disabled="!ready"
-                    :aria-label="t(`sandbox.agentVoice.interrupt`)"
-                    @update:model-value="(value: boolean) => saveVoice({ ...voice, interrupt: value })"
-                />
-            </template>
-        </Row>
-
-        <Row icon="sliders-h" :title="t(`sandbox.agentVoice.speed`)" :description="t(`sandbox.agentVoice.speedNote`)">
-            <template #control>
-                <select
-                    class="ui-field-box ui-field-sm w-24"
-                    :aria-label="t(`sandbox.agentVoice.speed`)"
-                    :value="String(voice.speed)"
-                    :disabled="!ready"
-                    @change="setSpeed"
-                >
-                    <option v-for="speed in speeds" :key="speed.value" :value="speed.value">{{ speed.label }}</option>
-                </select>
-            </template>
-        </Row>
-
-        <!-- The name every device of this sandbox listens for, where a reader switched listening on (Settings ▸ Voice). -->
-        <Row icon="microphone" :title="t(`sandbox.agentVoice.wakeWord`)" :description="t(`sandbox.agentVoice.wakeWordNote`)">
-            <template #control>
-                <input
-                    type="text"
-                    autocomplete="off"
-                    spellcheck="false"
-                    maxlength="40"
-                    :aria-label="t(`sandbox.agentVoice.wakeWord`)"
-                    :aria-invalid="wakeInvalid"
-                    :class="ui.input({ size: `sm` }, `w-40`)"
-                    :value="wakeShown"
-                    :disabled="!ready"
-                    @input="onWakeInput"
-                    @change="commitWake"
-                />
-            </template>
-        </Row>
-        <RowNote v-if="wakeInvalid" icon="exclamation-triangle" tone="warning">{{ t(`sandbox.agentVoice.wakeWordInvalid`) }}</RowNote>
-        <RowNote v-else-if="wakeShort" icon="exclamation-triangle" tone="warning">{{ t(`sandbox.agentVoice.wakeWordShort`) }}</RowNote>
-
-        <!-- One language at a time: the picker shows what speaks it now, and the list under it every language given a voice of its own. -->
-        <Row
-            v-if="view !== undefined"
-            icon="globe"
-            :title="t(`sandbox.agentVoice.voiceFor`)"
-            :description="t(`sandbox.agentVoice.voiceForNote`)"
-            wide-control
-            indent
-        >
-            <template #control>
-                <div class="flex flex-wrap items-center gap-2">
-                    <select
-                        class="ui-field-box ui-field-sm w-36"
-                        :aria-label="t(`sandbox.agentVoice.language`)"
-                        :value="language"
-                        @change="setLanguage"
-                    >
-                        <option v-for="choice in languages" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
-                    </select>
-                    <select
-                        class="ui-field-box ui-field-sm w-60"
-                        :aria-label="t(`sandbox.agentVoice.voice`)"
-                        :value="picked"
+    <!-- Its sections stacked here at the page's rhythm, so whatever mounts it cannot leave two headers touching. -->
+    <div class="flex flex-col gap-6">
+        <RowGroup data-setting="agent-voice" :label="t(`sandbox.agentVoice.group`)">
+            <Row icon="volume-up" :title="t(`sandbox.agentVoice.replies`)" :description="t(`sandbox.agentVoice.repliesNote`)">
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="voice.replies"
                         :disabled="!ready"
-                        @change="setVoice"
+                        :aria-label="t(`sandbox.agentVoice.replies`)"
+                        @update:model-value="(value: boolean) => saveVoice({ ...voice, replies: value })"
+                    />
+                </template>
+            </Row>
+
+            <!-- Off by default: a laptop's speakers without echo cancellation feed its own voice back as the person's. -->
+            <Row icon="microphone" :title="t(`sandbox.agentVoice.interrupt`)" :description="t(`sandbox.agentVoice.interruptNote`)">
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="voice.interrupt"
+                        :disabled="!ready"
+                        :aria-label="t(`sandbox.agentVoice.interrupt`)"
+                        @update:model-value="(value: boolean) => saveVoice({ ...voice, interrupt: value })"
+                    />
+                </template>
+            </Row>
+
+            <Row icon="sliders-h" :title="t(`sandbox.agentVoice.speed`)" :description="t(`sandbox.agentVoice.speedNote`)">
+                <template #control>
+                    <select
+                        class="ui-field-box ui-field-sm w-24"
+                        :aria-label="t(`sandbox.agentVoice.speed`)"
+                        :value="String(voice.speed)"
+                        :disabled="!ready"
+                        @change="setSpeed"
                     >
-                        <option v-for="choice in voices" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                        <option v-for="speed in speeds" :key="speed.value" :value="speed.value">{{ speed.label }}</option>
                     </select>
-                    <button
-                        type="button"
-                        :class="ui.textButton({ tone: `quiet` }, `font-medium tabular-nums`)"
-                        :disabled="!canPreview"
-                        :aria-pressed="previewing"
-                        @click="togglePreview"
-                    >
-                        <Icon :name="previewWaiting ? `spinner` : previewing ? `stop` : `play`" :spin="previewWaiting" />{{ previewLabel }}
-                    </button>
-                </div>
-            </template>
-            <template v-if="picks.length > 0" #below>
-                <ul class="flex flex-col gap-0.5" :aria-label="t(`sandbox.agentVoice.picked`)">
-                    <li v-for="pick in picks" :key="pick.language" class="flex min-w-0 items-center gap-1.5 text-xs text-muted">
-                        <span class="min-w-0 truncate">{{
-                            t(`sandbox.agentVoice.override`, { language: pick.languageLabel, voice: pick.voiceLabel })
-                        }}</span>
+                </template>
+            </Row>
+
+            <!-- The name every device of this sandbox listens for, where a reader switched listening on (Settings ▸ Voice). -->
+            <Row icon="microphone" :title="t(`sandbox.agentVoice.wakeWord`)" :description="t(`sandbox.agentVoice.wakeWordNote`)">
+                <template #control>
+                    <input
+                        type="text"
+                        autocomplete="off"
+                        spellcheck="false"
+                        maxlength="40"
+                        :aria-label="t(`sandbox.agentVoice.wakeWord`)"
+                        :aria-invalid="wakeInvalid"
+                        :class="ui.input({ size: `sm` }, `w-40`)"
+                        :value="wakeShown"
+                        :disabled="!ready"
+                        @input="onWakeInput"
+                        @change="commitWake"
+                    />
+                </template>
+            </Row>
+            <RowNote v-if="wakeInvalid" icon="exclamation-triangle" tone="warning">{{ t(`sandbox.agentVoice.wakeWordInvalid`) }}</RowNote>
+            <RowNote v-else-if="wakeShort" icon="exclamation-triangle" tone="warning">{{ t(`sandbox.agentVoice.wakeWordShort`) }}</RowNote>
+
+            <!-- One language at a time: the picker shows what speaks it now, and the list under it every language given a voice of its own. -->
+            <Row
+                v-if="view !== undefined"
+                icon="globe"
+                :title="t(`sandbox.agentVoice.voiceFor`)"
+                :description="t(`sandbox.agentVoice.voiceForNote`)"
+                wide-control
+                indent
+            >
+                <template #control>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select
+                            class="ui-field-box ui-field-sm w-36"
+                            :aria-label="t(`sandbox.agentVoice.language`)"
+                            :value="language"
+                            @change="setLanguage"
+                        >
+                            <option v-for="choice in languages" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                        </select>
+                        <select
+                            class="ui-field-box ui-field-sm w-60"
+                            :aria-label="t(`sandbox.agentVoice.voice`)"
+                            :value="picked"
+                            :disabled="!ready"
+                            @change="setVoice"
+                        >
+                            <option v-for="choice in voices" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                        </select>
                         <button
                             type="button"
-                            :class="ui.iconButton({ size: `xs`, tone: `danger` })"
-                            :aria-label="t(`sandbox.agentVoice.removeOverride`, { language: pick.languageLabel })"
-                            v-tooltip.top="t(`ui.action.remove`)"
-                            :disabled="!ready"
-                            @click="removePick(pick.language)"
+                            :class="ui.textButton({ tone: `quiet` }, `font-medium tabular-nums`)"
+                            :disabled="!canPreview"
+                            :aria-pressed="previewing"
+                            @click="togglePreview"
                         >
-                            <Icon name="times" class="text-2xs" />
+                            <Icon :name="previewWaiting ? `spinner` : previewing ? `stop` : `play`" :spin="previewWaiting" />{{ previewLabel }}
                         </button>
-                    </li>
-                </ul>
-            </template>
-        </Row>
-        <RowNote v-if="previewNotice !== undefined" icon="exclamation-triangle" tone="warning">{{ previewNotice }}</RowNote>
-        <RowNote v-if="view?.provisioned === false" icon="exclamation-triangle" tone="warning">{{ t(`sandbox.agentVoice.unprovisioned`) }}</RowNote>
-        <RowNote v-if="voicesFailure !== undefined" variant="block"><Notice :of="voicesFailure" /></RowNote>
-        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
-    </RowGroup>
+                    </div>
+                </template>
+                <template v-if="picks.length > 0" #below>
+                    <ul class="flex flex-col gap-0.5" :aria-label="t(`sandbox.agentVoice.picked`)">
+                        <li v-for="pick in picks" :key="pick.language" class="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+                            <span class="min-w-0 truncate">{{
+                                t(`sandbox.agentVoice.override`, { language: pick.languageLabel, voice: pick.voiceLabel })
+                            }}</span>
+                            <button
+                                type="button"
+                                :class="ui.iconButton({ size: `xs`, tone: `danger` })"
+                                :aria-label="t(`sandbox.agentVoice.removeOverride`, { language: pick.languageLabel })"
+                                v-tooltip.top="t(`ui.action.remove`)"
+                                :disabled="!ready"
+                                @click="removePick(pick.language)"
+                            >
+                                <Icon name="times" class="text-2xs" />
+                            </button>
+                        </li>
+                    </ul>
+                </template>
+            </Row>
+            <RowNote v-if="previewNotice !== undefined" icon="exclamation-triangle" tone="warning">{{ previewNotice }}</RowNote>
+            <RowNote v-if="view?.provisioned === false" icon="exclamation-triangle" tone="warning">{{
+                t(`sandbox.agentVoice.unprovisioned`)
+            }}</RowNote>
+            <RowNote v-if="voicesFailure !== undefined" variant="block"><Notice :of="voicesFailure" /></RowNote>
+            <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
+        </RowGroup>
 
-    <!-- The owner's own account with a speech service: better voices, at the price of the words leaving the sandbox. -->
-    <RowGroup data-setting="agent-speech-provider" :label="t(`sandbox.agentVoice.providerGroup`)">
-        <Row icon="cloud" :title="t(`sandbox.agentVoice.provider`)" :description="t(`sandbox.agentVoice.providerNote`)">
-            <template #control>
-                <select
-                    class="ui-field-box ui-field-sm w-36"
-                    :aria-label="t(`sandbox.agentVoice.provider`)"
-                    :value="cloud?.provider ?? ``"
-                    :disabled="!ready"
-                    @change="setProvider"
-                >
-                    <option v-for="choice in providers" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
-                </select>
+        <!-- The owner's own account with a speech service: better voices, at the price of the words leaving the sandbox. -->
+        <RowGroup data-setting="agent-speech-provider" :label="t(`sandbox.agentVoice.providerGroup`)">
+            <Row icon="cloud" :title="t(`sandbox.agentVoice.provider`)" :description="t(`sandbox.agentVoice.providerNote`)">
+                <template #control>
+                    <select
+                        class="ui-field-box ui-field-sm w-36"
+                        :aria-label="t(`sandbox.agentVoice.provider`)"
+                        :value="cloud?.provider ?? ``"
+                        :disabled="!ready"
+                        @change="setProvider"
+                    >
+                        <option v-for="choice in providers" :key="choice.value" :value="choice.value">{{ choice.label }}</option>
+                    </select>
+                </template>
+            </Row>
+            <template v-if="cloud !== undefined">
+                <Row icon="key" :title="t(`sandbox.agentVoice.secret`)" :description="t(`sandbox.agentVoice.secretNote`)">
+                    <template #control>
+                        <input
+                            type="text"
+                            autocomplete="off"
+                            spellcheck="false"
+                            :list="secretList"
+                            :aria-label="t(`sandbox.agentVoice.secret`)"
+                            :class="ui.input({ size: `sm` }, `w-56 font-mono`)"
+                            :value="cloud.secret"
+                            :disabled="!ready"
+                            @change="commitSecret"
+                        />
+                        <datalist :id="secretList">
+                            <option v-for="name in secretNames" :key="name" :value="name" />
+                        </datalist>
+                    </template>
+                </Row>
+                <RowNote v-if="keyFound === true" icon="check-circle" tone="success">{{ t(`sandbox.agentVoice.keyFound`) }}</RowNote>
+                <RowNote v-else-if="keyFound === false" icon="exclamation-triangle" tone="warning">{{ t(`sandbox.agentVoice.keyMissing`) }}</RowNote>
+                <Row icon="cpu" :title="t(`sandbox.agentVoice.model`)" :description="t(`sandbox.agentVoice.modelNote`)">
+                    <template #control>
+                        <input
+                            type="text"
+                            autocomplete="off"
+                            spellcheck="false"
+                            :placeholder="t(`sandbox.agentVoice.modelPlaceholder`)"
+                            :aria-label="t(`sandbox.agentVoice.model`)"
+                            :class="ui.input({ size: `sm` }, `w-56 font-mono`)"
+                            :value="cloud.model"
+                            :disabled="!ready"
+                            @change="commitModel"
+                        />
+                    </template>
+                </Row>
+                <Row icon="waveform" :title="t(`sandbox.agentVoice.cloudVoice`)" :description="t(`sandbox.agentVoice.cloudVoiceNote`)">
+                    <template #control>
+                        <input
+                            type="text"
+                            autocomplete="off"
+                            spellcheck="false"
+                            :placeholder="t(`sandbox.agentVoice.cloudVoicePlaceholder`)"
+                            :aria-label="t(`sandbox.agentVoice.cloudVoice`)"
+                            :class="ui.input({ size: `sm` }, `w-56 font-mono`)"
+                            :value="cloud.voice"
+                            :disabled="!ready"
+                            @change="commitCloudVoice"
+                        />
+                    </template>
+                </Row>
+                <RowNote icon="info-circle">{{ t(`sandbox.agentVoice.sentTo`, { provider: PROVIDER_NAMES[cloud.provider] }) }}</RowNote>
             </template>
-        </Row>
-        <template v-if="cloud !== undefined">
-            <Row icon="key" :title="t(`sandbox.agentVoice.secret`)" :description="t(`sandbox.agentVoice.secretNote`)">
-                <template #control>
-                    <input
-                        type="text"
-                        autocomplete="off"
-                        spellcheck="false"
-                        :list="secretList"
-                        :aria-label="t(`sandbox.agentVoice.secret`)"
-                        :class="ui.input({ size: `sm` }, `w-56 font-mono`)"
-                        :value="cloud.secret"
-                        :disabled="!ready"
-                        @change="commitSecret"
-                    />
-                    <datalist :id="secretList">
-                        <option v-for="name in secretNames" :key="name" :value="name" />
-                    </datalist>
-                </template>
-            </Row>
-            <RowNote v-if="keyFound === true" icon="check-circle" tone="success">{{ t(`sandbox.agentVoice.keyFound`) }}</RowNote>
-            <RowNote v-else-if="keyFound === false" icon="exclamation-triangle" tone="warning">{{ t(`sandbox.agentVoice.keyMissing`) }}</RowNote>
-            <Row icon="cpu" :title="t(`sandbox.agentVoice.model`)" :description="t(`sandbox.agentVoice.modelNote`)">
-                <template #control>
-                    <input
-                        type="text"
-                        autocomplete="off"
-                        spellcheck="false"
-                        :placeholder="t(`sandbox.agentVoice.modelPlaceholder`)"
-                        :aria-label="t(`sandbox.agentVoice.model`)"
-                        :class="ui.input({ size: `sm` }, `w-56 font-mono`)"
-                        :value="cloud.model"
-                        :disabled="!ready"
-                        @change="commitModel"
-                    />
-                </template>
-            </Row>
-            <Row icon="waveform" :title="t(`sandbox.agentVoice.cloudVoice`)" :description="t(`sandbox.agentVoice.cloudVoiceNote`)">
-                <template #control>
-                    <input
-                        type="text"
-                        autocomplete="off"
-                        spellcheck="false"
-                        :placeholder="t(`sandbox.agentVoice.cloudVoicePlaceholder`)"
-                        :aria-label="t(`sandbox.agentVoice.cloudVoice`)"
-                        :class="ui.input({ size: `sm` }, `w-56 font-mono`)"
-                        :value="cloud.voice"
-                        :disabled="!ready"
-                        @change="commitCloudVoice"
-                    />
-                </template>
-            </Row>
-            <RowNote icon="info-circle">{{ t(`sandbox.agentVoice.sentTo`, { provider: PROVIDER_NAMES[cloud.provider] }) }}</RowNote>
-        </template>
-    </RowGroup>
+        </RowGroup>
+    </div>
 </template>

@@ -7,15 +7,15 @@ import type { SettingsPartSlug, SettingsSlug } from "./settingsNav";
 // does not pay for all of them (workbench/hub/lazySection.ts); the rest are warmed at idle once the open one has drawn.
 // Module scope, not setup: a stand-in made once keeps its landed chunk across the hub's remounts, so a section drawn
 // once draws at once from then on.
-const SettingsProfile = lazySection(() => import("./SettingsProfile.vue"));
-const SettingsBilling = lazySection(() => import("./SettingsBilling.vue"));
-const SettingsAppearance = lazySection(() => import("./SettingsAppearance.vue"));
-const SettingsNotifications = lazySection(() => import("./SettingsNotifications.vue"));
-const SettingsKeybindings = lazySection(() => import("./SettingsKeybindings.vue"));
-const SettingsTokens = lazySection(() => import("./SettingsTokens.vue"));
-const OrgConsole = lazySection(() => import("../organisations/OrgConsole.vue"));
-const SettingsVoice = lazySection(() => import("./SettingsVoice.vue"));
-const SettingsData = lazySection(() => import("./SettingsData.vue"));
+const SettingsProfile = lazySection(`SettingsProfile`, () => import("./SettingsProfile.vue"));
+const SettingsBilling = lazySection(`SettingsBilling`, () => import("./SettingsBilling.vue"));
+const SettingsAppearance = lazySection(`SettingsAppearance`, () => import("./SettingsAppearance.vue"));
+const SettingsNotifications = lazySection(`SettingsNotifications`, () => import("./SettingsNotifications.vue"));
+const SettingsKeybindings = lazySection(`SettingsKeybindings`, () => import("./SettingsKeybindings.vue"));
+const SettingsTokens = lazySection(`SettingsTokens`, () => import("./SettingsTokens.vue"));
+const OrgConsole = lazySection(`OrgConsole`, () => import("../organisations/OrgConsole.vue"));
+const SettingsVoice = lazySection(`SettingsVoice`, () => import("./SettingsVoice.vue"));
+const SettingsData = lazySection(`SettingsData`, () => import("./SettingsData.vue"));
 
 // The same, by the slug the index names each under: what the hub fetches ahead and warms. The template's chain is what
 // draws them.

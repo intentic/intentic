@@ -7,15 +7,17 @@ import {
     RunnerHelloSchema,
     type RunnerSummary,
 } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import { buildParity, type SandboxBuild } from "@intentic/sandbox-contract/state/sandbox-build";
 import type { ContractRouterClient } from "@orpc/contract";
 import { z } from "zod";
 import type { Services } from "../composition.js";
+import { runningBuild } from "../environment/overlay.js";
+import { opt } from "../opt.js";
 import type { PeerDoor } from "../peers/peer.js";
 import type { PeerHub } from "../peers/peer-hub.js";
 import { createPeerRoutes } from "../peers/peer-routes.js";
 import type { PeerStore } from "../peers/peer-store.js";
 import { parseDefinitionToml, settingsDefinition, settingsDrift } from "../definition/definition.js";
-import { runnerParity } from "./runner-parity.js";
 import { refreshRunnerFacts } from "./fleet-facts.js";
 import { runnerEnrollmentsDocument, runnerPairConsumedDocument } from "../peers/enrollment.js";
 
@@ -26,7 +28,7 @@ import { runnerEnrollmentsDocument, runnerPairConsumedDocument } from "../peers/
 export type RunnerClient = ContractRouterClient<typeof runnerContract>;
 // What a runner's hello asserts about its build and declared shape, kept beside the live socket for the parity card.
 // `definitionToml` is replaced in place after a successful settings push (runner.routes.ts).
-export type RunnerAnnounced = Pick<RunnerHello, "version" | "image" | "baseImage" | "channel" | "overlayHash" | "definitionToml">;
+export type RunnerAnnounced = Pick<RunnerHello, "version" | "image" | "baseImage" | "baseDigest" | "channel" | "overlayHash" | "definitionToml">;
 export type RunnerHub = PeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>;
 export type RunnerStore = PeerStore<{ readonly host?: string | undefined }>;
 
@@ -52,22 +54,34 @@ export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOp
     },
     hello: {
         schema: RunnerHelloSchema,
-        announced: ({ version, image, baseImage, channel, overlayHash, definitionToml }) => ({
+        announced: ({ version, image, baseImage, baseDigest, channel, overlayHash, definitionToml }) => ({
             version,
             image,
-            ...(baseImage !== undefined ? { baseImage } : {}),
-            ...(channel !== undefined ? { channel } : {}),
-            ...(overlayHash !== undefined ? { overlayHash } : {}),
-            ...(definitionToml !== undefined ? { definitionToml } : {}),
+            ...opt("baseImage", baseImage),
+            ...opt("baseDigest", baseDigest),
+            ...opt("channel", channel),
+            ...opt("overlayHash", overlayHash),
+            ...opt("definitionToml", definitionToml),
         }),
     },
     expired: "pairing expired or already used, mint a fresh one from the parent sandbox.",
 };
 
+// The build a runner's hello claims. A runner from before the hello named its base is its own image's base; "dev" is
+// what a runner started by hand, with no image named, says (runner-link.ts), which names no base at all.
+const announcedBuild = (announced: RunnerAnnounced | undefined): SandboxBuild | undefined =>
+    announced === undefined
+        ? undefined
+        : {
+              base: announced.baseImage ?? (announced.image === "dev" ? "" : announced.image),
+              ...opt("baseDigest", announced.baseDigest),
+              ...opt("overlay", announced.overlayHash),
+          };
+
 // One line per environment/settings difference, surfaced not enforced. Overlay drift needs a rebuild; settings drift
 // goes through the sync door. A bad claim costs its own line, not the list; undefined means never connected.
 const runnerDriftLines = (
-    services: Services,
+    parentBuild: SandboxBuild,
     parent: Awaited<ReturnType<typeof settingsDefinition>>,
     announced: RunnerAnnounced | undefined,
 ): NeedsAction[] | undefined => {
@@ -75,7 +89,7 @@ const runnerDriftLines = (
         return undefined;
     }
     const lines: NeedsAction[] = [];
-    const parentHash = services.config.sandbox.environmentHash;
+    const parentHash = parentBuild.overlay ?? "";
     const runnerHash = announced.overlayHash ?? "";
     if (parentHash !== runnerHash) {
         lines.push({
@@ -101,17 +115,16 @@ const runnerDriftLines = (
 // Every enrolled runner with whatever the hub knows right now; "enrolled but never connected" must read differently
 // from "connected but asleep".
 export const runnerSummaries = async (services: Services): Promise<RunnerSummary[]> => {
+    const runners = await services.runners.list();
+    if (runners.length === 0) {
+        return [];
+    }
     // Read once for the whole list, so every row's badge and drift lines are measured against the same build.
-    const parentBuild = {
-        image: services.config.sandbox.image,
-        baseImage: services.config.sandbox.baseImage,
-        channel: services.config.sandbox.channel,
-        overlayHash: services.config.sandbox.environmentHash,
-    };
+    const parentBuild = runningBuild(services.config.sandbox);
     const parent = await settingsDefinition(services);
-    return (await services.runners.list()).map((runner) => {
+    return runners.map((runner) => {
         const state = services.runnerHub.state(runner.id);
-        const drift = runnerDriftLines(services, parent, state.announced);
+        const drift = runnerDriftLines(parentBuild, parent, state.announced);
         return {
             id: runner.id,
             ...(runner.host !== undefined ? { host: runner.host } : {}),
@@ -126,7 +139,7 @@ export const runnerSummaries = async (services: Services): Promise<RunnerSummary
                   }),
             ...(state.facts === undefined ? {} : { facts: state.facts }),
             ...(state.lastSeen === undefined ? {} : { lastSeen: state.lastSeen }),
-            parity: runnerParity(parentBuild, state.announced),
+            parity: buildParity(parentBuild, announcedBuild(state.announced)),
             ...(drift !== undefined ? { drift } : {}),
         };
     });

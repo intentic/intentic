@@ -99,7 +99,6 @@
             "resends": "sendet erneut {limitBackAt}",
             "resendsIn": "sendet erneut in {limitBackAt}",
             "resendsShortly": "sendet gleich erneut",
-            "resendNotBooked": "„Send again“ ist gewählt, aber nichts ist geplant, das es von selbst sendet: Drücke „Send again“, sobald es zurück ist.",
             "closeAgent": "Agent schließen",
             "closeDropsUnsent": "Ungesendeter Text geht verloren",
             "closeKeepsRunning": "Zug läuft weiter",
@@ -337,7 +336,9 @@
             "landProcessStopped": "Der Git-Prozess des Arbeitsbereichs wurde beendet. Versuche erneut, die Arbeit dieses Agenten zu übernehmen.",
             "landTooManyPaths": "Diese Änderung enthält zu viele Dateipfade, um sie auf einmal zu übernehmen. Reduziere die Überschneidungen in deinem Arbeitsbereich und versuche es erneut.",
             "landOutputLimit": "Git hat mehr Informationen zurückgegeben, als der Arbeitsbereich verarbeiten konnte. Verkleinere die Änderung und versuche es erneut.",
-            "workspaceOverlap": "{count} Dateien in deinem Arbeitsbereich überschneiden sich mit der Arbeit dieses Agenten. Committe oder verwirf ihre Änderungen und versuche es erneut."
+            "workspaceOverlap": "{count} Dateien in deinem Arbeitsbereich überschneiden sich mit der Arbeit dieses Agenten. Committe oder verwirf ihre Änderungen und versuche es erneut.",
+            "unknownCommand": "Unbekannter Befehl",
+            "warned": "Warnung"
         },
         "agentsTile": {
             "countingEverySandbox": "Alle Sandboxes werden gezählt",
@@ -2238,6 +2239,30 @@
                 "goOn": "Sprich weiter…",
                 "listeningDetail": "Hört auf diesem Gerät auf „{word}“. Klicke, um eine Stunde zu pausieren."
             }
+        },
+        "failure": {
+            "access": "Der Anbieter hat dieses Konto abgelehnt: Sein Tarif oder seine Organisation erlaubt es nicht.",
+            "signedOut": "Der Anbieter akzeptiert die Anmeldung dieses Kontos nicht mehr.",
+            "outage": "Der Anbieter hat nicht geantwortet.",
+            "model": "Dieses Modell ist für dieses Konto nicht verfügbar.",
+            "contextFull": "Die Unterhaltung ist zu lang für dieses Modell.",
+            "update": "Die installierte Agent-Engine ist zu alt für dieses Modell.",
+            "flagged": "Die Schutzmechanismen des Modells haben diesen Durchgang markiert.",
+            "limit": "Das Nutzungslimit dieses Kontos ist erreicht.",
+            "privacy": "Der Datenschutzschild hat diesen Durchgang zurückgehalten, bevor etwas gesendet wurde.",
+            "held": "Die Sandbox hat diesen Durchgang zurückgehalten.",
+            "cutShort": "Der Agent hat aufgehört, bevor er fertig war.",
+            "command": "Der Agent hat dies als einen Befehl gelesen, den er nicht hat.",
+            "advisory": "Der Agent ist mit einer Warnung fertig geworden.",
+            "unclassified": "Der Agent ist bei einem Fehler stehen geblieben, den diese App nicht kennt.",
+            "details": "Details",
+            "hideDetails": "Details ausblenden",
+            "category": "Kategorie",
+            "requestId": "Anfrage-ID",
+            "messageId": "Nachrichten-ID",
+            "learnMore": "Mehr erfahren",
+            "copyDetails": "Details kopieren",
+            "copyValue": "{name} kopieren"
         }
     },
     "common": {
@@ -3175,8 +3200,6 @@
             "contents": "Inhalt",
             "decideFirst": "Genehmigen oder verwerfen Sie zuerst die Änderung oben, dann deckt ein Neubau beides ab.",
             "noRebuildHere": "Der Container dieser Sandbox wurde nicht vom Installer von intentic gestartet, deshalb kann er nicht von hier aus neu gebaut werden. Bauen Sie ihn dort neu, wo er läuft, nach dem Rezept unter „Rezept“.",
-            "nothingToRebuild": "Nichts Genehmigtes wartet auf einen Build, ein Neubau würde also nichts ändern. Wenn {names} trotzdem nicht funktioniert, lassen Sie einen Agenten die Ursache suchen.",
-            "nothingToRebuildDecide": "Noch wartet nichts Genehmigtes auf einen Build. Genehmigen Sie die Änderung oben, dann wird der Neubau hier angeboten.",
             "onlySandboxMaintainerDecide": "Nur ein Sandbox-Maintainer kann über Umgebungsänderungen entscheiden.",
             "onlySandboxOwnerApprove": "Nur der Eigentümer der Sandbox oder ein Maintainer kann diese Änderung genehmigen oder ablehnen.",
             "onlySandboxOwnerRebuild": "Nur der Eigentümer der Sandbox kann sie neu bauen.",
@@ -3794,7 +3817,6 @@
             "needMorePower": "Brauchen Sie mehr Leistung?",
             "noHourLimitNothing": ": keine Stundengrenze, nichts abgerechnet, und der einzige Ort, an dem Ihre GPU ist.",
             "ownDevice": "Ihrem eigenen Gerät",
-            "readingWhatSandboxReports": "Es wird gelesen, was diese Sandbox über sich selbst meldet…",
             "removeLogo": "Logo entfernen",
             "renameSandbox": "Sandbox umbenennen",
             "resources": "Ressourcen",
@@ -4680,7 +4702,6 @@
             "presetThisMonth": "Dieser Monat",
             "presetLastMonth": "Letzter Monat",
             "presetLast30": "Letzte 30 Tage",
-            "dayRecords": "{count} Eintrag | {count} Einträge",
             "target": "Ziel",
             "actorTokenShort": "Schlüssel „{label}“",
             "actorAgentShort": "Agent {id}",
@@ -6407,7 +6428,6 @@
             "alsoTerminalChats": "Auch Terminal, Hauptbaum-Chats",
             "command": "Befehl",
             "commit": "Committen",
-            "committingNow": "{repos} wird committet…",
             "conflicts": "Konflikte",
             "couldntReadChanges": "Änderungen ließen sich nicht lesen",
             "couldntReadRepo": "Dieses Repo ließ sich nicht lesen",

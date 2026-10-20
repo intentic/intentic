@@ -35,7 +35,7 @@ const everything: PersistedAgent = {
     profile: { provider: "codex", harness: "claude-code", model: "gpt-5", effort: "high", thinking: true, fast: false, account: "acct-2" },
     sessionId: "sess-9",
     compactedTurn: 7,
-    ending: { kind: "limited", failure: "spent", resetsAt: 1_900, held: true, scheduled: true, moving: "acct-3" },
+    ending: { kind: "limited", failure: "spent", resetsAt: 1_900, held: true },
     // `check` is no longer written (no check runs when a turn ends), but entries from before still carry it and read.
     unfinished: { at: 9, steps: { open: 2, total: 5, next: "wire it" }, check: "pnpm verify" },
     proof: { at: 10, verification: "failing", check: "pnpm test", unviewed: 2 },
@@ -74,7 +74,7 @@ describe("sqliteAgentsStore", () => {
         ["stopped", { kind: "stopped" }],
         ["a coded failure", { kind: "failed", failure: "boom", code: "provider-outage" }],
         ["an uncoded failure with no sentence", { kind: "failed" }],
-        ["a spent allowance nobody booked", { kind: "limited", held: false, scheduled: false }],
+        ["a spent allowance nobody held", { kind: "limited", held: false }],
     ] as const)("round-trips the %s ending", (_case, ending) => {
         const { store } = fresh();
         const entry = conversationEntry({ id: "one", ending });

@@ -13,7 +13,7 @@ import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract
 import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../providers/agent-commands.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
-import { contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "./error-frames.js";
+import { contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, safeguardFrame, trialRetryFrame } from "./frames/error-frames.js";
 import { isSafeguardRefusal, RefusalFork } from "./refusal-fork.js";
 import { InformationalLines } from "./informational.js";
 import { probeRoutedEndpoint, type RoutedEndpoint } from "../providers/routed-refusal.js";

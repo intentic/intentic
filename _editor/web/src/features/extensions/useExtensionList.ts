@@ -65,21 +65,8 @@ const refusedStateOf = (problems: readonly string[], uiState: ExtensionState, ba
 
 export function useExtensionList() {
     const queryClient = useQueryClient();
-    const {
-        extensions,
-        invalid,
-        pending,
-        setEnabled,
-        approve,
-        create,
-        remove,
-        clearDev,
-        checkUpdates,
-        updatesCheckedAt,
-        listedAt,
-        isLoading,
-        error,
-    } = useExtensions();
+    const { extensions, invalid, pending, setEnabled, approve, create, remove, clearDev, checkUpdates, updatesCheckedAt, listedAt, loaded, error } =
+        useExtensions();
     const { capabilities } = useCapabilities();
 
     // Removal empties three caches beyond the extension list: the capability grid loses the entries added from its
@@ -106,8 +93,8 @@ export function useExtensionList() {
     const updatedSinceLoaded = computed(() =>
         aheadOfHost.value
             ? extensions.value.filter((extension) => {
-                  const loaded = loadedCommits.value.get(extension.id);
-                  return extension.source === `installed` && extension.enabled && loaded !== undefined && loaded !== codeRevisionOf(extension);
+                  const running = loadedCommits.value.get(extension.id);
+                  return extension.source === `installed` && extension.enabled && running !== undefined && running !== codeRevisionOf(extension);
               })
             : [],
     );
@@ -171,7 +158,7 @@ export function useExtensionList() {
         updatesCheckedAt,
         updatedSinceLoaded,
         installedSinceLoaded,
-        isLoading,
+        loaded,
         error,
     };
 }

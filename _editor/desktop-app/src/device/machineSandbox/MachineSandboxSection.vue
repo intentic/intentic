@@ -79,14 +79,14 @@ const useCloud = (): void => {
 
 <template>
     <section v-if="record !== undefined" class="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-sm">
-        <header class="flex items-start gap-2.5">
-            <Icon v-if="underWay" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
-            <Icon v-else-if="state === `ready`" name="check-circle" class="mt-0.5 shrink-0 text-success" />
-            <Icon v-else-if="state === `signedOut`" name="box" class="mt-0.5 shrink-0 text-subtle" />
+        <header class="flex items-start gap-2.5 text-sm">
+            <Icon v-if="underWay" name="spinner" spin class="shrink-0 text-link" />
+            <Icon v-else-if="state === `ready`" name="check-circle" class="shrink-0 text-success" />
+            <Icon v-else-if="state === `signedOut`" name="box" class="shrink-0 text-subtle" />
             <!-- Asleep is the sandbox resting, not a fault: opening it wakes it. -->
-            <Icon v-else-if="state === `asleep`" name="moon" class="mt-0.5 shrink-0 text-subtle" />
-            <Icon v-else-if="waitsForPc" name="clock" class="mt-0.5 shrink-0 text-subtle" />
-            <Icon v-else name="exclamation-circle" class="mt-0.5 shrink-0" :class="state === `failed` || state === `gone` ? `text-danger` : `text-warning`" />
+            <Icon v-else-if="state === `asleep`" name="moon" class="shrink-0 text-subtle" />
+            <Icon v-else-if="waitsForPc" name="clock" class="shrink-0 text-subtle" />
+            <Icon v-else name="exclamation-circle" class="shrink-0" :class="state === `failed` || state === `gone` ? `text-danger` : `text-warning`" />
             <div class="min-w-0 flex-1">
                 <h2 class="flex flex-wrap items-baseline gap-x-2 text-sm leading-tight font-semibold">
                     <span>{{ t(`desktop.machineSandbox.title`) }}</span>

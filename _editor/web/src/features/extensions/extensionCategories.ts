@@ -8,12 +8,10 @@ import { t } from "@intentic/ui/i18n";
 export interface ExtensionSection {
     readonly id: string;
     readonly label: string;
-    /** Only where the heading alone would leave the reader guessing what put a row there. */
-    readonly caption?: string;
     readonly entries: readonly ExtensionEntry[];
 }
 
-const categories = (): readonly { readonly id: string; readonly label: string; readonly caption?: string }[] => [
+const categories = (): readonly { readonly id: string; readonly label: string }[] => [
     { id: `work`, label: t(`extensions.extensionCategories.workDelivery`) },
     { id: `workspace`, label: t(`shared.workspace`) },
     { id: `connections`, label: t(`extensions.extensionCategories.connections`) },
@@ -22,7 +20,7 @@ const categories = (): readonly { readonly id: string; readonly label: string; r
 ];
 
 // Declared nothing, or a category this build doesn't know; a real section, not a silent drop.
-const other = (): { readonly id: string; readonly label: string; readonly caption?: string } => ({
+const other = (): { readonly id: string; readonly label: string } => ({
     id: `other`,
     label: t(`shared.other`),
 });
@@ -46,7 +44,7 @@ export const sectionsOf = (entries: readonly ExtensionEntry[]): ExtensionSection
     for (const category of [...categories(), other()]) {
         const held = buckets.get(category.id);
         if (held !== undefined) {
-            sections.push({ id: category.id, label: category.label, caption: category.caption, entries: held });
+            sections.push({ id: category.id, label: category.label, entries: held });
         }
     }
     return sections;

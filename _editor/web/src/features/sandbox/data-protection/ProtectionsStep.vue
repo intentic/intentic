@@ -72,11 +72,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
             <Notice v-if="presetError" :of="{ tone: `danger`, title: t(`sandbox.dataProtection.couldntReadPreset`), detail: presetError }" />
             <Notice v-if="outcome" :of="outcome" />
 
-            <RowGroup
-                v-if="plan.recommended.length > 0"
-                :label="t(`sandbox.dataProtection.recommended`)"
-                :caption="isOwner ? undefined : t(`sandbox.dataProtection.ownerApplies`)"
-            >
+            <RowGroup v-if="plan.recommended.length > 0" :label="t(`sandbox.dataProtection.recommended`)">
                 <template #info>
                     <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.dataProtection.recommended`) })">
                         <span class="block text-xs text-content">{{ t(`sandbox.dataProtection.recommendedHint`) }}</span>
@@ -94,6 +90,7 @@ const reasonOf = (item: PresetItem): string => t(`sandbox.dataProtection.unavail
                         @click="confirming = true"
                     />
                 </template>
+                <RowNote v-if="!isOwner" :label="t(`sandbox.dataProtection.ownerApplies`)" />
                 <Row v-for="entry in plan.recommended" :key="entry.measure.id" indent>
                     <template #title><HintedTitle :title="nameOf(entry.measure)">{{ whatOf(entry.measure) }}</HintedTitle></template>
                     <template #control>

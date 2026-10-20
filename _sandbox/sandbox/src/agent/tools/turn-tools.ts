@@ -21,7 +21,11 @@ export interface TurnRemoteTools {
     readonly release: () => void;
 }
 
-export type TurnToolsDeps = Pick<Services, "tools" | "turnMounts" | "browserRouters" | "desktopServers" | "linkMounts"> & ExtensionHost;
+// What a turn mounts through the daemon's MCP door. Named, because the suites' one stand-in for it (turn-mounts.testing.ts)
+// is typed by it: a mount a turn starts reading is a compile error there, not a throw in every suite that plans a turn.
+export type TurnMountDeps = Pick<Services, "turnMounts" | "browserRouters" | "desktopServers" | "linkMounts">;
+
+export type TurnToolsDeps = TurnMountDeps & Pick<Services, "tools"> & ExtensionHost;
 
 // Every MCP server a turn may reach, as one list every runtime projects the same way: the daemon's own internal tools,
 // the workspace's mcp-kind capabilities, and, through the daemon's one MCP door on a lease of this turn's own, the

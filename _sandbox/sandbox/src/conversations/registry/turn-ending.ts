@@ -27,19 +27,16 @@ const heldOn = (deps: EndingDeps, id: string): Pick<TurnEnding, "held" | "retrie
     const climbed = held.reason === "stopped" && held.tries > 0;
     return { held: heldEnding(held), ...(climbed ? { retries: { made: held.tries, max: RETRY_LADDER_TRIES } } : {}) };
 };
-// The booked re-run's own instant, as `nextAt` states one: only while it is still ahead, since a booking already due goes
-// on the next pass, which is "now" to a reader (a booked move, a reset just reached).
-const bookedAhead = (nextAt: number | undefined): number | undefined => (nextAt !== undefined && nextAt * 1000 > Date.now() ? nextAt : undefined);
+// The card's re-run, as the ending states it (`scheduled`, and `nextAt` in epoch s only while it is still ahead, since a
+// re-run already due goes on the next pass, which is "now" to a reader): the card's own `next`, never a reading of its own.
+const rerunOf = (summary: AgentSummary): Pick<TurnEnding, "scheduled" | "nextAt"> => {
+    const next = summary.next?.kind === "rerun" ? summary.next : undefined;
+    return next === undefined ? {} : { scheduled: true, ...opt("nextAt", next.at > Date.now() ? Math.ceil(next.at / 1000) : undefined) };
+};
 
 const failureEnding = (deps: EndingDeps, id: string, summary: AgentSummary): TurnEnding | undefined => {
     if (summary.failureCode === "rate_limit") {
-        return {
-            reason: "limit",
-            ...(summary.limitResetsAt !== undefined ? { resetsAt: summary.limitResetsAt } : {}),
-            ...heldOn(deps, id),
-            ...(summary.limitScheduled === true ? { scheduled: true } : {}),
-            ...opt("nextAt", bookedAhead(summary.limitNextAt)),
-        };
+        return { reason: "limit", ...opt("resetsAt", summary.limitResetsAt), ...heldOn(deps, id), ...rerunOf(summary) };
     }
     if (summary.failureCode === "provider-outage") {
         return { reason: "outage" };

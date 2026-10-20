@@ -68,7 +68,7 @@ const held = computed(() =>
 </script>
 
 <template>
-    <RowGroup :label="t(`connect.providerGrid.local`)" :caption="t(`connect.connect.localSubtitle`)">
+    <RowGroup :label="t(`connect.providerGrid.local`)" equal-rows>
         <RowNote v-if="landed" variant="block">
             <div class="flex flex-wrap items-center gap-3">
                 <Icon name="check" class="shrink-0 text-success" />

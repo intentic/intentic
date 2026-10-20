@@ -19,15 +19,18 @@ const GIT_CONFIG_ARGS = ["-c", "core.fileMode=false"] as const;
 export const GIT_GLOBAL_ARGS = ["--no-optional-locks", ...GIT_CONFIG_ARGS] as const;
 
 // Filenames after the last `--` get a `:(literal)` prefix so glob characters in real names (`[slug]`) cannot match
-// siblings; PLUMBING_PATHS verbs take literal filenames already and are excluded.
+// siblings; PLUMBING_PATHS verbs take literal filenames already and are excluded. Two pathspecs are the caller's own
+// words, not a name, and pass as written: the tree's top (`:/`) and a selection by attribute (`:(attr:…)`, or
+// `:(exclude,attr:…)`), which is how a land leaves out what the repository marks derived.
 const PLUMBING_PATHS = new Set(["update-index", "hash-object", "check-ignore", "check-attr"]);
+const MAGIC = /^(?::\/|:\((?:exclude,)?attr:[^)]+\))$/;
 
 export const literalPathspecs = (args: readonly string[]): readonly string[] => {
     const separator = args.lastIndexOf("--");
     if (separator === -1 || separator === args.length - 1 || PLUMBING_PATHS.has(subcommandOf(args) ?? "")) {
         return args;
     }
-    return [...args.slice(0, separator + 1), ...args.slice(separator + 1).map((path) => `:(literal)${path}`)];
+    return [...args.slice(0, separator + 1), ...args.slice(separator + 1).map((path) => (MAGIC.test(path) ? path : `:(literal)${path}`))];
 };
 
 // execFile rejects stdout past 1 MiB by default; 16 MiB covers a large untracked tree without going unbounded.

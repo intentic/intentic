@@ -84,9 +84,7 @@ export const planGeminiTurn = async (
                 "Google is connected, but the model translator isn't serving any Google model to this sandbox, so nothing can run on it. Send again in a minute; if it keeps happening, reconnect Google in Sandbox ▸ Agent.",
         };
     }
-    const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "gemini").catch((error: unknown) =>
-        error instanceof Error ? error.message : "the privacy shield's policy could not be read",
-    );
+    const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "gemini", input.conversationId);
     if (refused !== undefined) {
         return { ok: false, message: refused };
     }

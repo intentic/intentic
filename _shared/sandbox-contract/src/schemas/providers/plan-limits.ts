@@ -86,9 +86,9 @@ export type AccountUsage = z.infer<typeof AccountUsageSchema>;
 // words for a person, never a key.
 export const AccountFixSchema = z.enum(["reconnect", "admin", "verify", "wait"]);
 export type AccountFix = z.infer<typeof AccountFixSchema>;
-// Whether an account can serve a turn, decided once by the daemon (models/plan-pools.ts `serviceState`) from every fact
-// it holds about it: a revoked sign-in, a lost seat, a translator bench, a refusal still standing, and its plan limits.
-// Every picker (an unnamed turn, a limit move, a keep-warm refresh) and every surface reads this one verdict.
+// Whether an account can serve a turn, judged by one rule (models/plan-pools.ts `serviceStates`) from every fact on file
+// about it: a revoked sign-in, a lost seat, a translator bench, every refusal still standing, and its plan limits. The
+// daemon and the editor run that rule on the same facts; nothing publishes or keeps a judged copy.
 export const AccountStateSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("ready"),
@@ -104,6 +104,10 @@ export const AccountStateSchema = z.discriminatedUnion("kind", [
             .number()
             .optional()
             .describe("When every full pool has reopened, in epoch seconds, where the plan publishes it. Absent means unknown, never now."),
+        pool: z
+            .string()
+            .optional()
+            .describe("The pool holding it shut, by the plan's own name for it, where the plan meters it apart from other models. Absent for an undivided allowance."),
     }),
     z.object({
         kind: z.literal("blocked"),
@@ -178,13 +182,19 @@ export const ProviderRefusalSchema = z.object({
         .describe(
             "Set on a spent allowance no usage reading measures, such as a credit an organisation's admin grants. No reading answers it: it stands until the provider's own reset, or until a turn is answered.",
         ),
+    byHand: z
+        .literal(true)
+        .optional()
+        .describe(
+            "Set by a person rather than by a refused turn, for a plan nothing can read: believed for a day, or until unmarked or a turn on it is answered.",
+        ),
 });
 export type ProviderRefusal = z.infer<typeof ProviderRefusalSchema>;
 export const ProviderRefusalsSchema = z.object({
     refusals: z
-        .record(z.string(), ProviderRefusalSchema)
+        .record(z.string(), z.array(ProviderRefusalSchema))
         .describe(
-            "The most recent refusal per provider. Read alongside an account's usage: that says how full it was when last checked, this says whether it has since started saying no.",
+            "Every refusal on file per provider, each the latest of its kind for the account and model it names: what every verdict on that provider's accounts is judged against. Read alongside an account's usage: that says how full it was when last checked, these say whether it has since started saying no.",
         ),
 });
 export type ProviderRefusals = z.infer<typeof ProviderRefusalsSchema>;
@@ -212,9 +222,6 @@ export const TranslatorAccountSchema = z.object({
             verify: z.string().optional(),
         })
         .optional(),
-    state: AccountStateSchema.optional().describe(
-        "Whether it can serve a turn now, judged from everything above plus the provider's last refusal. Absent from a daemon older than this field.",
-    ),
 });
 export type TranslatorAccount = z.infer<typeof TranslatorAccountSchema>;
 // A list per provider, not a flag: CLIProxyAPI holds several auth files per provider and balances across them. Built

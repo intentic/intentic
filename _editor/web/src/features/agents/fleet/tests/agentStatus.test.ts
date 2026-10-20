@@ -2,12 +2,12 @@ import type { AgentJob, AgentStatus, AgentWatch } from "@intentic/sandbox-contra
 import { formatWhen } from "@intentic/ui/format";
 import { useAudience } from "../../../../app/useAudience";
 import { attentionReason, drillTarget, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
-import { cardFailure, scheduledWhen, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
+import { cardFailure, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
 import { failureGist } from "../../../../models/agent-status/agentStatus-failure";
 import { attentionCalls, attentionCards, callsOwner, laneOf, type RimAgent, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { agentStandingMeta, agentStatusMeta, activityLine, currentAction } from "../../../../models/agent-status/agentStatus-meta";
-import { type AgentStanding, awaitingUser, blocked, heardByParent, type ClientAgentStatus, conflictIsYours, standingFrom, memoryHeld, onlyOwnerCanAnswer, promptHeldJob, scheduledSend, scheduledCount, turnInFlight, unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
-import { limitBack, limitCorner, limitCountdown, memoryCorner, promptLine, selfStart, selfStartTicks, sendCorner, watchLine } from "../../../../models/agent-status/agentStatus-clock";
+import { type AgentStanding, awaitingUser, blocked, heardByParent, type ClientAgentStatus, conflictIsYours, goesBySelf, standingFrom, memoryHeld, onlyOwnerCanAnswer, promptHeldJob, turnInFlight, unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
+import { limitBack, limitCountdown, promptLine, selfStart, selfStartTicks, watchLine } from "../../../../models/agent-status/agentStatus-clock";
 import { landedAway, landedDelivery } from "../agentStatus-land";
 import { BAD_OBJECT, CORRUPT_PATCH, MISSING_PATCH, PATCH_CLASH, UNKNOWN_REVISION } from "./gitFailures";
 
@@ -474,20 +474,20 @@ describe("a spent allowance", () => {
     // hours over a question the reader had already answered. Active, as an armed watch is, and the card keeps its
     // "Usage limit" chip, so the stall is still in sight.
     it("leaves attention once a resend is booked at the reset", () => {
-        const booked = { status: `error`, attention: none, ...SHUT, limitScheduled: true } as const;
+        const booked: AgentStanding = { status: `error`, attention: none, ...SHUT, next: { kind: `rerun`, at: SHUT.limitResetsAt * 1000 } };
         expect(blocked(booked)).toBe(false);
         expect(laneOf(booked)).toBe(`active`);
         expect(unfinishedMark(booked)?.label).toBe(`Resend booked`);
         expect(attentionReason(booked)).toBe(`Usage limit`);
         expect(laneOf({ ...booked, awaitingWake: true })).toBe(`active`);
-        // Unbooked, the same card is the reader's again.
-        expect(laneOf({ ...booked, limitScheduled: false })).toBe(`attention`);
+        // With nothing carrying it on, the same card is the reader's again.
+        expect(laneOf({ ...booked, next: undefined })).toBe(`attention`);
     });
 
     // The one spent allowance already under way: the policy is carrying the held turn to another account on the resume
     // pass's next beat, seconds out, so filing it in Attention would flash a card nobody needs to touch.
     it("leaves attention only while a move to another account is booked", () => {
-        const moving = { status: `error`, attention: none, ...SHUT, limitScheduled: true, limitMoving: `Work` } as const;
+        const moving: AgentStanding = { status: `error`, attention: none, ...SHUT, next: { kind: `rerun`, at: NOW, onto: `Work` } };
         expect(blocked(moving)).toBe(false);
         expect(laneOf(moving)).toBe(`active`);
         expect(unfinishedMark(moving)?.label).toBe(`Moving to Work`);
@@ -542,37 +542,22 @@ describe("a spent allowance", () => {
     // that isn't running rests in Active; a booked move goes on the resume pass's next beat whatever the refused
     // account's reset says, so it names where, not when.
     it("names what goes by itself, and when, in the card's corner", () => {
-        const soon = { status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: (NOW + 40 * 60 * 1000) / 1000 } as const;
-        expect(limitCorner(soon, NOW)?.text).toBe(`back in 40m`);
-        expect(limitCorner({ ...soon, limitScheduled: true }, NOW)?.text).toBe(`resends in 40m`);
-        expect(limitCorner({ status: `error`, attention: none, ...SHUT, limitScheduled: true }, NOW)?.text).toMatch(
-            /^resends (?:\S.* )?\d{2}:\d{2}$/u,
-        );
+        const in40 = NOW + 40 * 60 * 1000;
+        const soon: AgentStanding = { status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: in40 / 1000 };
+        expect(selfStart(soon, NOW)?.text).toBe(`back in 40m`);
+        expect(selfStart({ ...soon, next: { kind: `rerun`, at: in40 } }, NOW)?.text).toBe(`resends in 40m`);
+        // The instant it states is the re-run's own, which waits behind a still-spent account past the reset.
+        expect(selfStart({ ...soon, next: { kind: `rerun`, at: NOW + 4 * 60 * 60 * 1000 } }, NOW)?.text).toMatch(/^resends (?:\S.* )?\d{2}:\d{2}$/u);
         // Past its instant a booked resend goes on the pass's next beat: said so, not dropped for a date that makes a
         // card resting in Active look stuck.
-        expect(limitCorner({ status: `error`, attention: none, ...OPEN, limitScheduled: true }, NOW)?.text).toBe(`resends in a moment`);
-        expect(limitCorner({ ...soon, limitScheduled: true, limitMoving: `Work` }, NOW)).toEqual({
-            kind: `moving`,
-            account: `Work`,
-            text: `moving to Work`,
-        });
+        expect(selfStart({ status: `error`, attention: none, ...OPEN, next: { kind: `rerun`, at: NOW - 1_000 } }, NOW)?.text).toBe(`resends in a moment`);
+        expect(selfStart({ ...soon, next: { kind: `rerun`, at: NOW, onto: `Work` } }, NOW)).toEqual({ kind: `moving`, account: `Work`, text: `moving to Work` });
     });
 
-    // "Send again" chosen with nothing booked to do it (no turn held, or a daemon that kept none across a restart): the
-    // corner marks the press still owed, which a card answered to wait, or one already booked, never is.
-    it("marks a reset clock whose answer is to go again by itself while nothing is booked", () => {
-        const soon = { status: `error`, attention: none, failureCode: `rate_limit`, limitResetsAt: (NOW + 40 * 60 * 1000) / 1000 } as const;
-        expect(limitCorner(soon, NOW, `resend`)).toMatchObject({ kind: `back`, text: `back in 40m`, unbooked: true });
-        expect(limitCorner(soon, NOW, `move`)).toMatchObject({ kind: `back`, unbooked: true });
-        expect(limitCorner(soon, NOW, `wait`)).not.toHaveProperty(`unbooked`);
-        expect(limitCorner(soon, NOW)).not.toHaveProperty(`unbooked`);
-        expect(limitCorner({ ...soon, limitScheduled: true }, NOW, `resend`)).toMatchObject({ kind: `resend` });
-    });
-
-    // Nothing booked and the window open: the corner is the ordinary date's again. And a real failure never gets one.
+    // Nothing carrying it on and the window open: the corner is the ordinary date's again. And a real failure never gets one.
     it("leaves the corner to the date once nothing is waited on", () => {
-        expect(limitCorner({ status: `error`, attention: none, ...OPEN }, NOW)).toBeUndefined();
-        expect(limitCorner({ status: `error`, attention: none }, NOW)).toBeUndefined();
+        expect(selfStart({ status: `error`, attention: none, ...OPEN }, NOW)).toBeUndefined();
+        expect(selfStart({ status: `error`, attention: none }, NOW)).toBeUndefined();
     });
 
     // Once the window is open there's no instant left to count to, and a provider that published none (Grok, Cursor)
@@ -699,7 +684,7 @@ describe("what a child agent asks of the reader", () => {
         expect(callsOwner(at({ status: `awaiting`, attention: { ...none, permission: true } }), family)).toBe(true);
         // Not yet an ending anyone was told, and a pause booked to run again is not over.
         expect(heardByParent(at({ status: `stopping` }), 9_000)).toBe(false);
-        expect(heardByParent(at({ status: `error`, failureCode: `rate_limit`, limitScheduled: true }), 9_000)).toBe(false);
+        expect(heardByParent(at({ status: `error`, failureCode: `rate_limit`, next: { kind: `rerun`, at: 1 } }), 9_000)).toBe(false);
     });
 
     // A fresh session is the person's review or test of the parent's work: nothing it does is reported to the parent, so
@@ -996,14 +981,18 @@ describe("a message held for low memory", () => {
         expect(memoryHeld({ status: `idle`, failureCode: `sandbox-memory-low` })).toBe(false);
     });
 
-    // The limit's twin: a card whose words go by themselves once memory frees up says so, rather than reading stuck.
-    it("says in its corner that the words go by themselves, only while they wait and the answer is to send", () => {
-        const waiting: AgentStanding = { ...held, queue: { paused: `refused` } };
-        expect(memoryCorner(waiting, `resend`)).toBe(`sends when memory frees`);
-        expect(memoryCorner(waiting, `wait`)).toBeUndefined();
-        // Nothing of a person's waits in its queue: the corner can promise nothing about it.
-        expect(memoryCorner(held, `resend`)).toBeUndefined();
-        expect(memoryCorner({ status: `error`, attention: none, failureCode: `harness-crash`, queue: { paused: `refused` } }, `resend`)).toBeUndefined();
+    // The limit's twin, and the same rule for the lane: a hold the sandbox sends by itself once memory frees up says so
+    // in its corner and stands in Active, rather than "sends when memory frees" over a card waiting in Attention for a
+    // press nobody owed (2026-10-08, 10-19).
+    it("says in its corner that the words go by themselves, and leaves attention for active while they do", () => {
+        const sending: AgentStanding = { ...held, next: { kind: `room` } };
+        expect(selfStart(sending, NOW)).toEqual({ kind: `room`, text: `sends when memory frees` });
+        expect(laneOf(sending)).toBe(`active`);
+        expect(attentionReason(sending)).toBeUndefined();
+        // Left for a press: the sandbox derives no `next`, and the card is the reader's.
+        expect(selfStart(held, NOW)).toBeUndefined();
+        expect(laneOf(held)).toBe(`attention`);
+        expect(attentionReason(held)).toBe(`Held`);
     });
 });
 
@@ -1092,20 +1081,20 @@ describe("failureGist", () => {
 });
 
 // Messages booked to go by themselves (a time, or another agent's land): the conversation starts again with nobody
-// pressing anything, so it is not finished, and its corner says when it goes.
+// pressing anything, so it is not finished, and its corner says when it goes. Read off the card's `next` alone, which
+// the sandbox derives from each message's own booking (conversation-next.ts): never from the queue a surface reads.
 describe("a conversation with messages booked for later", () => {
     const at = NOW + 3 * 60 * 60 * 1000;
-    const timed: AgentStanding = { status: `idle`, attention: none, queue: { paused: `scheduled`, until: at } };
-    const waiting: AgentStanding = { status: `ready`, attention: none, queue: { paused: `scheduled`, after: `brave-otter` } };
+    const timed: AgentStanding = { status: `idle`, attention: none, next: { kind: `send`, at, count: 1 } };
+    const waiting: AgentStanding = { status: `ready`, attention: none, next: { kind: `land`, after: `brave-otter`, count: 1 } };
 
     it("is Active, not Finished, whatever its last turn left; a call on the reader still outranks it", () => {
-        expect(scheduledSend(timed)).toBe(true);
+        expect(goesBySelf(timed)).toBe(true);
         expect(laneOf(timed)).toBe(`active`);
         expect(laneOf(waiting)).toBe(`active`);
         expect(laneOf({ ...timed, status: `awaiting` })).toBe(`attention`);
-        // Any other hold is a person's to lift, never a schedule.
-        expect(scheduledSend({ queue: { paused: `stopped` } })).toBe(false);
-        expect(laneOf({ status: `idle`, attention: none, queue: { paused: `stopped` } })).toBe(`finished`);
+        // Nothing carrying it on: a held queue is a person's to lift, never a schedule.
+        expect(laneOf({ status: `idle`, attention: none })).toBe(`finished`);
     });
 
     // The person's booking is their answer to a turn that ended badly (an expired account, a stop, a crash): the next move
@@ -1120,27 +1109,22 @@ describe("a conversation with messages booked for later", () => {
         expect(unfinishedMark(failed)?.label).toBe(`Scheduled`);
         expect(laneOf({ ...timed, status: `stopped` })).toBe(`active`);
         expect(laneOf({ ...timed, status: `interrupted` })).toBe(`active`);
-        // Nothing booked, the same card is the reader's.
-        expect(laneOf({ ...failed, queue: undefined })).toBe(`attention`);
-        expect(laneOf({ ...failed, queue: { paused: `refused` } })).toBe(`attention`);
+        // Nothing carrying it on, the same card is the reader's.
+        expect(laneOf({ ...failed, next: undefined })).toBe(`attention`);
         // Words held for memory, re-timed to go later: answered, and the corner stops saying held.
-        const memory: AgentStanding = { status: `error`, attention: none, failureCode: `sandbox-memory-low`, queue: { items: [{ until: at }] } };
+        const memory: AgentStanding = { status: `error`, attention: none, failureCode: `sandbox-memory-low`, next: { kind: `send`, at, count: 1 } };
         expect(laneOf(memory)).toBe(`active`);
         expect(attentionReason(memory)).toBeUndefined();
-        expect(laneOf({ ...memory, queue: { paused: `refused`, items: [{}] } })).toBe(`attention`);
-        // An ask outranks the booking, and so does an ending still unwinding.
+        // An ask outranks the booking, and so does an ending still unwinding, which keeps its own word.
         expect(laneOf({ ...failed, attention: { ...none, question: true } })).toBe(`attention`);
         expect(laneOf({ ...timed, status: `stopping` })).toBe(`attention`);
+        expect(attentionReason({ ...timed, status: `stopping` })).toBe(`Stopping`);
         expect(laneOf({ ...failed, landFailure: { reason: `git refused`, at: NOW } })).toBe(`attention`);
     });
 
     // One word in the corner, which the title shares a row with; when it goes is that word's hover.
     it("says Scheduled in its corner, and when it goes on hover, ahead of news and behind a call", () => {
         const titleOf = (id: string): string | undefined => (id === `brave-otter` ? `Fix the login bug` : undefined);
-        expect(scheduledWhen(timed)).toBe(formatWhen(at));
-        expect(scheduledWhen(waiting, titleOf)).toBe(`After Fix the login bug lands`);
-        expect(scheduledWhen(waiting)).toBe(`After another agent lands`);
-        expect(scheduledWhen({ queue: { paused: `stopped` } })).toBeUndefined();
         expect(standingChip({ ...timed, unread: true }, titleOf)).toEqual({
             label: `Scheduled`,
             tone: `bg-content/10 text-muted`,
@@ -1150,6 +1134,7 @@ describe("a conversation with messages booked for later", () => {
             title: `Scheduled`,
             rows: [{ label: `Sends`, value: `After Fix the login bug lands` }],
         });
+        expect(standingChip({ ...waiting, unread: false })?.hint?.rows?.[0]?.value).toBe(`After another agent lands`);
         expect(standingChip({ ...waiting, status: `conflict`, unread: false }, titleOf)?.label).toBe(attentionReason({ ...waiting, status: `conflict` }));
     });
 
@@ -1157,68 +1142,35 @@ describe("a conversation with messages booked for later", () => {
     // 02:00"): one corner, one grammar, for everything that goes by itself.
     it("says in the card's corner when it goes, as a resend says it, and how many wait", () => {
         const titleOf = (id: string): string | undefined => (id === `brave-otter` ? `Fix the login bug in the settings page` : undefined);
-        expect(sendCorner(timed, NOW)).toMatchObject({ kind: `send`, count: 1, clock: { at, wait: false } });
-        expect(sendCorner(timed, NOW)?.text).toMatch(/^sends (?:\S.* )?\d{2}:\d{2}$/u);
-        expect(sendCorner(timed, at - 12 * 60 * 1000)?.text).toBe(`sends in 12m`);
+        expect(selfStart(timed, NOW)).toMatchObject({ kind: `send`, count: 1, clock: { at, wait: false } });
+        expect(selfStart(timed, NOW)?.text).toMatch(/^sends (?:\S.* )?\d{2}:\d{2}$/u);
+        expect(selfStart(timed, at - 12 * 60 * 1000)?.text).toBe(`sends in 12m`);
         // The instant was chosen, not guessed: the hour booked a few seconds ago reads as the hour, not "61m".
-        expect(sendCorner(timed, at - 60 * 60 * 1000 - 8_000)?.text).toBe(`sends in 60m`);
-        expect(sendCorner(timed, at - 5_000)?.text).toBe(`sends in 1m`);
+        expect(selfStart(timed, at - 60 * 60 * 1000 - 8_000)?.text).toBe(`sends in 60m`);
+        expect(selfStart(timed, at - 5_000)?.text).toBe(`sends in 1m`);
         // Past its instant the sandbox's deadline is due: said so, never the date it was last active.
-        expect(sendCorner(timed, at + 1_000)).toEqual({ kind: `send`, count: 1, text: `sends in a moment` });
+        expect(selfStart(timed, at + 1_000)).toEqual({ kind: `send`, count: 1, text: `sends in a moment` });
         // Waiting on a land names the agent, clipped to the corner; the hover carries the whole title.
-        expect(sendCorner(waiting, NOW, titleOf)).toEqual({
+        expect(selfStart(waiting, NOW, titleOf)).toEqual({
             kind: `send`,
             count: 1,
             after: `Fix the login bug in the settings page`,
             text: `sends after Fix the login bug in th… lands`,
         });
-        expect(sendCorner(waiting, NOW)?.text).toBe(`sends after another agent lands`);
-        const two: AgentStanding = { status: `idle`, attention: none, queue: { items: [{ until: at + 60_000 }, {}, { until: at }] } };
-        expect(sendCorner(two, NOW)).toMatchObject({ count: 2, clock: { at } });
-        expect(sendCorner({ queue: { paused: `stopped`, items: [{}] } }, NOW)).toBeUndefined();
-    });
-
-    // A card goes one way first: a held turn's resend before a message held for memory, that before one booked for later.
-    it("reads one corner for whatever goes by itself, the held turn first", () => {
-        const limitedToo: AgentStanding = { ...timed, status: `error`, ...SHUT, limitScheduled: true };
-        expect(selfStart(limitedToo, NOW, {})?.kind).toBe(`resend`);
-        const memoryToo: AgentStanding = { ...timed, status: `error`, failureCode: `sandbox-memory-low`, queue: { paused: `refused`, items: [{}, { until: at }] } };
-        expect(selfStart(memoryToo, NOW, { memory: `resend` })).toEqual({ kind: `room`, text: `sends when memory frees` });
-        expect(selfStart(memoryToo, NOW, { memory: `wait` })?.kind).toBe(`send`);
-        expect(selfStart(timed, NOW, {})?.kind).toBe(`send`);
-        expect(selfStart({ status: `idle`, attention: none }, NOW, {})).toBeUndefined();
+        expect(selfStart(waiting, NOW)?.text).toBe(`sends after another agent lands`);
+        expect(selfStart({ ...timed, next: { kind: `send`, at, count: 2 } }, NOW)).toMatchObject({ count: 2, clock: { at } });
         // Its clock ticks only while it counts to an instant.
         expect(selfStartTicks(timed, NOW)).toBe(true);
         expect(selfStartTicks(waiting, NOW)).toBe(false);
-        expect(selfStartTicks(limitedToo, NOW)).toBe(true);
+        expect(selfStartTicks({ status: `error`, attention: none, ...OPEN, next: { kind: `rerun`, at } }, NOW)).toBe(true);
+        expect(selfStart({ status: `idle`, attention: none }, NOW)).toBeUndefined();
     });
 
-    // What an archive by hand cancels, which the card's Archive says first.
-    it("counts the messages booked, each by its own booking or the whole queue an older sandbox booked", () => {
-        expect(scheduledCount({ queue: { paused: `stopped`, items: [{ until: at }, {}, { after: `brave-otter` }] } })).toBe(2);
-        expect(scheduledCount({ queue: { paused: `scheduled`, until: at, items: [{}, {}, {}] } })).toBe(3);
-        expect(scheduledCount({})).toBe(0);
-    });
-
-    // A Stop holds the messages with no booking, and the queue's own field says `stopped` then: the booked messages beside
-    // them, each carrying its own time, still make it a conversation that runs again by itself.
-    it("reads each message's own booking when a stop's hold stands beside it, at the soonest of them", () => {
-        const items = [{ until: at + 60_000 }, {}, { until: at }];
-        const stopped: AgentStanding = { status: `idle`, attention: none, queue: { paused: `stopped`, items } };
-        expect(scheduledSend(stopped)).toBe(true);
-        expect(laneOf(stopped)).toBe(`active`);
-        expect(scheduledWhen(stopped)).toBe(formatWhen(at));
-        expect(standingFrom(stopped).queue).toEqual({ paused: `scheduled`, until: at });
-        const onLand: AgentStanding = { status: `idle`, attention: none, queue: { paused: `refused`, items: [{}, { after: `brave-otter` }] } };
-        expect(scheduledWhen(onLand)).toBe(`After another agent lands`);
-        // Nothing booked: the stop is all there is, a person's to lift.
-        expect(scheduledSend({ queue: { paused: `stopped`, items: [{}] } })).toBe(false);
-    });
-
-    it("keeps the hold, and only the hold, on a standing that outlives its card", () => {
-        expect(standingFrom(timed).queue).toEqual({ paused: `scheduled`, until: at });
-        expect(standingFrom(waiting).queue).toEqual({ paused: `scheduled`, after: `brave-otter` });
-        expect(standingFrom({ status: `idle`, attention: none, queue: { paused: `stopped` } })).not.toHaveProperty(`queue`);
+    // A standing that outlives its card (a tab, a summons to another window) carries the one reading the lane takes.
+    it("keeps what carries it on, and only that, on a standing that outlives its card", () => {
+        expect(standingFrom(timed).next).toEqual({ kind: `send`, at, count: 1 });
+        expect(laneOf(standingFrom(waiting))).toBe(`active`);
+        expect(standingFrom({ status: `idle`, attention: none })).not.toHaveProperty(`next`);
     });
 });
 

@@ -5,7 +5,7 @@ import { RouterLink } from "vue-router";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf, isTrialProvider, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { accessBadge, accessStateFor, providerReady, trialBadge } from "../../../models/providers/access";
-import { formatReset } from "../../../models/providers/usageStatus";
+import { formatReset, spentModels } from "../../../models/providers/usageStatus";
 import { badgeMeta } from "./catalog";
 import { type CatalogLoadState, providerModelsState } from "../../../models/providers/providerCatalog";
 import {
@@ -251,14 +251,14 @@ const railTo = (target: string | undefined): void => {
 // Ticks while the picker is open (it is mounted only then), so a row stops reading "back at 15:04" the moment it is 15:04.
 const now = useNow(true, 30_000);
 
-// Every credential that serves this model is refused until the named instant. Dimmed and stamped, never hidden and
-// never disabled: the model comes back on its own, the wait is the whole answer, and a reader may still queue a turn on
-// it. Distinct from `isLocked`, which is a provider with no credential at all.
-const isCooling = (entry: PickerEntry): boolean => entry.availableAt !== undefined && entry.availableAt * 1000 > now.value;
-const coolingBadge = (entry: PickerEntry): string | undefined =>
-    entry.availableAt === undefined || !isCooling(entry)
-        ? undefined
-        : t(`chat.modelPicker.backAt`, { at: formatReset(entry.availableAt, now.value) });
+// No account can serve this model now, by the answer Usage left and the spawn listing read (usageStatus.ts spentModels):
+// dimmed and stamped, never hidden nor disabled, as it comes back on its own. Unlike `isLocked`: a provider with no credential.
+const spentRows = computed(() => spentModels(pickerEntries.value, now.value));
+const isCooling = (entry: PickerEntry): boolean => spentRows.value.has(entry.key);
+const coolingBadge = (entry: PickerEntry): string | undefined => {
+    const reopensAt = spentRows.value.get(entry.key)?.reopensAt;
+    return !isCooling(entry) ? undefined : reopensAt === undefined ? t(`chat.modelPicker.unavailable`) : t(`chat.modelPicker.backAt`, { at: formatReset(reopensAt, now.value) });
+};
 
 // A version its family has moved past, said on the row: Opus 5 and Opus 5.5 differ by two characters, and a row picked
 // by mistake became the model every new chat opened on.
@@ -528,7 +528,7 @@ onMounted(() => {
                                 >{{ t(`chat.modelPicker.older`) }}</span
                             >
                             <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ refusedWhy(row.entry) ?? row.entry.description }}</span>
-                            <!-- Every credential for this model is refused until then; the instant, not a dot, since the wait is the decision. -->
+                            <!-- No account can serve this model until then; the instant, not a dot, since the wait is the decision. -->
                             <span v-if="isCooling(row.entry)" class="shrink-0 whitespace-nowrap text-2xs text-warning">
                                 {{ coolingBadge(row.entry) }}
                             </span>

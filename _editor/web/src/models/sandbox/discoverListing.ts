@@ -133,24 +133,21 @@ export const splitListingName = (name: string): { readonly publisher: string; re
 export interface ListingSection {
     readonly id: string;
     readonly label: string;
-    readonly caption: string;
     readonly listings: readonly DiscoverListing[];
 }
 
 // Verified means a human read the source at the listed commit; leading with it is the point of the surface.
-// The other group keeps an honest caption instead of dressing up as reviewed.
+// The other group's label says what it is instead of dressing up as reviewed.
 export const listingSections = (listings: readonly DiscoverListing[]): readonly ListingSection[] =>
     [
         {
             id: `verified`,
             label: t(`sandbox.words.verified`),
-            caption: ``,
             listings: listings.filter((listing) => listing.entry.trust === `verified`),
         },
         {
             id: `listed`,
             label: t(`sandbox.discoverListing.everythingPublished`),
-            caption: ``,
             listings: listings.filter((listing) => listing.entry.trust !== `verified`),
         },
     ].filter((section) => section.listings.length > 0);

@@ -333,7 +333,9 @@ describe("a spent allowance", () => {
         });
     });
 
-    test("on a routed provider benches the model to the resolved reset, in epoch milliseconds", async () => {
+    // The model's refusal, to the resolved reset, is the one record: every surface reads the model spent off it (a
+    // routed model's bench was once a second copy only the picker read, 2026-10-09).
+    test("on a routed provider files the model's refusal to the resolved reset, and nothing beside it", async () => {
         const plan = await classifyFailure(
             { ...limit, message: "429 usage limit" },
             context({ provider: "codex", model: "gpt-5.1", account: undefined, attribution: {}, limitReset: 1_900_000_000 }),
@@ -346,7 +348,6 @@ describe("a spent allowance", () => {
                 refusal: { at: NOW, kind: "limit", message: "429 usage limit", model: "gpt-5.1", resetsAt: 1_900_000_000 },
             },
             { kind: "headroom-refresh", options: { scope: { providers: ["codex"] }, maxAgeMs: 0 } },
-            { kind: "model-cooldown", provider: "codex", model: "gpt-5.1", cooldown: { until: 1_900_000_000_000, message: "429 usage limit", since: NOW } },
         ]);
     });
 
@@ -389,7 +390,7 @@ describe("a spent allowance", () => {
         expect(plan.frame).toMatchObject({ code: "rate_limit", resetsAt: 1_900_000_000, held: { ran: false } });
     });
 
-    test("on a routed provider with no reset benches nothing", async () => {
+    test("on a routed provider with no reset files the refusal alone", async () => {
         const plan = await classifyFailure(
             limit,
             context({ provider: "codex", model: "gpt-5.1", account: undefined, attribution: {} }),
@@ -398,7 +399,9 @@ describe("a spent allowance", () => {
         expect(plan.writes.map(({ kind }) => kind)).toStrictEqual(["provider-refusal", "headroom-refresh"]);
     });
 
-    test("on a plan with nothing to poll files the refusal as the account's reading of that model", async () => {
+    // 2026-10-13: a Cursor run-out was filed in a ledger of its own that only the role ladder read. The refusal against
+    // the account and model is the whole record, and every surface reads it.
+    test("on a plan with nothing to poll files the refusal against the account and the model, and nothing beside it", async () => {
         const plan = await classifyFailure(
             limit,
             context({ provider: "cursor", model: "composer-2.5", attribution: { account: "acct" } }),
@@ -411,13 +414,6 @@ describe("a spent allowance", () => {
                 refusal: { at: NOW, kind: "limit", message: "Claude usage limit reached.", account: "acct", model: "composer-2.5" },
             },
             { kind: "headroom-refresh", options: { scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 } },
-            {
-                kind: "observed-limit",
-                provider: "cursor",
-                account: "acct",
-                model: "composer-2.5",
-                limit: { at: NOW, message: "Claude usage limit reached." },
-            },
         ]);
     });
 
@@ -430,13 +426,11 @@ describe("a spent allowance", () => {
         };
         const plan = await classifyFailure(roleForbidden, context({ provider: "cursor", model: "claude-opus-5-5", attribution: { account: "acct" } }), answering());
         expect(plan.writes).toContainEqual({
-            kind: "observed-limit",
+            kind: "provider-refusal",
             provider: "cursor",
-            account: "acct",
-            model: "*",
-            limit: { at: NOW, message: roleForbidden.message, refused: "entitlement" },
+            refusal: { at: NOW, kind: "entitlement", message: roleForbidden.message, account: "acct", model: "claude-opus-5-5" },
         });
-        expect(plan.writes).toContainEqual(expect.objectContaining({ kind: "provider-refusal", refusal: expect.objectContaining({ kind: "entitlement" }) }));
+        expect(plan.writes.map(({ kind }) => kind)).toStrictEqual(["provider-refusal", "headroom-refresh"]);
         expect(plan.log.level).toBe("warn");
     });
 
@@ -444,7 +438,7 @@ describe("a spent allowance", () => {
         ["no account", { account: undefined }],
         ["no model", { model: undefined }],
         ["the catalog default", { model: "" }],
-    ] as const)("on such a plan with %s files no reading", async (_case, change) => {
+    ] as const)("on such a plan with %s files the refusal alone", async (_case, change) => {
         const plan = await classifyFailure(limit, context({ provider: "cursor", ...change }), answering({ way }));
         expect(plan.writes.map(({ kind }) => kind)).toStrictEqual(["provider-refusal", "headroom-refresh"]);
     });

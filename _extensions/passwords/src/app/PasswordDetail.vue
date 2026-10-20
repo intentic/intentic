@@ -1,6 +1,6 @@
 <!-- One password: who it signs in as, the value behind the person's yes, where it works, which agents may use it, what it was used for, and its earlier values. -->
 <script setup lang="ts">
-import { Button, ConfirmDialog, CopyButton, Icon, messageOr, Notice, SegmentedControl, ui } from "@intentic/extension-ui";
+import { Button, ConfirmDialog, CopyButton, Icon, messageOr, Notice, Section, SegmentedControl, ui } from "@intentic/extension-ui";
 import { timeAgo } from "@intentic/extension-ui/format";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { t } from "../i18n.js";
@@ -219,50 +219,51 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
             </div>
         </section>
 
-        <p v-if="healthLine" class="flex items-start gap-2 text-xs text-warning"><Icon name="exclamation-triangle" class="mt-0.5" />{{ healthLine }}</p>
+        <p v-if="healthLine" class="flex items-start gap-2 text-xs text-warning"><Icon name="exclamation-triangle" />{{ healthLine }}</p>
         <p v-if="item.backend" class="text-xs text-muted">{{ t(`app.detail.backend`, { backend: item.backend }) }}</p>
         <p class="text-xs text-subtle">
             {{ t(`app.detail.reference`) }} <code class="font-mono text-content">{{ reference }}</code>
         </p>
 
         <!-- Agents: one control per sandbox, so a level is changed where it is read. -->
-        <section class="flex flex-col gap-3">
-            <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`app.detail.agents`) }}</h3>
-            <p v-if="levels.length === 0" class="text-xs text-muted">{{ t(`app.detail.noAgents`) }}</p>
-            <div v-for="row in levels" :key="row.sandbox.url" class="flex flex-col gap-1.5">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <span class="flex min-w-0 items-center gap-2 text-sm text-content"><Icon name="robot" class="text-muted" /><span class="truncate">{{ row.sandbox.label }}</span></span>
-                    <SegmentedControl
-                        v-if="manage"
-                        :model-value="row.level"
-                        :options="accessOptions"
-                        size="xs"
-                        :aria-label="t(`app.access.label`, { sandbox: row.sandbox.label })"
-                        @update:model-value="(level: AccessLevel) => setAccess(row.sandbox.url, level)"
-                    />
-                    <span v-else class="text-xs font-medium text-muted">{{ t(`app.access.${row.level}`) }}</span>
+        <Section :label="t(`app.detail.agents`)" :heading="3">
+            <div class="flex flex-col gap-3">
+                <p v-if="levels.length === 0" class="text-xs text-muted">{{ t(`app.detail.noAgents`) }}</p>
+                <div v-for="row in levels" :key="row.sandbox.url" class="flex flex-col gap-1.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="flex min-w-0 items-center gap-2 text-sm text-content"><Icon name="robot" class="text-muted" /><span class="truncate">{{ row.sandbox.label }}</span></span>
+                        <SegmentedControl
+                            v-if="manage"
+                            :model-value="row.level"
+                            :options="accessOptions"
+                            size="xs"
+                            :aria-label="t(`app.access.label`, { sandbox: row.sandbox.label })"
+                            @update:model-value="(level: AccessLevel) => setAccess(row.sandbox.url, level)"
+                        />
+                        <span v-else class="text-xs font-medium text-muted">{{ t(`app.access.${row.level}`) }}</span>
+                    </div>
+                    <p v-if="waiting === `access:${row.sandbox.url}`" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
+                    <p v-else class="text-2xs text-subtle">{{ accessHelp(row.level) }}</p>
                 </div>
-                <p v-if="waiting === `access:${row.sandbox.url}`" class="flex items-center gap-1.5 text-2xs text-info" role="status"><Icon name="spinner" spin />{{ t(`app.confirmHere`) }}</p>
-                <p v-else class="text-2xs text-subtle">{{ accessHelp(row.level) }}</p>
             </div>
-        </section>
+        </Section>
 
-        <section class="flex flex-col gap-2">
-            <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`app.detail.activity`) }}</h3>
-            <p v-if="activity.length === 0" class="text-xs text-muted">{{ t(`app.detail.noActivity`) }}</p>
-            <ol v-else class="flex flex-col gap-1.5">
-                <li v-for="line in shownActivity" :key="`${line.at}:${line.op}`" class="flex items-baseline justify-between gap-3 text-xs">
-                    <span class="min-w-0 text-content">{{ activitySentence(line) }}</span>
-                    <span class="shrink-0 text-subtle">{{ timeAgo(line.at, { now }) }}</span>
-                </li>
-            </ol>
-            <button v-if="!allActivity && activity.length > ACTIVITY_SHOWN" type="button" :class="ui.textButton({ size: `xs` })" @click="allActivity = true">
-                {{ t(`app.detail.showAll`) }}
-            </button>
-        </section>
+        <Section :label="t(`app.detail.activity`)" :heading="3">
+            <div class="flex flex-col gap-2">
+                <p v-if="activity.length === 0" class="text-xs text-muted">{{ t(`app.detail.noActivity`) }}</p>
+                <ol v-else class="flex flex-col gap-1.5">
+                    <li v-for="line in shownActivity" :key="`${line.at}:${line.op}`" class="flex items-baseline justify-between gap-3 text-xs">
+                        <span class="min-w-0 text-content">{{ activitySentence(line) }}</span>
+                        <span class="shrink-0 text-subtle">{{ timeAgo(line.at, { now }) }}</span>
+                    </li>
+                </ol>
+                <button v-if="!allActivity && activity.length > ACTIVITY_SHOWN" type="button" :class="ui.textButton({ size: `xs` })" @click="allActivity = true">
+                    {{ t(`app.detail.showAll`) }}
+                </button>
+            </div>
+        </Section>
 
-        <section v-if="manage && versions.length > 0" class="flex flex-col gap-2">
-            <h3 :class="ui.sectionLabel({ size: `xs` })">{{ t(`app.detail.history`) }}</h3>
+        <Section v-if="manage && versions.length > 0" :label="t(`app.detail.history`)" :heading="3">
             <ol class="flex flex-col gap-1">
                 <li v-for="version in versions" :key="version.version" class="flex items-center justify-between gap-3 text-xs">
                     <span class="text-content">{{ t(`app.detail.version`, { when: timeAgo(version.at, { now }) }) }}</span>
@@ -271,7 +272,7 @@ const fieldLabel = computed(() => (item.kind === `text` ? t(`app.detail.text`) :
                     </button>
                 </li>
             </ol>
-        </section>
+        </Section>
 
         <div v-if="manage" class="pt-2">
             <button type="button" :class="ui.textButton({ tone: `danger` })" @click="confirmDelete = true">

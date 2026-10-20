@@ -8,10 +8,10 @@ type AppMessages = typeof base;
 // the two. What it does NOT do is refuse a key that is not in here — vue-i18n's `t` takes any string, whatever the
 // schema says — so the gate on a typo is `_tools/checks/i18n-keys.mjs`, not the compiler.
 //
-// One line per top-level section, rather than `extends AppMessages`, because an empty interface body is banned.
+// The whole of en.json, by `extends`: a section added there is typed the moment it exists. It used to be one line per
+// section, and a test failing on a section added to en.json and not to that list.
 // A section is one feature area: `src/features/<area>` keys under `<area>`, core-views under `views`, `src/shell`
-// under `shell`, `src/components` under `common`. Every top-level section is listed, and `i18nSections.test.ts` fails
-// on one that is not.
+// under `shell`, `src/components` under `common`.
 //
 // Where a word lives:
 // - `ui.action.*` (the kit's): a verb any surface's control can carry (Cancel, Restore, Show less); `ui.status.*` the
@@ -23,35 +23,8 @@ type AppMessages = typeof base;
 //   feature it belongs to.
 // - `<area>.<component>.*`: everything else.
 declare module "vue-i18n" {
-    interface DefineLocaleMessage {
-        readonly a11yKit: AppMessages["a11yKit"];
-        readonly agents: AppMessages["agents"];
-        readonly app: AppMessages["app"];
-        readonly auth: AppMessages["auth"];
-        readonly browsers: AppMessages["browsers"];
-        readonly capabilities: AppMessages["capabilities"];
-        readonly chat: AppMessages["chat"];
-        readonly common: AppMessages["common"];
-        readonly community: AppMessages["community"];
-        readonly connect: AppMessages["connect"];
-        readonly desktop: AppMessages["desktop"];
-        readonly "extension-host": AppMessages["extension-host"];
-        readonly extensions: AppMessages["extensions"];
-        readonly gettingStarted: AppMessages["gettingStarted"];
-        readonly local: AppMessages["local"];
-        readonly needs: AppMessages["needs"];
-        readonly organisations: AppMessages["organisations"];
-        readonly preview: AppMessages["preview"];
-        readonly router: AppMessages["router"];
-        readonly sandbox: AppMessages["sandbox"];
-        readonly settings: AppMessages["settings"];
-        readonly setup: AppMessages["setup"];
-        readonly shared: AppMessages["shared"];
-        readonly shell: AppMessages["shell"];
-        readonly terminal: AppMessages["terminal"];
-        readonly views: AppMessages["views"];
-        readonly workspace: AppMessages["workspace"];
-    }
+    // oxlint-disable-next-line typescript/no-empty-object-type -- module augmentation merges only into an interface, so en.json's whole tree enters by `extends`
+    interface DefineLocaleMessage extends AppMessages {}
 }
 
 /**

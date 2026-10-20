@@ -6,17 +6,11 @@ import type { JournalledFire } from "../../store/journals/turn-journal.js";
 import type { AutomationRecord } from "../automations-store.js";
 import type { FireOptions } from "../scheduler.js";
 import type { SenderLane } from "../senders.js";
-import { perDaemon } from "./daemon-memory.js";
 import { checkCondition, conditionOutside, rememberFiredCondition } from "../watch/watch-condition.js";
 
 // A fire's rows on the turn journal (store/journals/turn-journal.ts), from admission to its end: written before it waits
-// for a lane, updated once its check passed, cleared however it ends. What is on the journal at boot is what
-// fire-resume.ts replays, queued fires in the order they were admitted.
-
-// Admissions this daemon made and runs itself (daemon-memory.ts): a fire admitted while the boot pass reads the journal
-// is live here, never a restart's to replay.
-const liveOf = perDaemon(() => new Set<string>());
-export const liveHere = (services: Pick<Services, "automations">, entry: JournalledFire): boolean => entry.id !== undefined && liveOf.of(services).has(entry.id);
+// for a lane, updated once its check passed, cleared however it ends. What is on the journal when the gate opens is what
+// fire-resume.ts replays, queued fires in the order they were admitted: a fire this daemon admits is never among them.
 
 // Takes a fire's own entry off the turn journal, and only its own: another thread of the same automation may be in
 // flight beside it, journalled under its conversation. Nothing to take off for a fire that never journalled one.
@@ -24,7 +18,6 @@ export const clearJournalled = async (services: Services, automationId: string, 
     if (conversationId === undefined) {
         return;
     }
-    liveOf.of(services).delete(conversationId);
     await services.turnJournal
         .clearFire(conversationId)
         .catch((error: Error) => services.logger.warn({ err: error, automation: automationId }, "turn journal: fire not cleared"));
@@ -97,11 +90,8 @@ export const queuedFire = (automationId: string, conversationId: string, options
     ...opt("allowedTools", options.allowedTools === undefined ? undefined : [...options.allowedTools]),
 });
 
-// Writes a fire's admission row, marking it live in this daemon.
-export const admitFire = async (services: Pick<Services, "turnJournal" | "automations">, entry: JournalledFire): Promise<void> => {
-    if (entry.id !== undefined) {
-        liveOf.of(services).add(entry.id);
-    }
+// Writes a fire's admission row.
+export const admitFire = async (services: Pick<Services, "turnJournal">, entry: JournalledFire): Promise<void> => {
     await services.turnJournal.recordFire(entry);
 };
 

@@ -1,0 +1,10 @@
+# DERIVED FILES: each is a function of the tree's own sources, written by _tools/scripts/verify/fixers.mjs. No copy of
+# one is right for a tree it was not written in, so none is ever merged. A land leaves them out and writes them again in
+# the tree it lands in (the sandbox's conversations/land/rederive.ts); a rebase or merge keeps the side it lands on (the
+# `derived` merge driver, configured by _tools/scripts/ci/githooks.mjs on install); CI checks each against its sources.
+# A new generator's output joins this list, and its writer joins fixers.mjs's DERIVED table.
+/_shared/sandbox-contract/contract.lock.json merge=derived
+/_sandbox/sandbox/src/store/generated/state-shapes.json merge=derived
+/_sandbox/sandbox/src/bootstrap/state-registry.ts merge=derived
+/_sandbox/sandbox/src/bootstrap/slices/slice-registry.ts merge=derived
+/_sandbox/sandbox/src/app-raw-routes.ts merge=derived

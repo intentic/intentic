@@ -134,9 +134,10 @@ export class Conversation {
     // queue); guards a tab from closing. A watcher keeps it, not a computed, so a keystroke wakes none of the strip, fleet and cards that read it.
     readonly unsent = shallowRef(false);
 
-    // What this conversation is doing, for the tab's status icon.
+    // What this conversation is doing, for the tab's status icon. Failed: this window's own error line, or a turn that
+    // ended on a failure this window cannot fix itself (TurnFailures.crashed; its words are on the transcript's row).
     readonly status = computed<ConversationStatus>(() => {
-        if (this.error.value !== null) {
+        if (this.error.value !== null || this.failures.crashed.value) {
             return `error`;
         }
         // Ended by a person and only unwinding: ahead of a card it was parked on, which the ending takes with it.

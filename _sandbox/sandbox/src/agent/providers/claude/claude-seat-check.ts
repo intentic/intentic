@@ -3,6 +3,7 @@ import { CLAUDE_SEED_MODELS } from "@intentic/sandbox-contract/models/agent-cata
 import type { Logger } from "pino";
 import { z } from "zod";
 import { isEntitlementRefusalText } from "../../../engines/failure-sentences.js";
+import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { ProviderRefusalStore } from "../../../usage/provider-refusals.js";
 import { CLAUDE_CLI_USER_AGENT, type ClaudeStore, ensureFreshToken } from "./claude-credentials.js";
 import type { ClaudeSeatStore } from "./claude-seats.js";
@@ -136,21 +137,17 @@ export const createClaudeSeatCheck = (deps: ClaudeSeatCheckDeps): ClaudeSeatChec
 
     // When the account was first refused: its seat mark, or an entitlement refusal that covers it (a refusal naming no
     // account covers every account, and serviceState blocks on either one).
+    const entitlement = (id: string) => (refusal: ProviderRefusal): boolean => refusal.kind === "entitlement" && (refusal.account ?? id) === id;
     const markedAt = async (id: string): Promise<number | undefined> => {
-        const [seats, refusals] = await Promise.all([deps.seats.read(), deps.refusals().read()]);
-        const refusal = refusals["claude"];
-        const standing = refusal?.kind === "entitlement" && (refusal.account === undefined || refusal.account === id) ? refusal.at : undefined;
-        return seats[id]?.at ?? standing;
+        const [seats, refusals] = await Promise.all([deps.seats.read(), deps.refusals().onFile()]);
+        const standing = (refusals["claude"] ?? []).filter(entitlement(id)).map((refusal) => refusal.at);
+        return seats[id]?.at ?? (standing.length === 0 ? undefined : Math.min(...standing));
     };
 
     // Clears what a turn answering on the account clears (providerAnswered), but only a refusal of the seat's kind: a
     // one-token answer on the smallest model says nothing about a spent pool.
     const restore = async (id: string): Promise<void> => {
-        const refusal = (await deps.refusals().read())["claude"];
-        await Promise.all([
-            deps.seats.clear(id),
-            refusal?.kind === "entitlement" && (refusal.account === undefined || refusal.account === id) ? deps.refusals().clear("claude", id) : undefined,
-        ]);
+        await Promise.all([deps.seats.clear(id), deps.refusals().drop("claude", entitlement(id))]);
     };
 
     const attempt = async (id: string, plan: Planned): Promise<boolean> => {

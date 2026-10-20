@@ -11,14 +11,17 @@ import type {
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import {
     bindingWindow,
-    readingHeadroom,
+    type FleetCapacity,
+    fleetCapacity,
+    judgedReading,
     type ModelRef,
-    pinRefused,
+    newestRefusal,
     refusalVerdict,
-    refusedHeadroom,
     scopedWindow,
     type ServiceFacts,
+    serviceStates,
     SPENT_UTILIZATION,
+    standingOver,
     windowPeriod,
     type WindowPeriod,
 } from "@intentic/sandbox-contract/models/plan-pools";
@@ -85,26 +88,18 @@ const TIGHT_PERCENT = 75;
 const freshest = (provider: AgentProvider, account: string, attached: AccountUsage | undefined): AccountUsage | undefined =>
     lookupUsage(provider, account) ?? attached;
 
-// The provider's last refusal where it is a `limit` one still standing over this account, judged on this reading. Keyed
-// by provider: a routed refusal names no account, so it covers every credential the provider holds until one of them
-// reads room since.
-const standingLimit = (provider: AgentProvider, account: string, usage: AccountUsage | undefined, now: number = Date.now()): ProviderRefusal | undefined => {
-    const refusal = providerRefusals.value[provider];
-    return refusal !== undefined && limitStandsFor(provider, account, usage, now) ? refusal : undefined;
-};
+// Every refusal on file for a provider, as the daemon holds them (agent.refusals, then each change pushed whole).
+const refusalsOf = (provider: AgentProvider): readonly ProviderRefusal[] => providerRefusals.value[provider] ?? [];
 
-// A standing `limit` refusal reads its account's pool as full until the provider's own "try again at", by the
-// contract's one rule (pinRefused), the one the daemon's verdict reads too: never a different allowance than the one
-// that actually refused.
-const spentByRefusal = (provider: AgentProvider, account: string, usage: AccountUsage | undefined, model: ModelRef | undefined): AccountUsage | undefined => {
-    const refusal = standingLimit(provider, account, usage);
-    return refusal === undefined ? usage : pinRefused(usage, refusal, model);
+// An account's reading as any surface should draw it: freshest data, with every refusal still standing over it laid on
+// (judgedReading), the contract's one rule, which the daemon's verdict reads too: a standing refusal reads its pool full
+// until the provider's own "try again at", and never a different allowance than the one that actually refused. `model`
+// picks which pool a refusal naming none pins.
+export const liveUsage = (provider: AgentProvider, account: string, attached?: AccountUsage, model?: ModelRef, now: number = Date.now()): AccountUsage | undefined => {
+    const usage = freshest(provider, account, attached);
+    const standing = standingOver(withRow(providerFacts(provider), account, { usage }), refusalsOf(provider), now);
+    return judgedReading(usage, standing(account), model);
 };
-
-// An account's reading as any surface should draw it: freshest data, corrected for what the plan has since
-// refused. `model` picks which pool a refusal pins.
-export const liveUsage = (provider: AgentProvider, account: string, attached?: AccountUsage, model?: ModelRef): AccountUsage | undefined =>
-    spentByRefusal(provider, account, freshest(provider, account, attached), model);
 
 // Translator subscriptions for a provider, or none if it holds no auth files for it.
 const routedAccounts = (provider: AgentProvider): TranslatorAccounts[keyof TranslatorAccounts] =>
@@ -453,8 +448,8 @@ export interface PlanLimitRow {
     readonly facts: ServiceFacts;
 }
 
-// An account row as the daemon sends it, whichever list it came in.
-export type AccountFacts = ServiceFacts & { readonly state?: AccountState | undefined };
+// An account row as the daemon sends it, whichever list it came in: the facts the serviceability rule reads.
+export type AccountFacts = ServiceFacts;
 
 /** A provider's own account row, as the serviceability rule reads it. */
 export const accountFacts = (account: OauthAccount): AccountFacts => ({
@@ -463,7 +458,7 @@ export const accountFacts = (account: OauthAccount): AccountFacts => ({
     detail: account.detail,
     seatRefusal: account.seatRefusal,
     usage: account.usage,
-    state: account.state,
+    label: account.label,
 });
 
 /** A routed credential, as the serviceability rule reads it. */
@@ -471,57 +466,54 @@ export const routedAccountFacts = (account: TranslatorAccounts[keyof TranslatorA
     account: account.name,
     usage: account.usage,
     cooling: account.cooling,
-    state: account.state,
+    label: account.label,
 });
 
-// Every connection a provider holds (native and routed are one list to the reader), each with its freshest raw
-// reading: never corrected by spentByRefusal, since judging a refusal on corrected data would let a pinned 100% feed
-// itself forever.
+// Every connection a provider holds (native and routed are one list to the reader, as they are to the daemon's
+// accountFactsOf), each with its freshest raw reading: never one the refusals were laid on, since judging a refusal on
+// such a reading would let a pinned 100% feed itself forever.
 const providerFacts = (provider: AgentProvider): readonly AccountFacts[] =>
     [...(providerAccounts.value[provider] ?? []).map(accountFacts), ...routedAccounts(provider).map(routedAccountFacts)].map((facts) => ({
         ...facts,
         usage: freshest(provider, facts.account, facts.usage),
     }));
 
-const UNJUDGED: AccountState = { kind: `unknown` };
-
-// A bench whose instant has passed has lifted, whatever the list that reported it said.
-const stillBlocked = (state: AccountState, now: number): boolean =>
-    state.kind === `blocked` && (state.fix !== `wait` || state.until === undefined || state.until * 1000 > now);
+// The provider's facts with one account's row patched by what a caller holds (a fresher reading, the row it was handed),
+// or added where the lists do not hold it yet.
+const withRow = (facts: readonly AccountFacts[], account: string, patch: Partial<AccountFacts>): readonly AccountFacts[] =>
+    facts.some((entry) => entry.account === account)
+        ? facts.map((entry) => (entry.account === account ? { ...entry, ...patch } : entry))
+        : [...facts, { ...patch, account }];
 
 /**
- * Whether an account can serve a turn: the daemon's verdict (`state`), read as it stands for what only the account list
- * carries (a revoked sign-in, a lost seat, a bench, a refusal). The plan-limit half is re-read on the live reading when
- * there is one, by the contract's one rule (`readingHeadroom`), since readings and limit refusals stream in between lists,
- * and a question about one model asks about the pools that model spends.
+ * Whether an account can serve a turn, by the contract's one rule (serviceStates) over everything the daemon judges by:
+ * the provider's account rows, their freshest readings and every refusal on file. Nothing here keeps or trusts a verdict
+ * the daemon computed earlier: the same facts and the same rule give the same answer, and a reading or a refusal that
+ * streams in between lists moves it here and there alike. A question about one model asks about the pools it spends.
  */
 export const accountState = (provider: AgentProvider, facts: AccountFacts, model?: ModelRef, now: number = Date.now()): AccountState => {
-    const verdict = facts.state;
-    // No `state` is a daemon older than the verdict (accountsOutdated): unknown, never rebuilt from the other fields.
-    if (verdict === undefined) {
-        return UNJUDGED;
-    }
-    if (stillBlocked(verdict, now)) {
-        return verdict;
-    }
-    const fresh = freshest(provider, facts.account, facts.usage);
-    if (fresh === undefined && verdict.kind !== `blocked`) {
-        return verdict;
-    }
-    // By the same rule the daemon judged by (refusedHeadroom), so a standing refusal reopens here when it does there,
-    // at the provider's own "try again at", not at whatever the pinned pool's own reset is.
-    const refusal = standingLimit(provider, facts.account, fresh, now);
-    const local = refusal === undefined ? readingHeadroom(fresh, model) : refusedHeadroom(fresh, refusal, model);
-    // The daemon judged `spent` with the refusal it holds; this window's copy of that refusal can be missing, and a
-    // rounded pool read at the line is then no proof either way. Only a reading showing room below the line, or the
-    // reopening instant passing, answers the daemon's verdict, never a re-read at 0 room.
-    return heldSpent(verdict, local, now) ? verdict : local;
+    const judged = withRow(providerFacts(provider), facts.account, { ...facts, usage: freshest(provider, facts.account, facts.usage) });
+    return serviceStates(judged, refusalsOf(provider), model, now).get(facts.account) ?? { kind: `unknown` };
 };
 
-const heldSpent = (verdict: AccountState, local: AccountState, now: number): boolean =>
-    verdict.kind === `spent` &&
-    (verdict.reopensAt === undefined || verdict.reopensAt * 1000 > now) &&
-    (local.kind === `unknown` || (local.kind === `ready` && local.room === 0));
+/**
+ * What a provider's accounts can serve of one model together (fleetCapacity), the answer the daemon's spawn listing,
+ * role ladder and Auto offer read: a picker row is drawn spent exactly when a subagent asking for it would be refused.
+ */
+export const modelCapacity = (provider: AgentProvider, model: ModelRef, now: number = Date.now()): FleetCapacity =>
+    fleetCapacity(providerFacts(provider), refusalsOf(provider), model, now);
+
+/** Of some picker rows (a key, the provider, the model), those no account can serve now, each with when one is back. */
+export const spentModels = (
+    rows: readonly { readonly key: string; readonly provider: AgentProvider; readonly value: string; readonly label: string }[],
+    now: number = Date.now(),
+): ReadonlyMap<string, FleetCapacity & { readonly kind: `spent` }> =>
+    new Map(
+        rows.flatMap((row) => {
+            const capacity = modelCapacity(row.provider, { id: row.value, label: row.label }, now);
+            return capacity.kind === `spent` ? [[row.key, capacity] as const] : [];
+        }),
+    );
 
 // Common shape a row is built from: the daemon's facts, its label/identity. Named fields, not positionals — label and
 // identity are both strings and easy to swap by accident.
@@ -666,7 +658,7 @@ export interface PlanLimitGroup {
 // turn first, unread providers sink.
 export const planLimitGroups = (
     rows: readonly PlanLimitRow[],
-    refusals: Record<string, ProviderRefusal> = {},
+    refusals: Readonly<Record<string, readonly ProviderRefusal[]>> = {},
     now: number = Date.now(),
 ): PlanLimitGroup[] => {
     const byProvider = new Map<AgentProvider, PlanLimitRow[]>();
@@ -678,7 +670,7 @@ export const planLimitGroups = (
     return [...byProvider.entries()]
         .map(([provider, groupRows]): PlanLimitGroup => {
             const tightest = groupRows.find((row) => row.percent !== undefined);
-            const refusal = refusals[provider];
+            const refusal = newestRefusal(refusals[provider] ?? []);
             return {
                 provider,
                 rows: groupRows,
@@ -736,22 +728,13 @@ export const refusalNote = (refusal: ProviderRefusal | undefined, accounts: read
     };
 };
 
-// Provider's refusal read against everything since, for a caller holding only the provider. Same verdict
-// spentByRefusal pins a pool on, and the composer footer and Agent tab both print.
+// The provider's newest refusal read against everything since, for a caller holding only the provider: what the
+// composer footer and Agent tab print. Whether it still stands is the same verdict liveUsage pins a pool by.
 export const refusalFor = (provider: AgentProvider, now: number = Date.now()): RefusalNote | undefined =>
-    refusalNote(providerRefusals.value[provider], providerFacts(provider), now);
+    refusalNote(newestRefusal(refusalsOf(provider)), providerFacts(provider), now);
 
-// Whether a `limit` refusal still stands for this account: must be a limit refusal, must name this account or
-// none (then it covers every connection), and must be unanswered by a since reading with room.
-const limitStandsFor = (provider: AgentProvider, account: string, reading: AccountUsage | undefined, now: number = Date.now()): boolean => {
-    const refusal = providerRefusals.value[provider];
-    if (refusal === undefined || refusal.kind !== `limit` || (refusal.account !== undefined && refusal.account !== account)) {
-        return false;
-    }
-    // This account's fresher reading goes first, ahead of any stale copy.
-    const accounts = [{ account, usage: reading }, ...providerFacts(provider).filter((entry) => entry.account !== account)];
-    return refusalVerdict(refusal, accounts, now) === `standing`;
-};
+/** The newest refusal a provider has on file: the one a surface with room for a single line about it names. */
+export const lastRefusalOf = (provider: AgentProvider): ProviderRefusal | undefined => newestRefusal(refusalsOf(provider));
 
 // Readings that stopped moving, grouped by the provider's reason: four accounts Google wants verified are one sentence,
 // not four. Each group carries its own oldest age, the one its numbers are as old as.

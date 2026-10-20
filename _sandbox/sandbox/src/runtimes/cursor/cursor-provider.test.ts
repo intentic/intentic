@@ -152,9 +152,12 @@ const fleet = (ledger: Record<string, readonly string[]>): Partial<Services> => 
             { id: "two", apiKey: "key-two", connectedAt: 1 },
         ],
     }),
-    observedLimits: unstubbed<Services["observedLimits"]>("observedLimits", {
-        spent: async (_provider, account) =>
-            Object.fromEntries((ledger[account] ?? []).map((model) => [model, { at: Date.now(), message: "429 usage limit reached" }])),
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
+        onFile: async () => ({
+            cursor: Object.entries(ledger).flatMap(([account, models]) =>
+                models.map((model) => ({ at: Date.now(), kind: "limit" as const, message: "429 usage limit reached", account, model })),
+            ),
+        }),
     }),
 });
 

@@ -5,7 +5,6 @@ import { isIsolated } from "../registry/agents-store.js";
 import { landByHandLeased, type LandByHandDeps } from "./land-by-hand.js";
 import { landTargetOf } from "./land-target.js";
 import { takeLandHeldForWake } from "./wake-held.js";
-import { runWorktreeFixers } from "./worktree-fixers.js";
 
 // THE LAND A WAKE HELD, run once the wake goes away without firing. A turn that ends while the conversation will run
 // again by itself (a watch it armed, a job its ending handed to one) skips its land: the turn that wakes finishes the
@@ -13,7 +12,7 @@ import { runWorktreeFixers } from "./worktree-fixers.js";
 // person stops what it waits on and then lands it by hand: on 2026-10-12 a finished conversation sat 38 minutes behind
 // a demo server its turn had left running, and landed only on the second press. Stopping the wait is now the whole of
 // it: the skipped land runs here, deciding as the close would have (the rules, the turn's own answer to landing by
-// itself, the repository's fixers first) and landing as a person's press does (land-by-hand.ts).
+// itself) and landing as a person's press does (land-by-hand.ts).
 
 export type WakeHeldLandDeps = LandByHandDeps & Pick<Services, "sandboxSettings" | "activity" | "ruleFirings">;
 
@@ -58,8 +57,6 @@ export const landHeldForWake = async (services: WakeHeldLandDeps, conversationId
     }
     try {
         const span = entry.placement.repos.map(({ repo, base, landedTip }) => ({ repo, from: landedTip ?? base, dir: services.agentWorktrees.worktreeDir(conversationId, repo) }));
-        // Before the decision, as at a close: a path a fixer wrote is one the rules read, and the land commits it.
-        await runWorktreeFixers(services, conversationId, span);
         const target = await landTargetOf(services, entry);
         const decision = await decideLanding(services, target, entry, held.autoLand, span);
         performLandingWrites(services, conversationId, decision.writes);

@@ -63,7 +63,7 @@ export const goneStep = (pairing: Pick<Pairing, "goneSince" | "goneCheckedAt">, 
 // When a pairing marked gone at `since` is retired, for the line that says so.
 export const retiresAt = (since: number): number => since + GONE_RETIRE_MS;
 
-// WHAT THIS MACHINE'S ic SAYS of a sandbox, by the slugs it may know it under (swap-pause.ts `pairingSlugs`, plus the one
+// WHAT THIS MACHINE'S ic SAYS of a sandbox, by the slugs it may know it under (config.ts `pairingSlugs`, plus the one
 // it was listed under before):
 // - "here": ic lists it, whatever state it is in;
 // - "trashed": ic's trash holds it, so it may be restored and is not gone yet (ic purges it after its own week, and then

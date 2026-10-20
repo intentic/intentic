@@ -27,19 +27,16 @@ export const shieldHarnessCredential = async (
 };
 
 // OpenCode's one shared server fixes its providers' base URLs at spawn, so a shield turned on while it serves other
-// conversations reaches it only once they finish. Asked before every turn on it, which is also what restarts
-// an idle server booted the old way; a refusal sentence only while it would run an untrusted provider unshielded.
+// conversations reaches it only once they finish: until then a turn on it would go past the gateway. Asked before every
+// turn on it, which is also what restarts an idle server booted the old way.
 export const sharedServerRefusal = async (
-    shield: Pick<PrivacyShield, "policy" | "trusted">,
+    shield: Pick<PrivacyShield, "refusal">,
     shielded: () => Promise<boolean>,
     provider: string,
+    conversationId: string | undefined,
 ): Promise<string | undefined> => {
-    if (await shielded()) {
-        return undefined;
-    }
-    const policy = await shield.policy();
-    if (policy.mode !== "on" || (await shield.trusted(policy, provider))) {
-        return undefined;
-    }
-    return "The privacy shield was turned on while other conversations were running on the shared OpenCode server, which was started before it. Send again once they finish, and this one runs behind the shield.";
+    // allow(silent-catch): a server whose standing can't be read is taken to be in front of no gateway, which refuses an
+    // untrusted provider while the shield masks and nothing else.
+    const behind = await shielded().catch(() => false);
+    return shield.refusal({ provider, conversationId, route: behind ? "gateway" : "shared-server" });
 };

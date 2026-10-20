@@ -1,19 +1,15 @@
-import { type AgentStanding, type QueueHold, soonestHold } from "@intentic/sandbox-contract/models/agent-standing";
+import type { AgentStanding } from "@intentic/sandbox-contract/models/agent-standing";
 
 // Every projection of a fleet agent's state (lane, attention label, drill-in verb, glyphs) lives in the contract
 // (@intentic/sandbox-contract/models/agent-standing.ts) since 2026-10-16, so the daemon counts what needs the person by the
 // same rules (its `agents.attention`, the desktop app's status bar). Re-exported here, where every surface of the editor
 // has always imported it; what stays below is the editor's own: a card's standing copied for a tab or another window,
 // and the auto-land default.
+export { goesBySelf } from "@intentic/sandbox-contract/schemas/agent-next";
 export {
-    soonestHold,
-    scheduledSend,
-    scheduledCount,
     limited,
     memoryHeld,
     limitClosed,
-    limitScheduled,
-    limitMoveBooked,
     conflictIsYours,
     watching,
     promptHeldJob,
@@ -25,7 +21,6 @@ export {
     turnWorking,
     writingNow,
     landBroken,
-    bookingAnswers,
     blocked,
     awaitingUser,
     onlyOwnerCanAnswer,
@@ -33,17 +28,13 @@ export {
 } from "@intentic/sandbox-contract/models/agent-standing";
 export type { ClientAgentStatus, AgentStanding, EndingByHand } from "@intentic/sandbox-contract/models/agent-standing";
 
-// The scheduled hold alone, copied for a standing that outlives its card (standingFrom); undefined for any other queue.
-const scheduledHold = (agent: Pick<AgentStanding, "queue">): QueueHold | undefined => soonestHold(agent.queue);
-
 // A card's standing on its own, carried where a whole card can't go (a chat tab, a summons to another window):
 // every field `laneOf` reads and nothing else, with absent ones left out rather than spelled as undefined, since
 // this is persisted and posted between windows.
 export const standingFrom = (agent: AgentStanding): AgentStanding => {
     const copied = standingCopy(agent);
     const standing = agent.landFailure === undefined ? copied : { ...copied, landFailure: agent.landFailure };
-    const hold = scheduledHold(agent);
-    return hold === undefined ? standing : { ...standing, queue: hold };
+    return agent.next === undefined ? standing : { ...standing, next: agent.next };
 };
 const standingCopy = (agent: AgentStanding): AgentStanding => {
     const copy: AgentStanding = {
@@ -56,13 +47,9 @@ const standingCopy = (agent: AgentStanding): AgentStanding => {
         ...(agent.failureCode !== undefined ? { failureCode: agent.failureCode } : {}),
         ...(agent.limitResetsAt !== undefined ? { limitResetsAt: agent.limitResetsAt } : {}),
         ...(agent.limitHeld !== undefined ? { limitHeld: agent.limitHeld } : {}),
-        ...(agent.limitScheduled !== undefined ? { limitScheduled: agent.limitScheduled } : {}),
-        ...(agent.limitMoving !== undefined ? { limitMoving: agent.limitMoving } : {}),
     };
-    // When a booked limit goes, with the rest of its booking, so a copy never states a booking without its instant.
-    const booked = agent.limitNextAt === undefined ? copy : { ...copy, limitNextAt: agent.limitNextAt };
     // The jobs go with it: a job at a prompt holds the card's lane (heldByPrompt).
-    return agent.jobs === undefined ? booked : { ...booked, jobs: agent.jobs };
+    return agent.jobs === undefined ? copy : { ...copy, jobs: agent.jobs };
 };
 
 // Whether a clean turn's work lands by itself, folding the agent's own override, the sandbox default, and the

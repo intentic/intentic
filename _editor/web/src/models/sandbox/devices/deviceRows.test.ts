@@ -310,17 +310,21 @@ test(`reads the machine's hardware once, from whichever side described itself`, 
     expect(machineHardware(machineRow([], { key: `bare`, label: `bare` }))).toBe(``);
 });
 
-// The board's tile verdict, which is not the page's: a PC whose distro sleeps beside a live Windows is a PC you can use.
-test(`calls a PC live while any side answers, and offline only when none does`, () => {
-    const halfAsleep = machineRows(
-        [
-            device({ key: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, report: report({ os: `linux`, wsl: { distro: `Arch` } }) }),
-            device({ key: `rog`, hostId: `rog`, online: false, facts: WINDOWS, gap: `offline`, report: undefined }),
-        ],
-        undefined,
-        NOW,
-    )[0]!;
-    expect(machineVerdict(halfAsleep, NOW)).toEqual({ status: `live`, word: `live`, variant: `success` });
+// The board's tile verdict, which is not the page's, and whose "does it answer" is the same `machinePresence` the
+// capability card reads: a PC whose distro sleeps beside a live Windows is a PC you can use, and one answering only
+// through its distro is partly connected on both (2026-10-13: the card said offline, the board live, for one PC).
+test(`calls a PC live while its Windows side answers, partly connected on a distro alone, and offline only when none does`, () => {
+    const pcWith = (windows: boolean, distro: boolean) =>
+        machineRows(
+            [
+                device({ key: `rog-wsl`, hostId: `rog::wsl:Arch`, card: `rog`, online: distro, facts: ARCH, ...(distro ? { report: report({ os: `linux`, wsl: { distro: `Arch` } }) } : { gap: `offline`, report: undefined }) }),
+                device({ key: `rog`, hostId: `rog`, card: `rog`, online: windows, facts: WINDOWS, ...(windows ? { report: report() } : { gap: `offline`, report: undefined }) }),
+            ],
+            undefined,
+            NOW,
+        )[0]!;
+    expect(machineVerdict(pcWith(true, false), NOW)).toEqual({ status: `live`, word: `live`, variant: `success` });
+    expect(machineVerdict(pcWith(false, true), NOW)).toMatchObject({ status: `attention` });
     const asleep = card(deviceRow(device({ online: false, gap: `offline`, report: undefined }), undefined));
     expect(machineVerdict(asleep, NOW)).toEqual({ status: `offline`, word: `offline`, variant: `neutral` });
     // One side on its way back is the word worth reading on a machine nothing else on answers.

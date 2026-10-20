@@ -16,7 +16,7 @@ export const breakPolicyFor = async (
 };
 
 // The sandbox-wide answer, which a conversation with no answer of its own inherits.
-export const sandboxBreakPolicy = async (services: Pick<Services, "sandboxSettings">, ending: TurnBreak): Promise<TurnBreakPolicy> => {
+const sandboxBreakPolicy = async (services: Pick<Services, "sandboxSettings">, ending: TurnBreak): Promise<TurnBreakPolicy> => {
     const settings = await services.sandboxSettings.get();
     switch (ending) {
         case "limit":

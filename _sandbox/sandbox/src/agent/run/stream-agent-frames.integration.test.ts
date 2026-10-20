@@ -285,9 +285,7 @@ test("a spent allowance naming its reset is held whole, filed as a limit, and re
         },
     ]);
     expect(writes.headroomRefreshes).toStrictEqual([{ scope: { providers: ["claude"], account: "default" }, maxAgeMs: 0 }]);
-    // Claude publishes its plan limits, so the refusal is not the reading; nor is a native provider's model benched.
-    expect(writes.observedLimits).toStrictEqual([]);
-    expect(writes.modelCooldowns).toStrictEqual([]);
+    // The refusal is the one record: nothing beside it says the model is off the plan.
     expect(writes.modelRefusals).toStrictEqual([]);
     expect(resumes).toStrictEqual([
         { conversationId: "frames-limit", event: { kind: "resume-superseded" } },
@@ -495,7 +493,7 @@ test("a turn that ends with nothing to show gets its failure synthesized ahead o
     expect(frames).toStrictEqual([
         OPENING_CHECKS_PREAMBLE,
         { kind: "tool_call", id: "call-read", name: "Read", category: "read", status: "completed", locations: [{ path: "/work/src/parser.ts" }] },
-        { kind: "error", message: sentence, account: "default", held: { ran: true }, autoResume: "available" },
+        { kind: "error", message: sentence, own: true, account: "default", held: { ran: true }, autoResume: "available" },
         { kind: "done" },
     ]);
     expect(writes.activity.map(({ type, error }) => ({ type, error }))).toStrictEqual([

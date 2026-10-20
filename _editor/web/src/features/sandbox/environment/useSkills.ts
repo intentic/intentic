@@ -1,4 +1,5 @@
 import type { SkillBody, SkillDraft, SkillSummary, SkillSwitch } from "@intentic/sandbox-contract/schemas/settings";
+import { allLoaded, useLoaded } from "@intentic/extension-api";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
@@ -14,9 +15,12 @@ import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 
 export function useSkills() {
     const queryClient = useQueryClient();
-    const { settings, patch } = useSandboxSettings();
+    const { settings, patch, isLoading: settingsLoading, error: settingsError } = useSandboxSettings();
 
-    const { query, error } = useSandboxQuery(rpcQuery(`skills.list`));
+    const { query, loaded: listed } = useSandboxQuery(rpcQuery(`skills.list`));
+    // The list and the settings that switch its rows, drawn as one: no row is offered before its switch can be read.
+    const switches = useLoaded(() => ({ data: settings.value, error: settingsError.value, fetching: settingsLoading.value, wanted: true }));
+    const loaded = computed(() => allLoaded([listed.value, switches.value]));
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: rpcKey(`skills.list`) });
 
@@ -66,8 +70,7 @@ export function useSkills() {
     return {
         skills,
         settings,
-        error,
-        isLoading: query.isLoading,
+        loaded,
         save,
         remove,
         setEnabled,

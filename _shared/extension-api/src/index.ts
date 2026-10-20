@@ -4,6 +4,7 @@ export * from "./diff.js";
 export * from "./engines.js";
 export * from "./facts.js";
 export * from "./host.js";
+export * from "./loaded.js";
 export * from "./route.js";
 export * from "./scope.js";
 export * from "./server.js";

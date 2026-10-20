@@ -22,7 +22,7 @@ import { LimitPolicySchema, RetryPolicySchema, RoomPolicySchema } from "@intenti
 import { z } from "zod";
 import type { ConversationsDb } from "../../store/conversations-db.js";
 import { readDocument } from "@intentic/sandbox-contract/documents";
-import { at, CHECK_SETTLES, type JsonObject, mapValue, transform } from "../../store/evolution/conversions.js";
+import { at, CHECK_SETTLES, drop, type JsonObject, mapValue, transform } from "../../store/evolution/conversions.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { type ManifestProblem, recordManifestProblems } from "../../store/manifest/manifest-problems.js";
 import { TurnQueueSchema } from "../actor/conversation-queue.js";
@@ -129,14 +129,11 @@ const EndingSchema = z.discriminatedUnion("kind", [
         failure: z.string().optional(),
         // Epoch seconds the allowance reopens; absent when the provider publishes no instant.
         resetsAt: z.number().optional(),
-        // Held for a press, booked to fire at the reset, and where a booked move takes it: the registry clears them on load
-        // unless the entry kept the held turn itself (`limitHold`), which the boot puts back on its actor.
+        // Held whole for a press: the registry clears it on load unless the entry kept the held turn itself (`limitHold`),
+        // which the boot puts back on its actor. Whether and when it goes again is never kept: the card derives it from the
+        // hold (conversation-next.ts). Rows written before 2026-10-20 also carry `scheduled`, `moving` and `nextAt`, a copy
+        // of that derivation, which the parse drops.
         held: z.boolean(),
-        scheduled: z.boolean(),
-        moving: z.string().optional(),
-        // When the booked re-run goes (epoch s), while `scheduled`: the resume pass's own instant (limit-due.ts), which the
-        // pass keeps true on every beat (held-standing.ts keepLimitBooking).
-        nextAt: z.number().optional(),
     }),
 ]);
 export type Ending = z.infer<typeof EndingSchema>;
@@ -281,6 +278,11 @@ export const conversationRecordDocument = defineDocument({
                 }),
             ),
         ),
+        // 2026-10-20: a spent allowance's ending kept a copy of whether, when and where its held turn goes again, re-synced
+        // by the resume pass every beat and wrong between beats. The card derives it from the hold (conversation-next.ts).
+        at("ending", drop("scheduled")),
+        at("ending", drop("moving")),
+        at("ending", drop("nextAt")),
     ],
 });
 

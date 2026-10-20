@@ -1,13 +1,14 @@
-<!-- Surface card primitive. On a dialog it draws no surface: the dialog already is one (overlays/dialogGround.ts). -->
+<!-- Surface card primitive. On a surface (a dialog, a card, a group's card) it draws none: that surface already is one (overlays/surfaceGround.ts). -->
 <script setup lang="ts">
-import { useDialogGround } from "../overlays/dialogGround.js";
+import { provideSurfaceGround, useSurfaceGround } from "../overlays/surfaceGround.js";
 
 const { dashed = false } = defineProps<{ dashed?: boolean }>();
-const onDialog = useDialogGround();
+const onGround = useSurfaceGround();
+provideSurfaceGround();
 </script>
 
 <template>
-    <div :class="onDialog ? `` : { 'ui-card': true, 'ui-card-dashed': dashed }">
+    <div :class="onGround ? `` : { 'ui-card': true, 'ui-card-dashed': dashed }">
         <slot />
     </div>
 </template>

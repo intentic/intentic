@@ -4,6 +4,7 @@ import type { CiRepo, PipelineRun } from "@intentic/sandbox-contract/schemas/ci"
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
 import type { CiFix } from "./fixes/ciFixes";
 import {
+    Await,
     Icon,
     Notice,
     noticeOf,
@@ -13,11 +14,9 @@ import {
     RepoPicker,
     type RepoPickerAll,
     RowGroup,
-    SkeletonSnapshot,
     SplitView,
     toneTint,
     useNarrow,
-    vSkeletonSource,
     type AgentRunChoice,
     type TallyItem,
     ProjectChip,
@@ -43,7 +42,7 @@ import { t } from "./i18n.js";
 // at the head of its repository's runs, with the one fix agent the daemon put on it.
 
 const api = host();
-const { repos: allRepos, runs: allRuns, failures: allFailures, error, isPending, rerun, cancel, fix } = usePipelines();
+const { repos: allRepos, runs: allRuns, failures: allFailures, loaded, rerun, cancel, fix } = usePipelines();
 // The open project's rows only (api.workspace.inProject): runs come from the CI routes, not from repos(), so the view
 // narrows them itself and says on its chip how many repositories it put out of sight.
 const repos = computed(() => allRepos.value.filter((repo) => api.workspace.inProject(repo.repo)));
@@ -217,8 +216,6 @@ const successRate = computed(() => {
 const TALLY_AT_REM = 44;
 const body = ref<HTMLElement | undefined>(undefined);
 const narrowBoard = useNarrow(body, TALLY_AT_REM);
-// Hidden when there are no runs at all; the body's own empty-state sentence is the whole answer.
-const showTally = computed(() => isPending.value || scopedRuns.value.length > 0);
 
 const actionKey = (run: PipelineRun): string => `${run.host}:${run.project}:${run.runId}`;
 const busy = ref<string | undefined>();
@@ -274,13 +271,12 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
     <SplitView :title="t(`pipelinesView.pipelines`)" scroll="page" :scroll-key="scopeRepo" width="full">
         <!-- Pipeline totals belong in the information slot, not the action group. -->
         <template #info>
-            <!-- `min-w-0 flex-1`: the tally is what gives here. -->
-            <template v-if="showTally && !narrowBoard">
-                <SkeletonSnapshot v-if="isPending" of="pipelines.tally">
-                    <PipelinesTally skeleton class="ml-1 min-w-0 flex-1" />
-                </SkeletonSnapshot>
-                <PipelinesTally v-else v-skeleton-source="`pipelines.tally`" :items="counts" :rate="successRate" class="ml-1 min-w-0 flex-1" />
-            </template>
+            <!-- `min-w-0 flex-1`: the tally is what gives here. Absent with no runs at all, where the body's own empty-state
+                 sentence is the whole answer, and for a board that never answered, which its body says. -->
+            <Await v-if="!narrowBoard && loaded.state !== `failed`" :of="loaded" imprint="pipelines.tally">
+                <PipelinesTally v-if="scopedRuns.length > 0" :items="counts" :rate="successRate" class="ml-1 min-w-0 flex-1" />
+                <template #fallback><PipelinesTally skeleton class="ml-1 min-w-0 flex-1" /></template>
+            </Await>
         </template>
 
         <template #actions>
@@ -303,7 +299,8 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
         </template>
 
         <template #strips>
-            <Notice v-if="error" :of="noticeOf(error)" />
+            <!-- A board that never answered says so in its body; up here, only one whose last answer still stands. -->
+            <Notice v-if="loaded.state === `ready` && loaded.refreshError" :of="noticeOf(loaded.refreshError)" />
             <Notice v-if="actionError" :of="noticeOf(actionError)" />
         </template>
 
@@ -311,122 +308,121 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
             <!-- No scroller or `min-h-0 flex-1`: nothing clamps this, so the column is as tall as its runs. -->
             <div ref="body" class="flex flex-col">
                 <!-- Narrow headers move orientation text above the list. Remembered apart from the title row's, whose margins differ. -->
-                <template v-if="showTally && narrowBoard">
-                    <SkeletonSnapshot v-if="isPending" of="pipelines.tally.narrow">
-                        <PipelinesTally skeleton class="mb-5" />
-                    </SkeletonSnapshot>
-                    <PipelinesTally v-else v-skeleton-source="`pipelines.tally.narrow`" :items="counts" :rate="successRate" class="mb-5" />
-                </template>
+                <Await v-if="narrowBoard && loaded.state !== `failed`" :of="loaded" imprint="pipelines.tally.narrow">
+                    <PipelinesTally v-if="scopedRuns.length > 0" :items="counts" :rate="successRate" class="mb-5" />
+                    <template #fallback><PipelinesTally skeleton class="mb-5" /></template>
+                </Await>
 
                 <!-- Also covers the window before the sandbox handshake unblocks the fetch. -->
-                <PipelinesSkeleton v-if="isPending" />
-
-                <!-- One element in the skeleton's place, so its imprint (drawn by PipelinesSkeleton) is the whole board; laid out as the column. -->
-                <div v-else v-skeleton-source="`pipelines.board`" class="flex flex-col">
-                    <!-- Above the runs on purpose: the list says a repo failed again; this says which job keeps failing. -->
-                    <div v-if="recurring.length > 0" :class="toneTint(`danger`, `soft`, `mb-5 rounded-lg border px-4 py-3`)">
-                        <div class="flex items-center gap-2">
-                            <Icon name="exclamation-circle" class="text-sm text-danger" />
-                            <span class="text-sm font-semibold text-content">{{ t(`pipelinesView.failingRepeatedly`) }}</span>
-                        </div>
-                        <div class="mt-2 flex flex-wrap gap-1.5">
-                            <span
-                                v-for="item in recurring"
-                                :key="`${item.repo}:${item.branch}:${item.job}`"
-                                :class="toneTint(`danger`, `soft`, `inline-flex items-center gap-1.5 rounded-md border bg-canvas px-2 py-1 text-xs`)"
-                                v-tooltip.top="{
-                                    title: t(`pipelinesView.keepsFailing`),
-                                    tone: `danger`,
-                                    rows: [
-                                        { label: t(`tip.repo`), value: item.repo },
-                                        { label: t(`tip.branch`), value: item.branch },
-                                        { label: t(`tip.failedRuns`), value: item.runs },
-                                    ],
-                                }"
-                            >
-                                <span class="font-medium text-danger">{{ item.job }}</span>
-                                <span class="text-2xs text-subtle">{{ t(`pipelinesView.runs`, { runs: item.runs }) }}</span>
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Per-repo sections, worst first. -->
-                    <div class="flex flex-col gap-6">
-                        <RowGroup v-for="standing in sections" :key="standing.repo.repo" :label="standing.repo.repo">
-                            <template #info>
-                                <!-- This link opens the repository, not its pipelines. -->
-                                <a
-                                    :href="standing.repo.url"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="touch-target flex items-center gap-1.5 text-subtle hover:text-link"
-                                    v-tooltip.top="t(`pipelinesView.openRepo`)"
+                <Await :of="loaded" imprint="pipelines.board" :label="t(`pipelinesSkeleton.loadingPipelines`)">
+                    <template #fallback><PipelinesSkeleton /></template>
+                    <!-- Laid out as the column. -->
+                    <div class="flex flex-col">
+                        <!-- Above the runs on purpose: the list says a repo failed again; this says which job keeps failing. -->
+                        <div v-if="recurring.length > 0" :class="toneTint(`danger`, `soft`, `mb-5 rounded-lg border px-4 py-3`)">
+                            <div class="flex items-center gap-2">
+                                <Icon name="exclamation-circle" class="text-sm text-danger" />
+                                <span class="text-sm font-semibold text-content">{{ t(`pipelinesView.failingRepeatedly`) }}</span>
+                            </div>
+                            <div class="mt-2 flex flex-wrap gap-1.5">
+                                <span
+                                    v-for="item in recurring"
+                                    :key="`${item.repo}:${item.branch}:${item.job}`"
+                                    :class="toneTint(`danger`, `soft`, `inline-flex items-center gap-1.5 rounded-md border bg-canvas px-2 py-1 text-xs`)"
+                                    v-tooltip.top="{
+                                        title: t(`pipelinesView.keepsFailing`),
+                                        tone: `danger`,
+                                        rows: [
+                                            { label: t(`tip.repo`), value: item.repo },
+                                            { label: t(`tip.branch`), value: item.branch },
+                                            { label: t(`tip.failedRuns`), value: item.runs },
+                                        ],
+                                    }"
                                 >
-                                    <Icon :name="standing.repo.host" />
-                                    <span class="truncate font-mono text-2xs">{{ standing.repo.project }}</span>
-                                </a>
-                            </template>
+                                    <span class="font-medium text-danger">{{ item.job }}</span>
+                                    <span class="text-2xs text-subtle">{{ t(`pipelinesView.runs`, { runs: item.runs }) }}</span>
+                                </span>
+                            </div>
+                        </div>
 
-                            <!-- Above the group's runs, a card each: every failing main line as one incident, holding the runs
-                                 it is about. In the group's `lead`, not its list, so it never reads as one more run. -->
-                            <template v-if="boardOf(standing).incidents.length > 0" #lead>
-                                <MainFailureBanner
-                                    v-for="incident in boardOf(standing).incidents"
-                                    :key="`${incident.view.failure.repo}:${incident.view.failure.branch}`"
-                                    :view="incident.view"
-                                    :covered="incident.covered"
-                                    :runs="standing.runs"
-                                    :repo="standing.repo"
-                                    :busy="busy"
-                                    :starting="starting"
-                                    @fix="fixRun"
-                                >
-                                    <PipelineRunRow
-                                        v-for="run in incident.covered"
-                                        :key="actionKey(run)"
-                                        v-bind="rowProps(run, true)"
-                                        @rerun="act($event, rerun)"
-                                        @cancel="act($event, cancel)"
+                        <!-- Per-repo sections, worst first. -->
+                        <div class="flex flex-col gap-6">
+                            <RowGroup v-for="standing in sections" :key="standing.repo.repo" :label="standing.repo.repo">
+                                <template #info>
+                                    <!-- This link opens the repository, not its pipelines. -->
+                                    <a
+                                        :href="standing.repo.url"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="touch-target flex items-center gap-1.5 text-subtle hover:text-link"
+                                        v-tooltip.top="t(`pipelinesView.openRepo`)"
+                                    >
+                                        <Icon :name="standing.repo.host" />
+                                        <span class="truncate font-mono text-2xs">{{ standing.repo.project }}</span>
+                                    </a>
+                                </template>
+
+                                <!-- Above the group's runs, a card each: every failing main line as one incident, holding the runs
+                                     it is about. In the group's `lead`, not its list, so it never reads as one more run. -->
+                                <template v-if="boardOf(standing).incidents.length > 0" #lead>
+                                    <MainFailureBanner
+                                        v-for="incident in boardOf(standing).incidents"
+                                        :key="`${incident.view.failure.repo}:${incident.view.failure.branch}`"
+                                        :view="incident.view"
+                                        :covered="incident.covered"
+                                        :runs="standing.runs"
+                                        :repo="standing.repo"
+                                        :busy="busy"
+                                        :starting="starting"
                                         @fix="fixRun"
-                                    />
-                                </MainFailureBanner>
-                            </template>
+                                    >
+                                        <PipelineRunRow
+                                            v-for="run in incident.covered"
+                                            :key="actionKey(run)"
+                                            v-bind="rowProps(run, true)"
+                                            @rerun="act($event, rerun)"
+                                            @cancel="act($event, cancel)"
+                                            @fix="fixRun"
+                                        />
+                                    </MainFailureBanner>
+                                </template>
 
-                            <!-- Everyone sees warnings; only maintainers see the signing recipe. -->
-                            <Notice v-if="standing.repo.hookWarning" tone="warning" class="px-4 py-2.5 break-words">
-                                {{ standing.repo.hookWarning }}
-                                <template v-if="standing.repo.hookRecipe"> {{ standing.repo.hookRecipe }}</template>
-                            </Notice>
+                                <!-- Everyone sees warnings; only maintainers see the signing recipe. -->
+                                <Notice v-if="standing.repo.hookWarning" tone="warning" class="px-4 py-2.5 break-words">
+                                    {{ standing.repo.hookWarning }}
+                                    <template v-if="standing.repo.hookRecipe"> {{ standing.repo.hookRecipe }}</template>
+                                </Notice>
 
-                            <PipelineRunRow
-                                v-for="run in boardOf(standing).rest"
-                                :key="actionKey(run)"
-                                v-bind="rowProps(run)"
-                                @rerun="act($event, rerun)"
-                                @cancel="act($event, cancel)"
-                                @fix="fixRun"
-                            />
+                                <PipelineRunRow
+                                    v-for="run in boardOf(standing).rest"
+                                    :key="actionKey(run)"
+                                    v-bind="rowProps(run)"
+                                    @rerun="act($event, rerun)"
+                                    @cancel="act($event, cancel)"
+                                    @fix="fixRun"
+                                />
 
-                            <p v-if="standing.runs.length === 0" class="py-4 text-center text-sm text-muted">
-                                {{ t(`pipelinesView.noRunsYetRepo`) }}
+                                <p v-if="standing.runs.length === 0" class="py-4 text-center text-sm text-muted">
+                                    {{ t(`pipelinesView.noRunsYetRepo`) }}
+                                </p>
+                            </RowGroup>
+
+                            <p v-if="repos.length === 0" class="py-8 text-center text-sm text-muted">
+                                {{ t(`pipelinesView.noWorkspaceRepoMaps`) }}
                             </p>
-                        </RowGroup>
 
-                        <p v-if="repos.length === 0" class="py-8 text-center text-sm text-muted">
-                            {{ t(`pipelinesView.noWorkspaceRepoMaps`) }}
-                        </p>
-
-                        <!-- Every connected repo is silent; distinct from 'nothing is connected' and must not read like it. -->
-                        <p v-else-if="sections.length === 0" class="py-8 text-center text-sm text-muted">
-                            {{
-                                t(`pipelinesView.noRunsYet`, {
-                                    where:
-                                        repos.length === 1 ? t(`pipelinesView.thisRepo`) : t(`pipelinesView.connectedRepos`, { count: repos.length }),
-                                })
-                            }}
-                        </p>
+                            <!-- Every connected repo is silent; distinct from 'nothing is connected' and must not read like it. -->
+                            <p v-else-if="sections.length === 0" class="py-8 text-center text-sm text-muted">
+                                {{
+                                    t(`pipelinesView.noRunsYet`, {
+                                        where:
+                                            repos.length === 1 ? t(`pipelinesView.thisRepo`) : t(`pipelinesView.connectedRepos`, { count: repos.length }),
+                                    })
+                                }}
+                            </p>
+                        </div>
                     </div>
-                </div>
+                </Await>
             </div>
         </template>
     </SplitView>

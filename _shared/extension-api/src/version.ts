@@ -206,4 +206,19 @@
 // approved action ran as an agent turn following the item's instructions, and a connection's own command could only
 // read the workspace file to decide whether it was approved, which any turn writes. Additive: a backend that never calls
 // it is unchanged, and an action naming no performer still runs as a turn. The recorded surface grows the member.
-export const extensionApiVersion = "2.32.0";
+// 2.33.0 gives a read one state a view draws from: `Loaded` (waiting, ready, failed, idle), made by `useLoaded` from a
+// read's facts and handed back by `api.sandbox.query` as `loaded`, beside the kit's `<Await :of imprint>`, which draws
+// it: the reveal delay, the region as it last looked, what that look is taken from, and the failure in words. Each view
+// had wired those from `SkeletonSnapshot`, `vSkeletonSource` and `useLoadingReveal` with a loading flag of its own, and
+// each it got wrong was a skeleton for ever, none, or another view's. The three are deprecated, removable in 3.0.0. A
+// view's first wait is now its host's: every read made as it first draws (`api.sandbox.query` and vue-query's own
+// `useQuery` alike) joins it, so a bundle that draws no wait of its own still gets one. Additive. The recorded surface
+// grows the package's helpers (`useLoaded`, `loadedFrom`, `allLoaded`, `mapLoaded`, `dataOf`, `joinAwait`) and the kit's
+// `Await`.
+// 2.34.0 gives the UI kit its one section header: `Section` (a header over whatever it heads), `SectionHeader` (the
+// header alone, a panel's title), and `RowNote` (a sentence on a group's surface), so an extension heads a part of its
+// view with the shell's own header rather than a recipe class it spaces and decorates itself; and `InlineRename`, the
+// shell's one rename. `RowGroup` stops taking `caption` and `flat`: words beside a header and a group told by hand that
+// it sits on a card were the two decisions a view kept making for itself, and an older bundle passing either now has
+// it ignored as an attribute. Additive: every name an older bundle links is still there.
+export const extensionApiVersion = "2.34.0";

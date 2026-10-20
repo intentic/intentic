@@ -1463,6 +1463,9 @@ importers:
       '@intentic/code-read':
         specifier: workspace:*
         version: link:../../_tools/code-read
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../../_shared/extension-api
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract

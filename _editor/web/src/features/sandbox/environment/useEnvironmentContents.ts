@@ -1,3 +1,4 @@
+import { mapLoaded } from "@intentic/extension-api";
 import type { EnvironmentItem } from "@intentic/sandbox-contract/schemas/environment";
 import { computed, ref } from "vue";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
@@ -28,7 +29,7 @@ export interface ContentsGroup {
 export function useEnvironmentContents(enabled: () => boolean) {
     // Bumped by refresh() to force a re-probe; a mid-session install stays cached as missing otherwise.
     const reprobe = ref(0);
-    const { query, error } = useSandboxQuery({
+    const { query, error, loaded } = useSandboxQuery({
         queryKey: ENVIRONMENT_CONTENTS_KEY,
         queryFn: () => sandboxRaw(`GET /environment/contents`, reprobe.value > 0 ? { query: { refresh: `` } } : {}),
         enabled: computed(enabled),
@@ -61,5 +62,8 @@ export function useEnvironmentContents(enabled: () => boolean) {
     // When the rows on screen were read (ms, 0 before any read), for a reader that must know they postdate something.
     const readAt = computed(() => query.dataUpdatedAt.value);
 
-    return { groups, awaiting, loading, fetching, error, refresh, readAt };
+    // What the Contents list draws from (<Await>): the groups once probed, a wait before that.
+    const contents = computed(() => mapLoaded(loaded.value, () => groups.value));
+
+    return { groups, contents, awaiting, loading, fetching, error, refresh, readAt };
 }

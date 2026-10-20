@@ -1,8 +1,9 @@
-import type { PersonalDataClass, PrivacyLedgerAction, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
+import type { PrivacyLedgerAction } from "@intentic/sandbox-contract/schemas/privacy";
+import type { ShieldVerdict } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";
-import { GATEWAY_PATH, type PrivacyShield } from "../privacy-shield.js";
+import { GATEWAY_PATH, type PrivacyShield, type ShieldDecision } from "../privacy-shield.js";
 import { type GatewayProtocol, protocolOf, restoreResponse, restoreStream, shieldRequest } from "./protocols/index.js";
 import { compactAnthropicTools } from "./protocols/anthropic-tools.js";
 import { type Json, toJson } from "./protocols/walk.js";
@@ -12,16 +13,14 @@ import type { ShieldTally } from "./shield-types.js";
 
 // `ALL /privacy/gateway/<session>/*`: where every shielded runtime sends its model requests. The session names the
 // provider and the upstream the runtime would otherwise have called; the request goes there with its own headers
-// untouched (the runtime's credential travels as it would have), and only its body changes. Masking happens only for an
-// untrusted provider while the shield is on; watching reads and records but sends the request as it came; anything else
-// is a plain relay. A request that cannot be masked is refused, never sent as it came. Every mode drops one thing from
+// untouched (the runtime's credential travels as it would have), and only its body changes, as the shield's verdict
+// (privacy-shield.ts `decide`) says: masked, watched (read and recorded, sent as it came), or relayed as it is. A request that cannot be masked is refused, never sent as it came. Every mode drops one thing from
 // an Anthropic request, the dialect line of each tool's schema (protocols/anthropic-tools.ts), which no model reads.
 
 export interface GatewayRouteDeps {
     readonly shield: PrivacyShield;
     readonly warn: (message: string, error?: unknown) => void;
     readonly fetch?: typeof fetch;
-    readonly now?: () => Date;
 }
 
 // Shaped like each wire's own error, so the runtime shows the sentence instead of a parse failure. A 400, not a 5xx: a
@@ -75,27 +74,14 @@ const restOf = (c: Context<AppEnv>, token: string): string => {
     return `${path === "" ? "/" : path}${url.search}`;
 };
 
-export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = () => new Date() }: GatewayRouteDeps) => {
+export const createGatewayRoute = ({ shield, warn, fetch: send = fetch }: GatewayRouteDeps) => {
     const record = (
         session: GatewaySession,
-        fields: { action: PrivacyLedgerAction; trusted: boolean; protocol: string; tally?: ShieldTally; detail?: string },
+        verdict: ShieldVerdict,
+        fields: { action: PrivacyLedgerAction; protocol: string; tally?: ShieldTally; detail?: string },
     ): void => {
         const tally = fields.tally ?? emptyTally();
-        void shield.ledger
-            .record({
-                at: now().toISOString(),
-                ...(session.conversationId !== undefined ? { conversationId: session.conversationId } : {}),
-                provider: session.provider,
-                trusted: fields.trusted,
-                action: fields.action,
-                counts: tally.counts as Partial<Record<PersonalDataClass, number>>,
-                images: tally.images,
-                documents: tally.documents,
-                protocol: fields.protocol,
-                ...(fields.detail !== undefined ? { detail: fields.detail } : {}),
-                ...(tally.replacements.length > 0 ? { replacements: tally.replacements } : {}),
-            })
-            .catch((error: unknown) => warn("privacy shield: the log could not be written", error));
+        shield.note({ ...session, ...tally, verdict, action: fields.action, protocol: fields.protocol, detail: fields.detail });
     };
 
     return async (c: Context<AppEnv>): Promise<Response> => {
@@ -106,11 +92,9 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
         }
         const rest = restOf(c, token);
         const protocol = protocolOf(rest.split("?")[0] ?? rest);
-        let policy: PrivacyShieldPolicy;
-        let trusted: boolean;
+        let decision: ShieldDecision;
         try {
-            policy = await shield.policy();
-            trusted = await shield.trusted(policy, session.provider, session.conversationId);
+            decision = await shield.decide({ provider: session.provider, conversationId: session.conversationId, route: "gateway" });
         } catch (error) {
             warn("privacy shield: the policy could not be read, refusing the request", error);
             return refusal(
@@ -118,8 +102,9 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
                 `The privacy shield's policy could not be read, so this request was not sent. ${error instanceof Error ? error.message : ""}`.trim(),
             );
         }
-        const masking = policy.mode === "on" && !trusted;
-        const watching = policy.mode === "watch" && !trusted;
+        const { policy, verdict } = decision;
+        const masking = verdict.kind === "mask";
+        const watching = verdict.kind === "watch";
         const contentType = c.req.header("content-type") ?? null;
         const raw = await requestBody(c);
         let body: Uint8Array<ArrayBuffer> | undefined = relayedBody(masking, protocol, contentType, raw);
@@ -129,7 +114,7 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
             if (protocol === undefined || !isJson(contentType)) {
                 // A body on a path no walker knows: masked, it could not be read for what it carries, so it does not go.
                 if (masking) {
-                    record(session, { action: "refused", trusted, protocol: "other", detail: `unrecognised request ${rest.split("?")[0] ?? ""}` });
+                    record(session, verdict, { action: "refused", protocol: "other", detail: `unrecognised request ${rest.split("?")[0] ?? ""}` });
                     return refusal(
                         protocol,
                         `The privacy shield does not recognise this request (${c.req.method} ${rest.split("?")[0] ?? ""}), so it was not sent.`,
@@ -159,9 +144,8 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
                 } catch (error) {
                     warn("privacy shield: a request could not be masked", error);
                     if (masking) {
-                        record(session, {
+                        record(session, verdict, {
                             action: "refused",
-                            trusted,
                             protocol,
                             tally,
                             detail: error instanceof Error ? error.message : "masking failed",
@@ -177,9 +161,8 @@ export const createGatewayRoute = ({ shield, warn, fetch: send = fetch, now = ()
 
         // Off, a session minted while it was on is a plain relay and leaves no line: the log is the shield's record.
         if (protocol !== undefined && raw !== undefined && policy.mode !== "off") {
-            record(session, {
+            record(session, verdict, {
                 action: masking ? "masked" : watching ? "watched" : "passed",
-                trusted,
                 protocol,
                 ...(tally !== undefined ? { tally } : {}),
             });

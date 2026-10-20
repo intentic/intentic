@@ -17,8 +17,8 @@ const open = ref(false);
 
 <template>
     <section class="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl bg-card p-4 shadow-sm">
-        <div class="flex min-w-0 flex-1 items-start gap-2.5">
-            <Icon name="trash" class="mt-0.5 shrink-0 text-subtle" />
+        <div class="flex min-w-0 flex-1 items-start gap-2.5 text-sm">
+            <Icon name="trash" class="shrink-0 text-subtle" />
             <div class="min-w-0">
                 <h2 class="text-sm leading-tight font-semibold">{{ t(`desktop.uninstall.sectionTitle`) }}</h2>
                 <p class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.uninstall.sectionLead`) }}</p>

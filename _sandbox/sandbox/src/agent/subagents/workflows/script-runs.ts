@@ -17,6 +17,7 @@ import { agentCall, forgetWorker, placesFor, resetCallsForTest, type RunContext 
 import { type Cache, cacheOf, keepRun, type LiveRun, runFiles, runOnFile, type ScriptCall, type ScriptDefaults, type ScriptRun } from "./script-run-store.js";
 import { ScriptMetaSchema, splitScript } from "./script-source.js";
 import { readLiteral, runScript } from "./script-vm.js";
+import { defineInFlight } from "../../../seams/restart/in-flight.js";
 
 /* WORKFLOW RUNS: A SCRIPT AN AGENT WRITES TO COORDINATE OTHER AGENTS, ON ANY PROVIDER, THAT OUTLIVES A RESTART.
 
@@ -406,14 +407,16 @@ export const scriptRunDoor = (services: Services, parent: ChildParent): ScriptRu
 });
 
 /**
- * At boot, once the spawned children are back: every run a restart cut goes on where it was, its finished calls handed
- * back and its workers still working waited on, or, where the owner's restart answer resumes nothing, ends saying so.
- * Never throws.
+ * At boot, once the spawned children are back (bootstrap/restart/in-flight-kinds.ts): every run a restart cut goes on where it was, its
+ * finished calls handed back and its workers still working waited on, or, where the owner's restart answer resumes
+ * nothing, ends saying so.
  */
-export const resumeScriptRuns = async (services: Services, policy: { readonly resume: boolean }): Promise<void> => {
-    try {
-        const { entries } = await runFiles(services).list();
-        for (const entry of entries.filter((run) => run.state === "running")) {
+export const scriptRunsInFlight = defineInFlight({
+    name: "scripted workflow runs",
+    claim: "roots",
+    read: async (services: Services) => (await runFiles(services).list()).entries.filter((run) => run.state === "running"),
+    recover: async (services: Services, left, policy) => {
+        for (const entry of left) {
             const { id, ...record } = entry;
             const parent = services.agents.entry(record.parent);
             if (parent === undefined || parent.archivedAt !== undefined || !policy.resume) {
@@ -431,10 +434,8 @@ export const resumeScriptRuns = async (services: Services, policy: { readonly re
             services.logger.info({ run: id, calls: record.calls.length }, "workflow run: picked up where the restart cut it");
             launch(services, id, record, cacheOf(record.calls));
         }
-    } catch (error) {
-        services.logger.warn({ err: error }, "workflow runs: the ones a restart cut could not be read back, they stay as they were");
-    }
-};
+    },
+});
 
 /** For a suite: every run in this process forgotten. */
 export const resetScriptRunsForTest = (): void => {

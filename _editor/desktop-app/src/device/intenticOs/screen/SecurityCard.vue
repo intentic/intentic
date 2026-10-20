@@ -62,8 +62,8 @@ const savePin = (): void => {
 
 <template>
     <section class="flex flex-col gap-3 rounded-xl border border-line p-4" :aria-busy="reading || busy">
-        <header class="flex items-start gap-2.5">
-            <Icon name="lock" class="mt-0.5 shrink-0 text-subtle" />
+        <header class="flex items-start gap-2.5 text-sm">
+            <Icon name="lock" class="shrink-0 text-subtle" />
             <div class="min-w-0 flex-1">
                 <h2 class="text-sm leading-tight font-semibold">{{ t(`desktop.os.security.title`) }}</h2>
                 <p class="mt-1 text-xs text-muted">{{ t(`desktop.os.security.lead`) }}</p>

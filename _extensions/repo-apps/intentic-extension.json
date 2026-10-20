@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "category": "workspace",
     "icon": "th-large",
-    "engines": { "intentic": "^2.28.0" },
+    "engines": { "intentic": "^2.34.0" },
     "permissions": {
         "sandbox": [
             "GET /workspace/repos/*/apps",

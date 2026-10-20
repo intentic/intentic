@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "category": "work",
     "icon": "key",
-    "engines": { "intentic": "^2.28.0" },
+    "engines": { "intentic": "^2.34.0" },
     "permissions": {
         "sandbox": [
             "GET /secrets/inventory",

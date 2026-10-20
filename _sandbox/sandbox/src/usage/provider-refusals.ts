@@ -1,17 +1,22 @@
 import { type ProviderRefusal, ProviderRefusalSchema } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { jsonFile } from "../store/json-file.js";
-import { ENTITLEMENT_FOR_MS, OBSERVED_FOR_MS } from "./observed-limits.js";
 
-// Last refusal per provider, at <historyRoot>/provider-refusals.json, outside the agent's reach. account-usage.ts holds
-// polled headroom; this holds the moment a plan actually said no, which polling can't produce. Written from the turn's
-// own error path; last one wins, answering "when did this last happen", not "how often".
-// Beside it, under `provider:account`, each account's own last limit refusal. A spent allowance is a fact about one
-// account, and the provider's last refusal moves on to whichever account says no next: without this copy, an account
-// refused and still read at 100 by a provider that rounds (only a refusal proves such a pool empty) read as ready again
-// the moment another account was refused. Sign-in and seat refusals need no copy, since each already leaves a mark of
-// its own on the account (a revoke mark, a seat mark).
+/* EVERY TIME A PROVIDER SAID NO, IN ONE LEDGER, at <historyRoot>/provider-refusals.json, outside the agent's reach.
+   account-usage.ts holds polled headroom; this holds the moments a plan actually refused, which polling can't produce: a
+   spent allowance (for the account and model it named, or the provider's fleet where it named no account), a refused
+   sign-in, an account refused outright, and a plan marked spent by hand. Written from the turn's own error path, settled
+   by the turn that proves it over. Each is kept as the latest of its kind for the account and model it names.
+
+   One ledger, because one refusal used to be filed three times: as the provider's last refusal (one per provider, last
+   one wins, so a second account's refusal erased the first's, 2026-10-11), as a routed model's cooldown
+   (model-cooldowns.json, which only the picker read, 2026-10-09), and as a Cursor account's run-out (observed-limits.json,
+   which only the role ladder and the spawn listing read, 2026-10-13). Each copy had its own horizon and its own settle
+   rule, and each reader judged by its own subset, so one surface greyed a model another spawned onto. Every verdict now
+   reads this ledger whole (plan-pools.ts serviceStates), the daemon's and the editor's alike. */
 
 const StoredRefusalsSchema = z.record(z.string(), ProviderRefusalSchema);
 
@@ -22,71 +27,96 @@ export const providerRefusalsDocument = defineDocument({
     granularity: "record",
 });
 
-export interface ProviderRefusalStore {
-    // Every provider's last refusal, keyed by provider; one old enough to describe a reopened window is omitted, not
-    // served. What the wire carries and the refusal notes are written from.
-    readonly read: () => Promise<Record<string, ProviderRefusal>>;
-    // Every refusal on file, by provider: its last one and each account's own last limit refusal, in no particular order.
-    // What a verdict on an account is judged against (serviceStates), so one account's spent allowance outlives a
-    // refusal on another.
-    readonly onFile: () => Promise<Record<string, readonly ProviderRefusal[]>>;
-    readonly record: (provider: string, refusal: ProviderRefusal) => Promise<void>;
-    // Settles a provider's refusal when a scoped turn runs on the account it named, the only proof an entitlement
-    // refusal gets since it outlives any contradicting reading. A routed (nameless) refusal is settled by any success.
-    // Settles that account's own limit refusal too: it served a turn. `model` is what the answered turn ran on: a spent
-    // allowance filed for one model is settled only by an answer on that model, since a title job on a cheap model
-    // proves nothing about the pool an expensive one spends (2026-10-17: a Composer title call settled an Opus refusal
-    // two seconds after it was filed, and a Gemini flash-lite one settled an Opus 4.6 refusal). `askedAt` is when the
-    // answered request went out: a refusal filed at or after it stands, since that request was already in flight (an
-    // answer to it settled a "try again at 1:53 PM" five seconds after it was filed, 2026-10-19).
-    readonly clear: (provider: string, account: string | undefined, model?: string | undefined, askedAt?: number) => Promise<void>;
-    // Fires on every write, with the refusal as it now stands or undefined once settled; what /events forwards, so open
-    // windows update within the same beat.
-    readonly onChange: (listener: (provider: string, refusal: ProviderRefusal | undefined) => void) => () => void;
+/** What an answered turn proves: on which account (none for a routed turn) and model, and when its request went out. */
+export interface RefusalAnswer {
+    readonly account: string | undefined;
+    readonly model: string | undefined;
+    // A refusal filed at or after this instant stands: that request was already in flight (an answer to it settled a
+    // "try again at 1:53 PM" five seconds after it was filed, 2026-10-19). Undefined settles whatever stands.
+    readonly askedAt?: number | undefined;
+    // Another model's spent allowance this answer proves open too: every pool that model spends gates the answered one
+    // (plan-pools.ts answerCovers). Codex meters every model from one allowance: a Luna turn going through proves Sol's.
+    readonly covers?: ((model: string) => boolean) | undefined;
 }
 
-// A week, the longest pool cycle any provider sells: past it a refusal's window has certainly reopened or its
-// credential churned, so a stale one is worse than nothing. Forgotten on read, not pruned on write.
-const FORGET_AFTER_MS = 7 * 24 * 60 * 60_000;
+export interface ProviderRefusalStore {
+    // Every refusal on file, by provider, each past its horizon omitted rather than served: what every verdict on an
+    // account is judged against (serviceStates), and what the wire carries.
+    readonly onFile: () => Promise<Record<string, readonly ProviderRefusal[]>>;
+    // Instant is the caller's, so a test can place it without faking the clock. Replaces the one of the same kind on
+    // file for the same account and model.
+    readonly record: (provider: string, refusal: ProviderRefusal) => Promise<void>;
+    // Settles what an answered turn proves over (settledBy): content on the wire is the only evidence a refusal no poll
+    // can re-check yields to.
+    readonly settle: (provider: string, answer: RefusalAnswer) => Promise<void>;
+    // Drops what `which` picks of a provider's refusals, whatever answered them: an account disconnected, a mark a
+    // person took back, a seat a probe found restored. Answers whether anything was on file.
+    readonly drop: (provider: string, which: (refusal: ProviderRefusal) => boolean) => Promise<boolean>;
+    // Fires on every change, with the provider's refusals as they now stand; what /events forwards, so open windows
+    // judge by exactly what the daemon does within the same beat.
+    readonly onChange: (listener: (provider: string, refusals: readonly ProviderRefusal[]) => void) => () => void;
+}
 
-/* How long a refusal nothing else can retire is believed, where a week is far too long:
-   - An account refused outright, for as long as the mark that holds it is (observed-limits.ts): a day, unless a turn on
-     the account is answered first. Kept a week, a Cursor account the ledger had let go of after a day still read
-     "blocked, an admin's to fix" on its card for six more. A Claude seat refused outright is held by its seat mark,
-     re-tested by a probe (claude-seat-check.ts), not by this entry.
-   - An allowance no reading measures (`unmetered`) refused with no instant to try again at, in a wording nothing here
-     reads: as long as any refusal no reading can check (OBSERVED_FOR_MS). No reading answers it and only a turn settles
-     it, so one refused in Codex's then-unread dated wording stood a week against the spawn gate and the ladder, for an
-     allowance back in three and a half hours (2026-10-15). */
-const forgetAfter = (refusal: ProviderRefusal): number => {
-    if (refusal.kind === "entitlement") {
+const HOUR_MS = 60 * 60_000;
+// A week, the longest pool cycle any provider sells: past it a refusal's window has certainly reopened or its credential
+// churned, so a stale one is worse than nothing.
+const WEEK_MS = 7 * 24 * HOUR_MS;
+// An account refused outright, or a plan marked spent by hand: a role or a seat is switched back on by a person, not by
+// a window reopening, and two hours of belief let a whole fan-out be placed on the refused account again (2026-10-17).
+// A day, so one forgotten never grounds a provider for good; a turn answered on the account settles it sooner.
+const ENTITLEMENT_FOR_MS = 24 * HOUR_MS;
+// A spent allowance nothing can read back: no instant named, and no reading measures it (a plan that publishes none,
+// Cursor's or Devin's, or an admin's credit). Only a turn settles it, so it is believed as long as the role ladder
+// benches a refused rung (role-model.ts REFUSED_FOR_MS): one held a week stood against the spawn gate for an allowance
+// back in three and a half hours (2026-10-15).
+const OBSERVED_FOR_MS = 2 * HOUR_MS;
+
+// How long a refusal is believed when nothing settles or answers it first. Forgotten on read, not pruned on write.
+const horizon = (provider: string, refusal: ProviderRefusal): number => {
+    if (refusal.kind === "entitlement" || refusal.byHand === true) {
         return ENTITLEMENT_FOR_MS;
     }
-    return refusal.unmetered === true && refusal.resetsAt === undefined ? OBSERVED_FOR_MS : FORGET_AFTER_MS;
+    // SAFETY: a provider id is a string on the wire and in this file; reportsPlanLimits only tests membership.
+    const unread = refusal.unmetered === true || !reportsPlanLimits(provider as AgentProvider);
+    return refusal.kind === "limit" && refusal.resetsAt === undefined && unread ? OBSERVED_FOR_MS : WEEK_MS;
 };
 
-// Where an account's own copy is filed; a provider's name never holds a colon, so the two kinds of key never meet.
-const accountKey = (provider: string, account: string): string => `${provider}:${account}`;
-const providerOf = (key: string): string | undefined => (key.includes(":") ? key.slice(0, key.indexOf(":")) : undefined);
+// The scope a refusal is the latest of: its provider, kind, account and model. A provider's name never holds a colon,
+// so the provider is the key's first field, whichever release wrote it (one keyed `provider` or `provider:account`
+// reads as an entry like any other, and is re-keyed by the next write).
+const scopeOf = (provider: string, refusal: ProviderRefusal): string => `${provider}:${refusal.kind}:${refusal.account ?? ""}:${refusal.model ?? ""}`;
+const providerOf = (key: string): string => key.split(":", 1)[0] ?? key;
 
-// Kept per account: a spent allowance, on an account the refusal names. A routed refusal names none; the translator
-// benches the credential it refused itself.
-const accountCopy = (refusal: ProviderRefusal): string | undefined => (refusal.kind === "limit" ? refusal.account : undefined);
+// The file as scopes, each holding its newest refusal: an older release's provider slot and its account copy of one
+// refusal collapse into one entry.
+const scoped = (stored: Record<string, ProviderRefusal>): Map<string, ProviderRefusal> => {
+    const byScope = new Map<string, ProviderRefusal>();
+    for (const [key, refusal] of Object.entries(stored)) {
+        const scope = scopeOf(providerOf(key), refusal);
+        const held = byScope.get(scope);
+        if (held === undefined || held.at < refusal.at) {
+            byScope.set(scope, refusal);
+        }
+    }
+    return byScope;
+};
 
 /*
- * Whether a turn answered on `model`, by a request that went out at `askedAt`, proves this refusal over. Only a request
- * sent after the refusal was filed can. A refused credential or a refused account is answered by any turn the account
- * served; a spent allowance only by a turn on the model it named, or by any turn where it named none. An answer whose
+ * Whether an answered turn proves this refusal over. Only a request sent after it was filed can. A refusal naming another
+ * account is that account's, and still true. A refused credential or account is answered by any turn the account served;
+ * a spent allowance only by a turn on the model it named or one whose pools cover it (a title job on a cheap model
+ * proves nothing about the pool an expensive one spends, 2026-10-17), or by any turn where it named none. An answer whose
  * model is unknown proves nothing about a model-scoped allowance.
  */
-const answeredBy = (refusal: ProviderRefusal, model: string | undefined, askedAt: number | undefined): boolean =>
-    (askedAt === undefined || refusal.at < askedAt) &&
-    (refusal.kind !== "limit" || refusal.model === undefined || (model !== undefined && model !== "" && refusal.model === model));
+const settledBy = (refusal: ProviderRefusal, answer: RefusalAnswer): boolean =>
+    (answer.askedAt === undefined || refusal.at < answer.askedAt) &&
+    (refusal.account === undefined || refusal.account === answer.account) &&
+    (refusal.kind !== "limit" ||
+        refusal.model === undefined ||
+        (answer.model !== undefined && (refusal.model === answer.model || answer.covers?.(refusal.model) === true)));
 
-// Every write to this file decided which account a picker skips, and none of it was logged: one account's refusal took
-// over the provider's slot from another's and the only trace was the file as it stood afterwards. Each change writes one
-// line through `log`: recorded (and whose refusal it superseded in the provider's slot), and settled (by which account's
-// turn). A settle that finds nothing to remove, the case on nearly every answered turn, writes nothing.
+// Every write to this file decides which account a picker skips: each change writes one line through `log`, recorded
+// and settled. A settle that finds nothing, the case on nearly every answered turn, writes nothing.
 export interface ProviderRefusalStoreOptions {
     readonly log?: (fields: Record<string, unknown>, message: string) => void;
 }
@@ -97,90 +127,96 @@ const described = (refusal: ProviderRefusal): Record<string, unknown> => ({
     ...(refusal.account === undefined ? {} : { account: refusal.account }),
     ...(refusal.model === undefined ? {} : { model: refusal.model }),
     ...(refusal.resetsAt === undefined ? {} : { resetsAt: new Date(refusal.resetsAt * 1000).toISOString() }),
+    ...(refusal.byHand === true ? { byHand: true } : {}),
 });
 
-export const fileProviderRefusalStore = (path: string, options: ProviderRefusalStoreOptions = {}): ProviderRefusalStore => {
-    const log = options.log ?? (() => undefined);
-    const file = jsonFile<Record<string, ProviderRefusal>>(path, {
-        parse: (raw) => StoredRefusalsSchema.safeParse(raw).data,
-        fallback: () => ({}),
-        document: providerRefusalsDocument,
-    });
+type Stored = Record<string, ProviderRefusal>;
 
-    const listeners = new Set<(provider: string, refusal: ProviderRefusal | undefined) => void>();
-    const announce = (provider: string, refusal: ProviderRefusal | undefined): void => {
+// What the ledger is kept in: its file, or a record in memory for a caller with nothing to persist to.
+interface LedgerBacking {
+    readonly read: () => Promise<Stored>;
+    readonly update: (change: (current: Stored) => Stored) => Promise<Stored>;
+}
+
+export const fileProviderRefusalStore = (path: string, options: ProviderRefusalStoreOptions = {}): ProviderRefusalStore =>
+    refusalStoreOver(
+        jsonFile<Stored>(path, { parse: (raw) => StoredRefusalsSchema.safeParse(raw).data, fallback: () => ({}), document: providerRefusalsDocument }),
+        options,
+    );
+
+/** The same ledger over a record in memory, seeded with what each provider has on file: a test harness, the demo daemon. */
+export const memoryProviderRefusalStore = (seed: Readonly<Record<string, readonly ProviderRefusal[]>> = {}): ProviderRefusalStore => {
+    let held: Stored = Object.fromEntries(Object.entries(seed).flatMap(([provider, filed]) => filed.map((refusal) => [scopeOf(provider, refusal), refusal])));
+    return refusalStoreOver({
+        read: async () => held,
+        update: async (change) => {
+            held = change(held);
+            return held;
+        },
+    });
+};
+
+const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOptions = {}): ProviderRefusalStore => {
+    const log = options.log ?? (() => undefined);
+
+    const listeners = new Set<(provider: string, refusals: readonly ProviderRefusal[]) => void>();
+    const onFile = async (): Promise<Record<string, readonly ProviderRefusal[]>> => {
+        const now = Date.now();
+        const byProvider: Record<string, ProviderRefusal[]> = {};
+        for (const [scope, refusal] of scoped(await file.read())) {
+            const provider = providerOf(scope);
+            if (refusal.at > now - horizon(provider, refusal)) {
+                (byProvider[provider] ??= []).push(refusal);
+            }
+        }
+        return byProvider;
+    };
+    const announce = async (provider: string): Promise<void> => {
+        const refusals = (await onFile())[provider] ?? [];
         for (const listener of listeners) {
-            listener(provider, refusal);
+            listener(provider, refusals);
         }
     };
-
-    const recent = async (): Promise<[string, ProviderRefusal][]> => {
-        const now = Date.now();
-        return Object.entries(await file.read()).filter(([, refusal]) => refusal.at > now - forgetAfter(refusal));
+    // Removes the provider's entries `drops` picks, answering what went; the file is re-keyed by scope as it is written.
+    const remove = async (provider: string, drops: (refusal: ProviderRefusal) => boolean): Promise<ProviderRefusal[]> => {
+        const removed: ProviderRefusal[] = [];
+        await file.update((current) => {
+            const kept = [...scoped(current)].filter(([scope, refusal]) => {
+                const drop = providerOf(scope) === provider && drops(refusal);
+                if (drop) {
+                    removed.push(refusal);
+                }
+                return !drop;
+            });
+            return removed.length === 0 ? current : Object.fromEntries(kept);
+        });
+        if (removed.length > 0) {
+            await announce(provider);
+        }
+        return removed;
     };
 
     return {
-        read: async () => Object.fromEntries((await recent()).filter(([key]) => providerOf(key) === undefined)),
-        onFile: async () => {
-            const byProvider: Record<string, ProviderRefusal[]> = {};
-            for (const [key, refusal] of await recent()) {
-                (byProvider[providerOf(key) ?? key] ??= []).push(refusal);
-            }
-            return byProvider;
-        },
+        onFile,
         record: async (provider, refusal) => {
-            const account = accountCopy(refusal);
-            let previous: ProviderRefusal | undefined;
-            await file.update((current) => {
-                previous = current[provider];
-                return {
-                    ...current,
-                    [provider]: refusal,
-                    ...(account === undefined ? {} : { [accountKey(provider, account)]: refusal }),
-                };
-            });
-            // Another account's refusal leaving the provider's slot is the change worth naming: its own limit copy, where
-            // it has one, keeps it judged spent; any other kind it held is now off file.
-            const superseded = previous !== undefined && previous.account !== refusal.account ? previous : undefined;
-            log(
-                {
-                    provider,
-                    ...described(refusal),
-                    said: refusal.message,
-                    ...(superseded === undefined ? {} : { superseded: { ...described(superseded), keptForAccount: accountCopy(superseded) !== undefined } }),
-                },
-                `provider refusal: recorded ${provider} ${refusal.kind}${refusal.account === undefined ? "" : ` for ${refusal.account}`}${
-                    superseded === undefined ? "" : `, superseding ${superseded.account ?? "an unnamed account"}'s ${superseded.kind}`
-                }`,
-            );
-            announce(provider, refusal);
+            await file.update((current) => ({ ...Object.fromEntries(scoped(current)), [scopeOf(provider, refusal)]: refusal }));
+            log({ provider, ...described(refusal), said: refusal.message }, `provider refusal: recorded ${provider} ${refusal.kind}${refusal.account === undefined ? "" : ` for ${refusal.account}`}`);
+            await announce(provider);
         },
-        clear: async (provider, account, model, askedAt) => {
-            let settled = false;
-            const removed: ProviderRefusal[] = [];
-            await file.update((current) => {
-                const stored = current[provider];
-                // A refusal naming a different account belongs to someone else, and is still true; one about another
-                // model's allowance is still true of that model.
-                settled = stored !== undefined && (stored.account === undefined || stored.account === account) && answeredBy(stored, model, askedAt);
-                // The account's own copy goes whatever the provider's last says, where this answer is about its model.
-                const own = account === undefined ? undefined : accountKey(provider, account);
-                const ownCopy = own === undefined ? undefined : current[own];
-                const ownSettled = ownCopy !== undefined && answeredBy(ownCopy, model, askedAt);
-                const settles = (key: string): boolean => (settled && key === provider) || (ownSettled && key === own);
-                removed.splice(0, removed.length, ...Object.entries(current).flatMap(([key, refusal]) => (settles(key) ? [refusal] : [])));
-                return removed.length > 0 ? Object.fromEntries(Object.entries(current).filter(([key]) => !settles(key))) : current;
-            });
-            const cleared = removed[0];
-            if (cleared !== undefined) {
+        settle: async (provider, answer) => {
+            for (const settled of await remove(provider, (refusal) => settledBy(refusal, answer))) {
                 log(
-                    { provider, ...described(cleared), ...(account === undefined ? {} : { settledBy: account }) },
-                    `provider refusal: settled ${provider} ${cleared.kind}${cleared.account === undefined ? "" : ` for ${cleared.account}`} (${account ?? "a turn"} served)`,
+                    { provider, ...described(settled), ...(answer.account === undefined ? {} : { settledBy: answer.account }) },
+                    `provider refusal: settled ${provider} ${settled.kind}${settled.account === undefined ? "" : ` for ${settled.account}`} (${answer.account ?? "a turn"} served)`,
                 );
             }
-            if (settled) {
-                announce(provider, undefined);
+        },
+        drop: async (provider, which) => {
+            const dropped = await remove(provider, which);
+            for (const refusal of dropped) {
+                log({ provider, ...described(refusal) }, `provider refusal: dropped ${provider} ${refusal.kind}${refusal.account === undefined ? "" : ` for ${refusal.account}`}`);
             }
+            return dropped.length > 0;
         },
         onChange: (listener) => {
             listeners.add(listener);

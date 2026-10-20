@@ -5,7 +5,7 @@
 // time, so the next section opened draws at once.
 import "@intentic/testing/dom";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { REVEAL_DELAY_MS } from "@intentic/ui";
+import { MINIMUM_HOLD_MS, REVEAL_DELAY_MS } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import { type App, type Component, createApp, defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
@@ -85,7 +85,7 @@ afterEach(() => {
 it(`draws nothing for a short wait, the outline past the reveal delay, then the section with its props and slots`, async () => {
     jest.useFakeTimers();
     const chunk = gate(Shown);
-    const Section = lazySection(chunk.load);
+    const Section = lazySection(`chunk`, chunk.load);
     const el = await mount(() => h(Section, { label: `usage` }, { turns: () => h(`p`, { "data-turns": `` }) }));
 
     expect(el.textContent).toBe(``);
@@ -97,15 +97,20 @@ it(`draws nothing for a short wait, the outline past the reveal delay, then the 
     expect(outline(el)).not.toBeNull();
 
     chunk.open();
-    jest.useRealTimers();
-    await settle();
+    for (let beat = 0; beat < 8; beat += 1) {
+        await nextTick();
+    }
+    // Once shown, the outline holds long enough to register, the section mounted under it.
+    expect(outline(el)).not.toBeNull();
+    jest.advanceTimersByTime(MINIMUM_HOLD_MS);
+    await nextTick();
     expect(outline(el)).toBeNull();
     expect(el.querySelector(`[data-section="usage"] [data-turns]`)).not.toBeNull();
 });
 
 it(`draws a section it has drawn once at once, without asking for its chunk again`, async () => {
     const chunk = gate(Shown);
-    const Section = lazySection(chunk.load);
+    const Section = lazySection(`chunk`, chunk.load);
     const first = await mount(() => h(Section, { label: `usage` }));
     chunk.open();
     await settle();
@@ -119,7 +124,7 @@ it(`draws a section it has drawn once at once, without asking for its chunk agai
 
 it(`says a chunk failed, and fetches it afresh on Try again`, async () => {
     const chunk = gate(Shown);
-    const Section = lazySection(chunk.load);
+    const Section = lazySection(`chunk`, chunk.load);
     const el = await mount(() => h(Section, { label: `usage` }));
     chunk.fail(new Error(`the server said no`));
     await settle();
@@ -141,7 +146,7 @@ it(`lands a deep link on a card inside a section whose code is still on its way`
     Element.prototype.scrollTo = () => undefined;
     try {
         const chunk = gate(defineComponent({ render: () => h(`div`, { "data-setting": `usage-limits` }) }));
-        const Section = lazySection(chunk.load);
+        const Section = lazySection(`chunk`, chunk.load);
         await mount(() => h(Section));
         const landing = seekSetting(`usage-limits`);
         chunk.open();
@@ -160,9 +165,9 @@ it(`warms the other sections one at a time once the open one has drawn, and stop
         await settle();
     };
     const [open, second, third] = [gate(Shown), gate(Shown), gate(Shown)];
-    const Open = lazySection(open.load);
-    const Second = lazySection(second.load);
-    const Third = lazySection(third.load);
+    const Open = lazySection(`open`, open.load);
+    const Second = lazySection(`second`, second.load);
+    const Third = lazySection(`third`, third.load);
     await mount(
         () => h(Open, { label: `usage` }),
         () => useSectionWarmup(() => [Open, Second, Third]),

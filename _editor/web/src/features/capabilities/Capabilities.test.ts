@@ -47,9 +47,6 @@ jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
     viewProcessLogs: jest.fn(),
 }));
-jest.mock(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
-}));
 jest.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`./connect/hosts/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 

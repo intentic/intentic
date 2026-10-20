@@ -12,8 +12,8 @@ import { type Definition, CONVERSION_CHECKS_STAMP, conversionChecksInputs, state
 import { parseJsonOr } from "@intentic/base/json";
 import { readTextIfExists } from "@intentic/base/fs";
 
-// The shape generator, two modes. `--freeze` (the worktree fixer, before every land that touched daemon or contract
-// source) reads the state registry (src/bootstrap/state-registry.ts, every document and boot step the source defines,
+// The shape generator, two modes, run from source (`bun --conditions=@intentic/src`, so no build has to come first).
+// `--freeze` (the fixers, wherever a land writes daemon or contract source; state-shapes.json is `merge=derived`) reads the state registry (src/bootstrap/state-registry.ts, every document and boot step the source defines,
 // which the boot step and the pre-flight read; scripts/write-indexes.mjs writes it) and records each document's current
 // shape in state-shapes.json, the only one of its outputs that is committed. `--checks` (the package's `pretypecheck`) writes the shape checks from that
 // record: the type-level checks that each frozen shape still converts to what today's schema accepts and loses no key

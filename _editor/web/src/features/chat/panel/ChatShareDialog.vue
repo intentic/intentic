@@ -125,12 +125,12 @@ const done = (): void => {
                     type="button"
                     role="radio"
                     :aria-checked="detail === option.value"
-                    class="ui-row-select -mx-2.5 flex items-start gap-2 rounded-lg px-2.5 py-2 text-left"
+                    class="ui-row-select -mx-2.5 flex items-start gap-2 rounded-lg px-2.5 py-2 text-left text-xs"
                     :class="{ 'ui-row-select-on': detail === option.value }"
                     @click="detail = option.value"
                 >
                     <Icon
-                        class="mt-0.5 text-2xs"
+                        class="text-2xs"
                         :name="detail === option.value ? 'check-circle' : 'circle'"
                         :class="detail === option.value ? 'text-accent' : 'text-subtle'"
                     />
@@ -143,7 +143,7 @@ const done = (): void => {
 
             <!-- Sharing makes the conversation readable without sign-in. -->
             <p class="flex items-start gap-1.5 text-2xs text-warning">
-                <Icon name="globe" class="mt-0.5 shrink-0 text-2xs" />
+                <Icon name="globe" class="shrink-0 text-2xs" />
                 <span>{{ t(`chat.chatShareDialog.anyoneLinkReadNo`) }}</span>
             </p>
         </form>

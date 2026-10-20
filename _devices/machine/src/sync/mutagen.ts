@@ -12,7 +12,7 @@ import { clearAdoptFolder, isProjectPairing, type Pairing, pairingKey, pairingRe
 import { dockerEndpointAnswers, liveIdentity, mutagenForwardUrl, mutagenUrl, pairingEndpoint, type SandboxEndpoint } from "./endpoint.js";
 import { labelValue, sessionOwner } from "./environment.js";
 import { runProcess, runProcessSync, type SyncExecResult } from "./exec.js";
-import { carriedPause, dropCarriedPause, mutagenEnv } from "./mutagen-env.js";
+import { mutagenEnv } from "./mutagen-env.js";
 import { projectShell, realProjectRunner, sandboxCopy } from "./project/project-remote.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, ignoresFor, mutagenSshPath, sanitizeId, sshTransportAnswers } from "./ssh.js";
@@ -717,41 +717,9 @@ export const existingSyncSessions = (mutagen: string, names: readonly string[]):
     return names.filter((name) => held.has(name));
 };
 
-// Pauses a pairing's file sync, without touching a deliberate manual pause: answers whether it paused anything, and a
-// pairing whose sessions are all paused already (or that has none) is left alone, so its pause is not this caller's to
-// undo. Both sessions pause/resume as a pair. Used for a sandbox unreachable for an hour, and for one being swapped on
-// this machine (swap-pause.ts).
-export const pauseRunningSync = (mutagen: string, pairing: Pairing): boolean => {
-    if (pairing.mode !== "sync") {
-        return false;
-    }
-    const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
-    // `every` over an empty list is true, so "no sessions" and "all paused" share the branch on purpose. A listing that
-    // did not answer pauses nothing: the next pass asks again.
-    if (names === undefined || names.every((name) => readSessionState(mutagen, name).paused === true)) {
-        return false;
-    }
-    const result = runProcessSync(mutagen, ["sync", "pause", ...names], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true });
-    return result.status === 0;
-};
-
-// Pauses those of a pairing's sessions that are running, and answers which: what a pause that keeps its own list may
-// later resume, and nothing else, so a session somebody paused by hand stays as they left it. Empty when none was
-// running (or the pairing has none); undefined when Mutagen did not answer or refused the pause.
-export const pauseRunningSessions = (mutagen: string, pairing: Pairing): readonly string[] | undefined => {
-    if (pairing.mode !== "sync") {
-        return [];
-    }
-    const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
-    if (names === undefined) {
-        return undefined;
-    }
-    const running = names.filter((name) => readSessionState(mutagen, name).paused !== true);
-    if (running.length === 0) {
-        return [];
-    }
-    return runProcessSync(mutagen, ["sync", "pause", ...running], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true }).status === 0 ? running : undefined;
-};
+// Pauses these sessions in one call: answers whether Mutagen took it. What to pause is holds.ts's to say.
+export const pauseSessions = (mutagen: string, names: readonly string[]): boolean =>
+    names.length === 0 || runProcessSync(mutagen, ["sync", "pause", ...names], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, quiet: true }).status === 0;
 
 // A RESUME IS ONE CALL PER SESSION, AWAITED, AND READ BACK (2026-10-19, README "File sync holds still"). One call over
 // several stops at the first session that cannot connect (just after a swap, the usual case), a blocking one starves the
@@ -765,31 +733,6 @@ export const resumeSessions = async (mutagen: string, names: readonly string[]):
     const after = names.length === 0 ? [] : listSessions(mutagen, names);
     return after !== undefined && !after.some((session) => session.paused === true);
 };
-
-// Resumes the named sessions that still exist: the counterpart of `pauseRunningSessions`.
-export const resumeNamedSessions = async (mutagen: string, names: readonly string[]): Promise<boolean> => {
-    const held = names.length === 0 ? [] : existingSyncSessions(mutagen, names);
-    return held !== undefined && (await resumeSessions(mutagen, held));
-};
-
-// Lifts the pause a swap of the sandbox put on its file sync. Every session the pairing has: that pause paused them all.
-// Not while the drive holding its folder is short of room (low-disk.ts): it is tried again once the drive has room.
-export const resumeSwapPausedSync = async (mutagen: string, pairing: Pairing): Promise<boolean> => {
-    const names = pairing.fileSyncLowDisk === undefined ? existingSyncSessions(mutagen, syncSessionNames(pairing)) : undefined;
-    return names !== undefined && (await resumeSessions(mutagen, names));
-};
-
-export const resumeAutoPausedSync = async (mutagen: string, pairing: Pairing): Promise<boolean> => {
-    if (pairing.mode !== "sync" || pairing.fileSyncAutoPaused !== true || pairing.fileSyncLowDisk !== undefined) {
-        return false;
-    }
-    const names = existingSyncSessions(mutagen, syncSessionNames(pairing));
-    return names !== undefined && names.length > 0 && (await resumeSessions(mutagen, names));
-};
-
-// Lifts a pause the watcher made for a reason of its own (config.ts `fileSyncPausedFor`), once that reason ended. The
-// same as the swap's: that pause paused every session the pairing has.
-export const resumeWatcherPausedSync = async (mutagen: string, pairing: Pairing): Promise<boolean> => await resumeSwapPausedSync(mutagen, pairing);
 
 // Whether a live session joins the same two folders the spec does, in the same direction. Which endpoint should hold
 // what follows the spec's direction; a backup with reversed ends must never read as "close enough" — it would upload
@@ -871,16 +814,22 @@ export const relabelBudget = (count: number): RelabelBudget => {
 const NO_RELABELS: RelabelBudget = { take: () => false };
 
 // Converges the session to this build's spec: creates if missing, recreates if drifted, since recreating is the
-// only way to change ignores. Cheap when content already matches (a rescan, not a re-download); a paused session stays
-// paused. Answers whether both sessions now ARE the spec: false means something was put off (a create that failed is
-// thrown instead, a session waiting for its labels until a pass has room for it), and the watcher tries again on its
-// cadence rather than at its next start.
-export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: Log, relabels: RelabelBudget = NO_RELABELS): Promise<boolean> => {
+// only way to change ignores. Cheap when content already matches (a rescan, not a re-download); one made while the
+// pairing is held (holds.ts) is made paused. Answers whether both sessions now ARE the spec: false means something was
+// put off (a create that failed is thrown instead, a session waiting for its labels until a pass has room for it), and
+// the watcher tries again on its cadence rather than at its next start.
+export const ensureSyncSession = async (
+    mutagen: string,
+    pairing: Pairing,
+    log: Log,
+    held: boolean,
+    relabels: RelabelBudget = NO_RELABELS,
+): Promise<boolean> => {
     if (pairing.mode !== "sync" || pairing.localDir === undefined) {
         return true; // a mirror-only enrollment has no file sync at all: just port forwards
     }
-    const held = { ...pairing, localDir: pairing.localDir };
-    if (pairing.adoptFolder === true && !(await adoptBeforeFirstSession(mutagen, held, log))) {
+    const placed = { ...pairing, localDir: pairing.localDir };
+    if (pairing.adoptFolder === true && !(await adoptBeforeFirstSession(mutagen, placed, log))) {
         return false;
     }
     const symlinks = await deviceSymlinks();
@@ -893,8 +842,8 @@ export const ensureSyncSession = async (mutagen: string, pairing: Pairing, log: 
     // since that's what the user is waiting on. An unreachable sandbox leaves both alone, never half-converged.
     let converged = true;
     const answers = transportAnswers(pairing);
-    for (const spec of sessionSpecs(held, symlinks.mode, sessionOwner())) {
-        converged = (await convergeSession(mutagen, spec, log, answers, relabels)) && converged;
+    for (const spec of sessionSpecs(placed, symlinks.mode, sessionOwner())) {
+        converged = (await convergeSession(mutagen, spec, { log, answers, relabels, held })) && converged;
     }
     retireStrayBackup(mutagen, pairing, log);
     return converged;
@@ -1083,9 +1032,7 @@ export const terminationTargets = (sessions: readonly Pick<LiveSession, "identif
 const convergeSession = async (
     mutagen: string,
     spec: SyncSessionSpec,
-    log: Log,
-    answers: () => Promise<boolean>,
-    relabels: RelabelBudget,
+    { log, answers, relabels, held }: { readonly log: Log; readonly answers: () => Promise<boolean>; readonly relabels: RelabelBudget; readonly held: boolean },
 ): Promise<boolean> => {
     const listed = readSessions(mutagen, spec.name);
     if (listed === undefined) {
@@ -1143,18 +1090,9 @@ const convergeSession = async (
         );
         await runProcess(mutagen, ["sync", "terminate", ...terminationTargets(sessions, spec.name)], { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS });
     }
-    await createSession(mutagen, spec, live, log);
+    // Made paused while the pairing is held, so a session made or replaced never runs for a moment it should not.
+    await runMutagenAsync(mutagen, mutagenCreateArgs(spec, held), log);
     return true;
-};
-
-// Made paused where the session it replaces was, or where the move off the shared data directory ended one of this
-// name paused (mutagen-move.ts), whose pause then has been carried.
-const createSession = async (mutagen: string, spec: SyncSessionSpec, replaced: LiveSession | undefined, log: Log): Promise<void> => {
-    const carried = replaced === undefined && (await carriedPause(spec.name));
-    await runMutagenAsync(mutagen, mutagenCreateArgs(spec, replaced?.paused === true || carried), log);
-    if (carried) {
-        await dropCarriedPause(spec.name);
-    }
 };
 
 // One ssh round trip asking whether a handful of directories still exist; generous enough for a loaded laptop, bounded
@@ -1174,7 +1112,7 @@ export const healDerivedConflicts = async (mutagen: string, pairing: Pairing, lo
     if (pairing.mode !== "sync" || pairing.localDir === undefined || syncMode(pairing) !== "two-way-safe") {
         return idle;
     }
-    if (!asked && (pairing.autoHealOff === true || pairing.fileSyncAutoPaused === true)) {
+    if (!asked && pairing.autoHealOff === true) {
         return idle;
     }
     const held = readSessionConflicts(mutagen, sessionName(pairingKey(pairing)));

@@ -6,9 +6,11 @@ import {
     type DevicePort,
     type DeviceSandbox,
     type DeviceSyncSwitch,
+    deviceEnvironment,
     type Machine,
     machinesOf,
 } from "@intentic/sandbox-contract/schemas/devices";
+import { HOST_NATIVE_ENVIRONMENT, machinePresence } from "@intentic/sandbox-contract/schemas/hosts";
 import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import type { IconName, StatusVariant, Tip } from "@intentic/ui";
 import {
@@ -100,10 +102,7 @@ export const machineState = (machine: MachineRow, readAt: number): { word: strin
         rank: RANK[stateCode(environment.device, readAt)],
     }));
     const worst = states.toSorted((a, b) => b.rank - a.rank)[0];
-    if (worst === undefined) {
-        return { word: stateWord(`offline`), variant: `neutral` };
-    }
-    return { word: worst.word, variant: worst.variant };
+    return worst === undefined ? { word: stateWord(`offline`), variant: `neutral` } : { word: worst.word, variant: worst.variant };
 };
 
 // What the machine IS, in the quietest ink the masthead has: read once, mostly to tell two identically-named PCs
@@ -111,11 +110,8 @@ export const machineState = (machine: MachineRow, readAt: number): { word: strin
 // hostname joins only when it differs from the name already above it.
 export const machineHardware = (machine: MachineRow): string => {
     const described = machine.environments.find((environment) => environment.device.facts !== undefined)?.device;
-    if (described === undefined) {
-        return ``;
-    }
-    const hostname = described.report?.hostname;
-    return [described.facts?.arch, hostname !== undefined && hostname.toLowerCase() !== machine.label.toLowerCase() ? hostname : undefined]
+    const hostname = described?.report?.hostname;
+    return [described?.facts?.arch, hostname !== undefined && hostname.toLowerCase() !== machine.label.toLowerCase() ? hostname : undefined]
         .filter((part) => part !== undefined && part !== ``)
         .join(` · `);
 };
@@ -128,10 +124,10 @@ export const sortMachines = (machines: readonly MachineRow[], readAt: number): M
 
 // THE BOARD'S ONE WORD FOR A WHOLE COMPUTER, of three, for its tile's badge and the board's status pills. Not the
 // machine page's verdict (machineState, worst side first, under which each side has a row of its own): on a board of
-// tiles the question is "can I use it, and does it want me". A PC is live while any side answers, since a distro asleep
-// beside a live Windows is the normal case and its own chip says so; it needs attention when anything that answers asks
-// for a hand, its own sides or the sandboxes it holds; it is offline only when nothing on it answers, and then nothing
-// on it is a verdict, since a warning read before it went to sleep cannot be acted on.
+// tiles the question is "can I use it, and does it want me". Whether it answers is `machinePresence`, as /capabilities
+// reads it: live while its native side answers (a distro asleep beside it is normal); needing attention while only a
+// distro answers, or when anything that answers asks for a hand; offline only when nothing on it answers, and then
+// nothing on it is a verdict, since a warning read before it went to sleep cannot be acted on.
 export type MachineStatus = `live` | `attention` | `offline`;
 
 export interface MachineVerdict {
@@ -145,11 +141,13 @@ const answering = (code: DeviceStateCode): boolean => code !== `offline` && code
 export const machineVerdict = (machine: MachineRow, readAt: number): MachineVerdict => {
     const sides = machine.environments.map((environment) => ({ device: environment.device, code: stateCode(environment.device, readAt) }));
     const awake = sides.filter((side) => answering(side.code));
-    if (awake.length === 0) {
+    const presence = machinePresence(sides.map((side) => ({ key: deviceEnvironment(side.device) ?? HOST_NATIVE_ENVIRONMENT, online: answering(side.code) })));
+    if (presence.kind === `offline`) {
         // Coming back outranks gone: one side reconnecting is the word worth reading.
         return { status: `offline`, word: stateWord(sides.some((side) => side.code === `reconnecting`) ? `reconnecting` : `offline`), variant: `neutral` };
     }
     const asking =
+        presence.kind === `partly` ||
         awake.some((side) => side.code !== `live` || machineWarnings(side.device, readAt).length > 0) ||
         machine.groups.some((group) => groupSummary(group).warnings.length > 0);
     return asking

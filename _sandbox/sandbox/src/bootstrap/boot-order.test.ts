@@ -98,6 +98,15 @@ describe(`daemon boot order`, () => {
         expect(main.indexOf("await runBootSteps(")).toBeLessThan(main.indexOf("services.boot.finish();"));
     });
 
+    // What a restart cut is read while the gate is shut, after every conversion: nothing of this process can have written a
+    // record of it yet, which is what spares every kind of in-flight work a "was this mine" test (bootstrap/restart/in-flight-kinds.ts).
+    it(`reads the work a restart cut after the boot chain and before the gate opens`, () => {
+        const leftRead = main.indexOf("await readInFlight(");
+        expect(leftRead, "the in-flight read must still be in main.ts").toBeGreaterThan(-1);
+        expect(main.indexOf("await runBootSteps(")).toBeLessThan(leftRead);
+        expect(leftRead).toBeLessThan(main.indexOf("services.boot.finish();"));
+    });
+
     // The predicate is unit-tested (system/project-dir.test.ts); what is pinned here is that the step reads it.
     it(`seeds no starter site beside a project folder`, () => {
         expect(stepOf("starterSite")).toContain("&& seedsStarterSite(config)");

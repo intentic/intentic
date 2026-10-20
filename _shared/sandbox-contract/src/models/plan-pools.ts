@@ -1,4 +1,5 @@
 import type { AccountState, AccountUsage, ProviderRefusal, UsageWindow, WindowGates } from "../schemas/providers/plan-limits.js";
+import { humanizeModelId } from "./model-label.js";
 
 // Single reading of which account pool gates a given model (or, with none named, the account's tightest pool), shared
 // by the daemon's picker/refusal logic and the browser's rings and rail. A pool gated `none` is excluded from the
@@ -191,8 +192,9 @@ export const currentWindows = (usage: AccountUsage, now: number): UsageWindow[] 
     });
 };
 
-// Whether an account can serve a turn: the one rule every picker and surface reads (AccountState). The daemon runs it and
-// publishes the verdict on each account row; the editor runs it only on a row from a daemon older than that field.
+// Whether an account can serve a turn, and what one provider's accounts can serve together: the one rule every picker,
+// gate, listing and surface reads. The daemon and the editor run it on the same facts (the account rows and every
+// refusal on file); neither keeps a judged copy, so the two cannot disagree.
 
 /** Everything the serviceability rule reads of one account, as the account rows already carry it. */
 export interface ServiceFacts {
@@ -208,6 +210,9 @@ export interface ServiceFacts {
     // says whose it is.
     readonly label?: string | undefined;
 }
+
+/** Every refusal on file for one provider: what its accounts are judged against, each standing until something answers it. */
+export type RefusalsOnFile = readonly ProviderRefusal[];
 
 // A spent allowance is over once a reading with room lands after it; a refused credential once any reading does (the
 // token worked). Nothing a reading says answers an entitlement refusal: a seatless account authenticates and reads fine.
@@ -227,8 +232,8 @@ const answers = (refusal: ProviderRefusal, facts: ServiceFacts, measured: boolea
 };
 
 /**
- * How a provider's last refusal stands against everything read since, over every account the provider holds: `gone` once
- * the account it named is disconnected, `answered` once the instant it named has passed or once that account (or, for a
+ * How a refusal on file stands against everything read since, over every account the provider holds: `gone` once the
+ * account it named is disconnected, `answered` once the instant it named has passed or once that account (or, for a
  * refusal naming none, any account) has a later reading that contradicts it, else `standing`. An empty list is one not
  * loaded yet, so the refusal stands.
  */
@@ -261,6 +266,12 @@ export const refusalVerdict = (
     return accounts.some((facts) => answers(refusal, facts, true)) ? "answered" : "standing";
 };
 
+/** The refusals still standing over each of a provider's accounts: those naming it, and those naming none. */
+export const standingOver = (accounts: readonly ServiceFacts[], refusals: RefusalsOnFile, now: number = Date.now()): ((account: string) => RefusalsOnFile) => {
+    const standing = refusals.filter((refusal) => refusalVerdict(refusal, accounts, now) === "standing");
+    return (account) => standing.filter((refusal) => (refusal.account ?? account) === account);
+};
+
 // The account reopens for this question when the pools holding it shut do: all of them for a model's own question (or
 // the pools gating every model), the first to reopen when only per-model slices are full. Unknown if any is unpublished.
 const reopening = (full: readonly UsageWindow[], first: boolean): number | undefined => {
@@ -268,7 +279,20 @@ const reopening = (full: readonly UsageWindow[], first: boolean): number | undef
     return resets.length === full.length && resets.length > 0 ? (first ? Math.min(...resets) : Math.max(...resets)) : undefined;
 };
 
-const spent = (reopensAt: number | undefined): AccountState => (reopensAt === undefined ? { kind: "spent" } : { kind: "spent", reopensAt });
+// Spent until the pools holding it reopen, named by the one that decides when, where the plan meters it apart (an
+// undivided allowance is just "the allowance").
+const spentOn = (holding: readonly UsageWindow[], first: boolean): AccountState => {
+    const state: AccountState & { kind: "spent" } = { kind: "spent" };
+    const reopensAt = reopening(holding, first);
+    if (reopensAt !== undefined) {
+        state.reopensAt = reopensAt;
+    }
+    const deciding = holding.find((window) => window.resetsAt === reopensAt) ?? holding[0];
+    if (deciding !== undefined && deciding.gates !== "all" && deciding.label !== undefined) {
+        state.pool = deciding.label;
+    }
+    return state;
+};
 
 // A turn on the model this reading was contradicted for went through while the pool read full: the pool is at the line,
 // not proven empty, exactly as a rounded one is (provenFull).
@@ -289,17 +313,15 @@ const holdingPools = (full: readonly UsageWindow[], open: readonly UsageWindow[]
 };
 
 /**
- * What the polled reading ALONE says, never whether the account can serve: that is `serviceState`, which also reads the
- * refusals on file, ask it through the daemon's `serviceability`/`allowanceWall` or the editor's `accountState`. A
- * provider that rounds its percentages (Claude does, every pool) is never proven spent here, so a caller reading this
- * as the verdict sees every spent account as open: a pick between two spent accounts re-booked a held turn for "now"
- * that way (2026-10-19). Imported only by the few modules lint allows (.oxlintrc.json, no-restricted-imports), and was
- * named `headroomState` until then.
+ * What a reading says, at the contract's one spent line, never whether the account can serve: that is `serviceStates`,
+ * which first lays every standing refusal on the reading (judgedReading). A provider that rounds its percentages (Claude
+ * does, every pool) is never proven spent here, so a caller reading a polled reading's verdict as the account's sees every
+ * spent account as open: a pick between two spent accounts re-booked a held turn for "now" that way (2026-10-19).
+ * Imported only by the few modules lint allows (.oxlintrc.json, no-restricted-imports).
  *
- * The plan-limit half of the verdict, at the contract's one spent line. With a model, the pools that model spends: spent
- * once any is full, else the room the fullest leaves. With none, whether the account can serve SOME turn: spent once a
- * pool gating every model is full, or every per-model slice is; a full slice alone (Opus at 100%) leaves the other
- * models their room, which is then read off the fullest pool still open.
+ * With a model, the pools that model spends: spent once any is full, else the room the fullest leaves. With none, whether
+ * the account can serve SOME turn: spent once a pool gating every model is full, or every per-model slice is; a full
+ * slice alone (Opus at 100%) leaves the other models their room, which is then read off the fullest pool still open.
  */
 export const readingHeadroom = (usage: AccountUsage | undefined, model?: ModelRef): AccountState => {
     const windows = gatingWindows(usage, model).map((window) => (answeredDespite(usage, window) ? { ...window, rounded: true } : window));
@@ -319,100 +341,165 @@ export const readingHeadroom = (usage: AccountUsage | undefined, model?: ModelRe
     if (sliced && (usage?.uncovered?.length ?? 0) > 0) {
         return { kind: "unknown" };
     }
-    return spent(reopening(holding, sliced));
+    return spentOn(holding, sliced);
 };
 
-/**
- * A reading as a standing limit refusal leaves it, for every surface that draws or judges it: the pool the refused turn's
- * model spends (else the one asked about, else the tightest) read full, since a polled reading freezes the moment a pool
- * actually empties, and reopening when the provider said to try again, where it said, over whatever the polled pool last
- * said. Never another model's allowance. The reading as it was where it has no such pool.
- */
-export const pinRefused = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model?: ModelRef): AccountUsage | undefined => {
+// What a person calls a refused pool no reading names: the model it refused, or the allowance as a whole.
+const REFUSED_ALLOWANCE = "Allowance";
+
+// The pool a limit refusal proves full where no pool of the reading gates the model it refused: a plan that publishes
+// nothing (Cursor's, Devin's) or names no pool for that model. Its own, gating only that model (every model, where it
+// named none), reopening when the provider said.
+const refusedPool = (refusal: ProviderRefusal): UsageWindow => {
+    const pool: UsageWindow = {
+        kind: `refused:${refusal.model ?? "all"}`,
+        label: refusal.model === undefined ? REFUSED_ALLOWANCE : humanizeModelId(refusal.model),
+        utilization: SPENT_UTILIZATION,
+        gates: refusal.model === undefined ? "all" : { models: [refusal.model] },
+    };
+    if (refusal.resetsAt !== undefined) {
+        pool.resetsAt = refusal.resetsAt;
+    }
+    return pool;
+};
+
+// One limit refusal laid on a reading: the pool the refused turn's model spends (else the one asked about, else the
+// tightest) read full, since a polled reading freezes the moment a pool actually empties, and reopening when the provider
+// said to try again, where it said, over whatever the polled pool last said. Never another model's allowance.
+const pinRefusal = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model: ModelRef | undefined): AccountUsage => {
     const binding = bindingWindow(usage, refusal.model === undefined ? model : { id: refusal.model });
     if (usage === undefined || binding === undefined) {
-        return usage;
+        return { ...(usage ?? { measuredAt: refusal.at }), windows: [...(usage?.windows ?? []), refusedPool(refusal)] };
     }
-    const pinned = (window: UsageWindow): UsageWindow =>
-        refusal.resetsAt === undefined ? pinnedFull(window) : { ...pinnedFull(window), resetsAt: refusal.resetsAt };
-    return { ...usage, windows: usage.windows.map((window) => (window === binding ? pinned(window) : window)) };
+    const pinned = pinnedFull(binding);
+    if (refusal.resetsAt !== undefined) {
+        pinned.resetsAt = refusal.resetsAt;
+    }
+    return { ...usage, windows: usage.windows.map((window) => (window === binding ? pinned : window)) };
 };
 
 /**
- * The plan-limit verdict on a reading a standing limit refusal covers (pinRefused), the one rule the daemon's verdict and
- * the editor's live re-reading both judge by. Spent until the provider's own "try again at" where it named one: the
- * editor once re-judged the pinned pool by its own reset alone, and drew "spent until 19:55" over a daemon verdict, and a
- * model picker, both saying 15:53 (2026-10-20).
+ * An account's reading as the refusals standing over it leave it: what every surface draws and every verdict judges,
+ * never the polled reading alone. Each standing limit refusal is laid on it, oldest first so the newest says when its
+ * pool reopens. `standing` is what standingOver answers for the account; a refusal of another kind pins nothing.
  */
-export const refusedHeadroom = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model?: ModelRef): AccountState => {
-    const pinned = pinRefused(usage, refusal, model);
-    if (pinned === usage) {
-        // No pool to pin: the refusal itself is the evidence, unless it was about a different model than this question.
-        const sameModel = refusal.model === undefined || model === undefined || refusal.model === model.id;
-        return sameModel ? spent(refusal.resetsAt) : readingHeadroom(usage, model);
-    }
-    const state = readingHeadroom(pinned, model);
-    return state.kind === "spent" && refusal.resetsAt !== undefined ? spent(refusal.resetsAt) : state;
-};
+export const judgedReading = (usage: AccountUsage | undefined, standing: RefusalsOnFile, model?: ModelRef): AccountUsage | undefined =>
+    standing
+        .filter((refusal) => refusal.kind === "limit")
+        .toSorted((left, right) => left.at - right.at)
+        .reduce<AccountUsage | undefined>((reading, refusal) => pinRefusal(reading, refusal, model), usage);
+
+/** The newest of some refusals: the latest word, where a surface says one line about a provider or an account. */
+export const newestRefusal = (refusals: RefusalsOnFile): ProviderRefusal | undefined =>
+    refusals.reduce<ProviderRefusal | undefined>((newest, refusal) => (newest === undefined || refusal.at > newest.at ? refusal : newest), undefined);
 
 /**
- * One account's verdict. `refusal` is the provider's last refusal only when it still stands and covers this account
- * (serviceStates decides that). Precedence: a revoked sign-in outranks a lost seat (reconnecting fixes one, nothing here
- * fixes the other), both outrank a standing refusal, then a translator bench, then the plan limits.
+ * One account's verdict on everything on file over it. `standing` is the refusals still standing over it (standingOver).
+ * Precedence: a revoked sign-in outranks a lost seat (reconnecting fixes one, nothing here fixes the other), both outrank
+ * the newest standing refusal where it refused the account itself, then a translator bench, then the plan limits on the
+ * reading the refusals leave (judgedReading).
  */
-export const serviceState = (facts: ServiceFacts, refusal?: ProviderRefusal, model?: ModelRef, now: number = Date.now()): AccountState => {
+export const serviceState = (facts: ServiceFacts, standing: RefusalsOnFile = [], model?: ModelRef, now: number = Date.now()): AccountState => {
     if (facts.needsReauth === true) {
         return { kind: "blocked", fix: "reconnect", reason: facts.detail ?? "sign-in expired" };
     }
     if (facts.seatRefusal !== undefined) {
         return { kind: "blocked", fix: "admin", reason: facts.seatRefusal };
     }
-    if (refusal?.kind === "auth") {
-        return { kind: "blocked", fix: "reconnect", reason: refusal.message };
+    // The newest word on the account: a sign-in or an entitlement refused after any spent allowance blocks it, and a
+    // spent allowance refused after either says the account authenticated and was served, so that one is over.
+    const newest = newestRefusal(standing);
+    if (newest?.kind === "auth") {
+        return { kind: "blocked", fix: "reconnect", reason: newest.message };
     }
-    if (refusal?.kind === "entitlement") {
-        return { kind: "blocked", fix: "admin", reason: refusal.message };
+    if (newest?.kind === "entitlement") {
+        return { kind: "blocked", fix: "admin", reason: newest.message };
     }
-    const cooling = facts.cooling;
-    // A bench the provider wants a person for: the account's owner confirms it on the provider's page, and no wait or
-    // reconnect here lifts it. Outranks the retry instant, which is only when the proxy will ask again.
-    if (cooling?.verify !== undefined) {
-        return { kind: "blocked", fix: "verify", reason: cooling.reason ?? "the provider wants this account verified", url: cooling.verify };
-    }
-    // A bench with no instant is one no wait lifts (a Google account with no project): somebody has to connect again.
-    if (cooling !== undefined && cooling.until === undefined) {
-        return { kind: "blocked", fix: "reconnect", reason: cooling.reason ?? "benched by the translator" };
-    }
-    if (cooling?.until !== undefined && cooling.until * 1000 > now) {
-        return { kind: "blocked", fix: "wait", reason: cooling.reason ?? "cooling down", until: cooling.until };
-    }
-    return refusal?.kind === "limit" ? refusedHeadroom(facts.usage, refusal, model) : readingHeadroom(facts.usage, model);
+    const plan = readingHeadroom(judgedReading(facts.usage, standing, model), model);
+    return facts.cooling === undefined ? plan : benched(facts.cooling, plan, now);
 };
 
-/** The refusals a provider's accounts are judged against: its last one, or every one on file (each account's own beside it). */
-export type RefusalsOnFile = ProviderRefusal | readonly ProviderRefusal[] | undefined;
+// A translator bench over the plan verdict. One the provider wants a person for: the account's owner confirms it on the
+// provider's page, and no wait or reconnect here lifts it, whatever the retry instant says. One with no instant is one no
+// wait lifts either (a Google account with no project): somebody has to connect again. One with an instant is the
+// translator's own retry, a floor rather than the reopening: a Kimi credential benched for thirty minutes with its
+// five-hour window two hours from reopening was re-run at thirty minutes and refused again (2026-10-17), so it lifts once
+// its pools have reopened too. Past its instant it is over, and the plan speaks.
+const benched = (cooling: NonNullable<ServiceFacts["cooling"]>, plan: AccountState, now: number): AccountState => {
+    if (cooling.verify !== undefined) {
+        return { kind: "blocked", fix: "verify", reason: cooling.reason ?? "the provider wants this account verified", url: cooling.verify };
+    }
+    if (cooling.until === undefined) {
+        return { kind: "blocked", fix: "reconnect", reason: cooling.reason ?? "benched by the translator" };
+    }
+    if (cooling.until * 1000 <= now) {
+        return plan;
+    }
+    const until = plan.kind === "spent" && plan.reopensAt !== undefined ? Math.max(cooling.until, plan.reopensAt) : cooling.until;
+    return { kind: "blocked", fix: "wait", reason: cooling.reason ?? "cooling down", until };
+};
 
-const refusalList = (refusals: RefusalsOnFile): readonly ProviderRefusal[] =>
-    refusals === undefined ? [] : "kind" in refusals ? [refusals] : refusals;
-
-/**
- * Every account of one provider, judged together, since a refusal naming no account is answered by any of them. Each
- * account answers to the newest refusal that still stands over it: the provider's last one moves on to whichever account
- * said no next, and an account's own refusal on file stays true of it until something answers it.
- */
+/** Every account of one provider, judged together, since a refusal naming no account is answered by any of them. */
 export const serviceStates = (
     accounts: readonly ServiceFacts[],
-    refusals: RefusalsOnFile,
+    refusals: RefusalsOnFile = [],
     model?: ModelRef,
     now: number = Date.now(),
 ): ReadonlyMap<string, AccountState> => {
-    const standing = refusalList(refusals)
-        .filter((refusal) => refusalVerdict(refusal, accounts, now) === "standing")
-        .toSorted((left, right) => right.at - left.at);
-    return new Map(
-        accounts.map((facts) => [facts.account, serviceState(facts, standing.find((refusal) => (refusal.account ?? facts.account) === facts.account), model, now)]),
-    );
+    const standing = standingOver(accounts, refusals, now);
+    return new Map(accounts.map((facts) => [facts.account, serviceState(facts, standing(facts.account), model, now)]));
 };
+
+/** When an account that cannot serve says it can again, in epoch seconds; undefined where its verdict names no instant. */
+export const reopensAtOf = (state: AccountState): number | undefined => {
+    if (state.kind === "spent") {
+        return state.reopensAt;
+    }
+    return state.kind === "blocked" && state.fix === "wait" ? state.until : undefined;
+};
+
+/**
+ * What one provider's accounts can do for one model, together: the answer every gate, listing, picker and offer reads,
+ * so none can call a model spent that another lets through. An unmeasured account may still answer, so it keeps the
+ * model servable; only every account spent or blocked makes it spent.
+ */
+export type FleetCapacity =
+    // No account to judge: nothing on file says either way, so the model is asked.
+    | { readonly kind: "unknown" }
+    // `serving` of the `accounts` are ready or unmeasured; `roomMeasuredAt` is the newest reading with room among them.
+    | { readonly kind: "serving"; readonly serving: number; readonly accounts: number; readonly roomMeasuredAt?: number | undefined }
+    // Every account is spent or blocked: `reopensAt` is the soonest any is back (any one unblocks the turn), where one
+    // says when, and `pool` what holds that one.
+    | { readonly kind: "spent"; readonly accounts: number; readonly reopensAt?: number | undefined; readonly pool?: string | undefined };
+
+/** A provider's capacity for one model from its accounts as already judged on that model (serviceStates). */
+export const fleetOf = (accounts: readonly ServiceFacts[], states: ReadonlyMap<string, AccountState>): FleetCapacity => {
+    if (accounts.length === 0) {
+        return { kind: "unknown" };
+    }
+    const judged = accounts.map((facts) => ({ facts, state: states.get(facts.account) ?? ({ kind: "unknown" } as const) }));
+    const serving = judged.filter(({ state }) => state.kind === "ready" || state.kind === "unknown");
+    if (serving.length > 0) {
+        const room = serving.flatMap(({ facts, state }) => (state.kind === "ready" && facts.usage !== undefined ? [facts.usage.measuredAt] : []));
+        return { kind: "serving", serving: serving.length, accounts: accounts.length, roomMeasuredAt: room.length === 0 ? undefined : Math.max(...room) };
+    }
+    // The soonest instant any account names; one with none only decides the pool where nothing names an instant.
+    const soonest = judged.reduce<AccountState | undefined>((best, { state }) => {
+        const at = reopensAtOf(state);
+        const bestAt = best === undefined ? undefined : reopensAtOf(best);
+        return best === undefined || (at !== undefined && (bestAt === undefined || at < bestAt)) ? state : best;
+    }, undefined);
+    return {
+        kind: "spent",
+        accounts: accounts.length,
+        reopensAt: soonest === undefined ? undefined : reopensAtOf(soonest),
+        pool: soonest?.kind === "spent" ? soonest.pool : undefined,
+    };
+};
+
+/** A provider's capacity for one model, judged on its accounts and every refusal on file. */
+export const fleetCapacity = (accounts: readonly ServiceFacts[], refusals: RefusalsOnFile = [], model?: ModelRef, now: number = Date.now()): FleetCapacity =>
+    fleetOf(accounts, serviceStates(accounts, refusals, model, now));
 
 // Worst last: proven room, no reading either way, a pool at the line (it may hold a sliver, or nothing), known spent,
 // and nothing a turn can run on.
@@ -441,8 +528,8 @@ export const preferredAccount = <T extends { readonly state: AccountState }>(ent
 
 /**
  * The roomiest account with proven room, or none: what a move off a refused account may land on. Ties keep the caller's
- * order. An account at the line is left out: a move there could be refused in turn, and with one refusal remembered per
- * provider, two such accounts would hand the turn back and forth.
+ * order. An account at the line is left out: a move there could be refused in turn, and two such accounts would hand the
+ * turn back and forth.
  */
 export const roomiestAccount = <T extends { readonly state: AccountState }>(entries: readonly T[]): T | undefined =>
     preferredAccount(entries.filter((entry) => entry.state.kind === "ready" && entry.state.room > 0));

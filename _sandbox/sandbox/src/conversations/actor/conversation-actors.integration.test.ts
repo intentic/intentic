@@ -490,7 +490,7 @@ const walk = async (seed: number, steps: number): Promise<number> => {
         // The journal brings a watch back for a conversation that still has an entry: re-armed while its condition is
         // unmet, fired by the restore once it is.
         check.exitCode = random() < 0.5 ? 0 : 1;
-        await restoreWatchers();
+        await restoreWatchers(await watchJournal.list());
         await drained();
         for (const child of children) {
             child.forgotten = true;

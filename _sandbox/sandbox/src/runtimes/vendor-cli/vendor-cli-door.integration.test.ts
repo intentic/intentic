@@ -72,8 +72,7 @@ const doorOver = () => {
             acpConnections: unstubbed("acpConnections", { drop: (id: string) => void dropped.push(id) }),
             composeEnvironment: async () => {},
             headroom: unstubbed("headroom", { clear: async () => {} }),
-            observedLimits: unstubbed("observedLimits", { clear: async () => {} }),
-            providerRefusals: unstubbed("providerRefusals", { clear: async () => {} }),
+            providerRefusals: unstubbed("providerRefusals", { drop: async () => false }),
         }),
     );
     return { door, store, dropped, forgotten };

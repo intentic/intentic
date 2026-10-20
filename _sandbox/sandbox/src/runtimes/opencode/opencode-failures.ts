@@ -1,9 +1,9 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import { isContextOverflowText, isModelRefusalText } from "../../engines/failure-sentences.js";
-import { modelUnavailableFrame } from "../../agent/run/error-frames.js";
+import { isContextOverflowText, isModelRefusalText, isRateLimited, isUnsentParameterRefusalText } from "../../engines/failure-sentences.js";
+import { codedFailure, type FailureRule, modelUnavailableFrame, unsentParameterFrame } from "../../agent/run/frames/error-frames.js";
 import { opt } from "../../opt.js";
 import { latestOf, namedReset } from "../../usage/reset-sentences.js";
-import { isRateLimited, RATE_LIMIT_PATIENCE_MS, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
+import { RATE_LIMIT_PATIENCE_MS } from "../decorators/vendor-errors.js";
 import { OPENCODE_XAI_PROVIDER } from "./xai-models.js";
 
 // How an OpenCode turn's failures are coded. OpenCode 2 types every provider failure it ends an execution or schedules a
@@ -65,13 +65,9 @@ export interface FailureTarget {
     readonly model: string | undefined;
 }
 
-// The sentence rules, read only where the type said nothing the daemon can act on: a model xAI rejected, then a spent
-// allowance (a retry-later notice instead of a Continue that would just re-fail), then a session past the model's window.
-const SENTENCE_RULES: readonly VendorRule[] = [
-    [isModelInvalid, "grok-model-invalid"],
-    [isRateLimited, "rate_limit"],
-    [isContextOverflowText, "context-overflow"],
-];
+// OpenCode's own words for a model xAI rejected, read only where the type said nothing the daemon can act on, ahead of
+// the sentences every runtime shares (codedFailure).
+const SENTENCE_RULES: readonly FailureRule[] = [[isModelInvalid, "grok-model-invalid"]];
 
 const typedFrame = (error: StructuredError, kind: FailureKind, target: FailureTarget): ErrorFrame | undefined => {
     switch (kind) {
@@ -92,20 +88,19 @@ const typedFrame = (error: StructuredError, kind: FailureKind, target: FailureTa
 };
 
 /**
- * An execution's failure as its frame. A parameter this sandbox never sent is read first (vendorFailureFrame), then a
- * session past its window, whatever type it came under (an overflow is an invalid request to most providers), then
- * OpenCode's own type, and the sentence last.
+ * An execution's failure as its frame. A parameter this sandbox never sent is read first, then a session past its window,
+ * whatever type it came under (an overflow is an invalid request to most providers), then OpenCode's own type, and the
+ * sentence last (codedFailure).
  */
 export const executionErrorFrame = (error: StructuredError, target: FailureTarget): ErrorFrame => {
     const plain: ErrorFrame = { kind: "error", message: error.message };
-    const read = vendorFailureFrame(plain, []);
-    if (read.code !== undefined) {
-        return read;
+    if (isUnsentParameterRefusalText(error.message)) {
+        return unsentParameterFrame(error.message);
     }
     if (isContextOverflowText(error.message)) {
         return { ...plain, code: "context-overflow" };
     }
-    return typedFrame(error, kindOf(error), target) ?? vendorFailureFrame(plain, SENTENCE_RULES);
+    return typedFrame(error, kindOf(error), target) ?? codedFailure(plain, SENTENCE_RULES);
 };
 
 // How long a rate limit OpenCode means to wait out in-turn is left to it is the one figure every loop shares

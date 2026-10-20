@@ -17,14 +17,14 @@ const modes = computed(() => modeOptions(capabilities.value));
             v-for="m in modes"
             :key="m.value"
             type="button"
-            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
             :class="{ 'ui-row-select-on': mode === m.value }"
             @click="
                 mode = m.value;
                 emit(`selected`);
             "
         >
-            <Icon :name="m.icon" class="mt-0.5 text-xs" :class="mode === m.value ? 'text-accent' : 'text-subtle'" />
+            <Icon :name="m.icon" class="text-xs" :class="mode === m.value ? 'text-accent' : 'text-subtle'" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ m.label }}</span>
                 <span class="text-2xs text-subtle">{{ m.description }}</span>

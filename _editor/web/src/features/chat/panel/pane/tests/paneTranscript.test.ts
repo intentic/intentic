@@ -62,6 +62,30 @@ describe(`the live turn`, () => {
         expect(pane.showTurnStatus.value).toBe(false);
     });
 
+    // The row stream is the turn's last word: a failure that ended it stops the working line at once, whatever runtime's
+    // stream still has to close (2026-10-20, "Thinking…" under "Kimi Code usage limit reached" for two seconds), and a
+    // warning the runtime went on past does not.
+    it(`stops the working line at a failure that ended the turn, before the stream closes`, () => {
+        const { state, pane } = paneOf(ROWS.slice(0, 3));
+        state.streaming.value = true;
+        const limit = `You've hit your usage limit.`;
+        state.messages.value = [
+            ...ROWS.slice(0, 3),
+            { id: 4, role: `notice`, text: limit, noticeCode: { code: `failed`, params: { message: limit, error: `rate_limit` } } },
+        ];
+        expect([pane.showTurnStatus.value, pane.isStreaming(ROWS[3]!)]).toEqual([false, false]);
+
+        const warned = `Model metadata missing; using fallback.`;
+        state.messages.value = [
+            ...ROWS.slice(0, 3),
+            { id: 4, role: `notice`, text: warned, noticeCode: { code: `failed`, params: { message: warned, error: `codex-advisory` } } },
+        ];
+        expect(pane.showTurnStatus.value).toBe(true);
+        // A row after the failure is the turn going on: it works again.
+        state.messages.value = [...state.messages.value.slice(0, 3), { id: 4, role: `notice`, text: limit, noticeCode: { code: `failed`, params: { message: limit } } }, ROWS[3]!];
+        expect(pane.isStreaming(ROWS[3]!)).toBe(true);
+    });
+
     // A person ending the turn is said on that line, parked or not: a Stop on a card-parked turn otherwise drew nothing
     // new until the stream closed, seconds later.
     it(`draws the working line over a parked card once a person has ended the turn`, () => {

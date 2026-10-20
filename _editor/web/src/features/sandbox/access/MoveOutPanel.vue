@@ -187,7 +187,7 @@ const compare = async (event: Event): Promise<void> => {
 <template>
     <div class="flex flex-col gap-4">
         <!-- Publishing controls wait until the repository state is known. -->
-        <RowGroup v-if="workspace !== undefined" flat>
+        <RowGroup v-if="workspace !== undefined">
             <Row v-if="published !== undefined" :icon="published.icon">
                 <template #title
                     ><span class="block truncate font-mono text-2xs">{{ published.project }}</span></template
@@ -285,12 +285,12 @@ const compare = async (event: Event): Promise<void> => {
         <ExportBundleDialog :open="exporting" :busy="starting" @cancel="exporting = false" @confirm="startExport" />
 
         <!-- What the export could not express, said beside the file it just handed over. -->
-        <RowGroup v-if="derived !== undefined && derived.omitted.length > 0" flat :label="t(`sandbox.moveOutPanel.notInDocument`)">
+        <RowGroup v-if="derived !== undefined && derived.omitted.length > 0" :label="t(`sandbox.moveOutPanel.notInDocument`)">
             <Row v-for="entry in derived.omitted" :key="entry.subject" :title="entry.subject" :description="entry.detail" />
         </RowGroup>
 
         <!-- Download and delete use the same compact icon affordance. -->
-        <RowGroup v-if="exports.length > 0" flat :label="t(`sandbox.words.exports`)">
+        <RowGroup v-if="exports.length > 0" :label="t(`sandbox.words.exports`)">
             <Row v-for="entry in exports" :key="entry.name">
                 <template #title
                     ><span class="block truncate font-mono text-2xs">{{ entry.name }}</span></template
@@ -337,7 +337,7 @@ const compare = async (event: Event): Promise<void> => {
             <div v-if="diff.differences.length === 0" class="flex items-center gap-2">
                 <StatusBadge variant="success" :label="t(`sandbox.moveOutPanel.inAgreement`)" dot />
             </div>
-            <RowGroup v-else flat :label="t(`sandbox.moveOutPanel.differences`)">
+            <RowGroup v-else :label="t(`sandbox.moveOutPanel.differences`)">
                 <Row
                     v-for="difference in diff.differences"
                     :key="difference.subject + difference.detail"

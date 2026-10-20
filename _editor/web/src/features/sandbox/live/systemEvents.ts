@@ -2,7 +2,7 @@ import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { fileBoundQueryKeys, isUnversionedStatePath, staleQueryKeys } from "@intentic/sandbox-contract/state/workspace-state";
 import { staleRuntimeQueryKeys } from "@intentic/sandbox-contract/state/runtime-state";
-import type { SystemEvent } from "@intentic/sandbox-contract/events/system-events";
+import { refusalsOf, type SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import { adoptProjectScope } from "../../../app/projectScope";
 import { contributedFileBindings } from "../../../workbench/workspace-events/fileBindings";
 import { emitFilesChanged } from "../../../workbench/workspace-events/fileEvents";
@@ -167,12 +167,10 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // Newest reading wins into the shared usage map every account UI reads (providerAccounts.usageByAccount).
             setAccountUsage(event.provider, event.account, event.usage);
             return;
-        case `providerRefusal`: {
-            // Records or clears the observed refusal state for this provider.
-            const { [event.provider]: _previous, ...rest } = providerRefusals.value;
-            providerRefusals.value = event.refusal === undefined ? rest : { ...rest, [event.provider]: event.refusal };
+        case `providerRefusal`:
+            // Every refusal the provider still has on file, replacing what this window held for it.
+            providerRefusals.value = { ...providerRefusals.value, [event.provider]: refusalsOf(event) };
             return;
-        }
         case `agents`:
             // Roster is versioned, not last-frame-wins: it races GET /agents and this browser's own optimistic
             // archive/restore

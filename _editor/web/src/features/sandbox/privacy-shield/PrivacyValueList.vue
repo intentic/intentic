@@ -2,13 +2,13 @@
 import { Icon, ui } from "@intentic/ui";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
+import { allowKey } from "@intentic/sandbox-contract/schemas/privacy";
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import {
     ALLOW_LIMITS,
     type AllowListProblem,
     allowAdding,
     allowEdited,
-    allowKey,
     allowMarked,
     allowRemoving,
     allowShown,

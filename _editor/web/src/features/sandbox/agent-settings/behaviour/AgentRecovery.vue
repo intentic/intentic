@@ -141,225 +141,228 @@ const setAutomationThreadsAtOnce = (event: Event): void => {
 </script>
 
 <template>
-    <RowGroup data-setting="agent-turn-breaks" :label="t(`sandbox.agentRecovery.turnBreaks`)" equal-rows>
-        <!-- The default for every conversation; a chat's own control writes an override for that chat alone. -->
-        <Row icon="clock" :title="breakLabel(`limit`)" :description="t(`sandbox.agentRecovery.limitPolicyNote`)">
-            <template #control>
-                <SegmentedControl
-                    v-model="limitPolicy"
-                    :options="limitRows"
-                    size="xs"
-                    :wrap="true"
-                    :class="{ 'pointer-events-none opacity-60': settings === undefined }"
-                />
-            </template>
-        </Row>
+    <!-- Its sections stacked here at the page's rhythm, so whatever mounts it cannot leave two headers touching. -->
+    <div class="flex flex-col gap-6">
+        <RowGroup data-setting="agent-turn-breaks" :label="t(`sandbox.agentRecovery.turnBreaks`)" equal-rows>
+            <!-- The default for every conversation; a chat's own control writes an override for that chat alone. -->
+            <Row icon="clock" :title="breakLabel(`limit`)" :description="t(`sandbox.agentRecovery.limitPolicyNote`)">
+                <template #control>
+                    <SegmentedControl
+                        v-model="limitPolicy"
+                        :options="limitRows"
+                        size="xs"
+                        :wrap="true"
+                        :class="{ 'pointer-events-none opacity-60': settings === undefined }"
+                    />
+                </template>
+            </Row>
 
-        <!-- How the held turn continues once its cache is cold: the whole session, a trimmed copy, or a summary. The chat's
-             card asks each time and preselects this; measured in sandbox/bench/handoff-bench.ts. -->
-        <Row icon="history" :title="t(`sandbox.agentRecovery.handoff`)" :description="t(`sandbox.agentRecovery.handoffNote`)">
-            <template #control>
-                <SegmentedControl
-                    v-model="limitHandoff"
-                    :options="handoffRows"
-                    size="xs"
-                    :wrap="true"
-                    :class="{ 'pointer-events-none opacity-60': settings === undefined }"
-                />
+            <!-- How the held turn continues once its cache is cold: the whole session, a trimmed copy, or a summary. The chat's
+                 card asks each time and preselects this; measured in sandbox/bench/handoff-bench.ts. -->
+            <Row icon="history" :title="t(`sandbox.agentRecovery.handoff`)" :description="t(`sandbox.agentRecovery.handoffNote`)">
+                <template #control>
+                    <SegmentedControl
+                        v-model="limitHandoff"
+                        :options="handoffRows"
+                        size="xs"
+                        :wrap="true"
+                        :class="{ 'pointer-events-none opacity-60': settings === undefined }"
+                    />
+                </template>
+            </Row>
+            <template v-if="limitHandoff === `suggested`">
+                <Row icon="history" :title="t(`sandbox.agentRecovery.carryUnder`)" :description="t(`sandbox.agentRecovery.carryUnderNote`)">
+                    <template #control>
+                        <input
+                            type="number"
+                            min="0"
+                            step="10000"
+                            :aria-label="t(`sandbox.agentRecovery.carryUnder`)"
+                            class="ui-field-box ui-field-sm w-24 text-right"
+                            :value="settings?.limitMoveCarryUnder ?? 150000"
+                            :disabled="settings === undefined"
+                            @change="setLimitMoveCarryUnder"
+                        />
+                    </template>
+                </Row>
+                <Row icon="align-left" :title="t(`sandbox.agentRecovery.summaryOver`)" :description="t(`sandbox.agentRecovery.summaryOverNote`)">
+                    <template #control>
+                        <input
+                            type="number"
+                            min="0"
+                            step="10000"
+                            :aria-label="t(`sandbox.agentRecovery.summaryOver`)"
+                            class="ui-field-box ui-field-sm w-24 text-right"
+                            :value="settings?.handoffSummaryOver ?? 700000"
+                            :disabled="settings === undefined"
+                            @change="setHandoffSummaryOver"
+                        />
+                    </template>
+                </Row>
             </template>
-        </Row>
-        <template v-if="limitHandoff === `suggested`">
-            <Row icon="history" :title="t(`sandbox.agentRecovery.carryUnder`)" :description="t(`sandbox.agentRecovery.carryUnderNote`)">
+
+            <Row icon="refresh" :title="breakLabel(`outage`)" :description="t(`sandbox.agentRecovery.outagePolicyNote`)">
+                <template #control>
+                    <SegmentedControl
+                        v-model="outagePolicy"
+                        :options="outageRows"
+                        size="xs"
+                        :wrap="true"
+                        :class="{ 'pointer-events-none opacity-60': settings === undefined }"
+                    />
+                </template>
+            </Row>
+
+            <Row icon="pause" :title="breakLabel(`stopped`)" :description="t(`sandbox.agentRecovery.stopPolicyNote`)">
+                <template #control>
+                    <SegmentedControl
+                        v-model="stopPolicy"
+                        :options="stoppedRows"
+                        size="xs"
+                        :wrap="true"
+                        :class="{ 'pointer-events-none opacity-60': settings === undefined }"
+                    />
+                </template>
+            </Row>
+
+            <!-- How long one turn may run on a loop the sandbox drives itself (OpenCode, ACP, Pi, Muse) before it is ended; a
+                 subagent that reaches it is carried on rather than failed. -->
+            <Row icon="clock" :title="t(`sandbox.agentRecovery.turnCap`)" :description="t(`sandbox.agentRecovery.turnCapNote`)">
                 <template #control>
                     <input
                         type="number"
-                        min="0"
-                        step="10000"
-                        :aria-label="t(`sandbox.agentRecovery.carryUnder`)"
-                        class="ui-field-box ui-field-sm w-24 text-right"
-                        :value="settings?.limitMoveCarryUnder ?? 150000"
+                        :min="TURN_CAP.min"
+                        :max="TURN_CAP.max"
+                        :aria-label="t(`sandbox.agentRecovery.turnCapLabel`)"
+                        class="ui-field-box ui-field-sm w-20 text-right"
+                        :value="settings?.turnCapMinutes ?? 30"
                         :disabled="settings === undefined"
-                        @change="setLimitMoveCarryUnder"
+                        @change="setTurnCap"
                     />
                 </template>
             </Row>
-            <Row icon="align-left" :title="t(`sandbox.agentRecovery.summaryOver`)" :description="t(`sandbox.agentRecovery.summaryOverNote`)">
+
+            <!-- The door, not an ending: a message the sandbox held because memory was short, which nothing ran. -->
+            <Row icon="cpu" :title="breakLabel(`memory`)" :description="t(`sandbox.agentRecovery.memoryPolicyNote`)">
                 <template #control>
-                    <input
-                        type="number"
-                        min="0"
-                        step="10000"
-                        :aria-label="t(`sandbox.agentRecovery.summaryOver`)"
-                        class="ui-field-box ui-field-sm w-24 text-right"
-                        :value="settings?.handoffSummaryOver ?? 700000"
+                    <SegmentedControl
+                        v-model="memoryPolicy"
+                        :options="memoryRows"
+                        size="xs"
+                        :wrap="true"
+                        :class="{ 'pointer-events-none opacity-60': settings === undefined }"
+                    />
+                </template>
+            </Row>
+
+            <!-- The one ending with nobody watching it, so it asks no question in chat and stays a switch: an update, an
+                 environment approval, or an image rebuild recreating the container under a running turn. -->
+            <Row icon="refresh" :title="t(`sandbox.agentRecovery.resumeTurnsAfterRestart`)" :description="t(`sandbox.agentRecovery.pickUpInFlight`)">
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="settings?.autoResumeOnRestart ?? false"
                         :disabled="settings === undefined"
-                        @change="setHandoffSummaryOver"
+                        @update:model-value="(value: boolean) => patch({ autoResumeOnRestart: value })"
                     />
                 </template>
             </Row>
-        </template>
 
-        <Row icon="refresh" :title="breakLabel(`outage`)" :description="t(`sandbox.agentRecovery.outagePolicyNote`)">
-            <template #control>
-                <SegmentedControl
-                    v-model="outagePolicy"
-                    :options="outageRows"
-                    size="xs"
-                    :wrap="true"
-                    :class="{ 'pointer-events-none opacity-60': settings === undefined }"
-                />
-            </template>
-        </Row>
-
-        <Row icon="pause" :title="breakLabel(`stopped`)" :description="t(`sandbox.agentRecovery.stopPolicyNote`)">
-            <template #control>
-                <SegmentedControl
-                    v-model="stopPolicy"
-                    :options="stoppedRows"
-                    size="xs"
-                    :wrap="true"
-                    :class="{ 'pointer-events-none opacity-60': settings === undefined }"
-                />
-            </template>
-        </Row>
-
-        <!-- How long one turn may run on a loop the sandbox drives itself (OpenCode, ACP, Pi, Muse) before it is ended; a
-             subagent that reaches it is carried on rather than failed. -->
-        <Row icon="clock" :title="t(`sandbox.agentRecovery.turnCap`)" :description="t(`sandbox.agentRecovery.turnCapNote`)">
-            <template #control>
-                <input
-                    type="number"
-                    :min="TURN_CAP.min"
-                    :max="TURN_CAP.max"
-                    :aria-label="t(`sandbox.agentRecovery.turnCapLabel`)"
-                    class="ui-field-box ui-field-sm w-20 text-right"
-                    :value="settings?.turnCapMinutes ?? 30"
-                    :disabled="settings === undefined"
-                    @change="setTurnCap"
-                />
-            </template>
-        </Row>
-
-        <!-- The door, not an ending: a message the sandbox held because memory was short, which nothing ran. -->
-        <Row icon="cpu" :title="breakLabel(`memory`)" :description="t(`sandbox.agentRecovery.memoryPolicyNote`)">
-            <template #control>
-                <SegmentedControl
-                    v-model="memoryPolicy"
-                    :options="memoryRows"
-                    size="xs"
-                    :wrap="true"
-                    :class="{ 'pointer-events-none opacity-60': settings === undefined }"
-                />
-            </template>
-        </Row>
-
-        <!-- The one ending with nobody watching it, so it asks no question in chat and stays a switch: an update, an
-             environment approval, or an image rebuild recreating the container under a running turn. -->
-        <Row icon="refresh" :title="t(`sandbox.agentRecovery.resumeTurnsAfterRestart`)" :description="t(`sandbox.agentRecovery.pickUpInFlight`)">
-            <template #control>
-                <ToggleSwitch
-                    :model-value="settings?.autoResumeOnRestart ?? false"
-                    :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => patch({ autoResumeOnRestart: value })"
-                />
-            </template>
-        </Row>
-
-        <!-- Jobs failing every run stop instead of consuming another scheduled turn. -->
-        <Row
-            icon="stop"
-            :title="t(`sandbox.agentRecovery.stopFailingAutomation`)"
-            :description="t(`sandbox.agentRecovery.disableAutomationAfterConsecutive`)"
-        >
-            <template #control>
-                <input
-                    type="number"
-                    min="0"
-                    max="20"
-                    :aria-label="t(`sandbox.agentRecovery.consecutiveFailuresBeforeAutomation`)"
-                    class="ui-field-box ui-field-sm w-16 text-right"
-                    :value="settings?.automationFailureLimit ?? 0"
-                    :disabled="settings === undefined"
-                    @change="setAutomationFailureLimit"
-                />
-            </template>
-        </Row>
-
-        <!-- The other automation ceiling: each team-chat thread is its own agent turn, so this bounds how many one busy
-             channel starts at once; a thread past it waits and its channel is told it is queued. -->
-        <Row icon="users" :title="t(`sandbox.agentRecovery.threadsAtOnce`)" :description="t(`sandbox.agentRecovery.threadsAtOnceNote`)">
-            <template #control>
-                <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    :aria-label="t(`sandbox.agentRecovery.threadsAtOnceLabel`)"
-                    class="ui-field-box ui-field-sm w-16 text-right"
-                    :value="settings?.automationThreadsAtOnce ?? 3"
-                    :disabled="settings === undefined"
-                    @change="setAutomationThreadsAtOnce"
-                />
-            </template>
-        </Row>
-        <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
-    </RowGroup>
-    <!-- Off by default: each refresh spends the account's allowance on a chat nobody is using yet. -->
-    <RowGroup data-setting="agent-idle-chats" :label="t(`sandbox.agentRecovery.keepWarmGroup`)" equal-rows>
-        <Row icon="sun" :title="t(`sandbox.agentRecovery.keepWarm`)" :description="t(`sandbox.agentRecovery.keepWarmNote`)">
-            <template #control>
-                <ToggleSwitch
-                    :model-value="keepWarm.auto"
-                    :disabled="settings === undefined"
-                    @update:model-value="(value: boolean) => patchKeepWarm({ auto: value })"
-                />
-            </template>
-        </Row>
-        <template v-if="keepWarm.auto">
-            <Row icon="clock" :title="t(`sandbox.agentRecovery.keepWarmHours`)" :description="t(`sandbox.agentRecovery.keepWarmHoursNote`)">
-                <template #control>
-                    <input
-                        type="number"
-                        min="1"
-                        max="8"
-                        :aria-label="t(`sandbox.agentRecovery.keepWarmHoursLabel`)"
-                        class="ui-field-box ui-field-sm w-16 text-right"
-                        :value="keepWarm.hours"
-                        @change="setKeepWarmHours"
-                    />
-                </template>
-            </Row>
+            <!-- Jobs failing every run stop instead of consuming another scheduled turn. -->
             <Row
-                icon="database"
-                :title="t(`sandbox.agentRecovery.keepWarmMinTokens`)"
-                :description="t(`sandbox.agentRecovery.keepWarmMinTokensNote`)"
+                icon="stop"
+                :title="t(`sandbox.agentRecovery.stopFailingAutomation`)"
+                :description="t(`sandbox.agentRecovery.disableAutomationAfterConsecutive`)"
             >
                 <template #control>
                     <input
                         type="number"
                         min="0"
-                        step="10000"
-                        :aria-label="t(`sandbox.agentRecovery.keepWarmMinTokensLabel`)"
-                        class="ui-field-box ui-field-sm w-24 text-right"
-                        :value="keepWarm.minTokens"
-                        @change="setKeepWarmMinTokens"
+                        max="20"
+                        :aria-label="t(`sandbox.agentRecovery.consecutiveFailuresBeforeAutomation`)"
+                        class="ui-field-box ui-field-sm w-16 text-right"
+                        :value="settings?.automationFailureLimit ?? 0"
+                        :disabled="settings === undefined"
+                        @change="setAutomationFailureLimit"
                     />
                 </template>
             </Row>
-        </template>
-        <Row icon="usage" :title="t(`sandbox.agentRecovery.keepWarmReserve`)" :description="t(`sandbox.agentRecovery.keepWarmReserveNote`)">
-            <template #control>
-                <input
-                    type="number"
-                    min="0"
-                    max="90"
-                    :aria-label="t(`sandbox.agentRecovery.keepWarmReserveLabel`)"
-                    class="ui-field-box ui-field-sm w-16 text-right"
-                    :value="keepWarm.reserve"
-                    :disabled="settings === undefined"
-                    @change="setKeepWarmReserve"
-                />
+
+            <!-- The other automation ceiling: each team-chat thread is its own agent turn, so this bounds how many one busy
+                 channel starts at once; a thread past it waits and its channel is told it is queued. -->
+            <Row icon="users" :title="t(`sandbox.agentRecovery.threadsAtOnce`)" :description="t(`sandbox.agentRecovery.threadsAtOnceNote`)">
+                <template #control>
+                    <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        :aria-label="t(`sandbox.agentRecovery.threadsAtOnceLabel`)"
+                        class="ui-field-box ui-field-sm w-16 text-right"
+                        :value="settings?.automationThreadsAtOnce ?? 3"
+                        :disabled="settings === undefined"
+                        @change="setAutomationThreadsAtOnce"
+                    />
+                </template>
+            </Row>
+            <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
+        </RowGroup>
+        <!-- Off by default: each refresh spends the account's allowance on a chat nobody is using yet. -->
+        <RowGroup data-setting="agent-idle-chats" :label="t(`sandbox.agentRecovery.keepWarmGroup`)" equal-rows>
+            <Row icon="sun" :title="t(`sandbox.agentRecovery.keepWarm`)" :description="t(`sandbox.agentRecovery.keepWarmNote`)">
+                <template #control>
+                    <ToggleSwitch
+                        :model-value="keepWarm.auto"
+                        :disabled="settings === undefined"
+                        @update:model-value="(value: boolean) => patchKeepWarm({ auto: value })"
+                    />
+                </template>
+            </Row>
+            <template v-if="keepWarm.auto">
+                <Row icon="clock" :title="t(`sandbox.agentRecovery.keepWarmHours`)" :description="t(`sandbox.agentRecovery.keepWarmHoursNote`)">
+                    <template #control>
+                        <input
+                            type="number"
+                            min="1"
+                            max="8"
+                            :aria-label="t(`sandbox.agentRecovery.keepWarmHoursLabel`)"
+                            class="ui-field-box ui-field-sm w-16 text-right"
+                            :value="keepWarm.hours"
+                            @change="setKeepWarmHours"
+                        />
+                    </template>
+                </Row>
+                <Row
+                    icon="database"
+                    :title="t(`sandbox.agentRecovery.keepWarmMinTokens`)"
+                    :description="t(`sandbox.agentRecovery.keepWarmMinTokensNote`)"
+                >
+                    <template #control>
+                        <input
+                            type="number"
+                            min="0"
+                            step="10000"
+                            :aria-label="t(`sandbox.agentRecovery.keepWarmMinTokensLabel`)"
+                            class="ui-field-box ui-field-sm w-24 text-right"
+                            :value="keepWarm.minTokens"
+                            @change="setKeepWarmMinTokens"
+                        />
+                    </template>
+                </Row>
             </template>
-        </Row>
-        <RowNote v-if="keepWarmRefusal !== undefined" variant="block"><Notice :of="keepWarmRefusal" /></RowNote>
-    </RowGroup>
+            <Row icon="usage" :title="t(`sandbox.agentRecovery.keepWarmReserve`)" :description="t(`sandbox.agentRecovery.keepWarmReserveNote`)">
+                <template #control>
+                    <input
+                        type="number"
+                        min="0"
+                        max="90"
+                        :aria-label="t(`sandbox.agentRecovery.keepWarmReserveLabel`)"
+                        class="ui-field-box ui-field-sm w-16 text-right"
+                        :value="keepWarm.reserve"
+                        :disabled="settings === undefined"
+                        @change="setKeepWarmReserve"
+                    />
+                </template>
+            </Row>
+            <RowNote v-if="keepWarmRefusal !== undefined" variant="block"><Notice :of="keepWarmRefusal" /></RowNote>
+        </RowGroup>
+    </div>
 </template>

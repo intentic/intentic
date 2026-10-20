@@ -176,17 +176,9 @@ export const suggestionFor = (
 
 export type FleetAdviceDeps = Pick<Services, "runners" | "runnerHub" | "conversations" | "resources" | "privacyShield" | "sandboxSettings" | "workspace">;
 
-// Whether the shield keeps a session with this provider here: masking, and the provider not trusted. An unreadable
-// policy keeps it here, since the shield may be on (stream-agent.ts's own reading).
-const shieldHolds = async (deps: Pick<Services, "privacyShield">, provider: AgentProvider, conversationId: string | undefined): Promise<boolean> => {
-    try {
-        const policy = await deps.privacyShield.policy();
-        return policy.mode === "on" && !(await deps.privacyShield.trusted(policy, provider, conversationId));
-    } catch {
-        // allow(silent-catch): an unreadable policy may be one that masks, and keeping the session here costs a suggestion.
-        return true;
-    }
-};
+// Whether the shield keeps a session with this provider here: it would refuse it on a runner, as stream-agent.ts does.
+const shieldHolds = async (deps: Pick<Services, "privacyShield">, provider: AgentProvider, conversationId: string | undefined): Promise<boolean> =>
+    (await deps.privacyShield.refusal({ provider, conversationId, route: "runner" })) !== undefined;
 
 const fitOf = async (
     deps: FleetAdviceDeps,

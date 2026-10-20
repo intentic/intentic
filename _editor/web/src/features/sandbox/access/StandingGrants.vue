@@ -207,77 +207,80 @@ const pageOf = (conversationId: string): string => `/agents/${encodeURIComponent
 </script>
 
 <template>
-    <!-- Draws nothing while nothing stands, as the other machine doors do. The yeses that name no conversation come first:
-         each reaches every conversation at once. -->
-    <RowGroup
-        v-if="ownerItems.length > 0 || unreadable.length > 0"
-        :label="t(`needs.grants.ownerWideTitle`)"
-    >
-        <RowNote v-if="unreadable.length > 0" variant="block"><Notice tone="warning" size="sm">{{ t(`needs.grants.unreadable`, { what: unreadableWhat }) }}</Notice></RowNote>
-        <Row v-for="item in ownerItems" :key="keyOf(item.grant)" :icon="item.icon" :description="item.note" indent>
-            <template #title>
-                <span class="break-words">{{ item.label }}</span>
-            </template>
-            <template #control>
-                <Button
-                    :label="t(`ui.action.revoke`)"
-                    size="small"
-                    tier="quiet"
-                    tone="danger"
-                    :disabled="busyOn(item.grant)"
-                    @click="takeBack(item)"
-                />
-            </template>
-        </Row>
-        <RowNote>{{ t(`needs.grants.ownerWideWhen`) }}</RowNote>
-    </RowGroup>
-    <RowGroup v-if="rows.length > 0" :label="t(`needs.grants.title`)">
-        <Row
-            v-for="row in rows"
-            :key="row.conversation.conversationId"
-            icon="comments"
-            :description="row.line"
-            indent
+    <!-- Its sections stacked here at the page's rhythm, so whatever mounts it cannot leave two headers touching. -->
+    <div class="flex flex-col gap-6">
+        <!-- Draws nothing while nothing stands, as the other machine doors do. The yeses that name no conversation come first:
+             each reaches every conversation at once. -->
+        <RowGroup
+            v-if="ownerItems.length > 0 || unreadable.length > 0"
+            :label="t(`needs.grants.ownerWideTitle`)"
         >
-            <!-- An archived conversation's name steps back, since nothing under it is in use; its Revoke presses do not,
-                 since clearing what it still holds is the one thing left to do about it. -->
-            <template #title>
-                <span :class="row.standing.kind === `archived` ? `text-muted` : ``">{{ row.title }}</span>
-            </template>
-            <template #control>
-                <Button v-if="row.standing.kind !== `unknown`" size="small" tier="quiet" :as="RouterLink" :to="pageOf(row.conversation.conversationId)">
-                    {{ t(`ui.action.open`) }}
-                    <Icon name="arrow-up-right" class="text-2xs" />
-                </Button>
-                <Button
-                    v-if="row.items.length > 1"
-                    :label="t(`needs.grants.takeBackAll`)"
-                    size="small"
-                    tier="quiet"
-                    tone="danger"
-                    :disabled="allBusy(row.conversation.conversationId)"
-                    @click="takeBackAll(row.conversation.conversationId, row.title, row.items)"
-                />
-            </template>
-            <template #below>
-                <ul class="flex flex-col" :aria-label="t(`needs.grants.itemsOf`, { title: row.title })">
-                    <li v-for="item in row.items" :key="keyOf(item.grant)" class="flex items-center gap-2 py-0.5">
-                        <Icon :name="item.icon" class="shrink-0 text-2xs" :class="item.wide ? `text-warning` : `text-subtle`" />
-                        <span class="min-w-0 flex-1 break-words text-xs text-content">{{ item.label }}</span>
-                        <Button
-                            :label="t(`ui.action.revoke`)"
-                            size="small"
-                            tier="quiet"
-                            tone="danger"
-                            class="shrink-0"
-                            :disabled="busyOn(item.grant)"
-                            @click="takeBack(item)"
-                        />
-                    </li>
-                </ul>
-            </template>
-        </Row>
-        <RowNote>{{ t(`needs.grants.when`) }}</RowNote>
-        <RowNote v-if="notice" variant="block"><Notice :of="notice" /></RowNote>
-    </RowGroup>
+            <RowNote v-if="unreadable.length > 0" variant="block"><Notice tone="warning" size="sm">{{ t(`needs.grants.unreadable`, { what: unreadableWhat }) }}</Notice></RowNote>
+            <Row v-for="item in ownerItems" :key="keyOf(item.grant)" :icon="item.icon" :description="item.note" indent>
+                <template #title>
+                    <span class="break-words">{{ item.label }}</span>
+                </template>
+                <template #control>
+                    <Button
+                        :label="t(`ui.action.revoke`)"
+                        size="small"
+                        tier="quiet"
+                        tone="danger"
+                        :disabled="busyOn(item.grant)"
+                        @click="takeBack(item)"
+                    />
+                </template>
+            </Row>
+            <RowNote>{{ t(`needs.grants.ownerWideWhen`) }}</RowNote>
+        </RowGroup>
+        <RowGroup v-if="rows.length > 0" :label="t(`needs.grants.title`)">
+            <Row
+                v-for="row in rows"
+                :key="row.conversation.conversationId"
+                icon="comments"
+                :description="row.line"
+                indent
+            >
+                <!-- An archived conversation's name steps back, since nothing under it is in use; its Revoke presses do not,
+                     since clearing what it still holds is the one thing left to do about it. -->
+                <template #title>
+                    <span :class="row.standing.kind === `archived` ? `text-muted` : ``">{{ row.title }}</span>
+                </template>
+                <template #control>
+                    <Button v-if="row.standing.kind !== `unknown`" size="small" tier="quiet" :as="RouterLink" :to="pageOf(row.conversation.conversationId)">
+                        {{ t(`ui.action.open`) }}
+                        <Icon name="arrow-up-right" class="text-2xs" />
+                    </Button>
+                    <Button
+                        v-if="row.items.length > 1"
+                        :label="t(`needs.grants.takeBackAll`)"
+                        size="small"
+                        tier="quiet"
+                        tone="danger"
+                        :disabled="allBusy(row.conversation.conversationId)"
+                        @click="takeBackAll(row.conversation.conversationId, row.title, row.items)"
+                    />
+                </template>
+                <template #below>
+                    <ul class="flex flex-col" :aria-label="t(`needs.grants.itemsOf`, { title: row.title })">
+                        <li v-for="item in row.items" :key="keyOf(item.grant)" class="flex items-center gap-2 py-0.5">
+                            <Icon :name="item.icon" class="shrink-0 text-2xs" :class="item.wide ? `text-warning` : `text-subtle`" />
+                            <span class="min-w-0 flex-1 break-words text-xs text-content">{{ item.label }}</span>
+                            <Button
+                                :label="t(`ui.action.revoke`)"
+                                size="small"
+                                tier="quiet"
+                                tone="danger"
+                                class="shrink-0"
+                                :disabled="busyOn(item.grant)"
+                                @click="takeBack(item)"
+                            />
+                        </li>
+                    </ul>
+                </template>
+            </Row>
+            <RowNote>{{ t(`needs.grants.when`) }}</RowNote>
+            <RowNote v-if="notice" variant="block"><Notice :of="notice" /></RowNote>
+        </RowGroup>
+    </div>
 </template>

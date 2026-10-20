@@ -128,14 +128,12 @@ const queuedNow = (summary: AgentSummary): FleetNow["queued"] => {
     return count === 0 ? undefined : { count, ...present({ paused: summary.queue?.paused, until: summary.queue?.until }) };
 };
 
-const limitNow = (summary: AgentSummary): FleetNow["limit"] =>
-    summary.limitHeld !== true && summary.limitScheduled !== true
+const limitNow = (summary: AgentSummary): FleetNow["limit"] => {
+    const rerun = summary.next?.kind === "rerun" ? summary.next : undefined;
+    return summary.limitHeld !== true && rerun === undefined
         ? undefined
-        : {
-              held: summary.limitHeld === true,
-              scheduled: summary.limitScheduled === true,
-              ...present({ resetsAt: summary.limitResetsAt, moving: summary.limitMoving }),
-          };
+        : { held: summary.limitHeld === true, scheduled: rerun !== undefined, ...present({ resetsAt: summary.limitResetsAt, moving: rerun?.onto }) };
+};
 
 /** What is live or holding the conversation now; undefined for one that is simply at rest. */
 export const fleetNow = (summary: AgentSummary | undefined, state: ConversationState | undefined, running: boolean): FleetNow | undefined => {

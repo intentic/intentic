@@ -96,14 +96,14 @@ const place = (at: { box?: string; runner?: string }): void => {
     <div class="flex flex-col p-1">
         <button
             type="button"
-            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
             :class="{ 'ui-row-select-on': picked === undefined && pickedRunner === undefined }"
             :disabled="settled"
             @click="place({})"
         >
             <Icon
                 name="box"
-                class="mt-0.5 text-xs"
+                class="text-xs"
                 :class="picked === undefined && pickedRunner === undefined ? 'text-accent' : 'text-subtle'"
             />
             <span class="flex min-w-0 flex-col">
@@ -115,12 +115,12 @@ const place = (at: { box?: string; runner?: string }): void => {
             v-for="runner in runners"
             :key="runner.id"
             type="button"
-            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
             :class="{ 'ui-row-select-on': pickedRunner === runner.id }"
             :disabled="settled || !runner.online"
             @click="place({ runner: runner.id })"
         >
-            <Icon name="desktop" class="mt-0.5 text-xs" :class="pickedRunner === runner.id ? 'text-accent' : 'text-subtle'" />
+            <Icon name="desktop" class="text-xs" :class="pickedRunner === runner.id ? 'text-accent' : 'text-subtle'" />
             <span class="flex min-w-0 flex-1 flex-col">
                 <span class="flex items-center gap-1.5">
                     <span class="text-sm text-content md:text-xs">{{ runner.id }}</span>
@@ -142,12 +142,12 @@ const place = (at: { box?: string; runner?: string }): void => {
                 v-for="box in otherBoxes"
                 :key="box.sandbox.id"
                 type="button"
-                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
                 :class="{ 'ui-row-select-on': picked === box.sandbox.id }"
                 :disabled="settled || !answering(box)"
                 @click="place({ box: box.sandbox.id })"
             >
-                <Icon name="boxes" class="mt-0.5 text-xs" :class="picked === box.sandbox.id ? 'text-accent' : 'text-subtle'" />
+                <Icon name="boxes" class="text-xs" :class="picked === box.sandbox.id ? 'text-accent' : 'text-subtle'" />
                 <span class="flex min-w-0 flex-col">
                     <span class="truncate text-sm text-content md:text-xs">{{ box.sandbox.name }}</span>
                     <span class="text-2xs text-subtle">{{ boxDetail(box) }}</span>

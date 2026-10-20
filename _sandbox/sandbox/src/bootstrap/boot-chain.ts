@@ -90,7 +90,7 @@ const sweepStaleSessions = async ({ config, logger, services }: BootRun): Promis
             modelsAlive.push(panelSession(key));
         }
     }
-    // Taken back as jobs once the conversations load (boot-resumes.ts restoreBackgroundJobs), which spares them from
+    // Taken back as jobs once the conversations load (agent/tools/jobs/jobs-in-flight.ts), which spares them from
     // then on.
     const kept = restorableJobSessions();
     if (kept.length > 0) {

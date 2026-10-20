@@ -6,12 +6,10 @@ import {
     resourcesSummary,
     SandboxLogo,
     SandboxResourcesDialog,
-    SkeletonSnapshot,
     StatusBadge,
     toneHover,
     ui,
     vAction,
-    vSkeletonSource,
 } from "@intentic/ui";
 import type { ResourcesForm } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
@@ -21,7 +19,6 @@ import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { sandboxHoursLine } from "../../../models/hosted-plan/hostedHours";
 import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
-import { useSandboxOutline } from "./useSandboxOutline";
 import { sandboxAvailabilityVisual } from "./availability";
 import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useSandboxPlacement } from "./useSandboxPlacement";
@@ -48,8 +45,7 @@ const availability = useSandboxAvailability(hasSnapshot);
 const availabilityBadge = computed(() => sandboxAvailabilityVisual(availability.value));
 // The happy path needs no badge: reaching this tab already means the sandbox is up.
 const showAvailabilityBadge = computed(() => availability.value !== `live` && availability.value !== `stale`);
-const { info, installed, latest, updateAvailable, isLoading: infoLoading } = useSandboxVersion();
-const outline = useSandboxOutline(infoLoading);
+const { info, installed, latest, updateAvailable } = useSandboxVersion();
 
 const isOwner = computed(() => sandbox.active.value?.role === `owner`);
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
@@ -288,26 +284,10 @@ const removeLogo = async (): Promise<void> => {
                 </div>
             </div>
 
-            <!-- Reserves this card's second half while /info is still loading, since identity above renders instantly from the
-                 platform: drawn as the facts last read in this sandbox, two placeholder lines before that. -->
-            <SkeletonSnapshot
-                v-if="sandbox.reachable.value && infoLoading && outline"
-                of="sandbox.overview.facts"
-                :label="t(`sandbox.sandboxOverview.readingWhatSandboxReports`)"
-            >
-                <div role="status" aria-busy="true" class="flex flex-col gap-2 rounded-lg bg-canvas px-3 py-2.5">
-                    <span class="sr-only">{{ t(`sandbox.sandboxOverview.readingWhatSandboxReports`) }}</span>
-                    <div v-for="row in 2" :key="row" class="grid gap-x-3 gap-y-1 @md:grid-cols-[minmax(0,1fr)_minmax(0,3fr)]" aria-hidden="true">
-                        <span class="skeleton block h-2 w-16 max-w-full" />
-                        <span class="skeleton block h-2 max-w-full @md:justify-self-end" :class="row === 1 ? `w-48` : `w-32`" />
-                    </div>
-                </div>
-            </SkeletonSnapshot>
-
-            <!-- What the sandbox reports about itself, relayed via /info and never stored by the platform. -->
+            <!-- What the sandbox reports about itself, relayed via /info and never stored by the platform. Its one wait, the
+                 first read, is the hub section's own (lazySection), which holds this page's last look until /info answers. -->
             <dl
-                v-else-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
-                v-skeleton-source="`sandbox.overview.facts`"
+                v-if="sandbox.reachable.value && (info?.image || installed || agentUrl)"
                 class="flex flex-col gap-3 rounded-lg bg-canvas px-3 py-2.5 text-2xs @md:gap-1.5"
             >
                 <!-- Stack facts against the pane, not the window; technical values stay readable in full. -->

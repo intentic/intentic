@@ -86,7 +86,7 @@ const swipe = (message: QueuedMessage): SwipeAction | undefined => {
             @commit="unqueue(message)"
         >
             <div class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-card px-3 py-2">
-                <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                <Icon name="clock" class="shrink-0 text-2xs text-subtle" />
                 <div class="flex min-w-0 flex-1 items-start gap-2">
                     <ChatImageThumb
                         v-for="picture in picturesOf(message)"

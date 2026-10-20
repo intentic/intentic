@@ -15,7 +15,7 @@ import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
 import { keptHold, type StoredLimitHold, storedLimitHold } from "./limit-hold.js";
 import { comingBackNow, failureOf, sanitizeFailure } from "./turn-failure.js";
 import { BROADCAST, unchanged, withResume } from "./decision-parts.js";
-import { onHandoffChosen, onHeldRepointed, onHeldRetimed } from "./held-decide.js";
+import { onHandoffChosen, onHeldRepointed, onHeldRetimed, onHeldWalled } from "./held-decide.js";
 import {
     type Booking,
     edited,
@@ -148,18 +148,18 @@ export type ConversationEvent =
     // The held turn's one dispatch, a limit's appointment or a stop-ladder rung; answers whether it may go. `judged` is
     // the record the dispatcher decided on, as it read it: only that very record fires (onHeldFired).
     | { readonly kind: "held-fired"; readonly ladder: boolean; readonly judged: HeldRecord }
-    // A spent allowance's hold the entry kept across a restart (limit-hold.ts), put back at boot; nothing for a
-    // conversation that already holds a turn or is running one.
+    // A hold the entry kept across a restart (limit-hold.ts), put back at boot; nothing for one already holding or running a turn.
     | { readonly kind: "hold-restored"; readonly held: HeldRecord }
     // A spent stop ladder stands down: the hold stays for a press, never fired by the pass again; the count restarts.
     | { readonly kind: "ladder-spent" }
     // A person picked another account while a spent allowance held the turn: the booking follows the pick, re-timed to
     // that account's reopen (`reopensAt`, epoch s; absent leaves it press-only). Answers whether a hold took it.
     | { readonly kind: "held-repointed"; readonly account: string; readonly carry: boolean; readonly reopensAt?: number }
-    // A spent allowance's hold that was refused with no reopen to go at, timed once the sandbox's records say when its
-    // pool reopens (`reopensAt`, epoch s; held-standing.ts retimeLimitHold). Taken only by an unfired limit hold still
-    // without an instant and without a move; answers whether it took it.
+    // When a spent allowance's hold can go, as the pass learns it: `held-retimed` times one refused with no reopen once the
+    // records say when its pool reopens (epoch s; held-standing.ts), taken only by an unfired limit hold without an instant
+    // or a move, and answers whether it took it; `held-walled` is the wall in front of where it goes (ms; limit-due.ts).
     | { readonly kind: "held-retimed"; readonly reopensAt: number }
+    | { readonly kind: "held-walled"; readonly until: number | undefined }
     // A person picked how a spent allowance's held turn continues once it is sent again; answers whether the hold took it.
     | { readonly kind: "handoff-chosen"; readonly handoff: HandoffMode }
     // A turn took the conversation's steering seam; it starts unwatched, whatever the last one was.
@@ -732,8 +732,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "turn-got-somewhere": (state) => unchanged(withResume(state, { stopTries: 0 }), undefined),
     "resume-superseded": (state) => withQueue(withResume(state, { held: undefined }), superseded(state.queue), state.resume.held),
     "auth-firing": (state, event) => unchanged(withResume(state, { authFiring: event.firing }), undefined),
-    // Told to every window: the card's booking reads this hold (agents-registry limitHold), and nothing else moves when a
-    // cancel or a give-up drops it.
+    // Told to every window: the card's `next` reads this hold, and nothing else moves when a cancel or a give-up drops it.
     "resume-dropped": (state) =>
         state.resume.held === undefined
             ? unchanged(state, undefined)
@@ -745,6 +744,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
             : unchanged(state, undefined),
     "held-repointed": (state, event) => onHeldRepointed(state, event),
     "held-retimed": (state, event) => onHeldRetimed(state, event.reopensAt),
+    "held-walled": (state, event) => onHeldWalled(state, event.until),
     "handoff-chosen": (state, event) => onHandoffChosen(state, event),
     "ladder-spent": (state) =>
         unchanged(withResume(state, { held: state.resume.held && { ...state.resume.held, fired: true }, stopTries: 0 }), undefined),

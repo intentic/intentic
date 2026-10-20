@@ -1,13 +1,12 @@
 import { join } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import type { LowDiskPause, Pairing } from "../config.js";
+import type { LowDiskReading, Pairing } from "../config.js";
 import {
     diskFloor,
     FLOOR_MAX_BYTES,
     FLOOR_MIN_BYTES,
     guardDisks,
-    type LowDiskSeams,
     lowDiskStep,
     readDisk,
     RESUME_MARGIN_BYTES,
@@ -116,78 +115,34 @@ describe("writesToDisk", () => {
 describe("guardDisks", () => {
     const total = 500 * GIB; // floor 10 GiB
     const base: Pairing = { sandboxUrl: "https://s.example.dev", sandboxId: "s", mode: "sync", localDir: "/home/me/intentic/s" };
-    // A drive that reads `free`, and a Mutagen whose `running` sessions a pause takes; what each seam was asked is kept.
-    // `takes` is whether Mutagen takes a resume.
-    const seamsFor = (free: number, running: readonly string[], takes = true) => {
-        const records: (LowDiskPause | undefined)[] = [];
-        const resumed: string[][] = [];
-        let resumedAll = 0;
-        const seams: LowDiskSeams = {
-            read: async () => await Promise.resolve({ freeBytes: free, totalBytes: total }),
-            pause: () => running,
-            resume: async (names) => {
-                resumed.push([...names]);
-                return await Promise.resolve(takes);
-            },
-            resumeAll: async () => {
-                resumedAll += 1;
-                return await Promise.resolve(takes);
-            },
-            record: async (_key, pause) => {
-                records.push(pause);
+    // A drive that reads `free`, and the record of what each pass wrote about it.
+    const passOver = async (pairing: Pairing, free: number) => {
+        const records: (LowDiskReading | undefined)[] = [];
+        const held = await guardDisks(
+            [pairing],
+            () => undefined,
+            async () => await Promise.resolve({ freeBytes: free, totalBytes: total }),
+            async (_key, reading) => {
+                records.push(reading);
                 await Promise.resolve();
             },
-        };
-        return { seams, records, resumed, resumedAll: () => resumedAll };
+        );
+        return { held: [...held], records };
     };
 
-    it("keeps the names of what it paused, and its lifting resumes those alone, never a session paused by hand", async () => {
-        // The workspace session runs; the owner had paused the backup by hand, so a pause finds only the first running.
-        const low = seamsFor(9 * GIB, ["intentic-s"]);
-        expect([...(await guardDisks("mutagen", [base], 1, () => undefined, low.seams))]).toEqual(["s"]);
-        expect(low.records[0]?.paused).toEqual(["intentic-s"]);
-        const paused = { ...base, fileSyncLowDisk: low.records[0] };
-        const roomy = seamsFor(10 * GIB + RESUME_MARGIN_BYTES, []);
-        expect([...(await guardDisks("mutagen", [paused], 2, () => undefined, roomy.seams))]).toEqual([]);
-        expect(roomy.records).toEqual([undefined]);
-        expect(roomy.resumed).toEqual([["intentic-s"]]);
-        expect(roomy.resumedAll()).toBe(0);
+    // Only the fact: which sessions stop and start is holds.ts's, so the lifting can no longer resume one somebody else
+    // paused, or forget one it held.
+    it("holds a pairing under its floor, keeps it held while short, and lets it go once floor and margin are free", async () => {
+        const low = await passOver(base, 9 * GIB);
+        expect(low.held).toEqual(["s"]);
+        expect(low.records).toEqual([{ since: expect.any(Number), freeBytes: 9 * GIB, totalBytes: total }]);
+        const short = { ...base, lowDisk: low.records[0] };
+        expect(await passOver(short, 11 * GIB)).toEqual({ held: ["s"], records: [] });
+        expect(await passOver(short, 10 * GIB + RESUME_MARGIN_BYTES)).toEqual({ held: [], records: [undefined] });
     });
 
-    it("resumes nothing when every session was already paused as the drive filled", async () => {
-        const low = seamsFor(9 * GIB, []);
-        await guardDisks("mutagen", [base], 1, () => undefined, low.seams);
-        const roomy = seamsFor(20 * GIB, []);
-        await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: low.records[0] }], 2, () => undefined, roomy.seams);
-        expect(roomy.resumed).toEqual([[]]);
-    });
-
-    it("adds to its list a session resumed while the drive is still short, so it runs again once there is room", async () => {
-        const held: LowDiskPause = { since: 1, freeBytes: 9 * GIB, totalBytes: total, paused: ["intentic-s"] };
-        const still = seamsFor(9 * GIB, ["intentic-s-state"]);
-        await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: held }], 12, () => undefined, still.seams);
-        expect(still.records[0]?.paused).toEqual(["intentic-s", "intentic-s-state"]);
-    });
-
-    // (2026-10-19) The record went first and the resume after, whatever it did: one Mutagen did not take left the sync
-    // paused with no record that would ever lift it.
-    it("keeps its record until Mutagen took the resume, and tries it again next pass", async () => {
-        const held: LowDiskPause = { since: 1, freeBytes: 9 * GIB, totalBytes: total, paused: ["intentic-s"] };
-        const refused = seamsFor(20 * GIB, [], false);
-        expect([...(await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: held }], 2, () => undefined, refused.seams))]).toEqual(["s"]);
-        expect(refused.resumed).toEqual([["intentic-s"]]);
-        expect(refused.records).toEqual([]);
-        const taken = seamsFor(20 * GIB, []);
-        expect([...(await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: held }], 3, () => undefined, taken.seams))]).toEqual([]);
-        expect(taken.records).toEqual([undefined]);
-    });
-
-    it("leaves sessions another pause holds to that pause's own lifting", async () => {
-        const held: LowDiskPause = { since: 1, freeBytes: 9 * GIB, totalBytes: total, paused: ["intentic-s"] };
-        const roomy = seamsFor(20 * GIB, []);
-        await guardDisks("mutagen", [{ ...base, fileSyncLowDisk: held, fileSyncAutoPaused: true }], 2, () => undefined, roomy.seams);
-        expect(roomy.resumed).toEqual([]);
-        expect(roomy.resumedAll()).toBe(0);
+    it("writes nothing for a drive with room that held nothing", async () => {
+        expect(await passOver(base, 20 * GIB)).toEqual({ held: [], records: [] });
     });
 });
 

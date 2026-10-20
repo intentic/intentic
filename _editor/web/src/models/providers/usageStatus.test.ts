@@ -1,6 +1,6 @@
 import type { AccountUsage, ProviderRefusal, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { readingHeadroom, type ServiceFacts, serviceState } from "@intentic/sandbox-contract/models/plan-pools";
+import { readingHeadroom, type ServiceFacts, serviceState, serviceStates } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "./providerAccounts";
 import {
     accountState,
@@ -11,6 +11,7 @@ import {
     formatWait,
     isStale,
     liveUsage,
+    modelCapacity,
     meterFill,
     meterTint,
     meterTrack,
@@ -482,7 +483,7 @@ describe(`liveUsage under a standing refusal`, () => {
         account: `claude-1`,
         ...over,
     });
-    const spent = (over: Partial<ProviderRefusal> = {}): Record<string, ProviderRefusal> => ({ claude: refusedFor(over) });
+    const spent = (over: Partial<ProviderRefusal> = {}): Record<string, readonly ProviderRefusal[]> => ({ claude: [refusedFor(over)] });
     // Two pools, so what is pinned can be told apart from what is left alone.
     const pools = (over: Partial<AccountUsage> = {}): AccountUsage =>
         usage({ windows: [window({ kind: `five_hour`, utilization: 40 }), window({ kind: `seven_day`, utilization: 99.2 })], ...over });
@@ -541,7 +542,7 @@ describe(`liveUsage under a standing refusal`, () => {
     // Routed refusal names nobody; it speaks for every connection the provider holds.
     const kimiPools = (over: Partial<AccountUsage> = {}): AccountUsage =>
         usage({ windows: [window({ kind: `five_hour`, utilization: 93 }), window({ kind: `seven_day`, utilization: 79 })], ...over });
-    const kimiSpent = { kimi: { at: 2_000, kind: `limit` as const, message: `403 You've reached your 5-hour usage limit` } };
+    const kimiSpent = { kimi: [{ at: 2_000, kind: `limit` as const, message: `403 You've reached your 5-hour usage limit` }] };
 
     it(`reads a routed subscription as spent on the refusal that could name nobody`, () => {
         const reading = kimiPools({ measuredAt: 1_500 });
@@ -669,89 +670,107 @@ describe(`planLimitRows`, () => {
             {
                 ...noRouted,
                 kimi: [
-                    {
-                        name: `kimi-1`,
-                        label: `Kimi Code`,
-                        cooling: { until: 4_000_000_000, reason: `quota exceeded` },
-                        state: { kind: `blocked`, fix: `wait`, reason: `quota exceeded`, until: 4_000_000_000 },
-                    },
+                    { name: `kimi-1`, label: `Kimi Code`, cooling: { until: 4_000_000_000, reason: `quota exceeded` } },
                 ],
             },
         );
         expect(rows[0]?.state).toEqual({ kind: `blocked`, fix: `wait`, reason: `quota exceeded`, until: 4_000_000_000 });
     });
 
-    it(`reads the daemon's verdict when it sends one, and an older daemon's row without one as unknown`, () => {
+    it(`judges each row by the contract's rule on the facts it carries, as the daemon does`, () => {
         const seat = `Your organization has disabled Claude Code`;
-        const [published] = planLimitRows({ claude: [account({ usage: usage(), state: { kind: `blocked`, fix: `admin`, reason: seat } })] }, noRouted);
-        expect(published?.state).toEqual({ kind: `blocked`, fix: `admin`, reason: seat });
-        // A daemon older than `state` still sends the seat mark and the sign-in flag; nothing rebuilds a verdict from them.
-        const [older] = planLimitRows({ claude: [account({ usage: usage(), seatRefusal: seat, needsReauth: true })] }, noRouted);
-        expect(older?.state).toEqual({ kind: `unknown` });
+        const [seatless] = planLimitRows({ claude: [account({ usage: usage(), seatRefusal: seat })] }, noRouted);
+        expect(seatless?.state).toEqual({ kind: `blocked`, fix: `admin`, reason: seat });
+        const [revoked] = planLimitRows({ claude: [account({ usage: usage(), seatRefusal: seat, needsReauth: true })] }, noRouted);
+        expect(revoked?.state).toEqual({ kind: `blocked`, fix: `reconnect`, reason: `sign-in expired` });
     });
 });
 
-// The one verdict every headroom surface reads: the daemon's for what only its list carries, the live reading for the
-// plan-limit half, since readings stream in between lists.
+// The one verdict every headroom surface reads: the contract's rule (serviceStates) over the very facts the daemon judges
+// by, the account rows, their freshest readings and every refusal on file, so this window and the daemon cannot disagree.
 describe(`accountState`, () => {
     afterEach(() => {
         usageByAccount.value = {};
         providerRefusals.value = {};
+        providerAccounts.value = { ...providerAccounts.value, claude: [] };
     });
-    const row = (over: Partial<ServiceFacts & { state: ReturnType<typeof accountState> }> = {}) => ({ account: `claude-1`, ...over });
+    const row = (over: Partial<ServiceFacts> = {}): ServiceFacts => ({ account: `claude-1`, ...over });
 
-    it(`re-reads the plan-limit half on a reading that landed after the list`, () => {
+    it(`judges the plan-limit half on a reading that landed after the list`, () => {
         usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 100, resetsAt: 9_000 })], measuredAt: 900 }) };
-        expect(accountState(`claude`, row({ usage: usage({ measuredAt: 500 }), state: { kind: `ready`, room: 58 } }))).toEqual({ kind: `spent`, reopensAt: 9_000 });
+        expect(accountState(`claude`, row({ usage: usage({ measuredAt: 500 }) }))).toEqual({ kind: `spent`, reopensAt: 9_000 });
+        expect(accountState(`claude`, row())).toEqual({ kind: `spent`, reopensAt: 9_000 });
     });
 
-    it(`keeps the daemon's verdict when there is no reading to re-read`, () => {
-        expect(accountState(`claude`, row({ state: { kind: `spent` } }))).toEqual({ kind: `spent` });
-        expect(accountState(`claude`, row({ state: { kind: `unknown` } }))).toEqual({ kind: `unknown` });
+    it(`reads an account nothing has measured as unknown, never as room`, () => {
+        expect(accountState(`claude`, row())).toEqual({ kind: `unknown` });
     });
 
-    it(`holds the daemon's spent verdict over a rounded reading at the line, until a reading shows room or it reopens`, () => {
+    // 2026-10-10/10-11 (stark-gale, mellow-gale): an account refused at a rounded 100 was spent to the daemon and "ready,
+    // 0 room" here, because this window held only the provider's last refusal and another account's had replaced it.
+    it(`holds an account spent at a rounded 100 by its own refusal on file, whatever another account was refused since`, () => {
         const atLine = usage({ windows: [window({ utilization: 100, rounded: true, resetsAt: 9_000 })], measuredAt: 900 });
-        const spent = row({ usage: atLine, state: { kind: `spent`, reopensAt: 9_000 } });
-        // No refusal in this window's copy: the re-read alone would say ready at 0 room.
-        expect(accountState(`claude`, spent, undefined, 1_000_000)).toEqual({ kind: `spent`, reopensAt: 9_000 });
-        expect(accountState(`claude`, spent, { id: `claude-opus-4-6` }, 1_000_000)).toEqual({ kind: `spent`, reopensAt: 9_000 });
-        expect(accountState(`claude`, spent, undefined, 9_000_000)).toEqual({ kind: `ready`, room: 0 });
-        usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 40, rounded: true })], measuredAt: 950 }) };
-        expect(accountState(`claude`, spent, undefined, 1_000_000)).toEqual({ kind: `ready`, room: 60 });
+        providerAccounts.value = {
+            ...providerAccounts.value,
+            claude: [
+                { id: `claude-1`, label: `radarsu`, connectedAt: 0, usage: atLine },
+                { id: `claude-2`, label: `other`, connectedAt: 0, usage: usage({ measuredAt: 900 }) },
+            ],
+        };
+        const own: ProviderRefusal = { at: 1_000, kind: `limit`, message: `weekly limit`, account: `claude-1` };
+        const elsewhere: ProviderRefusal = { at: 2_000, kind: `auth`, message: `token revoked`, account: `claude-2` };
+        providerRefusals.value = { claude: [own, elsewhere] };
+        expect(accountState(`claude`, row({ usage: atLine }), undefined, 1_000_000)).toEqual({ kind: `spent`, reopensAt: 9_000 });
+        expect(accountState(`claude`, row({ usage: atLine }), { id: `claude-opus-4-6` }, 1_000_000)).toEqual({ kind: `spent`, reopensAt: 9_000 });
+        // The window's answer is the daemon's rule over the same facts, not a copy of a verdict it was sent.
+        const daemon = serviceStates(
+            [
+                { account: `claude-1`, usage: atLine, label: `radarsu` },
+                { account: `claude-2`, usage: usage({ measuredAt: 900 }), label: `other` },
+            ],
+            [own, elsewhere],
+            undefined,
+            1_000_000,
+        );
+        expect(accountState(`claude`, row({ usage: atLine }), undefined, 1_000_000)).toEqual(daemon.get(`claude-1`) ?? { kind: `unknown` });
+        // A reading with room taken since answers it, here as there.
+        usageByAccount.value = { "claude:claude-1": usage({ windows: [window({ utilization: 40, rounded: true })], measuredAt: 1_500 }) };
+        expect(accountState(`claude`, row({ usage: atLine }), undefined, 1_000_000)).toEqual({ kind: `ready`, room: 60 });
     });
 
-    it(`lets a bench lift at its own instant, whatever the list that reported it said`, () => {
-        const benched = row({ state: { kind: `blocked`, fix: `wait`, reason: `cooling down`, until: 1_000 }, usage: usage({ measuredAt: 500 }) });
+    it(`lets a bench lift at its own instant`, () => {
+        const benched = row({ cooling: { until: 1_000, reason: `cooling down` }, usage: usage({ measuredAt: 500 }) });
         expect(accountState(`claude`, benched, undefined, 999_000)).toEqual({ kind: `blocked`, fix: `wait`, reason: `cooling down`, until: 1_000 });
         expect(accountState(`claude`, benched, undefined, 1_000_000)).toEqual({ kind: `ready`, room: 57.6 });
     });
 
     // 2026-10-20: the daemon held Codex spent until the provider's "try again at 1:53 PM"; this window re-judged the pinned
     // 5-hour pool by that pool's own reset and drew "spent · 19:55" beside a picker saying "Back at 15:53".
-    it(`reopens a refused account when the provider said to try again, as the daemon judged it, and draws the pin so`, () => {
+    it(`reopens a refused account when the provider said to try again, and draws the pin so`, () => {
         const until = Math.ceil(Date.now() / 1000) + 3_600;
         const reading = usage({
             windows: [window({ kind: `five_hour`, utilization: 0, resetsAt: until + 7_200 }), window({ kind: `seven_day`, utilization: 0, resetsAt: until + 86_400 })],
             measuredAt: 2_000,
         });
         translatorAccounts.value = { codex: [{ name: `team.json`, label: `team`, usage: reading }], grok: [], kimi: [], gemini: [] };
-        providerRefusals.value = { codex: { at: 1_000, kind: `limit`, message: `try again at 1:53 PM`, model: `gpt-6.1-sol`, resetsAt: until } };
-        const refused = row({ account: `team.json`, usage: reading, state: { kind: `spent`, reopensAt: until } });
+        providerRefusals.value = { codex: [{ at: 1_000, kind: `limit`, message: `try again at 1:53 PM`, model: `gpt-6.1-sol`, resetsAt: until }] };
+        const refused = row({ account: `team.json`, usage: reading });
         expect(accountState(`codex`, refused)).toEqual({ kind: `spent`, reopensAt: until });
         expect(accountState(`codex`, refused, { id: `gpt-6-luna` })).toEqual({ kind: `spent`, reopensAt: until });
         expect(liveUsage(`codex`, `team.json`, reading)?.windows.map((entry) => [entry.utilization, entry.resetsAt])).toEqual([
             [100, until],
             [0, until + 86_400],
         ]);
+        // The picker's row and the subagent listing read the same fleet answer for the model.
+        expect(modelCapacity(`codex`, { id: `gpt-6.1-sol` })).toEqual({ kind: `spent`, accounts: 1, reopensAt: until, pool: undefined });
         translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
     });
 
     it(`answers for the model asked about, not the account's tightest pool`, () => {
-        const opusSpent = usage({ windows: [window({ utilization: 30 }), window({ kind: `model:Opus`, utilization: 100, gates: { models: [`Opus`] } })], measuredAt: 500 });
-        const judged = row({ usage: opusSpent, state: { kind: `ready`, room: 70 } });
+        const opusSpent = usage({ windows: [window({ utilization: 30 }), window({ kind: `model:Opus`, label: `Opus`, utilization: 100, gates: { models: [`Opus`] } })], measuredAt: 500 });
+        const judged = row({ usage: opusSpent });
         expect(accountState(`claude`, judged)).toEqual({ kind: `ready`, room: 70 });
-        expect(accountState(`claude`, judged, { id: `claude-opus-4-6` })).toEqual({ kind: `spent` });
+        expect(accountState(`claude`, judged, { id: `claude-opus-4-6` })).toEqual({ kind: `spent`, pool: `Opus` });
     });
 });
 
@@ -819,9 +838,9 @@ describe(`plan-limit aggregates`, () => {
     });
 
     // A stored refusal can outlive its own truth for a week; the record existing doesn't mean it's current.
-    it(`hands each provider its own last refusal, and points it at the account it names`, () => {
+    it(`hands each provider its own newest refusal, and points it at the account it names`, () => {
         const message = `You've reached your usage limit`;
-        const refusals = { kimi: { at: 1_000, kind: `limit` as const, message, account: `20` } };
+        const refusals = { kimi: [{ at: 500, kind: `auth` as const, message: `older` }, { at: 1_000, kind: `limit` as const, message, account: `20` }] };
         const groups = planLimitGroups([at(20, { id: `k`, provider: `kimi` }), at(95, { id: `c` })], refusals, 5_000);
         expect(groups.find((group) => group.provider === `claude`)?.refusal).toBeUndefined();
         const kimiRefusal = groups.find((group) => group.provider === `kimi`)?.refusal;

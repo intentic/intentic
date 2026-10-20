@@ -6,7 +6,7 @@ import { open, type SpawnedChildBirth, type SubagentTurn } from "./subagents.js"
 // A spawned child's roster row put back at boot from its file (child-restore.ts), beside the rows subagents.ts opens as
 // children are born.
 
-/** A spawned child's row as its file brings it back at boot (children.ts restoreSpawnedChildren). */
+/** A spawned child's row as its file brings it back at boot (child-restore.ts, spawnedChildrenInFlight). */
 export interface RestoredChildRow extends SpawnedChildBirth {
     readonly status: SubagentStatus;
     readonly startedAt: number;

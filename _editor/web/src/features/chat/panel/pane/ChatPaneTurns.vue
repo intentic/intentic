@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button, EmptyState, Icon, vSkeletonSource } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, defineAsyncComponent, inject, provide, ref, watch } from "vue";
+import { computed, defineAsyncComponent, inject, provide, ref } from "vue";
 import { loadChunk } from "@intentic/ui/chunk";
 import { awaitingUser, turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../../models/fleet/useAgents";
@@ -20,9 +20,6 @@ import ChatTurnShots from "../../transcript/shots/ChatTurnShots.vue";
 import ChatTurnDeliverables from "../../transcript/deliverables/ChatTurnDeliverables.vue";
 import ChatHeldMessages from "../../transcript/held/ChatHeldMessages.vue";
 import { useHeldQueue } from "../../transcript/held/heldQueue";
-import { unsaidError } from "../../../../models/conversations/transcript/transcript";
-import { failureHeadline, looksLikeProviderFailure } from "../../../../models/conversations/transcript/providerFailure";
-import NoticeFailureDetails from "../../transcript/notices/NoticeFailureDetails.vue";
 import { useShotViewer } from "../../transcript/shots/useShotViewer";
 import { usePaneTranscript } from "./paneTranscript";
 import { TRANSCRIPT_PARKED, useRowBudget, windowTurns } from "./paneWindow";
@@ -101,14 +98,12 @@ const showsPrompt = computed(() => !conversation.value.transcript.historyMore.va
 // reads it out (ChatSystemPrompt) and that message draws no paperclip of its own.
 const opening = computed(() => (showsPrompt.value ? messages.value.find((message) => message.role === `user`) : undefined));
 const doomed = computed(() => conversation.value.transcript.doomed.value);
-// The error line only where it adds to the transcript: the daemon's notice already says a turn's failure.
-const error = computed(() => unsaidError(conversation.value.error.value, messages.value));
-// A provider's longer words on the error line fold to one line as a failure row's do (providerFailure.ts), the whole of
-// them a press away, rather than running on as six paragraphs of red.
-const errorHeadline = computed(() => (error.value !== undefined && looksLikeProviderFailure(error.value) ? failureHeadline(error.value) : undefined));
-const errorOpen = ref(false);
-watch(error, () => {
-    errorOpen.value = false;
+// This window's own error line: what the transcript cannot say (a send the sandbox refused, a stream that broke, where to
+// install an engine). A turn's failure is never on it: the daemon's notice row is the one place that says one
+// (turnFailures.ts), so the two can no longer say the same failure twice, or say it raw.
+const error = computed(() => {
+    const said = conversation.value.error.value;
+    return said === null || said.trim() === `` ? undefined : said;
 });
 // The low-memory row whose message is held at the foot: that message's own line says it (ChatHeldMessages), so the row
 // is not drawn a second time above it.
@@ -244,19 +239,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
         <ChatTurnStatus v-if="showTurnStatus" />
         <!-- What the queue holds, where the message the reader just sent would have been: after everything that ran, above the error line a press on it may leave. -->
         <ChatHeldMessages />
-        <div v-if="error !== undefined" class="flex flex-wrap items-start gap-x-2 gap-y-1 text-xs text-danger">
-            <p class="min-w-0">{{ errorHeadline ?? error }}</p>
-            <button
-                v-if="errorHeadline !== undefined"
-                type="button"
-                class="touch-target shrink-0 font-medium text-link hover:underline"
-                :aria-expanded="errorOpen"
-                @click="errorOpen = !errorOpen"
-            >
-                {{ errorOpen ? t(`chat.providerFailure.hideDetails`) : t(`chat.providerFailure.details`) }}
-            </button>
-            <NoticeFailureDetails v-if="errorOpen && errorHeadline !== undefined" :said="error" class="text-content" />
-        </div>
+        <p v-if="error !== undefined" class="min-w-0 text-xs text-danger">{{ error }}</p>
         <!-- A read of a painted chat that has not answered: what is shown is the saved copy, said quietly, not as the error line. A live stream is fresher than either. -->
         <p v-if="staleness" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle" role="status">
             <template v-if="staleness.kind === `reconnecting`">

@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import {
-    ui,
     FilterBar,
     Notice,
     noticeOf,
     Row,
+    Section,
     SegmentedControl,
     sinceOf,
     StatusBadge,
-    timeWindows,
     type TimeWindow,
+    timeWindows,
 } from "@intentic/extension-ui";
 import { computed, provide } from "vue";
 import ActivityTimeline from "./ActivityTimeline.vue";
@@ -44,7 +44,7 @@ const search = computed<string>({
     set: (value) => api.route.setQuery({ q: value === `` ? undefined : value }),
 });
 
-const { events, status, error, isLoading, truncated } = useActivity(window);
+const { events, status, error, loaded, truncated } = useActivity(window);
 const names = useSourceNames();
 provide(SOURCE_NAMES, names);
 
@@ -81,7 +81,7 @@ const voiceSpeakers = computed(() => {
         </div>
 
         <!-- All three filters narrow the feed, so all three live in the instrument, ordered who, when, what. -->
-        <FilterBar v-model="search" :placeholder="t(`filter`)" :busy="isLoading">
+        <FilterBar v-model="search" :placeholder="t(`filter`)" :busy="loaded.state === `waiting`">
             <template #controls>
                 <SourceFilter v-model="source" :sources="sources" :total="windowed.length" :failed="failed" />
                 <span class="h-4 w-px bg-line" aria-hidden="true"></span>
@@ -90,9 +90,8 @@ const voiceSpeakers = computed(() => {
         </FilterBar>
 
         <!-- Activity scrolls with the page so the sticky section index stays reachable. -->
-        <section>
-            <h2 :class="ui.sectionLabel('mb-2.5 px-1')">{{ t(`title`) }}</h2>
-            <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :is-loading="isLoading" />
-        </section>
+        <Section :label="t(`title`)" :heading="2">
+            <ActivityTimeline :episodes="visible" :source="selected" :window="window" :truncated="truncated" :loaded="loaded" />
+        </Section>
     </div>
 </template>

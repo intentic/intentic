@@ -110,9 +110,9 @@ const pickChannel = (value: string): void => {
 
 <template>
     <section class="flex flex-col gap-3 rounded-xl p-4" :class="prominent ? `bg-card shadow-sm` : `border border-line`" :aria-busy="running">
-        <header class="flex items-start gap-2.5">
-            <Icon v-if="running" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
-            <Icon v-else name="linux" class="mt-0.5 shrink-0 text-subtle" />
+        <header class="flex items-start gap-2.5 text-sm">
+            <Icon v-if="running" name="spinner" spin class="shrink-0 text-link" />
+            <Icon v-else name="linux" class="shrink-0 text-subtle" />
             <div class="min-w-0 flex-1">
                 <h2 class="text-sm leading-tight font-semibold">{{ t(`desktop.os.title`) }}</h2>
                 <p class="mt-1 text-xs text-muted">{{ summary }}</p>
@@ -125,14 +125,14 @@ const pickChannel = (value: string): void => {
         <div v-if="health.failed.length > 0" class="flex flex-col gap-1 text-2xs">
             <p class="text-muted">{{ t(`desktop.os.failedChecks`) }}</p>
             <p v-for="failed in health.failed" :key="failed" class="flex items-start gap-1.5 text-danger">
-                <Icon name="times-circle" class="mt-0.5 shrink-0" />
+                <Icon name="times-circle" class="shrink-0" />
                 <span class="min-w-0 break-words">{{ failed }}</span>
             </p>
         </div>
 
         <!-- How sandboxes are kept apart from this computer, and when the microVMs the policy asks for are missing. -->
         <p class="flex items-start gap-1.5 text-2xs text-subtle">
-            <Icon name="shield" class="mt-0.5 shrink-0" />
+            <Icon name="shield" class="shrink-0" />
             <span>{{ t(`desktop.os.isolation.${isolation.mode}`) }}</span>
         </p>
         <Notice v-if="isolation.vmMissing" tone="warning" class="text-2xs">{{
@@ -148,7 +148,7 @@ const pickChannel = (value: string): void => {
         <!-- WHAT WAITS FOR THE NEXT BOOT, and the restart into it: the one press on this card that restarts this computer. -->
         <div v-else-if="restart" class="flex flex-col gap-2">
             <p class="flex items-start gap-1.5 text-xs text-content">
-                <Icon :name="waiting === `rollback` ? `undo` : `download`" class="mt-0.5 shrink-0 text-link" />
+                <Icon :name="waiting === `rollback` ? `undo` : `download`" class="shrink-0 text-link" />
                 <span>{{ waitingSentence }}</span>
             </p>
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -197,7 +197,7 @@ const pickChannel = (value: string): void => {
                 </Button>
             </div>
             <p v-else-if="checkSaid?.kind === `current`" class="flex items-start gap-1.5 text-2xs text-subtle">
-                <Icon name="check-circle" class="mt-0.5 shrink-0" />
+                <Icon name="check-circle" class="shrink-0" />
                 <span>{{ t(`desktop.os.upToDate`) }}</span>
             </p>
             <Notice v-if="checkError" tone="warning" class="text-2xs">

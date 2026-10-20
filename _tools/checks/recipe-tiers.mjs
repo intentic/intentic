@@ -8,10 +8,16 @@
 //    already been turning into each other by override), `inputSm`/`inputInline`/`sectionLabelSm` are the size variant.
 //    They stay in the kit only because installed extensions call them through the host.
 // 3. `ui-chip-on` written by hand: the lit chip is `ui.chip({ on })`.
+// 4. A selection marked a second way: `ui-row-select-on` with a rule, ring or fill of its own beside it, or a hand tint
+//    (`bg-link/10`, `bg-primary-600/15`) put on what is selected. The one selected mark is `ui-row-select-on` (or
+//    `<Row selected>`, `ui.chip({ on })`), so /sandbox/models and /sandbox/personas cannot mark a pick two ways again.
+// 5. `ui.sectionLabel()` outside the kit: the section header is <SectionHeader> (drawn by <Section>, <RowGroup> and
+//    <NavRail>), which owns its size, its spacing and what may sit beside it; the recipe stays for installed extensions.
 // Exceptions: `allow(recipes): <reason>` at the site, saying why the geometry is the place's own.
 import { readFileSync } from "node:fs";
 import { blank, excusedAt, finishFindings } from "./lib/templates.mjs";
 import { root, subjectFiles } from "./lib/repo.mjs";
+import { ratchet } from "./lib/ratchet.mjs";
 
 // The variant prefixes a token may carry (`hover:`, `max-md:`, `group-hover/row:`), stripped before judging.
 const bare = (token) =>
@@ -63,14 +69,24 @@ const RETIRED = {
     textAction: `\`ui.textButton({ tone: "quiet" })\``,
     inputSm: `\`ui.input({ size: "sm" })\``,
     inputInline: `\`ui.input({ size: "inline" })\``,
-    sectionLabelSm: `\`ui.sectionLabel({ size: "xs" })\``,
+    sectionLabelSm: `<SectionHeader density="dense"> (_editor/ui/src/components/rows/SectionHeader.vue)`,
+    sectionLabel: `<Section :label> over what it heads, <RowGroup :label> over rows, or <SectionHeader> for the header alone (_editor/ui/src/components/rows/): the header's size, spacing and neighbours are the kit's`,
 };
 
-const HOME = new Set([`_editor/ui/src/lib/ui.ts`]);
+const HOME = new Set([`_editor/ui/src/lib/ui.ts`, `_editor/ui/src/components/rows/SectionHeader.vue`]);
+
+// Rule 4. A colour of its own on a selected thing: a rule, a ring or a fill.
+const SELECTION_EXTRA = /(?:^|\s)(?:[\w@-]+:)*(?:border-(?:primary|link|accent)|ring(?:-\d)?(?:\s|$)|ring-(?:primary|link|accent)|bg-(?:primary|link|accent))[\w./-]*/u;
+// A hand tint of the selection's own hue.
+const HAND_TINT = /(?:^|[\s`'"])bg-(?:link|primary-\d{3})\/\d+(?=[\s`'"]|$)/u;
+// What a condition reads like when it decides that a thing is the picked one.
+const PICKED = /select|pick|chosen/iu;
 const tracked = subjectFiles(`_editor`, `_extensions`).filter(
     (path) => /\.(?:vue|ts|mts)$/u.test(path) && !HOME.has(path) && !/\.(?:test|spec)\.ts$/u.test(path) && !path.includes(`/dist/`),
 );
 const findings = [];
+// Rule 4's hand tints, per file: held by baselines/selection-tints.json, which may only shrink (lib/ratchet.mjs).
+const tints = new Map();
 
 // The balanced argument list after `ui.name(`, as written; a recipe call never spans an unbalanced string.
 const argsAt = (code, open) => {
@@ -119,6 +135,31 @@ for (const path of tracked) {
         }
     }
 
+    // Rule 4: within one class literal, the selected mark and a second colour beside it.
+    for (const lit of code.matchAll(/`([^`]*)`|'([^'\n]*)'|"([^"\n]*)"/gu)) {
+        const words = lit[1] ?? lit[2] ?? lit[3] ?? ``;
+        if (/(?:^|\s)ui-row-select-on(?:\s|$)/u.test(words) && SELECTION_EXTRA.test(words.replace(/(?:^|\s)ui-row-select-on(?=\s|$)/u, ` `)) && !excused(lit.index)) {
+            findings.push({
+                at: lineOf(lit.index),
+                why: `\`${words.trim()}\` marks a selection twice: \`ui-row-select-on\` is the whole selected mark, in every skin, so a rule, ring or fill beside it is a second one`,
+            });
+        }
+    }
+    // Rule 4: a tint of the selection's hue, put on whatever a picked-sounding condition chooses (ternary or object).
+    const picks = [
+        ...code.matchAll(/([^?:{},(\n]*)\?\s*(`[^`]*`|'[^'\n]*'|"[^"\n]*")/gu),
+        ...code.matchAll(/(`[^`]*`|'[^'\n]*'|"[^"\n]*")\s*:\s*([^,}\n]*)/gu),
+    ];
+    for (const pick of picks) {
+        const [condition, literal] = pick[0].trimStart().startsWith(pick[1]) && /\?/u.test(pick[0]) ? [pick[1], pick[2]] : [pick[2], pick[1]];
+        if (PICKED.test(condition ?? ``) && HAND_TINT.test(literal ?? ``) && !excused(pick.index)) {
+            (tints.get(path) ?? tints.set(path, []).get(path)).push({
+                at: lineOf(pick.index),
+                why: `a picked thing tinted by hand (\`${(literal ?? ``).replace(/[`'"]/gu, ``).trim()}\`): the selected mark is \`ui-row-select-on\` (or \`<Row selected>\`, \`ui.chip({ on })\`)`,
+            });
+        }
+    }
+
     for (const lit of code.matchAll(/(?<![\w-])ui-chip-on(?![\w-])/gu)) {
         if (!excused(lit.index)) {
             findings.push({
@@ -127,6 +168,11 @@ for (const path of tracked) {
             });
         }
     }
+}
+
+const { grown } = ratchet(`recipes`, `selection-tints`, new Map([...tints].map(([path, list]) => [path, list.length])));
+for (const { key } of grown) {
+    findings.push(...tints.get(key));
 }
 
 finishFindings(

@@ -6,22 +6,22 @@ import { lazySection } from "../../workbench/hub/lazySection";
 // pay for all of them (workbench/hub/lazySection.ts); the rest are warmed at idle once the open one has drawn. Module
 // scope, not setup: a stand-in made once keeps its landed chunk across the hub's remounts, so a section drawn once
 // draws at once from then on.
-const SandboxOverview = lazySection(() => import("./overview/SandboxOverview.vue"));
-const SandboxUsage = lazySection(() => import("./usage/SandboxUsage.vue"));
-const SandboxSecrets = lazySection(() => import("./secrets/SandboxSecrets.vue"));
-const SandboxDataProtection = lazySection(() => import("./data-protection/SandboxDataProtection.vue"));
-const SandboxPrivacyShield = lazySection(() => import("./privacy-shield/SandboxPrivacyShield.vue"));
-const SandboxGuardrails = lazySection(() => import("./guardrails/SandboxGuardrails.vue"));
-const SandboxRetention = lazySection(() => import("./retention/SandboxRetention.vue"));
-const SandboxActivity = lazySection(() => import("./activity/SandboxActivity.vue"));
-const SandboxEnvironment = lazySection(() => import("./environment/SandboxEnvironment.vue"));
-const SandboxMap = lazySection(() => import("./map/SandboxMap.vue"));
-const SandboxAccess = lazySection(() => import("./access/SandboxAccess.vue"));
-const SandboxPersonas = lazySection(() => import("./personas/SandboxPersonas.vue"));
-const SandboxAreas = lazySection(() => import("./areas/SandboxAreas.vue"));
-const SandboxModels = lazySection(() => import("./models/SandboxModels.vue"));
-const SandboxAgent = lazySection(() => import("./overview/SandboxAgent.vue"));
-const SandboxExtensions = lazySection(() => import("./extensions/SandboxExtensions.vue"));
+const SandboxOverview = lazySection(`SandboxOverview`, () => import("./overview/SandboxOverview.vue"));
+const SandboxUsage = lazySection(`SandboxUsage`, () => import("./usage/SandboxUsage.vue"));
+const SandboxSecrets = lazySection(`SandboxSecrets`, () => import("./secrets/SandboxSecrets.vue"));
+const SandboxDataProtection = lazySection(`SandboxDataProtection`, () => import("./data-protection/SandboxDataProtection.vue"));
+const SandboxPrivacyShield = lazySection(`SandboxPrivacyShield`, () => import("./privacy-shield/SandboxPrivacyShield.vue"));
+const SandboxGuardrails = lazySection(`SandboxGuardrails`, () => import("./guardrails/SandboxGuardrails.vue"));
+const SandboxRetention = lazySection(`SandboxRetention`, () => import("./retention/SandboxRetention.vue"));
+const SandboxActivity = lazySection(`SandboxActivity`, () => import("./activity/SandboxActivity.vue"));
+const SandboxEnvironment = lazySection(`SandboxEnvironment`, () => import("./environment/SandboxEnvironment.vue"));
+const SandboxMap = lazySection(`SandboxMap`, () => import("./map/SandboxMap.vue"));
+const SandboxAccess = lazySection(`SandboxAccess`, () => import("./access/SandboxAccess.vue"));
+const SandboxPersonas = lazySection(`SandboxPersonas`, () => import("./personas/SandboxPersonas.vue"));
+const SandboxAreas = lazySection(`SandboxAreas`, () => import("./areas/SandboxAreas.vue"));
+const SandboxModels = lazySection(`SandboxModels`, () => import("./models/SandboxModels.vue"));
+const SandboxAgent = lazySection(`SandboxAgent`, () => import("./overview/SandboxAgent.vue"));
+const SandboxExtensions = lazySection(`SandboxExtensions`, () => import("./extensions/SandboxExtensions.vue"));
 
 // The same sections by slug, for the warm-up alone: the template's chain is what draws them.
 const SECTIONS = new Map<string, Component>([

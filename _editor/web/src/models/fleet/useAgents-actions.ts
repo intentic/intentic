@@ -119,9 +119,7 @@ export const agentSeed = (
         | "failureCode"
         | "limitResetsAt"
         | "limitHeld"
-        | "limitScheduled"
-        | "limitMoving"
-        | "limitNextAt"
+        | "next"
     >,
 ): AgentTabSeed => ({
     id: agent.id,

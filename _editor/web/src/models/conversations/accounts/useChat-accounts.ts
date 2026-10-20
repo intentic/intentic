@@ -71,7 +71,7 @@ export const refreshTranslatorAccounts = (): Promise<void> =>
         translatorAccounts.value = listing;
     });
 
-// When each provider last refused a turn; the observed counterpart to the polled account snapshots.
+// Every refusal on file per provider; the observed counterpart to the polled account snapshots.
 const refreshProviderRefusals = (): Promise<void> =>
     readOrKeep(sandboxRpc.agent.refusals(), (body) => {
         providerRefusals.value = body.refusals;

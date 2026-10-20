@@ -1,7 +1,7 @@
 <!-- Bring back: what agents changed in this folder's own sandbox, reviewed and copied into the folder on request, with the folder's sync direction beside it.
      Drawn only with something to say (bringBack.ts `sectionShown`); the folder's page checks for changes on its own (useBringBack.ts `useQuietChecks`). -->
 <script setup lang="ts">
-import { Button, ConfirmDialog, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, SectionHeader, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
 import { localFace } from "../../app/environments/local";
@@ -62,7 +62,7 @@ const syncBothWays = (): void => {
 
 <template>
     <section v-if="shown" class="flex shrink-0 flex-col gap-1.5 border-t border-line px-3 py-2 text-xs" aria-labelledby="local-bring-back-title">
-        <h2 id="local-bring-back-title" :class="ui.sectionLabel({ size: `xs` })">{{ t(`local.localBringBack.title`) }}</h2>
+        <SectionHeader :label="t(`local.localBringBack.title`)" density="dense" :heading="2" id="local-bring-back-title" />
         <p class="text-muted">
             {{ state.direction === `both` ? t(`local.localBringBack.bothWays`) : t(`local.localBringBack.copyFirst`) }}
         </p>

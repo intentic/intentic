@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { t } from "../../i18n/index.js";
 import { formatUntil } from "../../lib/timeWindow.js";
-import { type DeviceBridgeHoldRow, type DeviceLowDiskRow, diskFullHint, historyHint, holdWarnings } from "./deviceHolds.js";
+import { type DeviceBridgeHoldRow, type DeviceLowDiskRow, folderHold, historyHint, holdWarnings } from "./deviceHolds.js";
 import type { Tip, TooltipValue } from "../../lib/tooltip.js";
 import type { StatusVariant } from "../feedback/statusBadge.js";
 
@@ -48,6 +48,9 @@ export interface DeviceFolderRow {
     // read them off Mutagen.
     conflictedPaths?: readonly DeviceConflictRow[] | undefined;
     paused?: boolean | undefined;
+    // What holds its file sync still, by whose word first (the contract's DeviceSyncHoldSchema; deviceHolds.ts
+    // `folderHold` reads it); absent while nothing does, and from an agent older than the field.
+    heldBy?: readonly string[] | undefined;
     // The second session's word, the one-way mirror carrying the sandbox's own state down; see `backupState`.
     backupStatus?: string | undefined;
     // Which sandbox folder `localDir` holds when it is not /work itself: a project pairing's `/work/<name>`, the
@@ -247,7 +250,7 @@ export const sandboxGroups = (
 export const mirroringOff = (folder: DeviceFolderRow | undefined): boolean => folder?.mirroring === `off`;
 
 // What a sync is doing, in Mutagen's own words rather than mapped onto a traffic light: its halted
-// states name their own cause. Paused wins, since it's the one state the user chose. A sync pairing with no
+// states name their own cause. A hold wins (deviceHolds.ts `folderHold`), since it says why nothing moves. A sync pairing with no
 // session at all gets our own word rather than a blank, the way `backupState` does: the report carries that as
 // an absent status, and silence reads exactly like healthy.
 export const folderState = (folder: DeviceFolderRow): string | undefined => {
@@ -255,10 +258,7 @@ export const folderState = (folder: DeviceFolderRow): string | undefined => {
     if (folder.mode === `mirror`) {
         return undefined;
     }
-    if (folder.paused === true) {
-        return t(`ui.deviceDetail.paused`);
-    }
-    return folder.mutagenStatus ?? t(`ui.deviceDetail.notSyncing`);
+    return folderHold(folder)?.word ?? folder.mutagenStatus ?? t(`ui.deviceDetail.notSyncing`);
 };
 
 // Whether this pairing has a file-sync session at all. Not the same question as `mode === "sync"`: a pairing
@@ -283,6 +283,9 @@ export const backupTone = (state: string | undefined): `success` | `warning` | `
 // are knowable from outside Mutagen's state machine; everything else stays neutral.
 export const folderTone = (state: string | undefined): `success` | `warning` | `neutral` =>
     state === `watching` ? `success` : state?.startsWith(`halted`) === true ? `warning` : `neutral`;
+
+// Why a folder's sync is not running, and whether Resume is the owner's to press (deviceHolds.ts).
+export { type FolderHold, folderHold } from "./deviceHolds.js";
 
 // What a folder's conflicts say, and what ends them (deviceConflicts.ts).
 export { type ConflictLine, type FolderConflicts, folderConflicts } from "./deviceConflicts.js";
@@ -437,18 +440,16 @@ const portChips = (group: DeviceSandboxGroup): GroupChip[] => {
     return chips;
 };
 
-// The folder half, only where it says something the row doesn't: a sync is where this device's copy lives, and a paused
-// one is a choice somebody made. A mirror-only pairing has no folder, and draws nothing.
+// The folder half, only where it says something the row doesn't: a sync is where this device's copy lives, and a held
+// one says why (deviceHolds.ts `folderHold`). A mirror-only pairing has no folder, and draws nothing.
 const folderChips = (group: DeviceSandboxGroup): GroupChip[] => {
     const folder = group.folder;
     if (folder === undefined || folder.mode !== `sync`) {
         return [];
     }
-    if (folder.lowDisk !== undefined) {
-        return [{ key: `folder`, icon: `pause`, text: ``, label: t(`ui.deviceDetail.diskFull`), hint: diskFullHint(folder.lowDisk), tone: `warning` }];
-    }
-    if (folder.paused === true) {
-        return [{ key: `folder`, icon: `pause`, text: ``, label: t(`ui.deviceDetail.fileSyncingPaused`), hint: t(`ui.deviceDetail.syncPaused`), tone: `quiet` }];
+    const hold = folderHold(folder);
+    if (hold !== undefined) {
+        return [{ key: `folder`, icon: `pause`, text: ``, label: hold.label, hint: hold.hint, tone: hold.tone }];
     }
     return [
         {
@@ -544,10 +545,9 @@ export const filesLine = (group: DeviceSandboxGroup): CardPart[] => {
             ? { key: `path`, text: t(`ui.deviceDetail.noFolderSynced`), tone: `muted` }
             : { key: `path`, text: folder.localDir, tone: `content`, mono: true, hint: folder.localDir },
     ];
-    if (folder.lowDisk !== undefined) {
-        parts.push({ key: `paused`, text: t(`ui.deviceDetail.diskFull`), tone: `warning`, hint: diskFullHint(folder.lowDisk) });
-    } else if (folder.paused === true) {
-        parts.push({ key: `paused`, text: t(`ui.deviceDetail.paused`), tone: `muted`, hint: t(`ui.deviceDetail.syncPaused`) });
+    const hold = folderHold(folder);
+    if (hold !== undefined) {
+        parts.push({ key: `paused`, text: hold.word, tone: hold.tone === `warning` ? `warning` : `muted`, hint: hold.hint });
     } else if (folder.mutagenStatus === undefined) {
         // A pairing with no session moves nothing, and a bare path beside it would read as a folder in step.
         parts.push({ key: `state`, text: t(`ui.deviceDetail.notSyncing`), tone: `muted` });

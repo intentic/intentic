@@ -1,10 +1,12 @@
 import type { Directive } from "vue";
-import { takeImprint } from "./skeletonImprint.js";
+import { emptyImprint, rendersNothing, takeImprint } from "./skeletonImprint.js";
 import { rememberImprint, skeletonScope } from "./skeletonStore.js";
 
 // `v-skeleton-source="name"` on the element a loading placeholder stands in for: once that element has settled (no
 // resize and no change inside it for a moment, then idle time), what it shows is taken as `name`'s imprint in the
-// current scope, for the `<SkeletonSnapshot of="name">` drawn there next time. A later resize or change (rows arriving,
+// current scope, for the `<SkeletonSnapshot of="name">` drawn there next time. With `.empty`, on an element that is only
+// ever drawn with its answer (<Await>'s), one that shows nothing at all (a section that turned out empty) is remembered
+// as nothing, so its next wait does not promise what is no longer there. A later resize or change (rows arriving,
 // an editor filling a pane of fixed size, a reply streaming in) takes it again once things are quiet. The name may
 // carry a variant (`diff:${path}`); changing it re-arms the capture under the new one.
 
@@ -14,6 +16,8 @@ const IDLE_TIMEOUT_MS = 2_000;
 
 interface Source {
     name: string | undefined;
+    /** Showing nothing is an answer worth remembering (`.empty`). */
+    readonly empty: boolean;
     timer: ReturnType<typeof setTimeout> | undefined;
     idle: number | undefined;
     /** What the observer watches: the element, or its parent when the element is `display: contents` and has no box. */
@@ -42,7 +46,7 @@ const capture = (element: Element, source: Source, scope: string): void => {
     if (name === undefined || name === `` || scope !== skeletonScope()) {
         return;
     }
-    const imprint = takeImprint(element);
+    const imprint = takeImprint(element) ?? (source.empty && rendersNothing(element) ? emptyImprint() : undefined);
     if (imprint !== undefined) {
         rememberImprint(scope, name, imprint);
     }
@@ -82,11 +86,11 @@ const observing = (): ResizeObserver | undefined => {
 };
 
 export const vSkeletonSource: Directive<HTMLElement, string | undefined> = {
-    mounted(element, { value }) {
+    mounted(element, { value, modifiers }) {
         const watched = getComputedStyle(element).display === `contents` ? (element.parentElement ?? element) : element;
         const changes = `MutationObserver` in globalThis ? new MutationObserver(() => schedule(element)) : undefined;
         changes?.observe(element, { childList: true, subtree: true, characterData: true });
-        sources.set(element, { name: value, timer: undefined, idle: undefined, watched, changes });
+        sources.set(element, { name: value, empty: modifiers[`empty`] === true, timer: undefined, idle: undefined, watched, changes });
         const watcher = observing();
         if (watcher === undefined) {
             schedule(element);

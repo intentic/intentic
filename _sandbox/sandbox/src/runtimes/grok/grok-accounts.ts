@@ -73,7 +73,7 @@ const pollDeviceApproval = async (client: OpenCodeClient, attempt: string, signa
     await client.integration.oauth.cancel({ integrationID: OPENCODE_XAI_PROVIDER, attemptID: attempt }).catch(() => {});
 };
 
-export type GrokAccountDeps = Pick<Services, "openCode" | "headroom" | "observedLimits" | "providerRefusals">;
+export type GrokAccountDeps = Pick<Services, "openCode" | "headroom" | "providerRefusals">;
 
 export const grokAccountDoor = (services: GrokAccountDeps, options: { readonly pause?: PollPause } = {}): AccountDoor => {
     let poll: { readonly handshake: string; readonly controller: AbortController } | undefined;

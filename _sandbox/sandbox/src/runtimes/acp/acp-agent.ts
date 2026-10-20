@@ -31,11 +31,10 @@ import {
     watchedPull,
     withTurnCap,
 } from "../decorators/turn-watchdog.js";
-import { isContextOverflowText } from "../../engines/failure-sentences.js";
 import { workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { opt } from "../../opt.js";
 import { answerVendorAsk } from "../decorators/vendor-ask.js";
-import { isRateLimited, vendorFailureFrame, type VendorRule, withStderrTail } from "../decorators/vendor-errors.js";
+import { withStderrTail } from "../decorators/vendor-errors.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
 import type { AcpLaunch, AcpSessionMeta } from "./acp-spawn.js";
@@ -81,14 +80,6 @@ class ModeNotLeft extends Error {}
 // where it has one (acp-modes.ts).
 const EMULATED_PLAN: Pick<AgentCapabilities, "permissions"> = { permissions: "plan" };
 
-// How an agent's failure sentences are coded, in this order: a spent allowance first, so the client shows a reset
-// countdown and holds the turn, then a session past the model's window, which the daemon re-runs in a fresh one. The
-// sentence is the agent's own, so what is not recognized stays a plain failure.
-const ACP_FAILURES: readonly VendorRule[] = [
-    [isRateLimited, "rate_limit"],
-    [isContextOverflowText, "context-overflow"],
-];
-
 // The agent's MCP servers: the turn's remote list (every mount at the daemon's MCP door: browsers, the mcp-kind cards and
 // the daemon's own servers) over http where the agent advertises http MCP, else as stdio servers through the daemon's
 // proxy (acp-mcp-proxy.ts), stdio being the transport every ACP agent must take. In-process SDK servers have no ACP
@@ -118,12 +109,10 @@ const failureOf = (error: unknown): string => {
 
 type ErrorFrame = Extract<AgentEvent, { kind: "error" }>;
 
-// A failure as its frame: the protocol's own auth_required first (ACP credentials belong to the capability, not a native
-// provider account's reconnect flow), then the agent's sentence through the shared rules.
+// A failure as its frame: the protocol's own auth_required (ACP credentials belong to the capability, not a native provider
+// account's reconnect flow); the agent's sentence is read where every runtime's is (codedFailure).
 const failureFrame = (message: string, error: unknown): ErrorFrame =>
-    error instanceof RequestError && error.code === RequestError.authRequired().code
-        ? { kind: "error", message, code: "acp-auth-required" }
-        : vendorFailureFrame({ kind: "error", message }, ACP_FAILURES);
+    error instanceof RequestError && error.code === RequestError.authRequired().code ? { kind: "error", message, code: "acp-auth-required" } : { kind: "error", message };
 
 // The session a phase runs on: the one asked for when this process holds it or can load it, else a new one, announced. A
 // session the agent can't bring back is the coded self-heal every runtime shares: the next send starts fresh.
@@ -504,7 +493,7 @@ async function* runAcpTurn(
                 cancel();
                 unbind();
                 connection.abandon(session);
-                yield { kind: "error", message: `ACP agent timed out: ${clock.expiry()}. It was stopped; send again to retry.` };
+                yield { kind: "error", message: `ACP agent timed out: ${clock.expiry()}. It was stopped; send again to retry.`, own: true };
                 return { sessionId: session, planText: held.text, errored: true };
             }
             yield next;

@@ -213,7 +213,7 @@ const watchGaveUp = computed(
 // written: a sandbox older than this app sends no code, and a newer one may send a code this build does not know.
 const { audience } = useAudience();
 const noticeText = computed(() => noticeLine(props.message, audience.value) ?? props.message.text);
-// A failure row: its own glyph, and a provider's longer words folded down to one line, the whole of them a press away.
+// A failure row: its own glyph and line, and the provider's or the harness's own words, where it carries any, a press away.
 const failure = computed(() => (props.message.role === `notice` ? noticeFailure(props.message) : undefined));
 const failureOpen = ref(false);
 // A notice the runtime's own extension or loop said (sandbox-contract events/agent-ui.ts): its level's glyph and colour.
@@ -589,17 +589,17 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 }}</template>
                 <template v-else>{{ watchEvidence ? t(`chat.chatMessageView.hideMessage`) : t(`chat.chatMessageView.showMessage`) }}</template>
             </button>
-            <!-- A provider's longer words, behind the line above: opened by a press, since they hold links and ids to copy. -->
+            <!-- What the provider or the harness said, behind the line above: opened by a press, since it holds links and ids to copy. -->
             <button
-                v-if="failure?.folded"
+                v-if="failure?.said !== undefined"
                 type="button"
                 class="touch-target shrink-0 font-medium text-link hover:underline"
                 :aria-expanded="failureOpen"
                 @click="failureOpen = !failureOpen"
             >
-                {{ failureOpen ? t(`chat.providerFailure.hideDetails`) : t(`chat.providerFailure.details`) }}
+                {{ failureOpen ? t(`chat.failure.hideDetails`) : t(`chat.failure.details`) }}
             </button>
-            <NoticeFailureDetails v-if="failureOpen && failure?.folded" :said="failure.said" />
+            <NoticeFailureDetails v-if="failureOpen && failure?.said !== undefined" :said="failure.said" />
             <pre
                 v-if="watchEvidence && unspokenSent !== undefined"
                 class="chat-inset max-h-64 w-full overflow-auto px-2.5 py-1.5 text-left text-2xs leading-relaxed whitespace-pre-wrap text-subtle"

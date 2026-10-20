@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { PrivacyProvider, PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
-import { RowGroup, SkeletonRows, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
+import { Await, Notice, RowGroup, RowNote, SkeletonRows } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { allowAdding } from "./privacyShield";
@@ -15,7 +15,7 @@ import { shieldRefusal, usePrivacyLog, usePrivacyShield } from "../../../models/
 const t = useT();
 
 const { status, setPolicy, saveError } = usePrivacyShield();
-const { entries, isLoading, error } = usePrivacyLog();
+const { loaded } = usePrivacyLog();
 
 const policy = computed<PrivacyShieldPolicy | undefined>(() => status.value?.policy);
 const providers = computed<readonly PrivacyProvider[]>(() => status.value?.providers ?? []);
@@ -31,18 +31,25 @@ const neverMask = (value: string): void => {
 </script>
 
 <template>
-    <SkeletonSnapshot v-if="isLoading" of="sandbox.activity.privacy">
-        <RowGroup :label="t(`sandbox.agentPrivacyShield.activity`)"><SkeletonRows :rows="3" description /></RowGroup>
-    </SkeletonSnapshot>
-    <PrivacyShieldActivity
-        v-else
-        v-skeleton-source="`sandbox.activity.privacy`"
-        :entries="entries"
-        :providers="providers"
-        :policy="policy"
-        :ready="policy !== undefined"
-        :error="error"
-        :notice="notice"
-        @never-mask="neverMask"
-    />
+    <Await :of="loaded" imprint="sandbox.activity.privacy">
+        <template #fallback>
+            <RowGroup :label="t(`sandbox.agentPrivacyShield.activity`)"><SkeletonRows :rows="3" description /></RowGroup>
+        </template>
+        <template #failed="{ error }">
+            <RowGroup :label="t(`sandbox.agentPrivacyShield.activity`)">
+                <RowNote variant="block"><Notice tone="danger">{{ error }}</Notice></RowNote>
+            </RowGroup>
+        </template>
+        <template #default="{ data: entries, refreshError }">
+            <PrivacyShieldActivity
+                :entries="entries"
+                :providers="providers"
+                :policy="policy"
+                :ready="policy !== undefined"
+                :error="refreshError"
+                :notice="notice"
+                @never-mask="neverMask"
+            />
+        </template>
+    </Await>
 </template>

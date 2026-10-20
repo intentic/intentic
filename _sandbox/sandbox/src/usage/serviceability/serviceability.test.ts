@@ -5,7 +5,7 @@ import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
 import type { SeatRefusal } from "../../agent/providers/claude/claude-seats.js";
-import { serviceabilities, serviceability, type ServiceabilityDeps, withAccountStates, withRoutedStates } from "./serviceability.js";
+import { allowanceWall, fleetCapacityOf, serviceabilities, serviceability, type ServiceabilityDeps } from "./serviceability.js";
 
 // The one "can this account serve a turn?" answer, fed from every store that holds a fact about it. The ranking cases
 // were accountWithHeadroom's, the unnamed pick this replaced; they hold for the rule every picker now shares.
@@ -18,22 +18,17 @@ const deps = (params: {
     readonly accounts?: readonly OauthAccount[];
     readonly usage?: Record<string, AccountUsage>;
     readonly seats?: Record<string, SeatRefusal>;
-    readonly refusals?: Record<string, ProviderRefusal>;
-    // Each account's own last limit refusal, kept on file beside the provider's last one.
-    readonly held?: readonly ProviderRefusal[];
+    // Every refusal on file, by provider.
+    readonly refusals?: Record<string, readonly ProviderRefusal[]>;
     readonly routed?: Partial<TranslatorAccounts>;
+    // The accounts a provider's own door lists (Cursor, Devin, the minted providers).
+    readonly doors?: Record<string, readonly OauthAccount[]>;
 }): ServiceabilityDeps => ({
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...(params.accounts ?? [])] }),
     claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => params.seats ?? {} }),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage ?? {} }),
-    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
-        read: async () => params.refusals ?? {},
-        onFile: async () => ({
-            ...Object.fromEntries(Object.entries(params.refusals ?? {}).map(([provider, refusal]) => [provider, [refusal]])),
-            // Every account refusal held here is a Claude account's.
-            claude: [...(params.refusals?.[`claude`] === undefined ? [] : [params.refusals[`claude`]]), ...(params.held ?? [])],
-        }),
-    }),
+    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => params.refusals ?? {} }),
+    providerAccounts: async (provider) => [...(params.doors?.[provider] ?? [])],
     cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
         accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [], ...params.routed }),
     }),
@@ -78,7 +73,7 @@ test("a revoked sign-in, a lost seat and a standing entitlement refusal each tak
         accounts: [account("revoked", { needsReauth: true }), account("seatless"), account("refused"), account("working")],
         usage,
         seats: { seatless: { at: 1, reason: "Your organization has disabled Claude Code." } },
-        refusals: { claude: { at: 1, kind: "entitlement", message: "Not entitled.", account: "refused" } },
+        refusals: { claude: [{ at: 1, kind: "entitlement", message: "Not entitled.", account: "refused" }] },
     });
     expect(await pick(services)).toBe("working");
     expect(await serviceability(services, "claude", "revoked")).toEqual({ kind: "blocked", fix: "reconnect", reason: "sign-in expired" });
@@ -89,15 +84,15 @@ test("a revoked sign-in, a lost seat and a standing entitlement refusal each tak
 
 test("a standing limit refusal reads its account as spent, until a reading with room lands after it", async () => {
     const accounts = [account("refused"), account("other")];
-    const refusals = { claude: { at: 1_000, kind: "limit" as const, message: "Limit reached.", account: "refused" } };
+    const refusals = { claude: [{ at: 1_000, kind: "limit" as const, message: "Limit reached.", account: "refused" }] };
     const stale = { refused: { ...reading(window({ utilization: 10 })), measuredAt: 500 }, other: reading(window({ utilization: 90 })) };
     expect(await pick(deps({ accounts, usage: stale, refusals }))).toBe("other");
     const since = { ...stale, refused: reading(window({ utilization: 10 })) };
     expect(await pick(deps({ accounts, usage: since, refusals }))).toBe("refused");
 });
 
-// The provider's last refusal moves on to whichever account says no next. An account read at 100 by a provider that rounds
-// is only proven spent by its own refusal, so that refusal must outlive one on another account.
+// 2026-10-11 (mellow-gale): the provider's last refusal moved on to whichever account said no next, and an account read at
+// 100 by a provider that rounds, only proven spent by its own refusal, read as ready again. Every refusal is on file.
 test("an account's own limit refusal holds it spent after another account is refused", async () => {
     const reopensAt = Math.floor(Date.now() / 1000) + 86_400;
     const atTheLine = { ...reading(window({ kind: "seven_day", utilization: 100, rounded: true, resetsAt: reopensAt })), measuredAt: Date.now() };
@@ -106,14 +101,15 @@ test("an account's own limit refusal holds it spent after another account is ref
     const services = deps({
         accounts,
         usage: { spent: atTheLine, roomy: reading(window({ utilization: 30 })) },
-        // The provider's last refusal now names another account: a revoked token, which says nothing about this pool.
-        refusals: { claude: { at: Date.now(), kind: "auth", message: "OAuth token revoked.", account: "elsewhere" } },
-        held: [own],
+        // The provider's newest refusal names another account: a revoked token, which says nothing about this pool.
+        refusals: { claude: [{ at: Date.now(), kind: "auth", message: "OAuth token revoked.", account: "elsewhere" }, own] },
     });
 
-    const [row] = await withAccountStates(services, "claude", accounts);
-    expect(row?.state).toEqual({ kind: "spent", reopensAt });
     expect(await serviceability(services, "claude", "spent")).toEqual({ kind: "spent", reopensAt });
+    // The wall a held turn is booked against is that very verdict (2026-10-19, fleet-quill: a pick between two spent
+    // accounts re-booked a held turn for "now", reading the polled reading alone).
+    expect(await allowanceWall(services, "claude", "spent")).toEqual({ reopensAt });
+    expect(await allowanceWall(services, "claude", "roomy")).toBeUndefined();
     expect(await pick(services)).toBe("roomy");
     // Without its own refusal on file, the same reading is at the line: no room, but not proven spent.
     expect(await serviceability(deps({ accounts, usage: { spent: atTheLine } }), "claude", "spent")).toEqual({ kind: "ready", room: 0 });
@@ -137,13 +133,31 @@ test("a routed provider is judged from the translator's credentials, its bench i
     expect(await serviceability(services, "gemini", "projectless")).toEqual({ kind: "blocked", fix: "reconnect", reason: "no Antigravity project" });
 });
 
-test("the lists publish the same verdict on the rows they already assembled", async () => {
-    const services = deps({ refusals: { codex: { at: 1_000, kind: "limit", message: "Limit reached." } } });
-    const [row] = await withAccountStates(services, "claude", [account("seatless", { seatRefusal: "No seat.", usage: reading(window({ utilization: 0 })) })]);
-    expect(row?.state).toEqual({ kind: "blocked", fix: "admin", reason: "No seat." });
-    // A routed refusal names no credential, so it covers them all until one reads with room after it.
-    const routed = await withRoutedStates(services, { codex: [{ name: "a", label: "a", usage: { ...reading(window({ utilization: 20 })), measuredAt: 500 } }], grok: [], kimi: [], gemini: [] });
-    expect(routed.codex[0]?.state).toEqual({ kind: "spent" });
+// 2026-10-13 (solid-meadow, sunny-fern): the spawn listing read Claude's store and the translator only, so a Cursor or
+// Devin model every account had refused stayed "not metered", and Sol children went onto a Codex the picker greyed.
+// Every provider's accounts reach the one rule the same way, refusals on file included.
+test("a provider that publishes no reading is judged from its door's accounts and the refusals on file", async () => {
+    const refused = (id: string) => ({ at: Date.now() - 60_000, kind: "limit" as const, message: "You're out of usage.", account: id, model: "composer-2.5" });
+    const services = deps({ doors: { cursor: [account("x"), account("y")] }, refusals: { cursor: [refused("x"), refused("y")] } });
+    expect((await fleetCapacityOf(services, "cursor", { id: "composer-2.5" })).kind).toBe("spent");
+    expect((await fleetCapacityOf(services, "cursor", { id: "gpt-6" })).kind).toBe("serving");
+    // One account still clear of it keeps the model servable, and the placement goes there.
+    const one = deps({ doors: { cursor: [account("x"), account("y")] }, refusals: { cursor: [refused("x")] } });
+    expect(await fleetCapacityOf(one, "cursor", { id: "composer-2.5" })).toEqual({ kind: "serving", serving: 1, accounts: 2, roomMeasuredAt: undefined });
+    expect(preferredAccount(await serviceabilities(one, "cursor", { id: "composer-2.5" }))?.id).toBe("y");
+});
+
+test("a routed refusal naming no credential covers them all until one reads with room after it", async () => {
+    const services = deps({
+        refusals: { codex: [{ at: 1_000, kind: "limit", message: "Limit reached.", model: "gpt-6.1-sol" }] },
+        routed: { codex: [{ name: "a", label: "a", usage: { ...reading(window({ utilization: 20 })), measuredAt: 500 } }] },
+    });
+    expect(await fleetCapacityOf(services, "codex", { id: "gpt-6.1-sol" })).toMatchObject({ kind: "spent", accounts: 1 });
+    const since = deps({
+        refusals: { codex: [{ at: 1_000, kind: "limit", message: "Limit reached.", model: "gpt-6.1-sol" }] },
+        routed: { codex: [{ name: "a", label: "a", usage: reading(window({ utilization: 20 })) }] },
+    });
+    expect((await fleetCapacityOf(since, "codex", { id: "gpt-6.1-sol" })).kind).toBe("serving");
 });
 
 test("a caller that passes the logger gets a line when an account's verdict changes", async () => {

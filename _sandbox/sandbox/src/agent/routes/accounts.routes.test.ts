@@ -78,8 +78,8 @@ test("a rename that matched nothing is 404, and force reaches the door's list", 
     });
     expect(await accounts.rename({ provider: "claude", id: "a", label: "Job" })).toEqual({ ...ROW, label: "Job" });
     expect(await errorCode(accounts.rename({ provider: "claude", id: "gone", label: "Job" }))).toBe("NOT_FOUND");
-    // Every listed row carries the one serviceability verdict; this one has no reading, so nothing is known either way.
-    expect(await accounts.accounts({ provider: "claude" })).toEqual({ accounts: [{ ...ROW, state: { kind: "unknown" } }] });
+    // Rows carry the facts the one serviceability rule judges, never a verdict of their own.
+    expect(await accounts.accounts({ provider: "claude" })).toEqual({ accounts: [ROW] });
     await accounts.accounts({ provider: "claude", force: "1" });
     expect(forced).toEqual([false, true]);
 });

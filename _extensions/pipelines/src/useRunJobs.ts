@@ -41,7 +41,7 @@ export function useRunJobs(run: Ref<PipelineRun | undefined>) {
     const enabled = computed(() => run.value !== undefined);
     const inFlight = computed(() => run.value !== undefined && isPipelineInFlight(run.value.status));
 
-    const { query, error } = api.sandbox.query({
+    const { query, error, loaded } = api.sandbox.query({
         queryKey,
         queryFn: (): Promise<CiJobsResponse> => {
             const r = run.value!;
@@ -74,6 +74,7 @@ export function useRunJobs(run: Ref<PipelineRun | undefined>) {
 
     return {
         jobs: computed((): PipelineJob[] => query.data.value?.jobs ?? []),
+        loaded,
         isLoading: query.isLoading,
         error,
     };

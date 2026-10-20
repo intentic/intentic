@@ -10,7 +10,6 @@ import { engineReady } from "../../engines/engine-resolve.js";
 import type { Config } from "../../env.config.js";
 import { stateRelPath } from "../../state-paths.js";
 import type { IsolationAnchor, IsolationPlan } from "../../conversations/worktrees/isolation.js";
-import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { AgentAdapter } from "./adapter.js";
 import type { AgentRequest } from "./agent-request.js";
 
@@ -112,9 +111,6 @@ export interface ProviderModule<D> {
     readonly secretEntries?: (deps: D, shared: SharedProviderReads) => Promise<SecretInventoryEntry[]>;
     // This provider's account door, built once per daemon; absent means /accounts/{provider} 404s for it.
     readonly accounts?: (deps: D) => AccountDoor;
-    // What this provider's own records say of one model's allowance across its accounts, for a provider that keeps its
-    // own reading; absent means the role walk reads the pool the provider shares (agent/models/role-model-quota.ts).
-    readonly turnLimit?: (deps: D, model: string) => Promise<TurnLimit | undefined>;
     // Keeping an idle conversation's prompt cache warm; absent means no conversation of this provider's can be kept.
     readonly warm?: ProviderWarm<D>;
 }

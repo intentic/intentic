@@ -4,7 +4,7 @@ import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { personaHome } from "@intentic/sandbox-contract/policy/persona-home";
 import type { SystemPromptMode } from "@intentic/sandbox-contract/schemas/settings";
 import type { TurnBriefingNoteId } from "@intentic/sandbox-contract/schemas/personas";
-import { BrandMark, ui, Notice, type NoticeModel, SearchBar, SegmentedControl } from "@intentic/ui";
+import { BrandMark, Notice, type NoticeModel, SearchBar, SectionHeader, SegmentedControl, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, shallowRef } from "vue";
 import AddModelButton from "../agent-settings/models/AddModelButton.vue";
@@ -259,7 +259,7 @@ const configure = (pin: ModelPin): void => {
                                 :aria-pressed="picked(account.id)"
                                 :class="[
                                     `group flex cursor-pointer items-center gap-2 rounded-lg border py-1.5 pl-2 pr-2.5 text-left transition-colors`,
-                                    picked(account.id) ? `border-link bg-link/10` : `border-line hover:border-line-strong hover:bg-card`,
+                                    picked(account.id) ? `ui-row-select-on border-line` : `border-line hover:border-line-strong hover:bg-card`,
                                 ]"
                                 @click="toggleAccount(account.id)"
                             >
@@ -297,7 +297,7 @@ const configure = (pin: ModelPin): void => {
                 <template #where="{ rail }">
                     <div class="flex flex-col gap-3">
                         <div class="flex flex-col gap-0.5">
-                            <span :class="ui.sectionLabel()">{{ t(`sandbox.personaForm.whereWorks`) }}</span>
+                            <SectionHeader :label="t(`sandbox.personaForm.whereWorks`)" />
                             <!-- The workspace copy is a fact, not a selectable mode. -->
                             <span class="text-xs text-subtle">
                                 {{ t(`sandbox.personaForm.everySessionWorksIn`) }}

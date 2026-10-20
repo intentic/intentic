@@ -12,7 +12,7 @@ import { host } from "./host";
 
 export function useWorkspaceGraph(repo: Ref<string>) {
     const api = host();
-    const { query, error } = api.sandbox.query({
+    const { query, error, loaded } = api.sandbox.query({
         queryKey: computed(() => api.sandbox.readKey(`workspace.packageGraph`, { repo: repo.value })),
         queryFn: () => api.sandbox.rpc.workspace.packageGraph({ repo: repo.value }),
     });
@@ -21,7 +21,7 @@ export function useWorkspaceGraph(repo: Ref<string>) {
         edges: computed<WorkspaceDepEdge[]>(() => query.data.value?.edges ?? []),
         components: computed<WorkspaceComponent[]>(() => query.data.value?.components ?? []),
         error,
-        isLoading: query.isLoading,
+        loaded,
     };
 }
 
@@ -29,7 +29,7 @@ export function useWorkspaceGraph(repo: Ref<string>) {
    a package is named. */
 export function usePackageModules(repo: Ref<string>, name: Ref<string | undefined>) {
     const api = host();
-    const { query, error } = api.sandbox.query({
+    const { query, error, loaded } = api.sandbox.query({
         queryKey: computed(() => api.sandbox.readKey(`workspace.packageModules`, { repo: repo.value, package: name.value ?? `` })),
         queryFn: () => api.sandbox.rpc.workspace.packageModules({ repo: repo.value, package: name.value ?? `` }),
         enabled: computed(() => name.value !== undefined),
@@ -37,6 +37,6 @@ export function usePackageModules(repo: Ref<string>, name: Ref<string | undefine
     return {
         modules: computed<PackageModules | undefined>(() => query.data.value),
         error,
-        isLoading: query.isLoading,
+        loaded,
     };
 }

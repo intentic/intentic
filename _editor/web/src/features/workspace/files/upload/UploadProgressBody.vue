@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
 
             <!-- Couldn't even ask the daemon; the upload still succeeded, so this is a note, not a failure. -->
             <div v-else-if="installError !== undefined" class="flex items-start gap-2 text-2xs text-danger">
-                <Icon name="exclamation-triangle" class="mt-0.5 text-sm" />
+                <Icon name="exclamation-triangle" class="text-sm" />
                 <span class="flex-1">{{ installError }}</span>
             </div>
 

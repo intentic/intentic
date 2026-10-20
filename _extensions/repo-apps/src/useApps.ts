@@ -12,7 +12,7 @@ export function useApps(repo: Ref<string>) {
     const queryClient = useQueryClient();
     const appsKey = computed(() => api.sandbox.readKey(`workspace.appsList`, { repo: repo.value }));
 
-    const { query, error } = api.sandbox.query({
+    const { query, error, loaded } = api.sandbox.query({
         queryKey: appsKey,
         queryFn: () => api.sandbox.rpc.workspace.appsList({ repo: repo.value }),
     });
@@ -64,7 +64,7 @@ export function useApps(repo: Ref<string>) {
         apps: computed<RepoApp[]>(() => query.data.value?.apps ?? []),
         templates: computed<TemplateSummary[]>(() => templatesQuery.data.value?.templates ?? []),
         error: computed(() => error.value ?? null),
-        isLoading: query.isLoading,
+        loaded,
         addApps,
         refresh: invalidate,
         startApp,

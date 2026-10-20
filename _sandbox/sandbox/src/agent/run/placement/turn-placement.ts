@@ -1,7 +1,8 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { type FreshSession, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
-import { landAgent, reportLockfileFailures } from "../../../conversations/land/land.js";
+import { landAgent } from "../../../conversations/land/land.js";
+import { reportLandRepairs } from "../../../conversations/land/rederive.js";
 import { intoOf, landTargetOf, underLeases } from "../../../conversations/land/land-target.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
@@ -84,7 +85,7 @@ export async function* placedTurn(
         }
         if (error instanceof CheckoutSpaceRefused) {
             failed = true;
-            const frame = { kind: "error", code: "sandbox-disk-low", message: error.message, ...opt("unattended", unattended ? true : undefined) } as const;
+            const frame = { kind: "error", code: "sandbox-disk-low", message: error.message, own: true, ...opt("unattended", unattended ? true : undefined) } as const;
             conversations.send(conversationId, { kind: "frame", frame });
             yield frame;
             yield { kind: "done" };
@@ -165,7 +166,7 @@ const REFUSED: { readonly [R in BeginRefusal]: string } = {
 
 // What a turn whose `begin` was refused says to whoever folds its frames; `agent-busy` is the one refusal with a code.
 export function* refusedBegin(refusal: BeginRefusal): Generator<AgentEvent> {
-    yield refusal === "busy" ? { kind: "error", code: "agent-busy", message: REFUSED.busy } : { kind: "error", message: REFUSED.archived };
+    yield refusal === "busy" ? { kind: "error", code: "agent-busy", message: REFUSED.busy, own: true } : { kind: "error", message: REFUSED.archived, own: true };
     yield { kind: "done" };
 }
 
@@ -249,7 +250,7 @@ async function* landIntoParent(
         await keepLandFailure(deps, conversationId, cause);
         throw cause;
     });
-    reportLockfileFailures(deps.logger, conversationId, landed);
+    reportLandRepairs(deps.logger, conversationId, landed);
     if (landed.advanced === true) {
         await deps.agents.recordLanded(conversationId, landed);
     }

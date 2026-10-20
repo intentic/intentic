@@ -2,11 +2,12 @@
 import {
     ASSISTANT_ACCESSORIES,
     ASSISTANT_COLORS,
-    AssistantFace,
     type AssistantAccessory,
+    AssistantFace,
     assistantFace,
     FACE_SIZES,
     personaAccessory,
+    SectionHeader,
     ui,
 } from "@intentic/ui";
 import { computed, ref } from "vue";
@@ -47,7 +48,7 @@ const accessories = Object.entries(ASSISTANT_ACCESSORIES) as [AssistantAccessory
     <section id="assistants" aria-labelledby="assistants-title" class="flex scroll-mt-4 flex-col gap-4">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-col gap-1">
-                <h2 id="assistants-title" :class="ui.sectionLabel()">Little guardians</h2>
+                <SectionHeader label="Little guardians" :heading="2" id="assistants-title" />
                 <p class="text-sm text-muted">One clay companion. Its color comes from the persona's id, the prop it holds from its name.</p>
             </div>
             <label class="flex cursor-pointer items-center gap-2 text-xs text-muted">

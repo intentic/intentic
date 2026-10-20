@@ -5,18 +5,19 @@ Repo-wide maintainer scripts: the verify checks, builds, releases, image and pla
 ```mermaid
 flowchart LR
     hand["by hand"] -->|"pnpm verify"| scripts(["_tools/scripts"])
-    worktree["a worktree<br/>before its land"] -->|"fixers.mjs"| scripts
+    land["the tree a land<br/>writes into"] -->|"fixers.mjs"| scripts
     turn["an isolated turn<br/>about to stop"] -->|"verify-turn.mjs"| scripts
     ci["CI workflows"] -->|"verify:push --base, in the quick job"| scripts
     semrel["semantic-release<br/>.releaserc.json"] --> scripts
     scripts --> out["GitHub Release · npm · images<br/>stores · platform deploy"]
 ```
 
-- The machine fixers run on a conversation's own worktree before its land, so what they write rides that land:
+- The machine fixers run in the tree a land writes into, on what it landed:
   `node _tools/scripts/verify/fixers.mjs --worktree <dir> --paths a,b` (or `--paths-file <file>`, or `--since <rev>`)
-  runs rustfmt on the touched crates, tightens the baselines the change beat, and rewrites the contract lock and the
-  stored shapes when the change reached their sources. Each is idempotent. It prints `{"ran":[…],"wrote":[…]}` and
-  exits 0. Nothing runs them on the main tree unasked.
+  runs rustfmt on the touched crates, tightens the baselines the change beat, and writes again every derived file
+  whose sources the change reached (its `DERIVED` table: the contract lock, the daemon's indexes, the stored shapes,
+  the layer tables). Each is idempotent. It prints `{"ran":[…],"wrote":[…]}` and exits 0. What `DERIVED` writes is
+  `merge=derived` in `.gitattributes`, so no land carries it and no rebase stops on it.
 - Three verify scripts, and none of them holds back a turn, a land, a commit or a push. `verify` measures the whole
   repository the way CI's verify groups do, when someone runs it by hand, and applies no fixer. `verify:push` is the
   push check: CI's `quick` job runs it on every push (`--base <sha>`, the commit the push is measured against), and by

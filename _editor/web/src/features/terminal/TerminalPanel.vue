@@ -246,8 +246,8 @@ watch(
         <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <!-- Agent requests appear above the prompt they concern. -->
             <div v-if="help" :class="toneTint(`warning`, `strong`, `flex shrink-0 flex-col gap-2 border-b px-3 py-2`)">
-                <div class="flex items-start gap-2">
-                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-sm text-warning" />
+                <div class="flex items-start gap-2 text-xs">
+                    <Icon name="exclamation-triangle" class="shrink-0 text-sm text-warning" />
                     <div class="min-w-0 flex-1 text-xs text-content">
                         <span class="font-medium">{{ t(`chat.words.agentNeedsHelp`) }}</span>
                         {{ help.message }}

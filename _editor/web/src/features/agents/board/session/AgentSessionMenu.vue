@@ -199,7 +199,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             :disabled="changes.actionBusy.value || changes.pending.value.length === 0"
             @click="pressLand(() => changes.land())"
         >
-            <Icon name="check" class="mt-0.5 text-xs text-success" />
+            <Icon name="check" class="text-xs text-success" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ retryLand ? t(`agents.agentSessionMenu.tryLandAgain`) : words.land }}</span>
                 <span class="text-2xs text-subtle">
@@ -219,7 +219,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         </button>
         <!-- Replaces "Land now" rather than joining it: with landed work missing, a plain land would leave that part exactly as missing. -->
         <button v-if="away !== undefined && canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value" @click="relandNow">
-            <Icon name="undo" class="mt-0.5 text-xs text-warning" />
+            <Icon name="undo" class="text-xs text-warning" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.words.landAgain`) }}</span>
                 <span class="text-2xs text-subtle">{{ writing ? t(`agents.agentSessionMenu.agentStillWritingYoull2`) : away.text }}</span>
@@ -227,32 +227,32 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         </button>
         <!-- Ownership: one of claim / take over, then hand over; none for a session that is the reader's own to keep, or that they may not touch. -->
         <button v-if="assignable && owner === undefined" type="button" :class="ITEM" @click="makeMine">
-            <Icon name="user" class="mt-0.5 shrink-0 text-xs text-muted" />
+            <Icon name="user" class="shrink-0 text-xs text-muted" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.claim`) }}</span>
                 <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.claimHint`) }}</span>
             </span>
         </button>
         <button v-else-if="assignable && !ownedByMe && owner !== undefined" type="button" :class="ITEM" @click="makeMine">
-            <Icon name="user" class="mt-0.5 shrink-0 text-xs text-muted" />
+            <Icon name="user" class="shrink-0 text-xs text-muted" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.takeOver`) }}</span>
                 <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.takeOverHint`, { name: owner.name ?? owner.email }) }}</span>
             </span>
         </button>
         <button v-if="assignable" type="button" :class="ITEM" @click="run(() => emit(`handOver`))">
-            <Icon name="users" class="mt-0.5 shrink-0 text-xs text-muted" />
+            <Icon name="users" class="shrink-0 text-xs text-muted" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.handOver`) }}</span>
                 <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.handOverHint`) }}</span>
             </span>
         </button>
         <button v-if="renameable" type="button" :class="ITEM" @click="run(() => emit(`rename`))">
-            <Icon name="pencil" class="mt-0.5 text-xs text-subtle" />
+            <Icon name="pencil" class="text-xs text-subtle" />
             <span class="text-sm text-content md:text-xs">{{ t(`ui.action.rename`) }}</span>
         </button>
         <button v-if="phone && sessionName !== undefined" type="button" :class="ITEM" @click="run(() => emit(`identity`))">
-            <Icon name="code" class="mt-0.5 text-xs text-subtle" />
+            <Icon name="code" class="text-xs text-subtle" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.words.sessionName`) }}</span>
                 <span class="truncate font-mono text-2xs text-subtle">{{ sessionName }}</span>
@@ -263,18 +263,18 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
              a level or words first. -->
         <template v-if="freshable">
             <button v-for="kind in FRESH_KINDS" :key="kind" type="button" :class="ITEM" @click="run(() => startFresh(kind))">
-                <Icon :name="FRESH_ICONS[kind]" class="mt-0.5 text-xs text-subtle" />
+                <Icon :name="FRESH_ICONS[kind]" class="text-xs text-subtle" />
                 <span class="text-sm text-content md:text-xs">{{
                     t(`agents.freshSession.menuItem`, { kind: t(`agents.freshSession.kind.${kind}`) })
                 }}</span>
             </button>
         </template>
         <button type="button" :class="ITEM" @click="run(() => changes.refresh())">
-            <Icon name="refresh" class="mt-0.5 text-xs text-subtle" :spin="changes.fetching.value" />
+            <Icon name="refresh" class="text-xs text-subtle" :spin="changes.fetching.value" />
             <span class="text-sm text-content md:text-xs">{{ t(`ui.action.refresh`) }}</span>
         </button>
         <button v-if="canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || archived" @click="toggleAutoLand">
-            <Icon :name="autoLandOn ? 'lock' : 'unlock'" class="mt-0.5 text-xs" :class="autoLandOn ? 'text-subtle' : 'text-link'" />
+            <Icon :name="autoLandOn ? 'lock' : 'unlock'" class="text-xs" :class="autoLandOn ? 'text-subtle' : 'text-link'" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{
                     autoLandOn ? t(`agents.agentSessionMenu.holdWorkOnBranch`) : t(`agents.agentSessionMenu.landAutomatically`)
@@ -286,7 +286,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
         </button>
         <!-- Only where a hold can be kept or is running: a cold cache or one this sandbox cannot replay has nothing to offer. -->
         <button v-if="warmHold !== undefined || warmable" type="button" :class="ITEM" :disabled="archived" @click="toggleWarm">
-            <Icon :name="warmHold === undefined ? 'sun' : 'moon'" class="mt-0.5 text-xs" :class="warmHold === undefined ? 'text-link' : 'text-subtle'" />
+            <Icon :name="warmHold === undefined ? 'sun' : 'moon'" class="text-xs" :class="warmHold === undefined ? 'text-link' : 'text-subtle'" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{
                     warmHold === undefined ? t(`agents.agentSessionMenu.keepWarm`) : t(`agents.agentSessionMenu.stopKeepingWarm`)
@@ -313,7 +313,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             >
                 <Icon
                     :name="wallAnswer === row.value ? 'check' : row.icon"
-                    class="mt-0.5 text-xs"
+                    class="text-xs"
                     :class="wallAnswer === row.value ? 'text-link' : 'text-subtle'"
                 />
                 <span class="flex min-w-0 flex-col">
@@ -330,7 +330,7 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             :disabled="changes.actionBusy.value || archiveBusy || streaming"
             @click="run(() => changes.archive())"
         >
-            <Icon name="box" class="mt-0.5 text-xs text-subtle" />
+            <Icon name="box" class="text-xs text-subtle" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-content md:text-xs">{{ t(`agents.agentSessionMenu.archive`) }}</span>
                 <span class="text-2xs text-subtle">
@@ -339,14 +339,14 @@ const ITEM = `flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left t
             </span>
         </button>
         <button v-else type="button" :class="ITEM" :disabled="archiveBusy" @click="run(() => restore([agentId]))">
-            <Icon name="history" class="mt-0.5 text-xs text-link" />
+            <Icon name="history" class="text-xs text-link" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-link md:text-xs">{{ t(`ui.action.restore`) }}</span>
                 <span class="text-2xs text-subtle">{{ t(`agents.agentSessionMenu.putsBackOnBoard`) }}</span>
             </span>
         </button>
         <button v-if="canShip" type="button" :class="ITEM" :disabled="changes.actionBusy.value || streaming" @click="run(() => emit(`discard`))">
-            <Icon name="trash" class="mt-0.5 text-xs text-danger" />
+            <Icon name="trash" class="text-xs text-danger" />
             <span class="flex min-w-0 flex-col">
                 <span class="text-sm text-danger md:text-xs">{{ t(`ui.action.discard`) }}</span>
                 <span class="text-2xs text-subtle">

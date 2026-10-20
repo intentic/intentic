@@ -1,3 +1,4 @@
+import type { FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
 import type { CodexCredential } from "../../../agent/providers/agent-request.js";
 import { RATE_LIMIT_PATIENCE_MS } from "../../decorators/vendor-errors.js";
 
@@ -81,18 +82,18 @@ export const limitWait = (stop: () => void, options: LimitWaitOptions = {}): Lim
     };
 };
 
-// The reopening a turn's allowance names for its model, in epoch seconds; undefined while anything still has room.
+// The reopening a turn's allowance names for its model, in epoch seconds; undefined while any account may still serve it.
 export const allowanceReopening =
-    (limit: () => Promise<{ readonly withHeadroom: number; readonly reopensAt?: number }>) =>
+    (capacity: () => Promise<FleetCapacity>) =>
     async (): Promise<number | undefined> => {
-        const read = await limit();
-        return read.withHeadroom > 0 ? undefined : read.reopensAt;
+        const read = await capacity();
+        return read.kind === "spent" ? read.reopensAt : undefined;
     };
 
 // What tells a rate-limited wait how long it really is: the turn's allowance, where its credential names one.
 export const limitWaitOptions = (credential: CodexCredential): LimitWaitOptions => {
-    const limit = credential.kind === "codex-endpoint" ? credential.allowance?.limit : undefined;
-    return limit === undefined ? {} : { reopensAt: allowanceReopening(limit) };
+    const capacity = credential.kind === "codex-endpoint" ? credential.allowance?.capacity : undefined;
+    return capacity === undefined ? {} : { reopensAt: allowanceReopening(capacity) };
 };
 
 // What the turn ends on when its wait is handed over: coded, so it is held and booked rather than offered as a Continue.

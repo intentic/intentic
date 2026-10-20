@@ -3,7 +3,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { useNow } from "@intentic/ui/async";
 import { computed, effectScope, watch } from "vue";
 import { attentionCards, type FleetLane, laneOf, NO_ATTENTION } from "../agent-status/agentStatus-lanes";
-import { awaitingUser, blocked, type ClientAgentStatus, heardByParent, scheduledSend, turnInFlight, unregistered } from "../agent-status/agentStatus-standing";
+import { awaitingUser, blocked, type ClientAgentStatus, goesBySelf, heardByParent, turnInFlight, unregistered } from "../agent-status/agentStatus-standing";
 import { closedDrafts } from "../conversations/drafts/closedDrafts";
 import { type TabFacts, unasked } from "../conversations/tabs/tabFacts";
 import type { StoredTab } from "../conversations/tabs/tabSnapshot";
@@ -387,13 +387,13 @@ watch(
 // - a message booked for later: yes, and the sandbox cancels it with the archive (the card's hint says so), since
 //   filed away the conversation is done with and the message would only be refused there at its time
 // - error/conflict/stopped/landed/idle: yes
-export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt" | "queue">): boolean =>
+export const canArchive = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt">): boolean =>
     agent.archivedAt === undefined && !unregistered(agent.status) && !turnInFlight(agent) && !awaitingUser(agent);
 
 // What a press that does not name the card itself may file away (the lane's Clear, the children going with a parent):
-// what canArchive allows less a conversation with a message scheduled in it, whose cancel only a press on that card says.
-export const clearable = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt" | "queue">): boolean =>
-    canArchive(agent) && !scheduledSend(agent);
+// what canArchive allows less a conversation something carries on by itself (`next`), a message scheduled in it above
+// all, whose cancel only a press on that card says.
+export const clearable = (agent: Pick<FleetAgent, "status" | "attention" | "archivedAt" | "next">): boolean => canArchive(agent) && !goesBySelf(agent);
 
 // What Clear on the Finished lane files away: every card there the board may archive, less a child whose parent is still
 // at work. That child rides in its parent's tray as the parent's history (models/fleet/board/childFold.ts), and filing it alone

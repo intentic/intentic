@@ -2,15 +2,21 @@ import "@intentic/testing/dom";
 import type { SafetyLogEntry } from "@intentic/sandbox-contract/policy/safety-policy";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const entries = ref<SafetyLogEntry[]>([]);
-const isLoading = ref(false);
 const error = ref<string | undefined>(undefined);
 
 jest.mock(`../environment/useSafetyPolicy`, () => ({
-    useSafetyLog: () => ({ entries, isLoading, error }),
+    useSafetyLog: () => ({
+        entries,
+        loaded: computed(() =>
+            error.value === undefined
+                ? { state: `ready`, data: entries.value, refreshing: false, refreshError: undefined }
+                : { state: `failed`, error: error.value, retry: undefined },
+        ),
+    }),
 }));
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
@@ -38,7 +44,6 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     entries.value = [];
-    isLoading.value = false;
     error.value = undefined;
     settings.value = SandboxSettingsSchema.parse({});
 });

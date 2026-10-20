@@ -1,13 +1,12 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { endpointIdOf, loopsOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { type ModelRef, preferredAccount } from "@intentic/sandbox-contract/models/plan-pools";
+import { type ModelRef, preferredAccount,type FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
 import { providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
 import { ensureFreshToken, replaceRejectedToken } from "./claude/claude-credentials.js";
 import type { Services } from "../../composition.js";
 import { serviceabilities } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
 import { goneAccountMessage, resolveRoute, type RouteResult } from "./routes/model-routes.js";
-import type { TurnLimit } from "../../usage/serviceability/fleet-limit.js";
 import type { HarnessCredential } from "./agent-request.js";
 import { containerKeyEnv } from "../../seams/sealed-env.js";
 
@@ -22,12 +21,12 @@ export interface HarnessEndpoint {
     readonly model: string;
 }
 
-// Whose allowance a turn spends and what's left of it; the harness misreports this for a routed turn. `limit` is bound
-// to the resolved model since some vendors meter models separately. Absent means a native Claude turn.
+// Whose allowance a turn spends and what's left of it; the harness misreports this for a routed turn. `capacity` is
+// bound to the resolved model since some vendors meter models separately. Absent means a native Claude turn.
 export interface TurnAllowance {
     readonly vendor: string;
     // Optional: a minted provider publishes no quota surface, so it names its vendor and omits this.
-    readonly limit?: () => Promise<TurnLimit>;
+    readonly capacity?: () => Promise<FleetCapacity>;
 }
 
 export interface HarnessCredentials {
@@ -146,6 +145,7 @@ export type HarnessCredentialDeps = Pick<
     | "logger"
     | "minted"
     | "privacyShield"
+    | "providerAccounts"
     | "providerCatalogs"
     | "providerRefusals"
     | "runnerParent"

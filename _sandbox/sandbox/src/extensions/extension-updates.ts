@@ -24,7 +24,7 @@ import { previousDir, withCheckoutLock } from "../capabilities/git-checkout.js";
 import { browseMarketplace } from "../capabilities/marketplace.js";
 import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
-import { composeEnvironment } from "../environment/environment.js";
+import { rebuildNeeded } from "../environment/overlay.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
@@ -283,11 +283,9 @@ export const applyExtensionUpdate = async (
         }
         services.extensionBackend.restart();
         void reconcileListenerProcesses(services);
-        const composedHash = await composeEnvironment(services);
-        const rebuildNeeded =
-            (await services.environmentSources.capabilityFragments({ id, kind: "extension", config: nextConfig })).length > 0 &&
-            composedHash !== undefined &&
-            composedHash !== services.config.sandbox.environmentHash;
+        const rebuild =
+            (await rebuildNeeded(services)) &&
+            (await services.environmentSources.capabilityFragments({ id, kind: "extension", config: nextConfig })).length > 0;
         if (identity !== undefined) {
             // The recorded update is spent the moment the pinned sha matches it; the health watch takes over.
             await patchRecord(root, identity, (record) => {
@@ -296,7 +294,7 @@ export const applyExtensionUpdate = async (
             });
             await watchExtensionHealth(services, id, identity, fromRef, options?.autoRevert === true);
         }
-        return { ref: target.ref, rebuildNeeded };
+        return { ref: target.ref, rebuildNeeded: rebuild };
     } finally {
         applying.delete(id);
     }

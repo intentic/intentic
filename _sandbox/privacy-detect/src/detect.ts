@@ -1,10 +1,11 @@
-import type { PersonalDataClass } from "@intentic/sandbox-contract/schemas/privacy";
+import { allowKey, type PersonalDataClass } from "@intentic/sandbox-contract/schemas/privacy";
 import { findAddresses } from "./address.js";
 import { findEmails, findPhones } from "./contact.js";
 import { findBankAccounts, findIdentityDocuments, findNip, findPaymentCards, findPesel } from "./identifiers.js";
-import type { Lexicon } from "./lexicon.js";
+import { builtInLexicon, type Lexicon } from "./lexicon.js";
 import { findNames } from "./names.js";
-import { type PersonalDataSpan, resolveSpans } from "./spans.js";
+import { type Candidate, resolveSpans, type SpanSource } from "./spans.js";
+import { standsAlone } from "./standalone.js";
 import type { Emit } from "./text.js";
 
 // The detector: personal data in arbitrary text (tool output, database dumps, CSV, JSON, prose, code, mail), found
@@ -12,18 +13,16 @@ import type { Emit } from "./text.js";
 // it masks is put back in the response, so a false find costs the model a little understanding while a missed one
 // leaks; the rules lean to finding, except in code, where identifiers must stay readable.
 
-export type { PersonalDataSpan } from "./spans.js";
+export type { Candidate, PersonalDataSpan, SpanSource } from "./spans.js";
+export { resolveSpans } from "./spans.js";
 
 export interface DetectOptions {
     readonly classes: ReadonlySet<PersonalDataClass>;
-    // Values never reported, already normalized with normalizeAllowed.
+    // Values never reported, as allowKey reads them.
     readonly allow?: ReadonlySet<string>;
     // The name lists as the owner set them (createLexicon); the built-in ones when absent.
     readonly lexicon?: Lexicon;
 }
-
-// How allowlist entries and found values are compared: case, Unicode composition and spacing do not matter.
-export const normalizeAllowed = (value: string): string => value.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
 
 const DETECTORS: ReadonlyArray<readonly [PersonalDataClass, (text: string, emit: Emit, lexicon?: Lexicon) => void]> = [
     ["national-id", findPesel],
@@ -37,27 +36,43 @@ const DETECTORS: ReadonlyArray<readonly [PersonalDataClass, (text: string, emit:
     ["person-name", findNames],
 ];
 
-// Spans sorted by start and non-overlapping: on overlap the longer is kept, on a tie the more specific class
-// (checksummed identifiers, then e-mail and phone, then address, then name).
-export const detectPersonalData = (text: string, options: DetectOptions): PersonalDataSpan[] => {
-    if (text === "" || options.classes.size === 0) {
-        return [];
+// What the built-in detectors propose in a text, each read in its own context; not yet settled, for a caller that adds
+// candidates of other sources before the gate.
+export const detectorCandidates = (text: string, options: Pick<DetectOptions, "classes" | "lexicon">): Candidate[] => {
+    const found: Candidate[] = [];
+    if (text === "") {
+        return found;
     }
-    const found: PersonalDataSpan[] = [];
-    const allow = options.allow;
-    const emit: Emit = (start, end, kind) => {
-        const value = text.slice(start, end);
-        if (options.classes.has(kind) && (allow === undefined || allow.size === 0 || !allow.has(normalizeAllowed(value)))) {
-            found.push({ start, end, class: kind, value });
-        }
-    };
     for (const [kind, detect] of DETECTORS) {
         if (options.classes.has(kind)) {
-            detect(text, emit, options.lexicon);
+            detect(text, (start, end, emitted) => found.push({ start, end, class: emitted, value: text.slice(start, end), by: "detector" }), options.lexicon);
         }
     }
-    return resolveSpans(found);
+    return found;
 };
 
-// Spans from another source (the local named-entity model) merged into the detector's, under the same overlap rule.
-export const mergeSpans = (a: readonly PersonalDataSpan[], b: readonly PersonalDataSpan[]): PersonalDataSpan[] => resolveSpans([...a, ...b]);
+// What a candidate brings for itself: a detector read it in context, and a rule or a taught value is the owner's own
+// word. A learned value and a model's guess bring nothing of the place they stand in, so they are asked standsAlone.
+const SELF_EVIDENT: ReadonlySet<SpanSource> = new Set<SpanSource>(["detector", "rule", "taught"]);
+
+// THE PIPELINE'S ONE GATE. Every source proposes candidates (the detectors, the owner's rules, the vault, the name
+// model) and every one passes here before anything is masked: its kind is looked for, it is not a value the owner never
+// masks, and its evidence holds where it stands. Then overlaps are settled once, by one ranking. The gateway, a hooked
+// runtime's channels, a sealed prompt, a push and a share all mask through it, so a find it refuses is refused for all.
+export interface Gate {
+    readonly admits: (text: string, candidate: Candidate) => boolean;
+    readonly settle: <T extends Candidate>(text: string, candidates: readonly T[]) => T[];
+}
+
+export const createGate = ({ classes, allow, lexicon = builtInLexicon() }: DetectOptions): Gate => {
+    const admits = (text: string, candidate: Candidate): boolean =>
+        classes.has(candidate.class) &&
+        (allow === undefined || allow.size === 0 || !allow.has(allowKey(candidate.value))) &&
+        (SELF_EVIDENT.has(candidate.by) || standsAlone(candidate.class, text, candidate.start, candidate.end, lexicon));
+    return { admits, settle: (text, candidates) => resolveSpans(candidates.filter((candidate) => admits(text, candidate))) };
+};
+
+// Sorted by start and non-overlapping: on overlap the longer is kept, on a tie the more specific class (checksummed
+// identifiers, then e-mail and phone, then address, then name).
+export const detectPersonalData = (text: string, options: DetectOptions): Candidate[] =>
+    options.classes.size === 0 ? [] : createGate(options).settle(text, detectorCandidates(text, options));

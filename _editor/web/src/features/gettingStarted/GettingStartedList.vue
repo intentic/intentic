@@ -69,7 +69,8 @@ const hide = (): void => {
             <p class="text-xs leading-relaxed text-muted">{{ t(`gettingStarted.panel.finishedWhere`) }}</p>
             <Button size="small" tier="quiet" @click="seeChanges">{{ t(`gettingStarted.panel.openChanges`) }}</Button>
         </div>
-        <RowGroup flat undivided>
+        <!-- Always shown on a surface (the ring's popover, the phone menu's band), so its rows are that surface's. -->
+        <RowGroup undivided>
             <Row
                 v-for="row in rows"
                 :key="row.id"

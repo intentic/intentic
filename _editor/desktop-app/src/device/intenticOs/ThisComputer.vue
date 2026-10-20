@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ui } from "@intentic/ui";
+import { Section } from "@intentic/ui";
 import { usePoll } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted } from "vue";
@@ -35,12 +35,13 @@ const shown = computed(
 </script>
 
 <template>
-    <section v-if="shown" class="flex flex-col gap-3" data-this-computer>
-        <h2 :class="ui.sectionLabel({}, `px-1`)">{{ t(`desktop.os.thisComputer`) }}</h2>
-        <NetworkCard v-if="network" />
-        <SoundCard v-if="sound" />
-        <DisplayCard v-if="displays && displays.outputs.length > 0" />
-        <KeyboardCard v-if="keyboard" />
-        <DrivesCard v-if="drives" />
-    </section>
+    <Section v-if="shown" data-this-computer :label="t(`desktop.os.thisComputer`)" :heading="2">
+        <div class="flex flex-col gap-3">
+            <NetworkCard v-if="network" />
+            <SoundCard v-if="sound" />
+            <DisplayCard v-if="displays && displays.outputs.length > 0" />
+            <KeyboardCard v-if="keyboard" />
+            <DrivesCard v-if="drives" />
+        </div>
+    </Section>
 </template>

@@ -1,4 +1,5 @@
 import type { Area } from "@intentic/sandbox-contract/schemas/areas";
+import { mapLoaded } from "@intentic/extension-api";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
@@ -16,7 +17,7 @@ import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
  */
 export function useAreas(enabled?: MaybeRefOrGetter<boolean>) {
     const queryClient = useQueryClient();
-    const { query, error } = useSandboxQuery({ ...rpcQuery(`areas.list`), ...(enabled === undefined ? {} : { enabled }) });
+    const { query, loaded } = useSandboxQuery({ ...rpcQuery(`areas.list`), ...(enabled === undefined ? {} : { enabled }) });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: rpcKey(`areas.list`) });
 
@@ -36,8 +37,7 @@ export function useAreas(enabled?: MaybeRefOrGetter<boolean>) {
         // An area is named on screen the way it is named everywhere else; an id with no area behind it reads as
         // itself rather than vanishing, since whoever holds it still holds it.
         labelOf: (id: string): string => areas.value.find((area) => area.id === id)?.label ?? id,
-        error,
-        isLoading: query.isLoading,
+        loaded: computed(() => mapLoaded(loaded.value, (answer) => answer.areas)),
         save,
         remove,
     };

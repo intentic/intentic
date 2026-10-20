@@ -54,7 +54,7 @@ test(`a press written twice in a moment is one row, named by the person rather t
 test(`rows fall under the reader's own day, today and yesterday by name`, () => {
     const now = new Date(2026, 9, 15, 12).getTime();
     const days = byDay(toEntries([auditRecord(new Date(2026, 9, 15, 9).getTime()), auditRecord(new Date(2026, 9, 15, 1).getTime(), { action: `auth.sign_in` }), auditRecord(new Date(2026, 9, 14, 23).getTime()), auditRecord(new Date(2026, 9, 12, 8).getTime())]), now);
-    expect(days.map((day) => [day.label, day.records])).toEqual([
+    expect(days.map((day) => [day.label, day.entries.length])).toEqual([
         [`Today`, 2],
         [`Yesterday`, 1],
         [`Monday, October 12`, 1],

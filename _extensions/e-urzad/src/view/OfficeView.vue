@@ -1,6 +1,6 @@
 <!-- One connected office card: EZD RP cases and tasks, or e-Doręczenia deliveries and proofs, as last saved, with a live refresh, a connection test and the office acts the agent took. -->
 <script setup lang="ts">
-import { Button, formatDate, formatDateTime, Notice, noticeOf, Page, PageHeader, Row, RowGroup, StatusBadge, ui } from "@intentic/extension-ui";
+import { Button, formatDate, formatDateTime, Notice, noticeOf, Page, PageHeader, Row, RowGroup, Section, StatusBadge } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { t } from "../i18n.js";
 import { deliveryTone, instant, type OfficeService } from "./facts.js";
@@ -70,29 +70,26 @@ const deliveryLabel = (row: (typeof deliveries.value)[number]): string => {
 
             <div v-if="snapshot !== undefined" class="flex flex-col gap-4" :aria-busy="pending !== undefined">
                 <template v-if="service === `ezd-rp`">
-                    <section>
-                        <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`cases`) }}</h3>
+                    <Section :label="t(`cases`)" :heading="3">
                         <p v-if="cases.length === 0" class="px-1 text-sm text-muted">{{ t(`noCases`) }}</p>
                         <RowGroup v-else>
                             <Row v-for="row in cases" :key="row.id" icon="folder" :title="row.title" :description="caseLine(row)">
                                 <template #meta><StatusBadge variant="neutral" :label="row.status" size="xs" /></template>
                             </Row>
                         </RowGroup>
-                    </section>
-                    <section>
-                        <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`tasks`) }}</h3>
+                    </Section>
+                    <Section :label="t(`tasks`)" :heading="3">
                         <p v-if="tasks.length === 0" class="px-1 text-sm text-muted">{{ t(`noTasks`) }}</p>
                         <RowGroup v-else>
                             <Row v-for="row in tasks" :key="row.id" icon="list-check" :title="row.documentTitle" :description="taskLine(row)">
                                 <template #meta><StatusBadge variant="info" :label="row.status" size="xs" /></template>
                             </Row>
                         </RowGroup>
-                    </section>
+                    </Section>
                 </template>
 
                 <template v-else>
-                    <section>
-                        <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`deliveries`) }}</h3>
+                    <Section :label="t(`deliveries`)" :heading="3">
                         <p v-if="deliveries.length === 0" class="px-1 text-sm text-muted">{{ t(`noDeliveries`) }}</p>
                         <RowGroup v-else>
                             <Row v-for="row in deliveries" :key="row.id" icon="envelope" :title="row.subject || row.id" :description="deliveryLine(row)">
@@ -102,9 +99,8 @@ const deliveryLabel = (row: (typeof deliveries.value)[number]): string => {
                                 </template>
                             </Row>
                         </RowGroup>
-                    </section>
-                    <section>
-                        <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`proofs`) }}</h3>
+                    </Section>
+                    <Section :label="t(`proofs`)" :heading="3">
                         <p class="mb-2 px-1 text-xs text-muted">{{ t(`proofNote`) }}</p>
                         <p v-if="proofs.length === 0" class="px-1 text-sm text-muted">{{ t(`noProofs`) }}</p>
                         <RowGroup v-else>
@@ -112,15 +108,14 @@ const deliveryLabel = (row: (typeof deliveries.value)[number]): string => {
                                 <template v-if="proof.eventDate" #meta><span class="text-2xs text-subtle">{{ when(proof.eventDate) }}</span></template>
                             </Row>
                         </RowGroup>
-                    </section>
+                    </Section>
                 </template>
 
-                <section v-if="actions.length > 0">
-                    <h3 :class="ui.sectionLabel(`mb-2 px-1`)">{{ t(`actions`) }}</h3>
+                <Section v-if="actions.length > 0" :label="t(`actions`)" :heading="3">
                     <RowGroup>
                         <Row v-for="action in actions" :key="`${action.at}-${action.key}`" icon="send" :title="action.outcome" :description="`${action.key} · ${when(action.at)}`" />
                     </RowGroup>
-                </section>
+                </Section>
             </div>
         </div>
     </Page>

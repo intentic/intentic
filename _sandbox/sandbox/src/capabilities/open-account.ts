@@ -1,7 +1,7 @@
 import type { Capability, IdentityConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { utcDayOf } from "@intentic/sandbox-contract/time/zone";
 import type { Services } from "../composition.js";
-import { composeEnvironment } from "../environment/environment.js";
+import { composeEnvironment } from "../environment/overlay.js";
 import { capabilityCtx } from "./capability.js";
 import { contributionKey, contributionRegistry, hostOf } from "./contributions.js";
 import { registry } from "./registry.js";

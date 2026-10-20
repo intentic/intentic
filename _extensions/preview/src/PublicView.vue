@@ -1,16 +1,5 @@
 <script setup lang="ts">
-import {
-    AddressField,
-    Button,
-    ui,
-    Icon,
-    Notice,
-    noticeOf,
-    SkeletonSnapshot,
-    StatusBadge,
-    useLoadingReveal,
-    vSkeletonSource,
-} from "@intentic/extension-ui";
+import { AddressField, Await, Button, Icon, Notice, noticeOf, Section, StatusBadge } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import SharedConversations from "./SharedConversations.vue";
 import SharePreview from "./SharePreview.vue";
@@ -21,15 +10,12 @@ import { t } from "./i18n.js";
 // listed as loudly as served ones (with why); the empty state explains the publishing convention itself; a shareable
 // link is always labeled public. Renders a BODY only; the hub owns the Page and header.
 
-const { files, url, servedCount, error, isLoading, unpublish } = usePublic();
-// Drawn only once the wait has earned it.
-const outline = useLoadingReveal(
-    isLoading,
-    computed(() => `public-files`),
-);
+const { loaded, url, unpublish } = usePublic();
 
 const busy = ref<string>();
 const actionError = ref<string>();
+// A listing that never answered says so in its own place; up here, only one whose last answer still stands.
+const notice = computed(() => actionError.value ?? (loaded.value.state === `ready` ? loaded.value.refreshError : undefined));
 
 const withdraw = async (path: string): Promise<void> => {
     actionError.value = undefined;
@@ -61,16 +47,12 @@ const size = (bytes: number): string => {
 
 <template>
     <div class="flex flex-col gap-4">
-        <Notice v-if="error ?? actionError" :of="noticeOf(error ?? actionError ?? ``)" />
+        <Notice v-if="notice" :of="noticeOf(notice)" />
 
         <!-- Renders nothing when empty; a shared conversation is the most sensitive item here, so it leads when present. -->
         <SharedConversations />
 
-        <section>
-            <div class="mb-2 flex items-center gap-2">
-                <h3 :class="ui.sectionLabel()">{{ t(`publicView.published`) }}</h3>
-                <StatusBadge v-if="servedCount > 0" variant="success" :label="t(`publicView.public2`, { servedCount })" size="xs" />
-            </div>
+        <Section :label="t(`publicView.published`)" :heading="3">
 
             <!-- Shown even with nothing published: makes the empty state actionable and gives something to copy. -->
             <AddressField
@@ -87,74 +69,69 @@ const size = (bytes: number): string => {
 
             <!-- Empty list reads as 'nothing published' too quietly; skeleton rows (icon, path, size) stand in while loading,
                  until the list or its empty card has been seen once and can be drawn as it was. -->
-            <SkeletonSnapshot v-if="isLoading && outline" of="preview.public-files" :label="t(`publicView.readingPublishedFiles`)">
-                <div class="rounded-lg bg-card shadow-sm" role="status" aria-busy="true">
-                    <span class="sr-only">{{ t(`publicView.readingPublishedFiles`) }}</span>
-                    <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
-                        <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2">
-                            <span class="skeleton block h-3.5 w-3.5 shrink-0" />
-                            <div class="flex min-w-0 flex-1 flex-col gap-1">
-                                <span class="skeleton block h-2.5" :class="[`w-48`, `w-64`, `w-40`][row % 3]" />
-                                <span class="skeleton block h-2 w-12" />
+            <Await :of="loaded" imprint="preview.public-files" :label="t(`publicView.readingPublishedFiles`)">
+                <template #fallback>
+                    <div class="rounded-lg bg-card shadow-sm" role="status" aria-busy="true">
+                        <span class="sr-only">{{ t(`publicView.readingPublishedFiles`) }}</span>
+                        <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
+                            <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2">
+                                <span class="skeleton block h-3.5 w-3.5 shrink-0" />
+                                <div class="flex min-w-0 flex-1 flex-col gap-1">
+                                    <span class="skeleton block h-2.5" :class="[`w-48`, `w-64`, `w-40`][row % 3]" />
+                                    <span class="skeleton block h-2 w-12" />
+                                </div>
+                                <span class="skeleton block h-3.5 w-10 shrink-0" />
                             </div>
-                            <span class="skeleton block h-3.5 w-10 shrink-0" />
                         </div>
                     </div>
-                </div>
-            </SkeletonSnapshot>
-
-            <div
-                v-else-if="files.length === 0 && !isLoading"
-                v-skeleton-source="`preview.public-files`"
-                class="flex flex-col items-center gap-2 rounded-lg bg-card shadow-sm py-10 text-center"
-            >
-                <Icon name="globe" class="text-2xl text-subtle" />
-                <p class="text-sm text-muted">{{ t(`publicView.nothingPublished`) }}</p>
-                <p class="text-2xs text-subtle">
-                    {{ t(`publicView.create`) }} <span class="font-mono">public/</span>
-                    {{ t(`publicView.folderInWorkspacePut`) }}
-                </p>
-            </div>
-
-            <div
-                v-else-if="files.length > 0"
-                v-skeleton-source="`preview.public-files`"
-                class="flex flex-col divide-y divide-line-subtle rounded-lg bg-card shadow-sm"
-            >
-                <div v-for="file in files" :key="file.path" class="flex items-center gap-3 px-4 py-2">
-                    <Icon :name="file.blocked ? `times` : `file`" :class="file.blocked ? `shrink-0 text-danger` : `shrink-0 text-subtle`" />
-                    <div class="min-w-0 flex-1">
-                        <p class="truncate font-mono text-xs text-content" v-tooltip.top.overflow="file.path">{{ file.path }}</p>
-                        <!-- A blocked file sits in the folder looking published; this line is the only thing that says otherwise. -->
-                        <p v-if="file.blocked" class="truncate text-2xs text-danger">
-                            {{ t(`publicView.notServed`, { blocked: file.blocked }) }}
+                </template>
+                <template #default="{ data: { files } }">
+                    <div v-if="files.length === 0" class="flex flex-col items-center gap-2 rounded-lg bg-card shadow-sm py-10 text-center">
+                        <Icon name="globe" class="text-2xl text-subtle" />
+                        <p class="text-sm text-muted">{{ t(`publicView.nothingPublished`) }}</p>
+                        <p class="text-2xs text-subtle">
+                            {{ t(`publicView.create`) }} <span class="font-mono">public/</span>
+                            {{ t(`publicView.folderInWorkspacePut`) }}
                         </p>
-                        <p v-else class="text-2xs text-subtle">{{ size(file.size) }}</p>
                     </div>
-                    <StatusBadge v-if="file.blocked" variant="danger" :label="t(`publicView.blocked`)" size="xs" />
-                    <a
-                        v-if="file.url"
-                        :href="file.url"
-                        target="_blank"
-                        rel="noopener"
-                        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
-                        :aria-label="t(`publicView.openInNewTab`, { path: file.path })"
-                        v-tooltip.bottom="t(`common.newTab`)"
-                    >
-                        <Icon name="external-link" />
-                    </a>
-                    <SharePreview v-if="file.url" :url="file.url" :label="t(`publicView.share`)" />
-                    <Button
-                        :label="t(`publicView.unpublish`)"
-                        size="small"
-                        tier="boring"
-                        :disabled="busy !== undefined"
-                        @click="withdraw(file.path)"
-                    >
-                        <template #icon><Icon name="trash" /></template>
-                    </Button>
-                </div>
-            </div>
-        </section>
+
+                    <div v-else class="flex flex-col divide-y divide-line-subtle rounded-lg bg-card shadow-sm">
+                        <div v-for="file in files" :key="file.path" class="flex items-center gap-3 px-4 py-2">
+                            <Icon :name="file.blocked ? `times` : `file`" :class="file.blocked ? `shrink-0 text-danger` : `shrink-0 text-subtle`" />
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate font-mono text-xs text-content" v-tooltip.top.overflow="file.path">{{ file.path }}</p>
+                                <!-- A blocked file sits in the folder looking published; this line is the only thing that says otherwise. -->
+                                <p v-if="file.blocked" class="truncate text-2xs text-danger">
+                                    {{ t(`publicView.notServed`, { blocked: file.blocked }) }}
+                                </p>
+                                <p v-else class="text-2xs text-subtle">{{ size(file.size) }}</p>
+                            </div>
+                            <StatusBadge v-if="file.blocked" variant="danger" :label="t(`publicView.blocked`)" size="xs" />
+                            <a
+                                v-if="file.url"
+                                :href="file.url"
+                                target="_blank"
+                                rel="noopener"
+                                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted hover:bg-overlay hover:text-content"
+                                :aria-label="t(`publicView.openInNewTab`, { path: file.path })"
+                                v-tooltip.bottom="t(`common.newTab`)"
+                            >
+                                <Icon name="external-link" />
+                            </a>
+                            <SharePreview v-if="file.url" :url="file.url" :label="t(`publicView.share`)" />
+                            <Button
+                                :label="t(`publicView.unpublish`)"
+                                size="small"
+                                tier="boring"
+                                :disabled="busy !== undefined"
+                                @click="withdraw(file.path)"
+                            >
+                                <template #icon><Icon name="trash" /></template>
+                            </Button>
+                        </div>
+                    </div>
+                </template>
+            </Await>
+        </Section>
     </div>
 </template>

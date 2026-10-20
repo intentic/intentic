@@ -7,7 +7,7 @@ import {
     type LandConflictReason,
     type LandFailure,
 } from "../schemas/agents.js";
-import type { QueuePause } from "../schemas/agent.js";
+import { type AgentNext, goesBySelf } from "../schemas/agent-next.js";
 
 // (2026-10-16) Moved here from the editor (_editor/web/src/models/agent-status/agentStatus-standing.ts, which re-exports
 // it), so the daemon counts what needs the person by the very rules the board draws with (models/agent-lanes.ts): the
@@ -51,74 +51,27 @@ export interface AgentStanding {
     readonly limitResetsAt?: number | undefined;
     /** Whether the refused turn is held whole, so a press re-runs it rather than sending a new message after it. */
     readonly limitHeld?: boolean | undefined;
-    /** Whether a fire is already booked for it (at the reset, or a move now), so no press is needed. */
-    readonly limitScheduled?: boolean | undefined;
-    /** The account the owner's policy is moving the held turn to, while that move is booked (a scheduled card's sentence). */
-    readonly limitMoving?: string | undefined;
-    /** When the booked re-run goes, in epoch SECONDS, while one is booked (limitScheduled): the pass's own instant. */
-    readonly limitNextAt?: number | undefined;
+    // What carries it on with nobody pressing anything, and when (AgentSummary.next): the daemon's one reading, which
+    // every lane, chip and corner below asks, never the hold, the queue or an answer it was derived from.
+    readonly next?: AgentNext | undefined;
     // A land that broke (AgentSummary.landFailure), standing until one goes through whatever turns run after it. Absent
     // from a sandbox older than it, where only a turn's own `failure` can say so.
     readonly landFailure?: LandFailure | undefined;
-    // What waits for its next turn (AgentSummary.queue), read here only for its hold: messages booked to go by
-    // themselves at a time or once another agent's work lands (`scheduled`), which make the conversation one that runs
-    // again by itself. Never the words.
-    readonly queue?: QueueHold | undefined;
     // The conversation whose work this one was opened on, for a fresh session (AgentSummary.fresh): a person's own
     // review, test or ask, which hangs under that conversation's card and is never reported to it
     // (subagents/child-report.ts), so nothing it stops on is that conversation's news. Absent for every other one.
     readonly fresh?: { readonly of: string } | undefined;
 }
 
-// The part of a conversation's queue the board reads: why it holds, and what a scheduled hold waits for. A queue-level
-// `scheduled` with its `until` or `after` is the soonest booked message's; a Stop's or a refusal's hold on the messages
-// with no booking takes that place, so each message's own booking (`items`, from sandboxes that book each message on its
-// own) is read then.
-export interface QueueHold {
-    readonly paused?: QueuePause | undefined;
-    readonly until?: number | undefined;
-    readonly after?: string | undefined;
-    readonly items?: readonly { readonly until?: number | undefined; readonly after?: string | undefined }[] | undefined;
-}
-
-// The soonest booking a queue holds, as a scheduled hold: the queue's own while it reads `scheduled`, else the earliest
-// message's time, else the first message waiting on a land; undefined when nothing is booked. One thing, never both.
-export const soonestHold = (queue: QueueHold | undefined): QueueHold | undefined => {
-    if (queue?.paused === "scheduled") {
-        if (queue.after !== undefined) {
-            return { paused: "scheduled", after: queue.after };
-        }
-        return queue.until === undefined ? { paused: "scheduled" } : { paused: "scheduled", until: queue.until };
-    }
-    const items = queue?.items ?? [];
-    const instants = items.flatMap((item) => (item.until === undefined ? [] : [item.until]));
-    if (instants.length > 0) {
-        return { paused: "scheduled", until: Math.min(...instants) };
-    }
-    const after = items.find((item) => item.after !== undefined)?.after;
-    return after === undefined ? undefined : { paused: "scheduled", after };
-};
-
-// Messages booked to go by themselves (sendLater.ts, or a spent allowance's reopen): the conversation runs again with
-// nobody pressing anything, so it is not finished, and nothing is owed by the reader for it to.
-export const scheduledSend = (agent: Pick<AgentStanding, "queue">): boolean => soonestHold(agent.queue) !== undefined;
-
-// How many messages are booked to go by themselves: each by its own booking, or all of them when an older sandbox booked
-// the queue whole. What an archive by hand cancels (the sandbox's archive.ts), which the card's Archive says first.
-export const scheduledCount = (agent: Pick<AgentStanding, "queue">): number => {
-    const items = agent.queue?.items ?? [];
-    return agent.queue?.paused === "scheduled" ? items.length : items.filter((item) => item.until !== undefined || item.after !== undefined).length;
-};
-
 // A spent allowance, not a failure to fix: nothing broken, and it comes back. Read off `failureCode` rather than
 // the provider's own sentence, which varies per provider; the code is the daemon's own classification
 // (error-frames.ts).
 export const limited = (agent: AgentStanding): boolean => agent.status === "error" && agent.failureCode === "rate_limit";
 
-// A message held at the door because the sandbox is short of memory (turn-admission): nothing ran and nothing failed,
-// it waits for a person's "send anyway". The daemon files it as an `error`, so this is read off the code, as `limited`
-// is, and the chip and glyph say held rather than error; the lane stays Attention, since the press is the reader's,
-// until its words are booked for later (bookingAnswers).
+// A message held at the door because the sandbox is short of memory (turn-admission): nothing ran and nothing failed.
+// The daemon files it as an `error`, so this is read off the code, as `limited` is, and the chip and glyph say held
+// rather than error. Its lane is any ending's: Attention until something carries it on (`next`, a send once memory
+// frees or a booking for later), Active from then.
 export const memoryHeld = (agent: Pick<AgentStanding, "status" | "failureCode">): boolean =>
     agent.status === "error" && agent.failureCode === "sandbox-memory-low";
 
@@ -126,16 +79,6 @@ export const memoryHeld = (agent: Pick<AgentStanding, "status" | "failureCode">)
 // Attention shut or open. No published instant means never closed, not a guessed one.
 export const limitClosed = (agent: AgentStanding, now: number = Date.now()): boolean =>
     limited(agent) && agent.limitResetsAt !== undefined && agent.limitResetsAt * 1_000 > now;
-
-// A booked fire needs no press: the held turn goes again at the reset by itself. Only where this conversation's answer
-// for the limit says so (`resend` or `move`); that answer starts at `wait`. Nothing is owed then, so it leaves Attention
-// for Active, as an armed watch does: a card counted in the badge and the tab title for the hours until a reset the
-// reader already answered was a call nobody could answer. The stall still shows, on the card's own chip and clock.
-export const limitScheduled = (agent: AgentStanding): boolean => limited(agent) && agent.limitScheduled === true;
-
-// A booked move: the owner's policy is already carrying the held turn to another account, on the resume pass's next
-// beat, seconds away, so the card names where it is going rather than when it goes.
-export const limitMoveBooked = (agent: AgentStanding): boolean => limitScheduled(agent) && agent.limitMoving !== undefined;
 
 // A refused land nothing the agent does can clear: every blocker left is a file the user has uncommitted edits on,
 // which only a commit or stash releases (git cannot merge through unstaged work, and the agent's checkout cannot
@@ -224,44 +167,35 @@ export const writingNow = (agent: AgentStanding): boolean => agent.status === "r
 // "Blocked on you": the agent cannot proceed (or has failed) until the user acts. Not the same as unread.
 // `stopped`/`interrupted` leave a half-written worktree only a new message can carry forward; `stopping` is
 // counted the moment the press lands rather than once the unwind finishes, since it settles in the same lane
-// either way; `failed` is the same kind of dead end one step earlier, before a worktree existed. A spent allowance
-// counts until something is booked to carry it on (limitScheduled): a resend at the reset, or a move now. Any settled
-// dead end counts until a booking answers it (bookingAnswers).
+// either way; `failed` is the same kind of dead end one step earlier, before a worktree existed.
 const BLOCKING_ENDINGS: ReadonlySet<AgentStatus | ClientAgentStatus> = new Set(["error", "interrupted", "stopping", "stopped", "failed"]);
 
 // A land that broke and still stands: its work is stuck on the branch, whatever the turn after it did, so the card is
 // the reader's to look at. Not while a turn or a land is under way, which ends in another land of its own.
 export const landBroken = (agent: AgentStanding): boolean => agent.landFailure !== undefined && !turnInFlight(agent);
 
-// The settled dead ends a booking can answer. Not `stopping`, which is still unwinding and rests in Attention whatever
-// waits behind it.
-const ANSWERABLE_ENDINGS: ReadonlySet<AgentStatus | ClientAgentStatus> = new Set(["error", "interrupted", "stopped", "failed"]);
-
 /**
- * A turn that ended badly, with something booked to go by itself after it: a message for a time, a continuation at a
- * spent allowance's reopen, words held for memory re-timed to that reopen. That booking is the person's answer to the
- * ending, or the sandbox's on their standing word, so the next move is the sandbox's, at the booking, and the ending no
- * longer calls the reader: the card is Active, and its corner says when it goes. Before 2026-10-18 only the sandbox's own
- * booked resend after a spent allowance (limitScheduled) answered an ending, so an expired account's card stayed in
- * Attention under a clock already saying "sends Sun 05:00", the reader's answer to it booked and not counted. Answers
- * only the ending: an ask (a plan, a question, a permission, a land only the reader can clear) still calls them.
+ * A turn that ended badly, with nothing set to carry it on: a dead end the reader owes a press. Once something will
+ * (`next`: a held turn re-run at its reopen or moved, a send once memory frees, a message booked for later), that is the
+ * answer to the ending, the person's or the sandbox's on their standing word, so the card is Active and its corner says
+ * when it goes. Before 2026-10-20 the lane asked two of those, the card's corner three, the chat's bar one more, and
+ * they disagreed. Not `stopping`, still unwinding, which rests in Attention whatever waits behind it. Answers only the
+ * ending: an ask (a plan, a question, a permission, a land only the reader can clear) still calls the reader.
  */
-export const bookingAnswers = (agent: AgentStanding): boolean => ANSWERABLE_ENDINGS.has(agent.status) && scheduledSend(agent);
+const deadEnd = (agent: AgentStanding): boolean => agent.status === "stopping" || (BLOCKING_ENDINGS.has(agent.status) && !goesBySelf(agent));
 
 export const blocked = (agent: AgentStanding): boolean =>
-    limitScheduled(agent)
-        ? false
-        : agent.attention.plan ||
-          agent.attention.question ||
-          agent.attention.permission ||
-          agent.attention.capability ||
-          agent.attention.conflict ||
-          // A need outlives its turn (docs/architecture/needs.md): a conversation still running carries on beside it
-          // and stays in Active, one that stopped is waiting on nothing but the answer.
-          (agent.attention.need === true && agent.status !== "running") ||
-          landBroken(agent) ||
-          heldByPrompt(agent) ||
-          (BLOCKING_ENDINGS.has(agent.status) && !bookingAnswers(agent));
+    agent.attention.plan ||
+    agent.attention.question ||
+    agent.attention.permission ||
+    agent.attention.capability ||
+    agent.attention.conflict ||
+    // A need outlives its turn (docs/architecture/needs.md): a conversation still running carries on beside it and
+    // stays in Active, one that stopped is waiting on nothing but the answer.
+    (agent.attention.need === true && agent.status !== "running") ||
+    landBroken(agent) ||
+    heldByPrompt(agent) ||
+    deadEnd(agent);
 
 // The half of `blocked` that is literally waiting on an answer (plan, question, permission, capability), narrower
 // than `blocked`: dead ends (a failed turn, an unlandable conflict) want looking at but owe the user nothing, so
@@ -296,9 +230,8 @@ export const heardByParent = (child: AgentStanding & { readonly updatedAt: numbe
     BLOCKING_ENDINGS.has(child.status) &&
     // Still unwinding: its ending has not reached anyone yet.
     child.status !== "stopping" &&
-    // Booked to run again by itself: not over, whatever its parent made of the pause.
-    !limitScheduled(child) &&
-    !bookingAnswers(child) &&
+    // Carried on by itself: not over, whatever its parent made of the pause.
+    !goesBySelf(child) &&
     !child.attention.question &&
     !child.attention.conflict &&
     !landBroken(child) &&

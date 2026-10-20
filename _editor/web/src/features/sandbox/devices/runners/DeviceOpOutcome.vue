@@ -25,7 +25,7 @@ const dismissed = ref(false);
 <template>
     <div v-if="!dismissed" class="flex flex-col gap-1" role="status">
         <div class="flex min-w-0 items-start gap-1.5 text-xs text-muted">
-            <Icon :name="idle ? `info-circle` : `check-circle`" class="mt-0.5 shrink-0" :class="idle ? `text-subtle` : `text-success`" aria-hidden="true" />
+            <Icon :name="idle ? `info-circle` : `check-circle`" class="shrink-0" :class="idle ? `text-subtle` : `text-success`" aria-hidden="true" />
             <span class="min-w-0 flex-1 whitespace-pre-line break-words">{{ message }}</span>
             <button
                 v-if="detail !== undefined"

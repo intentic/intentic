@@ -1,4 +1,4 @@
-import { modelUnavailableFrame } from "../error-frames.js";
+import { modelUnavailableFrame } from "./error-frames.js";
 
 /* A routed refusal that is really a spent allowance must not be filed as the model being off the plan: that hides the
    model for a day, where a sibling refused by the same limit was held for its reset and re-run (2026-10-17). */

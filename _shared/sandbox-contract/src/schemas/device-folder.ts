@@ -33,6 +33,14 @@ export type DeviceConflict = z.infer<typeof DeviceConflictSchema>;
 export const clearableOnDevice = (conflict: DeviceConflict): boolean =>
     conflict.nature === "derived-leftover" && conflict.local === "untracked" && conflict.sandbox === "deleted";
 
+// WHY A FOLDER'S FILE SYNC IS HELD STILL, AND BY WHOM (2026-10-20). The machine agent reads each off a fact it keeps
+// on the pairing and makes Mutagen agree every pass (its sync/holds.ts), so a pause never outlives its reason and a
+// resume never undoes somebody else's. `owner` is a person's Pause, the only one a person lifts; every other is the
+// agent's own and lifts by itself once its reason ends. Strings on the wire, so a reason a newer agent adds still
+// reads as held to an older page.
+export const DeviceSyncHoldSchema = z.enum(["owner", "gone", "container-missing", "container-trashed", "swap", "unreachable", "low-disk"]);
+export type DeviceSyncHold = z.infer<typeof DeviceSyncHoldSchema>;
+
 // The drive reading that paused a pairing for want of room: when (epoch ms), and how much was free of how much.
 export const DeviceLowDiskSchema = z.object({
     since: z.number(),

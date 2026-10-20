@@ -22,17 +22,6 @@
                 "default": "./dist/detect.js"
             }
         },
-        "./standalone": {
-            "types": "./dist/standalone.d.ts",
-            "import": {
-                "@intentic/src": "./src/standalone.ts",
-                "default": "./dist/standalone.js"
-            },
-            "require": {
-                "@intentic/src": "./src/standalone.ts",
-                "default": "./dist/standalone.js"
-            }
-        },
         "./text": {
             "types": "./dist/text.d.ts",
             "import": {

@@ -29,7 +29,6 @@ const {
     recordedForwards,
     retireMirroredPort,
     retirePairingMirror,
-    shouldAutoPauseFileSync,
     skippedPortsOf,
     reportCarriers,
     strandedForwards,
@@ -45,11 +44,6 @@ const { stopResident } = await import("../../resident/supervision.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("../mutagen.js");
 // setup() creates ~/.intentic/machine on write; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(runPidPath), { recursive: true });
-
-it("auto-pauses only after an hour of uninterrupted failure", () => {
-    expect(shouldAutoPauseFileSync(60 * 60_000 - 1)).toBe(false);
-    expect(shouldAutoPauseFileSync(60 * 60_000)).toBe(true);
-});
 
 describe("failing-pairing backoff", () => {
     // Measured in time, not polls: the ladder below stretches the gaps, so a poll count would put the hour hours away.

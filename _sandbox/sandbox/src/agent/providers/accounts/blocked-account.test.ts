@@ -3,13 +3,10 @@ import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { FIRST_RECHECK_MS, type SeatProbe } from "../claude/claude-seat-check.js";
-import { BACK_ON, memoryRefusals, memorySeats, scriptedSeatCheck, STILL_OFF } from "../claude/claude-seat-check.testing.js";
+import { BACK_ON, memorySeats, scriptedSeatCheck, seededRefusals, STILL_OFF } from "../claude/claude-seat-check.testing.js";
 import type { SeatRefusal } from "../claude/claude-seats.js";
-import type { ObservedSpend } from "../../../usage/observed-limits.js";
 import { type BlockedAccountDeps, offBlockedAccount } from "./blocked-account.js";
 import { claudeReading } from "../claude/claude-usage.testing.js";
-
-type StoredCursorAccount = Awaited<ReturnType<Services["cursorStore"]["credentials"]>>[number];
 
 // Which turns are moved off the account their conversation remembers, and which are left where routing points. The
 // planning side (the move recorded, the refusal held) is turn-plan.test.ts's; the whole path is agent.routes'.
@@ -24,26 +21,22 @@ const deps = (params: {
     readonly refusal?: ProviderRefusal;
     // What the provider says when the marked account is re-tested; the seat is still off unless a test says otherwise.
     readonly probe?: SeatProbe;
-    // Cursor's connected accounts and each one's refusal ledger.
-    readonly cursor?: readonly StoredCursorAccount[];
-    readonly ledger?: Record<string, ObservedSpend>;
-}): BlockedAccountDeps => ({
-    claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...params.accounts] }),
-    claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => params.seats ?? {} }),
-    claudeSeatCheck: scriptedSeatCheck({
-        seats: memorySeats({ ...params.seats }),
-        refusals: memoryRefusals(params.refusal === undefined ? {} : { claude: params.refusal }),
-        answer: () => params.probe ?? STILL_OFF,
-    }).check,
-    accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage ?? {} }),
-    providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", {
-        read: async () => (params.refusal === undefined ? {} : { claude: params.refusal }),
-        onFile: async () => (params.refusal === undefined ? {} : { claude: [params.refusal] }),
-    }),
-    cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {}),
-    cursorStore: unstubbed<Services["cursorStore"]>("cursorStore", { credentials: async () => [...(params.cursor ?? [])] }),
-    observedLimits: unstubbed<Services["observedLimits"]>("observedLimits", { spent: async (_provider, account) => params.ledger?.[account] ?? {} }),
-});
+    // Cursor's connected accounts, as its door lists them, and the refusals on file for them.
+    readonly cursor?: readonly OauthAccount[];
+    readonly cursorRefusals?: readonly ProviderRefusal[];
+}): BlockedAccountDeps => {
+    const refusals = { claude: params.refusal === undefined ? [] : [params.refusal], cursor: params.cursorRefusals ?? [] };
+    return {
+        claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...params.accounts] }),
+        claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => params.seats ?? {} }),
+        claudeSeatCheck: scriptedSeatCheck({ seats: memorySeats({ ...params.seats }), refusals: seededRefusals(refusals), answer: () => params.probe ?? STILL_OFF })
+            .check,
+        accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage ?? {} }),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => refusals }),
+        providerAccounts: async (provider) => (provider === "cursor" ? [...(params.cursor ?? [])] : []),
+        cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {}),
+    };
+};
 
 // SAFETY: the rule reads only an account's id and its marks; the rest of a stored row is the store's own business.
 const TWO = [
@@ -120,15 +113,18 @@ test("the re-test is made only for an account the rule would move a turn off", a
     expect(probes).toEqual([]);
 });
 
-// 2026-10-17: Cursor refused an account outright (`[role_forbidden]`), and the conversation kept being routed to it.
+// 2026-10-17: Cursor refused an account outright (`[role_forbidden]`), and the conversation kept being routed to it. Its
+// refusal is filed in the one ledger, and the one rule reads the account blocked like a seatless Claude one.
 describe("a Cursor account the server refused outright", () => {
-    // SAFETY: the rule reads only an account's id; the rest of a stored row is the store's own business.
-    const CURSOR = [{ id: "admin" }, { id: "billable" }] as StoredCursorAccount[];
-    const REFUSED: ObservedSpend = { "*": { at: Date.now(), message: "[role_forbidden] not available", refused: "entitlement" } };
+    const CURSOR: OauthAccount[] = [
+        { id: "admin", label: "admin", connectedAt: 0 },
+        { id: "billable", label: "billable", connectedAt: 0 },
+    ];
+    const refusedOutright = (account: string): ProviderRefusal => ({ at: Date.now(), kind: "entitlement", message: "[role_forbidden] not available", account });
     const onCursor = { provider: "cursor" as const, named: undefined, remembered: "admin", model: "composer-2.5" };
 
     test("moves the conversation to a live account it has not refused", async () => {
-        expect(await offBlockedAccount(deps({ accounts: [], cursor: CURSOR, ledger: { admin: REFUSED } }), onCursor)).toEqual({
+        expect(await offBlockedAccount(deps({ accounts: [], cursor: CURSOR, cursorRefusals: [refusedOutright("admin")] }), onCursor)).toEqual({
             kind: "move",
             from: "admin",
             to: "billable",
@@ -137,12 +133,12 @@ describe("a Cursor account the server refused outright", () => {
     });
 
     test("stays where it was routed when every other account is refused too, so the refusal is said at once", async () => {
-        const ledger = { admin: REFUSED, billable: REFUSED };
-        expect(await offBlockedAccount(deps({ accounts: [], cursor: CURSOR, ledger }), onCursor)).toEqual({ kind: "keep" });
+        const cursorRefusals = [refusedOutright("admin"), refusedOutright("billable")];
+        expect(await offBlockedAccount(deps({ accounts: [], cursor: CURSOR, cursorRefusals }), onCursor)).toEqual({ kind: "keep" });
     });
 
     test("leaves an account with only a spent model alone: that is the limit move's", async () => {
-        const ledger = { admin: { "composer-2.5": { at: Date.now(), message: "out of usage" } } };
-        expect(await offBlockedAccount(deps({ accounts: [], cursor: CURSOR, ledger }), onCursor)).toEqual({ kind: "keep" });
+        const cursorRefusals: ProviderRefusal[] = [{ at: Date.now(), kind: "limit", message: "out of usage", account: "admin", model: "composer-2.5" }];
+        expect(await offBlockedAccount(deps({ accounts: [], cursor: CURSOR, cursorRefusals }), onCursor)).toEqual({ kind: "keep" });
     });
 });

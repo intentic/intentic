@@ -1,8 +1,7 @@
 import { sandboxNames } from "@intentic/sandbox-run";
-import { isProjectPairing, isSandboxContainerName, type Pairing, pairingTransport, type SyncTransport } from "./config.js";
+import { isProjectPairing, isSandboxContainerName, type Pairing, pairingTransport, type SyncTransport,pairingSlugs } from "./config.js";
 import { runProcess } from "./exec.js";
 import { sshAlias } from "./ssh.js";
-import { pairingSlugs } from "./swap-pause.js";
 
 // WHERE THE SANDBOX'S SIDE OF A PAIRING IS REACHED, for everything that crosses to it: the Mutagen session, the port
 // forwards, the bring-back's listing and fetch, and the residue probe. Two ways (config.ts `SyncTransport`):
@@ -96,7 +95,7 @@ export const servesSandbox = (inspected: InspectedContainer | undefined, sandbox
 };
 
 // The container on THIS machine's engine that runs the sandbox at `sandboxUrl`, or undefined. ic names a sandbox's
-// container after its slug, and a pairing's URL carries the slugs ic may have used (swap-pause.ts `pairingSlugs`), so
+// container after its slug, and a pairing's URL carries the slugs ic may have used (config.ts `pairingSlugs`), so
 // the candidates are derived, never searched for; each is then checked to be running and to be this sandbox. A hosted
 // sandbox, one on another computer, or one this engine cannot see answers undefined, and its pairing stays on ssh.
 export const localSandboxContainer = async (sandboxUrl: string, inspect: InspectContainer = inspectContainer): Promise<string | undefined> => {

@@ -22,8 +22,7 @@ jest.mock(`./useAreas`, () => ({
     useAreas: () => ({
         areas,
         labelOf: (id: string) => id,
-        error: ref(undefined),
-        isLoading: ref(false),
+        loaded: computed(() => ({ state: `ready`, data: areas.value, refreshing: false, refreshError: undefined })),
         save: { mutateAsync: save, isPending: ref(false) },
         remove: { mutateAsync: remove, isPending: ref(false) },
     }),
@@ -39,7 +38,6 @@ jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({ usePersonas: 
 
 const role = ref<string>(`owner`);
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ role: role.value }) }) }));
-jest.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => ref(true) }));
 
 // <FolderPicker>'s own reads; this suite is about the page, so the tree is a fixture and nothing is fetched lazily.
 const tree = ref<WorkspaceTreeEntry[]>([]);
@@ -52,6 +50,7 @@ jest.mock(`../../../client/sandbox/useSandboxQuery`, () => {
         useSandboxQuery: () => ({
             query: { data: computed(() => ({ root, tree: tree.value, hidden: 0 })), isPending: shallow(false) },
             error: shallow(undefined),
+            loaded: computed(() => ({ state: `ready`, data: { root, tree: tree.value, hidden: 0 }, refreshing: false, refreshError: undefined })),
         }),
     };
 });

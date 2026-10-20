@@ -19,6 +19,87 @@ import { agentNoticeEvent, agentStatusEvent } from "./agent-ui.js";
 // Every frame an agent turn streams, as one `kind`-discriminated union: turn facts (session, standing, cost) and the
 // attach stream a window joins through. One closed vocabulary, kept in one file.
 
+// What a failure is, by name: the one vocabulary every runtime's failure is read into at its boundary (a runtime's typed
+// error, or the shared reading of its words), and the one a reader draws a failure's line from. A failure none of these
+// names goes out with no code: the unclassified kind, said as such, never a guess.
+export const AgentErrorCodeSchema = z.enum([
+    "session-not-found",
+    "rate_limit",
+    // Codex ran the turn but warned about it (fallback model metadata); a notice, not a failure.
+    "codex-advisory",
+    "codex-reauth",
+    // An ACP capability requires its own loginCommand, not a native provider account reconnect.
+    "acp-auth-required",
+    // The Claude subscription credential is dead; only a reconnect fixes it, unlike no account connected.
+    "claude-reauth",
+    // The API refused this turn's token mid-flight, usually superseded by a rotation already re-minting.
+    "claude-token-refused",
+    // The account authenticates and has real usage pools, but the org disabled Claude Code for this seat.
+    "claude-not-entitled",
+    // Any other provider's account signs in but is refused service outright, for every model (Cursor's
+    // `[role_forbidden]` for a non-billable admin): filed against the account, so placement skips it.
+    "account-not-entitled",
+    // The provider failed transiently and in-turn retries did not outlast it; the daemon retries on
+    // backoff.
+    "provider-outage",
+    // The platform-owned free-trial pool failed after its bounded key walk; the failed call is refunded.
+    "trial-unavailable",
+    // The trial answered, but the selected upstream model/request cannot run through this sandbox.
+    "trial-model-unavailable",
+    // This account's platform-owned daily trial allowance is spent until its UTC reset.
+    "trial-exhausted",
+    // The harness read the message as a slash command it doesn't have; the model never saw it.
+    "unknown-command",
+    "grok-model-invalid",
+    "codex-model-invalid",
+    // The model is real and listed, but this plan's subscription does not have access to it.
+    "model-unavailable",
+    // The model cannot hold a turn this size, refused before sending; retrying the same request never
+    // helps.
+    "context-window-too-small",
+    // The model can only write one-shot jobs (Model.helperOnly: its server says it cannot call tools, or
+    // it is the quick-jobs local model), refused before sending; the words wait for another model.
+    "model-helper-only",
+    // The privacy shield is on, the provider is untrusted, and the runtime is one it cannot read by content at
+    // all (an ACP agent, Pi), refused before sending; the words wait for a covered provider.
+    "privacy-unshielded",
+    // The turn carries a tool list (an automation's `allowedTools`) and its runtime cannot keep one
+    // (AgentCapabilities.toolAllowlist), refused before sending; the words wait for a runtime that can.
+    "tools-unenforced",
+    // The protected execution-domain policy is unsupported or unreadable; refused before any model/helper ran.
+    "agent-domain-refused",
+    // The privacy shield found personal data in instructions the runtime loads itself, past every channel it
+    // could mask (Cursor's project rules, AGENTS.md), refused before sending; the words wait for the owner to
+    // let the provider read this conversation, trust it, or take the data out of those files.
+    "privacy-instructions",
+    // The session outgrew the model's context window mid-turn; resuming that session only overflows again,
+    // so the daemon re-runs the turn once in a fresh session carrying the hand-off.
+    "context-overflow",
+    "subscription-required",
+    "agent-busy",
+    // The sandbox is short of memory, held before anything spawned: a person once per spell, after which
+    // their sends run; background work on every short reading. Transient, no clock.
+    "sandbox-memory-low",
+    // The conversation's own view of the workspace (its mount namespace) did not come up in time, twice,
+    // before anything ran: the sandbox too loaded to set it up. Held like a memory hold, and sent again by
+    // itself once the sandbox has had room for a while (the memory wall's answer).
+    "workspace-setup",
+    // The history volume cannot fit a new conversation checkout while keeping its free-space floor.
+    "sandbox-disk-low",
+    // The runtime hit its own iteration ceiling and stopped; the work may be half done, so the user
+    // decides.
+    "turn-cap",
+    // The harness ended the turn without succeeding, with no modelled reason; the vendor's subtype rides
+    // verbatim.
+    "harness-incomplete",
+    // The installed engine is too old for the model; the provider names the version required, on `engine`.
+    "engine-version-floor",
+    // The provider's safety classifier stopped the turn partway, often a false positive on ordinary work.
+    // Held for a person: retry on the same model without the stopped response, or go on with another.
+    "safeguard-flagged",
+]);
+export type AgentErrorCode = z.infer<typeof AgentErrorCodeSchema>;
+
 // One frame per emission, `kind`-discriminated; the daemon maps SDK message types onto this closed set, dropping any
 // without a UI mapping. `plan`/`question`/`permission` pause until `resolved` names the same requestId.
 export const AgentEventSchema = z.discriminatedUnion("kind", [
@@ -271,84 +352,13 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("error"),
         message: z.string(),
-        code: z
-            .enum([
-                "session-not-found",
-                "rate_limit",
-                // Codex ran the turn but warned about it (fallback model metadata); a notice, not a failure.
-                "codex-advisory",
-                "codex-reauth",
-                // An ACP capability requires its own loginCommand, not a native provider account reconnect.
-                "acp-auth-required",
-                // The Claude subscription credential is dead; only a reconnect fixes it, unlike no account connected.
-                "claude-reauth",
-                // The API refused this turn's token mid-flight, usually superseded by a rotation already re-minting.
-                "claude-token-refused",
-                // The account authenticates and has real usage pools, but the org disabled Claude Code for this seat.
-                "claude-not-entitled",
-                // Any other provider's account signs in but is refused service outright, for every model (Cursor's
-                // `[role_forbidden]` for a non-billable admin): filed against the account, so placement skips it.
-                "account-not-entitled",
-                // The provider failed transiently and in-turn retries did not outlast it; the daemon retries on
-                // backoff.
-                "provider-outage",
-                // The platform-owned free-trial pool failed after its bounded key walk; the failed call is refunded.
-                "trial-unavailable",
-                // The trial answered, but the selected upstream model/request cannot run through this sandbox.
-                "trial-model-unavailable",
-                // This account's platform-owned daily trial allowance is spent until its UTC reset.
-                "trial-exhausted",
-                // The harness read the message as a slash command it doesn't have; the model never saw it.
-                "unknown-command",
-                "grok-model-invalid",
-                "codex-model-invalid",
-                // The model is real and listed, but this plan's subscription does not have access to it.
-                "model-unavailable",
-                // The model cannot hold a turn this size, refused before sending; retrying the same request never
-                // helps.
-                "context-window-too-small",
-                // The model can only write one-shot jobs (Model.helperOnly: its server says it cannot call tools, or
-                // it is the quick-jobs local model), refused before sending; the words wait for another model.
-                "model-helper-only",
-                // The privacy shield is on, the provider is untrusted, and the runtime is one it cannot read by content at
-                // all (an ACP agent, Pi), refused before sending; the words wait for a covered provider.
-                "privacy-unshielded",
-                // The turn carries a tool list (an automation's `allowedTools`) and its runtime cannot keep one
-                // (AgentCapabilities.toolAllowlist), refused before sending; the words wait for a runtime that can.
-                "tools-unenforced",
-                // The protected execution-domain policy is unsupported or unreadable; refused before any model/helper ran.
-                "agent-domain-refused",
-                // The privacy shield found personal data in instructions the runtime loads itself, past every channel it
-                // could mask (Cursor's project rules, AGENTS.md), refused before sending; the words wait for the owner to
-                // let the provider read this conversation, trust it, or take the data out of those files.
-                "privacy-instructions",
-                // The session outgrew the model's context window mid-turn; resuming that session only overflows again,
-                // so the daemon re-runs the turn once in a fresh session carrying the hand-off.
-                "context-overflow",
-                "subscription-required",
-                "agent-busy",
-                // The sandbox is short of memory, held before anything spawned: a person once per spell, after which
-                // their sends run; background work on every short reading. Transient, no clock.
-                "sandbox-memory-low",
-                // The conversation's own view of the workspace (its mount namespace) did not come up in time, twice,
-                // before anything ran: the sandbox too loaded to set it up. Held like a memory hold, and sent again by
-                // itself once the sandbox has had room for a while (the memory wall's answer).
-                "workspace-setup",
-                // The history volume cannot fit a new conversation checkout while keeping its free-space floor.
-                "sandbox-disk-low",
-                // The runtime hit its own iteration ceiling and stopped; the work may be half done, so the user
-                // decides.
-                "turn-cap",
-                // The harness ended the turn without succeeding, with no modelled reason; the vendor's subtype rides
-                // verbatim.
-                "harness-incomplete",
-                // The installed engine is too old for the model; the provider names the version required, on `engine`.
-                "engine-version-floor",
-                // The provider's safety classifier stopped the turn partway, often a false positive on ordinary work.
-                // Held for a person: retry on the same model without the stopped response, or go on with another.
-                "safeguard-flagged",
-            ])
-            .optional(),
+        // Who worded `message`. Absent, it is the provider's or the harness's own words, which a reader keeps behind a
+        // press and leads with a line of its own for the code: nothing the sandbox forgot to mark is ever a raw headline.
+        own: z
+            .boolean()
+            .optional()
+            .describe("The message is the sandbox's own sentence, fit to be the notice's line. Absent, it is what the provider or the harness said."),
+        code: AgentErrorCodeSchema.optional(),
         // safeguard-flagged only: what the classifier named, and where a retry resumes the session from.
         refusal: z
             .object({

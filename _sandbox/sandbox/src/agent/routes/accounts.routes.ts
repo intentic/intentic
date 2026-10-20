@@ -4,7 +4,6 @@ import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
-import { withAccountStates } from "../../usage/serviceability/serviceability.js";
 import type { AccountDoor } from "../providers/provider-module.js";
 
 // One route family for every account this sandbox holds itself, provider in the path. `start` answers once there's a
@@ -60,10 +59,9 @@ export const createAccountsRoutes = (services: Services, doors: AccountDoors = a
             doorOf(input.provider).cancel(input.handshake);
             return { ok: true } as const;
         }),
-        // Each row carries the one serviceability verdict, judged on the facts the door put beside it.
-        accounts: i.accounts.handler(async ({ input }) => ({
-            accounts: await withAccountStates(services, input.provider, await doorOf(input.provider).list(input.force)),
-        })),
+        // Each row carries the facts the one serviceability rule judges (plan-pools.ts serviceStates), never a verdict:
+        // the reader judges them with every refusal on file, the way the daemon does.
+        accounts: i.accounts.handler(async ({ input }) => ({ accounts: await doorOf(input.provider).list(input.force) })),
         rename: i.rename.handler(async ({ input }) => {
             const renamed = await attempted(() => doorOf(input.provider).rename(input.id, input.label));
             if (renamed === undefined) {

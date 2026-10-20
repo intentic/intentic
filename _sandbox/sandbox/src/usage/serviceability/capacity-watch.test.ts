@@ -19,7 +19,7 @@ test("a new usage reading judges its provider's accounts again, and an account r
         claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [{ id: "a", label: "Work", connectedAt: 0 }] }),
         claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
         accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({ a: reading }) }),
-        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}), onChange: () => () => undefined }),
         headroom: unstubbed<Services["headroom"]>("headroom", {
             onChange: (listener: typeof heard) => {
                 heard = listener;

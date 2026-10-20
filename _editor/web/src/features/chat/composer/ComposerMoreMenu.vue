@@ -16,10 +16,10 @@ const emit = defineEmits<{ pick: [control: ComposerControl] }>();
             v-for="row in rows"
             :key="row.key"
             type="button"
-            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+            class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
             @click="emit(`pick`, row.key)"
         >
-            <Icon :name="row.icon" class="mt-0.5 shrink-0 text-xs text-subtle" />
+            <Icon :name="row.icon" class="shrink-0 text-xs text-subtle" />
             <span class="flex min-w-0 flex-1 flex-col">
                 <span class="flex min-w-0 items-baseline gap-2">
                     <span class="truncate text-sm text-content md:text-xs">{{ row.label }}</span>

@@ -75,12 +75,22 @@
     {
       "type": "{ heardAt: number; keyring?: { locked: boolean; pendingInbox: number; version: string }; pinned?: { at: number; inbox: string; seal: string }; pointers: ({ anyField: boolean; hosts: string[]; kind: \"password\" | \"text\"; mode: \"each-use\" | \"while-here\" | \"copy\"; name: string; packages: string[]; programs: string[]; source: \"keyring\" | \"bitwarden\" | \"1password\" | \"keepassxc\"; updatedAt: number })[] }",
       "since": "v1.338.0"
+    },
+    {
+      "type": "{ heardAt: number; keyring?: { locked: boolean; pendingInbox: number; remember?: { apps: boolean; browser: boolean; phone: boolean; sandbox: boolean; terminal: boolean }; version: string }; pinned?: { at: number; inbox: string; seal: string }; pointers: ({ anyField: boolean; hosts: string[]; kind: \"password\" | \"text\"; mode: \"each-use\" | \"while-here\" | \"copy\"; name: string; packages: string[]; programs: string[]; source: \"keyring\" | \"bitwarden\" | \"1password\" | \"keepassxc\"; updatedAt: number })[] }",
+      "since": "unreleased"
     }
   ],
   "auth:keyring-keys.json": [
     {
       "type": "{ seal?: { privateKey: string; publicKey: string }; sign?: { privateKey: string; publicKey: string } }",
       "since": "v1.338.0"
+    }
+  ],
+  "auth:keyring-needs.json": [
+    {
+      "type": "{ at: number; conversation?: string; detail: string; id: string; machine?: string; name?: string; origin: { host: string; kind: \"site\" } | { kind: \"program\"; label?: string; program: string } | { kind: \"package\"; label?: string; package: string } | { kind: \"ssh\"; target: string } | { kind: \"ssh-key\"; path: string } | { kind: \"sudo\"; user?: string } | { kind: \"git\"; url: string } | { command?: string; kind: \"prompt\"; sandbox?: string; text: string }; state: \"pending\" | \"allowed\" | \"denied\" | \"unknown\"; username?: string }",
+      "since": "unreleased"
     }
   ],
   "auth:keyring-sync-mailbox.json": [
@@ -157,6 +167,10 @@
     {
       "type": "{ measuredAt: number; unread?: { reason: string; since: number }; windows: ({ gates: \"all\" | \"none\" | { models: string[] }; kind: string; label?: string; lapsedAt?: number; resetsAt?: number; rounded?: boolean; utilization: number })[] }",
       "since": "v1.333.0"
+    },
+    {
+      "type": "{ contradicted?: { at: number; model: string }; measuredAt: number; uncovered?: string[]; unread?: { reason: string; since: number }; windows: ({ gates: \"all\" | \"none\" | { models: string[] }; kind: string; label?: string; lapsedAt?: number; missingSince?: number; resetsAt?: number; rounded?: boolean; utilization: number })[] }",
+      "since": "unreleased"
     }
   ],
   "history:activity.jsonl": [
@@ -201,6 +215,18 @@
     {
       "type": "{ actsAs?: string; autoRunAt?: number; automationId: string; conversationId?: string; createdAt: number; mint?: string; observed?: string; origin?: { author?: string; automationId: string; channelId?: string; provider: string; threadId?: string }; payload?: string; sessionId?: string; thread?: string; title?: string }",
       "since": "v1.335.0"
+    }
+  ],
+  "history:automation-listener-inbox.json": [
+    {
+      "type": "{ automationId: string; context: { lane: { actsAs?: string; requireApproval: boolean }; origin: { author?: string; automationId: string; channelId?: string; provider: string; threadId?: string }; thread: string; title: string; ttlMs: number }; id: string; line: string }",
+      "since": "unreleased"
+    }
+  ],
+  "history:automation-workspace-inbox.json": [
+    {
+      "type": "{ automationId: string; event: { agentId: string; branch: string; deps?: { attempt: number; command: string; exitCode: number; logTail: string; project: string }; event: \"turn.settled\" | \"agent.landed\" | \"deps.broken\" | \"deps.fixed\"; outcome: \"landed\" | \"conflict\" | \"ready\" | \"idle\" | \"error\"; repos: { dir: string; from: string; repo: string }[]; title?: string }; id: string }",
+      "since": "unreleased"
     }
   ],
   "history:boot-failure.json": [
@@ -253,6 +279,10 @@
     {
       "type": "{ archivedAt?: number; compactedTurn?: number; createdAt: number; ending: { kind: \"idle\" } | { kind: \"interrupted\" } | { kind: \"stopped\" } | { code?: string; failure?: string; kind: \"failed\" } | { failure?: string; held: boolean; kind: \"limited\"; moving?: string; resetsAt?: number; scheduled: boolean }; id: string; identity: { actsAs?: string; areas?: string[]; forkedFrom?: { conversationId: string; files: \"then\" | \"now\"; index: number }; origin?: { author?: string; automationId: string; channelId?: string; provider: string; threadId?: string }; people?: string[]; startIn?: string; startedBy?: string }; landing: { conflicts?: ({ clean: number; mainBranch?: string; paths: ({ path: string; reason: \"workspace\" | \"diverged\" | \"binary\" })[]; repo: string })[]; delivery?: { applied: number; at: number; conflicts: ({ path: string; reason: \"edited\" | \"link\" | \"outside\" | \"missing-git\" })[]; folder?: string; point?: string; project: string; reason?: string; state: \"delivered\" | \"partial\" | \"waiting\" | \"failed\" | \"too-large\" }; diff?: { deletions: number; files: number; insertions: number }; failure?: { at: number; check?: boolean; code?: string; reason: string }; message?: { allows?: string[]; breaking?: string; note?: string; subject: string; testNote?: string }; removedBy?: { id: string; kind: \"agent\" } | { email?: string; kind: \"person\"; name?: string } }; limitHold?: { carryRefused?: boolean; checklist?: ({ activeForm?: string; content: string; status: \"pending\" | \"in_progress\" | \"completed\" })[]; contextTokens?: number; handoff?: { basis: \"size\" | \"setting\"; carry?: { tokens?: number }; chosen?: \"carry\" | \"trim\" | \"summary\"; suggested: \"carry\" | \"trim\" | \"summary\"; summary?: { reads?: number; tokens: number }; trim?: { cleared: number; tokens: number } }; handoffTokens?: number; input: { account?: string; actor?: string; actsAs?: string; agent?: string; allowedTools?: string[]; attachments?: string[]; autoLand?: boolean; autoPicked?: boolean; conversationAutoLand?: boolean; conversationId: string & string; editorContext?: { endLine?: number; file: string; selection?: string; startLine?: number }; effort?: string; errand?: \"land-conflict\" | \"verify-nudge\" | \"land-breakage\" | \"land-fix\" | \"land-fix-nudge\" | \"land-held\" | \"push-fix\" | \"push-fix-nudge\" | \"ci-fix\" | \"ci-fix-nudge\"; fast?: boolean; forkOf?: { conversationId: string; files: \"then\" | \"now\"; keep: number }; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; isolated?: boolean; mentions?: string[]; messageId?: string; model?: string; origin?: { author?: string; automationId: string; channelId?: string; provider: string; threadId?: string }; outsideWake?: string; permissionMode?: \"default\" | \"plan\" | \"bypassPermissions\"; placement?: { kind: \"local\" } | { id: string; kind: \"runner\" }; prompt: string; resume?: \"auth\" | \"outage\" | \"restart\" | \"stopped\" | \"limit\" | \"switched\" | \"trimmed\" | \"summarized\" | \"carried\" | \"refused\" | \"door\" | \"overflow\" | \"flagged\" | \"continued\" | \"answered\"; resumeAt?: string; runRole?: \"commit-message\" | \"session-title\" | \"safety-judge\" | \"loop-verdict\" | \"handoff-summary\" | \"spoken-reply\" | \"model-router\" | \"pipeline-fix\" | \"deployment-fix\" | \"maintenance-chore\" | \"refactor-run\" | \"documentation-run\" | \"acceptance-run\" | \"approval-queue\" | \"extension-review\" | \"loop-iteration\"; sendAfter?: string; sendAt?: number; sessionId?: string; speaker?: { email: string; kind: \"person\"; name?: string } | { kind: \"program\"; token: string } | { conversationId: string; kind: \"agent\" } | { kind: \"sandbox\"; source?: string }; startIn?: string; thinking?: boolean; title?: string; unattended?: boolean; unseenRuns?: string[]; worktreeBase?: { base: string; repo: string }[] }; move?: { account: string; carry: boolean }; onto?: { account: string; carry: boolean }; ran: boolean; reason?: \"door\"; recordedAt: number; reopensAt?: number; run?: string; sessionId?: string; standing?: { check?: string; paths: string[]; state: \"verified\" | \"unproven\" | \"failing\" | \"no-code\" }; turnedAway?: boolean }; placement: { kind: \"main\" } | { branch: string; composition?: { persona?: string; repos: string[] }; kind: \"worktree\"; landedInto?: string; parent?: string; repos: { absorbed?: number; base: string; landedAt?: number; landedHead?: string; landedTip?: string; repo: string }[]; runner?: string }; postures: { autoLand?: boolean; limit?: \"wait\" | \"resend\" | \"move\"; memory?: \"wait\" | \"resend\"; outage?: \"wait\" | \"retry\"; stopped?: \"wait\" | \"retry\" }; profile: { account?: string; actsAs?: string; effort?: string; fast?: boolean; harness: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; model?: string; provider: string; thinking?: boolean }; proof?: { at: number; check?: string; unviewed?: number; verification: \"verified\" | \"unproven\" | \"failing\" | \"no-code\" }; queue?: { after?: { conversationId: string; since: number }; items: ({ actor?: string; after?: { conversationId: string; since: number }; areas?: string[]; continues?: true; id: string; outside?: string; owner?: { email: string; name?: string }; queuedAt: number; revision: number; speaker?: { email: string; kind: \"person\"; name?: string } | { kind: \"program\"; token: string } | { conversationId: string; kind: \"agent\" } | { kind: \"sandbox\"; source?: string }; turn: { account?: string; actsAs?: string; agent?: string; allowedTools?: string[]; attachments?: string[]; autoLand?: boolean; autoPicked?: boolean; conversationAutoLand?: boolean; conversationId: string & string; editorContext?: { endLine?: number; file: string; selection?: string; startLine?: number }; effort?: string; errand?: \"land-conflict\" | \"verify-nudge\" | \"land-breakage\" | \"land-fix\" | \"land-fix-nudge\" | \"land-held\" | \"push-fix\" | \"push-fix-nudge\" | \"ci-fix\" | \"ci-fix-nudge\"; fast?: boolean; forkOf?: { conversationId: string; files: \"then\" | \"now\"; keep: number }; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; isolated?: boolean; mentions?: string[]; messageId?: string; model?: string; origin?: { author?: string; automationId: string; channelId?: string; provider: string; threadId?: string }; outsideWake?: string; permissionMode?: \"default\" | \"plan\" | \"bypassPermissions\"; placement?: { kind: \"local\" } | { id: string; kind: \"runner\" }; prompt: string; runRole?: \"commit-message\" | \"session-title\" | \"safety-judge\" | \"loop-verdict\" | \"handoff-summary\" | \"spoken-reply\" | \"model-router\" | \"pipeline-fix\" | \"deployment-fix\" | \"maintenance-chore\" | \"refactor-run\" | \"documentation-run\" | \"acceptance-run\" | \"approval-queue\" | \"extension-review\" | \"loop-iteration\"; sendAfter?: string; sendAt?: number; sessionId?: string; startIn?: string; thinking?: boolean; title?: string; unattended?: boolean; worktreeBase?: { base: string; repo: string }[] }; until?: number; voice: \"person\" | \"sandbox\" | \"agent\" })[]; paused?: \"stopped\" | \"refused\" | \"scheduled\"; revision: number; until?: number }; reach?: { at: number; live?: { extension?: string; path: string }[]; liveMore?: number; published?: { branch?: string; command: string; dir?: string; remote?: string }[]; publishedMore?: number; stranded?: { dir: string; uncommitted: number; unpushed: number }[]; strandedMore?: number }; sessionId?: string; social: { landRequested?: { at: number; email: string; name?: string }; owner?: { email: string; name?: string; since: number }; reactions: { at: number; email: string; emoji: string; name?: string }[]; seenAt?: number; title?: { action?: string; source: \"derived\" | \"model\" | \"plan\" | \"user\"; text: string }; unsentAt?: number }; totals: { costUsd: number; inputTokens: number; outputTokens: number; subagents: number; toolUses: number; turns: number }; unfinished?: { at: number; check?: string; steps?: { next?: string; open: number; total: number } }; updatedAt: number }",
       "since": "v1.342.0"
+    },
+    {
+      "type": "{ archivedAt?: number; compactedTurn?: number; createdAt: number; ending: { kind: \"idle\" } | { kind: \"interrupted\" } | { kind: \"stopped\" } | { code?: string; failure?: string; kind: \"failed\" } | { failure?: string; held: boolean; kind: \"limited\"; resetsAt?: number }; id: string; identity: { actsAs?: string; areas?: string[]; forkedFrom?: { conversationId: string; files: \"then\" | \"now\"; index: number }; fresh?: { at: number; kind: \"review\" | \"test\" | \"ask\"; of: string }; origin?: { author?: string; automationId: string; channelId?: string; provider: string; threadId?: string }; people?: string[]; startIn?: string; startedBy?: string }; landMarks?: { versionPending?: number; wakeHeld?: { autoLand?: boolean } }; landing: { conflicts?: ({ clean: number; mainBranch?: string; paths: ({ path: string; reason: \"workspace\" | \"diverged\" | \"binary\" })[]; repo: string })[]; delivery?: { applied: number; at: number; conflicts: ({ path: string; reason: \"edited\" | \"link\" | \"outside\" | \"missing-git\" })[]; folder?: string; point?: string; project: string; reason?: string; state: \"delivered\" | \"partial\" | \"waiting\" | \"failed\" | \"too-large\" }; diff?: { deletions: number; files: number; insertions: number }; failure?: { at: number; check?: boolean; code?: string; reason: string }; message?: { allows?: string[]; breaking?: string; note?: string; subject: string; testNote?: string }; removedBy?: { id: string; kind: \"agent\" } | { email?: string; kind: \"person\"; name?: string } }; limitHold?: { carryRefused?: boolean; checklist?: ({ activeForm?: string; content: string; status: \"pending\" | \"in_progress\" | \"completed\" })[]; contextTokens?: number; forkAt?: string; handoff?: { basis: \"size\" | \"setting\"; carry?: { tokens?: number }; chosen?: \"carry\" | \"trim\" | \"summary\"; suggested: \"carry\" | \"trim\" | \"summary\"; summary?: { reads?: number; tokens: number }; trim?: { cleared: number; tokens: number } }; handoffTokens?: number; input: { account?: string; actor?: string; actsAs?: string; agent?: string; allowedTools?: string[]; attachments?: string[]; autoLand?: boolean; autoPicked?: boolean; conversationAutoLand?: boolean; conversationId: string & string; editorContext?: { endLine?: number; file: string; selection?: string; startLine?: number }; effort?: string; errand?: \"land-conflict\" | \"verify-nudge\" | \"land-breakage\" | \"land-fix\" | \"land-fix-nudge\" | \"land-held\" | \"push-fix\" | \"push-fix-nudge\" | \"ci-fix\" | \"ci-fix-nudge\"; fast?: boolean; forkOf?: { conversationId: string; files: \"then\" | \"now\"; keep: number }; freshOf?: { conversationId: string; kind: \"review\" | \"test\" | \"ask\" }; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; isolated?: boolean; mentions?: string[]; messageId?: string; model?: string; origin?: { author?: string; automationId: string; channelId?: string; provider: string; threadId?: string }; outsideWake?: string; permissionMode?: \"default\" | \"plan\" | \"bypassPermissions\"; placement?: { kind: \"local\" } | { id: string; kind: \"runner\" }; prompt: string; resume?: \"auth\" | \"outage\" | \"restart\" | \"stopped\" | \"limit\" | \"switched\" | \"trimmed\" | \"summarized\" | \"carried\" | \"refused\" | \"door\" | \"overflow\" | \"flagged\" | \"continued\" | \"answered\"; resumeAt?: string; runRole?: \"commit-message\" | \"session-title\" | \"safety-judge\" | \"loop-verdict\" | \"handoff-summary\" | \"spoken-reply\" | \"model-router\" | \"pipeline-fix\" | \"deployment-fix\" | \"maintenance-chore\" | \"refactor-run\" | \"documentation-run\" | \"acceptance-run\" | \"approval-queue\" | \"extension-review\" | \"loop-iteration\"; sendAfter?: string; sendAt?: number; sendAtReopen?: true; sessionId?: string; speaker?: { email: string; kind: \"person\"; name?: string } | { kind: \"program\"; token: string } | { conversationId: string; kind: \"agent\" } | { kind: \"sandbox\"; source?: string }; startIn?: string; thinking?: boolean; title?: string; unattended?: boolean; unseenRuns?: string[]; worktreeBase?: { base: string; repo: string }[] }; move?: { account: string; carry: boolean }; onto?: { account: string; carry: boolean }; ran: boolean; reason?: \"door\" | \"stopped\" | \"outage\" | \"overflow\" | \"flagged\"; recordedAt: number; reopensAt?: number; run?: string; sessionId?: string; standing?: { check?: string; paths: string[]; state: \"verified\" | \"unproven\" | \"failing\" | \"no-code\" }; tries?: number; turnedAway?: boolean }; placement: { kind: \"main\" } | { branch: string; composition?: { persona?: string; repos: string[] }; kind: \"worktree\"; landedInto?: string; parent?: string; repos: { absorbed?: number; base: string; landedAt?: number; landedHead?: string; landedTip?: string; repo: string }[]; runner?: string }; postures: { autoLand?: boolean; limit?: \"wait\" | \"resend\" | \"move\"; memory?: \"wait\" | \"resend\"; outage?: \"wait\" | \"retry\"; stopped?: \"wait\" | \"retry\" }; profile: { account?: string; actsAs?: string; effort?: string; fast?: boolean; harness: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; model?: string; provider: string; thinking?: boolean }; proof?: { at: number; check?: string; unviewed?: number; verification: \"verified\" | \"unproven\" | \"failing\" | \"no-code\" }; queue?: { after?: { conversationId: string; since: number }; items: ({ actor?: string; after?: { conversationId: string; since: number }; areas?: string[]; continues?: true; id: string; outside?: string; owner?: { email: string; name?: string }; queuedAt: number; reopenOf?: { account?: string; agent: string }; revision: number; speaker?: { email: string; kind: \"person\"; name?: string } | { kind: \"program\"; token: string } | { conversationId: string; kind: \"agent\" } | { kind: \"sandbox\"; source?: string }; turn: { account?: string; actsAs?: string; agent?: string; allowedTools?: string[]; attachments?: string[]; autoLand?: boolean; autoPicked?: boolean; conversationAutoLand?: boolean; conversationId: string & string; editorContext?: { endLine?: number; file: string; selection?: string; startLine?: number }; effort?: string; errand?: \"land-conflict\" | \"verify-nudge\" | \"land-breakage\" | \"land-fix\" | \"land-fix-nudge\" | \"land-held\" | \"push-fix\" | \"push-fix-nudge\" | \"ci-fix\" | \"ci-fix-nudge\"; fast?: boolean; forkOf?: { conversationId: string; files: \"then\" | \"now\"; keep: number }; freshOf?: { conversationId: string; kind: \"review\" | \"test\" | \"ask\" }; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; isolated?: boolean; mentions?: string[]; messageId?: string; model?: string; origin?: { author?: string; automationId: string; channelId?: string; provider: string; threadId?: string }; outsideWake?: string; permissionMode?: \"default\" | \"plan\" | \"bypassPermissions\"; placement?: { kind: \"local\" } | { id: string; kind: \"runner\" }; prompt: string; runRole?: \"commit-message\" | \"session-title\" | \"safety-judge\" | \"loop-verdict\" | \"handoff-summary\" | \"spoken-reply\" | \"model-router\" | \"pipeline-fix\" | \"deployment-fix\" | \"maintenance-chore\" | \"refactor-run\" | \"documentation-run\" | \"acceptance-run\" | \"approval-queue\" | \"extension-review\" | \"loop-iteration\"; sendAfter?: string; sendAt?: number; sendAtReopen?: true; sessionId?: string; startIn?: string; thinking?: boolean; title?: string; unattended?: boolean; worktreeBase?: { base: string; repo: string }[] }; until?: number; voice: \"person\" | \"sandbox\" | \"agent\" })[]; paused?: \"stopped\" | \"refused\" | \"scheduled\"; revision: number; until?: number }; reach?: { at: number; live?: { extension?: string; path: string }[]; liveMore?: number; published?: { branch?: string; command: string; dir?: string; remote?: string }[]; publishedMore?: number; stranded?: { dir: string; uncommitted: number; unpushed: number }[]; strandedMore?: number }; review?: { at: number; findings: number; open: number; source: \"claude\" | \"codex\" }; sessionId?: string; social: { landRequested?: { at: number; email: string; name?: string }; owner?: { email: string; name?: string; since: number }; reactions: { at: number; email: string; emoji: string; name?: string }[]; seenAt?: number; title?: { action?: string; source: \"derived\" | \"model\" | \"plan\" | \"user\"; text: string }; unsentAt?: number }; totals: { costUsd: number; inputTokens: number; outputTokens: number; subagents: number; toolUses: number; turns: number }; unfinished?: { at: number; check?: string; steps?: { next?: string; open: number; total: number } }; updatedAt: number }",
+      "since": "unreleased"
     }
   ],
   "history:dependency-requests.json": [
@@ -353,10 +383,20 @@
       "since": "v1.327.0"
     }
   ],
+  "history:kept-jobs": [
+    {
+      "type": "{ conversationId: string; dir: string; id: string; label: string; session: string }",
+      "since": "unreleased"
+    }
+  ],
   "history:links/linked-children.json": [
     {
       "type": "{ children: { description?: string; id: string; link: string; parent: string; remote: string; sandbox: string; sandboxId?: string; settledAt?: number; startedAt: number; url?: string }[] }",
       "since": "v1.338.0"
+    },
+    {
+      "type": "{ children: { asking?: { from?: { conversation?: string; title?: string }; hops?: number; requestId: string; tainted?: string; task: string; title?: string }; description?: string; id: string; link: string; parent: string; remote?: string; report?: string; sandbox: string; sandboxId?: string; settledAt?: number; startedAt: number; url?: string }[] }",
+      "since": "unreleased"
     }
   ],
   "history:member-ai-literacy.json": [
@@ -381,6 +421,10 @@
     {
       "type": "{ message: string; until: number }",
       "since": "v1.312.0"
+    },
+    {
+      "type": "{ message: string; since?: number; until: number }",
+      "since": "unreleased"
     }
   ],
   "history:model-refusals.json": [
@@ -401,6 +445,12 @@
     {
       "type": "Record<string, { at: number; byHand?: true; message: string; refused?: \"entitlement\" }>",
       "since": "v1.342.0"
+    }
+  ],
+  "history:panels.json": [
+    {
+      "type": "{ key: string; port?: number; spec: { command: string; cwd: string; portEnv?: string[] } }[]",
+      "since": "unreleased"
     }
   ],
   "history:paused-children.json": [
@@ -427,6 +477,12 @@
       "since": "v1.327.0"
     }
   ],
+  "history:phone-pairings.json": [
+    {
+      "type": "{ pairings: { at: number; fingerprint: string; keyring: string; phone: string }[] }",
+      "since": "unreleased"
+    }
+  ],
   "history:phone-wake.json": [
     {
       "type": "{ phones: Record<string, { registeredAt: number; registration: { channel: { deviceId: string; kind: \"relay\"; secret: string; url: string }; token: string } }> }",
@@ -449,6 +505,12 @@
       "since": "v1.333.1"
     }
   ],
+  "history:provider-answers.json": [
+    {
+      "type": "{ changedAt?: number; paths: Record<string, number>; sample?: string }",
+      "since": "unreleased"
+    }
+  ],
   "history:provider-refusals.json": [
     {
       "type": "{ account?: string; at: number; kind: \"limit\" | \"auth\" | \"entitlement\"; message: string }",
@@ -465,6 +527,10 @@
     {
       "type": "{ account?: string; at: number; kind: \"limit\" | \"auth\" | \"entitlement\"; message: string; model?: string; resetsAt?: number; unmetered?: true }",
       "since": "v1.342.0"
+    },
+    {
+      "type": "{ account?: string; at: number; byHand?: true; kind: \"limit\" | \"auth\" | \"entitlement\"; message: string; model?: string; resetsAt?: number; unmetered?: true }",
+      "since": "unreleased"
     }
   ],
   "history:push.json": [
@@ -521,7 +587,7 @@
   ],
   "history:spawned-children": [
     {
-      "type": "{ at: number; cwd: string; depth: number; ending?: { at: number; error?: string; status: \"completed\" | \"failed\" | \"killed\"; summary?: string; verification?: { check?: string; paths?: string[]; state: \"verified\" | \"unproven\" | \"failing\" | \"no-code\" } }; parent: string; pausedOn?: string; report?: string; result?: { value: string | number | boolean | null | any[] | Record<string, any> } | { error: string }; sessionId?: string; spec: { account?: string; description?: string; effort?: string; fallbacks?: ({ effort?: string; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; model: string; provider: string })[]; fast?: boolean; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; model: string; on?: string; prompt: string; provider: string; result?: { schema: Record<string, string | number | boolean | null | any[] | Record<string, any>> }; run?: { id: string }; thinking?: boolean }; startedAt: number; state: \"running\" | \"paused\" | \"settled\"; turns: number }",
+      "type": "{ at: number; cwd: string; depth: number; ending?: { at: number; error?: string; status: \"completed\" | \"failed\" | \"killed\"; summary?: string; verification?: { check?: string; paths?: string[]; state: \"verified\" | \"unproven\" | \"failing\" | \"no-code\" } }; parent: string; pausedOn?: string; report?: string; result?: { value: string | number | boolean | null | any[] | Record<string, any> } | { error: string }; sessionId?: string; spec: { account?: string; description?: string; effort?: string; fallbacks?: ({ effort?: string; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; model: string; provider: string })[]; fast?: boolean; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; model: string; on?: string; prompt: string; provider: string; result?: { schema: Record<string, string | number | boolean | null | any[] | Record<string, any>> }; run?: { id: string }; thinking?: boolean }; startHold?: { kind: \"seat\" | \"lane\" | \"start\"; order: number; reason?: string; requestId?: string }; startedAt: number; state: \"running\" | \"paused\" | \"settled\" | \"held\"; turns: number }",
       "since": "unreleased"
     }
   ],
@@ -539,6 +605,12 @@
     {
       "type": "{ digests: string[] }",
       "since": "v1.312.0"
+    }
+  ],
+  "history:turn-starts.json": [
+    {
+      "type": "{ starts: Record<string, number[]> }",
+      "since": "unreleased"
     }
   ],
   "history:update-outcome.json": [
@@ -1129,6 +1201,10 @@
     {
       "type": "{ checkedAt?: string; extensions: Record<string, { advisory?: { at: string; autoDisabled: boolean; reason: string; registry: string }; health?: { at: string; autoReverted?: boolean; detail?: string; fromRef?: string; state: \"watching\" | \"healthy\" | \"unhealthy\" }; update?: { at: string; needsReview?: string; path?: string; ref: string; registry: string; review?: { at: string; conversationId: string }; securityFix?: boolean; trust: \"verified\" | \"listed\"; url: string; version?: string } }> }",
       "since": "v1.312.0"
+    },
+    {
+      "type": "{ checkedAt?: string; extensions: Record<string, { advisory?: { at: string; autoDisabled: boolean; reason: string; registry: string }; health?: { at: string; autoReverted?: boolean; detail?: string; fromRef?: string; state: \"watching\" | \"healthy\" | \"unhealthy\" }; healthWatch?: { autoRevert: boolean; id: string }; update?: { at: string; needsReview?: string; path?: string; ref: string; registry: string; review?: { at: string; conversationId: string }; securityFix?: boolean; trust: \"verified\" | \"listed\"; url: string; version?: string } }> }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/records/extension-usage.json": [

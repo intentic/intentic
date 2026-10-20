@@ -1,8 +1,7 @@
 // Pins which account fallbackAccount may offer a refused turn, and every case where it must offer none.
 import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import { fallbackAccount as offer, fallbackLabel } from "./limitFallback";
-import { judgedOauth } from "../../../testing/judgedAccounts";
+import { fallbackAccount, fallbackLabel } from "./limitFallback";
 import { providerRefusals, setAccountUsage, usageByAccount } from "../../../models/providers/providerAccounts";
 import { SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
 
@@ -22,10 +21,6 @@ const reading = (percent: number): AccountUsage => ({
 
 const ACCOUNTS = [account(`a`), account(`b`), account(`c`)];
 
-// What is offered from a list as a current daemon sends it: every row carrying the verdict it was judged by.
-const fallbackAccount = (...[provider, current, accounts, model]: Parameters<typeof offer>): ReturnType<typeof offer> =>
-    offer(provider, current, judgedOauth(accounts, providerRefusals.value[provider]), model);
-
 beforeEach(() => {
     usageByAccount.value = {};
     providerRefusals.value = {};
@@ -42,7 +37,7 @@ it(`offers a connected account whose own reading has room`, () => {
 it(`never offers the account a standing refusal names, whatever its last reading said`, () => {
     setAccountUsage(`claude`, `a`, reading(10));
     setAccountUsage(`claude`, `b`, reading(10));
-    providerRefusals.value = { claude: { kind: `limit`, account: `b`, at: Date.now(), message: `usage limit reached` } };
+    providerRefusals.value = { claude: [{ kind: `limit`, account: `b`, at: Date.now(), message: `usage limit reached` }] };
 
     expect(fallbackAccount(`claude`, `a`, ACCOUNTS)?.id).toBeUndefined();
 });
@@ -59,8 +54,9 @@ it(`does not offer an idle account whose organisation refused its seat`, () => {
     setAccountUsage(`claude`, `c`, reading(60));
 
     expect(fallbackAccount(`claude`, `a`, [account(`a`), account(`b`, { seatRefusal: `Your organization has disabled Claude Code.` }), account(`c`)])?.id).toBe(`c`);
-    // The daemon's verdict is the one read, whatever the meters say.
-    expect(fallbackAccount(`claude`, `a`, [account(`a`), account(`b`, { state: { kind: `blocked`, fix: `admin`, reason: `No seat.` } })])?.id).toBeUndefined();
+    // Nor one an entitlement refusal on file names, whatever the meters say.
+    providerRefusals.value = { claude: [{ kind: `entitlement`, account: `b`, at: Date.now(), message: `No seat.` }] };
+    expect(fallbackAccount(`claude`, `a`, [account(`a`), account(`b`)])?.id).toBeUndefined();
 });
 
 it(`does not offer an account that needs reconnecting`, () => {
@@ -100,11 +96,3 @@ it(`names an account by the part of its address a person recognises`, () => {
     expect(fallbackLabel({ id: `x`, label: `Work key`, connectedAt: 1 })).toBe(`Work key`);
 });
 
-// A daemon older than the verdict sends rows without `state`: nothing is judged from their other fields, so no account is
-// offered to move to, however much room its reading shows (the continue card says the sandbox needs an update).
-it(`offers nothing from an older daemon's rows, which carry no verdict`, () => {
-    setAccountUsage(`claude`, `a`, reading(99));
-    setAccountUsage(`claude`, `b`, reading(10));
-
-    expect(offer(`claude`, `a`, ACCOUNTS)).toBeUndefined();
-});

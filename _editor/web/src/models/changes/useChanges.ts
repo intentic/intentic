@@ -1,5 +1,5 @@
 import { invalidatePushedQueries } from "../../lib/pushInvalidation";
-import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
+import { sandboxRef, sandboxScopeGuard, sandboxShallowRef } from "@intentic/extension-api";
 import { messageOr } from "@intentic/ui/async";
 import type {
     PushRun,
@@ -93,8 +93,22 @@ const failures = sandboxRef<ReadonlyMap<string, ActionFailure>>(() => new Map())
 // Signed-in member's tier on the active sandbox, read once for the module; runBatch checks it before sending.
 const { canShip } = useRole();
 
-// Repos this tab is committing right now, set before the request leaves; unioned with the daemon's own answer below.
-const committingHere = sandboxRef<readonly string[]>(() => []);
+/** What a press said as it was pressed (its label, and the count beside it), which it keeps saying while its work runs. */
+export interface PressFace {
+    readonly label: string;
+    readonly count: number;
+}
+
+/**
+ * A commit this tab pressed, from before the request leaves until it ends: which repos, and the press as pressed. The
+ * one record of it, so the repos dimmed, the bar's line and the button's face are all read from here, never held apart
+ * (a face held by a computed's previous value, a line suppressed by a flag another component emitted).
+ */
+export interface CommitPress {
+    readonly repos: readonly string[];
+    readonly face: PressFace;
+}
+const commitPress = sandboxShallowRef<CommitPress | undefined>(() => undefined);
 
 const dismissFailure = (scope: string): void => {
     if (!failures.value.has(scope)) {
@@ -216,8 +230,8 @@ const applyCommitResult = async (repo: string, result: CommitResult): Promise<vo
 // No refetch on the happy path — each commit's own answer is spliced in directly; a refusal falls back to a full read.
 // Answers whether any repo recorded a commit: a "Commit all" over nothing but scratch stages nothing, and git's
 // `committed: false` is then the only sign the typed message went nowhere.
-const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean): Promise<boolean> => {
-    committingHere.value = groups.map((group) => group.repo);
+const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean, face: PressFace): Promise<boolean> => {
+    commitPress.value = { repos: groups.map((group) => group.repo), face };
     let recorded = false;
     try {
         await runBatch(
@@ -238,7 +252,7 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
             () => (failures.value.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
         );
     } finally {
-        committingHere.value = [];
+        commitPress.value = undefined;
     }
     return recorded;
 };
@@ -415,7 +429,7 @@ export function useChanges() {
         enabled: computed(() => !landingNow.value),
         // Reads the cached response rather than closing over the query it configures.
         refetchInterval: (cached) =>
-            committingHere.value.length === 0 && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : false,
+            commitPress.value === undefined && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : false,
     });
 
     // Also includes repos git couldn't scan (empty lists plus an `error`) and repos that are merely out of sync;
@@ -437,13 +451,15 @@ export function useChanges() {
     const outgoing = computed(() => outgoingWork(repos.value));
     // Union of this tab's own in-flight commits and the daemon's; a repo in either is still being recorded.
     // Committing rows stay listed (dimmed, verbs disabled) rather than assumed gone before the commit returns.
-    const committing = computed<readonly string[]>(() => [...new Set([...committingHere.value, ...(query.data.value?.committing ?? [])])]);
+    const committing = computed<readonly string[]>(() => [...new Set([...(commitPress.value?.repos ?? []), ...(query.data.value?.committing ?? [])])]);
 
     return {
         repos,
         originAgents,
         count,
         committing,
+        // This tab's commit while it runs, the press as pressed included.
+        press: computed(() => commitPress.value),
         stagedCount,
         outgoing,
         // A read is in flight: what the refresh control spins on. True for background refreshes too, so nothing that

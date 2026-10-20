@@ -179,7 +179,7 @@ const shellDeleted = (id: string): EventOf<"shell.deleted"> => ({ ...stamp(), ty
 // turn, where the runner read it), a card its judge raised, and a failure it handed to the daemon.
 const session = (sessionId: string, created = true, spent?: TurnTokens): TurnSession => ({ type: "intentic.session", sessionId, created, ...opt("spent", spent) });
 const raised = (frame: AgentEvent): RaisedFrame => ({ type: "intentic.frame", frame });
-const timedOut = (message: string): OpenCodeTurnEvent => ({ type: "intentic.failed", frame: { kind: "error", code: "provider-outage", message } });
+const timedOut = (message: string): OpenCodeTurnEvent => ({ type: "intentic.failed", frame: { kind: "error", code: "provider-outage", message, own: true } });
 
 // The running total of a session nothing has spent on yet, as the fake server reports every session it holds.
 const NOTHING_SPENT: TurnTokens = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0 };
@@ -1298,6 +1298,7 @@ test("a stalled turn reaches the chat as a coded outage", async () => {
             kind: "error",
             code: "provider-outage",
             message: "Grok turn on the OpenCode loop timed out: nothing arrived for 1s, past the 1s silence limit, 1s into the turn.",
+            own: true,
         },
         { kind: "done" },
     ]);

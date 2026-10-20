@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ExtensionRemovalPlan, ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
-import { Button, Modal, Notice, SkeletonRows, SkeletonSnapshot, StatusBadge, ui, vSkeletonSource } from "@intentic/ui";
+import { useLoaded } from "@intentic/extension-api";
+import { Await, Button, Modal, Notice, Section, SkeletonRows, StatusBadge } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { facetsOf } from "../../extensions/extensionFacets";
@@ -44,6 +45,8 @@ watch(
     },
     { immediate: true },
 );
+// The plan as the dialog draws it: read once per opening (above), so an open dialog with neither answer is the wait.
+const loaded = useLoaded(() => ({ data: plan.value, error: failure.value, fetching: false, wanted: extension !== undefined }));
 
 // What disappears from the app itself, read off the manifest the row already holds: places, not state, so it belongs
 // beside the plan rather than in it.
@@ -104,113 +107,124 @@ const processesLine = computed(() => {
         :header="t(`sandbox.extensionRemoveDialog.remove`, { publisher: extension?.manifest.publisher, name: extension?.manifest.name })"
         @update:open="emit(`close`)"
     >
-        <!-- Drawn as the last plan read, whichever extension it was for: every plan has the same sections, and one kept per
-             extension would mostly belong to extensions already removed. -->
-        <div v-if="plan === undefined && failure === undefined" role="status" aria-busy="true">
-            <span class="sr-only">{{ t(`sandbox.extensionRemoveDialog.workingOutWhatRemoving`) }}</span>
-            <SkeletonSnapshot of="sandbox.extensions.remove">
-                <SkeletonRows :rows="4" description />
-            </SkeletonSnapshot>
-        </div>
-
-        <Notice v-else-if="failure" :of="{ tone: `danger`, title: t(`sandbox.extensionRemoveDialog.couldntRead`), detail: failure }" />
-
-        <div v-else-if="plan" v-skeleton-source="`sandbox.extensions.remove`" class="flex flex-col gap-4">
-            <!-- Refusals are shown, not hidden behind a missing button: the row hides the affordance, but a plan read
-                 while an image changed underneath still has to say why. -->
-            <Notice v-if="plan.blocked" :of="{ tone: `warning`, title: t(`sandbox.extensionRemoveDialog.cantBeRemoved`), detail: plan.blocked }" />
-
-            <p>
-                v{{ plan.version }} ·
-                {{
-                    plan.source === `workspace`
-                        ? t(`sandbox.extensionRemoveDialog.writtenInWorkspace`)
-                        : plan.source === `installed`
-                          ? t(`sandbox.extensionRemoveDialog.installedRepository`)
-                          : t(`sandbox.words.builtIntoSandboxImage`)
-                }}
-            </p>
-
-            <!-- Nothing below this point renders for a refusal. Every line of it is written in the present tense about
-                 what goes, and none of it is going anywhere: "2 connections are removed with it" under a notice saying
-                 it cannot be removed is a false claim, not extra information. -->
-            <template v-if="plan.blocked === undefined">
-                <!-- The connections lead, because they are the part nobody expects: entries the owner configured
-                 themselves, with credentials in them, that cannot outlive the extension supplying their card. -->
-                <section v-if="plan.connections.length > 0">
-                    <p :class="ui.sectionLabel({ size: `xs`, tone: `danger` }, `mb-1.5`)">
-                        {{ t(`sandbox.extensionRemoveDialog.connectionsRemoved`, { count: plan.connections.length }, plan.connections.length) }}
-                    </p>
-                    <!-- Entries divided by hairlines on the dialog's ground; the danger is the label's, not a tinted box round each. -->
-                    <ul class="flex flex-col divide-y divide-line-subtle">
-                        <li v-for="connection in plan.connections" :key="connection.id" class="py-2 first:pt-0 last:pb-0">
-                            <div class="flex flex-wrap items-baseline gap-x-2">
-                                <span class="font-mono text-xs font-medium text-content">{{ connection.id }}</span>
-                                <StatusBadge variant="neutral" :label="connection.kind" size="xs" />
-                                <span class="text-2xs text-subtle">{{ t(`sandbox.extensionRemoveDialog.added`, { entry: connection.entry }) }}</span>
-                            </div>
-                            <p class="mt-0.5 text-2xs text-muted">{{ connection.effect }}.</p>
-                            <p v-if="connection.secrets.length > 0" class="mt-0.5 text-2xs text-warning">
-                                {{
-                                    t(
-                                        `sandbox.extensionRemoveDialog.credentialsGoWithIt`,
-                                        { count: connection.secrets.length, names: connection.secrets.join(`, `) },
-                                        connection.secrets.length,
-                                    )
-                                }}
-                            </p>
-                        </li>
-                    </ul>
-                </section>
-
-                <!-- Files, settings and processes: the rest of the state, compact because none of it is a surprise. -->
-                <section v-if="plan.files.length > 0 || plan.settings.length > 0 || plan.processes.length > 0">
-                    <p :class="ui.sectionLabel({ size: `xs` }, `mb-1.5`)">{{ t(`sandbox.extensionRemoveDialog.alsoDeleted`) }}</p>
-                    <!-- `pl-3 -indent-3` hangs the wrap under the text rather than under the dash; several of these lines
-                     are long enough to wrap in a narrow modal. -->
-                    <ul class="flex flex-col gap-1 text-2xs text-muted">
-                        <li v-for="file in plan.files" :key="file.path" class="-indent-3 pl-3">
-                            — <span class="font-mono text-content">{{ file.path }}</span> · {{ file.detail }}
-                        </li>
-                        <li v-if="plan.settings.length > 0" class="-indent-3 pl-3">
-                            — {{ settingsLine.lead }}<span v-if="secretsAside" class="text-warning">{{ secretsAside }}</span
-                            >: {{ settingsLine.keys }}
-                        </li>
-                        <li v-if="plan.processes.length > 0" class="-indent-3 pl-3">— {{ processesLine }}</li>
-                        <li class="-indent-3 pl-3">{{ t(`sandbox.extensionRemoveDialog.switchUpdateRecordWhat`) }}</li>
-                    </ul>
-                </section>
-
-                <section v-if="surfaces.length > 0 || deferred.length > 0">
-                    <p :class="ui.sectionLabel({ size: `xs` }, `mb-1.5`)">{{ t(`sandbox.extensionRemoveDialog.whatStopsBeing`) }}</p>
-                    <p v-if="surfaces.length > 0" class="text-2xs text-muted">{{ surfaces.join(` · `) }}.</p>
-                    <ul v-if="deferred.length > 0" class="mt-1 flex flex-col gap-0.5">
-                        <li v-for="note in deferred" :key="note" class="-indent-3 pl-3 text-2xs text-subtle">— {{ note }}.</li>
-                    </ul>
-                </section>
-
-                <!-- Automations are the quiet failure this whole dialog is for: nothing deletes them, they simply stop. -->
-                <section v-if="plan.automations.length > 0">
-                    <p :class="ui.sectionLabel({ size: `xs`, tone: `warning` }, `mb-1.5`)">
-                        {{ t(`sandbox.extensionRemoveDialog.automationsStop`, { count: plan.automations.length }, plan.automations.length) }}
-                    </p>
-                    <p class="text-2xs text-muted">
-                        {{ t(`sandbox.extensionRemoveDialog.automationsWakeOn`, { names: plan.automations.join(`, `) }) }}
-                    </p>
-                </section>
-
-                <section v-if="plan.keeps.length > 0">
-                    <p :class="ui.sectionLabel({ size: `xs` }, `mb-1.5`)">{{ t(`sandbox.extensionRemoveDialog.leftAlone`) }}</p>
-                    <ul class="flex flex-col gap-0.5">
-                        <li v-for="keep in plan.keeps" :key="keep" class="-indent-3 pl-3 text-2xs text-subtle">— {{ keep }}.</li>
-                    </ul>
-                </section>
-
-                <p v-if="credentialsLost > 0" class="text-danger">
-                    {{ t(`sandbox.extensionRemoveDialog.credentialsLost`, { count: credentialsLost }, credentialsLost) }}
-                </p>
+        <!-- Waits again at every opening, drawn as the last plan read, whichever extension it was for: every plan has the same
+             sections, and one kept per extension would mostly belong to extensions already removed. -->
+        <Await :of="loaded" imprint="sandbox.extensions.remove" :label="t(`sandbox.extensionRemoveDialog.workingOutWhatRemoving`)">
+            <template #fallback>
+                <div role="status" aria-busy="true">
+                    <span class="sr-only">{{ t(`sandbox.extensionRemoveDialog.workingOutWhatRemoving`) }}</span>
+                    <SkeletonRows :rows="4" description />
+                </div>
             </template>
-        </div>
+            <template #failed="{ error }">
+                <Notice :of="{ tone: `danger`, title: t(`sandbox.extensionRemoveDialog.couldntRead`), detail: error }" />
+            </template>
+            <template #default="{ data: plan }">
+                <div class="flex flex-col gap-4">
+                    <!-- Refusals are shown, not hidden behind a missing button: the row hides the affordance, but a plan read
+                         while an image changed underneath still has to say why. -->
+                    <Notice
+                        v-if="plan.blocked"
+                        :of="{ tone: `warning`, title: t(`sandbox.extensionRemoveDialog.cantBeRemoved`), detail: plan.blocked }"
+                    />
+
+                    <p>
+                        v{{ plan.version }} ·
+                        {{
+                            plan.source === `workspace`
+                                ? t(`sandbox.extensionRemoveDialog.writtenInWorkspace`)
+                                : plan.source === `installed`
+                                  ? t(`sandbox.extensionRemoveDialog.installedRepository`)
+                                  : t(`sandbox.words.builtIntoSandboxImage`)
+                        }}
+                    </p>
+
+                    <!-- Nothing below this point renders for a refusal. Every line of it is written in the present tense about
+                         what goes, and none of it is going anywhere: "2 connections are removed with it" under a notice saying
+                         it cannot be removed is a false claim, not extra information. -->
+                    <template v-if="plan.blocked === undefined">
+                        <!-- The connections lead, because they are the part nobody expects: entries the owner configured
+                         themselves, with credentials in them, that cannot outlive the extension supplying their card. -->
+                        <Section
+                            v-if="plan.connections.length > 0"
+                            :label="t(`sandbox.extensionRemoveDialog.connectionsRemoved`, { count: plan.connections.length }, plan.connections.length)"
+                            tone="danger"
+                        >
+                            <!-- Entries divided by hairlines on the dialog's ground; the danger is the label's, not a tinted box round each. -->
+                            <ul class="flex flex-col divide-y divide-line-subtle">
+                                <li v-for="connection in plan.connections" :key="connection.id" class="py-2 first:pt-0 last:pb-0">
+                                    <div class="flex flex-wrap items-baseline gap-x-2">
+                                        <span class="font-mono text-xs font-medium text-content">{{ connection.id }}</span>
+                                        <StatusBadge variant="neutral" :label="connection.kind" size="xs" />
+                                        <span class="text-2xs text-subtle">{{
+                                            t(`sandbox.extensionRemoveDialog.added`, { entry: connection.entry })
+                                        }}</span>
+                                    </div>
+                                    <p class="mt-0.5 text-2xs text-muted">{{ connection.effect }}.</p>
+                                    <p v-if="connection.secrets.length > 0" class="mt-0.5 text-2xs text-warning">
+                                        {{
+                                            t(
+                                                `sandbox.extensionRemoveDialog.credentialsGoWithIt`,
+                                                { count: connection.secrets.length, names: connection.secrets.join(`, `) },
+                                                connection.secrets.length,
+                                            )
+                                        }}
+                                    </p>
+                                </li>
+                            </ul>
+                        </Section>
+
+                        <!-- Files, settings and processes: the rest of the state, compact because none of it is a surprise. -->
+                        <Section
+                            v-if="plan.files.length > 0 || plan.settings.length > 0 || plan.processes.length > 0"
+                            :label="t(`sandbox.extensionRemoveDialog.alsoDeleted`)"
+                        >
+                            <!-- `pl-3 -indent-3` hangs the wrap under the text rather than under the dash; several of these lines
+                             are long enough to wrap in a narrow modal. -->
+                            <ul class="flex flex-col gap-1 text-2xs text-muted">
+                                <li v-for="file in plan.files" :key="file.path" class="-indent-3 pl-3">
+                                    — <span class="font-mono text-content">{{ file.path }}</span> · {{ file.detail }}
+                                </li>
+                                <li v-if="plan.settings.length > 0" class="-indent-3 pl-3">
+                                    — {{ settingsLine.lead }}<span v-if="secretsAside" class="text-warning">{{ secretsAside }}</span
+                                    >: {{ settingsLine.keys }}
+                                </li>
+                                <li v-if="plan.processes.length > 0" class="-indent-3 pl-3">— {{ processesLine }}</li>
+                                <li class="-indent-3 pl-3">{{ t(`sandbox.extensionRemoveDialog.switchUpdateRecordWhat`) }}</li>
+                            </ul>
+                        </Section>
+
+                        <Section v-if="surfaces.length > 0 || deferred.length > 0" :label="t(`sandbox.extensionRemoveDialog.whatStopsBeing`)">
+                            <p v-if="surfaces.length > 0" class="text-2xs text-muted">{{ surfaces.join(` · `) }}.</p>
+                            <ul v-if="deferred.length > 0" class="mt-1 flex flex-col gap-0.5">
+                                <li v-for="note in deferred" :key="note" class="-indent-3 pl-3 text-2xs text-subtle">— {{ note }}.</li>
+                            </ul>
+                        </Section>
+
+                        <!-- Automations are the quiet failure this whole dialog is for: nothing deletes them, they simply stop. -->
+                        <Section
+                            v-if="plan.automations.length > 0"
+                            :label="t(`sandbox.extensionRemoveDialog.automationsStop`, { count: plan.automations.length }, plan.automations.length)"
+                            tone="warning"
+                        >
+                            <p class="text-2xs text-muted">
+                                {{ t(`sandbox.extensionRemoveDialog.automationsWakeOn`, { names: plan.automations.join(`, `) }) }}
+                            </p>
+                        </Section>
+
+                        <Section v-if="plan.keeps.length > 0" :label="t(`sandbox.extensionRemoveDialog.leftAlone`)">
+                            <ul class="flex flex-col gap-0.5">
+                                <li v-for="keep in plan.keeps" :key="keep" class="-indent-3 pl-3 text-2xs text-subtle">— {{ keep }}.</li>
+                            </ul>
+                        </Section>
+
+                        <p v-if="credentialsLost > 0" class="text-danger">
+                            {{ t(`sandbox.extensionRemoveDialog.credentialsLost`, { count: credentialsLost }, credentialsLost) }}
+                        </p>
+                    </template>
+                </div>
+            </template>
+        </Await>
 
         <template #footer>
             <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`close`)" />

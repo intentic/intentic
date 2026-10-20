@@ -13,15 +13,12 @@ export type RebuildRoute =
     | `checkout`
     | `device`
     // Waiting to be built, with no way to build it from here.
-    | `elsewhere`
-    // Nothing approved is waiting to be built, yet the contents name something that arrives with a rebuild.
-    | `nothing-pending`;
+    | `elsewhere`;
 
 export interface RebuildFacts {
-    // An approved recipe the running container was not built from.
+    // An approved recipe the running container was not built from. Contents marks a block as arriving after a rebuild only
+    // then (the daemon's contents.ts), so nothing waits on a rebuild while none is pending.
     readonly pending: boolean;
-    // Contents marks something as arriving after a rebuild.
-    readonly arriving: boolean;
     readonly hosted: boolean;
     readonly owner: boolean;
     readonly serverManaged: boolean;
@@ -30,10 +27,10 @@ export interface RebuildFacts {
     readonly slug: string | undefined;
 }
 
-// Undefined when there is nothing to rebuild and nothing waiting on one.
+// Undefined when there is nothing to rebuild.
 export const rebuildRouteOf = (facts: RebuildFacts): RebuildRoute | undefined => {
     if (!facts.pending) {
-        return facts.arriving ? `nothing-pending` : undefined;
+        return undefined;
     }
     if (facts.hosted) {
         return facts.owner ? `hosted` : `owner-only`;

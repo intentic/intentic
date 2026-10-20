@@ -8,12 +8,14 @@ import {
     providerLabel,
     TRIAL_ENDPOINT_ID,
 } from "@intentic/sandbox-contract/models/agent-catalog";
-import { type PrivacyProvider, type PrivacyShieldPolicy, trustedInConversation } from "@intentic/sandbox-contract/schemas/privacy";
+import type { PrivacyProvider } from "@intentic/sandbox-contract/schemas/privacy";
+import { type PrivacyRoute, turnRoute } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import { PROVIDER_SPECS } from "@intentic/sandbox-contract/models/provider-specs";
 
-// Who may read personal data as it is. The owner names trusted providers, everywhere or in one conversation; a model
-// running on this machine is trusted whatever the list says, since nothing it reads leaves. Everything else is untrusted
-// while the shield is on, the free trial included: it passes through Intentic's servers to a vendor the owner never chose.
+// What the shield's verdict (privacy-egress.ts) needs to know of this sandbox: which providers are models this machine
+// serves, which nothing they read leaves, and how a runtime's bytes reach its provider. Everything else is untrusted
+// unless the owner says so, the free trial included: it passes through Intentic's servers to a vendor the owner never
+// chose.
 
 // Loopback, and the computer that runs this sandbox's container: Docker names it host.docker.internal for the container
 // (the runner adds it as host-gateway), so Ollama or LM Studio on the owner's own PC is reached there. Its traffic
@@ -47,24 +49,14 @@ export const isLocalProvider = (provider: string, capabilities: readonly Capabil
     return capability?.kind === "endpoint" && onThisMachine(capability.config.baseUrl);
 };
 
-export const isTrustedProvider = (
-    policy: Pick<PrivacyShieldPolicy, "trusted" | "conversations">,
-    provider: string,
-    capabilities: readonly Capability[],
-    conversationId?: string,
-): boolean => isLocalProvider(provider, capabilities) || policy.trusted.includes(provider) || trustedInConversation(policy, provider, conversationId);
-
-// Whether a turn on this provider and harness sends its model requests through the gateway, which reads every byte.
-export const gatewayRuntime = (provider: string, harness: AgentHarness): boolean => capabilitiesOf(provider, harness).privacy === "gateway";
-
-// Whether the shield can read a turn on this provider and harness by content at all: through the gateway, or through
-// the runtime's own hooks (agent-runtimes.ts `privacy`). One it cannot is the only kind refused by its runtime alone.
-export const shieldableRuntime = (provider: string, harness: AgentHarness): boolean => capabilitiesOf(provider, harness).privacy !== "none";
+// How a turn on this provider and harness reaches its provider: through the gateway, through the runtime's own hooks
+// (agent-runtimes.ts `privacy`), or past both, which is the only runtime the shield refuses for what it is.
+export const runtimeRoute = (provider: string, harness: AgentHarness): PrivacyRoute => turnRoute(capabilitiesOf(provider, harness).privacy);
 
 // Every provider this sandbox could run a turn on, for the trusted list: the native ones, then each endpoint, local
 // model and agent the owner connected.
 export const privacyProviders = (capabilities: readonly Capability[]): PrivacyProvider[] => {
-    const shieldable = (provider: string): boolean => loopsOf(provider).some((loop) => shieldableRuntime(provider, loop));
+    const shieldable = (provider: string): boolean => loopsOf(provider).some((loop) => runtimeRoute(provider, loop) !== "runtime");
     const natives = PROVIDER_SPECS.map((spec) => ({ id: spec.id, label: spec.label, shieldable: shieldable(spec.id), local: false }));
     const connected = capabilities.flatMap((capability): PrivacyProvider[] => {
         if (capability.kind === "endpoint" || capability.kind === "localmodel") {

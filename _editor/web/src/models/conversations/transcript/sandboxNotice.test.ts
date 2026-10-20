@@ -41,10 +41,11 @@ const FOLDED: readonly TranscriptRow[] = [
     ...turn([refused]),
     ...turn([refused, { kind: `error`, message: `401.` }]),
     ...turn([{ kind: `error`, code: `claude-token-refused`, message: `Token refused.` }]),
-    ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.` }]),
-    ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.`, unattended: true }]),
-    ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.`, held: { ran: false } }]),
-    ...turn([{ kind: `error`, code: `agent-busy`, message: `This agent is already running a turn, wait for it to finish.` }]),
+    // A refusal at the door is the sandbox's own sentence (stream-agent's refusalFrame), so it is its own line.
+    ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.`, own: true }]),
+    ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.`, own: true, unattended: true }]),
+    ...turn([{ kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.`, own: true, held: { ran: false } }]),
+    ...turn([{ kind: `error`, code: `agent-busy`, message: `This agent is already running a turn, wait for it to finish.`, own: true }]),
     // The same door refusals, once the turn had already run a tool: stopped partway, nothing held.
     ...turn([
         { kind: `tool_call`, id: `t1`, name: `Edit`, category: `edit`, status: `completed` },
@@ -52,7 +53,7 @@ const FOLDED: readonly TranscriptRow[] = [
     ]),
     ...turn([
         { kind: `tool_call`, id: `t1`, name: `Edit`, category: `edit`, status: `completed` },
-        { kind: `error`, code: `sandbox-disk-low`, message: `The disk is full.` },
+        { kind: `error`, code: `sandbox-disk-low`, message: `The disk is full.`, own: true },
     ]),
     ...turn([{ kind: `prompt_cache`, readTokens: 305_000, writtenTokens: 2_000, kept: { forMs: 125 * 60_000, refreshes: 1 } }]),
     ...turn([{ kind: `prompt_cache`, readTokens: 0, writtenTokens: 310_000, kept: { forMs: 7 * 60_000, refreshes: 3 } }]),
@@ -116,10 +117,16 @@ describe(`a sandbox notice, as the chat says it`, () => {
         await setLocale(`en`);
     });
 
-    // The one promise English makes: the code changes nothing a developer reads.
-    it(`says in English, for a developer, exactly what the sandbox's own words say`, () => {
+    // The one promise English makes: the code changes nothing a developer reads of the sandbox's own words. A provider's
+    // words are the one thing swapped, for the line of their kind, and kept behind the row's press (failureView.ts).
+    it(`says in English, for a developer, exactly what the sandbox's own words say, a provider's swapped for their kind's line`, () => {
         const rows = [...FOLDED, ...DAEMON, ...RESUMED, ...UNSPOKEN];
-        expect(rows.map((row) => noticeLine(row, `developer`))).toEqual(rows.map((row) => row.text));
+        expect(rows.map((row) => noticeLine(row, `developer`))).toEqual(
+            rows.map((row) => {
+                const failure = noticeFailure(row);
+                return failure?.said === undefined ? row.text : row.text.replace(failure.said, failure.line);
+            }),
+        );
         // Nothing slipped through uncoded: every row above is worded by the chat, none falls back to its text.
         expect(RESUMED).toHaveLength(14);
         expect(rows.filter((row) => row.noticeCode === undefined && row.watchWake === undefined && row.needWake === undefined && row.agentWords === undefined)).toEqual([]);
@@ -148,23 +155,24 @@ describe(`a sandbox notice, as the chat says it`, () => {
         expect(line(FOLDED.find((row) => row.noticeCode?.code === `synced` && row.noticeCode.params?.[`blocked`] !== undefined))).toBe(
             `Twoja przestrzeń robocza poszła naprzód, gdy ten agent czekał; jego gałąź przeniesiono na Twoje ostatnie 3 commity. Nie udało się przenieść gałęzi na Twoją przestrzeń roboczą w web, api: tura działa na starszej bazie, więc jej scalenie może wymagać rozwiązania konfliktów.`,
         );
-        expect(line(coded(`retrying`))).toBe(`Anthropic is down. Ponawia sam: próba 2 z 6.`);
+        expect(line(coded(`retrying`))).toBe(`Dostawca nie odpowiedział. Ponawia sam: próba 2 z 6.`);
         expect(line(FOLDED.find((row) => row.noticeCode?.code === `installing` && row.noticeCode.params?.[`more`] !== undefined))).toBe(
             `Trwa instalacja pakietów w katalogu głównym przestrzeni roboczej, a/, b/ i jeszcze 2 w głównym drzewie, po jednej instalacji naraz.`,
         );
         expect(line(coded(`renewalWithdrawn`))).toBe(
-            `Token refused. Dane logowania były odnawiane, ale tura zatrzymała się, zanim mogła ruszyć dalej: sama się nie wznowi, więc naciśnij Kontynuuj, żeby ją podjąć.`,
+            `Dostawca nie akceptuje już logowania tego konta. Dane logowania były odnawiane, ale tura zatrzymała się, zanim mogła ruszyć dalej: sama się nie wznowi, więc naciśnij Kontynuuj, żeby ją podjąć.`,
         );
         expect(line(coded(`undelivered`))).toBe(
             `This model accepts 16,384 tokens. Twoja wiadomość nie została dostarczona: czeka, aż wyślesz ją ponownie.`,
         );
         const partway = FOLDED.filter((row) => row.noticeCode?.code === `stoppedPartway`).map(line);
         expect(partway).toEqual([
-            `Free trial used up for today. Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: kontynuuj z innym modelem, żeby podjąć pracę od tego miejsca.`,
+            `Limit użycia tego konta został wyczerpany. Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: kontynuuj z innym modelem, żeby podjąć pracę od tego miejsca.`,
             `The disk is full. Przebieg zatrzymał się w połowie. Zmiany wprowadzone do tej pory zostają: wyślij wiadomość, żeby podjąć pracę od tego miejsca.`,
         ]);
-        // A failure the sandbox worded itself is said in Polish whole.
-        expect(line(coded(`failed`))).toBe(`Ten agent już wykonuje turę, poczekaj, aż skończy.`);
+        // A failure the sandbox worded itself, and this build knows, is said in Polish whole; one nobody named, as such.
+        expect(line(FOLDED.find((row) => row.noticeCode?.params?.[`error`] === `agent-busy`))).toBe(`Ten agent już wykonuje turę, poczekaj, aż skończy.`);
+        expect(line(coded(`failed`))).toBe(`Agent zatrzymał się na błędzie, którego ta aplikacja nie rozpoznaje.`);
         expect(DAEMON.map(line).slice(0, 3)).toEqual([`Pytanie odrzucone.`, `Plan zatwierdzony.`, `Planowanie trwa dalej.`]);
         expect(line(RESUMED.find((row) => row.noticeCode?.params?.[`reason`] === `restart`))).toBe(
             `Sandbox znów działa; polecenia w tle i serwery deweloperskie uruchomione w tej turze zostały zatrzymane; ta tura wróciła tam, gdzie przerwała.`,
@@ -208,15 +216,18 @@ describe(`a sandbox notice, as the chat says it`, () => {
         await setLocale(`en`);
     });
 
-    // A provider that says more than a line keeps its first sentence on the row, and the sandbox's clause after it.
-    it(`folds a provider's longer words to their first sentence, and keeps them whole as the row's details`, () => {
+    // A provider's words, short or six paragraphs, are never the row's line: the kind's line leads, the sandbox's clause
+    // follows, and the words are the row's details (2026-10-06, 10-19: long raw text "fixed", then back on another path).
+    it(`leads a provider's words with their kind's line, and keeps them whole as the row's details`, () => {
         const said = `API Error: 500 Internal server error. This is a server-side issue, usually temporary — try again in a moment. If it persists, check https://status.claude.com.`;
         const [retrying] = turn([{ kind: `error`, code: `provider-outage`, message: said, autoResume: `scheduled`, retries: { made: 1, max: 6 } }]);
-        expect(noticeLine(retrying!, `developer`)).toBe(`Internal server error. Retrying by itself: attempt 2 of 6.`);
-        expect(noticeFailure(retrying!)).toEqual({ said, folded: true });
-        // A failure said in a line already, or worded by the sandbox itself, has nothing behind it to open.
-        expect(noticeFailure(FOLDED.find((row) => row.noticeCode?.code === `retrying`)!)).toEqual({ said: `Anthropic is down.`, folded: false });
-        expect(noticeFailure(FOLDED.find((row) => row.noticeCode?.code === `failed`)!)?.folded).toBe(false);
+        expect(noticeLine(retrying!, `developer`)).toBe(`The provider failed to answer. Retrying by itself: attempt 2 of 6.`);
+        expect(noticeFailure(retrying!)).toEqual({ line: `The provider failed to answer.`, said, ends: true });
+        // A failure the sandbox worded itself is its own line, with nothing behind it to open.
+        expect(noticeFailure(FOLDED.find((row) => row.noticeCode?.params?.[`error`] === `agent-busy`)!)?.said).toBeUndefined();
+        // One nobody named is unclassified, said as such, its words behind the press.
+        const [unnamed] = turn([{ kind: `error`, message: `fetch failed` }]);
+        expect([noticeLine(unnamed!, `developer`), noticeFailure(unnamed!)?.said]).toEqual([`The agent stopped on an error this app does not recognize.`, `fetch failed`]);
         // Every other notice is not a failure at all.
         expect(noticeFailure(DAEMON[0]!)).toBeUndefined();
         expect(noticeFailure(UNSPOKEN[0]!)).toBeUndefined();

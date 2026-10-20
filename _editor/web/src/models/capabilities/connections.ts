@@ -1,6 +1,6 @@
 import { capabilityEffects } from "@intentic/capability-catalog";
 import type { CapabilityKind, CapabilityState, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { HOST_NATIVE_ENVIRONMENT, type HostSummary } from "@intentic/sandbox-contract/schemas/hosts";
+import { environmentName, type HostSummary, machinePresence, type MachinePresence } from "@intentic/sandbox-contract/schemas/hosts";
 import type { NetdiskLink } from "@intentic/sandbox-contract/schemas/netdisk";
 import type { PhoneFacts } from "@intentic/sandbox-contract/schemas/phone";
 import type { VpnLink } from "@intentic/sandbox-contract/schemas/vpn";
@@ -81,8 +81,6 @@ const connectionStates = (): Readonly<Record<CapabilityState, ConnectionState>> 
 const needsSignIn = (): ConnectionState => ({ label: t(`capabilities.connections.needsSignIn`), tone: `warning`, rank: 1 });
 const online = (): ConnectionState => ({ label: t(`capabilities.connections.online`), tone: `success`, rank: 3 });
 const offline = (): ConnectionState => ({ label: t(`capabilities.connections.offline`), tone: `neutral`, rank: 2 });
-// A distro by the name WSL knows it by; any other side by its key.
-const sideName = (environment: string): string => (environment.startsWith(`wsl:`) ? environment.slice(`wsl:`.length) : environment);
 
 // (2026-10-15) A PC whose Windows side is down while a WSL distro on it still answers is neither offline nor fine: the
 // agent can still reach it through the distro, and the sandbox is putting the Windows side back through it. Amber, and
@@ -91,18 +89,11 @@ const partlyConnected = (awake: readonly string[]): ConnectionState => ({
     label: t(`capabilities.connections.partlyConnected`),
     tone: `warning`,
     rank: 1,
-    note: t(`capabilities.connections.partlyConnectedNote`, { sides: awake.map(sideName).join(`, `) }, awake.length),
+    note: t(`capabilities.connections.partlyConnectedNote`, { sides: awake.map(environmentName).join(`, `) }, awake.length),
 });
 
-/**
- * The sides of a machine other than its own that answer while its own does not: on a PC whose Windows side is down, the
- * WSL distros still connected. Empty while the machine's own side answers, since a distro asleep beside a live Windows is
- * the ordinary state of a PC and no reason to call it degraded.
- */
-export const sidesAwakeWithoutIt = (host: Pick<HostSummary, `online` | `environments`> | undefined): string[] =>
-    host === undefined || host.online
-        ? []
-        : host.environments.filter((environment) => environment.key !== HOST_NATIVE_ENVIRONMENT && environment.online).map((environment) => environment.key);
+// A machine's presence as its roster entry says it (the contract's `machinePresence`); not yet in the roster is offline.
+export const hostPresence = (host: Pick<HostSummary, `environments`> | undefined): MachinePresence => machinePresence(host?.environments ?? []);
 
 // What a connected machine's agent may do out there, in the words its own tile uses. Read from the effects rather
 // than the config so the pairing dialog, wherever it is opened from — the capability tile, an offline device's page
@@ -145,24 +136,24 @@ const SIGNS_IN_BY_HAND = new Set<CapabilityKind>([`browser`, `identity`]);
 
 export const signsInByHand = (kind: CapabilityKind | undefined): boolean => kind !== undefined && SIGNS_IN_BY_HAND.has(kind);
 
-// Two kinds know something truer about themselves than status: a machine's `online` comes from the roster, which no
-// stored status can carry, and so do the other sides of it that answer while its own does not (`awake`, from
-// sidesAwakeWithoutIt): the daemon calls such a card pending, "the device is offline", which is half the story.
-export const connectionState = (
-    kind: CapabilityKind,
-    instance: CapabilitySummary,
-    hostOnline: boolean | undefined,
-    awake: readonly string[] = [],
-): ConnectionState => {
+// A machine knows something truer about itself than its stored status: whether it answers, read live off its roster
+// (`presence`, the same `machinePresence` the Devices board and a call's routing read). A card lent to a machine is
+// online or partly connected by that alone, whatever the status said when it was last read: a status stored as pending
+// while the machine answered read as "needs setup" beside a Devices page acting on it (2026-10-13). Only when nothing
+// of it answers does the status say which way: offline once it has connected, or still to be paired.
+export const connectionState = (kind: CapabilityKind, instance: CapabilitySummary, presence?: MachinePresence): ConnectionState => {
     if (signsInByHand(kind) && awaitingLogin(instance)) {
         return needsSignIn();
     }
     const lent = instance.status.state === `active` || instance.status.state === `pending`;
-    if (kind === `device` && hostOnline !== true && awake.length > 0 && lent) {
-        return partlyConnected(awake);
+    if (kind === `device` && lent && presence?.kind === `online`) {
+        return online();
+    }
+    if (kind === `device` && lent && presence?.kind === `partly`) {
+        return partlyConnected(presence.awake);
     }
     if (kind === `device` && instance.status.state === `active`) {
-        return hostOnline === true ? online() : offline();
+        return offline();
     }
     return connectionStates()[instance.status.state];
 };

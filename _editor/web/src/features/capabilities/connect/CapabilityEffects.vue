@@ -191,7 +191,7 @@ const rows = computed<readonly EffectRow[]>(() => effects.map(describe));
                 :key="index"
                 :class="['flex items-start gap-2 text-xs leading-relaxed', row.warn ? 'text-warning' : 'text-muted']"
             >
-                <Icon :name="row.icon" class="mt-0.5 shrink-0 text-2xs" />
+                <Icon :name="row.icon" class="shrink-0 text-2xs" />
                 <span class="min-w-0 break-words">{{ row.label }}</span>
             </li>
         </ul>

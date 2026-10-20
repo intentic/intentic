@@ -26,7 +26,10 @@ import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import HoverCard from "../../chat/tabs/HoverCard.vue";
 import ReviewStat from "./ReviewStat.vue";
 import CommitField from "./commit/CommitField.vue";
+import IndexRunLine from "./commit/IndexRunLine.vue";
 import IndexRunPrompt from "./commit/IndexRunPrompt.vue";
+import { barLine } from "./commit/commitBar";
+import { useRunLine } from "./commit/runLine";
 import { useSettlingMove } from "./commit/settlingMove";
 import { sideViews, type SideView } from "./reviewSides";
 import { clickIntent, rangeSelect } from "../../../lib/multiSelect";
@@ -53,7 +56,7 @@ import { useSelectionBlade } from "../../../models/fleet/board/selectionBlade";
 import { diffRawUrls } from "../../../models/workspace/changes/diffRaw";
 import { repoOfPath, turnWrites } from "../../../models/workspace/files/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../../../models/workspace/push/outgoingWork";
-import { COMMIT_SCOPE, useChanges } from "../../../models/changes/useChanges";
+import { COMMIT_SCOPE, type PressFace, useChanges } from "../../../models/changes/useChanges";
 import { usePushFlow } from "../push/usePushFlow";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
@@ -199,9 +202,12 @@ const originTargets = (id: string, side: GitDiffSide): readonly RepoTarget[] =>
 // Staging stays the only selection Commit reads, and the Staged list shows exactly what the commit will take. The lit
 // chip still narrows the list and names the commit, recorded outside this component (nameCommitAfter) so the name holds
 // after the panel closes. Conflicts are left alone: staging one marks it resolved, which no chip should do for the owner.
-// From a chip's click until the review shows what it staged: the Commit press's count is stale in between.
-const chipMove = useSettlingMove(changes.fetching);
+// From a chip's click until the review shows what it staged: the Commit press's count is stale in between, so the move
+// holds the face the press had at the click.
+const chipMove = useSettlingMove<PressFace>(changes.fetching);
 const toggleOrigin = async (id: string): Promise<void> => {
+    // The face as the press stood at the click: lighting the chip changes what it would say before the rescan does.
+    const face = commitFace.value;
     const was = originFilter.value;
     const next = was === id ? undefined : id;
     originFilter.value = next;
@@ -210,7 +216,7 @@ const toggleOrigin = async (id: string): Promise<void> => {
     // answers with a no-op. Lighting asks only the repos holding that origin's work.
     const clearing = was === undefined ? [] : scannable.value.map((repo) => repo.repo);
     const lighting = next === undefined ? [] : originTargets(next, `unstaged`).map((target) => target.repo);
-    await chipMove.run(() => changes.swapChip({ origin: was, repos: clearing }, { origin: next, repos: lighting }));
+    await chipMove.run(face, () => changes.swapChip({ origin: was, repos: clearing }, { origin: next, repos: lighting }));
 };
 
 // Computed, not read at the click: recomputes as the review updates, so a message drafted seconds after
@@ -515,8 +521,6 @@ const blockedByConflicts = computed(() => scannable.value.some((repo) => repo.co
 // repos this box would actually commit — a run in a repo the filter excludes isn't this button's concern.
 const committingNow = computed(() => commitTarget.value.filter((repo) => changes.committing.value.includes(repo)));
 const commitRunning = computed(() => committingNow.value.length > 0);
-const progressRepos = ref<readonly string[]>([]);
-const commitStatusRepos = computed(() => committingNow.value.filter((repo) => !progressRepos.value.includes(repo)));
 const commitReady = computed(
     () =>
         commitTarget.value.length > 0 &&
@@ -527,12 +531,11 @@ const commitReady = computed(
 );
 // A plain Commit carries its staged count beside the label; the stage-first press says "all" instead.
 const commitLabel = computed(() => (stagesFirst.value ? t(`workspace.reviewPanel.commitAll`) : t(`workspace.reviewPanel.commit`)));
-// The face as pressed, held while the commit runs under a spinner that keeps its width, and while a chip's staging
-// awaits its rescan (else "Commit all", "Commit", "Commit 4" inside a second), so neither resizes it.
-const commitFace = computed<{ readonly label: string; readonly count: number }>((held) =>
-    (commitRunning.value || chipMove.moving.value) && held !== undefined
-        ? held
-        : { label: commitLabel.value, count: stagesFirst.value ? 0 : changes.stagedCount.value },
+// The face as pressed, read off the commit's own record while it runs under a spinner that keeps its width, and off the
+// chip's move while its staging awaits its rescan (else "Commit all", "Commit", "Commit 4" inside a second), so neither
+// resizes it. Live otherwise.
+const commitFace = computed<PressFace>(
+    () => changes.press.value?.face ?? chipMove.held.value ?? { label: commitLabel.value, count: stagesFirst.value ? 0 : changes.stagedCount.value },
 );
 
 // The commit button's hover: what the press will record, and the chord that presses it from the box. Nothing while it
@@ -599,7 +602,7 @@ const atRisk = computed(() => (stagesFirst.value ? commitTarget.value.filter((re
 const unaffected = computed(() => commitGroups.value.filter((group) => !writingRepos.value.has(group.repo)));
 
 const runCommit = async (target: readonly RepoTarget[]): Promise<void> => {
-    const recorded = await changes.commitRepos(target, commitMessage.value, stagesFirst.value);
+    const recorded = await changes.commitRepos(target, commitMessage.value, stagesFirst.value, commitFace.value);
     // Keeps the message on failure — it's the one thing here the user typed by hand — and when no repo recorded
     // anything (a "Commit all" over nothing but scratch stages nothing), saying so where a refused press would.
     if (changes.failures.value.has(COMMIT_SCOPE)) {
@@ -960,6 +963,20 @@ const outgoing = computed<"flow" | "held" | "offer" | undefined>(() =>
     stageLine.value !== undefined ? `flow` : heldLine.value !== undefined ? `held` : syncMeta.value !== undefined ? `offer` : undefined,
 );
 const pushPress = computed(() => syncMeta.value !== undefined && (outgoing.value === `offer` || outgoing.value === `held` || pushFlow.running.value));
+// The bar's one reading line, picked by commitBar.ts from every source that wants it.
+const runLine = useRunLine();
+const bar = computed(() =>
+    barLine({
+        changes: changes.count.value,
+        conflicts: blockedByConflicts.value,
+        run: runLine.value,
+        committing: committingNow.value,
+        refused: blockerNotice.value,
+        outgoing: outgoing.value,
+        chipNotice: boxIsYours.value ? chipNotice.value : undefined,
+        noUpstream: outgoing.value === `offer` && behindTotal.value === 0 && aheadTotal.value === 0,
+    }),
+);
 // Commit and the sync share one bar under the message field, so the box stands whenever either has something to say.
 const actionBar = computed(() => changes.count.value > 0 || outgoing.value !== undefined);
 // Commit keeps the primary slot while there's anything to record, so the two buttons are never both full-weight.
@@ -1073,27 +1090,22 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 :draft-title="filterLabel"
                 @submit="doCommit"
             />
-            <!-- The bar's own width says the one thing its buttons can't, most pressing first: what stops Commit, a press
-                 under way, why Ctrl+Enter refused, the push in flight or just done, why the lit chip left the box alone,
-                 and last what the sync spans. A line that matters keeps a floor (basis), so a narrow box wraps the buttons
-                 under it rather than cutting it to nothing; at rest there is no line, and it is never shorter than a press. -->
+            <!-- The bar's own width says the one thing its buttons can't (commitBar.ts picks which). A line that matters
+                 keeps a floor (basis), so a narrow box wraps the buttons under it rather than cutting it to nothing; at
+                 rest there is no line, and it is never shorter than a press. -->
             <div class="flex min-h-6.5 flex-wrap items-center justify-end gap-x-1 gap-y-1.5 max-md:min-h-8">
-                <IndexRunPrompt @progress="progressRepos = $event" />
-                <template v-if="progressRepos.length > 0"></template>
-                <span v-else-if="changes.count.value > 0 && blockedByConflicts" :class="BAR_LINE" class="text-danger">
+                <IndexRunPrompt />
+                <IndexRunLine v-if="bar.kind === `run`" :line="bar.line" />
+                <span v-else-if="bar.kind === `conflicts`" :class="BAR_LINE" class="text-danger">
                     {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
                 </span>
-                <!-- Where the commit is happening, until a slow run's line (IndexRunPrompt, first above) takes it with its Stop. -->
-                <span v-else-if="commitStatusRepos.length > 0" :class="BAR_LINE" class="text-muted">{{
-                    t(`workspace.reviewPanel.committingNow`, { repos: commitStatusRepos.join(`, `) })
-                }}</span>
-                <!-- Why Ctrl+Enter just refused: takes the line, since it answers the question the line is for. -->
-                <span v-else-if="blockerNotice" :class="BAR_LINE" class="text-warning" v-tooltip.right.overflow="blockerNotice">
-                    {{ blockerNotice }}
+                <span v-else-if="bar.kind === `committing`" :class="BAR_LINE" class="text-muted">{{ bar.words }}</span>
+                <span v-else-if="bar.kind === `refused`" :class="BAR_LINE" class="text-warning" v-tooltip.right.overflow="bar.reason">
+                    {{ bar.reason }}
                 </span>
                 <!-- The push in flight, in the place its button left: the run's clock, or what just went out. -->
                 <span
-                    v-else-if="outgoing === `flow`"
+                    v-else-if="bar.kind === `push`"
                     class="flex min-w-0 flex-1 basis-28 items-center gap-1.5 text-2xs text-muted"
                     v-tooltip.right="mobile ? undefined : stageTip"
                 >
@@ -1109,22 +1121,11 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     </span>
                     <span v-else class="min-w-0 flex-1 truncate whitespace-nowrap">{{ stageLine }}</span>
                 </span>
-                <!-- The lit chip's answer, for the one case the placeholder can't show: the box holds the user's own text. -->
-                <span
-                    v-else-if="changes.count.value > 0 && boxIsYours && chipNotice"
-                    :class="BAR_LINE"
-                    class="text-muted"
-                    v-tooltip.right.overflow="chipNotice"
-                >
-                    {{ chipNotice }}
+                <span v-else-if="bar.kind === `chip`" :class="BAR_LINE" class="text-muted" v-tooltip.right.overflow="bar.notice">
+                    {{ bar.notice }}
                 </span>
-                <!-- What the sync button can't carry: a branch with no upstream to count against. Context, not a reason, so
-                     it gives way to the buttons rather than wrapping them. How many repos a press spans is the button's
-                     tooltip's to say, not a line of its own. -->
-                <span
-                    v-else-if="outgoing === `offer` && behindTotal === 0 && aheadTotal === 0"
-                    class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs text-subtle"
-                >
+                <!-- Context, not a reason, so it gives way to the buttons rather than wrapping them. -->
+                <span v-else-if="bar.kind === `no-upstream`" class="flex min-w-0 flex-1 items-center gap-1.5 text-2xs text-subtle">
                     <span class="truncate whitespace-nowrap">{{ t(`workspace.reviewPanel.noUpstreamYet`) }}</span>
                 </span>
                 <span v-else class="flex-1"></span>

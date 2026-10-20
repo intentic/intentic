@@ -175,7 +175,7 @@ const approve = async (): Promise<void> => {
 <template>
     <div class="chat-card-body flex flex-col gap-2">
         <p v-if="subject.replaces" class="flex items-start gap-1.5 text-2xs text-warning">
-            <Icon name="exclamation-triangle" class="mt-0.5 shrink-0" />{{ t(`needs.automation.replaces`, { id: automation.id }) }}
+            <Icon name="exclamation-triangle" class="shrink-0" />{{ t(`needs.automation.replaces`, { id: automation.id }) }}
         </p>
 
         <!-- Labels in one column so the values line up, the way a failure's facts are laid out. -->

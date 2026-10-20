@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type IconName, Row, RowGroup, SkeletonRows, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
+import { Await, type IconName, Row, RowGroup, SkeletonRows } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import ControlTokensSection from "../ControlTokensSection.vue";
@@ -14,7 +14,7 @@ import { useAccessInventory } from "../useAccessInventory";
 const t = useT();
 
 // Other doors, counted, not managed here.
-const { inventory, loading: inventoryLoading } = useAccessInventory();
+const { inventory, loaded } = useAccessInventory();
 
 // Only doors in use are listed: a count of zero is a door nobody opened, so it says nothing here. A count the daemon
 // could not read stays, since an unread door is not a closed one.
@@ -81,18 +81,15 @@ const doors = computed(() => {
 
         <!-- Machine access other than sign-ins and tokens. The whole group stands in while it is read, drawn as it last
              looked in this sandbox: its rows sit straight in it. -->
-        <SkeletonSnapshot v-if="inventoryLoading" of="sandbox.access.other-ways-in">
-            <RowGroup :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
-                <div role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
+        <Await :of="loaded" imprint="sandbox.access.other-ways-in">
+            <RowGroup v-if="doors.length > 0" :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
+                <Row v-for="door in doors" :key="door.key" :icon="door.icon" :title="door.title" :description="door.description" />
             </RowGroup>
-        </SkeletonSnapshot>
-        <RowGroup
-            v-else-if="doors.length > 0"
-            v-skeleton-source="`sandbox.access.other-ways-in`"
-            :label="t(`sandbox.sandboxAccess.otherWaysIn`)"
-            equal-rows
-        >
-            <Row v-for="door in doors" :key="door.key" :icon="door.icon" :title="door.title" :description="door.description" />
-        </RowGroup>
+            <template #fallback>
+                <RowGroup :label="t(`sandbox.sandboxAccess.otherWaysIn`)" equal-rows>
+                    <div role="status" aria-busy="true"><SkeletonRows :rows="3" /></div>
+                </RowGroup>
+            </template>
+        </Await>
     </div>
 </template>

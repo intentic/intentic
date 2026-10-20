@@ -38,8 +38,6 @@ import { fileAnswerWatch, providerAnswersDocument } from "./usage/drift/answer-v
 import { claudeHeadroomSource } from "./agent/providers/claude/claude-usage.js";
 import { createHeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
-import { fileObservedLimitStore, observedLimitsDocument } from "./usage/observed-limits.js";
-import { cursorHeadroomSource } from "./runtimes/cursor/cursor-usage.js";
 import { fileIssuesStore, issuesDocument } from "./issues/issues-store.js";
 import { fileInstallsStore, issueInstallsDocument } from "./store/installs.js";
 import { filePeerTools, type PeerToolMemory } from "./peers/peer-tool-memory.js";
@@ -331,17 +329,14 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         providerRefusals: () => whole().providerRefusals,
     });
     const cursor = createCursorSlice({ authRoot, logger });
-    // What this sandbox has been refused, for the plans that publish no allowance to read; Cursor's only reading.
-    const observedLimits = fileObservedLimitStore(join(config.historyRoot, observedLimitsDocument.path));
-    // Every way 'what each account has left' can be learned: Claude's own tokens, routed subscriptions via the
-    // translator, and — where nothing is published — the refusals this sandbox has collected itself.
+    // Every way 'what each account has left' can be polled: Claude's own tokens and routed subscriptions via the
+    // translator. Where nothing is published (Cursor, Devin), the refusals on file are the whole measurement.
     const headroom = createHeadroomService({
         store: accountUsage,
         parks: fileUsageParkStore(join(config.historyRoot, usageParksDocument.path)),
         sources: [
             claudeHeadroomSource(claude.claudeStore, fetch, async (id) => (await claude.claudeModels.models(id)).models, answers),
             cliProxy.headroom,
-            cursorHeadroomSource({ cursorStore: cursor.cursorStore, cursorModels: cursor.cursorModels, observedLimits }),
         ],
         logger,
     });
@@ -351,7 +346,7 @@ const createProviderAreas = (config: Config, logger: Logger, authRoot: string, w
         grokBuild: createCliParts(GROK_BUILD, { authRoot, logger, acpConnections: () => whole().acpConnections }),
     };
     return {
-        shared: { accountUsage, cliProxy, openCode, authRoot, observedLimits, headroom },
+        shared: { accountUsage, cliProxy, openCode, authRoot, headroom },
         // Spread whole into Services; their members' docs live on the area interfaces, beside the code.
         areas: {
             ...claude,

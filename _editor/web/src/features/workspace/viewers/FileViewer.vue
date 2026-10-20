@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { Button, CopyButton, EmptyState, Notice, type Tip, ui, useDevice, useLoadingReveal } from "@intentic/ui";
+import { useLoaded } from "@intentic/extension-api";
+import { Await, Button, CopyButton, EmptyState, Notice, type Tip, ui, useDevice } from "@intentic/ui";
 import { messageOr, useLatest } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
 import { extensionOf } from "@intentic/ui/file-format";
@@ -81,11 +82,9 @@ const viewerContent = shallowRef<{ text: string } | { blob: Blob } | { src: stri
 // The extension viewer component itself, lazily imported alongside its content.
 const viewerComponent = shallowRef<Component | undefined>(undefined);
 const loading = ref(false);
-const loadingShown = useLoadingReveal(
-    loading,
-    computed(() => path),
-);
 const error = ref<string | null>(null);
+// What the surface below has of its file, while no failure (of its read, a reload or a download) covers it.
+const fileLoaded = useLoaded(() => ({ data: loading.value ? undefined : open.value, error: undefined, fetching: loading.value, wanted: true }));
 // Set when the file changed on disk with unsaved edits: buffer kept, Reload offered instead of overwriting.
 const staleOnDisk = ref(false);
 // The reader asked for this file's derived text instead of its own surface; reset on every open.
@@ -814,56 +813,57 @@ const onEditorSave = (value: string): void =>
             <!-- Ahead of every other surface, including the editor's: this is the reader's own choice for formats that have another view. -->
             <DerivedTextView v-if="showDerived" :path="path" :downloadable="derivedDownloadable" @download="download" />
             <EmptyState v-else-if="error" tone="danger" :title="error" class="h-full" />
-            <!-- A wait shown only past the reveal threshold, so a read that lands at once paints nothing first; text
-                 draws as the lines it will be, anything else as a spinner, since its shape is not known. -->
-            <template v-else-if="loading">
-                <DiffSkeleton v-if="loadingShown && (open.kind === 'code' || open.kind === 'markdown')" single />
-                <div v-else-if="loadingShown" class="flex h-full items-center justify-center text-muted" role="status">
-                    <Icon name="spinner" class="text-xl" spin :aria-label="t(`ui.status.loading`)" />
-                </div>
-            </template>
-            <!-- The page running in a sandboxed frame, from the same text the editor below holds (HtmlPreview). -->
-            <HtmlPreview v-else-if="previewing" ref="htmlView" :path :source="editorSeed" :unsaved="dirtyThis" :load="readAsset" @open="openLinked" />
-            <CodeView
-                v-else-if="open.kind === 'code' && text !== null"
-                ref="editorView"
-                :key="`${path}:${reloadNonce}`"
-                :editable="editingThis"
-                :path="path"
-                :code="editorSeed"
-                :lang="lang"
-                :scroll-to-line="line"
-                :hide-comments="hideFileComments"
-                @change="onEditorChange"
-                @save="onEditorSave"
-            />
-            <!-- Seeded and re-keyed like CodeView above: the surface owns its text after mount, replaced only by a reload, a clean external write. -->
-            <MarkdownViewer
-                v-else-if="open.kind === 'markdown' && text !== null"
-                ref="markdownView"
-                :key="`${path}:${reloadNonce}`"
-                :source="editorSeed"
-                :path="path"
-                :line="line"
-                :editable="markdownEditable"
-                @change="onEditorChange"
-                @save="onEditorSave"
-            />
-            <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
-            <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
-            <!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined); a `path` viewer gets the scope, `readOnly` and `unsaved` instead (pathViewerProps). -->
-            <!-- It may show the file's derived text through the `text` slot while it can't draw the file. -->
-            <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download">
-                <template v-if="quickLookOffered" #text>
-                    <DerivedTextView :path="path" />
+            <!-- Text waits as the lines it will be, anything else as a spinner, since its shape is not known. -->
+            <Await v-else :of="fileLoaded">
+                <template #fallback>
+                    <DiffSkeleton v-if="open.kind === 'code' || open.kind === 'markdown'" single />
+                    <div v-else class="flex h-full items-center justify-center text-muted" role="status">
+                        <Icon name="spinner" class="text-xl" spin :aria-label="t(`ui.status.loading`)" />
+                    </div>
                 </template>
-            </component>
-            <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
-            <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
-            <!-- Sandbox keeps this one to itself; resolveOpenFile knows from the path alone, no fetch needed. -->
-            <FileLocked v-else-if="open.kind === 'locked'" :path="path" />
-            <!-- Everything left: a known binary, or the unreachable case of a viewer that resolved with no component; both just hand over bytes. -->
-            <FileUnsupported v-else mode="binary" @download="download" />
+                <!-- The page running in a sandboxed frame, from the same text the editor below holds (HtmlPreview). -->
+                <HtmlPreview v-if="previewing" ref="htmlView" :path :source="editorSeed" :unsaved="dirtyThis" :load="readAsset" @open="openLinked" />
+                <CodeView
+                    v-else-if="open.kind === 'code' && text !== null"
+                    ref="editorView"
+                    :key="`${path}:${reloadNonce}`"
+                    :editable="editingThis"
+                    :path="path"
+                    :code="editorSeed"
+                    :lang="lang"
+                    :scroll-to-line="line"
+                    :hide-comments="hideFileComments"
+                    @change="onEditorChange"
+                    @save="onEditorSave"
+                />
+                <!-- Seeded and re-keyed like CodeView above: the surface owns its text after mount, replaced only by a reload, a clean external write. -->
+                <MarkdownViewer
+                    v-else-if="open.kind === 'markdown' && text !== null"
+                    ref="markdownView"
+                    :key="`${path}:${reloadNonce}`"
+                    :source="editorSeed"
+                    :path="path"
+                    :line="line"
+                    :editable="markdownEditable"
+                    @change="onEditorChange"
+                    @save="onEditorSave"
+                />
+                <!-- Over the editable cap: windowed, read-only, seeded with the window the read above already got. -->
+                <BigTextView v-else-if="open.kind === 'big-text' && firstWindow" :path="path" :first="firstWindow" @download="download" />
+                <!-- Extension-contributed viewer: gets the path plus exactly one content prop (the manifest's `fetch` kind, never the others as undefined); a `path` viewer gets the scope, `readOnly` and `unsaved` instead (pathViewerProps). -->
+                <!-- It may show the file's derived text through the `text` slot while it can't draw the file. -->
+                <component :is="viewerComponent" v-else-if="viewerComponent" :path="path" v-bind="viewerContent" @download="download">
+                    <template v-if="quickLookOffered" #text>
+                        <DerivedTextView :path="path" />
+                    </template>
+                </component>
+                <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
+                <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
+                <!-- Sandbox keeps this one to itself; resolveOpenFile knows from the path alone, no fetch needed. -->
+                <FileLocked v-else-if="open.kind === 'locked'" :path="path" />
+                <!-- Everything left: a known binary, or the unreachable case of a viewer that resolved with no component; both just hand over bytes. -->
+                <FileUnsupported v-else mode="binary" @download="download" />
+            </Await>
         </div>
     </div>
 </template>

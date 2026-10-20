@@ -26,7 +26,7 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
         <!-- ONE CLAUSE A LINE. -->
         <ul class="flex flex-col gap-2 text-xs leading-relaxed text-muted">
             <li class="flex items-start gap-2">
-                <Icon name="box" class="mt-0.5 shrink-0 text-link" />
+                <Icon name="box" class="shrink-0 text-link" />
                 <span class="min-w-0 flex flex-col gap-1">
                     <span>{{ t(`setup.setupRunDetails.startsSandboxIn`) }} <span class="text-content">Docker</span></span>
                     <a
@@ -40,7 +40,7 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
                 </span>
             </li>
             <li class="flex items-start gap-2">
-                <Icon name="cloud" class="mt-0.5 shrink-0 text-link" />
+                <Icon name="cloud" class="shrink-0 text-link" />
                 <!-- The fabric changed under this line and the line did not: it named Cloudflare long after the box stopped dialling one. -->
                 <span class="min-w-0"
                     >{{ t(`setup.setupRunDetails.dials`) }} <span class="text-content">{{ t(`setup.setupRunDetails.out`) }}</span>

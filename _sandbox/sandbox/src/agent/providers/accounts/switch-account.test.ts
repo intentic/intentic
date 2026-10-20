@@ -9,6 +9,7 @@ import { beginTurn } from "../../../conversations/actor/conversation-actors.test
 import { conversationEntry } from "../../../conversations/registry/agents-store.testing.js";
 import type { ConversationState } from "../../../conversations/actor/conversation-state.js";
 import { onHeldRepointed } from "../../../conversations/actor/held-decide.js";
+import { limitBooking } from "../../../conversations/actor/limit-booking.js";
 import { switchAccount } from "./switch-account.js";
 
 // The one command that moves who pays. A conversation's account is the daemon's record; this is the only write to it
@@ -64,6 +65,7 @@ const verdictOf = (usage: Record<string, AccountUsage>, refusals: readonly Provi
     claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
     providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: refusals }) }),
     cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {}),
+    providerAccounts: async () => [],
 });
 
 test("asked to run, a held turn runs again at once on the account named, carried when asked", async () => {
@@ -200,8 +202,9 @@ test("without run, a held turn stays held, and its booking moves to the picked a
     expect(await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0)).toEqual({ kind: "moved" });
     expect(pressed).toEqual([]);
     expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: REOPEN_B });
-    // The card is re-stated in the same write: the picked account's reset, and the re-run booked for it.
-    expect(moved).toEqual([["acct-b", { resetsAt: REOPEN_B, booking: { at: REOPEN_B * 1000 } }]]);
+    // The card is re-stated in the same write: the picked account's reset; the re-run its `next` derives is the hold's.
+    expect(moved).toEqual([["acct-b", { resetsAt: REOPEN_B }]]);
+    expect(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")).toEqual({ at: REOPEN_B * 1000 });
 });
 
 // An account with room has nothing to wait for: the booking is due now (an armed resend goes on the next pass, a
@@ -211,7 +214,8 @@ test("a pick onto an account with room clears the wait rather than keeping the r
     await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
     expect(sent).toContainEqual({ kind: "held-repointed", account: "acct-b", carry: false, reopensAt: Math.ceil(T0 / 1000) });
     // No clock on the card, and the re-run booked for now: the next pass sends it.
-    expect(moved).toEqual([["acct-b", { booking: { at: Math.ceil(T0 / 1000) * 1000 } }]]);
+    expect(moved).toEqual([["acct-b", {}]]);
+    expect(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")).toEqual({ at: Math.ceil(T0 / 1000) * 1000 });
 });
 
 // At the line with no refusal standing is not spent: the pool may hold a sliver, so the booked re-run goes now and the
@@ -219,7 +223,8 @@ test("a pick onto an account with room clears the wait rather than keeping the r
 test("a pick onto an account only at the line, with no refusal standing, books the held turn for now", async () => {
     const { deps, moved } = heldOnPick({ "acct-b": FULL_B });
     await switchAccount(deps, { conversationId: ID, account: "acct-b" }, T0);
-    expect(moved).toEqual([["acct-b", { booking: { at: Math.ceil(T0 / 1000) * 1000 } }]]);
+    expect(moved).toEqual([["acct-b", {}]]);
+    expect(limitBooking(deps.conversations.state(ID)?.resume.held, "resend")).toEqual({ at: Math.ceil(T0 / 1000) * 1000 });
 });
 
 // Picking an account is an attempt on it: a seat-marked one is re-tested at once, not on the rationed schedule, so access

@@ -50,16 +50,20 @@ flowchart LR
   A turn refused for an unsupported or unreadable protected policy carries `agent-domain-refused`, an admission
   refusal: its queued words remain owed, not consumed as an executed failure.
 - Some rules live here as code, not only shapes, because both ends must reach the same answer. The main one is
-  whether an account can serve a turn: `serviceState` in `src/models/plan-pools.ts` turns a revoked sign-in, a lost
-  seat, a translator bench, a standing refusal and the plan limits into one `AccountState` (`ready` · `spent` ·
-  `blocked` with its `fix` · `unknown`), and `SPENT_UTILIZATION` is the only spent line. The daemon runs it for every
-  picker and publishes it as `state` on each account row. The editor reads that field and never judges a row itself: a
-  row without it (a daemon from before v1.313) reads as `unknown`, and the editor says the sandbox needs an update.
+  whether an account can serve a turn: `serviceStates` in `src/models/plan-pools.ts` turns a revoked sign-in, a lost
+  seat, a translator bench, every refusal still standing and the plan limits into one `AccountState` (`ready` · `spent`
+  · `blocked` with its `fix` · `unknown`), and `fleetCapacity` folds a provider's accounts into one answer per model
+  (`serving` · `spent` until when · `unknown`). `SPENT_UTILIZATION` is the only spent line. The daemon and the editor both
+  run it, on the same account rows and the same refusals on file (`ProviderRefusalsSchema`, every refusal per provider);
+  no account row carries a verdict, so no surface can read a stale one.
 - So is which lane the board files a conversation in and what of a fleet calls the person (`src/models/agent-standing.ts`,
   `src/models/agent-lanes.ts`, `src/models/agent-starter.ts`, moved from the editor on 2026-10-16): the editor draws
   the board by them and re-exports them where it always imported them, and the daemon counts `GET /agents/attention`
   by `fleetAttention` (the Attention lane's cards plus held wakes, and the turns producing something), which the
-  desktop app's status bar reads through `ic sandbox attention`, so the bar and the board cannot disagree.
+  desktop app's status bar reads through `ic sandbox attention`, so the bar and the board cannot disagree. Whether a
+  conversation carries on by itself, and when, is one field the daemon derives on every card, `next`
+  (`src/schemas/agent-next.ts`): the lane, the card's corner and the chat read it rather than the hold, the queue or an
+  answer it came from (2026-10-20).
 - So are the rules the daemon and a device must agree on about the owner's machine. `DEVICE_PROGRAM_TOOLS` in
   `src/policy/device-programs.ts` says which device tools carry a program and how to read it, and
   `sandboxPowerCommands` in `src/policy/sandbox-power.ts` recognises a command that starts, stops or replaces a
@@ -124,9 +128,10 @@ flowchart LR
   under `access:METHOD /path`: every reach field of its `RouteMeta` with the default filled in (`routeAccess`). A
   field is recorded even when a route leaves it out, so a lowered floor or a new `guest`, `agent` or `panel` grant is a
   changed value, which counts as a shrink, never as growth that passes. The lock test names the route and the field
-  that moved. Rewrite it by hand with `pnpm --filter @intentic/sandbox-contract lock`. A conversation that changed the
-  contract has it rewritten in its own worktree before it lands (the repository's fixers,
-  `_tools/scripts/verify/fixers.mjs`), so the lock rides the land that moved it. `src/state/contract-lock.test.ts`
+  that moved. It is `merge=derived` (`.gitattributes`): no land carries a copy of it, and the repository's fixers
+  (`_tools/scripts/verify/fixers.mjs`) write it again in the tree a land writes contract sources into, so two
+  conversations that both moved the contract never conflict on it. By hand, from source with no build first:
+  `pnpm --filter @intentic/sandbox-contract lock`. `src/state/contract-lock.test.ts`
   fails while the lock and the schemas disagree. `_tools/checks/contract-shrink.mjs` fails CI for a pushed branch
   that shrinks it with no commit declaring the break (`type!:` or `Breaking-Note:`); nothing checks the push itself.
 

@@ -89,7 +89,7 @@ const startNew = (): void => {
                 :key="c.conversationId"
                 type="button"
                 class="flex h-12 items-center gap-2.5 rounded-lg px-2 text-left transition-colors active:bg-overlay"
-                :class="{ 'bg-primary-600/15': activeId === c.conversationId }"
+                :class="{ 'ui-row-select-on': activeId === c.conversationId }"
                 @click="pick(c.conversationId)"
             >
                 <Icon v-bind="statusIcon(c.status.value)" />

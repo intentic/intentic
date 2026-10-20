@@ -11,7 +11,7 @@ import { secretFieldsOf } from "../capabilities/credentials/secret-fields.js";
 import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";
-import { composeEnvironment } from "../environment/environment.js";
+import { rebuildNeeded } from "../environment/overlay.js";
 import { forgetExtensionApproval, revokeExtensionApproval } from "../capabilities/extension-inventory/extension-approvals.js";
 import { displayOf, forgetExtensionDev } from "../capabilities/extension-inventory/extension-dev.js";
 import { forgetExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
@@ -302,7 +302,7 @@ export const removeExtension = async (
 
     // Same convergence as removing any capability: fragments leave the overlay, gateways stop being wanted, a removed
     // endpoint provider stops routing, and the backend host restarts on the set that no longer includes this one.
-    const composedHash = await composeEnvironment(services);
+    const rebuild = await rebuildNeeded(services);
     void reconcileListenerProcesses(services);
     if (configured.some((capability) => mintsEndpointProvider(capability.kind))) {
         await syncEndpointCompat(services);
@@ -311,7 +311,7 @@ export const removeExtension = async (
 
     return {
         connections: configured.map((capability) => capability.id),
-        rebuildNeeded: composedHash !== undefined && composedHash !== services.config.sandbox.environmentHash,
+        rebuildNeeded: rebuild,
     };
 };
 

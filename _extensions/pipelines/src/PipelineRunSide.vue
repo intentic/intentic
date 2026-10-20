@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SideViewInput } from "@intentic/extension-api";
-import { formatTimestamp, Icon, StatusBadge, timeAgo, toneTint, ui, useNarrow } from "@intentic/extension-ui";
+import { formatTimestamp, Icon, Section, StatusBadge, timeAgo, toneTint, ui, useNarrow } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import PipelineDagGraph from "./graph/PipelineDagGraph.vue";
 import { pipelineStages } from "./graph/pipelineDag";
@@ -89,8 +89,7 @@ const forgeName = computed(() => (repo.value?.host === `gitlab` ? `GitLab` : `Gi
             </div>
             <!-- The whole graph, given the tab: pan and zoom inside it rather than a band cropped to a row. -->
             <PipelineDagGraph v-else-if="stages.length > 0" :stages="stages" :recurring="recurringJobs" fill :direction="narrow ? `TB` : `LR`" />
-            <div v-else-if="run.failedJobs?.length" class="flex flex-col gap-2 p-3">
-                <div :class="ui.sectionLabel({ size: `xs` })">{{ t(`pipelineRunRow.failedJobs`) }}</div>
+            <Section v-else-if="run.failedJobs?.length" class="p-3" :label="t(`pipelineRunRow.failedJobs`)">
                 <div class="flex flex-wrap gap-1.5">
                     <span
                         v-for="job in run.failedJobs"
@@ -103,7 +102,7 @@ const forgeName = computed(() => (repo.value?.host === `gitlab` ? `GitLab` : `Gi
                         {{ job }}
                     </span>
                 </div>
-            </div>
+            </Section>
             <p v-else class="p-3 text-xs text-muted">{{ t(`pipelineRunRow.noJobDetailsAvailable`) }}</p>
         </div>
     </div>

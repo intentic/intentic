@@ -6,15 +6,15 @@ import {
     type PrivacyReplacement,
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract/schemas/privacy";
-import { normalizeAllowed, type PersonalDataSpan } from "@intentic/privacy-detect";
-import type { Lexicon } from "@intentic/privacy-detect/lexicon";
-import { detectorFor } from "./policy-detector.js";
+import type { Gate, PersonalDataSpan } from "@intentic/privacy-detect";
+import { detectorFor, type PolicySpan } from "./policy-detector.js";
 import { opt } from "../opt.js";
 import type { PrivacyVault, VaultHit } from "./privacy-vault.js";
 import { LITERAL_PREFIX, TOKEN_LABEL, TOKEN_SOURCE, tokenPattern } from "./tokens.js";
 
-// One string bound for an untrusted provider, masked: every value the vault already holds, then whatever the detectors
-// (and the local name model, where installed) find, each replaced by its token. A request re-sends its whole
+// One string bound for an untrusted provider, masked: what the vault already holds, the detectors and the owner's rules
+// find, and the local name model (where installed) reads, each proposed to the one gate (@intentic/privacy-detect
+// createGate) and each it keeps replaced by its token. A request re-sends its whole
 // conversation every time, so almost every string has been masked before: the memo answers those by hash, which is what
 // keeps the cost of a turn proportional to what it added, and keeps the masked bytes identical between requests.
 
@@ -32,9 +32,10 @@ export interface MaskResult {
     readonly found: readonly Replacement[];
 }
 
-// A second source of spans: the local named-entity model, its finds held to the name lists as the owner set them.
+// A source of candidates the detectors do not read: the local named-entity model, its guesses held at the gate to what
+// a name or an address is alone.
 export interface EntityRecognizer {
-    readonly find: (text: string, lexicon?: Lexicon) => Promise<readonly PersonalDataSpan[]>;
+    readonly find: (text: string) => Promise<readonly PersonalDataSpan[]>;
 }
 
 // One value found in a string, where it sits, and the token it was given.
@@ -104,42 +105,10 @@ export const createMaskMemo = (budget = MEMO_BUDGET_CHARS): MaskMemo => {
     };
 };
 
-interface Candidate {
-    readonly start: number;
-    readonly end: number;
-    readonly class: PersonalDataClass;
-    readonly value: string;
-    // Known values carry the token they already have; found ones are given one.
+// One candidate on its way to a token: the vault's carry the one they already have.
+interface Proposed extends PolicySpan {
     readonly token?: string;
-    // Lower wins a tie: what the vault knows, then the detectors, then the model.
-    readonly rank: number;
-    // The owner's rule that found it, when one did: the vault leaves such a value to the rule (privacy-vault.ts).
-    readonly rule?: string;
 }
-
-// Which source a candidate's rank stands for, as a preview names it.
-const sourceOf = (candidate: Candidate): PrivacyPreviewSpan["by"] => {
-    if (candidate.rule !== undefined) {
-        return "rule";
-    }
-    return candidate.rank === 0 ? "learned" : candidate.rank === 1 ? "detector" : "model";
-};
-
-// Leftmost first; at one place the longer span, then the better-ranked source.
-const chooseSpans = (candidates: readonly Candidate[]): Candidate[] => {
-    const sorted = candidates.toSorted(
-        (left, right) => left.start - right.start || right.end - right.start - (left.end - left.start) || left.rank - right.rank,
-    );
-    const chosen: Candidate[] = [];
-    let covered = 0;
-    for (const candidate of sorted) {
-        if (candidate.start >= covered) {
-            chosen.push(candidate);
-            covered = candidate.end;
-        }
-    }
-    return chosen;
-};
 
 // Labels a token can be restored by, and the escaped ones, whose prefix restoring takes off.
 const RESTORABLE_LABELS: ReadonlySet<string> = new Set(Object.values(TOKEN_LABEL));
@@ -240,21 +209,27 @@ export interface MaskerDeps {
     readonly warn?: (message: string) => void;
 }
 
-// What the vault already knows in a stretch of text, admitted by the policy. `noting` marks each as seen today, which is
-// what the vault's retention ages by; a preview only reads.
-const knownIn = (vault: PrivacyVault, admitted: (kind: PersonalDataClass, value: string) => boolean, text: string, noting: boolean): Candidate[] =>
+// A value the vault holds, as the gate is asked about it where it was met.
+const knownSpan = (text: string, start: number, end: number, hit: VaultHit): PolicySpan => ({
+    start,
+    end,
+    class: hit.class,
+    value: text.slice(start, end),
+    by: hit.taught ? "taught" : "learned",
+});
+
+// What the vault already knows in a stretch of text, as the gate takes it where it stands: a value is matched in its next
+// shorter spelling where its longest is turned down. `noting` marks each as seen today, which is what the vault's
+// retention ages by; a preview only reads.
+const knownIn = (vault: PrivacyVault, gate: Gate, text: string, noting: boolean): Proposed[] =>
     vault
         .matcher()
-        .find(text)
-        .flatMap(({ start, end, payload }: { start: number; end: number; payload: VaultHit }) => {
-            const value = text.slice(start, end);
-            if (!admitted(payload.class, value)) {
-                return [];
-            }
+        .find(text, (start, end, hit) => gate.admits(text, knownSpan(text, start, end, hit)))
+        .map(({ start, end, payload }: { start: number; end: number; payload: VaultHit }) => {
             if (noting) {
                 vault.saw(payload);
             }
-            return [{ start, end, class: payload.class, value, token: payload.token, rank: 0 }];
+            return { ...knownSpan(text, start, end, payload), token: payload.token };
         });
 
 // Tokens back to the values they stand for, read from the vault alone.
@@ -288,16 +263,14 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
         { classes: policy.classes, allow: policy.allow, dictionary: policy.dictionary ?? { off: [], lists: [] }, rules: policy.rules ?? [] },
         warn,
     );
-    const { classes, allow } = detector;
+    const { gate } = detector;
     const policyKey = JSON.stringify([detector.key, recognizer === undefined ? "dictionary" : policy.names]);
-    const admitted = (kind: PersonalDataClass, value: string): boolean => classes.has(kind) && !allow.has(normalizeAllowed(value));
     // A rule's find is handed out as one, so the vault leaves it to the rule (privacy-vault.ts).
-    const tokenOfSpan = (span: Candidate): string =>
-        span.token ?? vault.tokenFor(span.value, span.class, span.rule === undefined ? undefined : "rule");
+    const tokenOfSpan = (span: Proposed): string => span.token ?? vault.tokenFor(span.value, span.class, span.by === "rule" ? "rule" : undefined);
 
     // Replaces the chosen spans; tallies what it replaced, and where each token landed in the whole string (`base` is
     // where this stretch starts in it).
-    const apply = (text: string, spans: readonly Candidate[], counts: Record<string, number>, placed: Placed[], base: number): string => {
+    const apply = (text: string, spans: readonly Proposed[], counts: Record<string, number>, placed: Placed[], base: number): string => {
         for (const span of spans) {
             counts[span.class] = (counts[span.class] ?? 0) + 1;
         }
@@ -309,24 +282,18 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
         );
     };
 
-    // What every source finds in a stretch of text holding no token, overlaps settled.
-    const spansOf = async (text: string, noting = true): Promise<Candidate[]> => {
+    // What every source proposes in a stretch of text holding no token, through the gate.
+    const spansOf = async (text: string, noting = true): Promise<Proposed[]> => {
         if (!HAS_WORD.test(text)) {
             return [];
         }
-        const detected: Candidate[] = detector.detect(text).map((span) => ({ ...span, rank: 1 }));
-        const recognized: Candidate[] =
-            recognizer === undefined
-                ? []
-                : (await recognizer.find(text, detector.lexicon))
-                      .filter((span) => admitted(span.class, span.value))
-                      .map((span) => ({ ...span, rank: 2 }));
-        return chooseSpans([...knownIn(vault, admitted, text, noting), ...detected, ...recognized]);
+        const recognized: Proposed[] = recognizer === undefined ? [] : (await recognizer.find(text)).map((span) => ({ ...span, by: "model" }));
+        return gate.settle(text, [...knownIn(vault, gate, text, noting), ...detector.candidates(text), ...recognized]);
     };
 
     // Every find in a string around the tokens already in it, with where its stretch starts in the string.
-    const spansAround = async (text: string, noting: boolean): Promise<{ readonly span: Candidate; readonly offset: number }[]> => {
-        const out: { span: Candidate; offset: number }[] = [];
+    const spansAround = async (text: string, noting: boolean): Promise<{ readonly span: Proposed; readonly offset: number }[]> => {
+        const out: { span: Proposed; offset: number }[] = [];
         let offset = 0;
         for (const part of segmentsAroundTokens(text)) {
             if (!part.token) {
@@ -342,7 +309,7 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
     const remaskKnown = (text: string, counts: Record<string, number>, placed: Placed[]): string => {
         let out = "";
         for (const part of segmentsAroundTokens(text)) {
-            out += part.token ? part.text : apply(part.text, chooseSpans(knownIn(vault, admitted, part.text, true)), counts, placed, out.length);
+            out += part.token ? part.text : apply(part.text, gate.settle(part.text, knownIn(vault, gate, part.text, true)), counts, placed, out.length);
         }
         return out;
     };
@@ -407,7 +374,8 @@ export const createMasker = ({ vault, policy, memo, recognizer, warn }: MaskerDe
                 start: offset + span.start,
                 end: offset + span.end,
                 class: span.class,
-                by: sourceOf(span),
+                // The preview names a value the vault holds alike, taught or learned.
+                by: span.by === "taught" ? "learned" : span.by,
                 ...opt("rule", span.rule),
             }));
         },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Notice, noticeOf, SegmentedControl, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/extension-ui";
+import { Await, Card, Notice, noticeOf, SegmentedControl } from "@intentic/extension-ui";
 import { computed, ref, toRef, watch } from "vue";
 import DepsGraph from "./DepsGraph.vue";
 import DepsOverview from "./DepsOverview.vue";
@@ -15,9 +15,7 @@ import { t } from "./i18n.js";
 // imply.
 
 const props = defineProps<{ repo: string }>();
-const { packages, edges, components, error, isLoading } = useWorkspaceGraph(toRef(props, `repo`));
-// Drawn only once the wait has earned it, and keyed on the repo so switching starts a fresh wait.
-const outline = useLoadingReveal(isLoading, toRef(props, `repo`));
+const { packages, edges, components, error, loaded } = useWorkspaceGraph(toRef(props, `repo`));
 
 type Tab = `overview` | `graph` | `inside`;
 const tab = ref<Tab>(`overview`);
@@ -48,6 +46,8 @@ const areas = computed(() => areasOf(packages.value, edges.value, grouping.value
 const areaOfPackage = computed(() => new Map(packages.value.map((pkg) => [pkg.name, areaIdOf(pkg, grouping.value)])));
 const findings = computed(() => findingsOf(edges.value, areaOfPackage.value));
 const hubs = computed(() => hubsOf(packages.value, edges.value));
+// Remembered as the overview the view opens on; the other tabs draw once answered, and nothing remembers them.
+const imprint = computed(() => (tab.value === `overview` ? `repo-apps.dependencies` : undefined));
 
 const tabs = computed(() => [
     {
@@ -89,43 +89,46 @@ const lookInside = (name: string): void => {
                 <SegmentedControl v-model="grouping" :options="groupings" size="xs" />
             </label>
         </div>
-        <Notice v-if="error" class="mx-4 mt-3" :of="noticeOf(error)" />
-        <!-- The view as it was last drawn here; until then, cards of the real node dimensions. -->
-        <SkeletonSnapshot v-if="isLoading && outline" of="repo-apps.dependencies" :label="t(`dependenciesView.readingWorkspaceGraph`)">
-            <div class="min-h-0 flex-1 p-4" role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`dependenciesView.readingWorkspaceGraph`) }}</span>
-                <div class="flex flex-wrap gap-3" aria-hidden="true">
-                    <span v-for="card in 6" :key="card" class="skeleton block h-12" :class="[`w-44`, `w-52`, `w-40`][card % 3]" />
+        <!-- A graph that never answered says so below; here, only one whose last answer still stands. -->
+        <Notice v-if="error && loaded.state !== `failed`" class="mx-4 mt-3" :of="noticeOf(error)" />
+        <!-- The view as it was last drawn here; until then, cards of the real node dimensions. Keyed by its imprint, since a
+             region remembered under another name is another region. -->
+        <Await :key="imprint" :of="loaded" :imprint="imprint" :label="t(`dependenciesView.readingWorkspaceGraph`)">
+            <template #fallback>
+                <div class="min-h-0 flex-1 p-4" role="status" aria-busy="true">
+                    <span class="sr-only">{{ t(`dependenciesView.readingWorkspaceGraph`) }}</span>
+                    <div class="flex flex-wrap gap-3" aria-hidden="true">
+                        <span v-for="card in 6" :key="card" class="skeleton block h-12" :class="[`w-44`, `w-52`, `w-40`][card % 3]" />
+                    </div>
                 </div>
+            </template>
+            <div v-if="packages.length === 0" class="p-4">
+                <Card dashed class="text-center text-sm text-muted">{{ t(`dependenciesView.noWorkspacePackagesFound`) }}</Card>
             </div>
-        </SkeletonSnapshot>
-        <div v-else-if="packages.length === 0 && !isLoading" v-skeleton-source="`repo-apps.dependencies`" class="p-4">
-            <Card dashed class="text-center text-sm text-muted">{{ t(`dependenciesView.noWorkspacePackagesFound`) }}</Card>
-        </div>
-        <DepsOverview
-            v-else-if="tab === `overview`"
-            v-skeleton-source="`repo-apps.dependencies`"
-            class="min-h-0 flex-1"
-            :packages="packages"
-            :edges="edges"
-            :areas="areas"
-            :area-of-package="areaOfPackage"
-            :findings="findings"
-            @open-area="openArea"
-            @open-package="openPackage"
-        />
-        <DepsGraph
-            v-else-if="tab === `graph`"
-            v-model:selected="selected"
-            v-model:focus-area="focusArea"
-            class="min-h-0 flex-1"
-            :packages="packages"
-            :edges="edges"
-            :areas="areas"
-            :area-of-package="areaOfPackage"
-            :hubs="hubs"
-            @look-inside="lookInside"
-        />
-        <PackageInside v-else-if="inside !== undefined" class="min-h-0 flex-1" :repo="repo" :name="inside" :packages="packages" />
+            <DepsOverview
+                v-else-if="tab === `overview`"
+                class="min-h-0 flex-1"
+                :packages="packages"
+                :edges="edges"
+                :areas="areas"
+                :area-of-package="areaOfPackage"
+                :findings="findings"
+                @open-area="openArea"
+                @open-package="openPackage"
+            />
+            <DepsGraph
+                v-else-if="tab === `graph`"
+                v-model:selected="selected"
+                v-model:focus-area="focusArea"
+                class="min-h-0 flex-1"
+                :packages="packages"
+                :edges="edges"
+                :areas="areas"
+                :area-of-package="areaOfPackage"
+                :hubs="hubs"
+                @look-inside="lookInside"
+            />
+            <PackageInside v-else-if="inside !== undefined" class="min-h-0 flex-1" :repo="repo" :name="inside" :packages="packages" />
+        </Await>
     </div>
 </template>

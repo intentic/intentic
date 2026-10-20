@@ -122,11 +122,11 @@ const copies = computed(() => keptCopiesOf(props.status));
         :class="prominent ? `bg-card shadow-sm` : `border border-line`"
         :aria-busy="moving"
     >
-        <header class="flex items-start gap-2.5">
-            <Icon v-if="moving" name="spinner" spin class="mt-0.5 shrink-0 text-link" />
-            <Icon v-else-if="offer === `gpu`" name="cpu" class="mt-0.5 shrink-0 text-subtle" />
-            <Icon v-else-if="offer === `offer`" name="arrows-h" class="mt-0.5 shrink-0 text-link" />
-            <Icon v-else name="boxes" class="mt-0.5 shrink-0 text-subtle" />
+        <header class="flex items-start gap-2.5 text-sm">
+            <Icon v-if="moving" name="spinner" spin class="shrink-0 text-link" />
+            <Icon v-else-if="offer === `gpu`" name="cpu" class="shrink-0 text-subtle" />
+            <Icon v-else-if="offer === `offer`" name="arrows-h" class="shrink-0 text-link" />
+            <Icon v-else name="boxes" class="shrink-0 text-subtle" />
             <div class="min-w-0 flex-1">
                 <h2 class="text-sm leading-tight font-semibold">{{ heading }}</h2>
                 <p v-if="lead" class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ lead }}</p>
@@ -203,7 +203,7 @@ const copies = computed(() => keptCopiesOf(props.status));
         <!-- What the engine left behind keeps: until the day ic removes it by itself, or now. -->
         <div v-if="copies.length > 0 && !moving" class="flex flex-col gap-1.5 border-t border-line pt-2.5">
             <p v-for="kept in copies" :key="kept.on" class="flex items-start gap-1.5 text-2xs text-subtle">
-                <Icon name="history" class="mt-0.5 shrink-0" />
+                <Icon name="history" class="shrink-0" />
                 <span>{{ t(`desktop.engine.kept.${kept.on}`, { date: formatDateLong(kept.until) }, kept.count) }}</span>
             </p>
             <div>

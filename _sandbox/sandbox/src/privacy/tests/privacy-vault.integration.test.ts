@@ -1,7 +1,9 @@
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PERSONAL_DATA_CLASSES } from "@intentic/sandbox-contract/schemas/privacy";
 import { createKnownMatcher } from "../known-matcher.js";
+import { createMaskMemo, createMasker } from "../masker.js";
 import { filePrivacyVault } from "../privacy-vault.js";
 import { luhn, pesel } from "@intentic/privacy-detect/testing";
 
@@ -141,8 +143,13 @@ describe("taught datasets", () => {
 // A value found in context is matched alone from then on, unless it is personal only in context: a word that is also an
 // ordinary word, or a value an older detector misread. Its token keeps resolving either way, and a taught value is
 // matched whatever it is.
-describe("what a found value is matched as alone", () => {
-    const hits = (vault: ReturnType<typeof filePrivacyVault>, text: string): number => vault.matcher().find(text).length;
+// The vault holds its values and proposes each wherever it comes back; the gate every source passes (@intentic/privacy-detect
+// createGate) judges it there as it judges a detector's find, so these run the masker's own path.
+describe("what the gate keeps of a value the vault learned", () => {
+    const hits = async (vault: ReturnType<typeof filePrivacyVault>, text: string): Promise<number> =>
+        (await createMasker({ vault, policy: { classes: [...PERSONAL_DATA_CLASSES], allow: [], names: "dictionary" }, memo: createMaskMemo() }).inspect(text)).filter(
+            (span) => span.by === "learned",
+        ).length;
     const ip = [192, 168, 1, 23].join(".");
 
     test("an ordinary word found as a name, an address taken for a phone and a team's mailbox are not matched alone", async () => {
@@ -151,9 +158,9 @@ describe("what a found value is matched as alone", () => {
         const word = vault.tokenFor("Grace", "person-name");
         vault.tokenFor(ip, "phone");
         vault.tokenFor(["support", "firma.pl"].join("@"), "email");
-        expect(hits(vault, "Grace period ends today")).toBe(0);
-        expect(hits(vault, `adb connect ${ip}:37005`)).toBe(0);
-        expect(hits(vault, `write to ${["support", "firma.pl"].join("@")}`)).toBe(0);
+        expect(await hits(vault, "Grace period ends today")).toBe(0);
+        expect(await hits(vault, `adb connect ${ip}:37005`)).toBe(0);
+        expect(await hits(vault, `write to ${["support", "firma.pl"].join("@")}`)).toBe(0);
         expect(vault.resolve("PERSON", word.replace(/\D/g, ""))).toBe("Grace");
     });
 
@@ -164,10 +171,10 @@ describe("what a found value is matched as alone", () => {
         const single = vault.tokenFor("Bożydar", "person-name");
         vault.tokenFor(["Grace", "Kowalska"].join(" "), "person-name");
         vault.tokenFor(["601", "234", "567"].join(" "), "phone");
-        expect(hits(vault, "Bożydar wrote")).toBe(0);
+        expect(await hits(vault, "Bożydar wrote")).toBe(0);
         expect(vault.resolve("PERSON", single.replace(/\D/g, ""))).toBe("Bożydar");
-        expect(hits(vault, `signed ${["Grace", "Kowalska"].join(" ")}`)).toBe(1);
-        expect(hits(vault, `call ${["601", "234", "567"].join(" ")}`)).toBe(1);
+        expect(await hits(vault, `signed ${["Grace", "Kowalska"].join(" ")}`)).toBe(1);
+        expect(await hits(vault, `call ${["601", "234", "567"].join(" ")}`)).toBe(1);
     });
 
     // The name model took a product's two-word name for a person, and the vault then found it in every path and package
@@ -180,15 +187,15 @@ describe("what a found value is matched as alone", () => {
         vault.tokenFor(product, "person-name");
         vault.tokenFor(["Poly", "Haven"].join(" "), "person-name");
         vault.tokenFor(["Ada", "Lovelace"].join(" "), "person-name");
-        expect(hits(vault, `ls refs: herdr ${product.replace(" ", "").toLowerCase()} kube-coder`)).toBe(0);
-        expect(hits(vault, `${product} is an open-source agent; textures from ${["Poly", "Haven"].join(" ")}`)).toBe(0);
-        expect(hits(vault, `notes by ${["Ada", "Lovelace"].join(" ")}`)).toBe(1);
+        expect(await hits(vault, `ls refs: herdr ${product.replace(" ", "").toLowerCase()} kube-coder`)).toBe(0);
+        expect(await hits(vault, `${product} is an open-source agent; textures from ${["Poly", "Haven"].join(" ")}`)).toBe(0);
+        expect(await hits(vault, `notes by ${["Ada", "Lovelace"].join(" ")}`)).toBe(1);
     });
 
     test("a taught value is matched however ordinary it is", async () => {
         const vault = filePrivacyVault(join(dir, "vault.json"));
         await vault.learn("crm", [{ value: "Grace", class: "person-name" }]);
-        expect(hits(vault, "Grace period ends today")).toBe(1);
+        expect(await hits(vault, "Grace period ends today")).toBe(1);
     });
 
     // Found once beside a "tel.", a placeholder number was matched from then on in a shell loop's `for i in 1 2 3 …`.
@@ -198,13 +205,25 @@ describe("what a found value is matched as alone", () => {
         const counting = Array.from({ length: 9 }, (_, index) => String(index + 1));
         const groups = (digits: readonly string[]): string => [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6)].map((group) => group.join("")).join(" ");
         const placeholder = vault.tokenFor(groups(counting), "phone");
-        expect(hits(vault, `call ${groups(counting)}`)).toBe(0);
+        expect(await hits(vault, `call ${groups(counting)}`)).toBe(0);
         expect(vault.resolve("PHONE", placeholder.replace(/\D/g, ""))).toBe(groups(counting));
         const number = [...["601", "234", "567"].join("")];
         vault.tokenFor(groups(number), "phone");
-        expect(hits(vault, `call ${number.join("")}`)).toBe(1);
-        expect(hits(vault, `call ${number[0]} ${number.slice(1).join("")}`)).toBe(1);
-        expect(hits(vault, `for i in ${number.join(" ")} 10; do`)).toBe(0);
+        expect(await hits(vault, `call ${number.join("")}`)).toBe(1);
+        expect(await hits(vault, `call ${number[0]} ${number.slice(1).join("")}`)).toBe(1);
+        expect(await hits(vault, `for i in ${number.join(" ")} 10; do`)).toBe(0);
+    });
+
+    // A float's places once taken for a card number come back in every float that prints them.
+    test("a number is not kept as the places of a decimal, but is beside a comma or ending a sentence", async () => {
+        const vault = filePrivacyVault(join(dir, "vault.json"));
+        await vault.load();
+        const places = luhn("558999999999999");
+        vault.tokenFor(places, "payment-card");
+        expect(await hits(vault, `"end": 0.${places} }`)).toBe(0);
+        expect(await hits(vault, `${places}.25`)).toBe(0);
+        expect(await hits(vault, `17,${places}`)).toBe(1);
+        expect(await hits(vault, `card ${places}.`)).toBe(1);
     });
 });
 
@@ -227,18 +246,17 @@ describe("the exact matcher", () => {
         expect("dzwoń: +48 600 100 200 wieczorem".slice(hit?.start, hit?.end)).toBe("+48 600 100 200");
     });
 
-    // An address's house and flat numbers stand alone as a matter of course; a number's digits never all do.
-    test("a folded spelling with lone digits is a number only when it holds nothing but digits", () => {
+    // The matcher knows spellings, not kinds: what a spelling is where it stands (a list of digits, a decimal's places) is
+    // the gate's to say, through `accept`, and the next shorter value at that place is tried when it says no.
+    test("a match the caller turns down gives way to the next shorter value at that place", () => {
         const number = ["601", "234", "567"];
-        const digits = [...number.join("")];
         const known = createKnownMatcher([
-            { value: ["Długa", "5", "m", "3"].join(" "), payload: "address", spelling: "folded" },
             { value: number.join(" "), payload: "phone", spelling: "folded" },
+            { value: number[0] ?? "", payload: "prefix", spelling: "folded" },
         ]);
-        expect(known.find("mieszka Długa 5 m 3").map((hit) => hit.payload)).toEqual(["address"]);
-        expect(known.find(`for i in ${digits.join(" ")}`)).toEqual([]);
-        expect(known.find(`seq ${digits.join("-")}`)).toEqual([]);
-        expect(known.find(`call ${number.join("_")}`).map((hit) => hit.payload)).toEqual(["phone"]);
+        const text = `call ${number.join("-")} now`;
+        expect(known.find(text).map((hit) => hit.payload)).toEqual(["phone"]);
+        expect(known.find(text, (_start, _end, payload) => payload !== "phone").map((hit) => hit.payload)).toEqual(["prefix"]);
     });
 
     // Raw JSON text writes a line break as `\n`, a tab as `\t`: the letter belongs to the escape, so a known value right
@@ -255,16 +273,6 @@ describe("the exact matcher", () => {
     test("a number inside a longer number is not the number", () => {
         expect(matcher.find("id 1850101123456")).toEqual([]);
         expect(matcher.find("PESEL: 85010112345.").map((hit) => hit.payload)).toEqual(["pesel"]);
-    });
-
-    // A float's places once taken for a card number come back in every float that prints them.
-    test("a number is not found as the places of a decimal, but is beside a comma or ending a sentence", () => {
-        const places = luhn("558999999999999");
-        const known = createKnownMatcher([{ value: places, payload: "card", spelling: "folded" }]);
-        expect(known.find(`"end": 0.${places} }`)).toEqual([]);
-        expect(known.find(`${places}.25`)).toEqual([]);
-        expect(known.find(`17,${places}`).map((hit) => hit.payload)).toEqual(["card"]);
-        expect(known.find(`card ${places}.`).map((hit) => hit.payload)).toEqual(["card"]);
     });
 });
 

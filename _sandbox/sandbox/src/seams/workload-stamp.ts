@@ -42,6 +42,8 @@ export const DETACHED_KINDS = [
     "python-check",
     // ffprobe and ffmpeg reading a workspace video for its tile (workspace/files/workspace-video.ts).
     "media-probe",
+    // A repository's fixers writing its derived files again where a land wrote (conversations/land/rederive.ts).
+    "fixers",
     "backend-host",
 ] as const;
 export type DetachedKind = (typeof DETACHED_KINDS)[number];

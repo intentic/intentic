@@ -7,6 +7,7 @@ import { installedBuild } from "../installed.js";
 import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../environments/wsl.js";
 import { deliversByItself, isProjectPairing, mirrorHeartbeatPath, type Pairing, pairingKey, readState, type SyncState } from "./config.js";
+import { syncHolds } from "./holds.js";
 import { backupSessionName, type LiveSession, readAllSessions, sessionName, sessionsByName, sessionStateOf } from "./mutagen.js";
 import { ensureMutagen } from "./binary/mutagen-binary.js";
 
@@ -36,10 +37,15 @@ const agentState = async (installed: string | undefined): Promise<DeviceAgent> =
 export type LiveSessions = ReadonlyMap<string, LiveSession>;
 
 // What the record says holds a pairing back, beside whatever Mutagen says: read off the pairing, so stated whether or not
-// Mutagen was consulted. Each only while it holds, as the rest of a resting pairing says nothing.
-const withHolds = (row: DevicePairing, pairing: Pairing): DevicePairing => {
-    if (pairing.fileSyncLowDisk !== undefined) {
-        const { since, freeBytes, totalBytes } = pairing.fileSyncLowDisk;
+// Mutagen was consulted. Each only while it holds, as the rest of a resting pairing says nothing. `heldBy` is the one
+// answer to whether its file sync should run (holds.ts), the low-disk reading the one hold that carries a figure.
+const withHolds = (row: DevicePairing, pairing: Pairing, now: number): DevicePairing => {
+    const held = syncHolds(pairing, now);
+    if (held.length > 0) {
+        row.heldBy = held;
+    }
+    if (pairing.lowDisk !== undefined) {
+        const { since, freeBytes, totalBytes } = pairing.lowDisk;
         row.lowDisk = { since, freeBytes, totalBytes };
     }
     if (pairing.bridgeHolds !== undefined && pairing.bridgeHolds.length > 0) {
@@ -48,7 +54,7 @@ const withHolds = (row: DevicePairing, pairing: Pairing): DevicePairing => {
     return row;
 };
 
-const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing): DevicePairing => {
+const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing, now: number): DevicePairing => {
     // Stated on every pairing rather than inferred from an empty port list: "nothing is listening" and "this device
     // was told not to" look identical otherwise, and only one has anything for a reader to do.
     const mirroring = pairing.mirrorOff === true ? "off" : "on";
@@ -64,7 +70,7 @@ const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing): De
     // A mirror-only enrollment has no file sync to ask about; the absent status is a fact about the mode, not a
     // failed read. Nor has the projects host, whose folders are pairings of their own.
     if (pairing.mode !== "sync" || sessions === undefined || pairing.projectsHost === true) {
-        return withHolds({ sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, ...remote, ...kind, mirroring }, pairing);
+        return withHolds({ sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, ...remote, ...kind, mirroring }, pairing, now);
     }
     // A sync pairing with no session is carried as the absence of a status, not a word for it, so every reader
     // renders it the same way instead of inventing a default. sessionStateOf resolves Mutagen's omitted zero.
@@ -88,6 +94,7 @@ const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing): De
             backupStatus: backup?.status,
         },
         pairing,
+        now,
     );
 };
 
@@ -130,7 +137,7 @@ export const buildReport = (
     os: platform(),
     // Omitted rather than set to undefined off WSL, so a report says nothing at all about it instead of saying no.
     ...(wsl === undefined ? {} : { wsl }),
-    pairings: state.pairings.map((pairing) => pairingReport(sessions, pairing)),
+    pairings: state.pairings.map((pairing) => pairingReport(sessions, pairing, capturedAt)),
     ports: state.pairings.flatMap(portRows),
     agent,
     capturedAt,

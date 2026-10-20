@@ -12,7 +12,7 @@ import type { ChildSpawnSpec } from "./children.js";
    (subagents.ts) lived in this process's memory, so a restart left every parent unable to reach its children: `send`,
    `answer` and `cancel` answered "No such child", a resumed child turn was never adopted, and a parked `wait` answered
    unknown-target while the child kept working. Each child is written down here as it starts, moves and settles, one file
-   apiece, and the next boot reads them back before any interrupted turn resumes (children.ts restoreSpawnedChildren). */
+   apiece, and the next boot reads them back before any interrupted turn resumes (child-restore.ts, spawnedChildrenInFlight). */
 
 const RehomeSchema = z.object({
     provider: AgentProviderSchema,

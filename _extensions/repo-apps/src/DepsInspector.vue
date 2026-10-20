@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { WorkspaceDepEdge, WorkspacePackage } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
-import { Button, Icon, ui } from "@intentic/extension-ui";
+import { Button, Icon, Section, ui } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { usageOf, type Area, type Closure } from "./depModel";
 import { t } from "./i18n.js";
@@ -55,35 +55,37 @@ const tone = (edge: WorkspaceDepEdge): string =>
         <p class="text-2xs text-subtle">{{ t(`dependenciesView.inspector.reach`) }}</p>
         <Button class="self-start" tier="boring" :label="t(`dependenciesView.inspector.lookInside`)" @click="emit(`lookInside`, pkg.name)" />
 
-        <section class="flex flex-col gap-1">
-            <h4 :class="ui.sectionLabel({ size: `xs` })">{{ t(`dependenciesView.inspector.declares`, { count: uses.length }) }}</h4>
-            <button
-                v-for="edge in uses"
-                :key="`${edge.to}:${edge.type}`"
-                type="button"
-                class="flex items-baseline justify-between gap-2 rounded px-1 py-0.5 text-left text-xs hover:bg-overlay"
-                @click="emit(`pick`, edge.to)"
-            >
-                <span class="truncate text-content">{{ short(edge.to) }}</span>
-                <span class="shrink-0 font-mono text-2xs" :class="tone(edge)"
-                    >{{ t(`dependenciesView.usage.${usageOf(edge)}`) }} · {{ edge.type }}</span
+        <Section :label="t(`dependenciesView.inspector.declares`)" density="dense" :heading="4">
+            <div class="flex flex-col gap-1">
+                <button
+                    v-for="edge in uses"
+                    :key="`${edge.to}:${edge.type}`"
+                    type="button"
+                    class="flex items-baseline justify-between gap-2 rounded px-1 py-0.5 text-left text-xs hover:bg-overlay"
+                    @click="emit(`pick`, edge.to)"
                 >
-            </button>
-        </section>
-        <section class="flex flex-col gap-1">
-            <h4 :class="ui.sectionLabel({ size: `xs` })">{{ t(`dependenciesView.inspector.declaredBy`, { count: usedBy.length }) }}</h4>
-            <button
-                v-for="edge in usedBy"
-                :key="`${edge.from}:${edge.type}`"
-                type="button"
-                class="flex items-baseline justify-between gap-2 rounded px-1 py-0.5 text-left text-xs hover:bg-overlay"
-                @click="emit(`pick`, edge.from)"
-            >
-                <span class="truncate text-content">{{ short(edge.from) }}</span>
-                <span class="shrink-0 font-mono text-2xs" :class="tone(edge)"
-                    >{{ t(`dependenciesView.usage.${usageOf(edge)}`) }} · {{ edge.type }}</span
+                    <span class="truncate text-content">{{ short(edge.to) }}</span>
+                    <span class="shrink-0 font-mono text-2xs" :class="tone(edge)"
+                        >{{ t(`dependenciesView.usage.${usageOf(edge)}`) }} · {{ edge.type }}</span
+                    >
+                </button>
+            </div>
+        </Section>
+        <Section :label="t(`dependenciesView.inspector.declaredBy`)" density="dense" :heading="4">
+            <div class="flex flex-col gap-1">
+                <button
+                    v-for="edge in usedBy"
+                    :key="`${edge.from}:${edge.type}`"
+                    type="button"
+                    class="flex items-baseline justify-between gap-2 rounded px-1 py-0.5 text-left text-xs hover:bg-overlay"
+                    @click="emit(`pick`, edge.from)"
                 >
-            </button>
-        </section>
+                    <span class="truncate text-content">{{ short(edge.from) }}</span>
+                    <span class="shrink-0 font-mono text-2xs" :class="tone(edge)"
+                        >{{ t(`dependenciesView.usage.${usageOf(edge)}`) }} · {{ edge.type }}</span
+                    >
+                </button>
+            </div>
+        </Section>
     </aside>
 </template>

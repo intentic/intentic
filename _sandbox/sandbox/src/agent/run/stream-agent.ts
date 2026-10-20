@@ -57,6 +57,8 @@ import { sessionToResume, handoffOf, attachmentsOf } from "./turn/turn-preflight
 import { resumeTrimTurn, trimDelivery, type ColdTrimBasis } from "./turn/cold-trim.js";
 import { planTurn, type TurnPlan, type TurnExperimentStamps } from "./turn/turn-plan.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "./frames/classify-failure.js";
+import { codedFailure } from "./frames/error-frames.js";
+import type { TurnRefusal } from "../providers/adapter.js";
 import { abortSuppresses, type Attribution, decorateFrame, silenceOf, silentEnding, withSilentEnding } from "./frames/frame-decorators.js";
 import { performFailureWrites, recordFrame, settleAnswered, turnActivity } from "./frames/frame-effects.js";
 import { recordQueries } from "./frames/failure-queries.js";
@@ -76,7 +78,6 @@ import {
 import { type WorktreeRun, worktreePlacement } from "./placement/worktree-placement.js";
 import { type ReachWatch, reachWatch } from "./placement/turn-reach.js";
 import { turnCloser } from "./placement/turn-close.js";
-import { runWorktreeFixers } from "../../conversations/land/worktree-fixers.js";
 import { standingOn } from "../../conversations/actor/parked-cards.js";
 import { AgentDomainRefusedError, agentExecutionScope, assertAgentExecution, withAdmittedAgentExecution, type AgentExecutionAdmission, type AgentExecutionContext } from "../../workload/agent-execution.js";
 import { errorMessage } from "@intentic/base/errors";
@@ -220,23 +221,8 @@ const placementOf = (
             versionMain: (repos) => versionMainTree(services, repos),
             run: (worktree) => runTurn(services, input, admission, signal, worktree, steering, snapshot, reach, conversation.coldTrimBasis),
             settleLanding: (conversationId) => settleLandingInBackground(services, conversationId),
-            fix: (span) => runWorktreeFixers(services, id, span),
         },
     );
-};
-
-// Why a turn may not run on a runner while the privacy shield is on, or nothing; an unreadable policy refuses, since the
-// shield may be on.
-const runnerShieldRefusal = async (services: Pick<Services, "privacyShield">, provider: string, conversationId: string): Promise<string | undefined> => {
-    try {
-        const policy = await services.privacyShield.policy();
-        if (policy.mode !== "on" || (await services.privacyShield.trusted(policy, provider, conversationId))) {
-            return undefined;
-        }
-    } catch (error) {
-        return error instanceof Error ? error.message : "the privacy shield's policy could not be read";
-    }
-    return `The privacy shield is on, and a runner would call ${provider} from its own machine, past the shield. Run this conversation here, or mark ${provider} as trusted in Sandbox ▸ Privacy shield.`;
 };
 
 // The fleet-registry lifecycle around every turn: `conversationId` acquires the mutex and publishes frames, and where
@@ -252,7 +238,7 @@ async function* runConversationTurn(
     if (input.conversationId === undefined) {
         // A runner needs a conversation: its branch is what moves between machines; refused otherwise.
         if (input.placement?.kind === "runner") {
-            yield { kind: "error", message: "Running on a runner needs a conversation id — the conversation's branch is what travels." };
+            yield { kind: "error", message: "Running on a runner needs a conversation id — the conversation's branch is what travels.", own: true };
             yield { kind: "done" };
             return;
         }
@@ -264,15 +250,16 @@ async function* runConversationTurn(
     const existing = services.agents.entry(conversationId);
     const runner = runnerOf(existing, input);
     if (existing === undefined && runner !== undefined && !(await services.runners.enrolled(runner))) {
-        yield { kind: "error", message: unpairedRunner(runner) };
+        yield { kind: "error", message: unpairedRunner(runner), own: true };
         yield { kind: "done" };
         return;
     }
     // A runner calls its provider from its own machine, past this sandbox's privacy shield: while the shield masks, only
     // a trusted provider may run there.
-    const unshieldedRunner = runner === undefined ? undefined : await runnerShieldRefusal(services, input.agent ?? "claude", conversationId);
+    const unshieldedRunner =
+        runner === undefined ? undefined : await services.privacyShield.refusal({ provider: input.agent ?? "claude", conversationId, route: "runner" });
     if (unshieldedRunner !== undefined) {
-        yield { kind: "error", code: "privacy-unshielded", message: unshieldedRunner };
+        yield { kind: "error", code: "privacy-unshielded", message: unshieldedRunner, own: true };
         yield { kind: "done" };
         return;
     }
@@ -282,6 +269,7 @@ async function* runConversationTurn(
         yield {
             kind: "error",
             message: "This conversation is limited to some areas of the workspace, and a runner cannot keep it to them yet. Run it here instead.",
+            own: true,
         };
         yield { kind: "done" };
         return;
@@ -642,27 +630,18 @@ const preflight = async (
     };
 };
 
-// A refusal that ran nothing, as the frame the chat draws. `unattended` rides with it because the row it becomes
-// offers to send the message again (transcript-fold.ts errorRow), which is only true where somebody typed one: an
-// automation, a loop or a watch wake has no composer holding anything.
-const refusalFrame = (
-    refusal: {
-        readonly code?: Extract<AgentEvent, { kind: "error" }>["code"];
-        readonly message: string;
-        // The cgroup reading behind a `sandbox-memory-low`, so the row it becomes can offer the raise as a press.
-        readonly memory?: Extract<AgentEvent, { kind: "error" }>["memory"];
-        readonly account?: string;
-    },
-    unattended: boolean,
-) =>
-    ({
-        kind: "error",
-        ...(refusal.code !== undefined ? { code: refusal.code } : {}),
-        ...(unattended ? { unattended: true } : {}),
-        ...(refusal.memory !== undefined ? { memory: refusal.memory } : {}),
-        ...(refusal.account !== undefined ? { account: refusal.account } : {}),
-        message: refusal.message,
-    }) as const satisfies AgentEvent;
+// A refusal that ran nothing, as the frame the chat draws, in the sandbox's own words (`own`). `unattended` rides with it
+// because the row it becomes offers to send the message again (failure-rows.ts), which is only true where somebody typed
+// one: an automation, a loop or a watch wake has no composer holding anything. `memory` lets that row offer the raise.
+const refusalFrame = (refusal: Omit<TurnRefusal, "ok">, unattended: boolean): ErrorFrame => ({
+    kind: "error",
+    message: refusal.message,
+    own: true,
+    ...opt("code", refusal.code),
+    ...opt("unattended", unattended ? true : undefined),
+    ...opt("memory", refusal.memory),
+    ...opt("account", refusal.account),
+});
 
 // What the message grew before reaching the model, and what the model's window would not let it grow. Both, together,
 // because they are one disclosure asked from two sides: an empty note list is not one, and a shed note has no message
@@ -770,7 +749,7 @@ async function* prepareTurn(
         yield { kind: "agent_status", key: HANDOFF_STATUS, text: null };
     }
     if ("refused" in ready) {
-        yield "code" in ready ? refusalFrame({ code: ready.code, message: ready.refused }, input.unattended === true) : { kind: "error", message: ready.refused };
+        yield refusalFrame("code" in ready ? { code: ready.code, message: ready.refused } : { message: ready.refused }, input.unattended === true);
         yield { kind: "done" };
         return undefined;
     }
@@ -1013,7 +992,8 @@ async function* runPreparedTurn(
             if (abortSuppresses(raw, aborted())) {
                 continue;
             }
-            const event = keptWarmOf(services, input.conversationId, raw);
+            // Every runtime's failure is read for its words at this one door (codedFailure), whichever loop said it.
+            const event = keptWarmOf(services, input.conversationId, raw.kind === "error" ? codedFailure(raw) : raw);
             fingerprint = event.kind === "init" ? (event.prompt ?? fingerprint) : fingerprint;
             sniffer.observe(event);
             settleAnswered(services, provider, account, request.spec.model, frames.note(event));

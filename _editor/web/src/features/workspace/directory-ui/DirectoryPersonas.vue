@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Persona } from "@intentic/sandbox-contract/schemas/personas";
 import { personaBoundsWords } from "../../../models/sandbox/personas/personaBounds";
-import { Button, ui, FACE_SIZES, Modal, Notice, type NoticeModel, PersonaFace, SearchBar, StatusBadge } from "@intentic/ui";
+import { Button, FACE_SIZES, Modal, Notice, type NoticeModel, PersonaFace, SearchBar, Section, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
@@ -208,121 +208,122 @@ const submit = async (): Promise<void> => {
 
         <div class="flex flex-col gap-4">
             <!-- Existing cards first, since a folder can hold several; absent entirely (not an empty box) when there are none. -->
-            <div v-if="cards.length > 0" class="flex flex-col gap-1">
-                <span :class="ui.sectionLabel()">{{ t(`workspace.directoryPersonas.startingHere`) }}</span>
-                <!-- Rows on the dialog's ground, the one being edited tinted; reaching out by their padding so faces line up with the label. -->
-                <div
-                    v-for="persona in cards"
-                    :key="persona.id"
-                    class="-mx-2.5 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors"
-                    :class="editing === persona.id ? `bg-link/10` : ``"
-                >
-                    <!-- The list size: this panel is about the folder, but a face too small to read is no cheaper, just worse. -->
-                    <PersonaFace :persona :size="FACE_SIZES.row" />
-                    <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
-                    <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBoundsWords(persona) }}</StatusBadge>
-                    <button
-                        type="button"
-                        :class="ui.iconButton()"
-                        :aria-label="t(`workspace.directoryPersonas.edit`, { id: persona.label ?? persona.id })"
-                        @click="startEdit(persona)"
+            <Section v-if="cards.length > 0" :label="t(`workspace.directoryPersonas.startingHere`)">
+                <div class="flex flex-col gap-1">
+                    <!-- Rows on the dialog's ground, the one being edited tinted; reaching out by their padding so faces line up with the label. -->
+                    <div
+                        v-for="persona in cards"
+                        :key="persona.id"
+                        class="-mx-2.5 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors"
+                        :class="editing === persona.id ? `ui-row-select-on` : ``"
                     >
-                        <Icon name="pencil" class="text-xs" />
-                    </button>
+                        <!-- The list size: this panel is about the folder, but a face too small to read is no cheaper, just worse. -->
+                        <PersonaFace :persona :size="FACE_SIZES.row" />
+                        <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
+                        <StatusBadge v-if="persona.powers !== undefined" variant="neutral" size="xs">{{ personaBoundsWords(persona) }}</StatusBadge>
+                        <button
+                            type="button"
+                            :class="ui.iconButton()"
+                            :aria-label="t(`workspace.directoryPersonas.edit`, { id: persona.label ?? persona.id })"
+                            @click="startEdit(persona)"
+                        >
+                            <Icon name="pencil" class="text-xs" />
+                        </button>
+                    </div>
                 </div>
-            </div>
+            </Section>
 
             <!-- Only drawn when there are cards above to separate from; alone, a rule under one paragraph reads as a load failure. -->
-            <div class="flex flex-col gap-3" :class="cards.length > 0 ? `border-t border-line pt-4` : ``">
-                <div class="flex items-center gap-2">
-                    <span :class="ui.sectionLabel()">{{ heading }}</span>
-                    <!-- Always the same corner, and only ever one link at a time — two side by side would turn this into a three-way choice. -->
-                    <button v-if="mode !== `new`" type="button" :class="ui.textButton({ tone: `quiet` }, 'ml-auto')" @click="startAdd">
+            <Section :label="heading" :class="cards.length > 0 ? `border-t border-line pt-4` : ``">
+                <!-- Always the same corner, and only ever one link at a time — two side by side would turn this into a three-way choice. -->
+                <template v-if="mode !== `new` || elsewhere.length > 0" #actions>
+                    <button v-if="mode !== `new`" type="button" :class="ui.textButton({ tone: `quiet` })" @click="startAdd">
                         {{ t(`workspace.directoryPersonas.addNewOneInstead`) }}
                     </button>
-                    <button
-                        v-else-if="elsewhere.length > 0"
-                        type="button"
-                        :class="ui.textButton({ tone: `quiet` }, 'ml-auto')"
-                        @click="startExisting"
-                    >
+                    <button v-else type="button" :class="ui.textButton({ tone: `quiet` })" @click="startExisting">
                         {{ t(`workspace.directoryPersonas.useOneIAlready`) }}
                     </button>
-                </div>
-
-                <!-- Rows styled like the ones above on purpose — same kind of thing, one folder along. -->
-                <template v-if="mode === `existing`">
-                    <SearchBar
-                        v-if="filterable"
-                        v-model="filter"
-                        variant="field"
-                        clearable
-                        :placeholder="t(`workspace.directoryPersonas.findPersona`)"
-                        :aria-label="t(`workspace.directoryPersonas.findPersona2`)"
-                    />
-                    <!-- Pulled out by the rows' padding on the scroller itself, since it clips anything that reaches past its edge. -->
-                    <div class="-mx-2.5 flex max-h-56 flex-col gap-1 overflow-y-auto">
-                        <button
-                            v-for="persona in shown"
-                            :key="persona.id"
-                            type="button"
-                            class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors"
-                            :class="chosen === persona.id ? `bg-link/10` : `ui-row-select`"
-                            :aria-label="t(`workspace.directoryPersonas.startHere`, { id: persona.label ?? persona.id })"
-                            :aria-pressed="chosen === persona.id"
-                            @click="chosen = persona.id"
-                        >
-                            <PersonaFace :persona :size="FACE_SIZES.row" />
-                            <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
-                            <span class="max-w-[45%] shrink-0 truncate text-xs text-subtle">
-                                {{
-                                    persona.workspace?.startIn === undefined
-                                        ? t(`workspace.directoryPersonas.noStartingFolder`)
-                                        : t(`workspace.directoryPersonas.startsIn2`, { startIn: persona.workspace.startIn })
-                                }}
-                            </span>
-                            <Icon v-if="chosen === persona.id" name="check" class="shrink-0 text-xs text-link" />
-                        </button>
-                        <p v-if="shown.length === 0" class="px-2.5 py-1 text-xs text-subtle">
-                            {{ t(`workspace.directoryPersonas.noPersonaGoesBy`) }}
-                        </p>
-                    </div>
-                    <!-- Stated in words too, since the folder that loses the card isn't shown on this screen. -->
-                    <p v-if="movedFrom !== undefined" class="text-xs text-warning">
-                        {{ t(`workspace.directoryPersonas.moves`) }} <span class="font-medium">{{ chosenCard?.label ?? chosenCard?.id }}</span>
-                        {{ t(`workspace.directoryPersonas.startsIn`) }} <code class="ui-code">{{ movedFrom }}</code>
-                        {{ t(`workspace.directoryPersonas.todayPersonaOneStarting`) }}
-                    </p>
                 </template>
-
-                <template v-else>
-                    <div class="ui-field">
-                        <input
-                            v-model="label"
-                            :class="ui.input('w-full font-medium')"
-                            :placeholder="t(`workspace.directoryPersonas.namePersonaDocsBot`, { folderName })"
-                            :aria-label="t(`shared.name`)"
-                            autofocus
-                            @keyup.enter="submit()"
+                <div class="flex flex-col gap-3">
+                    <!-- Rows styled like the ones above on purpose — same kind of thing, one folder along. -->
+                    <template v-if="mode === `existing`">
+                        <SearchBar
+                            v-if="filterable"
+                            v-model="filter"
+                            variant="field"
+                            clearable
+                            :placeholder="t(`workspace.directoryPersonas.findPersona`)"
+                            :aria-label="t(`workspace.directoryPersonas.findPersona2`)"
                         />
-                        <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
-                    </div>
-
-                    <!-- Folded, since most cards keep the full toolbox; the badge keeps a limited card visible even closed. -->
-                    <div class="flex flex-col gap-3">
-                        <div class="flex items-center gap-2">
-                            <button type="button" :class="ui.textButton({ tone: `quiet` })" :aria-expanded="advanced" @click="advanced = !advanced">
-                                <Icon name="angle-right" class="transition-transform" :class="advanced ? `rotate-90` : ``" />
-                                {{ t(`workspace.directoryPersonas.advancedWhatMayDo`) }}
+                        <!-- Pulled out by the rows' padding on the scroller itself, since it clips anything that reaches past its edge. -->
+                        <div class="-mx-2.5 flex max-h-56 flex-col gap-1 overflow-y-auto">
+                            <button
+                                v-for="persona in shown"
+                                :key="persona.id"
+                                type="button"
+                                class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors"
+                                :class="chosen === persona.id ? `ui-row-select-on` : `ui-row-select`"
+                                :aria-label="t(`workspace.directoryPersonas.startHere`, { id: persona.label ?? persona.id })"
+                                :aria-pressed="chosen === persona.id"
+                                @click="chosen = persona.id"
+                            >
+                                <PersonaFace :persona :size="FACE_SIZES.row" />
+                                <span class="min-w-0 flex-1 truncate text-sm text-content">{{ persona.label ?? persona.id }}</span>
+                                <span class="max-w-[45%] shrink-0 truncate text-xs text-subtle">
+                                    {{
+                                        persona.workspace?.startIn === undefined
+                                            ? t(`workspace.directoryPersonas.noStartingFolder`)
+                                            : t(`workspace.directoryPersonas.startsIn2`, { startIn: persona.workspace.startIn })
+                                    }}
+                                </span>
+                                <Icon v-if="chosen === persona.id" name="check" class="shrink-0 text-xs text-link" />
                             </button>
-                            <StatusBadge v-if="bounds !== undefined" variant="neutral" size="xs">{{ bounds }}</StatusBadge>
+                            <p v-if="shown.length === 0" class="px-2.5 py-1 text-xs text-subtle">
+                                {{ t(`workspace.directoryPersonas.noPersonaGoesBy`) }}
+                            </p>
                         </div>
-                        <PersonaPowersFields v-if="advanced" :draft="powers" :grantables="grantables" />
-                    </div>
-                </template>
+                        <!-- Stated in words too, since the folder that loses the card isn't shown on this screen. -->
+                        <p v-if="movedFrom !== undefined" class="text-xs text-warning">
+                            {{ t(`workspace.directoryPersonas.moves`) }} <span class="font-medium">{{ chosenCard?.label ?? chosenCard?.id }}</span>
+                            {{ t(`workspace.directoryPersonas.startsIn`) }} <code class="ui-code">{{ movedFrom }}</code>
+                            {{ t(`workspace.directoryPersonas.todayPersonaOneStarting`) }}
+                        </p>
+                    </template>
 
-                <Notice v-if="saveError !== undefined" :of="saveError" />
-            </div>
+                    <template v-else>
+                        <div class="ui-field">
+                            <input
+                                v-model="label"
+                                :class="ui.input('w-full font-medium')"
+                                :placeholder="t(`workspace.directoryPersonas.namePersonaDocsBot`, { folderName })"
+                                :aria-label="t(`shared.name`)"
+                                autofocus
+                                @keyup.enter="submit()"
+                            />
+                            <span v-if="nameHint !== undefined" class="text-xs text-warning">{{ nameHint }}</span>
+                        </div>
+
+                        <!-- Folded, since most cards keep the full toolbox; the badge keeps a limited card visible even closed. -->
+                        <div class="flex flex-col gap-3">
+                            <div class="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    :class="ui.textButton({ tone: `quiet` })"
+                                    :aria-expanded="advanced"
+                                    @click="advanced = !advanced"
+                                >
+                                    <Icon name="angle-right" class="transition-transform" :class="advanced ? `rotate-90` : ``" />
+                                    {{ t(`workspace.directoryPersonas.advancedWhatMayDo`) }}
+                                </button>
+                                <StatusBadge v-if="bounds !== undefined" variant="neutral" size="xs">{{ bounds }}</StatusBadge>
+                            </div>
+                            <PersonaPowersFields v-if="advanced" :draft="powers" :grantables="grantables" />
+                        </div>
+                    </template>
+
+                    <Notice v-if="saveError !== undefined" :of="saveError" />
+                </div>
+            </Section>
         </div>
 
         <template #footer>

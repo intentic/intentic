@@ -44,7 +44,7 @@ const unread = computed(() => landable.value && !props.landing && files.value > 
     <div v-if="canShip" class="flex min-w-0 flex-col gap-1">
         <!-- The standing ask leads the button it's about, so a maintainer meets the reason before the press. -->
         <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-warning">
-            <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}</span>
+            <Icon name="clock" class="shrink-0 text-2xs" /><span class="min-w-0">{{ landAsk }}</span>
         </p>
         <!-- Disabled while the land runs: the daemon refuses a second one outright (agents.routes CONFLICT). -->
         <div class="flex flex-wrap items-center gap-1.5">
@@ -63,7 +63,7 @@ const unread = computed(() => landable.value && !props.landing && files.value > 
     <!-- The same Ready card for a collaborator: land is a maintainer's press, so this offers the ask instead, same spot and size but quieter chrome. -->
     <div v-else-if="landable && canReview" class="flex min-w-0 flex-col gap-1">
         <p v-if="landAsk" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-muted">
-            <Icon name="clock" class="mt-0.5 shrink-0 text-2xs" /><span class="min-w-0">{{
+            <Icon name="clock" class="shrink-0 text-2xs" /><span class="min-w-0">{{
                 t(`agents.agentCard.waitingMaintainer`, { landAsk })
             }}</span>
         </p>

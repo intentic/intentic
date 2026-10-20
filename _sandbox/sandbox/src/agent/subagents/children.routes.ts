@@ -12,7 +12,7 @@ import { type ChildActionResult, type ChildSupervisor, childReportOf, pendingQue
 import { childResultOf } from "./child-records.js";
 import { HALF_A_MOVE } from "./child-words.js";
 import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
-import { markSpentByHand, unmarkSpentByHand } from "../../usage/observed-accounts.js";
+import { markSpentByHand, unmarkSpentByHand } from "../../usage/spent-by-hand.js";
 import { opt } from "../../opt.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { parseJsonOr } from "@intentic/base/json";

@@ -17,7 +17,7 @@ import { cliAgentId, type CliIdentity, ensureCli, type VendorCli } from "./vendo
 // How long an attempt's outcome stays readable once it ended, for a card polling it to learn how it ended.
 const OUTCOME_KEPT_MS = 15 * 60_000;
 
-export type CliDoorDeps = Pick<Services, "acpConnections" | "composeEnvironment" | "headroom" | "observedLimits" | "providerRefusals" | "authRoot">;
+export type CliDoorDeps = Pick<Services, "acpConnections" | "composeEnvironment" | "headroom" | "providerRefusals" | "authRoot">;
 
 // The account's model list, dropped when the first account changes: the first account decides it.
 export interface CliModelsCache {

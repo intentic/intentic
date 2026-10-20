@@ -3,17 +3,19 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
-import { restartResume } from "../../agent/run/turn/recovery/restart-resume-policy.js";
+import { type RestartResume, restartResume } from "../../agent/run/turn/recovery/restart-resume-policy.js";
 import { fileCapabilitiesStore } from "../../capabilities/capabilities-store.js";
 import type { Services } from "../../composition.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
 import { drivenBy } from "../../seams/turn-starter.testing.js";
 import { fileThreadSessionsStore } from "../../sessions/thread-sessions.js";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
-import { sqliteTurnJournal } from "../../store/journals/turn-journal.js";
+import { type JournalledFire, sqliteTurnJournal } from "../../store/journals/turn-journal.js";
 import { fileWebchatOutbox, outboxStreamFor } from "../../webchat/webchat-outbox.js";
 import { fileAutomationsStore } from "../automations-store.js";
-import { resumeAutomationInboxes, resumeInterruptedFires } from "../fire-resume.js";
+import { automationInboxesInFlight, interruptedFiresInFlight, recoverCutFires } from "../fire-resume.js";
+import { settingsResume } from "../../agent/run/turn/recovery/cut-turns.testing.js";
+import { recoverKinds } from "../../seams/restart/in-flight.testing.js";
 import { fileHeldWakesStore } from "../held-wakes-store.js";
 import { fileScheduleCoverageStore } from "../schedule-coverage.js";
 import { fileSendersStore } from "../senders-store.js";
@@ -96,11 +98,17 @@ export const daemonOn = (root: string, wake: TurnStarter["stream"], crashAt: Cra
     };
 };
 
-// The boot's automation passes, in the order bootstrap/boot-resumes.ts runs them, under a policy that resumes.
-export const bootAutomations = async (services: Services): Promise<void> => {
-    await resumeInterruptedFires(services, Date.now(), restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true }));
-    await resumeAutomationInboxes(services);
+// The boot's recovery of the fires a restart cut (fire-resume.ts, interruptedFiresInFlight), over what the journal holds
+// now, at a clock of the suite's own; with no answer given, the setting's alone decides.
+export const resumeInterruptedFires = async (services: Services, now: number = Date.now(), policy?: RestartResume): Promise<void> => {
+    const left = (await services.turnJournal.list()).filter((entry): entry is JournalledFire => entry.kind === "automation");
+    await recoverCutFires(services, left, policy ?? (await settingsResume(services)), now);
 };
+
+// The boot's automation kinds, read and recovered in the order bootstrap/restart/in-flight-kinds.ts lists them, under a policy that
+// resumes.
+export const bootAutomations = async (services: Services): Promise<void> =>
+    recoverKinds(services, [interruptedFiresInFlight, automationInboxesInFlight], restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true }));
 
 // A turn that starts and never ends: the daemon dies under it.
 export const hangingWake =

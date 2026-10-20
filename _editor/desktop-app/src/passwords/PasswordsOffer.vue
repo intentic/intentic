@@ -14,8 +14,8 @@ const router = useRouter();
 
 <template>
     <section v-if="passwordsOffered" class="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl bg-card p-4 shadow-sm" data-passwords-offer>
-        <div class="flex min-w-0 flex-1 items-start gap-2.5">
-            <Icon name="key" class="mt-0.5 shrink-0 text-subtle" />
+        <div class="flex min-w-0 flex-1 items-start gap-2.5 text-sm">
+            <Icon name="key" class="shrink-0 text-subtle" />
             <div class="min-w-0">
                 <h2 class="text-sm leading-tight font-semibold">{{ t(`desktop.passwords.title`) }}</h2>
                 <p class="mt-1 max-w-read-sm text-xs leading-relaxed text-muted">{{ t(`desktop.passwords.offerLead`) }}</p>

@@ -8,6 +8,8 @@ import { clearWindowsRunValue, homeDir, type Log } from "@intentic/local-agent";
 import { readRegistryValue } from "../windows-registry.js";
 import { sessionOwner } from "./environment.js";
 import { runProcessSync } from "./exec.js";
+import { pairingKey, readState } from "./config.js";
+import { declareOwnerPauses, markOwnerPausesAdopted, syncHeld } from "./holds.js";
 import {
     existingSyncSessions,
     MUTAGEN_CALL_TIMEOUT_MS,
@@ -17,6 +19,7 @@ import {
     saysVersionMismatch,
     SESSION_PREFIX,
     startMutagenDaemon,
+    syncSessionNames,
 } from "./mutagen.js";
 import { ownMutagenPath, resolveOnPath } from "./binary/mutagen-binary.js";
 import { movedAlready, mutagenDataDir, recordMove } from "./mutagen-env.js";
@@ -25,13 +28,15 @@ import { movedAlready, mutagenDataDir, recordMove } from "./mutagen-env.js";
    forwards in the user's own `~/.mutagen` (or wherever their MUTAGEN_DATA_DIRECTORY pointed), under a daemon they share
    with any Mutagen of their own. A sync session is CARRIED, not made again: paused there, its state files (Mutagen's
    `sessions/<id>`, and `archives/<id>`, the last state both sides agreed on) copied into this agent's own directory,
-   ended there, and loaded by this agent's daemon, which then resumes what was running. Made again from nothing instead,
+   ended there, and loaded by this agent's daemon, where the watcher resumes what was running (holds.ts), the pauses it
+   carried declared as the owner's first. Made again from nothing instead,
    a two-way-safe session has no record of what both sides last agreed on: a file deleted on one side while the session
    could not sync came back from the other, and a file changed on one side only read as a conflict. That was every
    session of a sandbox not answering at the move, and nothing could be flushed first: the move runs as the agent starts,
    before the transport its sessions ride (tunnel.ts) is up. What cannot be carried (a session with no state file, one
    this agent's daemon already holds under that name) is ended and made again by the watcher, as any missing session is
-   (mutagen.ts convergeSession), its pause carried over (below). Forwards hold no state and are ended and made again.
+   (mutagen.ts convergeSession), paused if it was (its pause declared the same way). Forwards hold no state and are ended
+   and made again.
    What is this agent's is said strictly as every sweep here says it: a name under its prefix that no other owner's
    label claims (mutagen.ts ownershipOf). The old daemon is stopped only when nothing else is left in it, or when this
    move is what started it; a daemon still holding the user's own sessions keeps running. One of another Mutagen version
@@ -106,6 +111,9 @@ export interface MoveSeams {
     readonly ownSessions: (names: readonly string[]) => readonly string[] | undefined;
     // Copies one session's state into this agent's own directory: true once it is there whole.
     readonly carry: (identifier: string) => Promise<boolean>;
+    // Records the owner's pause on the pairings of these sessions, paused in the old directory, and says the pauses from
+    // before holds are taken (holds.ts), so the watcher resumes only what was running.
+    readonly declarePaused: (names: readonly string[]) => Promise<void>;
     // Starts the shared daemon again with the owner's own Mutagen, after the move stopped one of another version.
     readonly restartTheirs: () => boolean;
     // A short wait between two tries of a daemon that is still stopping or starting.
@@ -152,14 +160,12 @@ export const openShared = (seams: MoveSeams): Opened | undefined => {
     return { sync: sync.sessions, forwards: forwards.sessions, startedByMove: first.kind !== "listed", displaced: first.kind === "mismatch" };
 };
 
-// What moving the sessions came to: which were carried, the paused ones left for the watcher to make again (whose pause
-// it carries over), and whether everything of this agent's in the old directory ended.
+// What moving the sessions came to: which were carried, which are left for the watcher to make again, and whether
+// everything of this agent's in the old directory ended.
 export interface Moved {
     readonly carried: readonly MovingSession[];
     readonly remade: readonly MovingSession[];
     readonly ended: boolean;
-    // Whether the carried sessions that were running run again under this agent's daemon.
-    readonly resumed: boolean;
 }
 
 // Each session's state into this agent's own directory, once the old daemon has stopped syncing them: the ones carried.
@@ -185,17 +191,16 @@ const carrySessions = async (seams: MoveSeams, plan: MovePlan): Promise<MovingSe
     return carried;
 };
 
-// How many times, `settle` apart, the reload waits on a daemon still stopping and retries a resume it refused.
+// How many times, `settle` apart, the reload waits on a daemon still stopping.
 const RELOAD_TRIES = 20;
 
-// The daemon reads its sessions as it starts: started again, it holds the carried ones, paused as they were left; what
-// was running runs again. `daemon stop` answers before the daemon has let go of its directory (seen on Windows): a start
-// meanwhile finds it still there and starts nothing, and the resume then reaches a daemon on its way out and is refused,
-// leaving a carried session paused for good. So the stop is waited out (with autostart off, a listing fails once no daemon
-// answers), and the resume is tried until the new daemon takes it. Answers whether what was running runs again.
-const loadCarried = async (seams: MoveSeams, carried: readonly MovingSession[]): Promise<boolean> => {
+// The daemon reads its sessions as it starts: started again, it holds the carried ones, each paused as the move left it,
+// and the watcher resumes the ones nothing holds. `daemon stop` answers before the daemon has let go of its directory
+// (seen on Windows): a start meanwhile finds it still there and starts nothing, so the stop is waited out (with autostart
+// off, a listing fails once no daemon answers) before the start.
+const loadCarried = async (seams: MoveSeams, carried: readonly MovingSession[]): Promise<void> => {
     if (carried.length === 0) {
-        return true;
+        return;
     }
     seams.own(["daemon", "stop"]);
     for (let tries = 0; tries < RELOAD_TRIES && seams.own(["sync", "list"]); tries += 1) {
@@ -203,19 +208,6 @@ const loadCarried = async (seams: MoveSeams, carried: readonly MovingSession[]):
         await seams.settle();
     }
     seams.startOwn();
-    const resume = carried.filter((session) => !session.paused).map((session) => session.name);
-    if (resume.length === 0) {
-        return true;
-    }
-    for (let tries = 0; tries < RELOAD_TRIES; tries += 1) {
-        if (seams.own(["sync", "resume", ...resume])) {
-            return true;
-        }
-        // the new daemon is still coming up
-        await seams.settle();
-        seams.startOwn();
-    }
-    return false;
 };
 
 export const moveSessions = async (seams: MoveSeams, plan: MovePlan): Promise<Moved> => {
@@ -223,8 +215,9 @@ export const moveSessions = async (seams: MoveSeams, plan: MovePlan): Promise<Mo
     const ended =
         (plan.sync.length === 0 || seams.shared(["sync", "terminate", ...plan.sync.map((session) => session.target)]).ok) &&
         (plan.terminateForwards.length === 0 || seams.shared(["forward", "terminate", ...plan.terminateForwards]).ok);
-    const resumed = await loadCarried(seams, carried);
-    return { carried, remade: plan.sync.filter((session) => !carried.includes(session)), ended, resumed };
+    await seams.declarePaused(plan.sync.filter((session) => session.paused).map((session) => session.name));
+    await loadCarried(seams, carried);
+    return { carried, remade: plan.sync.filter((session) => !carried.includes(session)), ended };
 };
 
 // Whether Mutagen's own sign-in registration (its Run value on Windows, its LaunchAgent on macOS) starts this agent's
@@ -281,6 +274,12 @@ const realSeams = (mutagen: string, from: string): MoveSeams => ({
     startOwn: () => startMutagenDaemon(mutagen),
     ownSessions: (names) => existingSyncSessions(mutagen, names),
     carry: async (identifier) => await carryState(from, mutagenDataDir, identifier),
+    declarePaused: async (names) => {
+        const now = Date.now();
+        const owned = (await readState()).pairings.filter((pairing) => !syncHeld(pairing, now) && syncSessionNames(pairing).some((name) => names.includes(name)));
+        await declareOwnerPauses(new Set(owned.map(pairingKey)), now);
+        await markOwnerPausesAdopted();
+    },
     settle: async () => await sleep(500),
     restartTheirs: () => {
         const theirs = resolveOnPath("mutagen");
@@ -321,7 +320,7 @@ export const moveOffSharedMutagen = async (mutagen: string, log: Log, seams?: Mo
     }
     const from = sharedDataDir();
     if (!existsSync(from) || from === mutagenDataDir) {
-        await recordMove([]);
+        await recordMove();
         return;
     }
     const acts = seams ?? realSeams(mutagen, from);
@@ -342,9 +341,6 @@ export const moveOffSharedMutagen = async (mutagen: string, log: Log, seams?: Mo
     } else if (process.platform === "win32") {
         clearWindowsRunValue(MUTAGEN_RUN_VALUE);
     }
-    if (!moved.resumed) {
-        log(`this agent's Mutagen daemon did not resume the carried sessions that were running, so they are paused: \`intentic-machine sync resume\` resumes them.`);
-    }
     if (!moved.ended) {
         log(`this agent's sessions in ${from} did not all end, so moving off it is tried again at the next start.`);
         return;
@@ -355,5 +351,5 @@ export const moveOffSharedMutagen = async (mutagen: string, log: Log, seams?: Mo
             `moved off Mutagen's shared data directory (${from}): carried ${moved.carried.length} of this agent's ${plan.sync.length} sync session(s) to ${mutagenDataDir} with what they had synced${moved.remade.length > 0 ? `, the rest are made again there` : ""}, and ended its ${plan.terminateForwards.length} forward(s), which are made again${plan.othersRemain ? ". Everything else in it is left running" : ""}.`,
         );
     }
-    await recordMove(moved.remade.filter((session) => session.paused).map((session) => session.name));
+    await recordMove();
 };

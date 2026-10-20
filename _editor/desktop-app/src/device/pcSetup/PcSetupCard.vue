@@ -344,7 +344,7 @@ const retryTask = (): Promise<void> =>
             </div>
             <ul v-if="blocked.length > 0" class="flex flex-col gap-2 text-xs">
                 <li v-for="row in blocked" :key="row.id" class="flex items-start gap-2">
-                    <Icon name="times" class="mt-0.5 shrink-0 text-2xs text-danger" aria-hidden="true" />
+                    <Icon name="times" class="shrink-0 text-2xs text-danger" aria-hidden="true" />
                     <div class="min-w-0 flex-1">
                         <p class="text-content">{{ row.label }}</p>
                         <p v-if="row.detail" class="text-2xs text-muted">{{ row.detail }}</p>
@@ -393,11 +393,11 @@ const retryTask = (): Promise<void> =>
                 <template v-if="phase === `needsSetup`">
                     <ul class="flex flex-col gap-1.5 text-xs">
                         <li v-if="machineLine" class="flex items-start gap-2">
-                            <Icon name="check" class="mt-0.5 shrink-0 text-2xs text-success" aria-hidden="true" />
+                            <Icon name="check" class="shrink-0 text-2xs text-success" aria-hidden="true" />
                             <p class="min-w-0 flex-1 text-muted">{{ machineLine }}</p>
                         </li>
                         <li v-for="row in todo" :key="row.id" class="flex items-start gap-2">
-                            <Icon :name="ROW_ICON[row.state].name" class="mt-0.5 shrink-0 text-2xs" :class="ROW_ICON[row.state].tone" aria-hidden="true" />
+                            <Icon :name="ROW_ICON[row.state].name" class="shrink-0 text-2xs" :class="ROW_ICON[row.state].tone" aria-hidden="true" />
                             <div class="min-w-0 flex-1">
                                 <p class="text-content">{{ row.label }}</p>
                                 <!-- Only for what the reader has to do: Intentic's own steps need no explaining before they run. -->
@@ -444,7 +444,7 @@ const retryTask = (): Promise<void> =>
                         <div class="flex items-start gap-3 text-xs">
                             <!-- Windows' own prompt, in place of the step it holds up: said once, as what to do. -->
                             <span v-if="needsYou" class="flex min-w-0 flex-1 items-start gap-1.5 font-medium text-warning">
-                                <Icon name="exclamation-circle" class="mt-0.5 shrink-0" />
+                                <Icon name="exclamation-circle" class="shrink-0" />
                                 <span>{{ t(`desktop.pcSetup.needsYou`) }}</span>
                             </span>
                             <span v-else class="min-w-0 flex-1 truncate text-muted" v-tooltip.top="step">{{ step }}</span>

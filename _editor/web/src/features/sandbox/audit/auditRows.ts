@@ -306,11 +306,10 @@ export const entryActor = (entry: AuditEntry): EntryActor => {
     return { actor: lead!, others: distinct.length - 1 };
 };
 
-/** One calendar day of the list, the reader's own: its heading, its rows, and how many records they hold. */
+/** One calendar day of the list, the reader's own: its heading and its rows (a section header carries no tally). */
 export interface AuditDay {
     readonly label: string;
     readonly entries: AuditEntry[];
-    records: number;
 }
 
 /** Entries in runs of one calendar day each, newest first. */
@@ -321,10 +320,9 @@ export const byDay = (entries: readonly AuditEntry[], now: number = Date.now()):
         const open = days.at(-1);
         if (open?.label === label) {
             open.entries.push(entry);
-            open.records += entry.records.length;
             continue;
         }
-        days.push({ label, entries: [entry], records: entry.records.length });
+        days.push({ label, entries: [entry] });
     }
     return days;
 };

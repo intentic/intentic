@@ -328,9 +328,16 @@ describe("a stranded card's lane follows what the pass will do", () => {
     const PROMPT = "Fix the header flicker";
 
     const fleet = async (settings: Record<string, unknown>, refusals: readonly ProviderRefusal[] = []) => {
-        const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences());
-        await agents.init();
         let current = SandboxSettingsSchema.parse(settings);
+        // The registry follows the settings the pass reads, as composition wires it, and hears every write.
+        const written = new Set<() => void>();
+        const onSet = (listener: () => void): (() => void) => {
+            written.add(listener);
+            return () => written.delete(listener);
+        };
+        const followed = { get: async () => current, onSet };
+        const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences(), { settings: followed });
+        await agents.init();
         const services = unstubbed<Services>("services", {
             agents,
             conversations,
@@ -338,16 +345,23 @@ describe("a stranded card's lane follows what the pass will do", () => {
             sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => current }),
             resources: unstubbed<Services["resources"]>("resources", { roomSince: async () => undefined }),
             accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({}) }),
-            cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { turnLimit: async () => ({ spent: 0, withHeadroom: 1 }) }),
+            // No Codex credential the translator lists: nothing on file says the model is spent.
+            cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) }),
+            providerAccounts: async () => [],
             providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ codex: refusals }) }),
-            modelCooldowns: unstubbed<Services["modelCooldowns"]>("modelCooldowns", { cooling: async () => new Map() }),
             turns: unstubbed<Services["turns"]>("turns", { drain: async () => {} }),
         });
         const lane = (): string | undefined => {
             const summary = agents.get("c1");
             return summary === undefined ? undefined : laneOf(summary);
         };
-        return { agents, conversations, services, lane, answer: (next: Record<string, unknown>) => void (current = SandboxSettingsSchema.parse(next)) };
+        const answer = (next: Record<string, unknown>): void => {
+            current = SandboxSettingsSchema.parse(next);
+            for (const listener of written) {
+                listener();
+            }
+        };
+        return { agents, conversations, services, lane, answer };
     };
 
     // Refused for a spent allowance, as classify-failure dresses it: held, with the reset where the refusal knew one.
@@ -369,7 +383,7 @@ describe("a stranded card's lane follows what the pass will do", () => {
 
         await createTurnResumeScheduler(at.services).tick(NOW);
         expect(at.conversations.state("c1")?.resume.held).toMatchObject({ reopensAt: REOPEN, fired: false });
-        expect(at.agents.get("c1")).toMatchObject({ limitResetsAt: REOPEN, limitScheduled: true });
+        expect(at.agents.get("c1")).toMatchObject({ limitResetsAt: REOPEN, next: { kind: "rerun", at: REOPEN * 1000 } });
         expect(at.lane()).toBe("active");
     });
 
@@ -391,12 +405,12 @@ describe("a stranded card's lane follows what the pass will do", () => {
 
         at.answer({ limitPolicy: "resend" });
         await createTurnResumeScheduler(at.services).tick(NOW);
-        expect(at.agents.get("c1")?.limitScheduled).toBe(true);
+        expect(at.agents.get("c1")?.next).toMatchObject({ kind: "rerun" });
         expect(at.lane()).toBe("active");
 
         at.answer({ limitPolicy: "wait" });
         await createTurnResumeScheduler(at.services).tick(NOW);
-        expect(at.agents.get("c1")?.limitScheduled).toBeUndefined();
+        expect(at.agents.get("c1")?.next).toBeUndefined();
         expect(at.lane()).toBe("attention");
     });
 
@@ -434,16 +448,16 @@ describe("the pass never sends a held turn into an allowance the records call sp
     const REFUSED = claudeLimitRefusal({ account: "acct-b", resetsAt: REOPEN, at: NOW - 60_000, model: "opus" });
 
     const fleet = async () => {
-        const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences());
+        // One settings document, read by the pass and followed by the registry, as composition wires them.
+        const settings = { get: async () => SandboxSettingsSchema.parse({ limitPolicy: "resend", stopPolicy: "retry" }), onSet: () => () => undefined };
+        const { agents, conversations } = createFleet(fleetStoreOver(openConversationsDb(IN_MEMORY)), standings(), noPresences(), { settings });
         await agents.init();
         const started: TurnInput[] = [];
         const services = unstubbed<Services>("services", {
             agents,
             conversations,
             logger: pino({ level: "silent" }),
-            sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
-                get: async () => SandboxSettingsSchema.parse({ limitPolicy: "resend", stopPolicy: "retry" }),
-            }),
+            sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: settings.get }),
             resources: unstubbed<Services["resources"]>("resources", { roomSince: async () => undefined }),
             claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
                 list: async () => [
@@ -454,7 +468,6 @@ describe("the pass never sends a held turn into an allowance the records call sp
             claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
             accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({ "acct-b": ROUNDED_FULL }) }),
             providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({ claude: [REFUSED] }) }),
-            modelCooldowns: unstubbed<Services["modelCooldowns"]>("modelCooldowns", { cooling: async () => new Map() }),
             turns: unstubbed<Services["turns"]>("turns", {
                 drain: async () => {},
                 start: async (turn) => {
@@ -485,7 +498,7 @@ describe("the pass never sends a held turn into an allowance the records call sp
         await createTurnResumeScheduler(at.services).tick(NOW);
         expect(at.started).toEqual([]);
         expect(at.conversations.state("c1")?.resume.held).toMatchObject({ fired: false, onto: { account: "acct-b" } });
-        expect(at.agents.get("c1")).toMatchObject({ limitScheduled: true, limitNextAt: REOPEN });
+        expect(at.agents.get("c1")).toMatchObject({ next: { kind: "rerun", at: REOPEN * 1000 } });
 
         await createTurnResumeScheduler(at.services).tick(REOPEN * 1000 + 1_000);
         expect(at.started.map((turn) => turn.account)).toEqual(["acct-b"]);

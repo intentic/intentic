@@ -8,17 +8,17 @@ import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
-import { personalAlone } from "@intentic/privacy-detect/standalone";
 import { createKnownMatcher, type KnownMatcher, type KnownValue, type Spelling, spellingKey } from "./known-matcher.js";
 import { TOKEN_LABEL, tokenKey, tokenOf } from "./tokens.js";
 
 // Which value each token stands for. One vault per workspace, so a value is the same token in every conversation,
 // subagent and provider switch, and a transcript re-sent on resume masks to exactly the bytes it masked to before. It
 // holds the real values, so it lives with the credentials (mode 0600, off the workspace). Every value in it is matched
-// from then on, wherever it appears and in every spelling its kind allows (spellingOf): a name the detector found once
-// in context is caught again where the context is missing, and a dataset the owner taught is caught whether or not any
-// detector would have found it. A found value that is personal only in context (an ordinary word that is also a name,
-// a value an older detector misread) is not matched alone, though its token still resolves.
+// from then on, wherever it appears and in every spelling its kind allows (spellingOf), and proposed to the detectors'
+// gate (@intentic/privacy-detect detect.ts) as what it is: a dataset the owner taught is masked whether or not any
+// detector would have found it, while a value the detectors found once is masked again only where it still stands as
+// its kind alone, so a value personal only in context (an ordinary word that is also a name, a number an older detector
+// misread) is not masked again, though its token still resolves. The vault keeps tokens; it never judges a find.
 
 const VaultEntrySchema = z.object({
     value: z.string(),
@@ -57,6 +57,8 @@ export interface VaultHit {
     readonly token: string;
     // The entry's key (tokenKey), for `saw`.
     readonly key: string;
+    // Taught from a dataset (the owner's word), rather than learned from a detector's find.
+    readonly taught: boolean;
 }
 
 export interface PrivacyVault {
@@ -172,15 +174,18 @@ const unmarkedBy = (entry: VaultEntry, found: "rule" | undefined): boolean => en
 // The mark a new entry carries for what found it.
 const markOf = (found: "rule" | undefined): Partial<VaultEntry> => (found === "rule" ? { rule: true } : {});
 
-// What the matcher matches, each value in each spelling it is written in. A value the owner taught is matched whatever it
-// is; one the detectors found, only while it would still be personal data standing alone (@intentic/privacy-detect
-// standalone.ts); one only an owner's rule found, never, since the rule matches it itself while it is on.
+// What the matcher matches, each value in each spelling it is written in: every value but one only an owner's rule found,
+// which the rule matches itself while it is on.
 const matchedValues = (entries: Iterable<VaultEntry>): KnownValue<VaultHit>[] =>
     [...entries]
-        .filter((entry) => entry.value.length >= MIN_MATCHED)
-        .filter((entry) => entry.source !== undefined || (entry.rule !== true && personalAlone(entry.value, entry.class)))
+        .filter((entry) => entry.value.length >= MIN_MATCHED && (entry.source !== undefined || entry.rule !== true))
         .flatMap((entry) => {
-            const hit: VaultHit = { class: entry.class, token: tokenOf(TOKEN_LABEL[entry.class], entry.index), key: keyOfEntry(entry) };
+            const hit: VaultHit = {
+                class: entry.class,
+                token: tokenOf(TOKEN_LABEL[entry.class], entry.index),
+                key: keyOfEntry(entry),
+                taught: entry.source !== undefined,
+            };
             const spelling = spellingOf(entry.value, entry.class);
             const escaped = escapedForm(entry.value);
             return escaped === undefined

@@ -32,7 +32,6 @@ import { landByHandLeased } from "./land/land-by-hand.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
-import { sandboxBreakPolicy } from "../agent/run/turn/break-policy.js";
 import { subagentTranscriptOf } from "../agent/subagents/subagent-transcript.js";
 import { cancelFamily, familyOf } from "../agent/subagents/children.js";
 
@@ -261,11 +260,10 @@ export const createAgentsRoutes = (services: Services) => {
         // re-polls often, so answering just after a dying turn answers for the very turn that bounced, and a limit's
         // window can be hours out, which is why the control also lives on the card and not only in an open transcript.
         // A NOT_FOUND covers both misses the registry can report: an unknown conversation, and an answer this ending
-        // does not allow. Handed the answer the pass will now read, cleared or not, so a held limit's card re-books.
+        // does not allow.
         breakPolicy: i.breakPolicy.handler(async ({ input, context }) => {
             entryFor(input.id, context);
-            const effective = input.policy ?? (await sandboxBreakPolicy(services, input.ending));
-            const summary = await services.agents.setBreakPolicy(input.id, input.ending, input.policy, effective);
+            const summary = await services.agents.setBreakPolicy(input.id, input.ending, input.policy);
             if (summary === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "unknown agent, or an answer that ending cannot take" });
             }

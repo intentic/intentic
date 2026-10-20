@@ -1,8 +1,8 @@
-import { ref, watch, type Ref } from "vue";
+import { type Ref, shallowRef, watch } from "vue";
 
 // An index move whose effect the panel only sees once the rescan it asked for has come back: a chip's staging returns
-// before the review says what it staged. `moving` spans the press to that read's end, so what reads the review (the
-// Commit press's face and count) can hold its last answer instead of showing the half-way one between the two.
+// before the review says what it staged. The move holds what the press reading the review (Commit's face and count)
+// said as it began, from the press to that read's end, instead of the half-way answer between the two.
 
 // No rescan outlasts this; a batch refused before it was sent asks for none, and must not hold the face for good.
 const READ_WAIT_MS = 3_000;
@@ -27,16 +27,20 @@ const readSettled = (fetching: Ref<boolean>): Promise<void> =>
         const timer = setTimeout(done, READ_WAIT_MS);
     });
 
-export const useSettlingMove = (fetching: Ref<boolean>) => {
-    const moving = ref(false);
-    const run = async (move: () => Promise<void>): Promise<void> => {
-        moving.value = true;
+/**
+ * A move that holds `face` (what the press reading the review said as the move began) from the press to the read's end:
+ * `held` is the one record of it, so the press draws it rather than keeping a value of its own.
+ */
+export const useSettlingMove = <F>(fetching: Ref<boolean>) => {
+    const held = shallowRef<F | undefined>(undefined);
+    const run = async (face: F, move: () => Promise<void>): Promise<void> => {
+        held.value = face;
         try {
             await move();
             await readSettled(fetching);
         } finally {
-            moving.value = false;
+            held.value = undefined;
         }
     };
-    return { moving, run };
+    return { held, run };
 };

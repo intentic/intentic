@@ -8,12 +8,14 @@ import {
     DeviceAgentNotes,
     DeviceDetail,
     type DeviceSandboxGroup,
+    folderHold,
     Icon,
     mirroringOff,
     type ResourcesForm,
     Row,
     RowGroup,
     RowNote,
+    Section,
     SandboxLogo,
     SandboxResourcesDialog,
     SandboxVerbs,
@@ -191,6 +193,9 @@ const conflictTurn = (row: DeviceRow, group: DeviceSandboxGroup): ConflictAsk =>
 
 // The environment whose agent holds a group's folder: the door its file-sync buttons go through.
 const ownerOf = (group: DeviceSandboxGroup): DeviceRow | undefined => folderOwner(machine, group);
+// Resume is offered only for a pause that is the owner's to lift; one the machine holds by itself says why, and Pause
+// adds the owner's own on top (deviceHolds.ts `folderHold`).
+const resumes = (group: DeviceSandboxGroup): boolean => folderHold(group.folder)?.resumable === true;
 
 // The one sandbox this page should arrive with unfolded; <DeviceDetail> unfolds anything needing attention
 // on its own.
@@ -313,13 +318,8 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
 
         <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
-        <!-- Flat: each sandbox is a card on its own surface, so the group draws none of its own around them. -->
-        <RowGroup
-            v-if="described"
-            :label="t(`sandbox.devicePage.sandboxes`)"
-            :flat="true"
-            :undivided="true"
-        >
+        <!-- A section, not a group: each sandbox is a card on its own surface. -->
+        <Section v-if="described" :label="t(`sandbox.devicePage.sandboxes`)">
             <!-- THE LIST'S HEADER: the machine's two switches, each one button whose menu holds its verbs, and the way into
                  acting on several sandboxes at once. -->
             <template v-if="menus.length > 0 || selection.selectable.value" #actions>
@@ -489,24 +489,13 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                             v-if="ownerOf(group) && pausable(ownerOf(group)!.device, group)"
                             size="small"
                             tier="quiet"
-                            :label="group.folder?.paused === true ? t(`sandbox.devicePage.resumeSyncing`) : t(`sandbox.devicePage.pauseSyncing`)"
+                            :label="resumes(group) ? t(`sandbox.devicePage.resumeSyncing`) : t(`sandbox.devicePage.pauseSyncing`)"
                             :loading="ops.syncRunning(ops.rowKey(group), `sync-pause`)"
                             :disabled="ops.working.value"
-                            v-tooltip.top="
-                                group.folder?.paused === true
-                                    ? undefined
-                                    : { title: t(`sandbox.words.filesOnly`), note: t(`sandbox.words.portsStayMirrored`) }
-                            "
-                            @click="
-                                void ops.runSync(
-                                    ownerOf(group)!,
-                                    ops.rowKey(group),
-                                    group.sandboxId,
-                                    group.folder?.paused === true ? `sync-resume` : `sync-pause`,
-                                )
-                            "
+                            v-tooltip.top="resumes(group) ? undefined : { title: t(`sandbox.words.filesOnly`), note: t(`sandbox.words.portsStayMirrored`) }"
+                            @click="void ops.runSync(ownerOf(group)!, ops.rowKey(group), group.sandboxId, resumes(group) ? `sync-resume` : `sync-pause`)"
                         >
-                            <template #icon><Icon :name="group.folder?.paused === true ? `play` : `pause`" /></template>
+                            <template #icon><Icon :name="resumes(group) ? `play` : `pause`" /></template>
                         </Button>
                         <!-- The one control here nothing undoes in a click. -->
                         <Button
@@ -612,7 +601,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                 </DeviceDetail>
             </div>
 
-        </RowGroup>
+        </Section>
 
         <!-- What this sandbox keeps here, as opposed to what the person does: runners it can hand a conversation to.
              One group for the PC, not one per door — one Docker engine serves every door, and drawing it per

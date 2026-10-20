@@ -3,7 +3,6 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { breakArmed, RETRY_LADDER_TRIES, type TurnBreak, type TurnBreakPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
 import type { LimitWay, limitWayOf } from "../../models/limit-way.js";
 import { isAdminGrantedAllowanceText, mentionsSpentAllowance } from "../../../engines/failure-sentences.js";
@@ -11,9 +10,7 @@ import { latestOf, namedPeriod, namedReset } from "../../../usage/reset-sentence
 import { OUTAGE_MAX_ATTEMPTS, type OutageState } from "../../providers/provider-health.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 import type { RefreshOptions } from "../../../usage/headroom.js";
-import type { StoredCooldown } from "../../../usage/model-cooldowns.js";
 import type { StoredModelRefusal } from "../../../usage/model-refusals.js";
-import { ACCOUNT_WIDE, type ObservedLimit } from "../../../usage/observed-limits.js";
 import { opt } from "../../../opt.js";
 import type { RoutedTurn } from "../../../seams/turn-starter.js";
 import type { HeldTurn } from "../turn/holds/held-turn.js";
@@ -33,7 +30,7 @@ const HANDLED_FAILURE_CODES: ReadonlySet<string> = new Set([
     "provider-outage",
     "claude-token-refused",
     "claude-not-entitled",
-    // Filed against the account (observed-limits.json, account-wide), so placement and the spawn gate skip it.
+    // Filed against the account (provider-refusals.json, refused outright), so placement and the spawn gate skip it.
     "account-not-entitled",
     // Filed against the model (model-refusals.json); happens once, since the picker stops offering it after.
     "model-unavailable",
@@ -96,7 +93,7 @@ export interface FailureQueries {
         readonly period?: number;
     }) => Promise<number | undefined>;
     // When the sandbox's own standing word on this provider's model says the pool reopens (limit-reset.ts
-    // standingReopensAt): the last refusal on file and the model's bench, for a refusal nothing else can time.
+    // standingReopensAt): the refusals on file for it, for a refusal nothing else can time.
     readonly standingReopensAt: (at: { readonly provider: AgentProvider; readonly model: string | undefined; readonly account: string | undefined }) => Promise<
         number | undefined
     >;
@@ -113,20 +110,10 @@ export type FailureWrite =
     // Re-measures what just refused while it is the freshest signal; unwatched, so a plan at its wall cannot spend the
     // read budget its own number depends on.
     | { readonly kind: "headroom-refresh"; readonly options: RefreshOptions }
-    // A plan with nothing to poll leaves its own refusal as the reading, scoped to the account and model that refused.
-    | {
-          readonly kind: "observed-limit";
-          readonly provider: AgentProvider;
-          readonly account: string;
-          readonly model: string;
-          readonly limit: ObservedLimit;
-      }
     // The plan does not cover this model: filed against the model, since the subscription serves its others fine.
     | { readonly kind: "model-refusal"; readonly provider: string; readonly model: string; readonly refusal: StoredModelRefusal }
     // The seat, not the credential: it signs in fine, but the org switched Claude Code off.
-    | { readonly kind: "seat-refusal"; readonly account: string; readonly reason: string }
-    // A routed provider benches the model to the resolved reset, since the translator picks and benches per model.
-    | { readonly kind: "model-cooldown"; readonly provider: AgentProvider; readonly model: string; readonly cooldown: StoredCooldown };
+    | { readonly kind: "seat-refusal"; readonly account: string; readonly reason: string };
 
 export interface FailurePlan {
     readonly frame: ErrorFrame;
@@ -156,20 +143,6 @@ const refusalKind = (event: ErrorFrame): ProviderRefusal["kind"] => {
 const refusingAccount = (provider: AgentProvider, account: string | undefined): string | undefined =>
     KeyedProviderSchema.safeParse(provider).success ? undefined : account;
 
-// A plan with nothing to poll keeps its refusals as the reading: a spent allowance against the model that spent it, an
-// account refused outright against every model (ACCOUNT_WIDE), so the next placement and the spawn gate skip it rather
-// than read it as untouched room (2026-10-17: a Cursor account refusing `[role_forbidden]` took two children in a row).
-const observedWrites = (
-    event: ErrorFrame,
-    at: { readonly provider: AgentProvider; readonly account: string; readonly model: string | undefined; readonly now: number },
-): FailureWrite[] => {
-    const { provider, account, model, now } = at;
-    if (event.code === "account-not-entitled") {
-        return [{ kind: "observed-limit", provider, account, model: ACCOUNT_WIDE, limit: { at: now, message: event.message, refused: "entitlement" } }];
-    }
-    return event.code === "rate_limit" && model !== undefined ? [{ kind: "observed-limit", provider, account, model, limit: { at: now, message: event.message } }] : [];
-};
-
 /* The instant a spent allowance's refusal stands until, against every reading: the provider's own. Where its words
    decided the booking (an instant, or a pool it named by length, whose reset the reading holds), the same instant, so the
    listing and the spawn gate do not call a model ready before the turn they held would be. A loop's own instant
@@ -183,7 +156,9 @@ const refusalReset = (event: ErrorFrame, context: FailureContext, reopening: Reo
     return context.limitReset ?? latestOf(namedReset(event.message, context.now), event.resetsAt);
 };
 
-// The durable refusal a refusing code files, the re-measure it owes, and for a plan with nothing to poll, the reading.
+// The durable refusal a refusing code files, and the re-measure it owes. A plan with nothing to poll (Cursor's) has no
+// other reading: this refusal, filed against the account and model, is what the next placement and the spawn gate read
+// (2026-10-17: a Cursor account refusing `[role_forbidden]` took two children in a row before it was).
 const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Reopening | undefined): FailureWrite[] => {
     if (event.code === undefined || !REFUSING_CODES.has(event.code) || context.door === true) {
         return [];
@@ -208,12 +183,9 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Re
         // reading (ProviderRefusal.unmetered). Codex's "send a request to your admin" is not one (failure-sentences.ts).
         ...opt("unmetered", kind === "limit" && isAdminGrantedAllowanceText(event.message) ? true : undefined),
     };
-    const observed: FailureWrite[] =
-        account === undefined || reportsPlanLimits(provider) ? [] : observedWrites(event, { provider, account, model, now });
     return [
         { kind: "provider-refusal", provider, refusal },
         { kind: "headroom-refresh", options: { scope: { providers: [provider], ...opt("account", account) }, maxAgeMs: 0 } },
-        ...observed,
     ];
 };
 
@@ -356,9 +328,9 @@ const stoppedFrame = async (
 };
 
 // The frame's dressing, the turn it holds, and any record only the dressing could decide.
-type Dressed = Pick<FailurePlan, "frame" | "held"> & { readonly writes: readonly FailureWrite[] };
+type Dressed = Pick<FailurePlan, "frame" | "held">;
 
-const bare = (frame: ErrorFrame): Dressed => ({ frame, held: undefined, writes: [] });
+const bare = (frame: ErrorFrame): Dressed => ({ frame, held: undefined });
 
 // What every held turn carries, as the frame found it: each wall spreads it under its own reason and adds what only it
 // knows, which the hold's type then checks against what that wall may carry (turn-resume.ts HeldTurn).
@@ -430,15 +402,10 @@ const reopeningOf = async (event: ErrorFrame, context: FailureContext, queries: 
     return standing === undefined ? { at: undefined, said: false } : { at: standing, said: false, carried: true };
 };
 
-// A spent allowance: when it reopens, whether it is held, the way on, and the model a routed provider benches.
+// A spent allowance: when it reopens, whether it is held, and the way on.
 const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries, reopening: Reopening): Promise<Dressed> => {
     const { turn, provider, account, answered } = context;
     const resetsAt = reopening.at;
-    const model = named(context.model);
-    const writes: FailureWrite[] =
-        KeyedProviderSchema.safeParse(provider).success && model !== undefined && resetsAt !== undefined && context.door !== true
-            ? [{ kind: "model-cooldown", provider, model, cooldown: { until: resetsAt * 1000, message: event.message, since: context.now } }]
-            : [];
     const way = await queries.limitWay({
         turn,
         provider,
@@ -461,10 +428,10 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
     const held = conversationId === undefined ? undefined : limitHeldOf(context, conversationId, { ...opt("reopensAt", booked), ...turnedAway }, way);
     // Worth dressing for a reset or a hold; with neither, it goes out bare.
     if (resetsAt === undefined && held === undefined) {
-        return { frame: event, held, writes };
+        return { frame: event, held };
     }
     const frame = await limitFrame(queries, event, { conversationId, resetsAt, booked, held: held !== undefined, ran: answered, way, now: context.now });
-    return { frame, held, writes };
+    return { frame, held };
 };
 
 // What an overflow's frame adds to the provider's words: where the turn goes next, which the reader cannot see.
@@ -485,7 +452,7 @@ const dressOverflow = (event: ErrorFrame, context: FailureContext, conversationI
         return bare({ ...event, message: withClause(event.message, TOO_LARGE) });
     }
     const frame: ErrorFrame = { ...event, message: withClause(event.message, FRESH_RERUN), held: { ran: context.answered }, autoResume: "scheduled" };
-    return { frame, held: { ...heldBase(context, conversationId), reason: "overflow" as const, ...leftBy(context) }, writes: [] };
+    return { frame, held: { ...heldBase(context, conversationId), reason: "overflow" as const, ...leftBy(context) } };
 };
 
 // The provider's safety classifier stopped the turn partway: held whole for a person, never re-run by a clock (the owner
@@ -493,7 +460,7 @@ const dressOverflow = (event: ErrorFrame, context: FailureContext, conversationI
 const dressFlagged = (event: ErrorFrame, context: FailureContext, conversationId: string): Dressed => {
     const frame: ErrorFrame = { ...event, held: { ran: context.answered, ...opt("contextTokens", context.contextTokens) }, autoResume: "available" };
     const held = { ...heldBase(context, conversationId), reason: "flagged" as const, ...leftBy(context), ...opt("resumeAt", event.refusal?.resumeAt) };
-    return { frame, held, writes: [] };
+    return { frame, held };
 };
 
 // Held whole for a press; a carry refused unanswered moves fresh at once; an unanswered `stopped` resume is not held again.
@@ -512,13 +479,13 @@ const dressDeath = async (event: ErrorFrame, context: FailureContext, conversati
             move: { account: turn.account, carry: false },
             ...left,
         };
-        return { frame: { ...event, held: heldOf(true, left, turn.account), autoResume: "scheduled" }, held, writes: [] };
+        return { frame: { ...event, held: heldOf(true, left, turn.account), autoResume: "scheduled" }, held };
     }
     if (!answered && turn.resume === "stopped") {
         return bare(event);
     }
     const frame = await stoppedFrame(queries, event, { conversationId, ran: answered, contextTokens: context.contextTokens });
-    return { frame, held: { ...heldBase(context, conversationId), reason: "stopped" as const, ...leftBy(context) }, writes: [] };
+    return { frame, held: { ...heldBase(context, conversationId), reason: "stopped" as const, ...leftBy(context) } };
 };
 
 const dress = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries, reopening: Reopening | undefined): Promise<Dressed> => {
@@ -533,14 +500,14 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
     // The provider failed, not the workspace; past the attempt budget the frame goes out bare.
     if (context.outage !== undefined && context.outage.attempt < OUTAGE_MAX_ATTEMPTS) {
         const armed = breakArmed(await queries.breakPolicy(conversationId, "outage"));
-        return { frame: outageFrame(event, armed, context.outage), held: { ...heldBase(context, conversationId), reason: "outage" as const }, writes: [] };
+        return { frame: outageFrame(event, armed, context.outage), held: { ...heldBase(context, conversationId), reason: "outage" as const } };
     }
     // Says on the frame whether the daemon will re-mint and re-run this credential.
     if (event.code === "claude-token-refused") {
         const { remint } = context;
         return remint === undefined
             ? bare(event)
-            : { frame: { ...event, autoResume: "scheduled" }, held: { ...heldBase(context, conversationId), reason: "auth" as const, remint }, writes: [] };
+            : { frame: { ...event, autoResume: "scheduled" }, held: { ...heldBase(context, conversationId), reason: "auth" as const, remint } };
     }
     if (event.code === "context-overflow") {
         return dressOverflow(event, context, conversationId);
@@ -581,6 +548,7 @@ const namedVerification = async (event: ErrorFrame, context: FailureContext, que
     const subject = labels.length === 1 ? "an account" : `${String(labels.length)} accounts`;
     return {
         ...event,
+        own: true,
         message: `Google wants ${subject} verified before ${labels.length === 1 ? "it takes" : "they take"} turns again: ${accountList(labels)}. Open Sandbox ▸ Agent and follow the Verify link on ${labels.length === 1 ? "its row" : "each row"}.`,
     };
 };
@@ -591,6 +559,6 @@ export const classifyFailure = async (event: ErrorFrame, context: FailureContext
     const reopening = asked.code === "rate_limit" ? await reopeningOf(asked, context, queries) : undefined;
     const filed = filedWrites(asked, context, reopening);
     const log = logOf(event, context);
-    const { frame, held, writes } = await dress(asked, context, queries, reopening);
-    return { frame, writes: [...filed, ...writes], log, held };
+    const { frame, held } = await dress(asked, context, queries, reopening);
+    return { frame, writes: filed, log, held };
 };

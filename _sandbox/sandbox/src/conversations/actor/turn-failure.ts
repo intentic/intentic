@@ -16,7 +16,7 @@ export const sanitizeFailure = (message: string): string | undefined => {
 // recorded as a failure rather than hidden as work in progress.
 export const comingBackNow = (event: Extract<AgentEvent, { kind: "error" }>): boolean => event.autoResume === "scheduled" && event.code !== "rate_limit";
 
-// A spent allowance is its own kind: the only failure with a reopening, a hold, a booking and a move to carry.
+// A spent allowance is its own kind: the only failure with a reopening and a held turn to carry.
 export const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): FailedEnding => {
     const failure = sanitizeFailure(event.message);
     if (event.code !== "rate_limit") {
@@ -26,11 +26,7 @@ export const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): Failed
         kind: "limited",
         ...opt("failure", failure),
         ...opt("resetsAt", event.resetsAt),
+        // Whether it goes again by itself is never filed: the card derives it from the hold (conversation-next.ts).
         held: event.held !== undefined,
-        // The daemon's own verdict at the failure; the firing pass asks the answer again at the reset, so a changed
-        // answer re-books it (agents-registry `rebooked`) to keep card and schedule in agreement.
-        scheduled: event.autoResume === "scheduled",
-        ...opt("moving", event.held?.moving),
-        ...opt("nextAt", event.autoResume === "scheduled" ? event.nextAt : undefined),
     };
 };

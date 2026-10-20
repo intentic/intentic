@@ -93,10 +93,6 @@ jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({
     useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: jest.fn(), stop: jest.fn() }),
     viewProcessLogs: jest.fn(),
 }));
-// No machine has checked in, matching a just-added device.
-jest.mock(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: jest.fn(), refresh: jest.fn(), start: jest.fn(), stop: jest.fn() }),
-}));
 // LiveLinkRows opens as well as lists, so `error` must be present or the render throws.
 jest.mock(`../../models/sandbox/devices/useLiveLinks`, () => ({
     importForticlient: jest.fn(),

@@ -2,8 +2,6 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { ToolCallContent } from "@intentic/sandbox-contract/events/requests";
 import { displayNameOf, toolTarget } from "@intentic/agent-context/tool-calls";
 import { diffContent, resultText, toolLocations, workspacePath } from "../../sessions/vocabulary/tool-calls.js";
-import { isContextOverflowText } from "../../engines/failure-sentences.js";
-import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { toolCallOpened, type TurnCapture, usageTotals, type VendorEventMapper } from "../decorators/vendor-events.js";
 
 // Pure mapping of Pi RPC events onto AgentEvent frames (the opencode-agent streamTurn shape, rebuilt for a pull-per-event
@@ -47,15 +45,8 @@ const piEditDiffs = (name: string, args: unknown, cwd: string): ToolCallContent[
     return undefined;
 };
 
-// How Pi's failure sentences are coded, in this order: a spent allowance first, so the client shows a reset countdown and
-// holds the turn rather than offering a Continue that would re-fail, then a session past the model's window, which the
-// daemon re-runs in a fresh one. The sentence is the provider's, as Pi's own client passes it on.
-export const PI_FAILURES: readonly VendorRule[] = [
-    [isRateLimited, "rate_limit"],
-    [isContextOverflowText, "context-overflow"],
-];
-
-const failureFrame = (message: string): AgentEvent => vendorFailureFrame({ kind: "error", message }, PI_FAILURES);
+// The provider's sentence, as Pi's own client passes it on; read where every runtime's is (codedFailure).
+const failureFrame = (message: string): AgentEvent => ({ kind: "error", message });
 
 // `holdText` ⇒ plan phase: the assistant's text is accumulated into the capture instead of streamed, since that text is
 // the plan.

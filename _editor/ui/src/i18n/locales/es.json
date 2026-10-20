@@ -144,7 +144,17 @@
         "historyTooLong": "la última descarga se quedó sin tiempo",
         "historyShallow": "la copia del sandbox es un clon superficial",
         "historyFailed": "git rechazó la última descarga",
-        "historyRetry": "próximo intento {when}"
+        "historyRetry": "próximo intento {when}",
+        "held": "retenida",
+        "fileSyncingHeld": "sincronización de archivos retenida",
+        "heldBy": {
+            "gone": "Retenida porque este sandbox ya no existiría. La sincronización sigue sola si vuelve a responder.",
+            "containerMissing": "Retenida mientras el contenedor de este sandbox no esté en el Docker de este equipo. La sincronización sigue sola cuando vuelva.",
+            "containerTrashed": "Retenida porque este sandbox está en la papelera de este equipo. Restaurarlo devuelve su sincronización.",
+            "swap": "Retenida mientras este sandbox se actualiza o se reconstruye en este equipo. La sincronización sigue sola cuando la nueva versión se mantiene.",
+            "unreachable": "Retenida porque este sandbox no responde desde hace una hora. La sincronización sigue sola cuando responda.",
+            "other": "Retenida por el agente de este equipo. La sincronización sigue sola."
+        }
     },
     "imageView": {
         "actualSize": "Tamaño real",
@@ -268,5 +278,9 @@
     },
     "coachMark": {
         "notNow": "Ahora no"
+    },
+    "await": {
+        "couldntLoad": "No se pudo cargar",
+        "stillWaiting": "Aún cargando · {elapsed}"
     }
 }

@@ -5,7 +5,6 @@
     "_sandbox/sandbox/src/browser/tools/email-codes.ts": 1,
     "_sandbox/sandbox/src/conversations/land/lockfile-reconcile.ts": 1,
     "_sandbox/sandbox/src/conversations/land/parked-ref-retention.ts": 1,
-    "_sandbox/sandbox/src/conversations/land/worktree-fixers.ts": 1,
     "_sandbox/sandbox/src/conversations/worktrees/isolation.ts": 2,
     "_sandbox/sandbox/src/derived/fileq.ts": 1,
     "_sandbox/sandbox/src/desktop/agent-desktop.ts": 2,

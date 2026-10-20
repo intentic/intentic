@@ -1,11 +1,10 @@
-import { reportLostKeptJobs } from "../agent/tools/jobs/kept-job-records.js";
 import { startTranslator } from "../agent/providers/translator.js";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { restoreConnectorHooks } from "../capabilities/cli/connector-hooks.js";
 import { startDockerdIfEnabled } from "../capabilities/handlers/docker.handler.js";
 import { startLocalModelsIfEnabled } from "../capabilities/handlers/localmodel.handler.js";
 import { engineReady } from "../engines/engine-resolve.js";
-import { composeEnvironment } from "../environment/environment.js";
+import { composeEnvironment } from "../environment/overlay.js";
 import { restoreExits } from "../exit/exit-links.js";
 import { resumeExtensionHealthWatches } from "../extensions/extension-updates.js";
 import { startAllExtensionProcesses } from "../extensions/extension-processes.js";
@@ -35,9 +34,6 @@ export const startBootRestores = (phase: BootPhase): void => {
     if (!role.container) {
         return;
     }
-    void reportLostKeptJobs(config.historyRoot, services.activity).catch((error: unknown) =>
-        logger.warn({ err: error }, "kept jobs lost during restart could not be reported in Activity"),
-    );
     // Every restore below is detached, so each names its own failure: otherwise a failed one (an unreadable capability
     // manifest, say) is an anonymous unhandled rejection and the only trace is a capability in error.
     // Writes stay under .intentic/, so this never touches the boot baseline.

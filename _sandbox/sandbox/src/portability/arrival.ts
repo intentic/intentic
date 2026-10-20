@@ -15,7 +15,7 @@ import {
 } from "../migrations/assistants.js";
 import type { Services } from "../composition.js";
 import { automationsDocument } from "../automations/automations-store.js";
-import { composeEnvironment } from "../environment/environment.js";
+import { composeEnvironment } from "../environment/overlay.js";
 import { applyDefinitionItems, definitionActions, definitionItems } from "../definition/apply-definition.js";
 import { ArrivalFormatError, ArrivalStaleError } from "../arrival-error.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";

@@ -8,19 +8,7 @@ import {
     type PrivacyShieldMode,
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract/schemas/privacy";
-import {
-    Button,
-    formatDate,
-    formatDateTime,
-    Notice,
-    Row,
-    RowGroup,
-    RowNote,
-    SegmentedControl,
-    SkeletonRows,
-    SkeletonSnapshot,
-    vSkeletonSource,
-} from "@intentic/ui";
+import { Await, Button, formatDate, formatDateTime, Notice, Row, RowGroup, RowNote, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { formatFixed } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
@@ -41,16 +29,16 @@ import { shieldRefusal, usePrivacyShield, usePrivacySources } from "../../../mod
 
 const t = useT();
 
-const { status, setPolicy, saveError, isLoading, error } = usePrivacyShield();
-const { sources, forget, forgetError, isLoading: sourcesLoading, error: sourcesError } = usePrivacySources();
+const { status, setPolicy, saveError, loaded } = usePrivacyShield();
+const { sources, forget, forgetError, loaded: listed } = usePrivacySources();
 
 const policy = computed<PrivacyShieldPolicy | undefined>(() => status.value?.policy);
 const ready = computed(() => policy.value !== undefined);
 const mode = computed<PrivacyShieldMode>(() => policy.value?.mode ?? `off`);
 const running = computed(() => mode.value !== `off`);
-
-// A switch with nothing loaded under it would write a policy built from nothing, so it looks inert until the read lands.
-const INERT = `pointer-events-none opacity-60`;
+// A re-read that failed is said in place of the group's rows, as a first read that failed is.
+const error = computed(() => (loaded.value.state === `ready` ? loaded.value.refreshError : undefined));
+const sourcesError = computed(() => (listed.value.state === `ready` ? listed.value.refreshError : undefined));
 
 // Off, watch, on, in escalating order, the same reading as the safety judge's switch above.
 const MODES = computed(() => [
@@ -142,131 +130,137 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
     <div class="flex flex-col gap-6">
         <!-- Each group waits on its own read, so each stands in whole, drawn as it last looked in this sandbox: their
              rows sit straight in the group, so nothing smaller can hold the imprint. -->
-        <SkeletonSnapshot v-if="isLoading" of="sandbox.agent.privacy-shield">
-            <RowGroup :label="t(`sandbox.agentPrivacyShield.title`)"><SkeletonRows :rows="1" description /></RowGroup>
-        </SkeletonSnapshot>
-        <RowGroup
-            v-else
-            v-skeleton-source="`sandbox.agent.privacy-shield`"
-            data-setting="privacy-shield-personal-data"
-            :label="t(`sandbox.agentPrivacyShield.title`)"
-        >
-            <RowNote v-if="error !== undefined" variant="block"
-                ><Notice tone="danger">{{ error }}</Notice></RowNote
-            >
-
-            <template v-else>
-                <Row
-                    icon="eye-slash"
-                    :title="t(`sandbox.agentPrivacyShield.shieldPersonalData`)"
-                    :description="t(`sandbox.agentPrivacyShield.whatItKeeps`)"
+        <Await :of="loaded" imprint="sandbox.agent.privacy-shield">
+            <template #fallback>
+                <RowGroup :label="t(`sandbox.agentPrivacyShield.title`)"><SkeletonRows :rows="1" description /></RowGroup>
+            </template>
+            <template #failed="{ error: unread }">
+                <RowGroup :label="t(`sandbox.agentPrivacyShield.title`)">
+                    <RowNote variant="block"><Notice tone="danger">{{ unread }}</Notice></RowNote>
+                </RowGroup>
+            </template>
+            <RowGroup data-setting="privacy-shield-personal-data" :label="t(`sandbox.agentPrivacyShield.title`)">
+                <RowNote v-if="error !== undefined" variant="block"
+                    ><Notice tone="danger">{{ error }}</Notice></RowNote
                 >
-                    <template #control>
-                        <SegmentedControl
-                            :model-value="mode"
-                            :options="MODES"
-                            :class="{ [INERT]: !ready }"
-                            @update:model-value="(next: PrivacyShieldMode) => write(`shield`, (current) => ({ ...current, mode: next }))"
-                        />
-                    </template>
-                    <template #below>
-                        <div class="flex flex-col gap-1.5 text-2xs text-muted">
-                            <p v-if="modeNote">{{ modeNote }}</p>
-                            <!-- What the shield has done so far, as plain counts; there is nothing to count while it is off. -->
-                            <p v-if="running && status !== undefined" class="flex flex-wrap gap-x-4 gap-y-0.5">
-                                <span>
-                                    <span class="text-subtle">{{ t(`sandbox.agentPrivacyShield.tokensGiven`) }}</span>
-                                    <span class="ml-1.5 tabular-nums text-content">{{ formatFixed(status.tokens, 0) }}</span>
-                                </span>
-                                <span>
-                                    <span class="text-subtle">{{ t(`sandbox.agentPrivacyShield.learnedValues`) }}</span>
-                                    <span class="ml-1.5 tabular-nums text-content">{{ formatFixed(status.known, 0) }}</span>
-                                </span>
-                            </p>
-                        </div>
-                    </template>
-                </Row>
 
-                <template v-if="running">
-                    <Row icon="search" :title="t(`sandbox.agentPrivacyShield.lookFor`)" :description="t(`sandbox.agentPrivacyShield.lookForNote`)">
-                        <template #below>
-                            <!-- Checkboxes on a grid, not nine switch rows: the kinds are one choice made nine ways, read together. -->
-                            <div class="grid grid-cols-1 gap-x-6 gap-y-2 @md:grid-cols-2 @3xl:grid-cols-3">
-                                <label
-                                    v-for="kind in PERSONAL_DATA_CLASSES"
-                                    :key="kind"
-                                    class="flex cursor-pointer items-center gap-2 text-xs text-content"
-                                    :class="{ [INERT]: !ready }"
-                                >
-                                    <Checkbox
-                                        :model-value="policy?.classes.includes(kind) ?? false"
-                                        binary
-                                        size="small"
-                                        @update:model-value="(on: unknown) => write(`shield`, (current) => withClass(current, kind, on === true))"
-                                    />
-                                    <span>{{ KINDS[kind] }}</span>
-                                </label>
-                            </div>
-                        </template>
-                    </Row>
-
+                <template v-else>
                     <Row
-                        icon="image"
-                        :title="t(`sandbox.agentPrivacyShield.images`)"
-                        :description="t(`sandbox.agentPrivacyShield.imagesDescription`)"
+                        icon="eye-slash"
+                        :title="t(`sandbox.agentPrivacyShield.shieldPersonalData`)"
+                        :description="t(`sandbox.agentPrivacyShield.whatItKeeps`)"
                     >
                         <template #control>
                             <SegmentedControl
-                                :model-value="images"
-                                :options="IMAGES"
-                                :class="{ [INERT]: !ready }"
-                                @update:model-value="(next: PrivacyImages) => write(`shield`, (current) => ({ ...current, images: next }))"
+                                :model-value="mode"
+                                :options="MODES"
+                                @update:model-value="(next: PrivacyShieldMode) => write(`shield`, (current) => ({ ...current, mode: next }))"
                             />
                         </template>
-                        <template v-if="imagesNote || ocrMissing" #below>
-                            <div class="flex flex-col gap-1.5 text-2xs">
-                                <p v-if="imagesNote" :class="images === `allow` ? `text-warning` : `text-muted`">{{ imagesNote }}</p>
-                                <p v-if="ocrMissing" class="text-warning">{{ t(`sandbox.agentPrivacyShield.noImageReader`) }}</p>
-                            </div>
-                        </template>
-                    </Row>
-
-                    <Row icon="user" :title="t(`sandbox.agentPrivacyShield.names`)" :description="t(`sandbox.agentPrivacyShield.namesDescription`)">
-                        <template #control>
-                            <SegmentedControl
-                                :model-value="names"
-                                :options="NAMES"
-                                :class="{ [INERT]: !ready }"
-                                @update:model-value="(next: PrivacyNames) => write(`shield`, (current) => ({ ...current, names: next }))"
-                            />
-                        </template>
-                        <template v-if="namesNote || nameModelMissing" #below>
+                        <template #below>
                             <div class="flex flex-col gap-1.5 text-2xs text-muted">
-                                <p v-if="namesNote">{{ namesNote }}</p>
-                                <p v-if="nameModelMissing" class="text-warning">{{ t(`sandbox.agentPrivacyShield.noNameModel`) }}</p>
+                                <p v-if="modeNote">{{ modeNote }}</p>
+                                <!-- What the shield has done so far, as plain counts; there is nothing to count while it is off. -->
+                                <p v-if="running && status !== undefined" class="flex flex-wrap gap-x-4 gap-y-0.5">
+                                    <span>
+                                        <span class="text-subtle">{{ t(`sandbox.agentPrivacyShield.tokensGiven`) }}</span>
+                                        <span class="ml-1.5 tabular-nums text-content">{{ formatFixed(status.tokens, 0) }}</span>
+                                    </span>
+                                    <span>
+                                        <span class="text-subtle">{{ t(`sandbox.agentPrivacyShield.learnedValues`) }}</span>
+                                        <span class="ml-1.5 tabular-nums text-content">{{ formatFixed(status.known, 0) }}</span>
+                                    </span>
+                                </p>
                             </div>
                         </template>
                     </Row>
 
-                    <!-- The lists both ways of finding names read, the model's way included: what they hold, which are on, the
-                         owner's own, and a word checked. -->
-                    <PrivacyNameDictionary :policy="policy" :ready="ready" @write="(change) => write(`shield`, change)" />
+                    <template v-if="running">
+                        <Row
+                            icon="search"
+                            :title="t(`sandbox.agentPrivacyShield.lookFor`)"
+                            :description="t(`sandbox.agentPrivacyShield.lookForNote`)"
+                        >
+                            <template #below>
+                                <!-- Checkboxes on a grid, not nine switch rows: the kinds are one choice made nine ways, read together. -->
+                                <div class="grid grid-cols-1 gap-x-6 gap-y-2 @md:grid-cols-2 @3xl:grid-cols-3">
+                                    <label
+                                        v-for="kind in PERSONAL_DATA_CLASSES"
+                                        :key="kind"
+                                        class="flex cursor-pointer items-center gap-2 text-xs text-content"
+                                    >
+                                        <Checkbox
+                                            :model-value="policy?.classes.includes(kind) ?? false"
+                                            binary
+                                            size="small"
+                                            @update:model-value="(on: unknown) => write(`shield`, (current) => withClass(current, kind, on === true))"
+                                        />
+                                        <span>{{ KINDS[kind] }}</span>
+                                    </label>
+                                </div>
+                            </template>
+                        </Row>
 
-                    <PrivacyRules :policy="policy" :ready="ready" :kinds="KINDS" @write="(change) => write(`shield`, change)" />
+                        <Row
+                            icon="image"
+                            :title="t(`sandbox.agentPrivacyShield.images`)"
+                            :description="t(`sandbox.agentPrivacyShield.imagesDescription`)"
+                        >
+                            <template #control>
+                                <SegmentedControl
+                                    :model-value="images"
+                                    :options="IMAGES"
+                                    @update:model-value="(next: PrivacyImages) => write(`shield`, (current) => ({ ...current, images: next }))"
+                                />
+                            </template>
+                            <template v-if="imagesNote || ocrMissing" #below>
+                                <div class="flex flex-col gap-1.5 text-2xs">
+                                    <p v-if="imagesNote" :class="images === `allow` ? `text-warning` : `text-muted`">{{ imagesNote }}</p>
+                                    <p v-if="ocrMissing" class="text-warning">{{ t(`sandbox.agentPrivacyShield.noImageReader`) }}</p>
+                                </div>
+                            </template>
+                        </Row>
 
-                    <PrivacyNeverMasked
-                        :allow="policy?.allow"
-                        :ready="ready"
-                        @write="(change) => write(`shield`, (current) => ({ ...current, allow: change(current.allow) }))"
-                    />
+                        <Row
+                            icon="user"
+                            :title="t(`sandbox.agentPrivacyShield.names`)"
+                            :description="t(`sandbox.agentPrivacyShield.namesDescription`)"
+                        >
+                            <template #control>
+                                <SegmentedControl
+                                    :model-value="names"
+                                    :options="NAMES"
+                                    @update:model-value="(next: PrivacyNames) => write(`shield`, (current) => ({ ...current, names: next }))"
+                                />
+                            </template>
+                            <template v-if="namesNote || nameModelMissing" #below>
+                                <div class="flex flex-col gap-1.5 text-2xs text-muted">
+                                    <p v-if="namesNote">{{ namesNote }}</p>
+                                    <p v-if="nameModelMissing" class="text-warning">{{ t(`sandbox.agentPrivacyShield.noNameModel`) }}</p>
+                                </div>
+                            </template>
+                        </Row>
 
-                    <!-- Everything above, tried on a text: what would be masked and what found it. -->
-                    <PrivacyTryShield :policy="policy" />
+                        <!-- The lists both ways of finding names read, the model's way included: what they hold, which are on, the
+                             owner's own, and a word checked. -->
+                        <PrivacyNameDictionary :policy="policy" :ready="ready" @write="(change) => write(`shield`, change)" />
+
+                        <PrivacyRules :policy="policy" :ready="ready" :kinds="KINDS" @write="(change) => write(`shield`, change)" />
+
+                        <PrivacyNeverMasked
+                            :allow="policy?.allow"
+                            :ready="ready"
+                            @write="(change) => write(`shield`, (current) => ({ ...current, allow: change(current.allow) }))"
+                        />
+
+                        <!-- Everything above, tried on a text: what would be masked and what found it. -->
+                        <PrivacyTryShield :policy="policy" />
+                    </template>
+
+                    <RowNote v-if="saveNotice !== undefined && writtenFrom === `shield`" variant="block"><Notice :of="saveNotice" /></RowNote>
                 </template>
-
-                <RowNote v-if="saveNotice !== undefined && writtenFrom === `shield`" variant="block"><Notice :of="saveNotice" /></RowNote>
-            </template>
-        </RowGroup>
+            </RowGroup>
+        </Await>
 
         <PrivacyTrustedProviders
             v-if="running && status !== undefined"
@@ -278,9 +272,51 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
         />
 
         <!-- The note on how a dataset arrives is drawn under the outline too, as it is under the list. -->
-        <SkeletonSnapshot v-if="showSources && sourcesLoading" of="sandbox.agent.privacy-datasets">
+        <Await v-if="showSources" :of="listed" imprint="sandbox.agent.privacy-datasets">
+            <template #fallback>
+                <RowGroup :label="t(`sandbox.agentPrivacyShield.datasets`)">
+                    <SkeletonRows :rows="2" description />
+                    <RowNote>
+                        <i18n-t keypath="sandbox.agentPrivacyShield.datasetsNote" tag="span" scope="global">
+                            <template #command
+                                ><code class="ui-code whitespace-nowrap">{{ LEARN_COMMAND }}</code></template
+                            >
+                        </i18n-t>
+                    </RowNote>
+                </RowGroup>
+            </template>
+            <template #failed="{ error: unread }">
+                <RowGroup :label="t(`sandbox.agentPrivacyShield.datasets`)">
+                    <RowNote variant="block"><Notice tone="danger">{{ unread }}</Notice></RowNote>
+                </RowGroup>
+            </template>
             <RowGroup :label="t(`sandbox.agentPrivacyShield.datasets`)">
-                <SkeletonRows :rows="2" description />
+                <RowNote v-if="sourcesError !== undefined" variant="block"
+                    ><Notice tone="danger">{{ sourcesError }}</Notice></RowNote
+                >
+
+                <template v-else>
+                    <RowNote v-if="sources.length === 0" variant="empty">{{ t(`sandbox.agentPrivacyShield.noDatasets`) }}</RowNote>
+
+                    <Row v-for="row in datasets" :key="row.source.source" icon="database">
+                        <template #title>
+                            <span class="block truncate font-mono text-xs" v-tooltip.top.overflow="row.source.source">{{ row.source.source }}</span>
+                        </template>
+                        <template #description>{{
+                            t(`sandbox.agentPrivacyShield.valuesCount`, { count: formatFixed(row.source.count, 0) }, row.source.count)
+                        }}</template>
+                        <template v-if="row.time !== undefined" #meta>
+                            <span v-tooltip.top="formatDateTime(row.time)">{{ formatDate(row.time) }}</span>
+                        </template>
+                        <template #control>
+                            <Button size="small" tier="quiet" @click="() => forget(row.source.source)">
+                                {{ t(`sandbox.agentPrivacyShield.forget`) }}
+                            </Button>
+                        </template>
+                    </Row>
+                </template>
+
+                <!-- How a dataset gets here, since nothing on this page adds one: the agent teaches it from a file it can read. -->
                 <RowNote>
                     <i18n-t keypath="sandbox.agentPrivacyShield.datasetsNote" tag="span" scope="global">
                         <template #command
@@ -288,44 +324,9 @@ const LEARN_COMMAND = `privacy learn <file> --column …`;
                         >
                     </i18n-t>
                 </RowNote>
+
+                <RowNote v-if="forgetNotice !== undefined" variant="block"><Notice :of="forgetNotice" /></RowNote>
             </RowGroup>
-        </SkeletonSnapshot>
-        <RowGroup v-else-if="showSources" v-skeleton-source="`sandbox.agent.privacy-datasets`" :label="t(`sandbox.agentPrivacyShield.datasets`)">
-            <RowNote v-if="sourcesError !== undefined" variant="block"
-                ><Notice tone="danger">{{ sourcesError }}</Notice></RowNote
-            >
-
-            <template v-else>
-                <RowNote v-if="sources.length === 0" variant="empty">{{ t(`sandbox.agentPrivacyShield.noDatasets`) }}</RowNote>
-
-                <Row v-for="row in datasets" :key="row.source.source" icon="database">
-                    <template #title>
-                        <span class="block truncate font-mono text-xs" v-tooltip.top.overflow="row.source.source">{{ row.source.source }}</span>
-                    </template>
-                    <template #description>{{
-                        t(`sandbox.agentPrivacyShield.valuesCount`, { count: formatFixed(row.source.count, 0) }, row.source.count)
-                    }}</template>
-                    <template v-if="row.time !== undefined" #meta>
-                        <span v-tooltip.top="formatDateTime(row.time)">{{ formatDate(row.time) }}</span>
-                    </template>
-                    <template #control>
-                        <Button size="small" tier="quiet" @click="() => forget(row.source.source)">
-                            {{ t(`sandbox.agentPrivacyShield.forget`) }}
-                        </Button>
-                    </template>
-                </Row>
-            </template>
-
-            <!-- How a dataset gets here, since nothing on this page adds one: the agent teaches it from a file it can read. -->
-            <RowNote>
-                <i18n-t keypath="sandbox.agentPrivacyShield.datasetsNote" tag="span" scope="global">
-                    <template #command
-                        ><code class="ui-code whitespace-nowrap">{{ LEARN_COMMAND }}</code></template
-                    >
-                </i18n-t>
-            </RowNote>
-
-            <RowNote v-if="forgetNotice !== undefined" variant="block"><Notice :of="forgetNotice" /></RowNote>
-        </RowGroup>
+        </Await>
     </div>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { diffMark, formatCount, SkeletonSnapshot, toneTint, ui, vSkeletonSource } from "@intentic/ui";
+import { useLoaded } from "@intentic/extension-api";
+import { Await, diffMark, formatCount, toneTint, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, shallowRef, watch } from "vue";
 import { type CellDiff, foldUnchangedRows, MAX_ROWS, type RowDiff, type Sheet, type SheetDiff } from "./tableDiff";
@@ -36,6 +37,7 @@ watch(
     },
     { immediate: true },
 );
+const compared = useLoaded(() => ({ data: sheets.value, error: undefined, fetching: sheets.value === undefined, wanted: true }));
 const changed = computed(() => sheets.value?.reduce((sum, sheet) => sum + sheet.changedRows, 0));
 watch(
     changed,
@@ -81,119 +83,124 @@ const plain = (cell: CellDiff): string => cell.after ?? cell.before ?? ``;
         <p v-if="cut" class="mb-3 text-2xs text-warning">
             {{ t(`workspace.tableDiffView.longTableOnlyFirstRows`, { rows: formatCount(MAX_ROWS) }) }}
         </p>
-        <!-- Held back a moment so a diff that lands at once never flashes it; held here, so the remembered table waits too. -->
-        <div v-if="sheets === undefined" class="animate-[ui-fade-in_0.2s_ease-out_0.3s_both]">
-            <SkeletonSnapshot of="workspace.tableDiff" :label="t(`workspace.tableDiffView.comparing`)">
-                <div role="status" aria-busy="true">
-                    <span class="sr-only">{{ t(`workspace.tableDiffView.comparing`) }}</span>
-                    <div class="flex flex-col gap-2.5 rounded-md border border-line p-3" aria-hidden="true">
-                        <span v-for="row in 8" :key="row" class="flex gap-4">
-                            <span v-for="cell in 4" :key="cell" class="skeleton block h-2 flex-1" />
-                        </span>
-                    </div>
-                </div>
-            </SkeletonSnapshot>
-        </div>
-        <p v-else-if="sheets.length === 0" v-skeleton-source="`workspace.tableDiff`" class="text-2xs text-subtle">
-            {{ t(`workspace.tableDiffView.neitherVersionHoldsTable`) }}
-        </p>
-        <!-- One box for every sheet, so the next comparison's wait is drawn as all of them were. -->
-        <div v-else v-skeleton-source="`workspace.tableDiff`">
-            <section v-for="sheet of sheets" :key="sheet.name" class="mb-6 last:mb-0">
-                <header class="mb-1.5 flex items-baseline gap-2">
-                    <h3 class="text-sm font-semibold text-content" :class="sheet.kind === `removed` ? `line-through text-muted` : ``">
-                        {{ sheet.name }}
-                    </h3>
-                    <span v-if="sheetBadge(sheet.kind)" class="text-2xs" :class="sheet.kind === `added` ? `text-success` : `text-danger`">{{
-                        sheetBadge(sheet.kind)
-                    }}</span>
-                    <span v-else-if="sheet.kind === `changed`" class="text-2xs tabular-nums text-muted">
-                        {{ t(`workspace.words.rowsChanged`, { count: sheet.changedRows }, sheet.changedRows) }}
+        <!-- The next comparison's wait is drawn as every sheet of this one was. -->
+        <Await :of="compared" imprint="workspace.tableDiff" :label="t(`workspace.tableDiffView.comparing`)">
+            <template #fallback>
+                <div
+                    role="status"
+                    aria-busy="true"
+                    :aria-label="t(`workspace.tableDiffView.comparing`)"
+                    class="flex flex-col gap-2.5 rounded-md border border-line p-3"
+                >
+                    <span v-for="row in 8" :key="row" class="flex gap-4">
+                        <span v-for="cell in 4" :key="cell" class="skeleton block h-2 flex-1" />
                     </span>
-                    <span v-else class="text-2xs text-subtle">{{ t(`workspace.tableDiffView.unchanged`) }}</span>
-                </header>
-                <p v-if="sheet.rows.length === 0" class="text-2xs text-subtle">{{ t(`workspace.tableDiffView.emptySheet`) }}</p>
-                <div v-else class="overflow-x-auto rounded-md border border-line">
-                    <table class="w-max min-w-full border-collapse text-xs">
-                        <tbody>
-                            <template v-for="(run, index) of runsOf(sheet)" :key="index">
-                                <!-- A fold spans the whole width: one line for the rows it stands for, opened in place. -->
-                                <template v-if="run.kind === `fold`">
-                                    <template v-if="opened.has(`${sheet.name}:${run.at}`)">
+                </div>
+            </template>
+            <template #default="{ data: diff }">
+                <p v-if="diff.length === 0" class="text-2xs text-subtle">
+                    {{ t(`workspace.tableDiffView.neitherVersionHoldsTable`) }}
+                </p>
+                <template v-else>
+                    <section v-for="sheet of diff" :key="sheet.name" class="mb-6 last:mb-0">
+                        <header class="mb-1.5 flex items-baseline gap-2">
+                            <h3 class="text-sm font-semibold text-content" :class="sheet.kind === `removed` ? `line-through text-muted` : ``">
+                                {{ sheet.name }}
+                            </h3>
+                            <span v-if="sheetBadge(sheet.kind)" class="text-2xs" :class="sheet.kind === `added` ? `text-success` : `text-danger`">{{
+                                sheetBadge(sheet.kind)
+                            }}</span>
+                            <span v-else-if="sheet.kind === `changed`" class="text-2xs tabular-nums text-muted">
+                                {{ t(`workspace.words.rowsChanged`, { count: sheet.changedRows }, sheet.changedRows) }}
+                            </span>
+                            <span v-else class="text-2xs text-subtle">{{ t(`workspace.tableDiffView.unchanged`) }}</span>
+                        </header>
+                        <p v-if="sheet.rows.length === 0" class="text-2xs text-subtle">{{ t(`workspace.tableDiffView.emptySheet`) }}</p>
+                        <div v-else class="overflow-x-auto rounded-md border border-line">
+                            <table class="w-max min-w-full border-collapse text-xs">
+                                <tbody>
+                                    <template v-for="(run, index) of runsOf(sheet)" :key="index">
+                                        <!-- A fold spans the whole width: one line for the rows it stands for, opened in place. -->
+                                        <template v-if="run.kind === `fold`">
+                                            <template v-if="opened.has(`${sheet.name}:${run.at}`)">
+                                                <tr
+                                                    v-for="row of sheet.rows.slice(run.at, run.at + run.count)"
+                                                    :key="`${row.beforeLine}-${row.afterLine}`"
+                                                    class="text-muted"
+                                                >
+                                                    <td
+                                                        class="border-l-2 border-transparent px-1.5 py-0.5 text-right tabular-nums text-2xs text-subtle"
+                                                    >
+                                                        {{ row.afterLine ?? row.beforeLine }}
+                                                    </td>
+                                                    <td
+                                                        v-for="(cell, column) of row.cells"
+                                                        :key="column"
+                                                        class="border-t border-line/60 px-2 py-0.5 whitespace-pre-wrap"
+                                                    >
+                                                        {{ plain(cell) }}
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                            <tr v-else>
+                                                <td :colspan="sheet.columns + 1" class="border-t border-line/60 px-2 py-0.5">
+                                                    <button
+                                                        type="button"
+                                                        :class="ui.textButton({ tone: `subtle`, size: `xs` }, `italic`)"
+                                                        @click="open(sheet.name, run.at)"
+                                                    >
+                                                        {{ t(`workspace.tableDiffView.unchangedRows`, { count: run.count }, run.count) }}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                        <!-- Row 0 is the header wherever the source has one: drawn bold, still diffed like any row. -->
                                         <tr
-                                            v-for="row of sheet.rows.slice(run.at, run.at + run.count)"
-                                            :key="`${row.beforeLine}-${row.afterLine}`"
-                                            class="text-muted"
+                                            v-else
+                                            :class="[
+                                                ROW_CLASS[run.row.kind],
+                                                run.row.kind === `same` ? `text-muted` : `text-content`,
+                                                index === 0 ? `font-semibold` : ``,
+                                            ]"
                                         >
-                                            <td class="border-l-2 border-transparent px-1.5 py-0.5 text-right tabular-nums text-2xs text-subtle">
-                                                {{ row.afterLine ?? row.beforeLine }}
+                                            <!-- The row's number in the new version, or the old one's struck through when it is gone; the mark on the margin says which. -->
+                                            <td class="px-1.5 py-0.5 text-right tabular-nums text-2xs text-subtle" :class="MARK_CLASS[run.row.kind]">
+                                                <del v-if="run.row.kind === `removed`" :class="diffMark(`removed`)">{{ run.row.beforeLine }}</del>
+                                                <template v-else>{{ run.row.afterLine }}</template>
                                             </td>
                                             <td
-                                                v-for="(cell, column) of row.cells"
+                                                v-for="(cell, column) of run.row.cells"
                                                 :key="column"
-                                                class="border-t border-line/60 px-2 py-0.5 whitespace-pre-wrap"
+                                                class="border-t border-line/60 px-2 py-0.5 whitespace-pre-wrap align-top"
                                             >
-                                                {{ plain(cell) }}
+                                                <template v-if="cell.kind === `changed`">
+                                                    <del :class="diffMark(`removed`)">{{ cell.before }}</del>
+                                                    <span class="mx-1 text-subtle">→</span>
+                                                    <ins :class="diffMark(`added`, `inline`, `text-content`)">{{ cell.after }}</ins>
+                                                </template>
+                                                <ins v-else-if="cell.kind === `added` && run.row.kind === `changed`" :class="diffMark(`added`)">{{
+                                                    cell.after
+                                                }}</ins>
+                                                <del v-else-if="cell.kind === `removed` && run.row.kind === `changed`" :class="diffMark(`removed`)">{{
+                                                    cell.before
+                                                }}</del>
+                                                <del v-else-if="run.row.kind === `removed`" :class="diffMark(`removed`)">{{ plain(cell) }}</del>
+                                                <template v-else>{{ plain(cell) }}</template>
                                             </td>
+                                            <!-- Pads a short row so the grid's right edge stays straight. -->
+                                            <td
+                                                v-for="pad of Math.max(0, sheet.columns - run.row.cells.length)"
+                                                :key="`pad-${pad}`"
+                                                class="border-t border-line/60"
+                                            ></td>
                                         </tr>
                                     </template>
-                                    <tr v-else>
-                                        <td :colspan="sheet.columns + 1" class="border-t border-line/60 px-2 py-0.5">
-                                            <button
-                                                type="button"
-                                                :class="ui.textButton({ tone: `subtle`, size: `xs` }, `italic`)"
-                                                @click="open(sheet.name, run.at)"
-                                            >
-                                                {{ t(`workspace.tableDiffView.unchangedRows`, { count: run.count }, run.count) }}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                </template>
-                                <!-- Row 0 is the header wherever the source has one: drawn bold, still diffed like any row. -->
-                                <tr
-                                    v-else
-                                    :class="[
-                                        ROW_CLASS[run.row.kind],
-                                        run.row.kind === `same` ? `text-muted` : `text-content`,
-                                        index === 0 ? `font-semibold` : ``,
-                                    ]"
-                                >
-                                    <!-- The row's number in the new version, or the old one's struck through when it is gone; the mark on the margin says which. -->
-                                    <td class="px-1.5 py-0.5 text-right tabular-nums text-2xs text-subtle" :class="MARK_CLASS[run.row.kind]">
-                                        <del v-if="run.row.kind === `removed`" :class="diffMark(`removed`)">{{ run.row.beforeLine }}</del>
-                                        <template v-else>{{ run.row.afterLine }}</template>
-                                    </td>
-                                    <td
-                                        v-for="(cell, column) of run.row.cells"
-                                        :key="column"
-                                        class="border-t border-line/60 px-2 py-0.5 whitespace-pre-wrap align-top"
-                                    >
-                                        <template v-if="cell.kind === `changed`">
-                                            <del :class="diffMark(`removed`)">{{ cell.before }}</del>
-                                            <span class="mx-1 text-subtle">→</span>
-                                            <ins :class="diffMark(`added`, `inline`, `text-content`)">{{ cell.after }}</ins>
-                                        </template>
-                                        <ins v-else-if="cell.kind === `added` && run.row.kind === `changed`" :class="diffMark(`added`)">{{
-                                            cell.after
-                                        }}</ins>
-                                        <del v-else-if="cell.kind === `removed` && run.row.kind === `changed`" :class="diffMark(`removed`)">{{
-                                            cell.before
-                                        }}</del>
-                                        <del v-else-if="run.row.kind === `removed`" :class="diffMark(`removed`)">{{ plain(cell) }}</del>
-                                        <template v-else>{{ plain(cell) }}</template>
-                                    </td>
-                                    <!-- Pads a short row so the grid's right edge stays straight. -->
-                                    <td
-                                        v-for="pad of Math.max(0, sheet.columns - run.row.cells.length)"
-                                        :key="`pad-${pad}`"
-                                        class="border-t border-line/60"
-                                    ></td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-        </div>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </template>
+            </template>
+        </Await>
     </div>
 </template>

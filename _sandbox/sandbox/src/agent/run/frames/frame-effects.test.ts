@@ -2,6 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { AccountUsage, ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { opt } from "../../../opt.js";
+import { memoryProviderRefusalStore } from "../../../usage/provider-refusals.js";
 import { recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../../harness/route-services.testing.js";
 import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
@@ -117,118 +118,116 @@ describe("the turn's rows", () => {
 });
 
 describe("the first answer", () => {
-    test("ends the provider's outage and settles what the provider and the seat last refused", () => {
+    test("ends the provider's outage and settles what the provider and the seat last refused", async () => {
         const { deps, writes } = recorded();
         recordProviderFailure("effects-provider");
         providerAnswered(deps, "effects-provider", "acct", undefined);
         expect(providerOutage("effects-provider")).toBeUndefined();
-        expect(writes.refusalsCleared).toStrictEqual([{ provider: "effects-provider", account: "acct" }]);
+        await waitFor(() => expect(writes.refusalsCleared).toStrictEqual([{ provider: "effects-provider", account: "acct" }]), SETTLES);
         expect(writes.seatsCleared).toStrictEqual(["acct"]);
     });
 
-    test("with no account settles the provider alone", () => {
+    test("with no account settles the provider alone", async () => {
         const { deps, writes } = recorded();
         providerAnswered(deps, "codex", undefined, undefined);
-        expect(writes.refusalsCleared).toStrictEqual([{ provider: "codex", account: undefined }]);
+        await waitFor(() => expect(writes.refusalsCleared).toStrictEqual([{ provider: "codex", account: undefined }]), SETTLES);
         expect(writes.seatsCleared).toStrictEqual([]);
     });
 
-    test("reopens the model it ran on, so a benched row stops reading as one", () => {
-        const { deps, writes } = recorded();
-        providerAnswered(deps, "codex", undefined, "gpt-6-astra");
-        expect(writes.cooldownsCleared).toStrictEqual([{ provider: "codex", model: "gpt-6-astra" }]);
+    // 2026-10-09 (rich-alder): GPT-6-Astra stayed greyed while its turns went through, held by a bench only the picker
+    // read. The answer settles the model's refusal in the one ledger every surface reads.
+    test("reopens the model it ran on, so a refused row stops reading as one", async () => {
+        const { deps, ledger } = await onFile({}, "codex", [spentOn("gpt-6-astra")]);
+        providerAnswered(deps, "codex", undefined, "gpt-6-astra", ASKED);
+        await waitFor(async () => expect(await ledger.onFile()).toEqual({}), SETTLES);
     });
 
-    // A spent allowance is about one model, so the settle says which one answered (provider-refusals.ts answeredBy).
-    test("settles what was refused for the model that answered, and the account's own refusals in the ledger", async () => {
-        const { deps, writes } = recorded();
-        providerAnswered(deps, "cursor", "acct", "composer-2.5");
-        expect(writes.refusalsCleared).toStrictEqual([{ provider: "cursor", account: "acct", model: "composer-2.5" }]);
-        await waitFor(
-            () =>
-                expect(writes.observedForgotten).toStrictEqual([
-                    { provider: "cursor", account: "acct", model: "*" },
-                    { provider: "cursor", account: "acct", model: "composer-2.5" },
-                ]),
-            SETTLES,
-        );
+    // A spent allowance is about one model, so the settle says which one answered (provider-refusals.ts settledBy); an
+    // account refused outright is settled by an answer on any model.
+    test("settles what was refused for the model that answered, and the account refused outright", async () => {
+        const forbidden: ProviderRefusal = { at: FILED, kind: "entitlement", message: "[role_forbidden]", account: "acct" };
+        const opus = spentOn("claude-opus-5-5", "acct");
+        const { deps, ledger } = await onFile({}, "cursor", [forbidden, spentOn("composer-2.5", "acct"), opus]);
+        providerAnswered(deps, "cursor", "acct", "composer-2.5", ASKED);
+        await waitFor(async () => expect(await ledger.onFile()).toEqual({ cursor: [opus] }), SETTLES);
     });
 
-    test("with no model named reopens nothing", () => {
-        const { deps, writes } = recorded();
-        providerAnswered(deps, "codex", undefined, "");
-        expect(writes.cooldownsCleared).toStrictEqual([]);
+    test("with no model named leaves a model's spent allowance standing", async () => {
+        const sol = spentOn("gpt-6.1-sol");
+        const { deps, ledger } = await onFile({}, "codex", [sol]);
+        providerAnswered(deps, "codex", undefined, "", ASKED);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(await ledger.onFile()).toEqual({ codex: [sol] });
     });
 
     test("logs each settle that fails under its own name", async () => {
         const base = services();
         const { deps, lines } = recorded({
-            providerRefusals: { ...base.providerRefusals, clear: rejecting },
+            providerRefusals: { ...base.providerRefusals, settle: rejecting },
             claudeSeats: { ...base.claudeSeats, clear: rejecting },
         });
         providerAnswered(deps, "claude", "acct", undefined);
         await waitFor(
-            () => expect(warnings(lines)).toStrictEqual(["provider refusal: settle failed", "claude account: could not clear the entitlement mark"]),
+            () =>
+                expect(warnings(lines).toSorted()).toStrictEqual(["claude account: could not clear the entitlement mark", "provider refusal: settle failed"]),
             SETTLES,
         );
     });
 });
 
-// What the provider's accounts read and what stands refused and benched on them, over the recording stores.
-const onFile = (readings: Record<string, AccountUsage>, refused: readonly ProviderRefusal[], benched: readonly string[]) => {
+// What the provider's accounts read, over the real refusal ledger seeded with what stands refused on them.
+const onFile = async (readings: Record<string, AccountUsage>, provider: string, refused: readonly ProviderRefusal[]) => {
     const stores = recordingTurnStores();
-    const { providerRefusals, modelCooldowns, headroom } = stores.overrides;
-    if (providerRefusals === undefined || modelCooldowns === undefined || headroom === undefined) {
-        throw new Error("the recording stores carry every one of these");
+    const { headroom } = stores.overrides;
+    if (headroom === undefined) {
+        throw new Error("the recording stores carry a headroom");
     }
-    const provider = refused[0]?.account === undefined ? "codex" : "claude";
-    const deps = services({
-        ...stores.overrides,
-        providerRefusals: { ...providerRefusals, onFile: async () => ({ [provider]: [...refused] }) },
-        modelCooldowns: { ...modelCooldowns, cooling: async () => new Map(benched.map((model) => [model, { until: Date.now() + 3_600_000, message: "spent", since: 1 }])) },
-        headroom: { ...headroom, read: async () => readings },
-    });
-    return { deps, writes: stores.writes };
+    const ledger = memoryProviderRefusalStore({ [provider]: refused });
+    const deps = services({ ...stores.overrides, providerRefusals: ledger, headroom: { ...headroom, read: async () => readings } });
+    return { deps, ledger };
 };
 
 const pool = (kind: string, gates: UsageWindow["gates"] = "all"): UsageWindow => ({ kind, utilization: 0, gates });
-const spentOn = (model: string, account?: string): ProviderRefusal => ({ at: 1, kind: "limit", message: "spent", model, ...opt("account", account) });
+// Filed a minute ago, and answered by a request sent now: what was filed before the request went out is what it settles.
+const FILED = Date.now() - 60_000;
+const ASKED = Date.now();
+const spentOn = (model: string, account?: string): ProviderRefusal => ({ at: FILED, kind: "limit", message: "spent", model, ...opt("account", account) });
 
 describe("an answer on a model that shares its allowance", () => {
-    // 2026-10-20: a Luna turn went through while Sol stayed refused and benched for another hour over the same allowance.
-    test("settles another model's refusal and bench where every pool it spends gates the model that answered", async () => {
-        const { deps, writes } = onFile(
+    // 2026-10-20 (kind-cove): a Luna turn went through while Sol stayed refused and benched for another hour over the same
+    // allowance, and the account rail read every Codex account spent over it.
+    test("settles another model's refusal where every pool it spends gates the model that answered", async () => {
+        const { deps, ledger } = await onFile(
             {
                 "codex:codex-team.json": { windows: [pool("five_hour"), pool("seven_day")], measuredAt: 1 },
                 "codex:codex-free.json": { windows: [pool("monthly")], measuredAt: 1 },
             },
+            "codex",
             [spentOn("gpt-6.1-sol")],
-            ["gpt-6.1-sol"],
         );
         // A routed turn names its subscription's label, the key of no reading: every reading of the provider speaks.
-        providerAnswered(deps, "codex", "codex-subscription", "gpt-6-luna", 2);
-        await waitFor(() => expect(writes.cooldownsCleared).toContainEqual({ provider: "codex", model: "gpt-6.1-sol", askedAt: 2 }), SETTLES);
-        expect(writes.refusalsCleared).toContainEqual({ provider: "codex", account: "codex-subscription", model: "gpt-6.1-sol", askedAt: 2 });
+        providerAnswered(deps, "codex", "codex-subscription", "gpt-6-luna", ASKED);
+        await waitFor(async () => expect(await ledger.onFile()).toEqual({}), SETTLES);
     });
 
     test("leaves a model alone where any pool it spends is its own", async () => {
         const plan = { windows: [pool("five_hour"), pool("seven_day"), pool("model:Opus", { models: ["Opus"] })], measuredAt: 1 };
-        const { deps, writes } = onFile({ acct: plan }, [spentOn("claude-sonnet-4-6", "acct"), spentOn("claude-opus-4-6", "acct")], []);
-        providerAnswered(deps, "claude", "acct", "claude-haiku-4-5", 2);
-        await waitFor(() => expect(writes.refusalsCleared).toContainEqual({ provider: "claude", account: "acct", model: "claude-sonnet-4-6", askedAt: 2 }), SETTLES);
-        expect(writes.refusalsCleared.map((entry) => entry.model)).not.toContain("claude-opus-4-6");
+        const opus = spentOn("claude-opus-4-6", "acct");
+        const { deps, ledger } = await onFile({ acct: plan }, "claude", [spentOn("claude-sonnet-4-6", "acct"), opus]);
+        providerAnswered(deps, "claude", "acct", "claude-haiku-4-5", ASKED);
+        await waitFor(async () => expect(await ledger.onFile()).toEqual({ claude: [opus] }), SETTLES);
     });
 
     test("settles nothing more where a routed provider's readings disagree, or nothing is read", async () => {
         const entitled = { windows: [pool("monthly"), pool("entitlement:gpt-6.1-sol", { models: ["gpt-6.1-sol"] })], measuredAt: 1 };
-        const split = onFile({ "codex:codex-team.json": { windows: [pool("five_hour")], measuredAt: 1 }, "codex:codex-free.json": entitled }, [spentOn("gpt-6.1-sol")], ["gpt-6.1-sol"]);
-        providerAnswered(split.deps, "codex", "codex-subscription", "gpt-6-luna", 2);
-        const unread = onFile({}, [spentOn("gpt-6.1-sol")], ["gpt-6.1-sol"]);
-        providerAnswered(unread.deps, "codex", "codex-subscription", "gpt-6-luna", 2);
+        const sol = spentOn("gpt-6.1-sol");
+        const split = await onFile({ "codex:codex-team.json": { windows: [pool("five_hour")], measuredAt: 1 }, "codex:codex-free.json": entitled }, "codex", [sol]);
+        providerAnswered(split.deps, "codex", "codex-subscription", "gpt-6-luna", ASKED);
+        const unread = await onFile({}, "codex", [sol]);
+        providerAnswered(unread.deps, "codex", "codex-subscription", "gpt-6-luna", ASKED);
         await new Promise((resolve) => setTimeout(resolve, 50));
-        for (const { writes } of [split, unread]) {
-            expect(writes.cooldownsCleared).toStrictEqual([{ provider: "codex", model: "gpt-6-luna", askedAt: 2 }]);
-            expect(writes.refusalsCleared).toStrictEqual([{ provider: "codex", account: "codex-subscription", model: "gpt-6-luna", askedAt: 2 }]);
+        for (const { ledger } of [split, unread]) {
+            expect(await ledger.onFile()).toEqual({ codex: [sol] });
         }
     });
 });
@@ -274,47 +273,32 @@ describe("a classification's writes", () => {
     const all: FailureWrite[] = [
         { kind: "provider-refusal", provider: "cursor", refusal: { at: 1, kind: "limit", message: "spent", account: "acct", model: "m" } },
         { kind: "headroom-refresh", options: { scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 } },
-        { kind: "observed-limit", provider: "cursor", account: "acct", model: "m", limit: { at: 1, message: "spent" } },
         { kind: "model-refusal", provider: "cursor", model: "m", refusal: { at: 1, message: "not covered" } },
         { kind: "seat-refusal", account: "acct", reason: "switched off" },
-        { kind: "model-cooldown", provider: "grok", model: "grok-4", cooldown: { until: 9_000, message: "spent" } },
     ];
 
-    test("each reach their own store, and a filed reading is re-read at once", async () => {
+    test("each reach their own store", async () => {
         const { deps, writes } = recorded();
         performFailureWrites(deps, all);
-        await waitFor(() => expect(writes.headroomRefreshes).toHaveLength(2), SETTLES);
+        await waitFor(() => expect(writes.seatsRefused).toHaveLength(1), SETTLES);
         expect(writes.providerRefusals).toStrictEqual([
             { provider: "cursor", refusal: { at: 1, kind: "limit", message: "spent", account: "acct", model: "m" } },
         ]);
-        expect(writes.headroomRefreshes).toStrictEqual([
-            { scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 },
-            { scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 },
-        ]);
-        expect(writes.observedLimits).toStrictEqual([{ provider: "cursor", account: "acct", model: "m", limit: { at: 1, message: "spent" } }]);
+        expect(writes.headroomRefreshes).toStrictEqual([{ scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 }]);
         expect(writes.modelRefusals).toStrictEqual([{ provider: "cursor", model: "m", refusal: { at: 1, message: "not covered" } }]);
         expect(writes.seatsRefused).toStrictEqual([{ account: "acct", reason: "switched off" }]);
-        expect(writes.modelCooldowns).toStrictEqual([{ provider: "grok", model: "grok-4", cooldown: { until: 9_000, message: "spent" } }]);
     });
 
-    test("that fail are each logged under their own name, and a failed reading is never re-read", async () => {
+    test("that fail are each logged under their own name", async () => {
         const base = services();
         const { deps, writes, lines } = recorded({
             providerRefusals: { ...base.providerRefusals, record: rejecting },
-            observedLimits: { spent: async () => ({}), record: rejecting, clear: async () => {}, forget: async () => false },
             modelRefusals: { refused: async () => new Set(), record: rejecting },
             claudeSeats: { ...base.claudeSeats, refuse: rejecting },
-            modelCooldowns: { cooling: async () => new Map(), record: rejecting, clear: async () => {} },
         });
         performFailureWrites(deps, all);
-        await waitFor(() => expect(warnings(lines)).toHaveLength(5), SETTLES);
-        expect(warnings(lines)).toStrictEqual([
-            "provider refusal: write failed",
-            "model refusal: write failed",
-            "claude account: could not record the entitlement refusal",
-            "model cooldown: write failed",
-            "observed limit: write failed",
-        ]);
+        await waitFor(() => expect(warnings(lines)).toHaveLength(3), SETTLES);
+        expect(warnings(lines)).toStrictEqual(["provider refusal: write failed", "model refusal: write failed", "claude account: could not record the entitlement refusal"]);
         expect(writes.headroomRefreshes).toStrictEqual([{ scope: { providers: ["cursor"], account: "acct" }, maxAgeMs: 0 }]);
     });
 });

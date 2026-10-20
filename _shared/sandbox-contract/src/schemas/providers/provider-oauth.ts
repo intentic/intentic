@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AccountStateSchema, AccountUsageSchema } from "./plan-limits.js";
+import { AccountUsageSchema } from "./plan-limits.js";
 import { SignInCatcherSchema } from "../loopback-catch.js";
 import { KeyedProviderSchema } from "./provider-subscriptions.js";
 // Claude uses PKCE paste-back (start → exchange); Codex uses OpenAI's device-code flow (start → poll). A sandbox can
@@ -37,9 +37,6 @@ export const OauthAccountSchema = z.object({
         ),
     usage: AccountUsageSchema.optional().describe(
         "How full its plan limits were when last measured, so a picker can show what is left before committing work to it. Absent until a reading exists, which reads as unknown rather than as nothing left.",
-    ),
-    state: AccountStateSchema.optional().describe(
-        "Whether it can serve a turn now, judged once from the sign-in, the seat, the provider's last refusal and the plan limits: the verdict every picker in the sandbox uses. Read this rather than the fields it was judged from. Absent from a daemon older than this field.",
     ),
 });
 export type OauthAccount = z.infer<typeof OauthAccountSchema>;
@@ -191,15 +188,6 @@ export const ModelSchema = z.object({
     helperOnly: HelperOnlySchema.optional().describe(
         "Set where this model may write commit messages, titles and other one-shot jobs but never run a chat turn, and why: its server says it cannot call tools, or it is the small local model kept for quick jobs. Absent means nothing has said it cannot.",
     ),
-    // Epoch seconds. A fact about the MODEL, not about any one account: a routed provider balances across credentials,
-    // so a model every one of them is benched on is unrunnable however much headroom their rings show. Absent is the
-    // ordinary case and means runnable, never "unknown".
-    availableAt: z
-        .number()
-        .optional()
-        .describe(
-            "When this model can be asked again, where every credential that serves it is currently refused. Absent means it can be asked now. A model here is still worth showing, unlike one the plan does not cover at all: the wait is the whole answer.",
-        ),
 });
 export type Model = z.infer<typeof ModelSchema>;
 export const ModelsSchema = z.object({

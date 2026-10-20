@@ -10,6 +10,7 @@ import {
     type NoticeModel,
     Row,
     RowGroup,
+    RowNote,
     StatusBadge,
     type StatusVariant,
     ui,
@@ -254,7 +255,9 @@ const items = computed<MenuItem[]>(() => {
 </script>
 
 <template>
-    <RowGroup :label="spec.group()" :caption="spec.caption(links)">
+    <RowGroup :label="spec.group()">
+        <!-- What the live links mean for the agent, said on the group's surface rather than beside its header. -->
+        <RowNote v-if="spec.caption(links) !== undefined" :label="spec.caption(links)" />
         <!-- The links stay listed: this says the live half is missing, not the capabilities. -->
         <Notice v-if="listNotice" :of="listNotice" class="m-4" />
         <Row v-for="row in rows" :key="row.id" :icon="spec.icon(row.link)" :selected="editingId === row.id">

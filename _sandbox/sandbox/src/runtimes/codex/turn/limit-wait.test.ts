@@ -67,9 +67,10 @@ describe("a rate-limited wait whose reopening is on file", () => {
 });
 
 describe("the reopening an allowance names", () => {
-    test("is its fleet's reopen only while nothing has room", async () => {
-        expect(await allowanceReopening(async () => ({ withHeadroom: 0, reopensAt: 42 }))()).toBe(42);
-        expect(await allowanceReopening(async () => ({ withHeadroom: 1, reopensAt: 42 }))()).toBeUndefined();
-        expect(await allowanceReopening(async () => ({ withHeadroom: 0 }))()).toBeUndefined();
+    test("is its fleet's reopen only while no account can serve", async () => {
+        expect(await allowanceReopening(async () => ({ kind: "spent", accounts: 2, reopensAt: 42 }))()).toBe(42);
+        expect(await allowanceReopening(async () => ({ kind: "serving", serving: 1, accounts: 2 }))()).toBeUndefined();
+        expect(await allowanceReopening(async () => ({ kind: "spent", accounts: 1 }))()).toBeUndefined();
+        expect(await allowanceReopening(async () => ({ kind: "unknown" }))()).toBeUndefined();
     });
 });

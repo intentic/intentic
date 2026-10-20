@@ -45,6 +45,6 @@ export function useSafetyPolicy() {
 }
 
 export function useSafetyLog() {
-    const { query, error } = useSandboxQuery(rpcQuery(`safety.log`));
-    return { entries: computed<SafetyLogEntry[]>(() => query.data.value ?? []), isLoading: query.isLoading, error };
+    const { query, loaded } = useSandboxQuery(rpcQuery(`safety.log`));
+    return { entries: computed<SafetyLogEntry[]>(() => query.data.value ?? []), loaded };
 }

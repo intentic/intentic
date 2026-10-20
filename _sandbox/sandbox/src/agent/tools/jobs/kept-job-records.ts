@@ -44,15 +44,20 @@ export const forgetKeptJob = (historyRoot: string | undefined, id: string): void
     }
 };
 
-/** Boot recovery reports each lost kept command in Activity before retiring its receipt. */
-export const reportLostKeptJobs = async (historyRoot: string, activity: Pick<ActivityStore, "append">, procRoot = "/proc"): Promise<void> => {
-    const store = openDirectory(keptJobRecordsDocument, recordsDir(historyRoot));
-    const { entries, invalid } = await store.list();
+/** Every kept command's receipt, read before the gate opens; throws for one that cannot be read, so none is retired blind. */
+export const keptJobReceipts = async (historyRoot: string): Promise<readonly KeptJob[]> => {
+    const { entries, invalid } = await openDirectory(keptJobRecordsDocument, recordsDir(historyRoot)).list();
     if (invalid.length > 0) {
         throw new Error(`kept job receipts could not be read: ${invalid.join(", ")}`);
     }
-    const alive = await jobRunnerPids(entries.map((job) => job.dir), procRoot);
-    for (const job of entries) {
+    return entries;
+};
+
+/** Boot recovery reports each lost kept command in Activity before retiring its receipt. */
+export const reportLostKeptJobs = async (historyRoot: string, left: readonly KeptJob[], activity: Pick<ActivityStore, "append">, procRoot = "/proc"): Promise<void> => {
+    const store = openDirectory(keptJobRecordsDocument, recordsDir(historyRoot));
+    const alive = await jobRunnerPids(left.map((job) => job.dir), procRoot);
+    for (const job of left) {
         if (alive.has(job.dir)) {
             continue;
         }

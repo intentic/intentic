@@ -1,34 +1,26 @@
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
-import { type PrivacyShieldStatus, trustedInConversation } from "@intentic/sandbox-contract/schemas/privacy";
+import type { PrivacyShieldStatus } from "@intentic/sandbox-contract/schemas/privacy";
+import { isPrivacyRefusal, shieldVerdict, turnRoute } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 
-// Where a conversation stands with the privacy shield before anything is sent. Said above the composer only when it is
-// already known that a turn would be turned away, so nothing here guesses from the provider alone (2026-10-08): the
-// shield reads every runtime it can by content, and only what it found, or a runtime it cannot read at all, refuses.
-// - A runtime with no seam at all (an ACP agent, Pi: privacy `none`) is turned away by its runtime alone, before a word
-//   is read (privacy-shield.ts `admit`), so that is knowable here and said before the send: told only after it, the
-//   refusal read as something found in the message (2026-10-02).
-// - A runtime the shield reads through its hooks (Cursor: privacy `hooks`) runs, and its channels are masked as it
-//   reads them; the one thing that turns it away is personal data in what it loads itself (its project rules), found
-//   when a turn was sent. That finding is said here from then on, with the way through, until a turn runs.
-// - A conversation placed on a runner calls its provider from the runner's own machine, past the shield whatever the
-//   runtime, so the daemon turns it away by placement alone (stream-agent.ts `runnerShieldRefusal`). Said before the
-//   send too: told only after it, the refusal read as the shield having found something in the message (2026-10-11).
+// Where a conversation stands with the privacy shield before anything is sent: the daemon's own verdict on the route its
+// next turn would take (privacy-egress.ts), read here off the same policy, so the strip above the composer says what the
+// turn will meet and never a guess of its own. Before 2026-10-20 it re-derived that verdict and drifted from it: it warned
+// on opening a Cursor composer (2026-10-08), whose turns the shield reads through hooks, and said nothing about a
+// conversation on a runner (2026-10-11) until its turn came back refused.
+// - Refused: the shield masks, the provider isn't trusted, and the turn would pass no seam (a runtime the shield can't
+//   read at all, or a runner calling its provider from its own machine). Said before the send, with the way through:
+//   told only after it, the refusal read as something found in the message (2026-10-02).
+// - Found: the shield reads the turn and masks, and the last turn was turned away for what it found where it could not
+//   mask (a hooked runtime's own project rules), in the daemon's own words, until a turn runs.
+// - Granted: it runs as it is because the owner let this provider read this conversation, and nowhere else.
 
 export type PrivacyStanding =
-    // The next turn would be turned away: the shield is on, the provider isn't trusted, and the runtime can't be read at
-    // all or the conversation runs on `runner`, which calls the provider from its own machine.
     | { readonly kind: `refused`; readonly provider: string; readonly label: string; readonly runner?: string }
-    // The last turn was turned away for what the shield found, in the daemon's own words.
     | { readonly kind: `found`; readonly provider: string; readonly label: string; readonly reason: string | undefined }
-    // It runs because the owner let this provider read this conversation as it is, and nowhere else.
     | { readonly kind: `granted`; readonly provider: string; readonly label: string };
 
-// The refusals that come from what the shield read on a runtime it reads by content: a finding in what the runtime loads
-// itself, or the shield unable to read the turn at all (its hooks missing, its policy unreadable).
-const SHIELD_REFUSALS: ReadonlySet<string> = new Set([`privacy-instructions`, `privacy-unshielded`]);
-
-/** Nothing to say while the shield is off or watching, for a runtime the gateway masks here, or for a provider trusted everywhere: that last is the owner's standing choice, said on the Safety page. */
+/** Nothing to say while the verdict is to watch, to mask with nothing refused yet, or to pass for any reason but this conversation's grant (the owner's standing choices are said on the Safety page). */
 export const privacyStanding = (
     status: PrivacyShieldStatus | undefined,
     provider: string,
@@ -37,23 +29,20 @@ export const privacyStanding = (
     failure?: { readonly code: string; readonly text?: string | undefined },
     runner?: string,
 ): PrivacyStanding | undefined => {
-    // The gateway masks what leaves this sandbox, and a runner's calls never pass through it.
-    if (status === undefined || status.policy.mode !== `on` || (capabilities.privacy === `gateway` && runner === undefined)) {
+    if (status === undefined) {
         return undefined;
     }
     const known = status.providers.find((entry) => entry.id === provider);
-    if (known?.local === true || status.policy.trusted.includes(provider)) {
-        return undefined;
-    }
     const label = known?.label ?? providerLabel(provider);
-    if (trustedInConversation(status.policy, provider, conversationId)) {
-        return { kind: `granted`, provider, label };
+    const verdict = shieldVerdict(status.policy, { provider, local: known?.local === true, conversationId, route: turnRoute(capabilities.privacy, runner) });
+    switch (verdict.kind) {
+        case `refuse`:
+            return runner === undefined ? { kind: `refused`, provider, label } : { kind: `refused`, provider, label, runner };
+        case `pass`:
+            return verdict.because === `granted` ? { kind: `granted`, provider, label } : undefined;
+        case `mask`:
+            return isPrivacyRefusal(failure?.code) ? { kind: `found`, provider, label, reason: failure?.text } : undefined;
+        case `watch`:
+            return undefined;
     }
-    if (runner !== undefined) {
-        return { kind: `refused`, provider, label, runner };
-    }
-    if (capabilities.privacy === `none`) {
-        return { kind: `refused`, provider, label };
-    }
-    return failure !== undefined && SHIELD_REFUSALS.has(failure.code) ? { kind: `found`, provider, label, reason: failure.text } : undefined;
 };

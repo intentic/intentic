@@ -317,9 +317,8 @@ test("a reading handed in from elsewhere is recorded and announced like a swept 
     ]);
 });
 
-// Three different silences: a read that failed, a read that found nothing, and a read that found nothing where nothing
-// was ever shown. Only the middle one may retire a snapshot, and only it announces.
-test("a read that failed keeps the last snapshot; one that found nothing takes it back", async () => {
+// A read that gives no pools is a read that failed: it never retires the last snapshot, which it marks unread instead.
+test("a read that gives no pools keeps the last snapshot", async () => {
     const { store, recorded } = memoryStore();
     let answer: HeadroomReading = WINDOWS;
     const { source: cursor } = source([{ key: "a", provider: "cursor", answer: async () => answer }]);
@@ -333,19 +332,10 @@ test("a read that failed keeps the last snapshot; one that found nothing takes i
     answer = { windows: [] };
     await service.refresh({ maxAgeMs: 0 });
     expect(recorded["a"]?.windows).toEqual([...WINDOWS.windows]);
-
-    answer = { windows: [], empty: true };
-    await service.refresh({ maxAgeMs: 0 });
-    expect(recorded["a"]).toBeUndefined();
     expect(announced).toEqual([
         expect.objectContaining({ windows: WINDOWS.windows }),
         expect.objectContaining({ windows: WINDOWS.windows, unread: expect.objectContaining({ reason: "the provider gave no reading" }) }),
-        undefined,
     ]);
-
-    // Nothing left to take back: a second empty read must not redraw every open window each sweep.
-    await service.refresh({ maxAgeMs: 0 });
-    expect(announced).toHaveLength(3);
 });
 
 // The rail printed "1h ago" over thirty accounts read a minute ago because four Google accounts had started answering

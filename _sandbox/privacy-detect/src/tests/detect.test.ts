@@ -1,13 +1,14 @@
-import { PERSONAL_DATA_CLASSES, type PersonalDataClass } from "@intentic/sandbox-contract/schemas/privacy";
-import { detectPersonalData, mergeSpans, normalizeAllowed, type PersonalDataSpan } from "../detect.js";
+import { allowKey, PERSONAL_DATA_CLASSES, type PersonalDataClass } from "@intentic/sandbox-contract/schemas/privacy";
+import { type Candidate, detectPersonalData, type PersonalDataSpan, resolveSpans, type SpanSource } from "../detect.js";
 import { iban, luhn, nip, pesel } from "./ids.testing.js";
 
 const everything = new Set(PERSONAL_DATA_CLASSES);
-const span = (start: number, end: number, kind: PersonalDataClass, text: string): PersonalDataSpan => ({
+const span = (start: number, end: number, kind: PersonalDataClass, text: string, by: SpanSource = "detector"): Candidate => ({
     start,
     end,
     class: kind,
     value: text.slice(start, end),
+    by,
 });
 
 // What the masker relies on: spans in order, never overlapping, each value exactly the text it covers.
@@ -52,15 +53,15 @@ describe("detectPersonalData", () => {
 
 describe("the allowlist", () => {
     test("a value on it is never reported, however it is cased or spaced", () => {
-        const allow = new Set(["jan kowalski", "anna@kowalska.pl"].map(normalizeAllowed));
+        const allow = new Set(["jan kowalski", "anna@kowalska.pl"].map(allowKey));
         const text = "JAN   KOWALSKI: Jan Kowalski, anna@kowalska.pl, Anna Nowak";
         const values = detectPersonalData(text, { classes: everything, allow }).map((found) => found.value);
         expect(values).toEqual(["Anna Nowak"]);
     });
 
     test("normalization lowercases, composes and collapses whitespace", () => {
-        expect(normalizeAllowed("  Zófia \t KOWALSKA \n")).toBe("zófia kowalska");
-        expect(normalizeAllowed("Łukasz")).toBe("łukasz");
+        expect(allowKey("  Zófia \t KOWALSKA \n")).toBe("zófia kowalska");
+        expect(allowKey("Łukasz")).toBe("łukasz");
     });
 });
 
@@ -79,20 +80,26 @@ describe("overlap resolution", () => {
 
     test("the longer span wins, then the more specific class", () => {
         const text = "0123456789012345";
-        const longer = mergeSpans([span(0, 11, "national-id", text)], [span(0, 16, "person-name", text)]);
+        const longer = resolveSpans([span(0, 11, "national-id", text), span(0, 16, "person-name", text)]);
         expect(longer.map((found) => found.class)).toEqual(["person-name"]);
-        const tie = mergeSpans([span(2, 8, "person-name", text), span(2, 8, "address", text)], [span(2, 8, "phone", text)]);
+        const tie = resolveSpans([span(2, 8, "person-name", text), span(2, 8, "address", text), span(2, 8, "phone", text)]);
         expect(tie.map((found) => found.class)).toEqual(["phone"]);
-        const identifiers = mergeSpans([span(0, 6, "address", text)], [span(0, 6, "payment-card", text)]);
+        const identifiers = resolveSpans([span(0, 6, "address", text), span(0, 6, "payment-card", text)]);
         expect(identifiers.map((found) => found.class)).toEqual(["payment-card"]);
+    });
+
+    test("on an equal stretch the better source wins before the class: what the vault holds, a detector, a rule, the model", () => {
+        const text = "0123456789";
+        const sources: readonly SpanSource[] = ["model", "rule", "detector", "learned"];
+        const all = sources.map((by, index) => span(0, 6, index % 2 === 0 ? "payment-card" : "person-name", text, by));
+        expect(resolveSpans(all).map((found) => found.by)).toEqual(["learned"]);
+        expect(resolveSpans(all.slice(0, 3)).map((found) => found.by)).toEqual(["detector"]);
+        expect(resolveSpans(all.slice(0, 2)).map((found) => found.by)).toEqual(["rule"]);
     });
 
     test("a chain of overlaps keeps what does not collide with a winner", () => {
         const text = "abcdefghijklmnopqrstuvwxyz";
-        const merged = mergeSpans(
-            [span(0, 5, "email", text), span(4, 12, "address", text)],
-            [span(11, 14, "person-name", text), span(20, 22, "phone", text)],
-        );
+        const merged = resolveSpans([span(0, 5, "email", text), span(4, 12, "address", text), span(11, 14, "person-name", text), span(20, 22, "phone", text)]);
         expect(merged.map((found) => [found.start, found.end, found.class])).toEqual([
             [4, 12, "address"],
             [20, 22, "phone"],
@@ -105,9 +112,9 @@ describe("overlap resolution", () => {
         const text = "Spotkałem Bożydara Jana Kowalskiego wczoraj, potem Anna Nowak.";
         const detector = detectPersonalData(text, { classes: everything });
         expect(detector.map((found) => found.value)).toEqual(["Jana Kowalskiego", "Anna Nowak"]);
-        const model = [span(10, 35, "person-name", text)];
-        expect(mergeSpans(detector, model).map((found) => found.value)).toEqual(["Bożydara Jana Kowalskiego", "Anna Nowak"]);
-        expect(mergeSpans([], model)).toEqual(model);
+        const model = [span(10, 35, "person-name", text, "model")];
+        expect(resolveSpans([...detector, ...model]).map((found) => found.value)).toEqual(["Bożydara Jana Kowalskiego", "Anna Nowak"]);
+        expect(resolveSpans(model)).toEqual(model);
     });
 });
 

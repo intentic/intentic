@@ -1,30 +1,18 @@
 import type { Log } from "@intentic/local-agent";
 import { SANDBOX_CONTAINER_PREFIX } from "@intentic/sandbox-run";
-import {
-    type GoneWitness,
-    moveSandboxToSsh,
-    type Pairing,
-    pairingKey,
-    readState,
-    setFileSyncPausedFor,
-    setIcSlug,
-    setSandboxGone,
-    type WatcherPause,
-} from "./config.js";
+import { type ContainerAway, type GoneWitness, moveSandboxToSsh, type Pairing, readState, setContainerAway, setIcSlug, setSandboxGone,pairingSlugs } from "./config.js";
 import { containerState } from "./endpoint.js";
 import { type ContainerState, dockerStep, keptHere, type LocalVerdict, localVerdict, retiresAt } from "./gone.js";
 import { type LocalSandboxes, readLocalSandboxes } from "./local-sandboxes.js";
-import { pauseRunningSync, resumeWatcherPausedSync } from "./mutagen.js";
-import { pairingSlugs } from "./swap-pause.js";
 
 // WHAT THE WATCHER DOES ABOUT A SANDBOX'S FATE (2026-10-05), the side-effecting half of gone.ts's rules: marking a
-// sandbox gone and holding it still, clearing the mark when it answers again, asking this machine's ic whether a sandbox
-// kept here still exists, and following a docker pairing whose container went away. mirror.ts calls these at their
-// cadences; each acts on every pairing of one sandbox together, since what it says is the sandbox's.
+// sandbox gone, clearing the mark when it answers again, asking this machine's ic whether a sandbox kept here still
+// exists, and following a docker pairing whose container went away. mirror.ts calls these at their cadences; each acts
+// on every pairing of one sandbox together, since what it says is the sandbox's. Each only keeps its fact: the file
+// sync a mark or an away container holds still is held and let go by holds.ts, off that fact.
 
 /** What these actions need from the watcher that runs them. */
 export interface FateSeams {
-    readonly mutagen: string;
     // Takes the sandbox's forwarded ports off localhost (mirror.ts retirePairingMirror).
     readonly releaseForwards: (sandboxId: string) => Promise<unknown>;
     readonly say: Log;
@@ -32,53 +20,17 @@ export interface FateSeams {
 
 const utcDay = (at: number): string => new Date(at).toISOString().slice(0, 10);
 
-// A pause of the watcher's own, for a reason it names and lifts itself; a pairing already paused (by a person, a swap,
-// the unreachable hour, or another of these) is left as it is and carries no marker, so nothing here ever resumes a
-// pause that was not its own.
-const pauseFor = async (seams: FateSeams, pairing: Pairing, reason: WatcherPause): Promise<boolean> => {
-    if (pairing.fileSyncPausedFor !== undefined || !pauseRunningSync(seams.mutagen, pairing)) {
-        return false;
-    }
-    await setFileSyncPausedFor(pairingKey(pairing), reason);
-    return true;
-};
-
-// Lifts the pauses this watcher made for `reasons`, on each pairing that carries one. (2026-10-19) A pairing's marker
-// comes off only once its resume took (mutagen.ts `resumeSessions`): one Mutagen did not take keeps it, and the next
-// call tries again, where clearing it anyway left the sync paused with nothing that would ever lift it. Answers how many
-// were lifted and how many still wait.
-const liftPauses = async (
-    seams: FateSeams,
-    pairings: readonly Pairing[],
-    reasons: readonly WatcherPause[],
-): Promise<{ readonly lifted: number; readonly waiting: number }> => {
-    let lifted = 0;
-    let waiting = 0;
-    for (const pairing of pairings.filter((held) => held.fileSyncPausedFor !== undefined && reasons.includes(held.fileSyncPausedFor))) {
-        // one pairing's sessions at a time, as every Mutagen call here
-        if (!(await resumeWatcherPausedSync(seams.mutagen, pairing))) {
-            waiting += 1;
-            continue;
-        }
-        // state is a single file; serial keeps the writes ordered
-        await setFileSyncPausedFor(pairingKey(pairing), undefined);
-        lifted += 1;
-    }
-    return { lifted, waiting };
-};
-
-// Whether a pairing of the sandbox still carries what a "gone" verdict left on it: the mark, or the pause it caused,
-// which outlives the mark while Mutagen has not taken its resume.
+// Whether a pairing of the sandbox still carries a "gone" verdict.
 export const goneLingers = (pairings: readonly Pairing[], sandboxId: string): boolean =>
-    pairings.some((pairing) => pairing.sandboxId === sandboxId && (pairing.goneSince !== undefined || pairing.fileSyncPausedFor === "gone"));
+    pairings.some((pairing) => pairing.sandboxId === sandboxId && pairing.goneSince !== undefined);
 
 // The sandbox's pairings as they are on disk now, not as a pass read them: two witnesses in one pass (the poll and the
 // report) must find the first one's mark rather than mark it twice.
 const pairingsOf = async (sandboxId: string): Promise<Pairing[]> => (await readState()).pairings.filter((pairing) => pairing.sandboxId === sandboxId);
 
-// A WITNESS SAID THIS SANDBOX IS GONE. The first time: the mark goes on every pairing of it, their sessions are paused
-// with that reason, its ports come off localhost, and one line says what happened and when the pairing is retired. A
-// recheck that still hears it only moves `goneCheckedAt`, quietly.
+// A WITNESS SAID THIS SANDBOX IS GONE. The first time: the mark goes on every pairing of it (which holds their file sync
+// still), its ports come off localhost, and one line says what happened and when the pairing is retired. A recheck that
+// still hears it only moves `goneCheckedAt`, quietly.
 export const sandboxSaidGone = async (seams: FateSeams, sandboxId: string, by: GoneWitness, now: number = Date.now()): Promise<void> => {
     const pairings = await pairingsOf(sandboxId);
     const first = pairings[0];
@@ -91,41 +43,25 @@ export const sandboxSaidGone = async (seams: FateSeams, sandboxId: string, by: G
         return;
     }
     await setSandboxGone(first.sandboxId, { since: now, checkedAt: now, by });
-    for (const pairing of pairings) {
-        // one pairing's pause and its marker at a time
-        await pauseFor(seams, pairing, "gone");
-    }
     await seams.releaseForwards(first.sandboxId);
     const folders = pairings.flatMap((pairing) => (pairing.localDir === undefined ? [] : [pairing.localDir]));
     seams.say(
-        `${first.sandboxId}: ${by === "edge" ? "the platform says this sandbox no longer exists" : "this machine's ic no longer holds this sandbox, in its listing or in its trash"}. Paused its file sync, took its ports off localhost, and stopped dialling and reporting to it; it is asked again every hour. Unless it answers, its pairing is retired on ${utcDay(retiresAt(now))}${folders.length === 0 ? "" : `, keeping ${folders.join(", ")} and ${folders.length === 1 ? "its" : "their"} restore points`}.`,
+        `${first.sandboxId}: ${by === "edge" ? "the platform says this sandbox no longer exists" : "this machine's ic no longer holds this sandbox, in its listing or in its trash"}. Its file sync holds still, its ports are off localhost, and stopped dialling and reporting to it; it is asked again every hour. Unless it answers, its pairing is retired on ${utcDay(retiresAt(now))}${folders.length === 0 ? "" : `, keeping ${folders.join(", ")} and ${folders.length === 1 ? "its" : "their"} restore points`}.`,
     );
 };
 
 // THE SANDBOX ANSWERED, so whatever said it was gone was wrong or is over (restored from the trash, set up again under
-// the same address): the mark comes off every pairing of it and the pauses it caused are lifted.
-// A pause the mark caused that Mutagen did not take the resume of stays, and each later answer tries it again.
+// the same address): the mark comes off every pairing of it, and with it the hold on their file sync.
 export const sandboxAnswered = async (seams: FateSeams, sandboxId: string): Promise<void> => {
     const pairings = await pairingsOf(sandboxId);
-    const first = pairings[0];
-    if (first === undefined || !goneLingers(pairings, sandboxId)) {
+    if (!goneLingers(pairings, sandboxId)) {
         return;
     }
-    const marked = pairings.some((pairing) => pairing.goneSince !== undefined);
-    if (marked) {
-        await setSandboxGone(first.sandboxId, undefined);
-    }
-    const { lifted, waiting } = await liftPauses(seams, pairings, ["gone"]);
-    if (marked) {
-        seams.say(
-            `${first.sandboxId}: answers again, so it is not gone after all; ${waiting === 0 ? "its file sync is resumed" : "its file sync is resumed as soon as Mutagen takes it"} and its ports come back with this pass.`,
-        );
-    } else if (lifted > 0) {
-        seams.say(`${first.sandboxId}: its file sync, held while it was said to be gone, is resumed.`);
-    }
+    await setSandboxGone(sandboxId, undefined);
+    seams.say(`${sandboxId}: answers again, so it is not gone after all; its file sync carries on and its ports come back with this pass.`);
 };
 
-// The slugs this machine's ic may list a pairing's sandbox under: the two its URL carries (swap-pause.ts), the one ic
+// The slugs this machine's ic may list a pairing's sandbox under: the two its URL carries (config.ts `pairingSlugs`), the one ic
 // listed it under before, and the one its container's name carries.
 export const localSlugsOf = (pairing: Pick<Pairing, "sandboxUrl" | "icSlug" | "container">): string[] => [
     ...new Set([
@@ -232,8 +168,9 @@ const followContainer = async (
 ): Promise<void> => {
     const { sandboxId, held, docker } = sandbox;
     if (container === "serves") {
-        if ((await liftPauses(seams, held, ["container-missing", "container-trashed"])).lifted > 0) {
-            seams.say(`${sandboxId}: ${sandbox.container} runs as this sandbox again; its file sync is resumed.`);
+        if (held.some((pairing) => pairing.containerAway !== undefined)) {
+            await setContainerAway(sandboxId, undefined);
+            seams.say(`${sandboxId}: ${sandbox.container} runs as this sandbox again; its file sync carries on.`);
         }
         return;
     }
@@ -249,23 +186,19 @@ const followContainer = async (
             `${sandboxId}: ${sandbox.container} is no longer on this machine's Docker engine, but the sandbox still answers at ${docker.sandboxUrl}: its file sync moves to ssh, through the sandbox's own address.`,
         );
     } else if (step === "pause-missing" || step === "pause-trashed") {
-        await pauseForContainer(seams, sandbox, step === "pause-trashed" ? "container-trashed" : "container-missing");
+        await containerAway(seams, sandbox, step === "pause-trashed" ? "trashed" : "missing");
     }
 };
 
-// Each pairing of the sandbox held still for its container, said once when any of them was running.
-const pauseForContainer = async (seams: FateSeams, sandbox: DockerSandbox, reason: "container-missing" | "container-trashed"): Promise<void> => {
-    let paused = 0;
-    for (const pairing of sandbox.held) {
-        // state is a single file; serial keeps the writes ordered
-        paused += (await pauseFor(seams, pairing, reason)) ? 1 : 0;
-    }
-    if (paused === 0) {
+// The sandbox's pairings held still for its container, said once when that is news.
+const containerAway = async (seams: FateSeams, sandbox: DockerSandbox, away: ContainerAway): Promise<void> => {
+    if (sandbox.held.every((pairing) => pairing.containerAway === away)) {
         return;
     }
+    await setContainerAway(sandbox.sandboxId, away);
     seams.say(
-        reason === "container-trashed"
-            ? `${sandbox.sandboxId}: was removed from this machine and sits in ic's trash, so its file sync is paused. \`ic sandbox restore\` brings it back, and its file sync with it.`
-            : `${sandbox.sandboxId}: ${sandbox.container} is no longer on this machine's Docker engine and the sandbox is not answering, so its file sync is paused until it is back.`,
+        away === "trashed"
+            ? `${sandbox.sandboxId}: was removed from this machine and sits in ic's trash, so its file sync holds still. \`ic sandbox restore\` brings it back, and its file sync with it.`
+            : `${sandbox.sandboxId}: ${sandbox.container} is no longer on this machine's Docker engine and the sandbox is not answering, so its file sync holds still until it is back.`,
     );
 };

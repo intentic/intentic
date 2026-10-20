@@ -1,11 +1,10 @@
-import { consumeInbox } from "./durable/inbox-store.js";
-import { liveHere } from "./durable/fire-admission.js";
+import { consumeInbox, type ListenerEntry, listenerInboxRows, type WorkspaceEntry, workspaceInboxRows } from "./durable/inbox-store.js";
 import { resumeListenerInbox } from "./listeners.js";
 import { resumeWorkspaceInbox } from "./workspace-events.js";
 import type { RestartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { consumeEntry, type JournalEntry, resumeBars, spendAttempt } from "../store/journals/turn-journal.js";
-import { settingsResume } from "../agent/run/turn/turn-resume.js";
 import type { Services } from "../composition.js";
+import { defineInFlight } from "../seams/restart/in-flight.js";
 import { opt } from "../opt.js";
 import { channelAnswerSink } from "../extensions/listener/listener-deliver.js";
 import { fireOnThread, resumable, type ThreadFireOptions, type ThreadPlace } from "./scheduler.js";
@@ -129,21 +128,19 @@ const heldSince = async (services: Services, entry: JournalledFire): Promise<boo
     return hold !== undefined;
 };
 
-// Runs once at boot, beside the engine's own pass over the turns it died under (agent/run/turn/turn-resume.ts). Each
-// entry is consumed or spent before it fires, so a fire that kills the daemon can't loop the boot. Interrupted fires and
-// queued ones come back in the order they were admitted. First the inbox rows (durable/inbox-store.ts) a journalled fire already
-// took over are dropped, so `resumeAutomationInboxes`, after this, fires nothing twice.
-// `policy`: whether this boot resumes what the restart cut (agent/run/turn/recovery/restart-resume-policy.ts), decided once for
-// every pass; absent, it is the settings' autoResumeOnRestart alone.
-export const resumeInterruptedFires = async (services: Services, now: number = Date.now(), policy?: RestartResume): Promise<void> => {
-    const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {
-        services.logger.warn({ err: error }, "turn journal: unreadable at boot, no interrupted fire is re-fired");
-        return [];
-    });
-    const fires = listed.filter((entry): entry is JournalledFire => entry.kind === "automation" && !liveHere(services, entry));
-    await consumeInbox(services, fires.flatMap((entry) => entry.inboxIds ?? []));
-    const resume = policy ?? (await settingsResume(services));
-    for (const entry of fires) {
+// Every fire the journal holds when the gate opens is one the daemon died under (bootstrap/restart/in-flight-kinds.ts), beside the
+// engine's own turns (agent/run/turn/turn-resume.ts). Each entry is consumed or spent before it fires, so a fire that
+// kills the daemon can't loop the boot. Interrupted fires and queued ones come back in the order they were admitted. The
+// inbox rows a journalled fire already took over are dropped first; the inbox kind after this one never read them.
+export const interruptedFiresInFlight = defineInFlight({
+    name: "automation fires",
+    read: async (services: Pick<Services, "turnJournal">) => journalledFires(await services.turnJournal.list()),
+    recover: async (services: Services, left, resume) => recoverCutFires(services, left, resume),
+});
+
+export const recoverCutFires = async (services: Services, left: readonly JournalledFire[], resume: RestartResume, now: number = Date.now()): Promise<void> => {
+    await consumeInbox(services, left.flatMap((entry) => entry.inboxIds ?? []));
+    for (const entry of left) {
         if (await heldSince(services, entry)) {
             await consumeEntry(services, entry);
             continue;
@@ -152,10 +149,27 @@ export const resumeInterruptedFires = async (services: Services, now: number = D
     }
 };
 
-// After the journalled fires (bootstrap/boot-resumes.ts): what still waited in the inboxes when the daemon stopped, a
-// listener message in its debounce or behind a running fire, a workspace event in its chore's queue, goes back where it
-// waited, in arrival order. Never rejects: a failure is logged, and the rows stay for the next boot.
-export const resumeAutomationInboxes = async (services: Services): Promise<void> => {
-    await resumeListenerInbox(services).catch((error: Error) => services.logger.error({ err: error }, "listener inbox could not be replayed"));
-    await resumeWorkspaceInbox(services).catch((error: Error) => services.logger.error({ err: error }, "workspace-event inbox could not be replayed"));
-};
+const journalledFires = (entries: readonly JournalEntry[]): JournalledFire[] => entries.filter((entry): entry is JournalledFire => entry.kind === "automation");
+
+// What still waited in the inboxes when the daemon stopped, a listener message in its debounce or behind a running fire, a
+// workspace event in its chore's queue, less what a journalled fire already carries: it goes back where it waited, in
+// arrival order, after the fires. A failure is logged, and the rows stay for the next boot.
+type InboxRow = { readonly listener: ListenerEntry } | { readonly workspace: WorkspaceEntry };
+
+export const automationInboxesInFlight = defineInFlight({
+    name: "automation inboxes",
+    read: async (services: Pick<Services, "config" | "turnJournal">): Promise<readonly InboxRow[]> => {
+        const carried = new Set(journalledFires(await services.turnJournal.list()).flatMap((entry) => entry.inboxIds ?? []));
+        const [listener, workspace] = await Promise.all([listenerInboxRows(services), workspaceInboxRows(services)]);
+        return [
+            ...listener.filter((row) => !carried.has(row.id)).map((row) => ({ listener: row })),
+            ...workspace.filter((row) => !carried.has(row.id)).map((row) => ({ workspace: row })),
+        ];
+    },
+    recover: async (services: Services, left) => {
+        const listener = left.flatMap((row) => ("listener" in row ? [row.listener] : []));
+        const workspace = left.flatMap((row) => ("workspace" in row ? [row.workspace] : []));
+        await resumeListenerInbox(services, listener).catch((error: Error) => services.logger.error({ err: error }, "listener inbox could not be replayed"));
+        await resumeWorkspaceInbox(services, workspace).catch((error: Error) => services.logger.error({ err: error }, "workspace-event inbox could not be replayed"));
+    },
+});

@@ -1,7 +1,8 @@
 <!-- The home's quick look: a card beside the hovered tile with a file's first lines, the picture itself, a document's first page, or what a folder holds. -->
 <script setup lang="ts">
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
-import { Code, explorerColorClass, formatBytes, formatCount, iconForEntry, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
+import { useLoaded } from "@intentic/extension-api";
+import { Await, Code, explorerColorClass, formatBytes, formatCount, iconForEntry } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref, type Ref, shallowRef, watch } from "vue";
 import { useLatest } from "@intentic/ui/async";
 import { useLayout } from "../../../../workbench/window/useLayout";
@@ -279,6 +280,10 @@ const onVideoDrawn = (event: Event): void => {
 // Which way the card leans in from, so its entrance comes from the tile rather than from nowhere.
 const enterFrom = computed(() => (frame.value?.side === `left` ? `opacity-0 translate-x-1` : frame.value?.side === `over` ? `opacity-0` : `opacity-0 -translate-x-1`));
 
+// The body's read, the text or a document's bytes: one that came to nothing is not waited on, the header says enough.
+// Only text is remembered, as an empty file's note or a document's page would stand in badly for the next file's lines.
+const body = useLoaded(() => ({ data: text.value ?? documentBytes.value, error: undefined, fetching: loading.value, wanted: loading.value }));
+const bodyImprint = computed(() => (text.value === `` || documentBytes.value !== undefined ? undefined : `workspace.home.quicklook`));
 // A document whose bytes never came (gone, or refused): the card is its header alone, not an empty page-sized box.
 const unreadable = computed(() => kind.value === `document` && !loading.value && documentBytes.value === undefined);
 
@@ -363,38 +368,36 @@ onBeforeUnmount(() => {
                         ></video>
                         <Icon v-else :name="icon" class="absolute inset-0 m-auto text-[2.5rem] opacity-40" :class="color" aria-hidden="true" />
                     </template>
-                    <template v-else-if="text !== undefined">
-                        <p v-if="text === ''" class="px-3 py-3 text-2xs text-subtle">{{ t(`workspace.homeQuickLook.nothingInYet`) }}</p>
-                        <!-- The block's own frame and scrollbar are dropped: the body is already the window into the file, and a
-                             card that takes no pointer can't be scrolled. -->
-                        <div
-                            v-else
-                            v-skeleton-source="`workspace.home.quicklook`"
-                            class="[&_.shiki]:overflow-hidden [&_.shiki]:rounded-none [&_.shiki]:border-0 [&_pre]:overflow-hidden [&_pre]:rounded-none [&_pre]:border-0"
-                        >
-                            <Code :code="text" :lang="plan.lang" :copyable="false" />
-                        </div>
-                    </template>
-                    <!-- Reading: the last file looked at, its lines as bars, or until there is one a few line-shaped
-                         placeholders, still (no animation), in the file's own measure. Above the document, so a document
-                         being fetched waits behind the same lines a file being read does. Only text is remembered: every
-                         hover is another file, and an empty one's note or a document's page would stand in badly for it. -->
-                    <SkeletonSnapshot v-else-if="loading" of="workspace.home.quicklook">
-                        <div class="flex flex-col gap-2 px-3 py-3" aria-hidden="true">
-                            <div class="skeleton h-3 w-2/3"></div>
-                            <div class="skeleton h-3 w-1/2"></div>
-                            <div class="skeleton h-3 w-3/4"></div>
-                            <div class="skeleton h-3 w-2/5"></div>
-                        </div>
-                    </SkeletonSnapshot>
-                    <!-- The file's own pages, drawn by the extension that owns the format, at the scale a thumbnail reads at:
-                         the top of the first page is all a glance gets, since a card that takes no pointer can't be scrolled. -->
-                    <div
-                        v-else-if="kind === 'document' && documentComponent && documentBytes"
-                        class="h-full w-full [zoom:0.7] [&_*]:[scrollbar-width:none]"
-                    >
-                        <component :is="documentComponent" :blob="documentBytes" />
-                    </div>
+                    <!-- Reading (a document too): the last file looked at, its lines as bars, or until there is one a few
+                         line-shaped placeholders, still (no animation), in the file's own measure. -->
+                    <Await v-else-if="kind === 'text' || kind === 'document'" :of="body" :imprint="bodyImprint">
+                        <template #default="{ data }">
+                            <template v-if="typeof data === 'string'">
+                                <p v-if="data === ''" class="px-3 py-3 text-2xs text-subtle">{{ t(`workspace.homeQuickLook.nothingInYet`) }}</p>
+                                <!-- The block's own frame and scrollbar are dropped: the body is already the window into the file,
+                                     and a card that takes no pointer can't be scrolled. -->
+                                <div
+                                    v-else
+                                    class="[&_.shiki]:overflow-hidden [&_.shiki]:rounded-none [&_.shiki]:border-0 [&_pre]:overflow-hidden [&_pre]:rounded-none [&_pre]:border-0"
+                                >
+                                    <Code :code="data" :lang="plan.lang" :copyable="false" />
+                                </div>
+                            </template>
+                            <!-- The file's own pages, drawn by the extension that owns the format, at a thumbnail's scale: the
+                                 top of the first page is all a glance gets, since a card that takes no pointer can't be scrolled. -->
+                            <div v-else-if="documentComponent" class="h-full w-full [zoom:0.7] [&_*]:[scrollbar-width:none]">
+                                <component :is="documentComponent" :blob="data" />
+                            </div>
+                        </template>
+                        <template #fallback>
+                            <div class="flex flex-col gap-2 px-3 py-3" aria-hidden="true">
+                                <div class="skeleton h-3 w-2/3"></div>
+                                <div class="skeleton h-3 w-1/2"></div>
+                                <div class="skeleton h-3 w-3/4"></div>
+                                <div class="skeleton h-3 w-2/5"></div>
+                            </div>
+                        </template>
+                    </Await>
                 </div>
             </div>
         </Transition>

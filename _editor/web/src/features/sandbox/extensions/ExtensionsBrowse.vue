@@ -2,7 +2,7 @@
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { OFFICIAL_REGISTRY_URL } from "@intentic/registry";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
-import { Button, SkeletonSnapshot, ui, type NoticeModel, vSkeletonSource } from "@intentic/ui";
+import { Await, Button, ui, type NoticeModel, Section } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { startAgent } from "../../../models/fleet/agentActions";
@@ -10,7 +10,6 @@ import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../models/extensions/useExtensions";
 import { useRegistry } from "../../extensions/useRegistry";
 import { useRole } from "../../../client/sandbox/useRole";
-import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useTerminalPanel } from "../../../models/terminal/useTerminalPanel";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { useOperations } from "../../../workbench/operations/operations";
@@ -53,8 +52,7 @@ const emit = defineEmits<{
 const route = useRoute();
 const router = useRouter();
 const { canShip: canOperate } = useRole();
-const { entries, registryName, url, token, isOfficial, isLoading, error, refetch, useRegistryAt, resetRegistry } = useRegistry();
-const outline = useSandboxOutline(isLoading);
+const { entries, registryName, url, token, isOfficial, loaded, error, refetch, useRegistryAt, resetRegistry } = useRegistry();
 const { extensions, applyUpdate } = useExtensions();
 const { add } = useCapabilities();
 // Installs and updates, one per listing, kept in the ledger (installsInFlight.ts). The open listing's dialog says how
@@ -136,12 +134,12 @@ const revealOpened = (): void => {
     emit(`reveal`, listing === undefined ? undefined : installedAs(listing)?.id);
 };
 
-// Clears a dead `ext` param once the registry has actually loaded, not before, since an empty list would eat every deep
-// link on arrival. Immediate, since a warm cache means nothing changes after mount for a lazy watch to catch.
+// Clears a dead `ext` param once the registry has actually listed something, not before, since an empty list would eat
+// every deep link on arrival. Immediate, since a warm cache means nothing changes after mount for a lazy watch to catch.
 watch(
-    [openName, isLoading, entries],
-    ([name, loading, rows]) => {
-        if (name !== undefined && !loading && rows.length > 0 && opened.value === undefined) {
+    [openName, entries],
+    ([name, rows]) => {
+        if (name !== undefined && rows.length > 0 && opened.value === undefined) {
             void router.replace({ query: { ...route.query, ext: undefined } });
         }
     },
@@ -251,9 +249,9 @@ const backToOfficial = (): void => {
 const GRID = `grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4`;
 
 // What to say when nothing matches, kept distinct from the error notice: a registry that failed to read has not 'listed
-// no extensions'.
+// no extensions'. Only drawn once the registry has answered (<Await>).
 const emptyNote = computed<string | undefined>(() => {
-    if (isLoading.value || error.value !== undefined || matches.value.length > 0) {
+    if (error.value !== undefined || matches.value.length > 0) {
         return undefined;
     }
     if (listings.value.length === 0) {
@@ -316,50 +314,48 @@ const emptyNote = computed<string | undefined>(() => {
             <p class="text-2xs text-subtle">{{ t(`sandbox.extensionsBrowse.tokenOnlyNeededPrivate`) }}</p>
         </div>
 
-        <!-- Registry loading draws the listing as it last looked here; until it has been seen once, the tile grid's shape. -->
-        <SkeletonSnapshot v-if="isLoading && outline" of="sandbox.extensions.browse" :label="t(`sandbox.extensionsBrowse.readingRegistry`)">
-            <div class="@container" role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`sandbox.extensionsBrowse.readingRegistry`) }}</span>
-                <div :class="GRID" aria-hidden="true">
-                    <div v-for="tile in 6" :key="tile" class="flex h-[2.875rem] items-stretch overflow-hidden rounded-lg bg-card shadow-sm">
-                        <span class="skeleton block w-11 shrink-0 rounded-none" />
-                        <div class="flex min-w-0 flex-1 flex-col justify-center gap-1.5 px-2.5">
-                            <span class="skeleton block h-3" :class="[`w-24`, `w-32`, `w-20`][tile % 3]" />
-                            <span class="skeleton block h-2 w-4/5" />
+        <!-- Registry loading, on arrival or after a change of registry, draws the listing as it last looked here; until it has
+             been seen once, the tile grid's shape. A failed read says so in the section's notice region (`notice`). -->
+        <Await :of="loaded" imprint="sandbox.extensions.browse" :label="t(`sandbox.extensionsBrowse.readingRegistry`)">
+            <template #fallback>
+                <div class="@container" role="status" aria-busy="true">
+                    <span class="sr-only">{{ t(`sandbox.extensionsBrowse.readingRegistry`) }}</span>
+                    <div :class="GRID" aria-hidden="true">
+                        <div v-for="tile in 6" :key="tile" class="flex h-[2.875rem] items-stretch overflow-hidden rounded-lg bg-card shadow-sm">
+                            <span class="skeleton block w-11 shrink-0 rounded-none" />
+                            <div class="flex min-w-0 flex-1 flex-col justify-center gap-1.5 px-2.5">
+                                <span class="skeleton block h-3" :class="[`w-24`, `w-32`, `w-20`][tile % 3]" />
+                                <span class="skeleton block h-2 w-4/5" />
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </SkeletonSnapshot>
-
-        <!-- The sections and the empty note as one box, so the next wait draws whichever was last on screen; only drawn
-             with something in it, or its gap would open a hole while the registry reads. -->
-        <div v-if="sections.length > 0 || emptyNote !== undefined" v-skeleton-source="`sandbox.extensions.browse`" class="flex flex-col gap-6">
-            <!-- Verified leads: the one claim on this page a human made. The other heading states what it's not, in the same size. -->
-            <div v-for="section in sections" :key="section.id" class="flex flex-col gap-2">
-                <div class="flex flex-wrap items-baseline gap-x-2">
-                    <span :class="ui.sectionLabel()">{{ section.label }}</span>
-                    <span v-if="section.caption" class="text-2xs text-muted">{{ section.caption }}</span>
-                </div>
-                <!-- Container query: how many tiles fit is a fact about this pane, not the screen. -->
-                <div class="@container">
-                    <div :class="GRID">
-                        <DiscoverCard
-                            v-for="listing in section.listings"
-                            :key="listing.entry.name"
-                            :listing="listing"
-                            :installing="installsInFlight.has(listing.entry.name)"
-                            @click="openListing(listing)"
-                        />
+            </template>
+            <template #failed />
+            <!-- The sections and the empty note as one box; only drawn with something in it, or its gap would open a hole. -->
+            <div v-if="sections.length > 0 || emptyNote !== undefined" class="flex flex-col gap-6">
+                <!-- Verified leads: the one claim on this page a human made. The other heading states what it's not, in the same size. -->
+                <Section v-for="section in sections" :key="section.id" :label="section.label">
+                    <!-- Container query: how many tiles fit is a fact about this pane, not the screen. -->
+                    <div class="@container">
+                        <div :class="GRID">
+                            <DiscoverCard
+                                v-for="listing in section.listings"
+                                :key="listing.entry.name"
+                                :listing="listing"
+                                :installing="installsInFlight.has(listing.entry.name)"
+                                @click="openListing(listing)"
+                            />
+                        </div>
                     </div>
+                </Section>
+
+                <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">
+                    <span>{{ emptyNote }}</span>
+                    <Button v-if="listings.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="emit(`clear`)" />
                 </div>
             </div>
-
-            <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">
-                <span>{{ emptyNote }}</span>
-                <Button v-if="listings.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="emit(`clear`)" />
-            </div>
-        </div>
+        </Await>
 
         <!-- The first place this app says publishing is possible, and how cheap it is (a repo topic, no account or queue). -->
         <!-- Registry details flow as one paragraph so narrow panes wrap naturally. -->

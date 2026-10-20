@@ -88,7 +88,9 @@ const mount = (groups: ContentsGroup[] = GROUPS): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     // Icon and v-tooltip are registered app-wide by installUi; stand-ins avoid pulling in the whole UI plugin.
-    app = createApp({ render: () => h(EnvironmentContents, { groups, loading: false }) });
+    app = createApp({
+        render: () => h(EnvironmentContents, { loaded: { state: `ready`, data: groups, refreshing: false, refreshError: undefined } }),
+    });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);
@@ -171,11 +173,11 @@ it(`only names the source when it is not already saying the row's own name`, () 
     expect(facts).toContain(`workspace extension`);
 });
 
-// Mounted with `loading` directly rather than through the parent, since the prop is the state under test.
+// Mounted with a waiting read directly rather than through the parent, since the prop is the state under test.
 const mountLoading = (): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
-    app = createApp({ render: () => h(EnvironmentContents, { groups: [], loading: true }) });
+    app = createApp({ render: () => h(EnvironmentContents, { loaded: { state: `waiting`, since: Date.now(), retry: undefined } }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(el);

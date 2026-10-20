@@ -2,143 +2,26 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { queueOnFile } from "@intentic/base/fs";
-import { DEV_SANDBOX_IMAGE, isOfficialSandboxImage } from "@intentic/sandbox-contract/policy/overlay-lint";
 import type { Environment, EnvironmentRecurring, EnvironmentRuntimeDecision } from "@intentic/sandbox-contract/schemas/environment";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Services } from "../composition.js";
-import type { Config } from "../env.config.js";
 import { cacheProblem } from "./apt-cache-rule.js";
 import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, stepFor } from "./auto-drafts.js";
 import { containerBornAtMs, installLive } from "./drift.js";
-import { type OverlayBlock, renderBlocks, splitBlocks, uniqueBlocks, withoutRepeats } from "./overlay-blocks.js";
-import { privacyPackFragments } from "./privacy-pack.js";
+import { composeEnvironment, containerFacts, customPath, runningBuild, writeComposed } from "./overlay.js";
+import { type OverlayBlock, renderBlocks, splitBlocks, uniqueBlocks } from "./overlay-blocks.js";
 import { statePath } from "../state-paths.js";
 
 // Overlay Dockerfile composed from the pinned FROM, each capability's fragment, and the owner-approved custom section.
-// Agents propose custom-section content only; the owner-gated approve route stores it as custom and recomposes. An
-// outside executor then verifies the approved hash, builds, and recreates with it stamped.
+// Agents propose custom-section content only; the owner-gated approve route stores it as custom. An outside executor
+// copies the composed file out, verifies the approved hash, builds, and recreates with it stamped.
 
 export const proposalPath = (services: Services): string => statePath(services.workspace.root, ".intentic/config/environment.Dockerfile");
-export const approvedPath = (services: Services): string => statePath(services.workspace.root, ".intentic/local/environment.approved.Dockerfile");
-export const customPath = (services: Services): string => statePath(services.workspace.root, ".intentic/config/environment.custom.Dockerfile");
-
-// Extends the image this sandbox is actually on, not a fixed tag, so a rebuild can't silently roll it back.
-const RELEASE_IMAGE = "ghcr.io/intentic/sandbox:stable";
-
-// Both inputs are runner-set, never agent-writable. `baseImage` wins since `runningImage` after a rebuild is the
-// overlay's own tag, not a base; an unofficial ref is only honoured when the runner named it explicitly (the dev
-// image).
-export const baseImageOf = (baseImage: string | undefined, runningImage: string | undefined): string => {
-    if (baseImage !== undefined && baseImage.trim() !== "") {
-        return baseImage.trim();
-    }
-    const running = runningImage?.trim() ?? "";
-    return isOfficialSandboxImage(running) ? running : RELEASE_IMAGE;
-};
-
-// The base named exactly: its reference with the registry digest the runner read (`ghcr.io/intentic/sandbox:stable@sha256:…`,
-// which docker pulls by the digest and a reader still sees the channel in). For what a sandbox records about itself, a
-// definition's `baseImage`; never what an overlay composes FROM, which follows the channel's tag. A reference that
-// already names a digest, or a digest that is not one, leaves the reference as it is.
-export const pinnedBase = (base: string, digest: string): string =>
-    base.includes("@") || !/^sha256:[0-9a-f]{64}$/u.test(digest) ? base : `${base}@${digest}`;
-
-// Composed overlay must extend the official sandbox image; the FROM line is pinned in composeEnvironment, and every
-// executor (`ic`, the hosted rebuild) re-checks it via the contract's `hasOfficialBase`.
 
 // A proposal is custom content only: no FROM (daemon owns the base) and no runtime directive (reserved for capability
 // fragments).
 const invalidProposal = (content: string): boolean =>
     content.split("\n").some((line) => /^\s*from\s/i.test(line)) || content.includes("intentic:runtime");
-
-const HEADER =
-    "# Composed by the intentic sandbox daemon: do not edit by hand.\n" +
-    "# Capability fragments are daemon-owned; the custom section mirrors .intentic/config/environment.custom.Dockerfile.";
-const CUSTOM_MARKER = "# ---- custom (owner-approved) ----";
-
-// Writes a derived file only when its content actually changed; on a read-triggered recompose, an unconditional write
-// would retrigger the workspace watcher into refetching the same query forever.
-const writeComposed = async (services: Services, path: string, content: string): Promise<void> => {
-    if ((await services.files.read(path)) === content) {
-        return;
-    }
-    await services.files.write(path, content);
-};
-
-// Regenerates the approved overlay from the capability manifest and custom file; returns the composed hash, or
-// undefined when none should exist. Runs on capability add/remove, approve, a privacy policy change, and boot,
-// catching drift when a daemon update changes a fragment.
-// On a hosted VM, already root over the whole machine, `# intentic:runtime` lines (privileges for a docker-run
-// executor) are meaningless; stripped here along with any fragment left with no real instruction after they're gone.
-export const withoutRuntimeDirectives = (fragments: readonly string[]): string[] =>
-    fragments
-        .map((fragment) =>
-            fragment
-                .split("\n")
-                .filter((line) => !line.trim().startsWith("# intentic:runtime"))
-                .join("\n")
-                .trim(),
-        )
-        .filter((fragment) => fragment.split("\n").some((line) => line.trim() !== "" && !line.trim().startsWith("#")));
-
-// The custom-section blocks a composed overlay carries, each by its name and the hash of its trimmed steps: what a
-// composition record keeps, read from the composed text itself so it describes exactly what a rebuild of it builds.
-export const compositionBlocksOf = (content: string): { readonly name: string; readonly hash: string }[] => {
-    const at = content.indexOf(CUSTOM_MARKER);
-    if (at === -1) {
-        return [];
-    }
-    return uniqueBlocks(splitBlocks(content.slice(at + CUSTOM_MARKER.length).trim())).map((block) => ({ name: block.name, hash: sha256Hex(block.body.trim()) }));
-};
-
-const recordComposition = async (services: Services, content: string, at: number): Promise<void> => {
-    await services.runtimeInstalls.recordComposition({ hash: sha256Hex(content), at, blocks: compositionBlocksOf(content) });
-};
-
-export const composeEnvironment = async (services: Services): Promise<string | undefined> => {
-    // The overlay this container was built from is still on disk until the first compose after the rebuild replaces it:
-    // remembered now, before it goes, so "is this tool in the image" has an answer for a container built from an overlay
-    // composed before compositions were kept.
-    const applied = services.config.sandbox.environmentHash;
-    if (applied !== "") {
-        const built = await services.files.read(approvedPath(services));
-        if (built !== undefined && sha256Hex(built) === applied) {
-            await recordComposition(services, built, Date.now());
-        }
-    }
-    const capabilities = await services.capabilities.list();
-    const contributed = [
-        ...new Set([
-            ...(await Promise.all(capabilities.map((capability) => services.environmentSources.capabilityFragments(capability)))).flat(),
-            ...(await services.environmentSources.workspaceExtensionFragments()),
-            // Helper binaries a connected provider needs, for a base image that doesn't already bake them.
-            ...(await services.environmentSources.providerPackFragments()),
-            // The privacy shield's readers, while its policy asks for one.
-            ...(await privacyPackFragments(services)),
-        ]),
-    ].toSorted();
-    const fragments = services.config.sandbox.vm ? withoutRuntimeDirectives(contributed) : contributed;
-    // Once per tool: a section an older release appended a repeat to builds that tool once, not once per copy.
-    const custom = withoutRepeats(((await services.files.read(customPath(services))) ?? "").trim());
-    // The base this container was built from, so a rebuild is version-preserving rather than a silent rollback.
-    const base = baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image);
-    if (fragments.length === 0 && custom === "") {
-        if (services.config.sandbox.environmentHash === "") {
-            await services.files.remove(approvedPath(services));
-            return undefined;
-        }
-        // Built from an overlay now empty; keep a bare one so the owner has a hash-pinned path back to stock.
-        const bare = `${HEADER}\n\nFROM ${base}\n`;
-        await writeComposed(services, approvedPath(services), bare);
-        await recordComposition(services, bare, Date.now());
-        return sha256Hex(bare);
-    }
-    const sections = [HEADER, `FROM ${base}`, ...fragments, ...(custom === "" ? [] : [CUSTOM_MARKER, custom])];
-    const content = `${sections.join("\n\n")}\n`;
-    await writeComposed(services, approvedPath(services), content);
-    await recordComposition(services, content, Date.now());
-    return sha256Hex(content);
-};
 
 // Where an agent writes what it needs, one file per tool. Not the proposal itself: parallel worktree-isolated agents
 // sharing one file would race, and naming by tool lets two agents needing the same thing converge on one entry.
@@ -277,20 +160,6 @@ const runtimeAttention = async (services: Services, baked: string): Promise<Pick
     };
 };
 
-// What the runner stamped on THIS container, none of it agent-writable: the overlay it was built from, the name a
-// rebuild targets, and whether its base was compiled from a checkout rather than published. That last one is the
-// dogfood shape, and it changes what the Environment card can offer: such a sandbox is rebuilt from its checkout, and
-// an update would move it onto the published image rather than refresh it.
-export const containerFacts = (sandbox: Config["sandbox"]): Pick<Environment, "appliedHash" | "container" | "localImage"> => {
-    const { environmentHash, name, devRoot } = sandbox;
-    const base = baseImageOf(sandbox.baseImage, sandbox.image);
-    return {
-        ...(environmentHash === "" ? {} : { appliedHash: environmentHash }),
-        ...(name === "" ? {} : { container: name }),
-        ...(base === DEV_SANDBOX_IMAGE ? { localImage: { base, ...(devRoot === undefined ? {} : { root: devRoot }) } } : {}),
-    };
-};
-
 export const readEnvironment = async (services: Services): Promise<Environment> => {
     // Folds in drafts since the last read, so the card's hash is the one approve will check against.
     await mergeProposalDrafts(services);
@@ -303,7 +172,8 @@ export const readEnvironment = async (services: Services): Promise<Environment> 
         await services.files.remove(proposalPath(services));
     }
     const proposal = await fileState(services, proposalPath(services));
-    const approved = await fileState(services, approvedPath(services));
+    // Composed now, not read back from the file composing writes: the hash the card shows is what a rebuild builds.
+    const approved = await composeEnvironment(services);
     // Approved contains custom by composition, so one string answers "already baked or already approved".
     const attention = await runtimeAttention(services, `${custom?.content ?? ""}\n${approved?.content ?? ""}`);
     return {
@@ -407,7 +277,7 @@ export const approveDraft = async (services: Services, tool: string): Promise<{ 
     await settleDrafts(services, [{ tool: draftTool(file), body: draft }]);
     await services.files.remove(path);
     await recomposeProposal(services);
-    return { hash: await composeEnvironment(services) };
+    return { hash: (await composeEnvironment(services))?.hash };
 };
 
 // Drops ONE tool's draft; the rest stay pending.
@@ -498,9 +368,6 @@ export const removeFromEnvironment = async (services: Services, block: string): 
     return undefined;
 };
 
-// The overlay this container was built from, as the runner stamped it; empty for a container built with none.
-export const appliedEnvironmentHash = (services: Pick<Services, "config">): string => services.config.sandbox.environmentHash;
-
 // A block's name as its draft file names it, which is how drafts, approvals and settled records are matched: a block
 // approved before approvals were named by their file keeps its raw spelling ("ImageMagick").
 const fileNamed = (name: string): string => {
@@ -523,7 +390,7 @@ export const toolStanding = async (
     asked: { readonly tool: string; readonly steps: string; readonly approvedHash?: string | undefined },
 ): Promise<ToolStanding> => {
     const name = fileNamed(asked.tool);
-    const applied = appliedEnvironmentHash(services);
+    const applied = runningBuild(services.config.sandbox).overlay ?? "";
     if (asked.approvedHash !== undefined && applied === asked.approvedHash) {
         return "built";
     }

@@ -484,7 +484,11 @@ const reading = (state: { fetching: boolean; loaded: boolean }): ReturnType<type
         codeStat: ref({ files: 0, additions: 0, deletions: 0 }),
         testStat: ref({ files: 0, additions: 0, deletions: 0 }),
         fetching: ref(state.fetching),
-        loaded: ref(state.loaded),
+        loaded: ref(
+            state.loaded
+                ? { state: `ready`, data: { repos: [], absorbed: 0 }, refreshing: state.fetching, refreshError: undefined }
+                : { state: `waiting`, since: Date.now(), retry: undefined },
+        ),
         error: ref(undefined),
         refresh: jest.fn(),
         fileDiff: jest.fn(),

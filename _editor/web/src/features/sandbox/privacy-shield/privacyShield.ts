@@ -1,6 +1,7 @@
 import { PROVIDER_BRAND_PATHS, type ProviderBrand } from "@intentic/constants";
 import { isEndpointProvider, isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
+    allowKey,
     PERSONAL_DATA_CLASSES,
     PRIVACY_ALLOW_MAX,
     type PersonalDataClass,
@@ -13,6 +14,7 @@ import {
     type PrivacyReplacement,
     type PrivacyShieldPolicy,
 } from "@intentic/sandbox-contract/schemas/privacy";
+import { shieldVerdict } from "@intentic/sandbox-contract/schemas/privacy-egress";
 
 // The privacy shield panel's arithmetic, kept free of Vue so it can be tested on its own. The policy route replaces
 // the policy whole, so every change here returns a new policy built from the one on screen rather than a patch.
@@ -54,10 +56,6 @@ export const withClass = (policy: PrivacyShieldPolicy, kind: PersonalDataClass, 
 // A local model never leaves this machine, so the gateway treats it as trusted whatever the list says.
 export const providerTrusted = (provider: PrivacyProvider, policy: PrivacyShieldPolicy): boolean =>
     provider.local || policy.trusted.includes(provider.id);
-
-// The daemon's own reading of an allowed value (normalizeAllowed in the sandbox's detector): case, Unicode form and runs
-// of whitespace do not tell two values apart, so the list never holds "Acme" and "ACME" as two entries.
-export const allowKey = (value: string): string => value.normalize(`NFC`).toLowerCase().replace(/\s+/g, ` `).trim();
 
 // Values from typed or pasted text, one per line: trimmed, blanks dropped, and a value the shield reads as one already
 // given kept once, as first written.
@@ -372,24 +370,17 @@ export const providerMark = (id: string, local: boolean): ProviderMark => {
     return { glyph: isEndpointProvider(id) ? `server` : `sparkles` };
 };
 
-// What a provider is sent under the policy in force, the one fact its row has to make plain: tokens (through the
-// gateway, or a hooked runtime's channels); the values while the shield only watches; the values as they are (trusted,
-// or a runtime the shield can't read while it only watches); nothing, since a runtime the shield can't read at all
-// does not run untrusted while it masks; or nothing that leaves, for a model on this machine.
+// What a provider is sent under the policy in force, the one fact its row has to make plain, read off the daemon's own
+// verdict (privacy-egress.ts) for a turn here outside any conversation: tokens (through the gateway, or a hooked
+// runtime's channels); the values while the shield only watches; the values as they are (trusted, off, or a runtime the
+// shield can't read while it only watches); nothing, since a runtime the shield can't read at all does not run untrusted
+// while it masks; or nothing that leaves, for a model on this machine, whatever the switch says.
 export type ProviderReceives = `tokens` | `watched` | `values` | `refused` | `local`;
 
-export const providerReceives = (provider: PrivacyProvider, policy: PrivacyShieldPolicy): ProviderReceives => {
-    if (provider.local) {
-        return `local`;
-    }
-    if (providerTrusted(provider, policy) || policy.mode === `off`) {
-        return `values`;
-    }
-    if (!provider.shieldable) {
-        return policy.mode === `on` ? `refused` : `values`;
-    }
-    return policy.mode === `on` ? `tokens` : `watched`;
-};
+const RECEIVES = { mask: `tokens`, watch: `watched`, pass: `values`, refuse: `refused` } as const satisfies Record<string, ProviderReceives>;
+
+export const providerReceives = (provider: PrivacyProvider, policy: PrivacyShieldPolicy): ProviderReceives =>
+    provider.local ? `local` : RECEIVES[shieldVerdict(policy, { provider: provider.id, local: false, route: provider.shieldable ? `gateway` : `runtime` }).kind];
 
 // What a looked-up word or name comes to: masked on its own, never part of a name, a name only beside other evidence
 // (a title, a surname, a name field), or nothing the lists know.

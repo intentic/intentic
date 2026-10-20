@@ -9,7 +9,7 @@ import { capabilityCtx } from "../capabilities/capability.js";
 import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
-import { composeEnvironment } from "../environment/environment.js";
+import { composeEnvironment } from "../environment/overlay.js";
 import { upsertEnv } from "../secrets/env-text.js";
 import { switchOwnSkill, writeOwnSkill } from "../settings/skills.js";
 import { textFile } from "../store/plain-files/text-file.js";

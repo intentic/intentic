@@ -198,7 +198,7 @@ const pickAccount = (id: string): void => {
                     </span>
                     <!-- Truncated on the row, full text on hover; leads with the condition that decides the click. -->
                     <span v-if="a.refused" class="flex max-w-full items-start gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
-                        <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs" aria-hidden="true" />
+                        <Icon name="exclamation-triangle" class="shrink-0 text-2xs" aria-hidden="true" />
                         <span class="truncate">{{ a.refused }}</span>
                     </span>
                     <span v-else-if="a.waiting" class="max-w-full truncate text-2xs text-subtle">{{ a.waiting }}</span>

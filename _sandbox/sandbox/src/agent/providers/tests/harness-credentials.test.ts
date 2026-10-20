@@ -179,10 +179,10 @@ const twoAccounts = (refusal: ProviderRefusal | undefined, seats: Record<string,
             clear: async () => {},
         },
         providerRefusals: {
-            read: async () => (refusal === undefined ? {} : { claude: refusal }),
             onFile: async () => (refusal === undefined ? {} : { claude: [refusal] }),
             record: async () => {},
-            clear: async () => {},
+            settle: async () => {},
+            drop: async () => false,
             onChange: () => () => {},
         },
     });
@@ -287,10 +287,10 @@ describe.each(MINTED_PROVIDERS.map((provider) => ({ provider })))("a $provider t
         expect(endpoint?.authToken).toBe("vendor-key");
         // The harness appends `/v1/messages` itself; a base URL that already has one 404s mid-conversation.
         expect(endpoint?.baseUrl).not.toMatch(/\/v\d+$/);
-        // Vendor is named so a 429 here doesn't report as Claude's; no `limit`, since neither vendor publishes a quota
+        // Vendor is named so a 429 here doesn't report as Claude's; no `capacity`, since neither vendor publishes a quota
         // surface a stored key can read.
         expect(result.ok && result.credentials.allowance?.vendor).toBe(PROVIDER_VENDOR[provider]);
-        expect(result.ok && result.credentials.allowance?.limit).toBeUndefined();
+        expect(result.ok && result.credentials.allowance?.capacity).toBeUndefined();
     });
 
     // Another connected account would take the conversation somewhere nobody chose; which one is the person's call.

@@ -24,7 +24,7 @@ export function useRegistry({ read = true }: { read?: MaybeRefOrGetter<boolean> 
     const url = computed(() => registryUrl.value.trim());
     const token = computed(() => registryToken.value.trim());
 
-    const { query, error } = useSandboxQuery<Marketplace>({
+    const { query, error, loaded } = useSandboxQuery<Marketplace>({
         // Token isn't in the key: it's a credential, not a different registry, and the key persists in the cache.
         queryKey: computed(() => REGISTRY.of(url.value)),
         queryFn: () => browseMarketplace(url.value, token.value === `` ? undefined : token.value),
@@ -46,8 +46,8 @@ export function useRegistry({ read = true }: { read?: MaybeRefOrGetter<boolean> 
         url: registryUrl,
         token: registryToken,
         isOfficial: isOfficialRegistry,
-        // True only for the first fetch; a background refresh over a list already on screen must not blank it.
-        isLoading: computed(() => query.isFetching.value && entries.value.length === 0),
+        // What the listing draws from (<Await>): a registry not read yet is a wait, a refresh over a list on screen is not.
+        loaded,
         isFetching: computed(() => query.isFetching.value),
         error,
         refetch: (): void => void query.refetch(),

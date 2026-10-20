@@ -56,12 +56,11 @@ const pickUpView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | un
 
 // What the board's card says this chat waits on a person for (a question, a plan, a permission), known before this
 // window has drawn the card: what keeps the composer and the pinned bar from reading idle over an agent waiting on you.
+// And what it says carries the chat on with nobody pressing (`next`), the one reading the board's lane and corner take.
 const waitingView = (conversation: ComputedRef<Conversation>, cardOf: CardOf | undefined) => {
-    const waitsOn = computed(() => {
-        const card = cardOf?.(conversation.value.conversationId);
-        return card === undefined ? undefined : waitKindOf(card);
-    });
-    return { waitsOn, waitingOnYou: computed(() => waitsOn.value !== undefined) };
+    const card = computed(() => cardOf?.(conversation.value.conversationId));
+    const waitsOn = computed(() => (card.value === undefined ? undefined : waitKindOf(card.value)));
+    return { waitsOn, waitingOnYou: computed(() => waitsOn.value !== undefined), next: computed(() => card.value?.next) };
 };
 
 // What waits in the conversation's queue for its next turn, the same in every window, less a message this window is

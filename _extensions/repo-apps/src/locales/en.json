@@ -118,8 +118,8 @@
             "close": "Close",
             "reach": "Everything it reaches through its dependencies, and everything a change to it can affect.",
             "lookInside": "Look inside",
-            "declares": "Declares ({count})",
-            "declaredBy": "Declared by ({count})"
+            "declares": "Declares",
+            "declaredBy": "Declared by"
         },
         "inside": {
             "declared": "Directories stacked in the layers its layers.json declares, lowest at the bottom. A module may import its own layer and any layer below it.",

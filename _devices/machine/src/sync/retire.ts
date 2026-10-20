@@ -3,13 +3,12 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import { sandboxNames } from "@intentic/sandbox-run";
 import { baseDir } from "../config.js";
-import { isProjectPairing, type Pairing, pairingKey, pairingTransport, readState, removeSandboxPairings } from "./config.js";
+import { isProjectPairing, type Pairing, pairingKey, pairingTransport, readState, removeSandboxPairings,pairingSlugs } from "./config.js";
 import { realBridgeExec, realUnbridgeFs, unbridgeRepos } from "./git-bridge.js";
 import { runProcessSync } from "./exec.js";
 import { existingSyncSessions, MUTAGEN_CALL_TIMEOUT_MS, ourForwardSessions, forwardSessionName, syncSessionNames } from "./mutagen.js";
 import { listingRecordPath } from "./project/project-local.js";
 import { forgetKnownHost, pairingSshConfig, sanitizeId, sshAlias, writeManagedSshConfig } from "./ssh.js";
-import { pairingSlugs } from "./swap-pause.js";
 
 // RETIRING A SANDBOX'S PAIRINGS (2026-10-05): everything this machine made for a sandbox that is gone, removed, and the
 // owner's own files kept. The watcher does it once a sandbox has been gone past the trash window (gone.ts), and

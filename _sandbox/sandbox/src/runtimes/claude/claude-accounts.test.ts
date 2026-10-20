@@ -13,13 +13,7 @@ import type { SeatRefusal } from "../../agent/providers/claude/claude-seats.js";
 // accountUsage is real state, not a stub: list folds it into every row, and disconnect clears it with the credential.
 // Empty by default, matching a sandbox before any turn runs.
 // What forgetting an account also clears, empty here: this suite is about the credential and the seat.
-const NO_REFUSALS: ClaudeAccountDeps["providerRefusals"] = { read: async () => ({}), onFile: async () => ({}), record: async () => {}, clear: async () => {}, onChange: () => () => {} };
-const NO_OBSERVED: ClaudeAccountDeps["observedLimits"] = {
-    spent: async () => ({}),
-    record: async () => {},
-    clear: async () => {},
-    forget: async () => false,
-};
+const NO_REFUSALS: ClaudeAccountDeps["providerRefusals"] = { onFile: async () => ({}), record: async () => {}, settle: async () => {}, drop: async () => false, onChange: () => () => {} };
 
 const door = (
     claudeStore: ClaudeAccountDeps["claudeStore"],
@@ -73,7 +67,6 @@ const door = (
                 start: () => () => {},
             },
             providerRefusals: NO_REFUSALS,
-            observedLimits: NO_OBSERVED,
             // Nothing of the owner's is connected: every sign-in here is the paste (the bridge has its own suite).
             hostHub,
             logger: pino({ level: "silent" }),

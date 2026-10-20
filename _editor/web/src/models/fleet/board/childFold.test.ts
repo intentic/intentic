@@ -118,7 +118,7 @@ describe(`which children ride under their parent`, () => {
         expect(ids(asked.lanes.attention)).toEqual([`p`]);
         const later = folded(card(`p`, { updatedAt: 9_000 }), limited(`late`, `p`, { updatedAt: 9_500 }));
         expect(ids(later.lanes.attention)).toEqual([`p`]);
-        const booked = folded(card(`p`, { updatedAt: 9_000 }), limited(`resumes`, `p`, { updatedAt: 2_000, limitScheduled: true }));
+        const booked = folded(card(`p`, { updatedAt: 9_000 }), limited(`resumes`, `p`, { updatedAt: 2_000, next: { kind: `rerun`, at: 5_000 } }));
         expect(ids(booked.lanes.active)).toEqual([`p`]);
     });
 

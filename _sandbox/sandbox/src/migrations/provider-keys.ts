@@ -9,7 +9,7 @@ import { capabilitiesDocument } from "../capabilities/capabilities-store.js";
 import { registry } from "../capabilities/registry.js";
 import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
-import { composeEnvironment } from "../environment/environment.js";
+import { composeEnvironment } from "../environment/overlay.js";
 import type { HostHub } from "../hosts/host-peer.js";
 import { versionedSettingsWrite } from "../seams/settings-versions.js";
 import { entryId } from "./adapter-shared.js";

@@ -88,7 +88,7 @@ test("a runner turn without a conversation is refused before anything starts", a
     const { services: s } = placedServices(scripted([{ kind: "done" }]));
 
     expect(await collect(streamAgent(s, { prompt: "go", placement: { kind: "runner", id: "r-1" } }, undefined))).toStrictEqual([
-        { kind: "error", message: "Running on a runner needs a conversation id — the conversation's branch is what travels." },
+        { kind: "error", message: "Running on a runner needs a conversation id — the conversation's branch is what travels.", own: true },
         { kind: "done" },
     ]);
 });
@@ -103,7 +103,7 @@ test("a runner nobody paired is refused before the conversation exists", async (
     );
 
     expect(frames).toStrictEqual([
-        { kind: "error", message: 'No runner named "r-1" is paired with this sandbox — pair one first, or leave placement out to run here.' },
+        { kind: "error", message: 'No runner named "r-1" is paired with this sandbox — pair one first, or leave placement out to run here.', own: true },
         { kind: "done" },
     ]);
     expect(s.agents.entry("placed-unpaired")).toBeUndefined();
@@ -122,6 +122,7 @@ test("a fenced conversation is refused a runner, which would run it over the who
         {
             kind: "error",
             message: "This conversation is limited to some areas of the workspace, and a runner cannot keep it to them yet. Run it here instead.",
+            own: true,
         },
         { kind: "done" },
     ]);
@@ -139,7 +140,7 @@ test("a conversation already running a turn refuses a second one as busy", async
     ).toBe("begun");
 
     expect(await collect(streamAgent(s, { prompt: "second", conversationId: "placed-busy" }, undefined))).toStrictEqual([
-        { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." },
+        { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish.", own: true },
         { kind: "done" },
     ]);
 });
@@ -153,7 +154,7 @@ test("a second turn refused as busy leaves the live turn stoppable and steerable
     s.conversations.registerTurn("placed-held", { abort: () => (stopped = true), steering: new SteeringQueue() });
 
     expect(await collect(streamAgent(s, { prompt: "second", conversationId: "placed-held" }, undefined))).toStrictEqual([
-        { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish." },
+        { kind: "error", code: "agent-busy", message: "This agent is already running a turn, wait for it to finish.", own: true },
         { kind: "done" },
     ]);
     expect(s.conversations.steer("placed-held", "go left instead")).toBe(true);
@@ -174,7 +175,7 @@ test("an archived conversation refuses a turn nobody sent, and stays archived", 
     await s.agents.setArchived(["placed-filed"], 3_000);
 
     expect(await collect(streamAgent(s, { prompt: "picking this back up", conversationId: "placed-filed" }, undefined))).toStrictEqual([
-        { kind: "error", message: "This conversation is archived: only a person's message reopens it." },
+        { kind: "error", message: "This conversation is archived: only a person's message reopens it.", own: true },
         { kind: "done" },
     ]);
     expect(ran).toBe(false);

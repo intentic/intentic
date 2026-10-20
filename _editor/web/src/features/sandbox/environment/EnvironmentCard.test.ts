@@ -5,7 +5,7 @@ import "@intentic/testing/dom";
 import type { Environment } from "@intentic/sandbox-contract/schemas/environment";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import PrimeVue from "primevue/config";
-import { type App, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
+import { type App, computed, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // An applied overlay and nothing pending, the ordinary baseline state.
@@ -59,6 +59,11 @@ jest.mock(`../../../models/sandbox/environment/useEnvironment`, () => ({
 jest.mock(`./useEnvironmentContents`, () => ({
     useEnvironmentContents: () => ({
         groups: contentsGroups,
+        contents: computed(() =>
+            contentsLoading.value
+                ? { state: `waiting`, since: 0, retry: undefined }
+                : { state: `ready`, data: contentsGroups.value, refreshing: contentsFetching.value, refreshError: undefined },
+        ),
         awaiting: ref(0),
         loading: contentsLoading,
         fetching: contentsFetching,
@@ -237,18 +242,13 @@ it(`says why there is no rebuild here for a container nobody here started`, () =
     expect(el.querySelector(`#sandbox-rebuild`)?.textContent).toContain(`can't be rebuilt from here`);
 });
 
-// Contents marks a capability as arriving with a rebuild while nothing approved waits to be built: the card says that
-// a rebuild would change nothing yet, and what to do instead, rather than leaving the label unanswered.
-it(`answers "arrives after rebuild" when nothing approved is waiting to be built`, () => {
+// The daemon marks a block as arriving after a rebuild only while one is pending (contents.ts), so the card has no
+// sentence for "arriving, yet nothing pending": that state once drew one, for a tool whose command sat off PATH.
+it(`draws no rebuild step for contents while nothing approved waits to be built`, () => {
     contentsGroups.value = [
         { origin: `capability`, label: `From your capabilities`, items: [{ id: `capability:whisper`, name: `Whisper`, origin: `capability`, state: `after-rebuild`, tools: [] }] },
     ];
-    expect(mount().querySelector(`#sandbox-rebuild`)?.textContent).toContain(`If Whisper still isn't working`);
-    app?.unmount();
-    document.body.innerHTML = ``;
-
-    proposal.value = { content: `${OVERLAY}RUN apt-get install -y imagemagick\n`, hash: `proposed` };
-    expect(mount().querySelector(`#sandbox-rebuild`)?.textContent).toContain(`Approve the change above`);
+    expect(mount().querySelector(`#sandbox-rebuild`)).toBeNull();
 });
 
 it(`stays silent about rebuilding when nothing waits and nothing is arriving`, () => {

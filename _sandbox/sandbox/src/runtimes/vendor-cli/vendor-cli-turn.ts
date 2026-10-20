@@ -54,7 +54,7 @@ async function* refusedSignIn(cli: VendorCli, store: CliStore, accountId: string
             if (stored !== undefined) {
                 await store.write({ ...stored, refusedAt: Date.now() });
             }
-            yield { kind: "error", message: `${cli.name} could no longer renew this account's sign-in. Sign in again in Sandbox ▸ Models.` };
+            yield { kind: "error", message: `${cli.name} could no longer renew this account's sign-in. Sign in again in Sandbox ▸ Models.`, own: true };
             continue;
         }
         yield event;

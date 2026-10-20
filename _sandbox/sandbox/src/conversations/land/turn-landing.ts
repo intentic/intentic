@@ -1,7 +1,8 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
-import { landAgent, type LandOutcome, reportLockfileFailures } from "./land.js";
+import { landAgent, type LandOutcome } from "./land.js";
+import { reportLandRepairs } from "./rederive.js";
 import { landFailureOf } from "./land-failure.js";
 import { intoOf, type LandTarget, landTargetOf, type Upstream, upstreamOf, underLeases } from "./land-target.js";
 import { landingPaths } from "./landing-paths.js";
@@ -13,12 +14,12 @@ import { landingVerdict, type RuleFacts, standing } from "../../rules/rules.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { ReconcileOutcome } from "../../workspace/deps/reconcile-deps.js";
 import { opt } from "../../opt.js";
-import type { FixersRepo } from "./worktree-fixers.js";
 
 // A finished isolated turn's land, step 4 of the turn's close (turn-close.ts). Whether its work reaches the main tree or
 // waits on its branch is decided purely, from the rules and the paths it touched; no check holds it, and none runs after
-// it either: CI checks what the owner pushes. The land runs as the sequence below: the repository's fixers in the
-// worktree, decide, land under the lease, record, reconcile the installed tree, announce. A spawned child's work goes
+// it either: CI checks what the owner pushes. The land runs as the sequence below: decide, land under the lease (which
+// writes the repository's derived files again where the work lands, rederive.ts), record, reconcile the installed
+// tree, announce. A spawned child's work goes
 // into its parent's checkout instead (land-target.ts), as the parent's in-process subagents' edits do: no rule decides
 // that, and nothing of the main tree's after-land (its version commit, its installed tree, its announcements) follows.
 
@@ -84,9 +85,6 @@ export type LandingDeps = Pick<
 export interface LandingHooks {
     // Drafts what a land did and commits it where the version rule stands, off the turn's clock.
     readonly settleLanding: (conversationId: string) => void;
-    // Runs the repository's own machine fixers in the worktree on what the turn changed (worktree-fixers.ts), so what
-    // they write rides this land; never throws.
-    readonly fix: (span: readonly FixersRepo[]) => Promise<unknown>;
 }
 
 export interface LandingTurn {
@@ -154,7 +152,7 @@ const landUnderLease = async (
     const outcome = await deps.perf.track("agent.land", { id, mode, span: "outstanding" }, () =>
         landAgent(deps.agentWorktrees, landing, mode, "outstanding", intoOf(target)),
     );
-    reportLockfileFailures(deps.logger, id, outcome);
+    reportLandRepairs(deps.logger, id, outcome);
     return outcome;
 };
 
@@ -261,8 +259,6 @@ export async function* landTurn(deps: LandingDeps, hooks: LandingHooks, turn: La
     if (turn.failed || turn.aborted || turn.awaitingWake || !isolated) {
         return;
     }
-    // Before the decision, so a path a fixer wrote is one the rules read, and before the lease, so the land commits it.
-    await hooks.fix(books.span);
     const target = await landTargetOf(deps, finished);
     const decision = await decideLanding(deps, target, finished, turn.autoLand, books.span);
     // Under the land lease, so a manual land pressed meanwhile queues rather than rebasing under this one; and under the
@@ -307,7 +303,7 @@ export const settleLandBooks = async (
                 landAgent(deps.agentWorktrees, entry, "measure", "outstanding", into),
             ),
         );
-        reportLockfileFailures(deps.logger, conversationId, measured);
+        reportLandRepairs(deps.logger, conversationId, measured);
         if (measured.changed || measured.advanced === true) {
             await deps.agents.recordLanded(conversationId, measured);
         }

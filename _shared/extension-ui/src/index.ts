@@ -81,6 +81,9 @@ export {
     InfoDialog,
     InfoHint,
     InfoTable,
+    // The app's one rename: the name in place with its pencil, the field in the same box, and its failure; never a
+    // field of an extension's own beside the name.
+    InlineRename,
     // What a file is by its name (category, label, whether it is ever text), the table the shell's own surfaces read.
     type FileFormat,
     formatOf,
@@ -139,19 +142,27 @@ export {
     // Use over `AnchoredOverlay` for a menu: anchored on desktop, a thumb-reachable sheet on a phone, one open flag.
     ResponsiveOverlay,
     Row,
+    // A list is a <RowGroup>: the one section header over the rows' card, on which <RowNote> says what is none of its
+    // rows. A label over things that are not rows is a <Section>; the header alone (a panel's title) is
+    // <SectionHeader>. None of them can carry a count, a caption or a fill, and their spacing is the tier's.
     RowGroup,
+    RowNote,
+    Section,
+    SectionHeader,
     SearchBar,
     SegmentedControl,
     seriesColor,
     sinceOf,
-    // Gates a skeleton placeholder so a flash on a fast read never shows; see its own note in the kit for the two
-    // thresholds.
+    // Deprecated (2026-10-20) with SkeletonSnapshot and vSkeletonSource: <Await> holds all three.
     useLoadingReveal,
     // Renders real `<Row>`s rather than divs, so its height matches what replaces it and the page doesn't jump.
     SkeletonRows,
-    // A placeholder drawn exactly as its content last looked in this sandbox: `v-skeleton-source="name"` on the
-    // content takes its imprint once settled, `<SkeletonSnapshot of="name">` draws it, its slot the fallback until then.
-    // Prefix the name with the extension's id, since every extension's imprints share the sandbox's store.
+    // A region's wait: `<Await :of="query.loaded" imprint="ext-id.list">`, where `loaded` is what `api.sandbox.query`
+    // returns. Nothing for a moment, then the region as it last looked in this sandbox (its `#fallback` until seen once),
+    // the answer in the default slot, or the failure in words. Prefix the name with the extension's id, since every
+    // extension's imprints share the sandbox's store. A view's first wait is its host's: every read joins it.
+    Await,
+    // Deprecated (2026-10-20): <Await>'s insides, kept so extensions built against them still link.
     SkeletonSnapshot,
     vSkeletonSource,
     SplitView,

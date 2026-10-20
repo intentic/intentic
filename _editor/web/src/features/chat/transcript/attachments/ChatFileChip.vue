@@ -207,8 +207,8 @@ onBeforeUnmount(() => clearTimeout(timer));
         <!-- The look, teleported out of this chip by the overlay. -->
         <AnchoredOverlay v-model="looking" :anchor="root" :side="side" cross="start" :gap="GAP">
             <div class="flex max-h-[min(32rem,70vh)] w-[min(34rem,80vw)] flex-col" @pointerenter="onCardEnter" @pointerleave="onLeave">
-                <div class="flex shrink-0 items-start gap-2 border-b border-line px-3 py-2">
-                    <Icon :name="icon" class="mt-px shrink-0 text-xs" :class="iconColor" />
+                <div class="flex shrink-0 items-start gap-2 border-b border-line px-3 py-2 text-xs">
+                    <Icon :name="icon" class="shrink-0 text-xs" :class="iconColor" />
                     <div class="min-w-0 flex-1">
                         <p class="truncate text-xs font-medium text-content">{{ name }}</p>
                         <p class="truncate font-mono text-2xs text-subtle">{{ path }}</p>

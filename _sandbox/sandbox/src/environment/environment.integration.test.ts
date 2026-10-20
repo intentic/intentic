@@ -8,32 +8,14 @@ import type { Services } from "../composition.js";
 import { environmentSourcesOf } from "../environment-composers.js";
 import { environmentSourcesFake } from "../seams/environment-sources.testing.js";
 import { unstubbed } from "@intentic/testing";
-import { waitFor } from "@intentic/testing/bun";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { AUTO_MARKER } from "./auto-drafts.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
 import { DEFAULT_PRIVACY_SHIELD } from "@intentic/sandbox-contract/schemas/privacy";
+import { rebuildPending } from "@intentic/sandbox-contract/state/sandbox-build";
 import { hasOfficialBase } from "@intentic/sandbox-contract/policy/overlay-lint";
-import {
-    approveDraft,
-    approvedPath,
-    approveEnvironment,
-    composeEnvironment,
-    customPath,
-    decideRuntimeInstall,
-    draftsDir,
-    baseImageOf,
-    pinnedBase,
-    proposalPath,
-    proposeDraft,
-    readEnvironment,
-    rejectDraft,
-    rejectEnvironment,
-    removeFromEnvironment,
-    withoutRuntimeDirectives,
-} from "./environment.js";
-import { overlayInputsMoved, recomposeOnInputChanges } from "./recompose-on-change.js";
-import { stateRelPath } from "../state-paths.js";
+import { approveDraft, approveEnvironment, decideRuntimeInstall, draftsDir, proposalPath, proposeDraft, readEnvironment, rejectDraft, rejectEnvironment, removeFromEnvironment } from "./environment.js";
+import { approvedPath, composeEnvironment, customPath, baseImageOf, pinnedBase, withoutRuntimeDirectives } from "./overlay.js";
 import { PROVIDER_MODULES } from "../runtimes/runtime-table.js";
 
 // Pins PACK_STAMPS_DIR to an empty directory so every compose here means "no base image bakes this pack," regardless of
@@ -146,8 +128,8 @@ test("a rebuild is version-preserving: composing again after one is byte-identic
     expect(hasOfficialBase(approved)).toBe(true);
 
     // Simulates post-rebuild boot: running the overlay's own tag; identical hash keeps the card quiet.
-    const rebuilt = stubServices(first!, [vpn("office")], "intentic-sandbox-env-demo:abc123def456", latest);
-    expect(await composeEnvironment(rebuilt)).toBe(first);
+    const rebuilt = stubServices(first!.hash, [vpn("office")], "intentic-sandbox-env-demo:abc123def456", latest);
+    expect(await composeEnvironment(rebuilt)).toEqual(first);
     expect(await rebuilt.files.read(approvedPath(rebuilt))).toBe(approved);
 });
 
@@ -211,46 +193,41 @@ test("reject deletes the proposal and leaves the approved custom section untouch
     expect(state.approved).toEqual(expect.any(Object));
 });
 
-// A land, a commit or a checkout rewrites the custom section on disk without an approve. The overlay has to follow it, or
-// a rebuild bakes the one composed before the move and the boot after it reads "pending rebuild" (2026-10-12).
-test("a custom section rewritten on disk recomposes the approved overlay the rebuild reads", async () => {
+// A land, a commit or a checkout rewrites the custom section on disk without an approve, and nothing of the daemon's runs.
+// The card composed from its inputs on the read, so it shows what they say now, and the file `ic` copies out for the
+// rebuild holds those very bytes: before, the card read a copy composed before the move, the rebuild baked it, and the
+// boot after composed the moved inputs and read "pending rebuild" (2026-10-12, the second time).
+test("the card shows the overlay its inputs compose now, however they moved, and the file a rebuild copies is that one", async () => {
     const services = stubServices();
     await services.files.write(customPath(services), "# ---- htop ----\nRUN apt-get install -y htop\n");
-    const before = await composeEnvironment(services);
-    let deliver: (paths: string[]) => void = () => undefined;
-    const stop = recomposeOnInputChanges(services, (listener) => {
-        deliver = listener;
-        return () => undefined;
-    });
+    const before = (await readEnvironment(services)).approved;
 
-    // Landed: the file changes and the watcher names it, with no route of the daemon's involved.
-    await services.files.write(customPath(services), "RUN apt-get install -y cowsay\n");
-    deliver(["intentic/README.md", stateRelPath(".intentic/config/environment.custom.Dockerfile")]);
-    const after = await waitFor(async () => {
-        const approved = (await services.files.read(approvedPath(services)))!;
-        expect(approved).toContain("cowsay");
-        return sha256Hex(approved);
-    });
-    expect(after).not.toBe(before);
-    // The same bytes a compose of its own reaches, so the hash the card offers is the one the rebuild checks.
-    expect(await composeEnvironment(services)).toBe(after);
-    stop();
+    await services.files.write(customPath(services), "# ---- cowsay ----\nRUN apt-get install -y cowsay\n");
+    const after = (await readEnvironment(services)).approved;
+    const copied = (await services.files.read(approvedPath(services)))!;
+    expect(after).toEqual({ content: copied, hash: sha256Hex(copied) });
+    expect(copied).toContain("cowsay");
+    expect(after?.hash).not.toBe(before?.hash);
 });
 
-test("only a batch that may have moved an overlay input recomposes", () => {
-    expect(overlayInputsMoved([stateRelPath(".intentic/config/environment.custom.Dockerfile")])).toBe(true);
-    expect(overlayInputsMoved([stateRelPath(".intentic/config/capabilities.json")])).toBe(true);
-    // Unnamed: could be anything.
-    expect(overlayInputsMoved([])).toBe(true);
-    // Its own output, and the agent requests that wait for approval, change nothing it composes.
-    expect(overlayInputsMoved([stateRelPath(".intentic/local/environment.approved.Dockerfile")])).toBe(false);
-    expect(overlayInputsMoved([stateRelPath(".intentic/config/environment.Dockerfile"), stateRelPath(".intentic/config/environment.d/", "htop.Dockerfile")])).toBe(false);
-    expect(overlayInputsMoved(["intentic/README.md"])).toBe(false);
+// The scenario of 2026-10-07, 10-12 and 10-13: the owner rebuilt from what the card offered, and the card still said pending.
+test("a container rebuilt from the overlay the card offered is applied, and one a moved input outdated waits again", async () => {
+    const services = stubServices("", [vpn("office")]);
+    await services.files.write(customPath(services), "# ---- htop ----\nRUN apt-get install -y htop\n");
+    const offered = (await readEnvironment(services)).approved!;
+
+    const rebuilt = { ...stubServices(offered.hash, [vpn("office")]), workspace: services.workspace, runtimeInstalls: services.runtimeInstalls };
+    const after = await readEnvironment(rebuilt);
+    expect(rebuildPending(after.approved?.hash, after.appliedHash)).toBe(false);
+
+    await rebuilt.files.write(customPath(rebuilt), "# ---- htop ----\nRUN apt-get install -y htop btop\n");
+    const moved = await readEnvironment(rebuilt);
+    expect(rebuildPending(moved.approved?.hash, moved.appliedHash)).toBe(true);
 });
 
 test("compose folds a capability's fragment (install + runtime directives) into a valid overlay", async () => {
     const services = stubServices("", [vpn("office")]);
-    const hash = await composeEnvironment(services);
+    const hash = (await composeEnvironment(services))?.hash;
     const approved = await services.files.read(approvedPath(services));
     expect(approved).toEqual(expect.any(String));
     expect(hash).toBe(sha256Hex(approved!));
@@ -309,7 +286,7 @@ test("compose with nothing left removes the overlay on a stock container, keeps 
 
     // A container built from an overlay keeps a bare FROM overlay: the hash-pinned rebuild path back to stock.
     const overlayBuilt = stubServices("deadbeef");
-    const hash = await composeEnvironment(overlayBuilt);
+    const hash = (await composeEnvironment(overlayBuilt))?.hash;
     const bare = await overlayBuilt.files.read(approvedPath(overlayBuilt));
     expect(bare).toEqual(expect.any(String));
     expect(hash).toBe(sha256Hex(bare!));
@@ -356,6 +333,12 @@ test("re-reading unchanged drafts writes nothing, so the watcher has no change t
         logger: services.logger,
         capabilities: services.capabilities,
         runtimeInstalls: services.runtimeInstalls,
+        // The read composes the approved overlay too, from the same sources, and must stay silent the same way.
+        environmentSources: services.environmentSources,
+        providerModules: services.providerModules,
+        authRoot: services.authRoot,
+        privacyShield: services.privacyShield,
+        openCode: services.openCode,
         files: unstubbed<Services["files"]>("files", {
             read: services.files.read,
             remove: services.files.remove,
@@ -673,7 +656,7 @@ test("a proposed apt install carries both cache mounts and leaves the lists alon
 test("removing an approved tool takes it out of the overlay, which then waits for a rebuild", async () => {
     const services = stubServices();
     await services.files.write(customPath(services), "# ---- zcode ----\nRUN install zcode\n\n# ---- ffmpeg ----\nRUN install ffmpeg\n");
-    const before = await composeEnvironment(services);
+    const before = (await composeEnvironment(services))?.hash;
     // The proposal an earlier approve left behind names zcode too; it must not come back as a decision.
     await services.files.write(proposalPath(services), "# ---- zcode ----\nRUN install zcode\n\n# ---- ffmpeg ----\nRUN install ffmpeg\n");
 

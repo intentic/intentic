@@ -5,7 +5,7 @@ import type { ConversationState, HeldRecord } from "./conversation-state.js";
 import { BROADCAST, unchanged, withResume } from "./decision-parts.js";
 
 // How a held turn's own events move it once it is held: a person's pick of an account re-points it, the resume pass
-// times one refused with no instant, and a person picks how it continues. Each answers whether the hold took it.
+// times one refused with no instant and reads the wall in front of it, and a person picks how it continues.
 
 // Only an unfired limit hold is re-timed: every other wall is not about which account pays. A pick undoes a booked move,
 // since the person has just said where it goes.
@@ -32,6 +32,17 @@ export const onHeldRetimed = (state: ConversationState, reopensAt: number): Deci
         return unchanged(state, false);
     }
     return { state: withResume(state, { held: { ...held, reopensAt } }), effects: BROADCAST, reply: true };
+};
+
+// The wall the pass read in front of where an unfired limit hold goes; told to every window only when it moved, since the
+// card's `next` waits behind it (limit-booking.ts).
+export const onHeldWalled = (state: ConversationState, until: number | undefined): Decision<undefined> => {
+    const { held } = state.resume;
+    if (held === undefined || held.fired || held.reason !== "limit" || held.walledUntil === until) {
+        return unchanged(state, undefined);
+    }
+    const { walledUntil: _was, ...rest } = held;
+    return { state: withResume(state, { held: { ...rest, ...opt("walledUntil", until) } }), effects: BROADCAST, reply: undefined };
 };
 
 // Only an unfired limit hold whose offer names that way on takes the pick; told to every window, whose card shows it.

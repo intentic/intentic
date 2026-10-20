@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ResponsiveOverlay, SearchBar, ui, useDevice, useListNavigation } from "@intentic/ui";
+import { Button, ResponsiveOverlay, SearchBar, SectionHeader, ui, useDevice, useListNavigation } from "@intentic/ui";
 import Checkbox from "primevue/checkbox";
 import { computed, nextTick, ref, useId, type VNode } from "vue";
 import {
@@ -163,7 +163,7 @@ const optionNote = (option: PickOption, inFamily: boolean): string | undefined =
             </span>
         </div>
         <div v-for="section in inlineSections" :key="section.key" class="flex flex-col gap-1">
-            <span v-if="section.label !== undefined" :class="ui.sectionLabel({ size: `xs` })">{{ section.label }}</span>
+            <SectionHeader :label="section.label" density="dense" v-if="section.label !== undefined" />
             <div class="-mx-2.5 flex flex-col gap-0.5" role="group" :aria-label="section.label ?? ariaLabel">
                 <label
                     v-for="option in section.options"

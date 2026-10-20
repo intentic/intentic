@@ -1,38 +1,48 @@
+import { errorMessage } from "@intentic/base/errors";
 import type { AgentHarness } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import {
-    type PersonalDataClass,
-    PRIVACY_REPLACEMENTS_MAX,
-    type PrivacyKnownSource,
-    type PrivacyKnownValue,
-    type PrivacyLedgerAction,
-    type PrivacyPreview,
-    type PrivacyShieldPolicy,
-    type PrivacyShieldStatus,
+import type {
+    PersonalDataClass,
+    PrivacyKnownSource,
+    PrivacyKnownValue,
+    PrivacyPreview,
+    PrivacyShieldPolicy,
+    PrivacyShieldStatus,
 } from "@intentic/sandbox-contract/schemas/privacy";
-import { type ClassCounts, createMasker, createMaskMemo, type EntityRecognizer, type Masker, type Replacement } from "./masker.js";
+import { type PrivacyBypass, type PrivacyRoute, type ShieldVerdict, shieldVerdict } from "@intentic/sandbox-contract/schemas/privacy-egress";
+import { type ClassCounts, createMasker, createMaskMemo, type EntityRecognizer, type Masker } from "./masker.js";
 import type { PrivacyImageArchive } from "./privacy-images.js";
-import type { PrivacyLedger } from "./privacy-ledger.js";
+import { type EgressNote, noteEgress, type PrivacyLedger } from "./privacy-ledger.js";
 import type { PrivacyPolicyStore } from "./privacy-policy.js";
-import { detectorFor } from "./policy-detector.js";
-import { gatewayRuntime, isTrustedProvider, privacyProviders, shieldableRuntime } from "./privacy-trust.js";
+import { isLocalProvider, privacyProviders, runtimeRoute } from "./privacy-trust.js";
 import type { PrivacyVault } from "./privacy-vault.js";
 import type { LocalReaders } from "./readers.js";
 import type { GatewaySession, SessionTokens } from "./gateway/session-token.js";
 import { createReadingMemo, type ReadingMemo } from "./gateway/request-shield.js";
 import { paintRegions, readingText, regionsFor } from "./image-mask.js";
 import { TOKEN_LABEL, TOKEN_SOURCE } from "./tokens.js";
-import { opt } from "../opt.js";
 
-// The privacy shield as the rest of the daemon sees it: the owner's policy, the decision whether a turn may run, the
-// base URL a runtime is pointed at, and the masker every other exit (push, shares) borrows. The gateway route that does
-// the masking on the wire reads its parts from here.
+// The privacy shield as the rest of the daemon sees it: the owner's policy, the one verdict on bytes bound for a
+// provider (sandbox-contract privacy-egress.ts) as every place they leave by asks it, the base URL a runtime is pointed
+// at, and the masker every other exit (push, shares) borrows. The gateway route that does the masking on the wire reads
+// its parts from here.
 
-// Why a turn was refused, or nothing: it may run.
-export type ShieldAdmission = { readonly allowed: true } | { readonly allowed: false; readonly reason: string };
+// Where bytes for a provider would leave, as the shield is asked about them; whether the provider is a model this machine
+// serves is the shield's to know.
+export interface EgressAsk {
+    readonly provider: string;
+    readonly conversationId?: string | undefined;
+    readonly route: PrivacyRoute;
+}
+
+// The verdict, and the policy in force it was read under, which the masker for those bytes is built from.
+export interface ShieldDecision {
+    readonly policy: PrivacyShieldPolicy;
+    readonly verdict: ShieldVerdict;
+}
 
 // A sealed request (agent/providers/agent-request.ts `policy.sealed`): its prompt is everything the model reads, since
-// it carries no tools, reads no file and continues no session. Who it goes to, for the trust it is read against.
+// it carries no tools, reads no file and continues no session. Who it goes to, for the verdict it is read under.
 export interface SealedRequest {
     readonly provider: string;
     readonly harness: AgentHarness;
@@ -47,7 +57,7 @@ export interface SealedPrompt {
 }
 
 // One turn on a runtime the gateway does not stand in front of but whose every channel passes the daemon first (privacy
-// `hooks`, agent-runtimes.ts): each channel hands its text here before the model can read it. The policy is read on
+// `hooks`, agent-runtimes.ts): each channel hands its text here before the model can read it. The verdict is read on
 // every call, as the gateway reads it on every request, so a grant made mid-turn opens the rest of it.
 export interface TurnShield {
     readonly provider: string;
@@ -68,7 +78,7 @@ export interface TurnShield {
     readonly refusesDocument: (data: Buffer, channel: string) => Promise<readonly PersonalDataClass[] | "unreadable">;
     // Tokens in what the model wrote back to the values they stand for.
     readonly restore: (text: string) => string;
-    // Whether masking is in force right now: the shield on and the provider untrusted here. False while it watches.
+    // Whether masking is in force right now: the verdict is to mask. False while it watches.
     readonly masking: () => Promise<boolean>;
     // Where the runtime should call an MCP server instead of `url`: the masking proxy, which restores tokens in what the
     // model sends and masks what the server answers (gateway/mcp-route.ts).
@@ -79,25 +89,27 @@ export interface PrivacyShield {
     readonly policy: () => Promise<PrivacyShieldPolicy>;
     readonly setPolicy: (policy: PrivacyShieldPolicy) => Promise<void>;
     readonly status: () => Promise<PrivacyShieldStatus>;
-    // Whether an open request (a turn, whose runtime goes on to read what the shield never sees) on this provider and
-    // harness may run under the policy in force; in a conversation, a grant the owner made for that one counts.
-    readonly admit: (provider: string, harness: AgentHarness, conversationId?: string) => Promise<ShieldAdmission>;
+    // THE verdict on bytes leaving by a route, read fresh: pass, watch, mask or refuse. Throws when the policy can't be
+    // read; a seam that acts on the verdict refuses the bytes then rather than sending them as they are.
+    readonly decide: (egress: EgressAsk) => Promise<ShieldDecision>;
+    // Why bytes leaving by a route may not go, in the words a turn ends with, or nothing: they may (masked, watched or as
+    // they are). A policy that can't be read refuses, since the shield may be on and what leaves cannot be taken back.
+    readonly refusal: (egress: EgressAsk) => Promise<string | undefined>;
     // A sealed request, read for what it holds rather than refused for its runtime: sent as it is when the gateway
-    // already stands in front of that runtime, the provider is trusted, or nothing is found; masked here, with the
-    // restore that reads tokens in the answer back, when something is. Never refuses: the whole request is in hand.
-    // Throws when the policy can't be read or masking fails, which refuses the request rather than sending it as it is.
+    // already stands in front of that runtime or the verdict passes it, masked here, with the restore that reads tokens in
+    // the answer back, when the verdict masks. Never refuses: the whole request is in hand. Throws when the policy can't
+    // be read or masking fails, which refuses the request rather than sending it as it is.
     readonly seal: (request: SealedRequest) => Promise<SealedPrompt>;
     // The shield for one turn on a hooked runtime (TurnShield), read by the same reader `seal` reads with; undefined when
-    // there is nothing to read for: the shield is off, the provider is trusted here, or the gateway already covers it.
+    // there is nothing to read for: the runtime is not a hooked one, or the verdict passes the provider.
     readonly forTurn: (provider: string, harness: AgentHarness, conversationId?: string) => Promise<TurnShield | undefined>;
     // The base URL a runtime should send its model requests to instead of `upstream`; undefined while the shield is off,
     // so a sandbox that never turned it on sends nothing through the daemon.
     readonly baseUrlFor: (session: GatewaySession) => Promise<string | undefined>;
-    // Whether a provider may read personal data as it is under a policy, everywhere or in this conversation: the gateway
-    // is a plain relay for it, and a runtime the gateway cannot cover may run.
-    readonly trusted: (policy: PrivacyShieldPolicy, provider: string, conversationId?: string) => Promise<boolean>;
     // A masker for the policy in force; cheap, since its memo and vault are shared.
     readonly masker: (policy: PrivacyShieldPolicy) => Promise<Masker>;
+    // The log's one writer (privacy-ledger.ts), for the seams that act on a verdict.
+    readonly note: (note: EgressNote) => void;
     // Text for a place that must not hold personal data and never comes back (a push notification): every finding
     // becomes its kind's label, with no token to resolve. Unchanged while the shield is off.
     readonly redactForDisplay: (text: string) => Promise<string>;
@@ -136,34 +148,35 @@ export interface PrivacyShieldDeps {
     readonly recognizer: () => Promise<EntityRecognizer | undefined>;
     // Whether that model is installed, for the status.
     readonly recognizerInstalled: () => Promise<boolean>;
-    // Where a rule of the owner's that cannot run is said.
+    // Where a rule of the owner's that cannot run, and a log line that could not be written, are said.
     readonly warn?: (message: string) => void;
 }
 
 export const GATEWAY_PATH = "/privacy/gateway";
 export const MCP_PROXY_PATH = "/privacy/mcp";
 
-// Why a provider on a runtime the shield cannot read at all (an ACP agent, Pi: no gateway, no hooks) was turned away.
-// Decided by the runtime alone, before a word of the turn is read, so the sentence says that first: read as a finding
-// (2026-10-02), it sent the owner looking for personal data in a message that held none, when what the shield cannot
-// see is everything such a turn goes on to read.
-export const unshieldedRefusal = (label: string, inConversation: boolean): string =>
-    [
-        `The privacy shield turned ${label} away before reading anything: nothing in what you sent was flagged.`,
-        `${label}'s agent reads files and command output on its own and sends them to its provider on a wire the shield can't read, so it can't mask personal data on the way, and an untrusted ${label} does not run while the shield is on.`,
-        inConversation
-            ? `Let ${label} read this conversation as it is from the strip above the composer, trust it everywhere in Sandbox ▸ Privacy shield, or pick a provider the shield covers.`
-            : `Trust it in Sandbox ▸ Privacy shield, or pick a provider the shield covers.`,
-    ].join(" ");
-
-// What one read through the shared reader came to: the text as the provider may read it, how to read tokens in its
-// answer back, and what was found (empty when nothing was, or nothing was read for).
-interface Reading {
-    readonly text: string;
-    readonly restore: (text: string) => string;
-    readonly found: readonly Replacement[];
-    readonly counts: ClassCounts;
-}
+// Why bytes that would pass no seam were turned away, by where they would go. Decided by the route alone, before a word
+// is read, so each sentence says that first: read as a finding (2026-10-02), a refusal sent the owner looking for
+// personal data in a message that held none.
+const refusalSentence = (route: PrivacyBypass, label: string, inConversation: boolean): string => {
+    const trust = inConversation
+        ? `let ${label} read this conversation as it is from the strip above the composer, or trust it everywhere in Sandbox ▸ Privacy shield`
+        : `trust ${label} in Sandbox ▸ Privacy shield`;
+    switch (route) {
+        case "runtime":
+            return [
+                `The privacy shield turned ${label} away before reading anything: nothing in what you sent was flagged.`,
+                `${label}'s agent reads files and command output on its own and sends them to its provider on a wire the shield can't read, so it can't mask personal data on the way, and an untrusted ${label} does not run while the shield is on.`,
+                `Pick a provider the shield covers, or ${trust}.`,
+            ].join(" ");
+        case "runner":
+            return `The privacy shield is on, and a runner would call ${label} from its own machine, past the shield: nothing in what you sent was flagged. Run this conversation here, or ${trust}.`;
+        case "own-key":
+            return `The privacy shield is on, and ${label} here would call its provider with the container's own key, past the shield. Connect your subscription so it runs through the translator, or ${trust}.`;
+        case "shared-server":
+            return "The privacy shield was turned on while other conversations were running on the shared OpenCode server, which was started before it. Send again once they finish, and this one runs behind the shield.";
+    }
+};
 
 // The kinds a reading holds, each once, in the order they sit in the text. Read off the spans rather than the counts:
 // a text the memo has seen counts nothing again (masker.ts), and a file opened twice must be refused twice.
@@ -171,7 +184,7 @@ const kindsOf = (spans: readonly { readonly class: PersonalDataClass }[]): Perso
 
 // The counts a refusal is logged with: what this reading holds, whether or not the memo had seen it.
 const countsOf = (spans: readonly { readonly class: PersonalDataClass }[]): ClassCounts => {
-    const counts: Partial<Record<PersonalDataClass, number>> = {};
+    const counts: ClassCounts = {};
     for (const span of spans) {
         counts[span.class] = (counts[span.class] ?? 0) + 1;
     }
@@ -189,214 +202,134 @@ export const SEALED_PROTOCOL = "sealed";
 
 const unchanged = (text: string): string => text;
 
-// What a place that keeps no token shows in place of each finding: its kind, the longest of overlapping ones winning.
-const labelledSpans = async (
-    deps: Pick<PrivacyShieldDeps, "vault" | "warn">,
-    text: string,
-    policy: PrivacyShieldPolicy,
-): Promise<{ start: number; end: number; label: string }[]> => {
-    const spans = detectorFor(policy, deps.warn).detect(text);
-    await deps.vault.load();
-    const known = deps.vault.matcher().find(text);
-    const all = [
-        ...known.map((hit) => ({ start: hit.start, end: hit.end, label: TOKEN_LABEL[hit.payload.class] })),
-        ...spans.map((span) => ({ start: span.start, end: span.end, label: TOKEN_LABEL[span.class] })),
-    ].toSorted((left, right) => left.start - right.start || right.end - left.end);
-    let last = 0;
-    return all.filter((span) => {
-        if (span.start < last) {
-            return false;
-        }
-        last = span.end;
-        return true;
-    });
-};
+// What a verdict has the shield do with bytes it can read: read them, and whether to mask what it finds.
+const reading = (verdict: ShieldVerdict): "mask" | "watch" | undefined => (verdict.kind === "mask" || verdict.kind === "watch" ? verdict.kind : undefined);
+
+// What a place that keeps no token shows in place of each finding: its kind.
+const labelOf = (kind: PersonalDataClass): string => TOKEN_LABEL[kind].toLowerCase().replaceAll("_", " ");
 
 export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
     const memo = createMaskMemo();
     const readings = createReadingMemo();
-    const trusted = async (policy: PrivacyShieldPolicy, provider: string, conversationId?: string): Promise<boolean> =>
-        isTrustedProvider(policy, provider, await deps.capabilities(), conversationId);
-    const displaySpans = (text: string, policy: PrivacyShieldPolicy) => labelledSpans(deps, text, policy);
+    const warn = deps.warn ?? (() => undefined);
+    const note = (line: EgressNote): void => noteEgress(deps.ledger, line, warn);
     const masker = async (policy: PrivacyShieldPolicy): Promise<Masker> =>
-        createMasker({
-            vault: deps.vault,
-            policy,
-            memo,
-            recognizer: policy.names === "model" ? await deps.recognizer() : undefined,
-            ...opt("warn", deps.warn),
-        });
-    const record = (fields: {
-        readonly provider: string;
-        readonly conversationId: string | undefined;
-        readonly action: PrivacyLedgerAction;
-        readonly protocol: string;
-        readonly counts: ClassCounts;
-        readonly found: readonly Replacement[];
-        readonly images?: number;
-        readonly documents?: number;
-        readonly detail?: string;
-    }): void => {
-        void deps.ledger
-            .record({
-                at: new Date().toISOString(),
-                ...opt("conversationId", fields.conversationId),
-                provider: fields.provider,
-                trusted: false,
-                action: fields.action,
-                counts: fields.counts,
-                images: fields.images ?? 0,
-                documents: fields.documents ?? 0,
-                protocol: fields.protocol,
-                ...opt("detail", fields.detail),
-                ...opt("replacements", fields.found.length > 0 ? fields.found.slice(0, PRIVACY_REPLACEMENTS_MAX) : undefined),
-            })
-            // allow(silent-catch): the log is the owner's record of what left, and a write it lost costs the request nothing
-            .catch(() => undefined);
-    };
-    // Where the policy stands for one provider in one conversation, read fresh: whether to mask, or only to watch.
-    const standing = async (provider: string, conversationId: string | undefined) => {
+        createMasker({ vault: deps.vault, policy, memo, recognizer: policy.names === "model" ? await deps.recognizer() : undefined, warn });
+    // The one verdict, read fresh: a grant or a trust made between two requests holds from the next one.
+    const decide = async (egress: EgressAsk): Promise<ShieldDecision> => {
         const policy = await deps.policyStore.get();
-        const open = policy.mode === "off" || (await trusted(policy, provider, conversationId));
-        return { policy, masking: !open && policy.mode === "on", watching: !open && policy.mode === "watch" };
+        const local = policy.mode !== "off" && isLocalProvider(egress.provider, await deps.capabilities());
+        return { policy, verdict: shieldVerdict(policy, { ...egress, local }) };
     };
     // THE READER every text bound for a provider the gateway does not stand in front of goes through: a sealed request's
-    // prompt, and each channel of a hooked runtime's turn. Masked while the shield masks, read and logged while it
-    // watches, untouched while it is off or the provider is trusted. `log` says when a reading earns a line: a sealed
-    // request is a request and always does; a channel of a turn speaks often and logs only what it found.
-    const read = async (input: {
-        readonly provider: string;
-        readonly conversationId: string | undefined;
-        readonly text: string;
-        readonly protocol: string;
-        readonly log: "always" | "found";
-    }): Promise<Reading> => {
-        const nothing: Reading = { text: input.text, restore: unchanged, found: [], counts: {} };
-        const { policy, masking, watching } = await standing(input.provider, input.conversationId);
-        if ((!masking && !watching) || input.text === "") {
-            return nothing;
+    // prompt, and each channel of a hooked runtime's turn. Masked, read and logged, or left alone, as the verdict says.
+    // `log` says when a reading earns a line: a sealed request is a request and always does; a channel of a turn speaks
+    // often and logs only what it found.
+    const read = async (
+        egress: EgressAsk,
+        text: string,
+        line: { readonly protocol: string; readonly log: "always" | "found" },
+    ): Promise<SealedPrompt> => {
+        const { policy, verdict } = await decide(egress);
+        const how = reading(verdict);
+        if (how === undefined || text === "") {
+            return { prompt: text, restore: unchanged };
         }
-        const reading = await masker(policy);
-        const found = masking ? await reading.mask(input.text) : await reading.find(input.text);
+        const shield = await masker(policy);
+        const found = how === "mask" ? await shield.mask(text) : await shield.find(text);
         // The tokens the provider is about to read must be on disk before it reads them, as on the wire.
         await deps.vault.commit();
-        if (input.log === "always" || found.found.length > 0) {
-            record({ ...input, action: masking ? "masked" : "watched", counts: found.counts, found: found.found });
+        if (line.log === "always" || found.found.length > 0) {
+            note({ ...egress, conversationId: egress.conversationId, verdict, action: how === "mask" ? "masked" : "watched", protocol: line.protocol, counts: found.counts, replacements: found.found });
         }
         // Watching sends the text as it came, so nothing in the answer is a token this reading gave out.
-        return masking && "text" in found
-            ? { text: found.text, restore: reading.restore, found: found.found, counts: found.counts }
-            : { ...nothing, found: found.found, counts: found.counts };
+        return "text" in found ? { prompt: found.text, restore: shield.restore } : { prompt: text, restore: unchanged };
     };
-    const turnShield = (provider: string, conversationId: string | undefined): TurnShield => ({
-        provider,
-        conversationId,
-        mask: async (text, channel) => (await read({ provider, conversationId, text, protocol: `hooks:${channel}`, log: "found" })).text,
-        refuses: async (text, channel, refusal) => {
-            const { policy, masking, watching } = await standing(provider, conversationId);
-            if ((!masking && !watching) || text === "") {
+    const turnShield = (provider: string, conversationId: string | undefined): TurnShield => {
+        const egress = { provider, conversationId, route: "hooks" } as const;
+        // A read the runtime can only allow or refuse: what `look` reads of it checked under the verdict in force and
+        // logged, and the kinds that refuse it while the shield masks. `look` answers undefined for what could not be read
+        // on this machine to be checked, which refuses it as surely, since it would otherwise go unchecked.
+        const judge = async (
+            channel: string,
+            look: (policy: PrivacyShieldPolicy) => Promise<string | undefined>,
+            line: { readonly refused: string; readonly unreadable?: string; readonly images?: number; readonly documents?: number },
+        ): Promise<readonly PersonalDataClass[] | "unreadable"> => {
+            const { policy, verdict } = await decide(egress);
+            const how = reading(verdict);
+            if (how === undefined) {
                 return [];
             }
-            const found = await (await masker(policy)).find(text);
-            if (found.spans.length === 0) {
-                return [];
-            }
-            await deps.vault.commit();
-            record({
-                provider,
-                conversationId,
-                action: masking ? "refused" : "watched",
-                protocol: `hooks:${channel}`,
-                counts: countsOf(found.spans),
-                found: found.found,
-                ...opt("detail", masking ? refusal : undefined),
-            });
-            return masking ? kindsOf(found.spans) : [];
-        },
-        refusesImage: async (data, channel) => {
-            const { policy, masking, watching } = await standing(provider, conversationId);
-            if ((!masking && !watching) || policy.images === "allow") {
-                return [];
-            }
-            const reading = await deps.readers.readImage(data);
-            if (reading === undefined) {
-                if (masking) {
-                    record({
-                        provider,
-                        conversationId,
-                        action: "refused",
-                        protocol: `hooks:${channel}`,
-                        counts: {},
-                        found: [],
-                        images: 1,
-                        detail: "an image read was refused: it could not be read on this machine to be checked",
-                    });
-                }
-                return masking ? "unreadable" : [];
-            }
-            const found = await (await masker(policy)).find(readingText(reading.lines));
-            if (found.spans.length === 0) {
-                return [];
-            }
-            await deps.vault.commit();
-            record({
-                provider,
-                conversationId,
-                action: masking ? "refused" : "watched",
-                protocol: `hooks:${channel}`,
-                counts: countsOf(found.spans),
-                found: found.found,
-                images: 1,
-                ...opt("detail", masking ? "an image read was refused: it shows personal data" : undefined),
-            });
-            return masking ? kindsOf(found.spans) : [];
-        },
-        refusesDocument: async (data, channel) => {
-            const { policy, masking, watching } = await standing(provider, conversationId);
-            if (!masking && !watching) {
-                return [];
-            }
-            const text = await deps.readers.readPdf(data);
+            const counted = { images: line.images, documents: line.documents };
+            const text = await look(policy);
             if (text === undefined) {
-                if (masking) {
-                    record({
-                        provider,
-                        conversationId,
-                        action: "refused",
-                        protocol: `hooks:${channel}`,
-                        counts: {},
-                        found: [],
-                        documents: 1,
-                        detail: "a document read was refused: it could not be read on this machine to be checked",
-                    });
+                if (how === "mask") {
+                    note({ ...egress, ...counted, verdict, action: "refused", protocol: `hooks:${channel}`, detail: line.unreadable });
                 }
-                return masking ? "unreadable" : [];
+                return how === "mask" ? "unreadable" : [];
             }
             const found = await (await masker(policy)).find(text);
             if (found.spans.length === 0) {
                 return [];
             }
             await deps.vault.commit();
-            record({
-                provider,
-                conversationId,
-                action: masking ? "refused" : "watched",
+            note({
+                ...egress,
+                ...counted,
+                verdict,
+                action: how === "mask" ? "refused" : "watched",
                 protocol: `hooks:${channel}`,
                 counts: countsOf(found.spans),
-                found: found.found,
-                documents: 1,
-                ...opt("detail", masking ? "a document read was refused: it holds personal data" : undefined),
+                replacements: found.found,
+                detail: how === "mask" ? line.refused : undefined,
             });
-            return masking ? kindsOf(found.spans) : [];
-        },
-        // Synchronous by contract, so it reads the vault as loaded: forTurn loads it before handing the shield out.
-        restore: (text) => restoreWith(text),
-        masking: async () => (await standing(provider, conversationId)).masking,
-        mcpUrl: async (url) => `${deps.loopbackBase()}${MCP_PROXY_PATH}/${await deps.tokens.sign({ provider, upstream: url, conversationId })}`,
-    });
+            return how === "mask" ? kindsOf(found.spans) : [];
+        };
+        return {
+            provider,
+            conversationId,
+            mask: async (text, channel) => (await read(egress, text, { protocol: `hooks:${channel}`, log: "found" })).prompt,
+            // A text in hand is always readable, so `judge` never answers unreadable for it.
+            refuses: async (text, channel, refused) => {
+                const kinds = await judge(channel, async () => text, { refused });
+                return kinds === "unreadable" ? [] : kinds;
+            },
+            refusesImage: (data, channel) =>
+                judge(
+                    channel,
+                    async (policy) => {
+                        if (policy.images === "allow") {
+                            return "";
+                        }
+                        const image = await deps.readers.readImage(data);
+                        return image === undefined ? undefined : readingText(image.lines);
+                    },
+                    {
+                        refused: "an image read was refused: it shows personal data",
+                        unreadable: "an image read was refused: it could not be read on this machine to be checked",
+                        images: 1,
+                    },
+                ),
+            refusesDocument: (data, channel) =>
+                judge(channel, () => deps.readers.readPdf(data), {
+                    refused: "a document read was refused: it holds personal data",
+                    unreadable: "a document read was refused: it could not be read on this machine to be checked",
+                    documents: 1,
+                }),
+            // Synchronous by contract, so it reads the vault as loaded: forTurn loads it before handing the shield out.
+            restore: (text) => restoreWith(text),
+            masking: async () => (await decide(egress)).verdict.kind === "mask",
+            mcpUrl: async (url) => `${deps.loopbackBase()}${MCP_PROXY_PATH}/${await deps.tokens.sign({ provider, upstream: url, conversationId })}`,
+        };
+    };
     // Restoring needs no policy: a token is looked up in the vault, never trusted for what it says (tokens.ts).
     const restoreWith = (text: string): string =>
         createMasker({ vault: deps.vault, policy: RESTORE_POLICY, memo, recognizer: undefined }).restore(text);
+    // Where each finding sits in a text for a place that keeps no token, under the policy in force; none while it is off.
+    const findings = async (text: string) => {
+        const policy = await deps.policyStore.get();
+        return policy.mode === "on" ? (await masker(policy)).inspect(text) : undefined;
+    };
     return {
         policy: deps.policyStore.get,
         setPolicy: deps.policyStore.set,
@@ -410,27 +343,26 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             ]);
             return { policy, known: counts.known, tokens: counts.tokens, readers: { ocr, model }, providers: privacyProviders(capabilities) };
         },
-        admit: async (provider, harness, conversationId) => {
-            const policy = await deps.policyStore.get();
-            // A runtime the shield reads by content (the gateway, or its hooks) runs: what it reads is checked as it
-            // reads it. Only one with no seam at all is decided by its runtime, since nothing it reads is ever seen.
-            if (policy.mode !== "on" || shieldableRuntime(provider, harness) || (await trusted(policy, provider, conversationId))) {
-                return { allowed: true };
+        decide,
+        refusal: async (egress) => {
+            try {
+                const { verdict } = await decide(egress);
+                if (verdict.kind !== "refuse") {
+                    return undefined;
+                }
+                const label = privacyProviders(await deps.capabilities()).find((entry) => entry.id === egress.provider)?.label ?? egress.provider;
+                return refusalSentence(verdict.route, label, egress.conversationId !== undefined);
+            } catch (error) {
+                return `The privacy shield's policy could not be read, so nothing was sent. ${errorMessage(error)}`;
             }
-            const label = privacyProviders(await deps.capabilities()).find((entry) => entry.id === provider)?.label ?? provider;
-            return { allowed: false, reason: unshieldedRefusal(label, conversationId !== undefined) };
         },
-        seal: async ({ provider, harness, conversationId, prompt }) => {
-            // The gateway masks this runtime's wire as it masks a turn's, so reading it here as well would log it twice.
-            if (gatewayRuntime(provider, harness)) {
-                return { prompt, restore: unchanged };
-            }
-            const reading = await read({ provider, conversationId, text: prompt, protocol: SEALED_PROTOCOL, log: "always" });
-            return { prompt: reading.text, restore: reading.restore };
-        },
+        // The gateway reads this runtime's wire as it reads a turn's, so reading the prompt here as well would log it twice.
+        seal: async ({ provider, harness, conversationId, prompt }) =>
+            runtimeRoute(provider, harness) === "gateway"
+                ? { prompt, restore: unchanged }
+                : read({ provider, conversationId, route: "sealed" }, prompt, { protocol: SEALED_PROTOCOL, log: "always" }),
         forTurn: async (provider, harness, conversationId) => {
-            const { masking, watching } = await standing(provider, conversationId);
-            if (gatewayRuntime(provider, harness) || (!masking && !watching)) {
+            if (runtimeRoute(provider, harness) !== "hooks" || reading((await decide({ provider, conversationId, route: "hooks" })).verdict) === undefined) {
                 return undefined;
             }
             await deps.vault.load();
@@ -443,33 +375,32 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
             }
             return `${deps.loopbackBase()}${GATEWAY_PATH}/${await deps.tokens.sign(session)}`;
         },
-        trusted,
         masker,
+        note,
         redactForDisplay: async (text) => {
-            const policy = await deps.policyStore.get();
-            if (policy.mode !== "on") {
+            const spans = await findings(text);
+            if (spans === undefined) {
                 return text;
             }
             let out = "";
             let last = 0;
-            for (const span of await displaySpans(text, policy)) {
-                out += `${text.slice(last, span.start)}‹${span.label.toLowerCase().replaceAll("_", " ")}›`;
+            for (const span of spans) {
+                out += `${text.slice(last, span.start)}‹${labelOf(span.class)}›`;
                 last = span.end;
             }
             return out + text.slice(last);
         },
         redactPictureForDisplay: async (data) => {
-            const policy = await deps.policyStore.get();
-            if (policy.mode !== "on") {
+            if ((await deps.policyStore.get()).mode !== "on") {
                 return data;
             }
-            const reading = await deps.readers.readImage(data);
-            if (reading === undefined) {
+            const image = await deps.readers.readImage(data);
+            if (image === undefined) {
                 return undefined;
             }
             // Lettered with the kind alone: the token's own alphabet, and nothing a reader of the page could resolve.
-            const spans = (await displaySpans(readingText(reading.lines), policy)).map(({ start, end, label }) => ({ start, end, token: label }));
-            const painted = await paintRegions(data, regionsFor(reading.lines, spans, reading));
+            const spans = ((await findings(readingText(image.lines))) ?? []).map(({ start, end, class: kind }) => ({ start, end, token: TOKEN_LABEL[kind] }));
+            const painted = await paintRegions(data, regionsFor(image.lines, spans, image));
             return painted === undefined ? undefined : Buffer.from(painted.data, "base64");
         },
         learn: deps.vault.learn,

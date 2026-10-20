@@ -17,7 +17,7 @@ jest.mock(`../../../models/capabilities/useSecrets`, () => ({
     useSecretInventory: () => ({
         inventory,
         missingRequiredCount: ref(0),
-        inventoryPending: ref(false),
+        loaded: computed(() => ({ state: `ready`, data: { entries: inventory.value }, refreshing: false, refreshError: undefined })),
         refreshInventory: () => {},
     }),
     useSecrets: () => ({ set: { mutateAsync: jest.fn() }, remove: { mutateAsync: jest.fn() } }),

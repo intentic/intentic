@@ -52,7 +52,7 @@ import { terminalHelpServer } from "../../terminal/terminal-help.js";
 import { EventQueue } from "./event-queue.js";
 import { insideRel } from "@intentic/base/contained";
 import { planRevision } from "../prompt/plan-revision.js";
-import { trialUnavailableFrame } from "./error-frames.js";
+import { trialUnavailableFrame } from "./frames/error-frames.js";
 import type { AgentRequest, HarnessCredential } from "../providers/agent-request.js";
 import { harnessEnv } from "../providers/harness-credentials.js";
 import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";

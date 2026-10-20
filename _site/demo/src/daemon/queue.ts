@@ -14,8 +14,23 @@ type QueuedMessage = ConversationQueue[`items`][number];
 type Hold = Pick<QueuedMessage, `until` | `after` | `reopenOf`>;
 type Serving = NonNullable<QueuedMessage[`serves`]>;
 const queueOf = (id: string): ConversationQueue => roster.agents.find((agent) => agent.id === id)?.queue ?? NO_QUEUE;
+// What the bookings carry the card on by, as the daemon derives its `next` from them (conversation-next.ts): the soonest
+// time, else the first land waited for. The demo holds no turn or memory hold a booking would rank behind.
+const bookedNext = (queue: ConversationQueue): AgentSummary[`next`] => {
+    const booked = queue.items.filter((item) => item.until !== undefined || item.after !== undefined);
+    const instants = booked.flatMap((item) => (item.until === undefined ? [] : [item.until]));
+    const after = booked.find((item) => item.after !== undefined)?.after;
+    if (instants.length > 0) {
+        return { kind: `send`, at: Math.min(...instants), count: booked.length };
+    }
+    return after === undefined ? undefined : { kind: `land`, after, count: booked.length };
+};
 const writeQueue = (id: string, queue: ConversationQueue): ConversationQueue => {
-    amendAgent(id, ({ queue: _old, ...card }) => (queue.items.length === 0 && queue.revision === 0 ? card : { ...card, queue }));
+    amendAgent(id, ({ queue: _old, next: _was, ...card }) => {
+        const next = bookedNext(queue);
+        const kept = next === undefined ? card : { ...card, next };
+        return queue.items.length === 0 && queue.revision === 0 ? kept : { ...kept, queue };
+    });
     return queue;
 };
 

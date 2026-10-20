@@ -252,7 +252,7 @@ export const ACP: AgentCapabilities = {
     isolation: "cwd",
     commands: true,
     terminals: true,
-    // A failure the agent words as a spent allowance or an outgrown window is coded (acp-agent.ts ACP_FAILURES), but the
+    // A failure the agent words as a spent allowance or an outgrown window is coded (error-frames.ts codedFailure), but the
     // words are each agent's own and the protocol marks no outage, so nothing promises the codes auto-resume keys off.
     recovery: false,
     warm: false,
@@ -332,7 +332,7 @@ export const PI: AgentCapabilities = {
     // session, as the Claude loop's Bash hook does (pi-hooks.ts).
     terminals: true,
     // Pi reports a provider failure as its own event (auto_retry_end, an errored message_end) carrying the provider's
-    // sentence, status code included, which the shared rules code (pi-events.ts PI_FAILURES).
+    // sentence, status code included, which the shared rules code (error-frames.ts codedFailure).
     recovery: true,
     warm: false,
     // `--system-prompt` replaces Pi's base and `--append-system-prompt` adds to it, both per process; `--no-context-files`

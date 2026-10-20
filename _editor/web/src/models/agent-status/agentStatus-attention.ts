@@ -5,9 +5,10 @@ import { useVocabulary } from "../../workbench/views/vocabulary";
 import { failureKind, failureOpensChat, failureWord } from "./agentStatus-failure";
 import {
     type AgentStanding,
-    bookingAnswers,
+    blocked,
     type ClientAgentStatus,
     conflictIsYours,
+    goesBySelf,
     heldByPrompt,
     landBroken,
     limited,
@@ -77,8 +78,9 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
         return t(`agents.agentStatus.usageLimit`);
     }
     // Held, not failed: the chip is the word the reader acts on ("send anyway"), and "error" sent people hunting a fault.
-    // Once its words are booked for later the hold is answered, and the corner says when they go instead (standingChip).
-    if (memoryHeld(agent) && !bookingAnswers(agent)) {
+    // Once something carries it on (sent when memory frees, or booked for later) the hold is answered, and the corner
+    // says when it goes instead (selfStart).
+    if (memoryHeld(agent) && !goesBySelf(agent)) {
         return t(`agents.agentStatus.held`);
     }
     const park = leadingPark(agent);
@@ -96,9 +98,10 @@ export const attentionReason = (agent: AgentStanding): string | undefined => {
     if (heldByPrompt(agent)) {
         return t(`agents.agentStatus.needsInput`);
     }
-    // An ending something booked answers names no reason: the card is Active, and its corner says when the booking goes
+    // An ending something carries on names no reason: the card is Active, and its corner says when it goes
     // ("Scheduled"), where "Error" beside a clock already counting to the send read as a fault nobody had dealt with.
-    if (bookingAnswers(agent)) {
+    // Not a Stop still unwinding, which rests in Attention whatever waits behind it (blocked).
+    if (goesBySelf(agent) && !blocked(agent)) {
         return undefined;
     }
     // A failure the daemon classified says what kind it was ("No access", "Provider down"), never the bare "Error" a

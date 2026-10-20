@@ -12,9 +12,9 @@ import {
     type ConnectionState,
     connectionFacts,
     connectionState,
+    hostPresence,
     netdiskFacts,
     phoneSystem,
-    sidesAwakeWithoutIt,
     vpnFacts,
 } from "../../../models/capabilities/connections";
 import { type DeviceConnection, sameMachineNote } from "./deviceConnections";
@@ -37,19 +37,9 @@ export interface ConnectionSources {
     readonly devices: readonly Device[];
 }
 
-// The roster's answer for a peer connection: the browser, phone or machine at the far end, by the tile's kind.
-const peerOf = (kind: CapabilityKind, id: string, sources: ConnectionSources): { readonly online: boolean } | undefined =>
-    kind === `webext` ? sources.browser(id) : kind === `phone` ? sources.phone(id) : sources.host(id);
-
-// A connection's state, with the machine/browser/phone roster's online answer folded in where there is one, and for a
-// machine the other sides of it that answer while its own does not.
+// A connection's state, with a machine's presence read off the roster where it is one.
 export const liveState = (entry: CapabilityCatalogEntry, instance: CapabilitySummary, sources: ConnectionSources): ConnectionState =>
-    connectionState(
-        entry.kind,
-        instance,
-        peerOf(entry.kind, instance.id, sources)?.online,
-        entry.kind === `device` ? sidesAwakeWithoutIt(sources.host(instance.id)) : [],
-    );
+    connectionState(entry.kind, instance, entry.kind === `device` ? hostPresence(sources.host(instance.id)) : undefined);
 
 // A phone names itself and its Android release (a watch, its Wear OS), and says when it cannot be woken yet: asleep is its usual state, so
 // "can't be woken" is the one thing worth the owner's attention.

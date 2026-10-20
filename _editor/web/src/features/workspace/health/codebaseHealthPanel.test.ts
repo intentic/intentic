@@ -2,7 +2,7 @@
 // own prompt, and it runs on the Refactors job's model unless the row's caret picked another. Arithmetic is covered in
 // refactorAsk.test.ts.
 import "@intentic/testing/dom";
-import { createApp, h, nextTick, ref } from "vue";
+import { computed, createApp, h, nextTick, ref } from "vue";
 import type { WorkspaceHealth } from "@intentic/sandbox-contract/schemas/codebase-health";
 import type { AgentRunChoice } from "@intentic/ui";
 import CodebaseHealth from "./CodebaseHealth.vue";
@@ -44,7 +44,13 @@ jest.mock(`../../../models/conversations/accounts/shellModelPicking`, () => ({
     }),
 }));
 jest.mock(`./useCodebaseHealth`, () => ({
-    useCodebaseHealth: () => ({ health: mocked.health, loading: ref(false), error: ref(null), refresh: () => {} }),
+    useCodebaseHealth: () => ({
+        health: mocked.health,
+        loading: ref(false),
+        error: ref(null),
+        refresh: () => {},
+        loaded: computed(() => ({ state: `ready`, data: mocked.health.value, refreshing: false, refreshError: undefined })),
+    }),
 }));
 jest.mock(`../../../models/workspace/tree/useRepos`, () => ({ useRepos: () => ({ options: ref([`root`]) }) }));
 

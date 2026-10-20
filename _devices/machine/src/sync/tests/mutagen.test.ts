@@ -665,6 +665,10 @@ const fakeMutagen = (
             ran("settle");
             await Promise.resolve();
         },
+        declarePaused: async (names) => {
+            ran(`declare paused ${names.join(" ")}`);
+            await Promise.resolve();
+        },
     };
     return { calls, seams };
 };
@@ -679,7 +683,10 @@ describe("moveSessions", () => {
         owner,
     );
 
-    it("pauses, carries the state, ends the old sessions, then reloads this agent's daemon and resumes what was running", async () => {
+    // The watcher resumes what was running (holds.ts): the move only says which pauses were the owner's, so the one
+    // session it paused itself to copy is never mistaken for one somebody paused (70c5294392's carried sessions left
+    // paused for good once the move's own resume was refused).
+    it("pauses, carries the state, ends the old sessions, declares the pauses it found, then reloads this agent's daemon", async () => {
         const { calls, seams } = fakeMutagen({}, [], ["sync_a", "sync_b"]);
         const moved = await moveSessions(seams, plan);
         expect(moved).toMatchObject({ ended: true, remade: [] });
@@ -691,41 +698,20 @@ describe("moveSessions", () => {
             "carry sync_b",
             "shared sync terminate sync_a sync_b",
             "shared forward terminate fwd_a",
+            // The backup was paused before the move, so its pause is the owner's; the main session's is the move's own.
+            "declare paused intentic-a-state",
             "own daemon stop",
             // Gone at the first look.
             "own sync list",
             "own daemon start",
-            // The backup stays paused, as it was.
-            "own sync resume intentic-a",
         ]);
+        expect(calls.some((line) => line.startsWith("own sync resume"))).toBe(false);
     });
 
-    it("waits out a daemon still stopping and retries the resume until the new one takes it", async () => {
-        const { calls, seams } = fakeMutagen({}, [], ["sync_a", "sync_b"], { "own sync list": [true, true, false], "own sync resume": [false, false, true] });
-        const moved = await moveSessions(seams, plan);
-        expect(moved.resumed).toBe(true);
-        const reload = calls.slice(calls.indexOf("own daemon stop"));
-        expect(reload).toEqual([
-            "own daemon stop",
-            "own sync list",
-            "settle",
-            "own sync list",
-            "settle",
-            "own sync list",
-            "own daemon start",
-            "own sync resume intentic-a",
-            "settle",
-            "own daemon start",
-            "own sync resume intentic-a",
-            "settle",
-            "own daemon start",
-            "own sync resume intentic-a",
-        ]);
-    });
-
-    it("says so when the new daemon never takes the resume", async () => {
-        const { seams } = fakeMutagen({}, [], ["sync_a", "sync_b"], { "own sync resume": [false] });
-        expect((await moveSessions(seams, plan)).resumed).toBe(false);
+    it("waits out a daemon still stopping before it starts this agent's own", async () => {
+        const { calls, seams } = fakeMutagen({}, [], ["sync_a", "sync_b"], { "own sync list": [true, true, false] });
+        await moveSessions(seams, plan);
+        expect(calls.slice(calls.indexOf("own daemon stop"))).toEqual(["own daemon stop", "own sync list", "settle", "own sync list", "settle", "own sync list", "own daemon start"]);
     });
 
     it("makes again what it cannot carry, and carries nothing beside a session of that name this agent already holds", async () => {

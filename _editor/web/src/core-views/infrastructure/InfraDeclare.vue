@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { INVENTORY_SERVICES } from "@intentic/capability-catalog";
 import type { InventoryEntry } from "@intentic/sandbox-contract/schemas/inventory";
-import { Button, Card, ui, ConfirmDialog, InfoHint, Notice, type NoticeModel, StatusBadge } from "@intentic/ui";
+import { Button, Card, ConfirmDialog, InfoHint, Notice, type NoticeModel, Section, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, onMounted, ref, watch } from "vue";
 import SecretField from "../../parts/capabilities/SecretField.vue";
@@ -290,68 +290,70 @@ onMounted(progress.recover);
 
         <div class="grid grid-cols-1 gap-4 @lg:grid-cols-2">
             <!-- Apps: declared i.want.app entries union resolved plan union live deployments (see wanted.ts). -->
-            <div class="flex flex-col gap-2">
-                <span :class="ui.sectionLabel()">{{ t(`views.infraDeclare.apps2`) }}</span>
-                <Card v-for="app in apps" :key="app.name" class="flex items-center justify-between gap-3">
-                    <div class="min-w-0">
-                        <span class="truncate font-medium text-content">{{ app.name }}</span>
-                        <p v-if="app.domain" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ app.domain }}</p>
-                    </div>
-                    <div class="flex shrink-0 items-center gap-1">
-                        <StatusBadge
-                            :variant="app.status === 'live' ? 'success' : app.status === 'planned' ? 'info' : 'neutral'"
-                            :label="
-                                app.status === 'live'
-                                    ? t(`views.words.live`)
-                                    : app.status === 'planned'
-                                      ? t(`views.words.planned`)
-                                      : t(`views.infraDeclare.declared`)
-                            "
-                            size="xs"
-                            dot
-                        />
+            <Section :label="t(`views.infraDeclare.apps2`)">
+                <div class="flex flex-col gap-2">
+                    <Card v-for="app in apps" :key="app.name" class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <span class="truncate font-medium text-content">{{ app.name }}</span>
+                            <p v-if="app.domain" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ app.domain }}</p>
+                        </div>
+                        <div class="flex shrink-0 items-center gap-1">
+                            <StatusBadge
+                                :variant="app.status === 'live' ? 'success' : app.status === 'planned' ? 'info' : 'neutral'"
+                                :label="
+                                    app.status === 'live'
+                                        ? t(`views.words.live`)
+                                        : app.status === 'planned'
+                                          ? t(`views.words.planned`)
+                                          : t(`views.infraDeclare.declared`)
+                                "
+                                size="xs"
+                                dot
+                            />
+                            <Button
+                                v-if="declaredApps.has(app.name)"
+                                size="small"
+                                tier="quiet" tone="danger"
+                                :aria-label="t(`views.infraDeclare.removeApp`)"
+                                @click="removeEntry(app.name)"
+                            >
+                                <template #icon><Icon name="trash" /></template>
+                            </Button>
+                        </div>
+                    </Card>
+                    <Card v-if="apps.length === 0" :dashed="true" class="text-center text-xs text-muted">
+                        {{ t(`views.infraDeclare.noAppYet`) }} <b>{{ t(`ui.action.add`) }}</b
+                        >{{ t(`views.infraDeclare.appsInMonoreposIn`) }}
+                    </Card>
+                </div>
+            </Section>
+
+            <!-- Self-hosted services = i.want.service entries (removable here). -->
+            <Section :label="t(`views.words.selfHostedServices`)">
+                <div class="flex flex-col gap-2">
+                    <Card v-for="tool in tools" :key="tool.name" class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="truncate font-medium text-content">{{ tool.name }}</span>
+                                <StatusBadge variant="neutral" :label="entryLabel(tool)" size="xs" />
+                            </div>
+                            <p v-if="summary(tool)" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ summary(tool) }}</p>
+                        </div>
                         <Button
-                            v-if="declaredApps.has(app.name)"
                             size="small"
                             tier="quiet" tone="danger"
-                            :aria-label="t(`views.infraDeclare.removeApp`)"
-                            @click="removeEntry(app.name)"
+                            :aria-label="t(`views.infraDeclare.removeService`)"
+                            @click="removeEntry(tool.name)"
                         >
                             <template #icon><Icon name="trash" /></template>
                         </Button>
-                    </div>
-                </Card>
-                <Card v-if="apps.length === 0" :dashed="true" class="text-center text-xs text-muted">
-                    {{ t(`views.infraDeclare.noAppYet`) }} <b>{{ t(`ui.action.add`) }}</b
-                    >{{ t(`views.infraDeclare.appsInMonoreposIn`) }}
-                </Card>
-            </div>
-
-            <!-- Self-hosted services = i.want.service entries (removable here). -->
-            <div class="flex flex-col gap-2">
-                <span :class="ui.sectionLabel()">{{ t(`views.words.selfHostedServices`) }}</span>
-                <Card v-for="tool in tools" :key="tool.name" class="flex items-center justify-between gap-3">
-                    <div class="min-w-0">
-                        <div class="flex items-center gap-2">
-                            <span class="truncate font-medium text-content">{{ tool.name }}</span>
-                            <StatusBadge variant="neutral" :label="entryLabel(tool)" size="xs" />
-                        </div>
-                        <p v-if="summary(tool)" class="mt-0.5 truncate font-mono text-2xs text-subtle">{{ summary(tool) }}</p>
-                    </div>
-                    <Button
-                        size="small"
-                        tier="quiet" tone="danger"
-                        :aria-label="t(`views.infraDeclare.removeService`)"
-                        @click="removeEntry(tool.name)"
-                    >
-                        <template #icon><Icon name="trash" /></template>
-                    </Button>
-                </Card>
-                <Card v-if="tools.length === 0" :dashed="true" class="text-center text-xs text-muted">
-                    {{ t(`views.infraDeclare.noServicesYet`) }} <b>{{ t(`ui.action.add`) }}</b
-                    >{{ t(`views.infraDeclare.outlinePaperlessNgxOpenproject`) }}
-                </Card>
-            </div>
+                    </Card>
+                    <Card v-if="tools.length === 0" :dashed="true" class="text-center text-xs text-muted">
+                        {{ t(`views.infraDeclare.noServicesYet`) }} <b>{{ t(`ui.action.add`) }}</b
+                        >{{ t(`views.infraDeclare.outlinePaperlessNgxOpenproject`) }}
+                    </Card>
+                </div>
+            </Section>
         </div>
     </section>
 

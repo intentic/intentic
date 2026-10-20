@@ -12,6 +12,7 @@ import { turnCliEnv } from "../run/harness/turn-env.js";
 import type { Services } from "../../composition.js";
 import { whenFileAppears } from "../tools/file-appears.js";
 import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
+import { defineInFlight } from "../../seams/restart/in-flight.js";
 import { isCiWatchCommand, onCiDeliveries } from "./ci-rechecks.js";
 import { type CheckOptions, type CheckResult, type RunCheck, watchCheck, type WatchPlacement } from "./watch-check.js";
 import type { JournalledWatch, WatchJournal } from "../../store/journals/watch-journal.js";
@@ -456,14 +457,21 @@ export const armWatcher = async (spec: WatcherSpec, options: ArmOptions = {}): P
     return { kind: "armed", id: record.id, intervalSeconds, timeoutSeconds, firstCheck };
 };
 
-// Once at boot; every armed entry is re-checked first, since the condition can resolve mid-restart.
-export const restoreWatchers = async (): Promise<void> => {
+// Every watch armed or firing when the gate opened, armed again by boot (bootstrap/restart/in-flight-kinds.ts) after the agent commands
+// a restart took down were written down as lost, so a watch on one reports that at its first look. Each first look is a
+// check command of its own, so the pass does not wait on them.
+export const watchesInFlight = defineInFlight({
+    name: "condition watches",
+    read: async (services: Pick<Services, "watchJournal">) => services.watchJournal.list(),
+    recover: async (_services, left) => {
+        void restoreWatchers(left);
+    },
+});
+
+// Each one is re-checked first, since the condition can resolve mid-restart.
+export const restoreWatchers = async (entries: readonly JournalledWatch[]): Promise<void> => {
     const live = runtime;
-    if (live === undefined) {
-        return;
-    }
-    const entries = await live.journal.list();
-    if (entries.length === 0) {
+    if (live === undefined || entries.length === 0) {
         return;
     }
     // Asked once per conversation, not per entry: every watch of one conversation wants the same answer.
@@ -501,9 +509,6 @@ const checkOf = (check: NonNullable<JournalledWatch["firing"]>["check"]): CheckR
 });
 
 const restoreOne = async (live: WatcherRuntime, entry: JournalledWatch, env: Record<string, string>): Promise<void> => {
-    if (live.conversations.holdings(MINTED).has(entry.id) || live.conversations.holdings(WATCHES).has(entry.id)) {
-        return;
-    }
     const context = { watch: entry.id, conversationId: entry.conversationId, note: entry.note };
     if (!live.conversationLive(entry.conversationId)) {
         live.logger.info(context, "watch: not restored, its conversation is gone");

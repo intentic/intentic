@@ -15,6 +15,7 @@ import {
     repeatedChecklistIds,
     turnsOf,
 } from "../../../../models/conversations/transcript/transcript";
+import { noticeFailure } from "../../../../models/conversations/transcript/sandboxNotice";
 
 // The transcript as one pane draws it: turns, the live bubble, each turn's pictures and documents, fork cuts, day marks,
 // the skeleton.
@@ -39,7 +40,16 @@ export interface PaneTranscriptHost {
 }
 
 export const usePaneTranscript = (pane: PaneTranscriptHost) => {
-    const { messages, streaming, ending, awaitingDecision } = pane;
+    const { messages, ending, awaitingDecision } = pane;
+    // Whether the live turn is still writing, read off its rows as well as its stream: a failure that ended the turn is
+    // the last word, however long the stream takes to close behind it, so nothing draws the turn as working under it
+    // (2026-10-20: "Thinking…" stood under a usage-limit notice for two seconds, fixed in one runtime's loop only). A row
+    // drawn after the failure (a renewal's run going on) makes it working again.
+    const endedOnFailure = computed(() => {
+        const last = messages.value.at(-1);
+        return last?.role === `notice` && noticeFailure(last)?.ends === true;
+    });
+    const streaming = computed(() => pane.streaming.value && !endedOnFailure.value);
     // The bubble this turn writes into, if any (liveBubbleOf); recomputed per frame, scanning only the tail.
     const liveBubble = computed(() => liveBubbleOf(messages.value));
     // The status line belongs at the transcript's very end: inside the live bubble only while that bubble is the last row.

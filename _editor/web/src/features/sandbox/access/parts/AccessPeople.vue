@@ -3,6 +3,7 @@ import type { InviteDelivery, InviteRecord } from "@intentic/api-contract";
 import type { MemberGrant } from "@intentic/sandbox-contract/schemas/members";
 import {
     Avatar,
+    Await,
     Button,
     clipboardOf,
     Notice,
@@ -10,10 +11,10 @@ import {
     Row,
     RowGroup,
     RowNote,
-    SkeletonSnapshot,
+    Section,
     StatusBadge,
-    vSkeletonSource,
 } from "@intentic/ui";
+import { useLoaded } from "@intentic/extension-api";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, onMounted, ref, useId, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -22,7 +23,6 @@ import { grantMember, revokeMember, useMembers } from "../../../../client/sandbo
 import { useAuth } from "../../../../client/auth/useAuth";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
 import { useRole } from "../../../../client/sandbox/useRole";
-import { useSandboxOutline } from "../../overview/useSandboxOutline";
 import { identityHue } from "../../../../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../../../../workbench/presence/usePresence";
 import AiLiteracySettings from "../../ai-literacy/AiLiteracySettings.vue";
@@ -246,6 +246,13 @@ const clearNotice = (): void => {
 
 // True until the mount fetch lands; every later refresh rides a write's own response, never blank again.
 const listing = ref(true);
+// The people grid's answer, owner-only: a failed read says so above the grid (`localNotice`) and leaves it empty.
+const people = useLoaded(() => ({
+    data: listing.value ? undefined : members.value,
+    error: undefined,
+    fetching: listing.value && isOwner.value,
+    wanted: isOwner.value,
+}));
 
 const load = async (): Promise<void> => {
     const id = sandbox.activeSandboxId.value;
@@ -288,16 +295,13 @@ watch(
     },
 );
 
-// The people grid's placeholder while the roster loads, so the tab doesn't open claiming nobody's invited.
-const outline = useSandboxOutline(listing);
-
 // Invite list is owner-only (the API 403s a member); load only when the viewer owns this sandbox.
 onMounted(() => {
     if (isOwner.value) {
         void load();
         return;
     }
-    // A member never fetches; leaving `listing` true would outline a list that never arrives.
+    // A member never fetches; leaving `listing` true would wait for a list that never arrives.
     listing.value = false;
 });
 
@@ -446,7 +450,7 @@ const revoke = async (target: string): Promise<void> => {
             <Notice v-if="notice && (selectedMember === undefined || handover !== undefined)" :of="notice">
                 <span v-if="handover" class="mt-1 block break-all font-medium">{{ handover }}</span>
             </Notice>
-            <RowGroup data-setting="access-people" :label="t(`sandbox.sandboxAccess.people`)" flat undivided>
+            <Section data-setting="access-people" :label="t(`sandbox.sandboxAccess.people`)">
                 <!-- One card per person, the signed-in one first, and the next card is where a new one is added: pressed, it
                      becomes the address field in place, so adding someone grows the group by one card and moves nothing. -->
                 <div role="group" :aria-label="t(`sandbox.sandboxAccess.people`)" class="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-1">
@@ -459,8 +463,8 @@ const revoke = async (target: string): Promise<void> => {
                          people and the add tile, one run of grid items imprinted together), else as one person-shaped
                          card; the add tile comes with the list, so it lands in its place instead of arriving early and
                          being pushed along by the people that load ahead of it. -->
-                    <template v-if="isOwner && listing">
-                        <SkeletonSnapshot v-if="outline" of="sandbox.access.people" :label="t(`sandbox.sandboxAccess.readingWhoAccess`)">
+                    <Await v-if="isOwner" :of="people" imprint="sandbox.access.people" :label="t(`sandbox.sandboxAccess.readingWhoAccess`)">
+                        <template #fallback>
                             <div role="status" aria-busy="true" class="flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5">
                                 <span class="sr-only">{{ t(`sandbox.sandboxAccess.readingWhoAccess`) }}</span>
                                 <span class="skeleton block size-8 shrink-0 rounded-full" aria-hidden="true" />
@@ -469,69 +473,69 @@ const revoke = async (target: string): Promise<void> => {
                                     <span class="skeleton block h-2.5 w-16 max-w-full" />
                                 </span>
                             </div>
-                        </SkeletonSnapshot>
-                    </template>
-                    <div v-else-if="isOwner" v-skeleton-source="`sandbox.access.people`" class="contents">
-                        <PersonCard
-                            v-for="member in members"
-                            :key="member.email"
-                            :email="member.email"
-                            :line="lineOf(member)"
-                            :dot="member.status === `accepted` ? undefined : member.status === `expired` ? `danger` : `info`"
-                            :selected="selected === member.email"
-                            :aria-controls="panelId"
-                            :disabled="fencesUnknown"
-                            pressable
-                            @press="toggle(member)"
-                        />
-                        <form
-                            v-if="adding"
-                            class="ui-field-shell flex min-w-0 items-center gap-3 rounded-xl px-3 py-2"
-                            :class="{ 'ui-field-error-box': addError !== undefined }"
-                            @submit.prevent="addPerson"
-                        >
-                            <Avatar :size="32" :name="newAddress === `` ? `?` : newAddress" :hue="identityHue(newAddress)" class="shrink-0" />
-                            <span class="flex min-w-0 flex-1 flex-col">
-                                <input
-                                    v-model="newEmail"
-                                    type="email"
-                                    autocomplete="off"
-                                    autofocus
-                                    placeholder="name@example.com"
-                                    :aria-label="t(`sandbox.sandboxAccess.emailLabel`)"
-                                    class="field-bare w-full min-w-0"
-                                    @keydown.esc.prevent="cancelAdd"
-                                    @blur="newEmail.trim() === `` && cancelAdd()"
-                                />
-                                <span class="truncate text-xs" :class="addError === undefined ? `text-subtle` : `text-danger`">{{
-                                    addError ?? t(`sandbox.sandboxAccess.addPersonKeys`)
-                                }}</span>
-                            </span>
-                            <Button
-                                type="submit"
-                                size="small"
-                                :loading="busy"
-                                :disabled="busy || newTaken || newAddress === ``"
-                                :aria-label="t(`ui.action.add`)"
-                                @mousedown.prevent
+                        </template>
+                        <template #default="{ data: invited }">
+                            <PersonCard
+                                v-for="member in invited"
+                                :key="member.email"
+                                :email="member.email"
+                                :line="lineOf(member)"
+                                :dot="member.status === `accepted` ? undefined : member.status === `expired` ? `danger` : `info`"
+                                :selected="selected === member.email"
+                                :aria-controls="panelId"
+                                :disabled="fencesUnknown"
+                                pressable
+                                @press="toggle(member)"
+                            />
+                            <form
+                                v-if="adding"
+                                class="ui-field-shell flex min-w-0 items-center gap-3 rounded-xl px-3 py-2"
+                                :class="{ 'ui-field-error-box': addError !== undefined }"
+                                @submit.prevent="addPerson"
                             >
-                                <template #icon><Icon name="check" /></template>
-                            </Button>
-                        </form>
-                        <button
-                            v-else
-                            type="button"
-                            class="ui-row-select flex min-w-0 items-center gap-3 rounded-xl border border-dashed border-line px-3 py-2.5 text-left"
-                            :disabled="busy"
-                            @click="startAdd"
-                        >
-                            <span class="flex size-8 shrink-0 items-center justify-center rounded-full text-muted"><Icon name="plus" /></span>
-                            <span class="flex min-w-0 flex-col">
-                                <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxAccess.addPerson`) }}</span>
-                                <span class="truncate text-xs text-subtle">{{ t(`sandbox.sandboxAccess.addPersonSub`) }}</span>
-                            </span>
-                        </button>
-                    </div>
+                                <Avatar :size="32" :name="newAddress === `` ? `?` : newAddress" :hue="identityHue(newAddress)" class="shrink-0" />
+                                <span class="flex min-w-0 flex-1 flex-col">
+                                    <input
+                                        v-model="newEmail"
+                                        type="email"
+                                        autocomplete="off"
+                                        autofocus
+                                        placeholder="name@example.com"
+                                        :aria-label="t(`sandbox.sandboxAccess.emailLabel`)"
+                                        class="field-bare w-full min-w-0"
+                                        @keydown.esc.prevent="cancelAdd"
+                                        @blur="newEmail.trim() === `` && cancelAdd()"
+                                    />
+                                    <span class="truncate text-xs" :class="addError === undefined ? `text-subtle` : `text-danger`">{{
+                                        addError ?? t(`sandbox.sandboxAccess.addPersonKeys`)
+                                    }}</span>
+                                </span>
+                                <Button
+                                    type="submit"
+                                    size="small"
+                                    :loading="busy"
+                                    :disabled="busy || newTaken || newAddress === ``"
+                                    :aria-label="t(`ui.action.add`)"
+                                    @mousedown.prevent
+                                >
+                                    <template #icon><Icon name="check" /></template>
+                                </Button>
+                            </form>
+                            <button
+                                v-else
+                                type="button"
+                                class="ui-row-select flex min-w-0 items-center gap-3 rounded-xl border border-dashed border-line px-3 py-2.5 text-left"
+                                :disabled="busy"
+                                @click="startAdd"
+                            >
+                                <span class="flex size-8 shrink-0 items-center justify-center rounded-full text-muted"><Icon name="plus" /></span>
+                                <span class="flex min-w-0 flex-col">
+                                    <span class="text-sm font-medium text-content">{{ t(`sandbox.sandboxAccess.addPerson`) }}</span>
+                                    <span class="truncate text-xs text-subtle">{{ t(`sandbox.sandboxAccess.addPersonSub`) }}</span>
+                                </span>
+                            </button>
+                        </template>
+                    </Await>
                 </div>
                 <RowNote v-if="!isOwner">{{ t(`sandbox.sandboxAccess.onlySandboxOwnerInvite`) }}</RowNote>
 
@@ -549,7 +553,7 @@ const revoke = async (target: string): Promise<void> => {
                         @resend="resend"
                     />
                 </div>
-            </RowGroup>
+            </Section>
         </div>
 
         <!-- Live presence: who else is connected right now (everyone sees this). Drawn only while somebody is: an empty

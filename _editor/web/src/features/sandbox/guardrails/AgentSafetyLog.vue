@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { SafetyLogEntry } from "@intentic/sandbox-contract/policy/safety-policy";
 import {
+    Await,
     Code,
     DisclosureRow,
     FilterBar,
@@ -12,11 +13,9 @@ import {
     RowNote,
     SegmentedControl,
     SkeletonRows,
-    SkeletonSnapshot,
     StatusBadge,
     type StatusVariant,
     timeAgo,
-    vSkeletonSource,
 } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useSafetyLog } from "../environment/useSafetyPolicy";
@@ -30,7 +29,9 @@ const t = useT();
 
 type OutcomeFilter = "all" | "ran" | "asked" | "refused";
 
-const { entries, isLoading, error } = useSafetyLog();
+const { entries, loaded } = useSafetyLog();
+// A re-read that failed is said in place of the decisions, as a first read that failed is.
+const error = computed(() => (loaded.value.state === `ready` ? loaded.value.refreshError : undefined));
 const { settings } = useSandboxSettings();
 // Only used to pick the correct empty-state message: judge off differs from an empty judged history.
 const judgeOff = computed(() => settings.value?.commandJudge === `off`);
@@ -163,145 +164,145 @@ const commandSummary = (program: string): string => {
 <template>
     <!-- The filter bar and the list stand in as one, drawn as they last looked in this sandbox, so the bar does not push
          the list down when it arrives. Until then the list's group alone, as no filter is drawn before there are entries. -->
-    <SkeletonSnapshot v-if="isLoading" of="sandbox.agent.safety-log">
-        <div class="flex flex-col gap-3">
+    <Await :of="loaded" imprint="sandbox.agent.safety-log">
+        <template #fallback>
             <RowGroup :label="t(`sandbox.words.recentDecisions`)"><SkeletonRows :rows="4" description /></RowGroup>
-        </div>
-    </SkeletonSnapshot>
-    <div v-else v-skeleton-source="`sandbox.agent.safety-log`" class="flex flex-col gap-3">
-        <FilterBar
-            v-if="entries.length > 0"
-            v-model="query"
-            :placeholder="t(`sandbox.agentSafetyLog.filterDecisionsByCommand`)"
-            clearable
-        >
-            <template #controls>
-                <SegmentedControl v-model="outcomeFilter" size="xs" :options="filterOptions" />
-            </template>
-        </FilterBar>
-
-        <RowGroup :label="t(`sandbox.words.recentDecisions`)">
-            <RowNote v-if="error !== undefined" variant="block">
-                <Notice tone="danger">{{ error }}</Notice>
-            </RowNote>
-
-            <!-- Off and "nothing judged yet" are different empty states; the message must not blur them. -->
-            <RowNote v-else-if="entries.length === 0" variant="empty">
-                <template v-if="judgeOff">{{ t(`sandbox.agentSafetyLog.safetyJudgeOffNothing`) }}</template>
-                <template v-else>
-                    {{ t(`sandbox.agentSafetyLog.nothingNeededJudgingYet`) }}
+        </template>
+        <template #failed="{ error: unread }">
+            <RowGroup :label="t(`sandbox.words.recentDecisions`)">
+                <RowNote variant="block"><Notice tone="danger">{{ unread }}</Notice></RowNote>
+            </RowGroup>
+        </template>
+        <div class="flex flex-col gap-3">
+            <FilterBar v-if="entries.length > 0" v-model="query" :placeholder="t(`sandbox.agentSafetyLog.filterDecisionsByCommand`)" clearable>
+                <template #controls>
+                    <SegmentedControl v-model="outcomeFilter" size="xs" :options="filterOptions" />
                 </template>
-            </RowNote>
+            </FilterBar>
 
-            <RowNote v-else-if="visibleEntries.length === 0" variant="empty">
-                <template v-if="query.trim() !== ''">{{ t(`sandbox.agentSafetyLog.noDecisionsMatch`, { trim: query.trim() }) }}</template>
-                <template v-else>{{ t(`sandbox.agentSafetyLog.noDecisionsRecordedYet`, { outcomeFilter: outcomeFilterWord }) }}</template>
-            </RowNote>
+            <RowGroup :label="t(`sandbox.words.recentDecisions`)">
+                <RowNote v-if="error !== undefined" variant="block">
+                    <Notice tone="danger">{{ error }}</Notice>
+                </RowNote>
 
-            <template v-else>
-                <DisclosureRow
-                    v-for="entry in visibleEntries"
-                    :key="entryKey(entry)"
-                    :open="opened.has(entryKey(entry))"
-                    body="rail"
-                    @update:open="(val) => toggle(entryKey(entry), val)"
-                >
-                    <template #lead="{ iconClass }">
-                        <Icon :name="statusOf(entry).icon" :class="[iconClass, statusOf(entry).iconTone]" />
+                <!-- Off and "nothing judged yet" are different empty states; the message must not blur them. -->
+                <RowNote v-else-if="entries.length === 0" variant="empty">
+                    <template v-if="judgeOff">{{ t(`sandbox.agentSafetyLog.safetyJudgeOffNothing`) }}</template>
+                    <template v-else>
+                        {{ t(`sandbox.agentSafetyLog.nothingNeededJudgingYet`) }}
                     </template>
+                </RowNote>
 
-                    <template #title>
-                        <span class="block truncate font-mono text-xs text-content" v-tooltip.top="entry.program">
-                            {{ commandSummary(entry.program) }}
-                        </span>
-                    </template>
+                <RowNote v-else-if="visibleEntries.length === 0" variant="empty">
+                    <template v-if="query.trim() !== ''">{{ t(`sandbox.agentSafetyLog.noDecisionsMatch`, { trim: query.trim() }) }}</template>
+                    <template v-else>{{ t(`sandbox.agentSafetyLog.noDecisionsRecordedYet`, { outcomeFilter: outcomeFilterWord }) }}</template>
+                </RowNote>
 
-                    <template #description>
-                        <span class="block truncate text-2xs text-muted" v-tooltip.top.overflow="entry.sentence">
-                            {{ entry.sentence }}
-                        </span>
-                    </template>
+                <template v-else>
+                    <DisclosureRow
+                        v-for="entry in visibleEntries"
+                        :key="entryKey(entry)"
+                        :open="opened.has(entryKey(entry))"
+                        body="rail"
+                        @update:open="(val) => toggle(entryKey(entry), val)"
+                    >
+                        <template #lead="{ iconClass }">
+                            <Icon :name="statusOf(entry).icon" :class="[iconClass, statusOf(entry).iconTone]" />
+                        </template>
 
-                    <template #meta>
-                        <span
-                            v-if="entry.machine"
-                            class="hidden items-center gap-1 font-mono text-2xs text-subtle @xl:inline-flex"
-                            v-tooltip.top="t(`sandbox.agentSafetyLog.ranOn`)"
-                        >
-                            <Icon name="desktop" class="text-3xs" />
-                            {{ entry.machine }}
-                        </span>
-                        <StatusBadge :variant="statusOf(entry).variant" :label="statusOf(entry).label" size="xs" :dot="statusOf(entry).dot" />
-                        <span class="shrink-0 text-2xs text-subtle" v-tooltip.top="formatDateTime(entry.at)">
-                            {{ timeAgo(entry.at) }}
-                        </span>
-                    </template>
+                        <template #title>
+                            <span class="block truncate font-mono text-xs text-content" v-tooltip.top="entry.program">
+                                {{ commandSummary(entry.program) }}
+                            </span>
+                        </template>
 
-                    <template #below>
-                        <div class="flex flex-col gap-3 py-1 text-xs">
-                            <div>
-                                <div class="text-2xs font-medium uppercase tracking-wider text-subtle">
-                                    {{ t(`sandbox.agentSafetyLog.judgeAssessment`) }}
+                        <template #description>
+                            <span class="block truncate text-2xs text-muted" v-tooltip.top.overflow="entry.sentence">
+                                {{ entry.sentence }}
+                            </span>
+                        </template>
+
+                        <template #meta>
+                            <span
+                                v-if="entry.machine"
+                                class="hidden items-center gap-1 font-mono text-2xs text-subtle @xl:inline-flex"
+                                v-tooltip.top="t(`sandbox.agentSafetyLog.ranOn`)"
+                            >
+                                <Icon name="desktop" class="text-3xs" />
+                                {{ entry.machine }}
+                            </span>
+                            <StatusBadge :variant="statusOf(entry).variant" :label="statusOf(entry).label" size="xs" :dot="statusOf(entry).dot" />
+                            <span class="shrink-0 text-2xs text-subtle" v-tooltip.top="formatDateTime(entry.at)">
+                                {{ timeAgo(entry.at) }}
+                            </span>
+                        </template>
+
+                        <template #below>
+                            <div class="flex flex-col gap-3 py-1 text-xs">
+                                <div>
+                                    <div class="text-2xs font-medium uppercase tracking-wider text-subtle">
+                                        {{ t(`sandbox.agentSafetyLog.judgeAssessment`) }}
+                                    </div>
+                                    <p class="mt-1 leading-relaxed text-content/90">{{ entry.sentence }}</p>
                                 </div>
-                                <p class="mt-1 leading-relaxed text-content/90">{{ entry.sentence }}</p>
-                            </div>
 
-                            <div>
-                                <div class="mb-1 text-2xs font-medium uppercase tracking-wider text-subtle">
-                                    {{ t(`sandbox.agentSafetyLog.programCommand`) }}
+                                <div>
+                                    <div class="mb-1 text-2xs font-medium uppercase tracking-wider text-subtle">
+                                        {{ t(`sandbox.agentSafetyLog.programCommand`) }}
+                                    </div>
+                                    <Code :code="entry.program" lang="bash" :wrap="true" />
                                 </div>
-                                <Code :code="entry.program" lang="bash" :wrap="true" />
-                            </div>
 
-                            <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1 text-2xs text-muted">
-                                <span class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.judge`) }}</span>
-                                    <span class="font-medium text-content capitalize">{{ entry.decision }}</span>
-                                </span>
-                                <span class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.gate`) }}</span>
-                                    <span class="font-medium text-content capitalize">{{ entry.outcome }}</span>
-                                </span>
-                                <span v-if="entry.answer" class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.response`) }}</span>
-                                    <span class="font-medium text-content capitalize">{{ entry.answer }}</span>
-                                </span>
-                                <span v-if="entry.machine" class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.target`) }}</span>
-                                    <span class="font-medium text-content">{{ entry.machine }}</span>
-                                </span>
-                                <span v-if="entry.classes.length > 0" class="inline-flex items-center gap-1.5">
-                                    <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.triage`) }}</span>
-                                    <span class="flex flex-wrap gap-1">
-                                        <span
-                                            v-for="cls in entry.classes"
-                                            :key="cls"
-                                            class="rounded bg-content/5 px-1.5 py-0.5 font-mono text-3xs text-subtle"
-                                        >
-                                            {{ cls }}
+                                <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1 text-2xs text-muted">
+                                    <span class="inline-flex items-center gap-1.5">
+                                        <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.judge`) }}</span>
+                                        <span class="font-medium text-content capitalize">{{ entry.decision }}</span>
+                                    </span>
+                                    <span class="inline-flex items-center gap-1.5">
+                                        <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.gate`) }}</span>
+                                        <span class="font-medium text-content capitalize">{{ entry.outcome }}</span>
+                                    </span>
+                                    <span v-if="entry.answer" class="inline-flex items-center gap-1.5">
+                                        <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.response`) }}</span>
+                                        <span class="font-medium text-content capitalize">{{ entry.answer }}</span>
+                                    </span>
+                                    <span v-if="entry.machine" class="inline-flex items-center gap-1.5">
+                                        <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.target`) }}</span>
+                                        <span class="font-medium text-content">{{ entry.machine }}</span>
+                                    </span>
+                                    <span v-if="entry.classes.length > 0" class="inline-flex items-center gap-1.5">
+                                        <span class="text-subtle">{{ t(`sandbox.agentSafetyLog.triage`) }}</span>
+                                        <span class="flex flex-wrap gap-1">
+                                            <span
+                                                v-for="cls in entry.classes"
+                                                :key="cls"
+                                                class="rounded bg-content/5 px-1.5 py-0.5 font-mono text-3xs text-subtle"
+                                            >
+                                                {{ cls }}
+                                            </span>
                                         </span>
                                     </span>
-                                </span>
-                                <span class="ml-auto font-mono text-subtle">
-                                    {{ formatDateTime(entry.at) }}
-                                </span>
+                                    <span class="ml-auto font-mono text-subtle">
+                                        {{ formatDateTime(entry.at) }}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
-                    </template>
-                </DisclosureRow>
+                        </template>
+                    </DisclosureRow>
 
-                <RowNote
-                    v-if="shouldCollapse"
-                    variant="action"
-                    :icon="expandedList ? 'chevron-up' : 'chevron-down'"
-                    :label="
-                        expandedList
-                            ? t(`sandbox.agentSafetyLog.showFewerDecisions`)
-                            : t(`sandbox.agentSafetyLog.showOlderDecisions`, { hiddenCount })
-                    "
-                    @click="expandedList = !expandedList"
-                />
-            </template>
-        </RowGroup>
-    </div>
+                    <RowNote
+                        v-if="shouldCollapse"
+                        variant="action"
+                        :icon="expandedList ? 'chevron-up' : 'chevron-down'"
+                        :label="
+                            expandedList
+                                ? t(`sandbox.agentSafetyLog.showFewerDecisions`)
+                                : t(`sandbox.agentSafetyLog.showOlderDecisions`, { hiddenCount })
+                        "
+                        @click="expandedList = !expandedList"
+                    />
+                </template>
+            </RowGroup>
+        </div>
+    </Await>
 </template>

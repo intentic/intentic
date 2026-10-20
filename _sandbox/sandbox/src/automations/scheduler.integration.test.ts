@@ -17,7 +17,8 @@ import type { Services } from "../composition.js";
 import { automationConfig, automationRecord } from "../harness/route-stores.testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
-import { resumeInterruptedFires } from "./fire-resume.js";
+import { interruptedFiresInFlight } from "./fire-resume.js";
+import { recoverKinds } from "../seams/restart/in-flight.testing.js";
 import { restartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { fileScheduleCoverageStore } from "./schedule-coverage.js";
@@ -1187,7 +1188,7 @@ test("a journalled fire keeps its lane, thread and session, and the re-fire rest
         yield { kind: "session", sessionId: "sess-2" };
         yield { kind: "done" };
     };
-    await resumeInterruptedFires(drivenBy(withThreads, resumedWake), Date.now(), restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true }));
+    await recoverKinds(drivenBy(withThreads, resumedWake), [interruptedFiresInFlight], restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true }));
     await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
     expect(turns[0]).toMatchObject({ conversationId: "a-front-door-1", sessionId: "sess-1", actsAs: "guest" });
     await waitFor(async () => expect((await threads.get(thread, 60_000, Date.now()))?.sessionId).toBe("sess-2"), SETTLES);
@@ -1453,7 +1454,7 @@ test("the boot pass re-fires every interrupted thread of an automation on its ow
     expect(await conversationsInJournal(services)).toEqual(["a-resumed-t1", "a-resumed-t2"]);
 
     const { wake, started, release } = heldPerConversation();
-    await resumeInterruptedFires(drivenBy(withThreads, wake), Date.now(), restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true }));
+    await recoverKinds(drivenBy(withThreads, wake), [interruptedFiresInFlight], restartResume({ ownerAsked: false, storm: false, autoResumeOnRestart: true }));
     await waitFor(() => expect(started.toSorted()).toEqual(["a-resumed-t1", "a-resumed-t2"]), SETTLES);
 
     release("a-resumed-t1");

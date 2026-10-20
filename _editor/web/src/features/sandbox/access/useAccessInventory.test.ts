@@ -61,10 +61,10 @@ afterEach(() => {
 describe(`useAccessInventory`, () => {
     it(`counts each door from the cache entry the boards read, and the paired machines from two of them`, async () => {
         answer({ devices: 2, runners: 1 }, { webhooks: 3, gates: 1 });
-        const { inventory, loading } = inScope(() => useAccessInventory());
+        const { inventory, loaded } = inScope(() => useAccessInventory());
         await waitFor(() => expect(inventory.value.paired).toEqual({ devices: 2, runners: 1 }));
         expect(inventory.value).toEqual({ webhooks: 3, gates: 1, ciRepos: { total: 2, hooked: 1 }, paired: { devices: 2, runners: 1 } });
-        expect(loading.value).toBe(false);
+        expect(loaded.value).toMatchObject({ state: `ready`, data: inventory.value });
     });
 
     it(`shares the procedure's entry, whole, rather than keeping a reshaped copy of its own`, async () => {
@@ -78,17 +78,17 @@ describe(`useAccessInventory`, () => {
     it(`leaves a door it could not read unknown, and the paired count with it, rather than zero`, async () => {
         answer({ devices: 2, runners: 1 }, { webhooks: 1, gates: 1 });
         reads.devices.mockImplementation(unread);
-        const { inventory, loading } = inScope(() => useAccessInventory());
-        await waitFor(() => expect(loading.value).toBe(false));
+        const { inventory, loaded } = inScope(() => useAccessInventory());
+        await waitFor(() => expect(loaded.value.state).toBe(`ready`));
         expect(inventory.value.webhooks).toBe(1);
         expect(inventory.value.paired).toBeUndefined();
     });
 
-    it(`is not loading while the sandbox is not answering, so its doors read as not readable and not as a skeleton`, async () => {
+    it(`waits while the sandbox is not answering, rather than calling every door unreadable`, async () => {
         signalConnection({ kind: `disconnect` });
-        const { inventory, loading } = inScope(() => useAccessInventory());
+        const { inventory, loaded } = inScope(() => useAccessInventory());
         await new Promise((resolve) => setTimeout(resolve, 50));
-        expect(loading.value).toBe(false);
+        expect(loaded.value.state).toBe(`waiting`);
         expect(inventory.value).toEqual({});
     });
 });

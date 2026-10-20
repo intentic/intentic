@@ -61,13 +61,13 @@ const undo = async (toast: Toast): Promise<void> => {
             <div
                 v-for="toast in toasts"
                 :key="toast.id"
-                class="pointer-events-auto flex items-start gap-3 rounded-xl border border-line bg-card px-4 py-3 shadow-lg"
+                class="pointer-events-auto flex items-start gap-3 rounded-xl border border-line bg-card px-4 py-3 shadow-lg text-sm"
                 @mouseenter="pause(toast.id)"
                 @mouseleave="start(toast.id)"
                 @focusin="pause(toast.id)"
                 @focusout="start(toast.id)"
             >
-                <Icon name="check-circle" class="mt-0.5 text-success" />
+                <Icon name="check-circle" class="text-success" />
                 <div class="flex min-w-0 flex-1 flex-col gap-1">
                     <p class="text-sm text-content">
                         <span class="font-medium">{{ toast.outcome === `updated` ? t(`app.toast.updated`, { title: toast.title }) : t(`app.toast.saved`, { title: toast.title }) }}</span>

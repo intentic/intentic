@@ -65,9 +65,9 @@ export interface SandboxVerbPrompt {
     readonly body: string;
 }
 
-// ONE OF THE VERSIONS A MACHINE KEPT, as the row's Roll back offers it. `to` is what the machine is sent to name it (a
-// version, or the pinned image when it would not say), and absent for the newest, which is where a plain rollback goes
-// anyway. Offered only by a caller whose machine can take `to` at all.
+// ONE OF THE VERSIONS A MACHINE KEPT, as the row's Roll back offers it. `to` is the exact image the machine listed for
+// it, and absent for the newest, which is where a plain rollback goes anyway. Offered only by a caller whose machine can
+// take `to` at all.
 export interface RollbackChoice {
     readonly version: string;
     readonly to: string | undefined;

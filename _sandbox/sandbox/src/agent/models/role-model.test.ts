@@ -6,7 +6,6 @@ import { type SetupLadder, setupsFromRoleLists } from "@intentic/sandbox-contrac
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { PerfFields } from "../../system/resources/perf.js";
-import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
 import { askRoleModel, REFUSED_FOR_MS } from "./role-model.js";
 import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 import { sentenceAnswer } from "../../engines/role-answer.js";
@@ -118,8 +117,6 @@ const fakeServices = (pinned: readonly string[], spent: readonly string[] = []):
             get: async () => setupsFromRoleLists({ [ROLE]: asPins(pinned) }) as Awaited<ReturnType<Services[`sandboxSettings`][`get`]>>,
         }),
         capabilities: unstubbed<Services[`capabilities`]>(`capabilities`, { list: async () => [] }),
-        // The real modules, so a provider keeping its own allowance reading answers for itself.
-        providerModules: PROVIDER_MODULES,
         // One translator account per routed provider, read full where the case spends that provider.
         cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
             accounts: async () => ({
@@ -144,10 +141,10 @@ const fakeServices = (pinned: readonly string[], spent: readonly string[] = []):
         workspace: unstubbed<Services[`workspace`]>(`workspace`, { root: `/work` }),
         // The seam a sealed request's hooks carry; nothing is ever parked on it.
         cards: unstubbed<Services[`cards`]>(`cards`, {}),
-        // An answer settles what its provider last refused, as a turn's first words do.
-        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { clear: async () => {}, onFile: async () => ({}) }),
-        // ...and reopens the model it benched, as the same first words do.
-        modelCooldowns: unstubbed<Services[`modelCooldowns`]>(`modelCooldowns`, { clear: async () => {} }),
+        // An answer settles what its provider was refused before it, as a turn's first words do.
+        providerRefusals: unstubbed<Services[`providerRefusals`]>(`providerRefusals`, { settle: async () => {}, onFile: async () => ({}) }),
+        // No provider here lists accounts through a door of its own.
+        providerAccounts: async () => [],
         logger: unstubbed<Services[`logger`]>(`logger`, {
             debug: () => {},
             info: (fields: object, message: string) => void logged.push({ level: `info`, fields, message }),

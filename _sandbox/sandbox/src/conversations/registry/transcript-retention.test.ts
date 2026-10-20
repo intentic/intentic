@@ -58,7 +58,7 @@ describe("agedConversations", () => {
                 card({ id: "ready", status: "ready" }),
                 card({ id: "conflict", status: "conflict" }),
                 card({ id: "unsent", unsentAt: 1 }),
-                card({ id: "rerun", status: "interrupted", limitScheduled: true }),
+                card({ id: "rerun", status: "interrupted", next: { kind: "rerun", at: 1 } }),
                 card({ id: "watching", watches: [{ id: "watch-k3f9", note: "CI", intervalSeconds: 60, deadlineAt: 1 }] }),
                 card({ id: "stopped", status: "stopped" }),
             ],

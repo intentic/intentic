@@ -1,3 +1,4 @@
+import { AgentErrorCodeSchema } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import { computed, ref } from "vue";
@@ -87,14 +88,15 @@ describe(`a turn that outgrew the model's window`, () => {
         expect(host.reattach).toHaveBeenCalledTimes(0);
     });
 
-    // The fresh session overflowing too is the end of it: nothing is coming back, and nothing here would fix it.
-    it(`is the error line when the fresh re-run overflowed as well, with nothing to press and nothing to watch`, async () => {
+    // The fresh session overflowing too is the end of it: nothing is coming back, and nothing here would fix it. The row
+    // the daemon writes says so; the error line does not say it again.
+    it(`is the row's alone when the fresh re-run overflowed as well, with nothing to press and nothing to watch`, async () => {
         const host = hostOf();
         const failures = new TurnFailures(host);
         const sentence = `Prompt is too long. A fresh session could not hold this turn either.`;
         failures.apply({ kind: `error`, code: `context-overflow`, message: sentence });
 
-        expect(host.error.value).toBe(sentence);
+        expect(host.error.value).toBeNull();
         expect(host.pickUp.value).toBeUndefined();
         failures.armRenewalProbe();
         await advanceTimersByTimeAsync(40_000);
@@ -236,8 +238,21 @@ describe(`an ACP agent that wants signing in`, () => {
         const kept: SessionRef = { id: `s1`, provider: `claude`, account: undefined, harness: `native` };
         host.session.value = kept;
         new TurnFailures(host).apply({ kind: `error`, message: `Authentication required.`, code: `acp-auth-required` });
-        expect(host.error.value).toBe(`Authentication required. Sign this agent in from its row under Capabilities (Sign in).`);
+        expect(host.error.value).toBe(`Sign this agent in from its row under Capabilities (Sign in).`);
         expect(host.session.value).toEqual(kept);
         expect(host.pickUp.value).toBeUndefined();
     });
+});
+
+// The error line is this window's own words. No failure, whatever its code or none, puts what was said on it: a failure
+// is drawn once, by the coded row the daemon writes for it (failure-rows.ts), never a second time raw above the composer
+// (21e4260d93; Google's "Verify your account to continue." printed twice, 2026-10).
+it(`never puts a failure's own words on the error line, whatever its code`, () => {
+    for (const code of [...AgentErrorCodeSchema.options, undefined]) {
+        const host = { ...hostOf(), selection: unstubbed<FailureHost["selection"]>(`selection`, { provider: computed(() => `claude`) }) };
+        const failures = new TurnFailures(host);
+        failures.apply({ kind: `error`, message: `The provider's own words.`, code });
+        failures.cancelProbe();
+        expect([code, host.error.value?.includes(`own words`) === true, failures.failedTurn]).toEqual([code, false, true]);
+    }
 });

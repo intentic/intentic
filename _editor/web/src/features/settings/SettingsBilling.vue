@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { HOSTED_PLAN_MAX_SLOTS } from "@intentic/api-contract";
-import { Button, formatElapsed, Notice, RowGroup, RowNote, SkeletonSnapshot, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
-import { messageOr, type NoticeModel, usePoll } from "@intentic/ui/async";
+import { Await, Button, formatElapsed, Notice, RowGroup, RowNote } from "@intentic/ui";
+import { type NoticeModel, usePoll } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, onMounted } from "vue";
 import { RouterLink, useRoute } from "vue-router";
@@ -33,14 +33,7 @@ import { useWaitClock } from "../../components/useWaitClock";
 
 const t = useT();
 
-const { state: plan, error, refetch, setSlots, changeTier, tiers } = useHostedPlan();
-
-const loadError = computed(() => (error.value === null ? undefined : messageOr(error.value, t(`settings.settingsBilling.couldntLoadPlan`))));
-
-const outline = useLoadingReveal(
-    computed(() => plan.value === undefined && error.value === null),
-    computed(() => `hosted-plan`),
-);
+const { state: plan, loaded, refetch, setSlots, changeTier, tiers } = useHostedPlan();
 
 // Stripe's webhook can land seconds after redirect, so the first read after checkout may still say not-on-plan. Polls
 // instead of asking for a reload, and gives up after a bounded wait.
@@ -253,304 +246,309 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
             }"
         />
 
-        <Notice v-if="loadError" :of="{ tone: `danger`, title: t(`settings.settingsBilling.couldntLoadYourPlan`), detail: loadError }" />
-
-        <RowGroup v-else-if="plan && !plan.enabled" v-skeleton-source="`settings.billing`" :label="t(`settings.settingsBilling.billing`)">
-            <RowNote variant="block">
-                <p class="text-xs text-muted">{{ t(`settings.settingsBilling.platformDoesntSellHosted`) }}</p>
-            </RowNote>
-        </RowGroup>
-
-        <!-- One element, so its imprint is the whole page the wait stood in for; spaced as the column it sits in. -->
-        <div v-else-if="plan" v-skeleton-source="`settings.billing`" class="flex flex-col gap-6">
-            <!-- The plan: one line for where things stand, one door. -->
-
-            <!-- Complimentary: the operator's comp list; nothing to manage or buy. -->
-            <RowGroup v-if="plan.onPlan && comped" :label="t(`settings.settingsBilling.hostedPlan`)">
-                <RowNote variant="block">
-                    <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.complimentary`) }}</p>
-                    <p class="mt-1 text-xs text-muted">{{ t(`settings.settingsBilling.compedOnTheHouse`) }}</p>
-                </RowNote>
-            </RowGroup>
-
-            <!-- On the plan: the date, the consequence if ending, and the one door. -->
-            <RowGroup v-else-if="plan.onPlan" :label="t(`settings.settingsBilling.hostedPlan`)">
-                <template v-if="periodEnd" #actions>
-                    <span class="text-2xs" :class="cancelling ? `text-warning` : `text-subtle`">{{ dateWord }} {{ periodEnd }}</span>
-                </template>
-                <RowNote variant="block">
-                    <div class="flex flex-col gap-3">
-                        <template v-if="cancelling">
-                            <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.planEnds`, { periodEnd }) }}</p>
-                            <p class="text-xs text-muted">
-                                {{ t(`settings.settingsBilling.afterThatFreeHours`, { count: machines.length }, machines.length) }}
-                            </p>
-                        </template>
-                        <template v-else>
-                            <p class="text-sm font-medium text-content">
-                                {{ onTrial ? t(`settings.settingsBilling.youreOnTrial`) : t(`settings.settingsBilling.onHostedPlan`) }}
-                            </p>
-                            <p class="text-xs text-muted">
-                                {{ t(`settings.settingsBilling.slotsOnPlan`, { count: paidSlots }, paidSlots) }}
-                            </p>
-                        </template>
-                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                            <Button
-                                :label="cancelling ? t(`settings.settingsBilling.resumeOnStripe`) : t(`settings.settingsBilling.manageOnStripe`)"
-                                size="small"
-                                tier="loud"
-                                :loading="working"
-                                @click="open(`portal`)"
-                            />
-                            <span v-if="!cancelling" class="text-2xs text-subtle">{{ t(`settings.settingsBilling.cardInvoicesCancellingOn`) }}</span>
-                        </div>
-                    </div>
-                </RowNote>
-            </RowGroup>
-
-            <!-- Lapsed: a subscriber whose card stopped working; one thing to do, no sales pitch. -->
-            <RowGroup v-else-if="lapsed" :label="t(`settings.settingsBilling.hostedPlan`)">
-                <RowNote variant="block">
-                    <div class="flex flex-col gap-3">
-                        <p class="text-sm font-medium text-warning">{{ t(`settings.settingsBilling.planNeedsWorkingCard`) }}</p>
-                        <p class="text-xs text-muted">{{ t(`settings.settingsBilling.paymentFailedFreeHours`) }}</p>
-                        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                            <Button
-                                :label="t(`settings.settingsBilling.updatePaymentOnStripe`)"
-                                :loading="working"
-                                tier="loud"
-                                @click="open(`portal`)"
-                            />
-                            <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.stripeReportsPlan`, { lapsed }) }}</p>
-                        </div>
-                    </div>
-                </RowNote>
-            </RowGroup>
-
-            <!-- Activating: the webhook's few seconds, owned by the app instead of handed back to the payer. -->
-            <RowGroup v-else-if="justJoined && waiting" :label="t(`settings.settingsBilling.hostedPlan`)">
-                <RowNote variant="block">
-                    <div class="flex flex-col gap-2">
-                        <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.paymentReceivedActivatingPlan`) }}</p>
-                        <p class="text-xs text-muted">{{ t(`settings.settingsBilling.activating`) }}</p>
-                    </div>
-                </RowNote>
-            </RowGroup>
-
-            <!-- Checkout, open in the reader's browser: this replaces the offer rather than sitting beside it, since a
-                 second press here would be a second subscription on one account. -->
-            <RowGroup v-else-if="away === `checkout`" :label="t(`settings.settingsBilling.hostedPlan`)">
-                <RowNote variant="block">
-                    <div class="flex flex-col gap-3">
-                        <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.checkoutOpenInBrowser`) }}</p>
-                        <p class="text-xs text-muted">{{ t(`settings.settingsBilling.finishPayingThereNothing`) }}</p>
-                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                            <!-- Says the page is watching, rather than offering a press that would only start the read
-                                 already running. Coming back to this window re-arms it either way. -->
-                            <p class="flex items-center gap-2 text-xs text-muted">
-                                <Icon name="spinner" spin class="text-info" />
-                                {{ t(`settings.settingsBilling.waitingForStripe`) }}
-                            </p>
-                            <Button :label="t(`settings.settingsBilling.didntPayAfterAll`)" size="small" tier="quiet" @click="dropAway" />
-                        </div>
-                    </div>
-                </RowNote>
-            </RowGroup>
-
-            <!-- The offer: the one buying surface in the product. -->
-            <template v-else>
-                <Notice
-                    v-if="justJoined && !waiting"
-                    :of="{
-                        tone: `info`,
-                        title: t(`settings.settingsBilling.paymentWentThrough`),
-                        detail: t(`settings.settingsBilling.paymentWentThroughDetail`),
-                    }"
-                />
-                <Notice
-                    v-if="returning"
-                    :of="{
-                        tone: `info`,
-                        title: t(`settings.settingsBilling.previousPlanEnded`),
-                        detail: t(`settings.settingsBilling.previousPlanEndedDetail`),
-                    }"
-                />
-                <HostedPlanOffer :subscribe-label="buyLabel" :working="working" @checkout="open(`checkout`)" />
+        <!-- The page as it last looked here while the plan is read, else the outline of one. -->
+        <Await :of="loaded" imprint="settings.billing" :label="t(`settings.settingsBilling.readingPlan`)">
+            <template #failed="{ error: failure }">
+                <Notice :of="{ tone: `danger`, title: t(`settings.settingsBilling.couldntLoadYourPlan`), detail: failure }" />
             </template>
-
-            <!-- The hosted sandboxes, how many there is room for, and the hours each one spends: the only place on this page
-                 hours are stated, beside the machines that spend them. -->
-            <RowGroup
-                v-if="hosted"
-                :label="t(`settings.settingsBilling.hostedSandboxes`)"
-            >
-                <!-- The one state where cancelling is the advice, not the door. -->
-                <RowNote v-if="planWithoutMachine" variant="block">
-                    <div class="flex flex-col gap-3">
-                        <p class="text-sm font-medium text-warning">{{ t(`settings.settingsBilling.planCoversHostedSandbox`) }}</p>
-                        <p class="text-xs text-muted">{{ t(`settings.settingsBilling.payingMachineIsntStart`) }}</p>
-                        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-                            <Button
-                                :as="RouterLink"
-                                :to="HOSTED_SETUP"
-                                :label="t(`settings.settingsBilling.startHostedSandbox`)"
-                                size="small"
-                                tier="loud"
-                            />
-                            <Button
-                                :label="t(`settings.settingsBilling.cancelOnStripe`)"
-                                size="small"
-                                tier="boring"
-                                :loading="working"
-                                @click="open(`portal`)"
-                            />
+            <template #fallback>
+                <RowGroup role="status" aria-busy="true" :aria-label="t(`settings.settingsBilling.readingPlan`)">
+                    <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
+                    <RowNote variant="block">
+                        <div class="flex flex-col gap-2" aria-hidden="true">
+                            <span class="skeleton block h-8 w-56" />
+                            <span class="skeleton block h-2.5 w-full max-w-md" />
+                            <span class="skeleton block h-2.5 w-2/3 max-w-sm" />
                         </div>
-                    </div>
-                </RowNote>
-                <RowNote v-else-if="machines.length === 0" variant="block">
-                    <p class="text-xs text-muted">
-                        {{ t(`settings.settingsBilling.noneYet`) }}
-                        <RouterLink :to="HOSTED_SETUP" class="text-link hover:underline">{{ t(`settings.settingsBilling.startOne`) }}</RouterLink
-                        >{{ t(`settings.settingsBilling.freeInSeconds`) }}
-                        <template v-if="freeHoursNote">{{ freeHoursNote }}</template>
-                    </p>
-                </RowNote>
-                <RowNote v-else variant="block">
-                    <ul class="flex flex-col divide-y divide-line">
-                        <li
-                            v-for="machine in machines"
-                            :key="machine.sandboxId"
-                            class="flex items-baseline justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
-                        >
-                            <div class="flex min-w-0 flex-col gap-1">
-                                <span class="min-w-0 truncate text-sm text-content">{{ machine.name }}</span>
-                                <!-- This machine's own shape and month, from its row: once rungs differ, the account has neither. -->
-                                <span class="text-2xs text-subtle">
-                                    {{ machineWords(machine.shape) }} · {{ machine.region }} · {{ machineState(machine.wokeAt) }}
-                                </span>
-                                <!-- Whose hours this machine spends and what is left of them: its own month on a slot, or
-                                     the account's free hours, shared when another machine spends them too. -->
-                                <HostedHoursMeter :hours="hoursOf(machine)" grow class="max-w-sm py-0.5" />
-                                <!-- The one upgrade prompt on this page, and it is a fact the provider reported rather
-                                     than a pitch: this machine was killed for memory, this many times, at this size. -->
-                                <span v-if="machine.oomsThisWeek > 0" class="text-2xs text-warning">
-                                    {{
-                                        t(
-                                            `settings.settingsBilling.ranOutOfMemory`,
-                                            { count: machine.oomsThisWeek, memory: machine.shape.memoryMb / 1024 },
-                                            machine.oomsThisWeek,
-                                        )
-                                    }}
-                                </span>
-                                <!-- Moving is its own act: the slot is already bought, and this puts the machine on it. -->
-                                <span v-if="hosted" class="flex flex-wrap items-center gap-1.5">
+                    </RowNote>
+                </RowGroup>
+            </template>
+            <template #default="{ data: plan, refreshError }">
+                <Notice v-if="refreshError" :of="{ tone: `danger`, title: t(`settings.settingsBilling.couldntLoadYourPlan`), detail: refreshError }" />
+
+                <RowGroup v-if="!plan.enabled" :label="t(`settings.settingsBilling.billing`)">
+                    <RowNote variant="block">
+                        <p class="text-xs text-muted">{{ t(`settings.settingsBilling.platformDoesntSellHosted`) }}</p>
+                    </RowNote>
+                </RowGroup>
+
+                <div v-else class="flex flex-col gap-6">
+                    <!-- The plan: one line for where things stand, one door. -->
+
+                    <!-- Complimentary: the operator's comp list; nothing to manage or buy. -->
+                    <RowGroup v-if="plan.onPlan && comped" :label="t(`settings.settingsBilling.hostedPlan`)">
+                        <RowNote variant="block">
+                            <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.complimentary`) }}</p>
+                            <p class="mt-1 text-xs text-muted">{{ t(`settings.settingsBilling.compedOnTheHouse`) }}</p>
+                        </RowNote>
+                    </RowGroup>
+
+                    <!-- On the plan: the date, the consequence if ending, and the one door. -->
+                    <RowGroup v-else-if="plan.onPlan" :label="t(`settings.settingsBilling.hostedPlan`)">
+                        <template v-if="periodEnd" #actions>
+                            <span class="text-2xs" :class="cancelling ? `text-warning` : `text-subtle`">{{ dateWord }} {{ periodEnd }}</span>
+                        </template>
+                        <RowNote variant="block">
+                            <div class="flex flex-col gap-3">
+                                <template v-if="cancelling">
+                                    <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.planEnds`, { periodEnd }) }}</p>
+                                    <p class="text-xs text-muted">
+                                        {{ t(`settings.settingsBilling.afterThatFreeHours`, { count: machines.length }, machines.length) }}
+                                    </p>
+                                </template>
+                                <template v-else>
+                                    <p class="text-sm font-medium text-content">
+                                        {{ onTrial ? t(`settings.settingsBilling.youreOnTrial`) : t(`settings.settingsBilling.onHostedPlan`) }}
+                                    </p>
+                                    <p class="text-xs text-muted">
+                                        {{ t(`settings.settingsBilling.slotsOnPlan`, { count: paidSlots }, paidSlots) }}
+                                    </p>
+                                </template>
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                                     <Button
-                                        v-for="rung in ladder"
-                                        :key="rung.id"
-                                        :label="t(`settings.settingsBilling.moveToRung`, { name: rung.name })"
+                                        :label="cancelling ? t(`settings.settingsBilling.resumeOnStripe`) : t(`settings.settingsBilling.manageOnStripe`)"
                                         size="small"
-                                        tier="quiet"
-                                        :disabled="!canMoveTo(machine, rung)"
-                                        :loading="moving === machine.sandboxId"
-                                        @click="moveTo(machine.sandboxId, rung.id)"
+                                        tier="loud"
+                                        :loading="working"
+                                        @click="open(`portal`)"
                                     />
+                                    <span v-if="!cancelling" class="text-2xs text-subtle">{{ t(`settings.settingsBilling.cardInvoicesCancellingOn`) }}</span>
+                                </div>
+                            </div>
+                        </RowNote>
+                    </RowGroup>
+
+                    <!-- Lapsed: a subscriber whose card stopped working; one thing to do, no sales pitch. -->
+                    <RowGroup v-else-if="lapsed" :label="t(`settings.settingsBilling.hostedPlan`)">
+                        <RowNote variant="block">
+                            <div class="flex flex-col gap-3">
+                                <p class="text-sm font-medium text-warning">{{ t(`settings.settingsBilling.planNeedsWorkingCard`) }}</p>
+                                <p class="text-xs text-muted">{{ t(`settings.settingsBilling.paymentFailedFreeHours`) }}</p>
+                                <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                                    <Button
+                                        :label="t(`settings.settingsBilling.updatePaymentOnStripe`)"
+                                        :loading="working"
+                                        tier="loud"
+                                        @click="open(`portal`)"
+                                    />
+                                    <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.stripeReportsPlan`, { lapsed }) }}</p>
+                                </div>
+                            </div>
+                        </RowNote>
+                    </RowGroup>
+
+                    <!-- Activating: the webhook's few seconds, owned by the app instead of handed back to the payer. -->
+                    <RowGroup v-else-if="justJoined && waiting" :label="t(`settings.settingsBilling.hostedPlan`)">
+                        <RowNote variant="block">
+                            <div class="flex flex-col gap-2">
+                                <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.paymentReceivedActivatingPlan`) }}</p>
+                                <p class="text-xs text-muted">{{ t(`settings.settingsBilling.activating`) }}</p>
+                            </div>
+                        </RowNote>
+                    </RowGroup>
+
+                    <!-- Checkout, open in the reader's browser: this replaces the offer rather than sitting beside it, since a
+                         second press here would be a second subscription on one account. -->
+                    <RowGroup v-else-if="away === `checkout`" :label="t(`settings.settingsBilling.hostedPlan`)">
+                        <RowNote variant="block">
+                            <div class="flex flex-col gap-3">
+                                <p class="text-sm font-medium text-content">{{ t(`settings.settingsBilling.checkoutOpenInBrowser`) }}</p>
+                                <p class="text-xs text-muted">{{ t(`settings.settingsBilling.finishPayingThereNothing`) }}</p>
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                    <!-- Says the page is watching, rather than offering a press that would only start the read
+                                         already running. Coming back to this window re-arms it either way. -->
+                                    <p class="flex items-center gap-2 text-xs text-muted">
+                                        <Icon name="spinner" spin class="text-info" />
+                                        {{ t(`settings.settingsBilling.waitingForStripe`) }}
+                                    </p>
+                                    <Button :label="t(`settings.settingsBilling.didntPayAfterAll`)" size="small" tier="quiet" @click="dropAway" />
+                                </div>
+                            </div>
+                        </RowNote>
+                    </RowGroup>
+
+                    <!-- The offer: the one buying surface in the product. -->
+                    <template v-else>
+                        <Notice
+                            v-if="justJoined && !waiting"
+                            :of="{
+                                tone: `info`,
+                                title: t(`settings.settingsBilling.paymentWentThrough`),
+                                detail: t(`settings.settingsBilling.paymentWentThroughDetail`),
+                            }"
+                        />
+                        <Notice
+                            v-if="returning"
+                            :of="{
+                                tone: `info`,
+                                title: t(`settings.settingsBilling.previousPlanEnded`),
+                                detail: t(`settings.settingsBilling.previousPlanEndedDetail`),
+                            }"
+                        />
+                        <HostedPlanOffer :subscribe-label="buyLabel" :working="working" @checkout="open(`checkout`)" />
+                    </template>
+
+                    <!-- The hosted sandboxes, how many there is room for, and the hours each one spends: the only place on this page
+                         hours are stated, beside the machines that spend them. -->
+                    <RowGroup
+                        v-if="hosted"
+                        :label="t(`settings.settingsBilling.hostedSandboxes`)"
+                    >
+                        <!-- The one state where cancelling is the advice, not the door. -->
+                        <RowNote v-if="planWithoutMachine" variant="block">
+                            <div class="flex flex-col gap-3">
+                                <p class="text-sm font-medium text-warning">{{ t(`settings.settingsBilling.planCoversHostedSandbox`) }}</p>
+                                <p class="text-xs text-muted">{{ t(`settings.settingsBilling.payingMachineIsntStart`) }}</p>
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                    <Button
+                                        :as="RouterLink"
+                                        :to="HOSTED_SETUP"
+                                        :label="t(`settings.settingsBilling.startHostedSandbox`)"
+                                        size="small"
+                                        tier="loud"
+                                    />
+                                    <Button
+                                        :label="t(`settings.settingsBilling.cancelOnStripe`)"
+                                        size="small"
+                                        tier="boring"
+                                        :loading="working"
+                                        @click="open(`portal`)"
+                                    />
+                                </div>
+                            </div>
+                        </RowNote>
+                        <RowNote v-else-if="machines.length === 0" variant="block">
+                            <p class="text-xs text-muted">
+                                {{ t(`settings.settingsBilling.noneYet`) }}
+                                <RouterLink :to="HOSTED_SETUP" class="text-link hover:underline">{{ t(`settings.settingsBilling.startOne`) }}</RouterLink
+                                >{{ t(`settings.settingsBilling.freeInSeconds`) }}
+                                <template v-if="freeHoursNote">{{ freeHoursNote }}</template>
+                            </p>
+                        </RowNote>
+                        <RowNote v-else variant="block">
+                            <ul class="flex flex-col divide-y divide-line">
+                                <li
+                                    v-for="machine in machines"
+                                    :key="machine.sandboxId"
+                                    class="flex items-baseline justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
+                                >
+                                    <div class="flex min-w-0 flex-col gap-1">
+                                        <span class="min-w-0 truncate text-sm text-content">{{ machine.name }}</span>
+                                        <!-- This machine's own shape and month, from its row: once rungs differ, the account has neither. -->
+                                        <span class="text-2xs text-subtle">
+                                            {{ machineWords(machine.shape) }} · {{ machine.region }} · {{ machineState(machine.wokeAt) }}
+                                        </span>
+                                        <!-- Whose hours this machine spends and what is left of them: its own month on a slot, or
+                                             the account's free hours, shared when another machine spends them too. -->
+                                        <HostedHoursMeter :hours="hoursOf(machine)" grow class="max-w-sm py-0.5" />
+                                        <!-- The one upgrade prompt on this page, and it is a fact the provider reported rather
+                                             than a pitch: this machine was killed for memory, this many times, at this size. -->
+                                        <span v-if="machine.oomsThisWeek > 0" class="text-2xs text-warning">
+                                            {{
+                                                t(
+                                                    `settings.settingsBilling.ranOutOfMemory`,
+                                                    { count: machine.oomsThisWeek, memory: machine.shape.memoryMb / 1024 },
+                                                    machine.oomsThisWeek,
+                                                )
+                                            }}
+                                        </span>
+                                        <!-- Moving is its own act: the slot is already bought, and this puts the machine on it. -->
+                                        <span v-if="hosted" class="flex flex-wrap items-center gap-1.5">
+                                            <Button
+                                                v-for="rung in ladder"
+                                                :key="rung.id"
+                                                :label="t(`settings.settingsBilling.moveToRung`, { name: rung.name })"
+                                                size="small"
+                                                tier="quiet"
+                                                :disabled="!canMoveTo(machine, rung)"
+                                                :loading="moving === machine.sandboxId"
+                                                @click="moveTo(machine.sandboxId, rung.id)"
+                                            />
+                                        </span>
+                                        <WaitProgress
+                                            v-if="moving === machine.sandboxId && moveWait"
+                                            :wait="moveWait"
+                                            :what="t(`settings.settingsBilling.movingNote`)"
+                                            :details="move.lines.value"
+                                            class="max-w-sm"
+                                        />
+                                    </div>
+                                </li>
+                            </ul>
+                        </RowNote>
+                        <!-- Said once, as the list's last line, because it is the question a limit shown anywhere raises first:
+                             what is counted, and that a sandbox on the reader's own computer never is. -->
+                        <RowNote v-if="resetsOn" variant="block">
+                            <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.hoursFootnote`, { resetsOn }) }}</p>
+                        </RowNote>
+                        <p v-if="moveError" class="mt-2 text-2xs text-danger">{{ moveError }}</p>
+                    </RowGroup>
+
+                    <!-- The ladder: every machine there is, what it costs, and how many of each this account holds. -->
+                    <RowGroup v-if="hosted" :label="t(`settings.settingsBilling.theMachines`)">
+                        <RowNote v-for="rung in ladder" :key="rung.id" variant="block">
+                            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                                <span class="text-sm font-medium text-content">{{ rung.name }}</span>
+                                <span class="text-2xs text-subtle">
+                                    {{ rung.priceUsd === 0 ? t(`settings.settingsBilling.noCard`) : t(`settings.settingsBilling.pricePerMonth`, { price: rung.priceUsd }) }}
                                 </span>
-                                <WaitProgress
-                                    v-if="moving === machine.sandboxId && moveWait"
-                                    :wait="moveWait"
-                                    :what="t(`settings.settingsBilling.movingNote`)"
-                                    :details="move.lines.value"
-                                    class="max-w-sm"
+                            </div>
+                            <p class="mt-1 text-xs text-muted">
+                                {{ rung.shape }} · {{ t(`settings.settingsBilling.awakeHoursMonth`, { hours: rung.hours }) }}
+                            </p>
+                            <div v-if="paying && rung.priceUsd > 0" class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                                <span class="text-2xs text-subtle">{{ t(`settings.settingsBilling.slotsHeld`, { held: rung.held, standing: rung.standing }) }}</span>
+                                <Button
+                                    :label="t(`settings.settingsBilling.addSlotAt`, { price: rung.priceUsd })"
+                                    size="small"
+                                    tier="boring"
+                                    :disabled="rung.held >= HOSTED_PLAN_MAX_SLOTS"
+                                    :loading="slotsWorking"
+                                    @click="changeSlots(rung.id, rung.held + 1)"
+                                />
+                                <Button
+                                    v-if="rung.held > 0"
+                                    :label="t(`settings.settingsBilling.removeSlot`)"
+                                    size="small"
+                                    tier="quiet"
+                                    :disabled="rung.standing >= rung.held"
+                                    :loading="slotsWorking"
+                                    v-tooltip.top="
+                                        rung.standing < rung.held
+                                            ? undefined
+                                            : { title: t(`settings.settingsBilling.slotsInUse`), note: t(`settings.settingsBilling.removeSandboxFirst`) }
+                                    "
+                                    @click="changeSlots(rung.id, rung.held - 1)"
                                 />
                             </div>
-                        </li>
-                    </ul>
-                </RowNote>
-                <!-- Said once, as the list's last line, because it is the question a limit shown anywhere raises first:
-                     what is counted, and that a sandbox on the reader's own computer never is. -->
-                <RowNote v-if="resetsOn" variant="block">
-                    <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.hoursFootnote`, { resetsOn }) }}</p>
-                </RowNote>
-                <p v-if="moveError" class="mt-2 text-2xs text-danger">{{ moveError }}</p>
-            </RowGroup>
+                        </RowNote>
+                        <RowNote variant="block">
+                            <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.chargedRestMonthStripe`) }}</p>
+                            <p v-if="slotsError" class="mt-2 text-2xs text-danger">{{ slotsError }}</p>
+                        </RowNote>
+                    </RowGroup>
 
-            <!-- The ladder: every machine there is, what it costs, and how many of each this account holds. -->
-            <RowGroup v-if="hosted" :label="t(`settings.settingsBilling.theMachines`)">
-                <RowNote v-for="rung in ladder" :key="rung.id" variant="block">
-                    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                        <span class="text-sm font-medium text-content">{{ rung.name }}</span>
-                        <span class="text-2xs text-subtle">
-                            {{ rung.priceUsd === 0 ? t(`settings.settingsBilling.noCard`) : t(`settings.settingsBilling.pricePerMonth`, { price: rung.priceUsd }) }}
-                        </span>
-                    </div>
-                    <p class="mt-1 text-xs text-muted">
-                        {{ rung.shape }} · {{ t(`settings.settingsBilling.awakeHoursMonth`, { hours: rung.hours }) }}
-                    </p>
-                    <div v-if="paying && rung.priceUsd > 0" class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                        <span class="text-2xs text-subtle">{{ t(`settings.settingsBilling.slotsHeld`, { held: rung.held, standing: rung.standing }) }}</span>
-                        <Button
-                            :label="t(`settings.settingsBilling.addSlotAt`, { price: rung.priceUsd })"
-                            size="small"
-                            tier="boring"
-                            :disabled="rung.held >= HOSTED_PLAN_MAX_SLOTS"
-                            :loading="slotsWorking"
-                            @click="changeSlots(rung.id, rung.held + 1)"
-                        />
-                        <Button
-                            v-if="rung.held > 0"
-                            :label="t(`settings.settingsBilling.removeSlot`)"
-                            size="small"
-                            tier="quiet"
-                            :disabled="rung.standing >= rung.held"
-                            :loading="slotsWorking"
-                            v-tooltip.top="
-                                rung.standing < rung.held
-                                    ? undefined
-                                    : { title: t(`settings.settingsBilling.slotsInUse`), note: t(`settings.settingsBilling.removeSandboxFirst`) }
-                            "
-                            @click="changeSlots(rung.id, rung.held - 1)"
-                        />
-                    </div>
-                </RowNote>
-                <RowNote variant="block">
-                    <p class="text-2xs text-subtle">{{ t(`settings.settingsBilling.chargedRestMonthStripe`) }}</p>
-                    <p v-if="slotsError" class="mt-2 text-2xs text-danger">{{ slotsError }}</p>
-                </RowNote>
-            </RowGroup>
-
-            <!-- How hosting works: what the free machine and a slot each come with, what an hour is, and what is never
-                 counted at all. -->
-            <RowGroup v-if="hosted" :label="t(`settings.settingsBilling.howHostingWorks`)">
-                <RowNote variant="block">
-                    <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-xs @lg:grid-cols-[auto_1fr]">
-                        <dt class="text-subtle">{{ t(`settings.settingsBilling.freePlan`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.freePlanTerms`, { hours: hosted.freeTier.monthlyHours }) }}</dd>
-                        <dt class="text-subtle">{{ t(`settings.settingsBilling.onPlan`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.slotTerms`) }}</dd>
-                        <dt class="text-subtle">{{ t(`settings.settingsBilling.awakeHours`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.awakeHoursTerms`) }}</dd>
-                        <dt class="text-subtle">{{ t(`settings.settingsBilling.ownComputer`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.ownComputerTerms`) }}</dd>
-                        <dt class="text-subtle">{{ t(`settings.settingsBilling.teams`) }}</dt>
-                        <dd class="text-muted">{{ t(`settings.settingsBilling.sharedSandboxSpendsOwners`) }}</dd>
-                    </dl>
-                </RowNote>
-            </RowGroup>
-        </div>
-
-        <SkeletonSnapshot v-else-if="outline" of="settings.billing" :label="t(`settings.settingsBilling.readingPlan`)">
-            <RowGroup role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`settings.settingsBilling.readingPlan`) }}</span>
-                <template #label><span class="skeleton block h-2.5 w-28" aria-hidden="true" /></template>
-                <RowNote variant="block">
-                    <div class="flex flex-col gap-2" aria-hidden="true">
-                        <span class="skeleton block h-8 w-56" />
-                        <span class="skeleton block h-2.5 w-full max-w-md" />
-                        <span class="skeleton block h-2.5 w-2/3 max-w-sm" />
-                    </div>
-                </RowNote>
-            </RowGroup>
-        </SkeletonSnapshot>
+                    <!-- How hosting works: what the free machine and a slot each come with, what an hour is, and what is never
+                         counted at all. -->
+                    <RowGroup v-if="hosted" :label="t(`settings.settingsBilling.howHostingWorks`)">
+                        <RowNote variant="block">
+                            <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-xs @lg:grid-cols-[auto_1fr]">
+                                <dt class="text-subtle">{{ t(`settings.settingsBilling.freePlan`) }}</dt>
+                                <dd class="text-muted">{{ t(`settings.settingsBilling.freePlanTerms`, { hours: hosted.freeTier.monthlyHours }) }}</dd>
+                                <dt class="text-subtle">{{ t(`settings.settingsBilling.onPlan`) }}</dt>
+                                <dd class="text-muted">{{ t(`settings.settingsBilling.slotTerms`) }}</dd>
+                                <dt class="text-subtle">{{ t(`settings.settingsBilling.awakeHours`) }}</dt>
+                                <dd class="text-muted">{{ t(`settings.settingsBilling.awakeHoursTerms`) }}</dd>
+                                <dt class="text-subtle">{{ t(`settings.settingsBilling.ownComputer`) }}</dt>
+                                <dd class="text-muted">{{ t(`settings.settingsBilling.ownComputerTerms`) }}</dd>
+                                <dt class="text-subtle">{{ t(`settings.settingsBilling.teams`) }}</dt>
+                                <dd class="text-muted">{{ t(`settings.settingsBilling.sharedSandboxSpendsOwners`) }}</dd>
+                            </dl>
+                        </RowNote>
+                    </RowGroup>
+                </div>
+            </template>
+        </Await>
 
         <Notice v-if="errandFailure" :of="errandFailure" />
     </div>

@@ -293,18 +293,14 @@ test("Codex resolves the catalog default when the turn pins no model", async () 
 });
 
 // (2026-10-20) The translator's bench is how long a Codex rate limit lasts, which Codex never tells its client; the
-// subscription turn carries it, read for the model it runs, so a wait known to be hours long is handed over at once.
+// subscription turn carries it, judged by the one rule for the model it runs, so a wait known to be hours long is
+// handed over at once.
 test("a Codex subscription turn carries its allowance, read for the model it runs", async () => {
-    const asked: string[] = [];
     const services = servicesWith({
         codexThreadExists: async () => true,
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
-            accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
-            turnLimit: async (provider, model) => {
-                asked.push(`${provider}/${model}`);
-                return { spent: 1, withHeadroom: 0, reopensAt: 1_800_000_000 };
-            },
+            accounts: async () => ({ codex: [{ name: "sub", label: "sub", cooling: { until: 1_800_000_000, reason: "429" } }], grok: [], kimi: [], gemini: [] }),
         }),
         codexModels: unstubbed<Services["codexModels"]>("codexModels", {
             models: async () => ({ models: [{ id: "gpt-5.6-codex", label: "GPT 5.6 Codex" }], default: "gpt-5.6-codex" }),
@@ -314,8 +310,12 @@ test("a Codex subscription turn carries its allowance, read for the model it run
     const plan = await planTurn(services, turn({ agent: "codex" }), context);
 
     const credential = (plan as { request: AgentRequest }).request.credential;
-    expect(credential.kind === "codex-endpoint" ? await credential.allowance?.limit?.() : undefined).toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_800_000_000 });
-    expect(asked).toEqual(["codex/gpt-5.6-codex"]);
+    expect(credential.kind === "codex-endpoint" ? await credential.allowance?.capacity?.() : undefined).toEqual({
+        kind: "spent",
+        accounts: 1,
+        reopensAt: 1_800_000_000,
+        pool: undefined,
+    });
 });
 
 // A turn nobody started acts as no one, so it reaches none of the sandbox's signed-in accounts. Denying the skills is
@@ -606,7 +606,7 @@ describe("a conversation whose account can no longer serve it", () => {
             accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", {
                 read: async () => (ready ? { seatless: { ...roomy, windows: [] }, spare: roomy } : { seatless: { ...roomy, windows: [] } }),
             }),
-            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { read: async () => ({}), onFile: async () => ({}) }),
+            providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
         });
 
     const marked = () => ({

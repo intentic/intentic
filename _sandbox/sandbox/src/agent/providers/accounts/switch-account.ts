@@ -2,8 +2,6 @@ import type { SwitchAccount } from "@intentic/sandbox-contract/schemas/providers
 import { type AgentHarness, type AgentProvider, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
 import { allowanceWall, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
-import { limitBooking } from "../../../conversations/actor/limit-booking.js";
-import { breakPolicyFor } from "../../run/turn/break-policy.js";
 import { opt } from "../../../opt.js";
 
 // The one command that moves a conversation to another account (routing.ts reads where it points from then on). Asked to
@@ -104,9 +102,8 @@ export const switchAccount = async (
         if (handoff !== undefined) {
             services.conversations.send(conversationId, { kind: "handoff-chosen", handoff });
         }
-        // The booking the pick leaves, written with the move, so the card's one broadcast says when the turn now goes.
-        const booking = limitBooking(services.conversations.state(conversationId)?.resume.held, await breakPolicyFor(services, conversationId, "limit"));
-        await services.agents.switchAccount(conversationId, account, { ...opt("resetsAt", reopening.shown), ...opt("booking", booking) });
+        // The card's `next` reads the re-pointed hold, so the switch's own broadcast already says when the turn now goes.
+        await services.agents.switchAccount(conversationId, account, opt("resetsAt", reopening.shown));
     }
     followPick(services, conversationId, { ...withRuntimeDefaults({ agent: entry.profile.provider, harness: entry.profile.harness }), account });
     if (entry.profile.account !== account && !carry) {

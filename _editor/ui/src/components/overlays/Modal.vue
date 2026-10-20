@@ -4,7 +4,7 @@ import Dialog from "primevue/dialog";
 import { computed, nextTick, ref, useId, useSlots, type VNode } from "vue";
 import { useBackDismiss } from "../../composables/useBackDismiss.js";
 import { useDevice } from "../../composables/useDevice.js";
-import { provideDialogGround } from "./dialogGround.js";
+import { provideSurfaceGround } from "./surfaceGround.js";
 
 const {
     size = `md`,
@@ -45,8 +45,8 @@ const open = defineModel<boolean>(`open`, { required: true });
 const emit = defineEmits<{ show: []; hide: [] }>();
 
 const slots = useSlots();
-// Everything in the box lies on it: no group or card inside draws a surface of its own (dialogGround.ts).
-provideDialogGround();
+// Everything in the box lies on it: no group or card inside draws a surface of its own (surfaceGround.ts).
+provideSurfaceGround();
 const { mobile, keyboardInset } = useDevice();
 
 const titleId = useId();

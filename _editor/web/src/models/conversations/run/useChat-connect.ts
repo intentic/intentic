@@ -23,6 +23,7 @@ import {
     refreshTranslatorAccounts,
 } from "../accounts/useChat-accounts";
 import { translatorAccounts } from "../../providers/providerAccounts";
+import { accountFacts, accountState } from "../../providers/usageStatus";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type ProcedureOutput, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 
@@ -253,16 +254,21 @@ export const cancelConnect = (): void => {
 // Without it, "Add another account" on a provider that already held one read as connected on the first tick: the list
 // was not empty, so the panel came down and "Connected" was announced over a sign-in nobody had finished.
 export interface AccountsBefore {
+    readonly provider: AgentProvider;
     readonly connectedAt: ReadonlyMap<string, number>;
     // Accounts that could not serve until somebody signed in again: a reconnect lands on the same id (the daemon's one
     // connect rule), so for one of those the sign-in landing is the account recovering, not a new row.
     readonly stale: ReadonlySet<string>;
 }
-const unservable = (account: OauthAccount): boolean =>
-    account.needsReauth === true || (account.state?.kind === `blocked` && account.state.fix === `reconnect`);
-export const accountsBefore = (accounts: readonly OauthAccount[]): AccountsBefore => ({
+// By the one rule every surface judges an account by (accountState), so a refused sign-in on file counts as one too.
+const unservable = (provider: AgentProvider, account: OauthAccount): boolean => {
+    const state = accountState(provider, accountFacts(account));
+    return state.kind === `blocked` && state.fix === `reconnect`;
+};
+export const accountsBefore = (provider: AgentProvider, accounts: readonly OauthAccount[]): AccountsBefore => ({
+    provider,
     connectedAt: new Map(accounts.map((account) => [account.id, account.connectedAt])),
-    stale: new Set(accounts.filter(unservable).map((account) => account.id)),
+    stale: new Set(accounts.filter((account) => unservable(provider, account)).map((account) => account.id)),
 });
 // Landed: an account that was not there, one connected again since, or one that needed a new sign-in and now serves.
 export const landedSince = (before: AccountsBefore, now: readonly OauthAccount[]): boolean =>
@@ -270,7 +276,7 @@ export const landedSince = (before: AccountsBefore, now: readonly OauthAccount[]
         (account) =>
             !before.connectedAt.has(account.id) ||
             before.connectedAt.get(account.id) !== account.connectedAt ||
-            (before.stale.has(account.id) && !unservable(account)),
+            (before.stale.has(account.id) && !unservable(before.provider, account)),
     );
 
 // Ends a native sign-in's poll that ran out of time, as the daemon's own `expiresAt` says the attempt has.
@@ -353,7 +359,7 @@ export const startConnect = async (variant?: string): Promise<void> => {
         return;
     }
     // What was already here, read before anything changes it, so the poll below knows what landing looks like.
-    const before = accountsBefore(accountsOf(target));
+    const before = accountsBefore(target, accountsOf(target));
     // One sign-in at a time, of either mechanism (connectTranslator).
     cancelConnect();
     settleTranslator();

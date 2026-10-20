@@ -50,13 +50,41 @@ pub fn without(record: &ChannelRecord, image: &str) -> ChannelRecord {
     }
 }
 
-/// Which kept build `to` names: a version, a whole image reference, or the short id a pin tag ends with. Pure.
-pub fn find_target<'a>(targets: &'a [Pin], to: &str) -> Option<&'a Pin> {
-    targets.iter().find(|pin| {
-        pin.version.as_deref() == Some(to)
-            || pin.image == to
-            || pin.image.rsplit(':').next() == Some(to)
-    })
+/// One way back: the kept pin, and the image a rollback onto it runs (`reachable`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WayBack {
+    pub pin: Pin,
+    pub image: String,
+}
+
+/// THE WAYS BACK this sandbox has, newest first: every kept pin a rollback can still reach, each once, since two pruned
+/// pins of one release are one download. The one list the listing offers, a plain rollback takes the first of, and
+/// `--to` is matched against, so a menu row and the rollback it starts cannot name different builds (2026-10: a version
+/// matched a pruned pin the menu had already hidden, and a plain rollback took a `previous` the menu never listed).
+/// Pure over `on_machine`.
+pub fn ways_back(record: &ChannelRecord, on_machine: &dyn Fn(&str) -> bool) -> Vec<WayBack> {
+    let mut ways: Vec<WayBack> = Vec::new();
+    for pin in record.targets() {
+        if let Some(image) = reachable(&pin, on_machine(&pin.image)) {
+            if !ways.iter().any(|way| way.image == image) {
+                ways.push(WayBack { pin, image });
+            }
+        }
+    }
+    ways
+}
+
+/// Which way back `to` names: exactly, by the image the listing offers for it, its pin's own image or the short id that
+/// tag ends with; else by its version, the newest way back carrying it. Pure.
+pub fn find_way<'a>(ways: &'a [WayBack], to: &str) -> Option<&'a WayBack> {
+    ways.iter()
+        .find(|way| {
+            way.image == to || way.pin.image == to || way.pin.image.rsplit(':').next() == Some(to)
+        })
+        .or_else(|| {
+            ways.iter()
+                .find(|way| way.pin.version.as_deref() == Some(to))
+        })
 }
 
 /// Three dot-separated numbers, optionally with a prerelease or build suffix: a release `ic` can pull by its tag.
@@ -78,34 +106,37 @@ pub fn is_published(value: &str) -> bool {
     is_version(value) && value.trim_start_matches('v') != DEV_VERSION
 }
 
-/// The target `ic sandbox rollback --to <to>` moves onto: a kept build when one matches, else the published image of
-/// that release (every release is also tagged by its version, and a published reference is taken as it is), which is
-/// pulled like any update.
-pub fn resolve_to(record: &ChannelRecord, to: &str) -> Result<Pin> {
-    if let Some(pin) = find_target(&record.targets(), to) {
-        return Ok(pin.clone());
+/// The way back `ic sandbox rollback --to <to>` takes: one of `ways` when one matches, else the published image of that
+/// release (every release is also tagged by its version, and a published reference is taken as it is), which is pulled
+/// like any update.
+pub fn resolve_to(ways: &[WayBack], to: &str) -> Result<WayBack> {
+    if let Some(way) = find_way(ways, to) {
+        return Ok(way.clone());
     }
+    let published = |image: String, version: Option<String>| WayBack {
+        pin: Pin {
+            image: image.clone(),
+            version,
+            ..Pin::default()
+        },
+        image,
+    };
     if is_published(to) {
         let version = to.trim_start_matches('v');
-        return Ok(Pin {
-            image: format!("{DEFAULT_REGISTRY}:{version}"),
-            version: Some(version.to_string()),
-            ..Pin::default()
-        });
+        return Ok(published(
+            format!("{DEFAULT_REGISTRY}:{version}"),
+            Some(version.to_string()),
+        ));
     }
     if to
         .strip_prefix(&format!("{DEFAULT_REGISTRY}:"))
         .is_some_and(|tag| !tag.is_empty())
     {
-        return Ok(Pin {
-            image: to.to_string(),
-            ..Pin::default()
-        });
+        return Ok(published(to.to_string(), None));
     }
-    let kept: Vec<String> = record
-        .targets()
+    let kept: Vec<String> = ways
         .iter()
-        .map(|pin| pin.version.clone().unwrap_or_else(|| pin.image.clone()))
+        .map(|way| way.pin.version.clone().unwrap_or_else(|| way.image.clone()))
         .collect();
     bail!(
         "{}",
@@ -158,37 +189,19 @@ pub fn pinned_environment(
     (has_recipe && target == pin.image && on_machine(image)).then(|| (image.clone(), hash.clone()))
 }
 
-/// The rollback targets that can still be had, newest first, each as what a rollback would run, and each once: two
-/// pruned pins of one release are the same download. Pure over `on_machine`.
-pub fn reachable_targets(record: &ChannelRecord, on_machine: &dyn Fn(&str) -> bool) -> Vec<Pin> {
-    let mut targets: Vec<Pin> = Vec::new();
-    for pin in record.targets() {
-        if let Some(image) = reachable(&pin, on_machine(&pin.image)) {
-            if !targets.iter().any(|seen| seen.image == image) {
-                targets.push(Pin {
-                    image,
-                    version: pin.version,
-                    ..Pin::default()
-                });
-            }
-        }
-    }
-    targets
-}
-
-/// The listing's `rollbackTargets` (DeviceSandboxSchema): newest first, as JSON, only the ones a rollback can reach.
-/// `download` marks one whose pinned image is gone, which a rollback downloads by its version. Pure over `on_machine`.
+/// The listing's `rollbackTargets` (DeviceSandboxSchema): the ways back, as JSON. `download` marks one whose pinned image
+/// is gone, which a rollback downloads by its version. Pure over `on_machine`.
 pub fn targets_json(record: &ChannelRecord, on_machine: &dyn Fn(&str) -> bool) -> Value {
     Value::Array(
-        reachable_targets(record, on_machine)
+        ways_back(record, on_machine)
             .into_iter()
-            .map(|pin| {
+            .map(|way| {
                 let mut entry = Map::new();
-                if !on_machine(&pin.image) {
+                if !on_machine(&way.image) {
                     entry.insert("download".into(), json!(true));
                 }
-                entry.insert("image".into(), json!(pin.image));
-                if let Some(version) = pin.version {
+                entry.insert("image".into(), json!(way.image));
+                if let Some(version) = way.pin.version {
                     entry.insert("version".into(), json!(version));
                 }
                 Value::Object(entry)
@@ -408,35 +421,82 @@ mod tests {
     }
 
     #[test]
-    fn a_target_is_found_by_its_version_its_image_or_its_short_id() {
-        let targets = vec![pin("intentic-sandbox-rollback-x:0123456789ab", "1.2.0")];
-        assert!(find_target(&targets, "1.2.0").is_some());
-        assert!(find_target(&targets, "intentic-sandbox-rollback-x:0123456789ab").is_some());
-        assert!(find_target(&targets, "0123456789ab").is_some());
-        assert!(find_target(&targets, "1.2.1").is_none());
+    fn a_way_back_is_found_by_its_image_its_short_id_or_its_version() {
+        let record = with_targets(
+            Some(pin("intentic-sandbox-rollback-x:0123456789ab", "1.2.0")),
+            vec![],
+        );
+        let ways = ways_back(&record, &|_| true);
+        assert!(find_way(&ways, "1.2.0").is_some());
+        assert!(find_way(&ways, "intentic-sandbox-rollback-x:0123456789ab").is_some());
+        assert!(find_way(&ways, "0123456789ab").is_some());
+        assert!(find_way(&ways, "1.2.1").is_none());
     }
 
     #[test]
     fn a_version_nobody_kept_is_downloaded_by_its_release_tag_and_anything_else_is_refused() {
-        let record = with_targets(Some(pin("pin:b", "1.2.0")), Vec::new());
-        assert_eq!(resolve_to(&record, "1.2.0").unwrap().image, "pin:b");
-        assert_eq!(
-            resolve_to(&record, "1.1.0").unwrap(),
-            pin("ghcr.io/intentic/sandbox:1.1.0", "1.1.0")
+        let ways = ways_back(
+            &with_targets(Some(pin("pin:b", "1.2.0")), Vec::new()),
+            &|_| true,
         );
+        assert_eq!(resolve_to(&ways, "1.2.0").unwrap().image, "pin:b");
+        let release = resolve_to(&ways, "1.1.0").unwrap();
+        assert_eq!(release.pin, pin("ghcr.io/intentic/sandbox:1.1.0", "1.1.0"));
+        assert_eq!(release.image, "ghcr.io/intentic/sandbox:1.1.0");
         assert_eq!(
-            resolve_to(&record, "v1.1.0").unwrap().image,
+            resolve_to(&ways, "v1.1.0").unwrap().image,
             "ghcr.io/intentic/sandbox:1.1.0"
         );
         assert_eq!(
-            resolve_to(&record, "ghcr.io/intentic/sandbox:1.1.0")
+            resolve_to(&ways, "ghcr.io/intentic/sandbox:1.1.0")
                 .unwrap()
                 .image,
             "ghcr.io/intentic/sandbox:1.1.0",
             "what the listing offers for a pin whose image is gone"
         );
-        let refused = resolve_to(&record, "yesterday").unwrap_err();
+        let refused = resolve_to(&ways, "yesterday").unwrap_err();
         assert!(refused.0.contains("kept: 1.2.0"), "{}", refused.0);
+    }
+
+    // The menu offers the ways back and sends a row's exact image; the plain rollback and `--to` read the same list, so
+    // neither reaches a build the menu hid (2026-10: a version matched a pruned pin first, and a plain rollback took a
+    // pruned `previous` the menu never listed).
+    #[test]
+    fn a_rollback_and_the_menu_offering_it_name_the_same_builds() {
+        let gone = "intentic-sandbox-rollback-x:0d0d0d0d0d0d";
+        let record = with_targets(
+            Some(pin(gone, "0.0.0")),
+            vec![
+                pin("intentic-sandbox-rollback-x:aaaaaaaaaaaa", "1.3.0"),
+                pin("intentic-sandbox-rollback-x:f5eb7476ff5c", "0.0.0"),
+            ],
+        );
+        let ways = ways_back(&record, &|image| image != gone);
+        assert_eq!(
+            ways.iter()
+                .map(|way| way.image.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "intentic-sandbox-rollback-x:aaaaaaaaaaaa",
+                "intentic-sandbox-rollback-x:f5eb7476ff5c"
+            ],
+            "the pruned dev build is no way back, and the plain rollback takes the first that is"
+        );
+        assert_eq!(
+            resolve_to(&ways, "0.0.0").unwrap().image,
+            "intentic-sandbox-rollback-x:f5eb7476ff5c"
+        );
+        for listed in targets_json(&record, &|image| image != gone)
+            .as_array()
+            .unwrap()
+        {
+            let image = listed["image"].as_str().unwrap();
+            assert_eq!(
+                resolve_to(&ways, image).unwrap().image,
+                image,
+                "a menu row's `to` reaches its own build"
+            );
+        }
     }
 
     #[test]
@@ -512,7 +572,7 @@ mod tests {
             targets_json(&record, &gone),
             json!([{ "image": "ghcr.io/intentic/sandbox:1.2.0", "version": "1.2.0", "download": true }])
         );
-        assert!(resolve_to(&with_targets(None, vec![]), "0.0.0").is_err());
+        assert!(resolve_to(&[], "0.0.0").is_err());
         assert!(is_published("1.2.0") && !is_published("0.0.0") && !is_published("v0.0.0"));
     }
 

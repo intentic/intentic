@@ -17,8 +17,8 @@ import { resolveTurnJobs } from "../../tools/jobs/job-fates.js";
 //    with a note is queued as a wake in the gate's own words (guard/held-cards.ts), and a stop cancels the card. What the conversation holds then says whether it runs again by itself (awaitingWake,
 //    conversation-state.ts), so nothing later predicts it.
 // 4. land, a turn that ended clean only (placement.land): nothing while it awaits a wake, whose turn finishes the work;
-//    else the repository's own fixers run in its worktree (worktree-fixers.ts), the rules decide, and it lands under the
-//    lease (turn-landing.ts).
+//    else the rules decide, and it lands under the lease (turn-landing.ts), its derived files written again where it
+//    lands (rederive.ts).
 // 5. settle: the placement's books, then the conversation's actor.
 // 6. publish, once: the placement announces how the turn ended (PlacedTurnEnding).
 // The run registry announces `run.settled` after all of it; its listeners are independent of each other and of this

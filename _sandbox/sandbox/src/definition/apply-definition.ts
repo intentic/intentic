@@ -8,7 +8,8 @@ import type { NeedsAction } from "@intentic/sandbox-contract/policy/needs-action
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
-import { composeEnvironment, draftsDir } from "../environment/environment.js";
+import { draftsDir } from "../environment/environment.js";
+import { composeEnvironment } from "../environment/overlay.js";
 import { repoGitDir } from "../workspace/layout/git-layout.js";
 import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { definitionDiff, deriveDefinition, emitDefinitionToml, parseDefinitionToml } from "./definition.js";

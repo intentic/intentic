@@ -8,7 +8,7 @@ import type { RestartIntent, RestartSide } from "@intentic/sandbox-contract/sche
 import { z } from "zod";
 import { readMachineConfig } from "../../environments/machine.js";
 import { thisSide } from "../../environments/wsl.js";
-import { pairingSlugs } from "../../sync/swap-pause.js";
+import { pairingSlugs } from "../../sync/config.js";
 import type { LinkReading } from "../config.js";
 import { type IcRun, lastLine, type Rounds, startRounds } from "./ic-rounds.js";
 import { readSwaps, swapsUnderway } from "./ic-swaps.js";
@@ -205,7 +205,7 @@ const machineLine = (report: FixReport): string => {
 
 // The slug a link's sandbox has on this machine, when it runs here: whichever of its possible slugs this environment's
 // ic knows (a record, the last listing), else, for a sandbox this agent reached over loopback, its hostname's first
-// label, which is what ic names a sandbox with a public hostname (sync/swap-pause.ts, pairingSlugs).
+// label, which is what ic names a sandbox with a public hostname (sync/config.ts, pairingSlugs).
 export const localSlugOf = (sandboxUrl: string, known: ReadonlySet<string>, loopback: boolean): string | undefined => {
     const slugs = pairingSlugs(sandboxUrl);
     return slugs.find((slug) => known.has(slug)) ?? (loopback ? slugs[0] : undefined);

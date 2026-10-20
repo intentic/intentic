@@ -113,7 +113,7 @@ const scopeOf = (value: string | undefined): ApprovalScope | undefined => scopes
                 class="rounded-md"
                 @click="picked = scope.key"
             >
-                <template v-if="scope.icon === undefined" #lead><BrandMark :size="18" :name="scope.label" :logo="scope.logo" /></template>
+                <template v-if="scope.icon === undefined" #lead="{ mark }"><BrandMark :size="mark" :name="scope.label" :logo="scope.logo" /></template>
                 <template #meta>
                     <span v-tooltip.bottom="note(scope)" :class="tone(scope)">{{ scope.total }}</span>
                 </template>

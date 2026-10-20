@@ -1,18 +1,5 @@
 <script setup lang="ts">
-import {
-    Button,
-    ui,
-    FilterBar,
-    type NoticeModel,
-    NoticeStack,
-    Row,
-    RowGroup,
-    RowNote,
-    SegmentedControl,
-    SkeletonRows,
-    SkeletonSnapshot,
-    vSkeletonSource,
-} from "@intentic/ui";
+import { Await, Button, ui, FilterBar, type NoticeModel, NoticeStack, Row, RowGroup, RowNote, SegmentedControl, SkeletonRows } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { SECRET_KEY_MAX, SECRET_KEY_RE } from "@intentic/sandbox-contract/schemas/secrets";
 import { computed, nextTick, ref, useTemplateRef } from "vue";
@@ -23,7 +10,6 @@ import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../models/extensions/useExtensions";
 import { untilResult } from "../../../lib/intenticStream";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
-import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSecretInventory } from "../../../models/capabilities/useSecrets";
 import { useKeyrings } from "../../capabilities/connect/secrets/useKeyrings";
 import OpenInPasswords from "./OpenInPasswords.vue";
@@ -46,8 +32,7 @@ const FILTERABLE_FROM = 8;
 const COLLAPSE_THRESHOLD = 5;
 const VISIBLE_WHEN_COLLAPSED = 3;
 
-const { inventory, inventoryPending, refreshInventory } = useSecretInventory();
-const outline = useSandboxOutline(inventoryPending);
+const { inventory, loaded, refreshInventory } = useSecretInventory();
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
 
@@ -107,9 +92,9 @@ const clearFilters = (): void => {
     scope.value = `all`;
 };
 
-// Distinguishes still-loading, empty inventory, and no filter matches.
+// Distinguishes empty inventory from no filter matches; drawn only once the inventory has been read.
 const emptyNote = computed<string | undefined>(() => {
-    if (inventoryPending.value || matches.value.length > 0) {
+    if (matches.value.length > 0) {
         return undefined;
     }
     return rows.value.length === 0 ? t(`sandbox.sandboxSecrets.noCredentialsYet`) : t(`sandbox.sandboxSecrets.nothingMatchesFilter`);
@@ -200,69 +185,47 @@ const pushToCi = async (): Promise<void> => {
     <div class="flex flex-col gap-6">
         <NoticeStack :of="[pushError]" />
 
-        <!-- Content waits for inventory; the outline waits for the reveal, drawn as the page last looked in this sandbox. -->
-        <template v-if="inventoryPending">
-            <SkeletonSnapshot v-if="outline" of="sandbox.secrets" :label="t(`sandbox.sandboxSecrets.readingSandboxsSecrets`)">
-                <!-- Until it has been seen once: the shape of the coming list (rows with a key and reveal control), not a spinner. -->
+        <!-- Content waits for inventory, drawn meanwhile as the page last looked in this sandbox. -->
+        <Await :of="loaded" imprint="sandbox.secrets" :label="t(`sandbox.sandboxSecrets.readingSandboxsSecrets`)">
+            <!-- Until it has been seen once: the shape of the coming list (rows with a key and reveal control), not a spinner. -->
+            <template #fallback>
                 <RowGroup :label="t(`sandbox.sandboxSecrets.secrets`)">
                     <div role="status" aria-busy="true">
                         <span class="sr-only">{{ t(`sandbox.sandboxSecrets.readingSandboxsSecrets`) }}</span>
                         <SkeletonRows :rows="4" control />
                     </div>
                 </RowGroup>
-            </SkeletonSnapshot>
-        </template>
+            </template>
 
-        <!-- One element, so its imprint is the whole page below the notices; spaced as the column it sits in. -->
-        <div v-else v-skeleton-source="`sandbox.secrets`" class="flex flex-col gap-6">
-            <!-- Filter and scope narrow everything below as one control; the page's actions sit beside it, so adding a secret
-                 needs no section of its own while there is nothing in it yet. -->
-            <div data-setting="secrets-add" class="flex flex-wrap items-center justify-end gap-2">
-                <FilterBar
-                    v-if="filterable"
-                    v-model="query"
-                    :placeholder="t(`sandbox.sandboxSecrets.keyAccountWhatUses`)"
-                    class="min-w-0 flex-1"
-                >
-                    <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
-                </FilterBar>
-                <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" :disabled="adding" @click="openAdd">
-                    <template #icon><Icon name="plus" /></template>
-                </Button>
-                <Button :as="RouterLink" to="/capabilities" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" tier="boring" />
-                <Button
-                    v-if="ciKnown"
-                    :label="ciStale ? t(`sandbox.sandboxSecrets.pushToCi`) : t(`sandbox.sandboxSecrets.ciInSync`)"
-                    size="small"
-                    :tier="ciStale ? `accent` : `boring`"
-                    :disabled="!ciStale || pushing"
-                    :loading="pushing"
-                    @click="pushToCi"
-                >
-                    <template #icon><Icon :name="ciStale ? `cloud-upload` : `check`" /></template>
-                </Button>
-            </div>
-
-            <!-- Shown only while something is owed: the rows themselves, not a count of them. -->
-            <RowGroup v-if="attention.length > 0" :label="t(`sandbox.words.needsAttention`)">
-                <SecretEntryRow
-                    v-for="row in attention"
-                    :key="row.entry.key"
-                    :row="row"
-                    :expanded="opened === row.entry.key"
-                    @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
-                />
-            </RowGroup>
-
-            <!-- The owner's own: what they must keep, what they chose to keep, what intentic keeps for them. -->
+            <!-- One element, spaced as the column it sits in. -->
             <div class="flex flex-col gap-6">
-                <RowGroup
-                    v-if="devopsActive && groupVisible(required)"
-                    :label="t(`sandbox.sandboxSecrets.requiredByIntent`)"
-                >
-                    <RowNote v-if="required.length === 0">{{ t(`sandbox.sandboxSecrets.intentDeclaresNoUser`) }}</RowNote>
+                <!-- Filter and scope narrow everything below as one control; the page's actions sit beside it, so adding a secret
+                     needs no section of its own while there is nothing in it yet. -->
+                <div data-setting="secrets-add" class="flex flex-wrap items-center justify-end gap-2">
+                    <FilterBar v-if="filterable" v-model="query" :placeholder="t(`sandbox.sandboxSecrets.keyAccountWhatUses`)" class="min-w-0 flex-1">
+                        <template #controls><SegmentedControl v-model="scope" :options="scopeOptions" /></template>
+                    </FilterBar>
+                    <Button :label="t(`sandbox.sandboxSecrets.addSecret`)" size="small" :disabled="adding" @click="openAdd">
+                        <template #icon><Icon name="plus" /></template>
+                    </Button>
+                    <Button :as="RouterLink" to="/capabilities" :label="t(`sandbox.sandboxSecrets.manageCapabilities`)" size="small" tier="boring" />
+                    <Button
+                        v-if="ciKnown"
+                        :label="ciStale ? t(`sandbox.sandboxSecrets.pushToCi`) : t(`sandbox.sandboxSecrets.ciInSync`)"
+                        size="small"
+                        :tier="ciStale ? `accent` : `boring`"
+                        :disabled="!ciStale || pushing"
+                        :loading="pushing"
+                        @click="pushToCi"
+                    >
+                        <template #icon><Icon :name="ciStale ? `cloud-upload` : `check`" /></template>
+                    </Button>
+                </div>
+
+                <!-- Shown only while something is owed: the rows themselves, not a count of them. -->
+                <RowGroup v-if="attention.length > 0" :label="t(`sandbox.words.needsAttention`)">
                     <SecretEntryRow
-                        v-for="row in required"
+                        v-for="row in attention"
                         :key="row.entry.key"
                         :row="row"
                         :expanded="opened === row.entry.key"
@@ -270,112 +233,123 @@ const pushToCi = async (): Promise<void> => {
                     />
                 </RowGroup>
 
-                <!-- A person's own secrets need no DevOps: without it they go to the sandbox's own store, the one a need's card writes to too. -->
-                <!-- Drawn only once it holds something, or while a new one is being named: an empty group is just a header. -->
-                <RowGroup v-if="(yours.length > 0 || adding) && groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)">
-                    <SecretEntryRow
-                        v-for="row in yours"
-                        :key="row.entry.key"
-                        :row="row"
-                        :expanded="opened === row.entry.key"
-                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
-                    />
-                    <RowNote v-if="!filtering && adding" variant="block">
-                        <div class="@container/secret-form flex min-w-0 flex-col gap-2">
-                            <div class="flex min-w-0 flex-col gap-2 @lg/secret-form:flex-row">
-                                <input
-                                    ref="newKeyInput"
-                                    v-model="newKey"
-                                    :placeholder="t(`sandbox.sandboxSecrets.keyName`)"
-                                    :aria-label="t(`sandbox.sandboxSecrets.keyName`)"
-                                    autocapitalize="off"
-                                    spellcheck="false"
-                                    :class="ui.input('min-w-0 w-full shrink-0 font-mono @lg/secret-form:w-44')"
-                                />
-                                <SecretField class="min-w-0 flex-1" :secret-key="newKey" :disabled="!newKeyValid" no-hint @saved="newKey = ``" />
-                            </div>
-                            <span v-if="newKeyProblem" :class="newKeyTaken ? `text-2xs text-subtle` : `text-2xs text-warning`">
-                                {{ newKeyProblem }}
-                            </span>
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                <button
-                                    v-if="newKeyValid && !newKeyTaken"
-                                    type="button"
-                                    :class="ui.textButton({ size: `xs` })"
-                                    :disabled="generating"
-                                    v-tooltip.top="{
-                                        title: t(`sandbox.sandboxSecrets.neverShown`),
-                                        note: t(`sandbox.sandboxSecrets.sessionOrSigningKeys`),
-                                    }"
-                                    @click="generateOne"
-                                >
-                                    {{ t(`sandbox.sandboxSecrets.generateRandom`) }}
-                                </button>
-                                <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="cancelAdd">
-                                    {{ t(`ui.action.cancel`) }}
-                                </button>
-                            </div>
-                            <NoticeStack :of="[generateError]" />
-                        </div>
-                    </RowNote>
-                </RowGroup>
+                <!-- The owner's own: what they must keep, what they chose to keep, what intentic keeps for them. -->
+                <div class="flex flex-col gap-6">
+                    <RowGroup v-if="devopsActive && groupVisible(required)" :label="t(`sandbox.sandboxSecrets.requiredByIntent`)">
+                        <RowNote v-if="required.length === 0">{{ t(`sandbox.sandboxSecrets.intentDeclaresNoUser`) }}</RowNote>
+                        <SecretEntryRow
+                            v-for="row in required"
+                            :key="row.entry.key"
+                            :row="row"
+                            :expanded="opened === row.entry.key"
+                            @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                        />
+                    </RowGroup>
 
-                <RowGroup v-if="onComputers.length > 0 && groupVisible(onComputers)" :label="t(`sandbox.sandboxSecrets.onYourComputers`)">
-                    <template #actions><OpenInPasswords /></template>
-                    <SecretEntryRow
-                        v-for="row in onComputers"
-                        :key="row.entry.key"
-                        :row="row"
-                        :expanded="opened === row.entry.key"
-                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
-                    />
-                </RowGroup>
-                <SecretKeyrings v-if="keyrings.length > 0 && !filtering" />
-
-                <RowGroup
-                    v-if="devopsActive && groupVisible(generated)"
-                    :label="t(`sandbox.sandboxSecrets.generatedByIntentic`)"
-                >
-                    <RowNote v-if="generated.length === 0">{{ t(`sandbox.sandboxSecrets.nothingGeneratedYetAppear`) }}</RowNote>
-                    <SecretEntryRow
-                        v-for="row in generated"
-                        :key="row.entry.key"
-                        :row="row"
-                        :expanded="opened === row.entry.key"
-                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
-                    />
-                </RowGroup>
-
-                <!-- Same collapse-behind-toggle pattern as the Agent tab, once there are enough rows to crowd the rest of it. -->
-                <RowGroup v-if="groupVisible(visibleCredentials)" :label="t(`sandbox.sandboxSecrets.capabilityCredentials`)">
-                    <SecretEntryRow
-                        v-for="row in visibleCredentials"
-                        :key="row.entry.key"
-                        :row="row"
-                        :expanded="opened === row.entry.key"
-                        @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
-                    />
-                    <Row v-if="shouldCollapseCredentials && !filtering" interactive @click="credentialsExpanded = !credentialsExpanded">
-                        <template #title>
-                            <span class="flex items-center gap-2 text-2xs font-medium text-link">
-                                <span class="flex w-[1.125rem] shrink-0 justify-center">
-                                    <Icon :name="credentialsExpanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                    <!-- A person's own secrets need no DevOps: without it they go to the sandbox's own store, the one a need's card writes to too. -->
+                    <!-- Drawn only once it holds something, or while a new one is being named: an empty group is just a header. -->
+                    <RowGroup v-if="(yours.length > 0 || adding) && groupVisible(yours)" :label="t(`sandbox.sandboxSecrets.secrets`)">
+                        <SecretEntryRow
+                            v-for="row in yours"
+                            :key="row.entry.key"
+                            :row="row"
+                            :expanded="opened === row.entry.key"
+                            @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                        />
+                        <RowNote v-if="!filtering && adding" variant="block">
+                            <div class="@container/secret-form flex min-w-0 flex-col gap-2">
+                                <div class="flex min-w-0 flex-col gap-2 @lg/secret-form:flex-row">
+                                    <input
+                                        ref="newKeyInput"
+                                        v-model="newKey"
+                                        :placeholder="t(`sandbox.sandboxSecrets.keyName`)"
+                                        :aria-label="t(`sandbox.sandboxSecrets.keyName`)"
+                                        autocapitalize="off"
+                                        spellcheck="false"
+                                        :class="ui.input('min-w-0 w-full shrink-0 font-mono @lg/secret-form:w-44')"
+                                    />
+                                    <SecretField class="min-w-0 flex-1" :secret-key="newKey" :disabled="!newKeyValid" no-hint @saved="newKey = ``" />
+                                </div>
+                                <span v-if="newKeyProblem" :class="newKeyTaken ? `text-2xs text-subtle` : `text-2xs text-warning`">
+                                    {{ newKeyProblem }}
                                 </span>
-                                {{
-                                    credentialsExpanded
-                                        ? t(`ui.action.showLess`)
-                                        : t(`sandbox.sandboxSecrets.showMoreAccounts`, { collapsedCredentialCount })
-                                }}
-                            </span>
-                        </template>
-                    </Row>
-                </RowGroup>
-            </div>
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    <button
+                                        v-if="newKeyValid && !newKeyTaken"
+                                        type="button"
+                                        :class="ui.textButton({ size: `xs` })"
+                                        :disabled="generating"
+                                        v-tooltip.top="{
+                                            title: t(`sandbox.sandboxSecrets.neverShown`),
+                                            note: t(`sandbox.sandboxSecrets.sessionOrSigningKeys`),
+                                        }"
+                                        @click="generateOne"
+                                    >
+                                        {{ t(`sandbox.sandboxSecrets.generateRandom`) }}
+                                    </button>
+                                    <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="cancelAdd">
+                                        {{ t(`ui.action.cancel`) }}
+                                    </button>
+                                </div>
+                                <NoticeStack :of="[generateError]" />
+                            </div>
+                        </RowNote>
+                    </RowGroup>
 
-            <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
-                <span>{{ emptyNote }}</span>
-                <Button v-if="rows.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="clearFilters" />
+                    <RowGroup v-if="onComputers.length > 0 && groupVisible(onComputers)" :label="t(`sandbox.sandboxSecrets.onYourComputers`)">
+                        <template #actions><OpenInPasswords /></template>
+                        <SecretEntryRow
+                            v-for="row in onComputers"
+                            :key="row.entry.key"
+                            :row="row"
+                            :expanded="opened === row.entry.key"
+                            @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                        />
+                    </RowGroup>
+                    <SecretKeyrings v-if="keyrings.length > 0 && !filtering" />
+
+                    <RowGroup v-if="devopsActive && groupVisible(generated)" :label="t(`sandbox.sandboxSecrets.generatedByIntentic`)">
+                        <RowNote v-if="generated.length === 0">{{ t(`sandbox.sandboxSecrets.nothingGeneratedYetAppear`) }}</RowNote>
+                        <SecretEntryRow
+                            v-for="row in generated"
+                            :key="row.entry.key"
+                            :row="row"
+                            :expanded="opened === row.entry.key"
+                            @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                        />
+                    </RowGroup>
+
+                    <!-- Same collapse-behind-toggle pattern as the Agent tab, once there are enough rows to crowd the rest of it. -->
+                    <RowGroup v-if="groupVisible(visibleCredentials)" :label="t(`sandbox.sandboxSecrets.capabilityCredentials`)">
+                        <SecretEntryRow
+                            v-for="row in visibleCredentials"
+                            :key="row.entry.key"
+                            :row="row"
+                            :expanded="opened === row.entry.key"
+                            @update:expanded="(open) => (opened = open ? row.entry.key : undefined)"
+                        />
+                        <Row v-if="shouldCollapseCredentials && !filtering" interactive @click="credentialsExpanded = !credentialsExpanded">
+                            <template #title>
+                                <span class="flex items-center gap-2 text-2xs font-medium text-link">
+                                    <span class="flex w-[1.125rem] shrink-0 justify-center">
+                                        <Icon :name="credentialsExpanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                                    </span>
+                                    {{
+                                        credentialsExpanded
+                                            ? t(`ui.action.showLess`)
+                                            : t(`sandbox.sandboxSecrets.showMoreAccounts`, { collapsedCredentialCount })
+                                    }}
+                                </span>
+                            </template>
+                        </Row>
+                    </RowGroup>
+                </div>
+
+                <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
+                    <span>{{ emptyNote }}</span>
+                    <Button v-if="rows.length > 0" size="small" :label="t(`ui.action.clearFilter`)" @click="clearFilters" />
+                </div>
             </div>
-        </div>
+        </Await>
     </div>
 </template>

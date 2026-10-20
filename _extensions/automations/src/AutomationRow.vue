@@ -5,15 +5,16 @@ import {
     type ActionItem,
     Button,
     Code,
-    ui,
     CopyButton,
     DisclosureRow,
     formatDateTime,
     Icon,
+    type IconName,
     OverflowActions,
+    Section,
     ToggleSwitch,
     toneWash,
-    type IconName,
+    ui,
     useDevice,
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
@@ -478,95 +479,97 @@ const verbs = computed((): ActionItem[] => [
             <!-- Two columns for two questions: what this is, and what it's done. -->
             <div v-else class="grid gap-x-6 gap-y-4 pr-3 @3xl:grid-cols-3">
                 <div class="flex min-w-0 flex-col gap-3 @3xl:col-span-2">
-                    <div class="flex flex-col gap-1">
-                        <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.prompt`) }}</span>
+                    <Section :label="t(`automationRow.prompt`)">
                         <p class="max-h-32 overflow-auto text-2xs leading-relaxed whitespace-pre-wrap text-muted">
                             {{ automation.prompt }}
                         </p>
-                    </div>
+                    </Section>
 
                     <!-- What decides whether a fire goes ahead, and what it saw last time it looked. -->
-                    <div v-if="automation.guard || automation.source || watched" class="flex min-w-0 flex-col gap-1">
-                        <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.check`) }}</span>
-                        <Code v-if="automation.guard" :code="automation.guard" lang="bash" wrap :scroll-lines="6" />
-                        <span v-else-if="automation.source" class="truncate text-2xs text-muted" v-tooltip.top.overflow="sourceLabel(automation.source)">{{
-                            sourceLabel(automation.source)
-                        }}</span>
-                        <span v-if="watched" class="text-2xs text-subtle">{{ watched }}</span>
-                        <template v-if="automation.watch?.value">
-                            <span class="mt-1 text-2xs text-subtle">{{
-                                automation.watch.changedAt === undefined
-                                    ? t(`automationRow.lastSaw`)
-                                    : t(`automationRow.lastSawSince`, { when: formatDateTime(automation.watch.changedAt) })
+                    <Section v-if="automation.guard || automation.source || watched" class="min-w-0" :label="t(`automationRow.check`)">
+                        <div class="flex flex-col gap-1">
+                            <Code v-if="automation.guard" :code="automation.guard" lang="bash" wrap :scroll-lines="6" />
+                            <span v-else-if="automation.source" class="truncate text-2xs text-muted" v-tooltip.top.overflow="sourceLabel(automation.source)">{{
+                                sourceLabel(automation.source)
                             }}</span>
-                            <pre class="max-h-32 overflow-auto rounded-md bg-canvas px-2 py-1.5 font-mono text-2xs break-words whitespace-pre-wrap text-muted">{{
-                                automation.watch.value
-                            }}</pre>
-                        </template>
-                    </div>
+                            <span v-if="watched" class="text-2xs text-subtle">{{ watched }}</span>
+                            <template v-if="automation.watch?.value">
+                                <span class="mt-1 text-2xs text-subtle">{{
+                                    automation.watch.changedAt === undefined
+                                        ? t(`automationRow.lastSaw`)
+                                        : t(`automationRow.lastSawSince`, { when: formatDateTime(automation.watch.changedAt) })
+                                }}</span>
+                                <pre class="max-h-32 overflow-auto rounded-md bg-canvas px-2 py-1.5 font-mono text-2xs break-words whitespace-pre-wrap text-muted">{{
+                                    automation.watch.value
+                                }}</pre>
+                            </template>
+                        </div>
+                    </Section>
 
-                    <div v-if="trigger.kind === `event`" class="flex flex-col gap-1">
-                        <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.webhook`) }}</span>
-                        <!-- The URL carries the door's token; the daemon hands it to a maintainer or owner only, never a viewer. -->
-                        <div v-if="webhookUrl(automation) !== undefined" class="flex items-center gap-1.5">
-                            <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
-                            <CopyButton
-                                :text="webhookUrl(automation) ?? ``"
-                                :aria-label="t(`automationRow.copyWebhookUrl`, { id: automation.id })"
-                                v-tooltip.top="t(`automationRow.copyUrl`)"
-                            />
-                            <Button
-                                v-if="!confirmingRotate"
-                                :label="t(`automationRow.rotate`)"
-                                size="small"
-                                tier="quiet"
-                                :disabled="rotateToken.isPending.value"
-                                v-tooltip.top="{ title: t(`automationRow.newToken`), note: t(`automationRow.oldUrlStops`) }"
-                                @click="confirmingRotate = true"
-                            />
+                    <Section v-if="trigger.kind === `event`" :label="t(`automationRow.webhook`)">
+                        <div class="flex flex-col gap-1">
+                            <!-- The URL carries the door's token; the daemon hands it to a maintainer or owner only, never a viewer. -->
+                            <div v-if="webhookUrl(automation) !== undefined" class="flex items-center gap-1.5">
+                                <code class="min-w-0 flex-1 truncate font-mono text-2xs text-subtle">{{ webhookUrl(automation) }}</code>
+                                <CopyButton
+                                    :text="webhookUrl(automation) ?? ``"
+                                    :aria-label="t(`automationRow.copyWebhookUrl`, { id: automation.id })"
+                                    v-tooltip.top="t(`automationRow.copyUrl`)"
+                                />
+                                <Button
+                                    v-if="!confirmingRotate"
+                                    :label="t(`automationRow.rotate`)"
+                                    size="small"
+                                    tier="quiet"
+                                    :disabled="rotateToken.isPending.value"
+                                    v-tooltip.top="{ title: t(`automationRow.newToken`), note: t(`automationRow.oldUrlStops`) }"
+                                    @click="confirmingRotate = true"
+                                />
+                            </div>
+                            <p v-else class="text-2xs text-subtle">{{ t(`automationRow.urlShownToMaintainers`) }}</p>
+                            <div v-if="confirmingRotate" class="flex flex-wrap items-center justify-end gap-2">
+                                <span class="mr-auto text-2xs text-subtle">{{ t(`automationRow.sureEverySenderWired`) }}</span>
+                                <Button
+                                    :label="t(`automationRow.cancel`)"
+                                    size="small"
+                                    tier="quiet"
+                                    @click="confirmingRotate = false"
+                                />
+                                <Button
+                                    :label="t(`automationRow.rotateToken`)"
+                                    size="small"
+                                    tone="danger"
+                                    :loading="rotateToken.isPending.value"
+                                    @click="rotate"
+                                />
+                            </div>
                         </div>
-                        <p v-else class="text-2xs text-subtle">{{ t(`automationRow.urlShownToMaintainers`) }}</p>
-                        <div v-if="confirmingRotate" class="flex flex-wrap items-center justify-end gap-2">
-                            <span class="mr-auto text-2xs text-subtle">{{ t(`automationRow.sureEverySenderWired`) }}</span>
-                            <Button
-                                :label="t(`automationRow.cancel`)"
-                                size="small"
-                                tier="quiet"
-                                @click="confirmingRotate = false"
-                            />
-                            <Button
-                                :label="t(`automationRow.rotateToken`)"
-                                size="small"
-                                tone="danger"
-                                :loading="rotateToken.isPending.value"
-                                @click="rotate"
-                            />
-                        </div>
-                    </div>
+                    </Section>
 
                     <!-- The two settings deciding whether the widget works at all. -->
-                    <div v-if="visitorChat" class="flex flex-col gap-1.5">
-                        <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.visitorChat`) }}</span>
-                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
-                            <span v-if="visitorChat.origins.length > 0">{{
-                                t(`automationRow.onOrigins`, { origins: visitorChat.origins.join(`, `) })
-                            }}</span>
-                            <span v-else class="text-danger">{{ t(`automationRow.noSitesAllowedNobody`) }}</span>
-                            <span>{{ visitorChat.access }}</span>
-                            <span>{{ visitorChat.botCheck }}</span>
+                    <Section v-if="visitorChat" :label="t(`automationRow.visitorChat`)">
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle">
+                                <span v-if="visitorChat.origins.length > 0">{{
+                                    t(`automationRow.onOrigins`, { origins: visitorChat.origins.join(`, `) })
+                                }}</span>
+                                <span v-else class="text-danger">{{ t(`automationRow.noSitesAllowedNobody`) }}</span>
+                                <span>{{ visitorChat.access }}</span>
+                                <span>{{ visitorChat.botCheck }}</span>
+                            </div>
+                            <!-- Use a glyph in the row and words after the reader opens it. -->
+                            <Button
+                                size="small"
+                                tier="boring"
+                                class="self-start"
+                                :label="t(`automationRow.getEmbedCode`)"
+                                :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
+                                @click="emit(`install`)"
+                            >
+                                <template #icon><Icon name="globe" /></template>
+                            </Button>
                         </div>
-                        <!-- Use a glyph in the row and words after the reader opens it. -->
-                        <Button
-                            size="small"
-                            tier="boring"
-                            class="self-start"
-                            :label="t(`automationRow.getEmbedCode`)"
-                            :aria-label="t(`automationRow.installOnWebsite`, { id: automation.id })"
-                            @click="emit(`install`)"
-                        >
-                            <template #icon><Icon name="globe" /></template>
-                        </Button>
-                    </div>
+                    </Section>
 
                     <!-- Labelled pairs expose the two facts most checked during diagnosis. -->
                     <dl class="flex flex-wrap gap-x-5 gap-y-1.5">
@@ -578,8 +581,7 @@ const verbs = computed((): ActionItem[] => [
                 </div>
 
                 <!-- Run history links to transcripts for runs that reached a turn. -->
-                <div class="flex min-w-0 flex-col gap-1">
-                    <span :class="ui.sectionLabel({ size: `xs` })">{{ t(`automationRow.runs`) }}</span>
+                <Section class="min-w-0" :label="t(`automationRow.runs`)">
                     <p v-if="automation.runs.length === 0" class="text-2xs text-subtle">{{ t(`automationRow.nothingYetRunNow`) }}</p>
                     <div v-else class="-mx-1 flex max-h-40 flex-col overflow-y-auto">
                         <component
@@ -598,7 +600,7 @@ const verbs = computed((): ActionItem[] => [
                             <Icon v-if="run.conversationId" name="chevron-right" class="ml-auto shrink-0 text-2xs text-subtle" />
                         </component>
                     </div>
-                </div>
+                </Section>
             </div>
         </template>
     </DisclosureRow>

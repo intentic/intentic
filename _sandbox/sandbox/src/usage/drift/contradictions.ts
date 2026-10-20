@@ -14,10 +14,6 @@ import type { HeadroomService, RefreshScope } from "../headroom.js";
 const SAY_EVERY_MS = 60 * 60_000;
 const saidAt = new Map<string, number>();
 
-// The pools a provider published. A refusal this sandbox recorded itself (`observed:`, observed-limits.ts) is settled by
-// the same answer on its own path, and is no reading to be wrong.
-const published = (usage: AccountUsage): AccountUsage => ({ ...usage, windows: usage.windows.filter((window) => !window.kind.startsWith("observed:")) });
-
 // The readings the answer speaks for: the account it named, under either key the store files it by, or, for a routed turn
 // that names none, every reading of the provider.
 export const readingKeys = (stored: Readonly<Record<string, AccountUsage>>, provider: string, account: string | undefined): string[] =>
@@ -42,7 +38,7 @@ const contradictReadings = async (deps: AnsweredDeps, provider: AgentProvider, a
     const keys = readingKeys(stored, provider, account);
     const wrong = keys.filter((key) => {
         const usage = stored[key];
-        return usage !== undefined && usage.measuredAt < askedAt && readingHeadroom(published(usage), { id: model }).kind === "spent";
+        return usage !== undefined && usage.measuredAt < askedAt && readingHeadroom(usage, { id: model }).kind === "spent";
     });
     // A routed turn names no account, so the answer proves only that one of them had room: wrong once all of them say none.
     if (wrong.length === 0 || (account === undefined && wrong.length < keys.length)) {

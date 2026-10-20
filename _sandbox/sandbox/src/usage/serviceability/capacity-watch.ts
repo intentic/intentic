@@ -4,11 +4,11 @@ import { type ServiceabilityDeps, serviceabilities } from "./serviceability.js";
 import { onReopenDue } from "./state-log.js";
 
 /* CAPACITY BACK, NOTICED WHEN IT HAPPENS. An account coming back to ready was said (state-log.ts onAccountReopened) only
-   when something judged the accounts again: a page load, a spawn, the resume pass, or the idle usage refresh every
-   fifteen minutes. So a parent waiting on capacity heard of a pool that reopened at a known instant whenever one of those
-   came next (2026-10-20). A provider's accounts are judged again here at the soonest reopen a judgement saw ahead
-   (onReopenDue), and whenever a new usage reading lands for it (headroom onChange), which is where a pool read open
-   again shows first. */
+   when something judged the accounts again: a spawn, the resume pass, or the idle usage refresh every fifteen minutes.
+   So a parent waiting on capacity heard of a pool that reopened at a known instant whenever one of those came next
+   (2026-10-20). A provider's accounts are judged again here whenever anything the verdict reads changes: at the soonest
+   reopen a judgement saw ahead (onReopenDue), when a new usage reading lands for it (headroom onChange), which is where a
+   pool read open again shows first, and when a refusal of it is filed or settled (providerRefusals onChange). */
 
 // Readings land in bursts (a sweep reads every account), and one judgement covers all of a provider's accounts.
 const JUDGE_SETTLE_MS = 500;
@@ -32,7 +32,7 @@ export const watchCapacity = (deps: CapacityWatchDeps): (() => void) => {
         timer.unref();
         pending.set(provider, timer);
     };
-    const unsubscribes = [onReopenDue(judge), deps.headroom.onChange((provider) => judge(provider))];
+    const unsubscribes = [onReopenDue(judge), deps.headroom.onChange((provider) => judge(provider)), deps.providerRefusals.onChange((provider) => judge(provider))];
     return () => {
         for (const unsubscribe of unsubscribes) {
             unsubscribe();

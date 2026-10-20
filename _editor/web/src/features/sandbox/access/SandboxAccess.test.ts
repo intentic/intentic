@@ -95,7 +95,6 @@ jest.mock(`../../../client/sandbox/useSandbox`, () => ({
         reachable: ref(true),
     }),
 }));
-jest.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false }));
 // One assistant, homed in the support folder: which areas hand it over is read off where it starts, never picked.
 const personas = ref([{ id: `support`, label: `Support`, capabilities: [], workspace: { startIn: `support` } }]);
 jest.mock(`../../../models/sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
@@ -183,8 +182,9 @@ const openPerson = async (address: string): Promise<void> => {
 };
 const panel = (): HTMLElement | null => document.body.querySelector(`section[aria-label]`);
 // One part of the open panel, by the label over it.
+// A part of the panel by its header: a kit <Section> (its <section>, header first) or a block a view drew itself.
 const part = (label: string): HTMLElement | undefined =>
-    [...(panel()?.querySelectorAll<HTMLElement>(`div`) ?? [])].find((block) => block.firstElementChild?.textContent?.trim() === label);
+    [...(panel()?.querySelectorAll<HTMLElement>(`section, div`) ?? [])].find((block) => block.firstElementChild?.textContent?.trim() === label);
 // The page's own tabs, by name (a count on one rides after its name), and one pressed: its part replaces the one open.
 const pageTabs = (): string[] =>
     [...document.body.querySelectorAll<HTMLButtonElement>(`[role=tablist][aria-label="Part of Access"] [role=tab]`)].map((button) =>

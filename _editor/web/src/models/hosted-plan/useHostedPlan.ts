@@ -1,6 +1,8 @@
 import type { HostedMigration, HostedPlanState } from "@intentic/api-contract";
 import { HOSTED_TIERS } from "@intentic/constants";
+import { useLoaded } from "@intentic/extension-api";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
+import { messageOr } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { HOSTED_PLAN } from "../../lib/queryKeys";
@@ -53,7 +55,14 @@ export function useHostedPlan() {
         // Every rung there is, so the page can price the ladder without a second read.
         tiers: HOSTED_TIERS,
         isLoading: query.isLoading,
-        error: query.error,
+        // What Billing draws the plan from (<Await :of>), its failure in words.
+        loaded: useLoaded(() => ({
+            data: query.data.value,
+            error: query.error.value === null ? undefined : messageOr(query.error.value, t(`settings.settingsBilling.couldntLoadPlan`)),
+            fetching: query.isFetching.value,
+            wanted: true,
+            retry: () => void query.refetch(),
+        })),
         refetch: query.refetch,
     };
 }

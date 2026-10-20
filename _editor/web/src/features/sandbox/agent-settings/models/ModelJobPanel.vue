@@ -2,7 +2,7 @@
 import { MODEL_ROLES, type ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { suggestedSetup } from "@intentic/sandbox-contract/models/model-setups";
-import { Button, ui } from "@intentic/ui";
+import { Button, SectionHeader } from "@intentic/ui";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { modelLabelFor } from "../../../../models/providers/providerCatalog";
@@ -102,20 +102,20 @@ const choices = computed<readonly Choice[]>(() => [
         </div>
 
         <div role="radiogroup" :aria-label="t(`sandbox.agentModels.runsOn`)" class="flex flex-col gap-1">
-            <p :class="ui.sectionLabel({ size: `xs` })" aria-hidden="true">{{ t(`sandbox.agentModels.runsOn`) }}</p>
+            <SectionHeader :label="t(`sandbox.agentModels.runsOn`)" density="dense" aria-hidden="true" />
             <button
                 v-for="choice in choices"
                 :key="choice.key"
                 type="button"
                 role="radio"
                 :aria-checked="choice.on"
-                class="flex items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay"
+                class="flex items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-overlay text-xs"
                 :class="choice.on && `bg-overlay`"
                 @click="choice.on ? undefined : emit(`move`, choice.target)"
             >
                 <Icon
                     :name="choice.key === `new` ? `plus` : choice.on ? `check-circle` : `circle`"
-                    class="mt-0.5 shrink-0 text-xs"
+                    class="shrink-0 text-xs"
                     :class="choice.on ? `text-link` : `text-subtle`"
                 />
                 <span class="flex min-w-0 flex-col">

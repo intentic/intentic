@@ -5,6 +5,8 @@ import { homeDir, writeSecretFile } from "@intentic/local-agent";
 import type { PortSkipReason } from "@intentic/sandbox-contract/schemas/devices";
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import { projectDirNameOf } from "@intentic/sandbox-contract/ids/project-dir";
+import { sandboxIdFromUrl } from "@intentic/sandbox-contract/ids/hostnames";
+import { slugOfDaemonUrl } from "@intentic/sandbox-run/slug";
 import { SANDBOX_CONTAINER_PREFIX } from "@intentic/sandbox-run";
 import { z } from "zod";
 import { baseDir } from "../config.js";
@@ -72,10 +74,7 @@ export const isSandboxContainerName = (name: string | undefined): name is string
 // One paired sandbox. sandboxId namespaces the ssh alias, the Mutagen sessions and the loopback port, and is
 // the key. syncToken is the enrollment-minted credential for GET /ports, the self-revoke on uninstall, and the
 // SSH transport itself; a pairing without one can do nothing but exist. mirroredPorts/skippedPorts are the last
-// reconcile's baseline and its negative. fileSyncAutoPaused marks a pause the watcher itself applied after an
-// hour unreachable, distinct from a person's `pause`, which the watcher never undoes. fileSyncSwapPaused marks the
-// pause it applies while the sandbox is swapped on this machine (swap-pause.ts), kept on disk so an agent restarted
-// mid-swap still lifts it. autoHealOff stops this agent
+// reconcile's baseline and its negative. autoHealOff stops this agent
 // clearing the build output it left inside directories the sandbox deleted (residue.ts); it is off by default because
 // what that removes is content the session already ignores, which a build puts back. ignoredPorts is mirrorOff's
 // per-port form: numbers this device is never to take, which is a standing choice and not a reading, so nothing the
@@ -88,6 +87,8 @@ export const isSandboxContainerName = (name: string | undefined): name is string
 // (`pairingProblem`). `key` tells apart the several pairings one sandbox may hold since folders ATTACH to this machine's
 // own sandbox (`pairingKey`); `projectsHost` marks the folderless pairing that holds that sandbox's sync token and
 // mirrors its ports, and `deliver` whether landed work is written into an attached folder by itself (project-delivery.ts).
+// WHETHER ITS FILE SYNC RUNS is no field of its own: it is read off the facts below (holds.ts `syncHolds`), each kept by
+// the one rule that observes it, and Mutagen is made to agree every pass.
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
@@ -101,8 +102,6 @@ export interface Pairing {
     readonly skippedPorts?: readonly SkippedPort[];
     readonly ignoredPorts?: readonly number[];
     readonly mirrorOff?: boolean | undefined;
-    readonly fileSyncAutoPaused?: boolean | undefined;
-    readonly fileSyncSwapPaused?: boolean | undefined;
     readonly autoHealOff?: boolean | undefined;
     readonly remoteDir?: string | undefined;
     readonly project?: true | undefined;
@@ -117,12 +116,18 @@ export interface Pairing {
     readonly goneSince?: number | undefined;
     readonly goneCheckedAt?: number | undefined;
     readonly goneBy?: GoneWitness | undefined;
-    // When the sandbox's ports poll began failing in this outage. Kept on disk because the hour that auto-pauses file sync
-    // was counted in memory, so an agent restarted more often than hourly never paused a dead sandbox's sessions.
+    // When the sandbox's ports poll began failing in this outage. Kept on disk because the hour that holds file sync still
+    // was counted in memory, so an agent restarted more often than hourly never held a dead sandbox's sessions.
     readonly unreachableSince?: number | undefined;
-    // A pause the watcher made for a reason of its own, beside `fileSyncAutoPaused`'s hour: the sandbox is gone, or the
-    // container a docker pairing reaches is no longer on this machine. Lifted only by the watcher, once that reason ends.
-    readonly fileSyncPausedFor?: WatcherPause | undefined;
+    // (2026-10-20) When the owner paused this folder's file sync (`sync pause`), the one hold a person lifts (`sync resume`).
+    readonly ownerPausedAt?: number | undefined;
+    // (2026-10-20) Since when this machine's ic is swapping the sandbox (holds.ts `holdsSync`), written and cleared by
+    // the watcher's reading of ic's swaps each pass.
+    readonly swapSince?: number | undefined;
+    // (2026-10-20) The container a docker pairing reaches is no longer on this machine's engine, or sits in ic's trash, and
+    // the sandbox is not answering (gone.ts `dockerStep`). The sandbox's, so written on every pairing of it; cleared once
+    // the container serves as this sandbox again.
+    readonly containerAway?: ContainerAway | undefined;
     // The slug this machine's ic lists the sandbox under, recorded the first time it does: the proof that the sandbox is
     // kept HERE, which is what lets ic's listing say it is gone (gone.ts `localVerdict`).
     readonly icSlug?: string | undefined;
@@ -134,9 +139,9 @@ export interface Pairing {
     // disk because the wait between tries is what keeps a fetch that cannot finish from running again every pass, and an
     // agent restarted between two tries must not start the count over; and because `status` and the report read it.
     readonly bridgeHolds?: readonly BridgeHold[] | undefined;
-    // (2026-10-18) Set while the drive holding `localDir` is nearly full and this pairing's file sync and git bridge are
-    // paused for it (low-disk.ts), with the reading that paused it. Lifted only by the watcher, once the drive has room.
-    readonly fileSyncLowDisk?: LowDiskPause | undefined;
+    // (2026-10-18) Set while the drive holding `localDir` is nearly full (low-disk.ts), with the reading that said so.
+    // Cleared by the watcher alone, once the drive has room again.
+    readonly lowDisk?: LowDiskReading | undefined;
 }
 
 // Why the bridge stopped fetching one repo: git went quiet mid-fetch (`stalled`), the fetch was still moving at its
@@ -153,21 +158,18 @@ export interface BridgeHold {
     readonly retryAt: number;
 }
 
-// The drive reading that paused a pairing for want of room: when, and how much was free of how much. And the sessions
-// this pause itself paused, the only ones its lifting resumes: one the owner had paused by hand (`sync pause`, which keeps
-// no record of its own) was not running when the drive filled, so it is not on the list and stays paused.
-export interface LowDiskPause {
+// The drive reading that holds a pairing for want of room: when, and how much was free of how much.
+export interface LowDiskReading {
     readonly since: number;
     readonly freeBytes: number;
     readonly totalBytes: number;
-    readonly paused?: readonly string[] | undefined;
 }
 
 // Who said a sandbox is gone: the platform's edge, or this machine's own ic.
 export type GoneWitness = "edge" | "local";
 
-// Why the watcher paused a pairing's file sync, beyond the unreachable hour.
-export type WatcherPause = "gone" | "container-missing" | "container-trashed";
+// What became of the container a docker pairing reaches: gone from this machine's engine, or in ic's trash.
+export type ContainerAway = "missing" | "trashed";
 
 // WHICH PAIRING THIS IS, among the several one sandbox may now hold. Every pairing made before folders could attach
 // has no `key`, so its key is its sandbox id and nothing keyed by it (its Mutagen session, its restore points, its
@@ -175,6 +177,15 @@ export type WatcherPause = "gone" | "container-missing" | "container-trashed";
 // being its folder in the sandbox (`/work/<name>`). What identifies the SANDBOX (its enrollment and sync token, its ssh
 // alias and tunnel, its container, its forwards, the report's `sandboxId`) stays the sandbox id.
 export const pairingKey = (pairing: Pick<Pairing, "key" | "sandboxId">): string => pairing.key ?? pairing.sandboxId;
+
+// The slugs this machine's ic may know a pairing's sandbox by. ic names a sandbox with a public hostname by that
+// hostname's first label (`sandbox-<id>`, or the subdomain an owner chose) and one without by the 12-hex id its
+// connect token derives, which is the same id the hostname carries. A pairing's URL is that public hostname, so its
+// first label, or the id in it, is the slug of the one sandbox it is: the mapping needs no guessing.
+export const pairingSlugs = (sandboxUrl: string): string[] => {
+    const id = sandboxIdFromUrl(sandboxUrl);
+    return [...new Set([slugOfDaemonUrl(sandboxUrl), id].filter((slug): slug is string => slug !== undefined && slug !== ""))];
+};
 
 // The key an attached folder is filed under. `~` is in no project name (isProjectDirName) and in no id this agent makes.
 export const attachedKey = (sandboxId: string, name: string): string => `${sandboxId}~${name}`;
@@ -333,7 +344,30 @@ export const readState = async (): Promise<SyncState> => {
         throw new SyntaxError(`${configPath} has no "pairings" list`);
     }
     assertPairings(parsed.pairings);
-    return { pairings: parsed.pairings };
+    return { pairings: parsed.pairings.map(fromMarkers) };
+};
+
+// (2026-10-20) The pause markers each rule kept before file sync's holds were read off facts (holds.ts), translated on
+// read into the facts they stood for and gone from the file at its next write. A marker whose fact the pairing already
+// keeps (the gone mark, the outage clock) translates to nothing. A person's pause kept no marker at all: holds.ts
+// `adoptOwnerPauses` takes those from Mutagen once.
+interface Markers {
+    readonly fileSyncAutoPaused?: unknown;
+    readonly fileSyncSwapPaused?: unknown;
+    readonly fileSyncPausedFor?: unknown;
+    readonly fileSyncLowDisk?: { readonly since: number; readonly freeBytes: number; readonly totalBytes: number; readonly paused?: unknown };
+}
+const fromMarkers = (raw: Pairing & Markers): Pairing => {
+    const { fileSyncAutoPaused: auto, fileSyncSwapPaused: swap, fileSyncPausedFor: away, fileSyncLowDisk: low, ...pairing } = raw;
+    if (auto === undefined && swap === undefined && away === undefined && low === undefined) {
+        return raw;
+    }
+    return {
+        ...pairing,
+        swapSince: swap === true ? (pairing.swapSince ?? Date.now()) : pairing.swapSince,
+        containerAway: away === "container-missing" ? "missing" : away === "container-trashed" ? "trashed" : pairing.containerAway,
+        lowDisk: low === undefined ? pairing.lowDisk : { since: low.since, freeBytes: low.freeBytes, totalBytes: low.totalBytes },
+    };
 };
 
 // Read-modify-write the pairing list: every mutation re-reads first, so a caller mutates what is on disk now.
@@ -408,22 +442,21 @@ export const setPortIgnored = async (key: string, port: number, ignored: boolean
 export const setAutoHealOff = async (key: string, off: boolean): Promise<void> =>
     await updatePairing(key, (held) => ({ ...held, autoHealOff: off ? true : undefined }));
 
-export const setFileSyncAutoPaused = async (key: string, paused: boolean): Promise<void> =>
-    await updatePairing(key, (held) => ({ ...held, fileSyncAutoPaused: paused ? true : undefined }));
+// The owner's pause of one pairing's file sync, set or lifted; the watcher makes Mutagen agree (holds.ts).
+export const setOwnerPaused = async (key: string, at: number | undefined): Promise<void> =>
+    await updatePairing(key, (held) => ({ ...held, ownerPausedAt: at }));
 
-export const setFileSyncSwapPaused = async (key: string, paused: boolean): Promise<void> =>
-    await updatePairing(key, (held) => ({ ...held, fileSyncSwapPaused: paused ? true : undefined }));
+// The swap of a pairing's sandbox on this machine, begun or settled (holds.ts `swapStep`).
+export const setSwapSince = async (key: string, since: number | undefined): Promise<void> =>
+    await updatePairing(key, (held) => ({ ...held, swapSince: since }));
 
 // The folder compared and made to agree with the sandbox's copy (adopt.ts): nothing left to do before its first session.
 export const clearAdoptFolder = async (key: string): Promise<void> =>
     await updatePairing(key, (held) => ({ ...held, adoptFolder: undefined }));
 
-export const setFileSyncPausedFor = async (key: string, reason: WatcherPause | undefined): Promise<void> =>
-    await updatePairing(key, (held) => ({ ...held, fileSyncPausedFor: reason }));
-
-// The low-disk pause and its reading; undefined lifts it.
-export const setFileSyncLowDisk = async (key: string, pause: LowDiskPause | undefined): Promise<void> =>
-    await updatePairing(key, (held) => ({ ...held, fileSyncLowDisk: pause }));
+// The drive under a pairing's folder short of room, with its reading; undefined says it has room again (low-disk.ts).
+export const setLowDisk = async (key: string, reading: LowDiskReading | undefined): Promise<void> =>
+    await updatePairing(key, (held) => ({ ...held, lowDisk: reading }));
 
 // One repo's hold set or cleared; the key is absent once nothing is held, as the resting state carries no field.
 export const setBridgeHold = async (key: string, repo: string, hold: BridgeHold | undefined): Promise<void> =>
@@ -461,6 +494,10 @@ export const setSandboxGone = async (
 
 export const setUnreachableSince = async (sandboxId: string, since: number | undefined): Promise<void> =>
     await updateSandboxPairings(sandboxId, (held) => ({ ...held, unreachableSince: since }));
+
+// The container a docker sandbox's pairings reach, away or back (gone-watch.ts `checkContainers`).
+export const setContainerAway = async (sandboxId: string, away: ContainerAway | undefined): Promise<void> =>
+    await updateSandboxPairings(sandboxId, (held) => ({ ...held, containerAway: away }));
 
 export const setIcSlug = async (sandboxId: string, slug: string): Promise<void> =>
     await updateSandboxPairings(sandboxId, (held) => ({ ...held, icSlug: slug }));

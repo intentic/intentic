@@ -2,7 +2,6 @@
 // one listed), the accounts that can take a turn come first, and one that can take none is dimmed with its reason
 // legible. The reported bug: an org-disabled account listed first was ticked while the turn ran on another.
 import "@intentic/testing/dom";
-import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { type App, computed, createApp, h } from "vue";
@@ -21,9 +20,13 @@ jest.mock("../../../models/conversations/accounts/useChat-accounts", () => ({
 jest.mock("../../../models/providers/accountsOutdated", () => ({ accountsOutdated: computed(() => false) }));
 const { default: PickerAccounts } = await import("./PickerAccounts.vue");
 
-const account = (id: string, state: AccountState): OauthAccount => ({ id, label: `${id}@example.com`, connectedAt: 0, state });
-const SEATLESS: AccountState = { kind: `blocked`, fix: `admin`, reason: `Your organization has disabled Claude subscription access.` };
-const SPENT: AccountState = { kind: `spent`, reopensAt: 1_900_000_000 };
+// An account as the daemon lists it: the facts the one rule judges (a seat mark, a reading), never a verdict.
+
+const account = (id: string, facts: Partial<OauthAccount> = {}): OauthAccount => ({ id, label: `${id}@example.com`, connectedAt: 0, ...facts });
+
+const room = (left: number): Partial<OauthAccount> => ({ usage: { measuredAt: Date.now(), windows: [{ kind: `seven_day`, utilization: 100 - left, gates: `all` }] } });
+const SEATLESS: Partial<OauthAccount> = { seatRefusal: `Your organization has disabled Claude subscription access.` };
+const SPENT: Partial<OauthAccount> = { usage: { measuredAt: Date.now(), windows: [{ kind: `seven_day`, utilization: 100, resetsAt: 1_900_000_000, gates: `all` }] } };
 
 let app: App | undefined;
 const picks: string[] = [];
@@ -48,7 +51,7 @@ const ticked = (element: HTMLElement): string[] =>
         .map(labelOf);
 
 beforeEach(() => {
-    listed = [account(`work`, SEATLESS), account(`personal`, { kind: `ready`, room: 40 }), account(`spare`, { kind: `ready`, room: 70 })];
+    listed = [account(`work`, SEATLESS), account(`personal`, room(40)), account(`spare`, room(70))];
     picks.length = 0;
 });
 
@@ -71,8 +74,8 @@ it(`draws the accounts that can take a turn first, the spent ones next, the ones
     listed = [
         account(`work`, SEATLESS),
         account(`drained`, SPENT),
-        account(`personal`, { kind: `ready`, room: 40 }),
-        account(`unread`, { kind: `unknown` }),
+        account(`personal`, room(40)),
+        account(`unread`),
     ];
     const element = mount();
 
@@ -80,7 +83,7 @@ it(`draws the accounts that can take a turn first, the spent ones next, the ones
 });
 
 it(`dims a row that can take no turn but keeps its reason legible, and says when a spent one reopens`, () => {
-    listed = [account(`work`, SEATLESS), account(`drained`, SPENT), account(`personal`, { kind: `ready`, room: 40 })];
+    listed = [account(`work`, SEATLESS), account(`drained`, SPENT), account(`personal`, room(40))];
     const element = mount();
     const row = (id: string): HTMLElement => rows(element).find((candidate) => labelOf(candidate) === `${id}@example.com`)!;
 

@@ -17,7 +17,7 @@ export function useApprovals() {
     const api = host();
     const queryClient = useQueryClient();
     const spec = approvalsQuery();
-    const { query, error } = api.sandbox.query(spec);
+    const { query, error, loaded } = api.sandbox.query(spec);
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: spec.queryKey });
 
     const save = useMutation({
@@ -36,7 +36,7 @@ export function useApprovals() {
         approvals,
         invalid,
         error,
-        isLoading: query.isLoading,
+        loaded,
         save,
         remove,
     };

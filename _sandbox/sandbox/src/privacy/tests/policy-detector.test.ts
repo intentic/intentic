@@ -20,10 +20,11 @@ const rule = (fields: Partial<PrivacyRule> & Pick<PrivacyRule, "id" | "match">):
 
 const policyWith = (fields: Partial<PrivacyShieldPolicy>): PrivacyShieldPolicy => ({ ...DEFAULT_PRIVACY_SHIELD, ...fields });
 
-const found = (policy: PrivacyShieldPolicy, text: string): [string, string, string | undefined][] =>
-    detectorFor(policy)
-        .detect(text)
-        .map((span) => [span.value, span.class, span.rule]);
+// What the policy's detectors and rules propose, through the gate every source passes.
+const found = (policy: PrivacyShieldPolicy, text: string): [string, string, string | undefined][] => {
+    const detector = detectorFor(policy);
+    return detector.gate.settle(text, detector.candidates(text)).map((span) => [span.value, span.class, span.rule]);
+};
 
 describe("the owner's rules", () => {
     test("a term is found as a whole word in any case, a phrase with its separators anywhere", () => {
@@ -71,7 +72,7 @@ describe("the owner's rules", () => {
         const detector = detectorFor(policyWith({ rules: [rule({ id: "bad", match: "pattern", pattern: "(unclosed" })] }), (message) =>
             said.push(message),
         );
-        expect(detector.detect("(unclosed")).toEqual([]);
+        expect(detector.candidates("(unclosed")).toEqual([]);
         expect(said.join("\n")).toContain("does not compile");
     });
 

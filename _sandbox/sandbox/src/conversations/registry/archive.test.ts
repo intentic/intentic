@@ -146,7 +146,8 @@ describe("agedFamilies", () => {
         expect(goesWithParent(child("held", "p", { status: "ready" }), parent)).toBe(false);
         expect(goesWithParent(child("refused", "p", { status: "conflict" }), parent)).toBe(false);
         expect(goesWithParent(child("broke", "p", { landFailure: { reason: "fatal: refused", at: 1 } }), parent)).toBe(false);
-        expect(goesWithParent(child("booked", "p", { failureCode: "rate_limit", limitScheduled: true }), parent)).toBe(false);
+        expect(goesWithParent(child("booked", "p", { failureCode: "rate_limit", next: { kind: "rerun", at: 1 } }), parent)).toBe(false);
+        expect(goesWithParent(child("scheduled", "p", { next: { kind: "send", at: 1, count: 1 } }), parent)).toBe(false);
         expect(goesWithParent(child("words", "p", { unsentAt: 1 }), parent)).toBe(false);
         expect(goesWithParent(child("done", "p", { status: "landed" }), parent)).toBe(true);
     });

@@ -2,6 +2,7 @@
 import PlainResultReview from "./results/PlainResultReview.vue";
 import { useAudience } from "../../../app/useAudience";
 import {
+    Await,
     Button,
     ChangeStatusMark,
     EmptyState,
@@ -15,9 +16,9 @@ import {
     ui,
     useDevice,
     useExplorerStyle,
-    useLoadingReveal,
     useNarrow,
 } from "@intentic/ui";
+import type { Loaded } from "@intentic/extension-api";
 import { isTestPath } from "@intentic/sandbox-contract/text/path-refs";
 import type { WorkspaceModule } from "@intentic/sandbox-contract/schemas/git/git";
 import type { FileDiff } from "@intentic/sandbox-contract/schemas/history";
@@ -129,16 +130,13 @@ const history = useAgentHistory(
 // of the branch, and (on an agent whose work the reader has already committed) the walk through history that finds
 // where it went. A refresh is neither, whether or not it has rows behind it: it keeps the spinner in the list header,
 // since replacing an answer the reader is using with bars would be a loss of place, not a promise.
-// An error is an answer too: it renders above, and waiting under it would promise a list that isn't coming.
-const firstRead = computed(() => !changes.loaded.value && changes.error.value === undefined);
-const historyRead = computed(() => changes.count.value === 0 && changes.absorbed.value > 0 && !history.loaded.value);
-const waiting = computed(() => firstRead.value || historyRead.value);
-const waitLabel = computed(() => (firstRead.value ? t(`agents.agentReviewPanel.readingChanges`) : t(`agents.agentReviewPanel.findingInHistory`)));
-// Same thresholds every other skeleton in the app answers to, keyed on the agent so walking from one review to the
-// next starts a fresh wait rather than continuing the old one's hold.
-const outline = useLoadingReveal(
-    waiting,
-    computed(() => agentId),
+// A failed read is an answer too: it renders above, and waiting under it would promise a list that isn't coming.
+const review = computed(
+    (): Loaded<unknown> =>
+        changes.loaded.value.state === `ready` && changes.count.value === 0 && history.loaded.value.state === `waiting` ? history.loaded.value : changes.loaded.value,
+);
+const waitLabel = computed(() =>
+    changes.loaded.value.state === `ready` ? t(`agents.agentReviewPanel.findingInHistory`) : t(`agents.agentReviewPanel.readingChanges`),
 );
 
 // The list.
@@ -525,7 +523,7 @@ const markLabel = (file: AgentReviewFile): string =>
 // The diff.
 // Shares its cache key with the background loader (AGENT_FILE_DIFF_OPTIONS), so a warmed row paints without a
 // re-read. Keyed by selection too, so a slow earlier fetch can't land on the file now chosen.
-const { query: diffQuery, error: diffError } = useSandboxQuery(
+const { query: diffQuery, loaded: diffRead } = useSandboxQuery(
     {
         queryKey: computed(() => agentFileDiffKey(agentId, selected.value?.repo ?? ``, selected.value?.change.path ?? ``, at)),
         queryFn: () => readAgentFileDiff(agentId, selected.value!.repo, selected.value!.change.path, at),
@@ -535,13 +533,6 @@ const { query: diffQuery, error: diffError } = useSandboxQuery(
     () => at,
 );
 const diff = computed(() => diffQuery.data.value);
-const diffLoading = diffQuery.isFetching;
-// Keyed on the row, not the agent: stepping down the list is a new wait each time, so a held outline can never sit
-// over the file after the one it was drawn for.
-const diffOutline = useLoadingReveal(
-    computed(() => diff.value === undefined && diffLoading.value),
-    computed(() => selectedKey.value ?? ``),
-);
 // Monaco is uncontrolled, so a genuinely different file must remount, not re-render. vue-query keeps `diff` the
 // same object across a no-op refetch, so that identity (numbered only because :key needs a string) is what
 // distinguishes files.
@@ -701,368 +692,372 @@ const seamWidth = computed<number>({
         </div>
 
         <!-- History loads only once absorbed work is reported, skipping a flash of "nothing here" first. -->
-        <!-- The review's frame and one line for the wait, the same one AgentDetail's own wait draws. -->
-        <template v-if="waiting">
-            <AgentReviewOutline v-if="outline" :label="waitLabel" />
-        </template>
-        <!-- An empty list is two opposite facts needing different next moves: nothing written, or everything already committed.
-             "Ask it in chat" only applies where a chat for this agent exists; a remote review has none on screen, so the
-             sentence points at the crossing instead. -->
-        <EmptyState
-            v-else-if="changes.count.value === 0 && history.count.value === 0"
-            :icon="changes.absorbed.value > 0 ? 'check' : 'file-edit'"
-            :line="
-                changes.absorbed.value > 0
-                    ? t(`agents.agentReviewPanel.anythingWritesNextShows`, { absorbedNote })
-                    : remoteName !== undefined
-                      ? t(`agents.agentReviewPanel.agentHasntChangedAny`, { remoteName })
-                      : t(`agents.agentReviewPanel.agentHasntChangedAny2`)
-            "
-            class="min-h-0 flex-1 p-6"
-        >
-            <template v-if="remoteName !== undefined" #actions>
-                <Button size="small" tier="boring" @click="cross">
-                    <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
-                </Button>
-            </template>
-        </EmptyState>
-
-        <!-- List | diff share one screen on a phone: the diff takes over on pick, with no route change either way. -->
-        <!-- No select-none while dragging: ResizeSeam already claims the whole document's selection for the drag. -->
-        <div v-else class="flex min-h-0 flex-1">
-            <aside
-                v-if="mobile ? selected === undefined : listMode === `side`"
-                class="flex min-h-0 min-w-0 flex-col"
-                :class="mobile ? 'flex-1' : 'shrink-0 border-r border-line'"
-                :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
+        <!-- The review's frame and one line for the wait, the same one AgentDetail's own wait draws; a failed read is said above. -->
+        <Await :of="review" :label="waitLabel">
+            <template #fallback><AgentReviewOutline :label="waitLabel" /></template>
+            <template #failed />
+            <!-- An empty list is two opposite facts needing different next moves: nothing written, or everything already committed.
+                 "Ask it in chat" only applies where a chat for this agent exists; a remote review has none on screen, so the
+                 sentence points at the crossing instead. -->
+            <EmptyState
+                v-if="changes.count.value === 0 && history.count.value === 0"
+                :icon="changes.absorbed.value > 0 ? 'check' : 'file-edit'"
+                :line="
+                    changes.absorbed.value > 0
+                        ? t(`agents.agentReviewPanel.anythingWritesNextShows`, { absorbedNote })
+                        : remoteName !== undefined
+                          ? t(`agents.agentReviewPanel.agentHasntChangedAny`, { remoteName })
+                          : t(`agents.agentReviewPanel.agentHasntChangedAny2`)
+                "
+                class="min-h-0 flex-1 p-6"
             >
-                <!-- The list's own header (count, filter, pass progress), the same height as the diff's toolbar so both align. -->
-                <!-- Wraps inside a one-line box: the totals take the line only when they fit beside the filter, and
-                     otherwise drop to a second line the box clips, rather than spilling over the diff's toolbar. Each
-                     group heading keeps its own totals either way. -->
-                <div class="h-8 shrink-0 overflow-hidden border-b border-line max-md:h-12">
-                    <div class="flex flex-wrap items-center gap-x-1.5 px-2 *:h-8 max-md:*:h-12">
-                        <div v-if="filterOptions.length > 1" class="flex max-w-full items-center overflow-x-auto [scrollbar-width:none]">
-                            <SegmentedControl v-model="filter" :options="filterOptions" size="xs" />
+                <template v-if="remoteName !== undefined" #actions>
+                    <Button size="small" tier="boring" @click="cross">
+                        <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
+                    </Button>
+                </template>
+            </EmptyState>
+
+            <!-- List | diff share one screen on a phone: the diff takes over on pick, with no route change either way. -->
+            <!-- No select-none while dragging: ResizeSeam already claims the whole document's selection for the drag. -->
+            <div v-else class="flex min-h-0 flex-1">
+                <aside
+                    v-if="mobile ? selected === undefined : listMode === `side`"
+                    class="flex min-h-0 min-w-0 flex-col"
+                    :class="mobile ? 'flex-1' : 'shrink-0 border-r border-line'"
+                    :style="mobile ? undefined : { width: uiLength(shell.reviewListWidth.value) }"
+                >
+                    <!-- The list's own header (count, filter, pass progress), the same height as the diff's toolbar so both align. -->
+                    <!-- Wraps inside a one-line box: the totals take the line only when they fit beside the filter, and
+                         otherwise drop to a second line the box clips, rather than spilling over the diff's toolbar. Each
+                         group heading keeps its own totals either way. -->
+                    <div class="h-8 shrink-0 overflow-hidden border-b border-line max-md:h-12">
+                        <div class="flex flex-wrap items-center gap-x-1.5 px-2 *:h-8 max-md:*:h-12">
+                            <div v-if="filterOptions.length > 1" class="flex max-w-full items-center overflow-x-auto [scrollbar-width:none]">
+                                <SegmentedControl v-model="filter" :options="filterOptions" size="xs" />
+                            </div>
+                            <span v-else class="inline-flex items-center whitespace-nowrap text-2xs text-muted">
+                                <span class="font-medium text-content">{{ bodyFiles.length }}</span>&nbsp;{{ t(`agents.agentReviewPanel.files`, {}, bodyFiles.length) }}
+                            </span>
+                            <span v-if="changes.fetching.value" class="inline-flex items-center"><Icon name="spinner" class="text-2xs text-muted" spin /></span>
+                            <!-- Totals for the whole review; the code/tests split is carried by the filter options instead. -->
+                            <ReviewTotals class="ml-auto" :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" :viewed="bodyViewed" :total="bodyFiles.length" />
                         </div>
-                        <span v-else class="inline-flex items-center whitespace-nowrap text-2xs text-muted">
-                            <span class="font-medium text-content">{{ bodyFiles.length }}</span>&nbsp;{{ t(`agents.agentReviewPanel.files`, {}, bodyFiles.length) }}
-                        </span>
-                        <span v-if="changes.fetching.value" class="inline-flex items-center"><Icon name="spinner" class="text-2xs text-muted" spin /></span>
-                        <!-- Totals for the whole review; the code/tests split is carried by the filter options instead. -->
-                        <ReviewTotals class="ml-auto" :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" :viewed="bodyViewed" :total="bodyFiles.length" />
                     </div>
-                </div>
 
-                <div class="min-h-0 flex-1 overflow-auto">
-                    <div v-for="group in groups" :key="group.key">
-                        <!-- Sticky, since scrolling is what takes the repo context away. -->
-                        <div
-                            class="group/head sticky top-0 z-10 flex w-full items-center border-b border-line/60 bg-canvas pr-1 transition-colors hover:bg-overlay"
-                        >
-                            <button
-                                type="button"
-                                class="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left"
-                                @click="toggleGroup(group.key)"
+                    <div class="min-h-0 flex-1 overflow-auto">
+                        <div v-for="group in groups" :key="group.key">
+                            <!-- Sticky, since scrolling is what takes the repo context away. -->
+                            <div
+                                class="group/head sticky top-0 z-10 flex w-full items-center border-b border-line/60 bg-canvas pr-1 transition-colors hover:bg-overlay"
                             >
-                                <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.key) ? 'chevron-right' : 'chevron-down'" />
-                                <Icon v-if="group.conflicts" :name="CONFLICT_ICON" class="shrink-0 text-2xs text-warning" />
-                                <span
-                                    class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide"
-                                    :class="group.conflicts ? `text-warning` : `text-muted`"
-                                    >{{ group.title }}</span
+                                <button
+                                    type="button"
+                                    class="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left"
+                                    @click="toggleGroup(group.key)"
                                 >
-                                <span class="shrink-0 ui-status-pill bg-overlay text-2xs text-muted">{{ groupLabel(group.files) }}</span>
-                                <span
-                                    v-if="group.blocked > 0 && !group.conflicts"
-                                    class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
-                                    :class="toneWash(`warning`)"
-                                >
-                                    <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
-                                </span>
-                                <span class="flex-1"></span>
-                                <ReviewStat :code="group.code" :additions="group.additions" :deletions="group.deletions" />
-                            </button>
-                            <ReviewGroupCheck
-                                :name="group.title"
-                                :total="group.files.length"
-                                :viewed="groupProgress(group.files)"
-                                @toggle="toggleGroupViewed(group.files)"
-                            />
-                        </div>
+                                    <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.key) ? 'chevron-right' : 'chevron-down'" />
+                                    <Icon v-if="group.conflicts" :name="CONFLICT_ICON" class="shrink-0 text-2xs text-warning" />
+                                    <span
+                                        class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide"
+                                        :class="group.conflicts ? `text-warning` : `text-muted`"
+                                        >{{ group.title }}</span
+                                    >
+                                    <span class="shrink-0 ui-status-pill bg-overlay text-2xs text-muted">{{ groupLabel(group.files) }}</span>
+                                    <span
+                                        v-if="group.blocked > 0 && !group.conflicts"
+                                        class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
+                                        :class="toneWash(`warning`)"
+                                    >
+                                        <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
+                                    </span>
+                                    <span class="flex-1"></span>
+                                    <ReviewStat :code="group.code" :additions="group.additions" :deletions="group.deletions" />
+                                </button>
+                                <ReviewGroupCheck
+                                    :name="group.title"
+                                    :total="group.files.length"
+                                    :viewed="groupProgress(group.files)"
+                                    @toggle="toggleGroupViewed(group.files)"
+                                />
+                            </div>
 
-                        <template v-if="!collapsed.has(group.key)">
-                            <template v-for="bucket in viewOf(group.key).buckets" :key="`${group.key}/${bucket.key}`">
-                                <!-- The package a run of rows belongs to, stated once: same fold-left/sweep-right/totals-between heading as the repo's, one scope down. -->
-                                <div v-if="viewOf(group.key).named" class="group/head flex items-center border-b border-line/40 bg-canvas/60 pr-1.5">
-                                    <button
-                                        type="button"
-                                        class="flex min-w-0 flex-1 items-center gap-2 py-1 pl-2 pr-1.5 text-left"
-                                        @click="toggleModule(group.key, bucket.key)"
-                                    >
-                                        <Icon
-                                            class="shrink-0 text-[0.6rem] text-subtle"
-                                            :name="moduleCollapsed(group.key, bucket.key) ? 'chevron-right' : 'chevron-down'"
-                                        />
-                                        <!-- One way to name a module, shared with the workspace's own Changes list (ModuleLabel). -->
-                                        <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
-                                        <span class="shrink-0 text-2xs text-subtle">{{ groupLabel(bucket.rows) }}</span>
-                                        <!-- A folded package can't hide a refusal either: same badge, same glyph, one scope down. -->
-                                        <span
-                                            v-if="bucket.blocked > 0"
-                                            class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
-                                            :class="toneWash(`warning`)"
-                                        >
-                                            <Icon name="exclamation-triangle" class="text-2xs" />{{ bucket.blocked }}
-                                        </span>
-                                        <span class="flex-1"></span>
-                                        <!-- Its size, always: the only place a folded package's +/- survives, and what marks it worth folding. -->
-                                        <ReviewStat :code="bucket.code" :additions="bucket.additions" :deletions="bucket.deletions" />
-                                    </button>
-                                    <ReviewGroupCheck
-                                        :name="bucket.name"
-                                        :total="bucket.rows.length"
-                                        :viewed="groupProgress(bucket.rows)"
-                                        @toggle="toggleGroupViewed(bucket.rows)"
-                                    />
-                                </div>
-                                <template v-if="!moduleCollapsed(group.key, bucket.key)">
-                                    <div
-                                        v-for="file in bucket.rows"
-                                        :key="file.key"
-                                        :ref="(el) => setRowEl(file.key, el)"
-                                        class="group/file flex items-center transition-colors"
-                                        :class="[
-                                            // Tint only, no edge stripe: the same way the workspace's Changes list marks its picked row.
-                                            file.key === selectedKey ? 'bg-primary-600/10' : 'hover:bg-overlay',
-                                            // Under a header the rows step in, so the module reads as holding them.
-                                            viewOf(group.key).named ? 'pl-2' : '',
-                                        ]"
-                                    >
+                            <template v-if="!collapsed.has(group.key)">
+                                <template v-for="bucket in viewOf(group.key).buckets" :key="`${group.key}/${bucket.key}`">
+                                    <!-- The package a run of rows belongs to, stated once: same fold-left/sweep-right/totals-between heading as the repo's, one scope down. -->
+                                    <div v-if="viewOf(group.key).named" class="group/head flex items-center border-b border-line/40 bg-canvas/60 pr-1.5">
                                         <button
                                             type="button"
-                                            class="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2.5 pr-1.5 text-left max-md:min-h-11"
-                                            :class="isViewed(file) ? 'opacity-50' : ''"
-                                            @click="select(file)"
+                                            class="flex min-w-0 flex-1 items-center gap-2 py-1 pl-2 pr-1.5 text-left"
+                                            @click="toggleModule(group.key, bucket.key)"
                                         >
-                                            <ChangeStatusMark :status="file.change.status" />
                                             <Icon
-                                                :name="iconForEntry(basename(file.change.path), 'file', false)"
-                                                class="shrink-0 text-2xs"
-                                                :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
+                                                class="shrink-0 text-[0.6rem] text-subtle"
+                                                :name="moduleCollapsed(group.key, bucket.key) ? 'chevron-right' : 'chevron-down'"
                                             />
-                                            <!-- How a changed file is named, shared with the workspace's Changes list (ChangeRowName). -->
-                                            <ChangeRowName :path="file.change.path" :label="file.label" :named="viewOf(group.key).named" />
-                                            <!-- A glyph, not a word: the name is what the reader needs, and the cause is the hover's. -->
+                                            <!-- One way to name a module, shared with the workspace's own Changes list (ModuleLabel). -->
+                                            <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
+                                            <span class="shrink-0 text-2xs text-subtle">{{ groupLabel(bucket.rows) }}</span>
+                                            <!-- A folded package can't hide a refusal either: same badge, same glyph, one scope down. -->
                                             <span
-                                                v-if="file.blocked !== undefined"
-                                                class="inline-flex shrink-0 items-center text-2xs text-warning"
-                                                v-tooltip.right="reasonCopy()[file.blocked].row"
-                                                :aria-label="t(`agents.agentReviewPanel.conflict`)"
+                                                v-if="bucket.blocked > 0"
+                                                class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
+                                                :class="toneWash(`warning`)"
                                             >
-                                                <Icon :name="CONFLICT_ICON" class="text-2xs" />
+                                                <Icon name="exclamation-triangle" class="text-2xs" />{{ bucket.blocked }}
                                             </span>
-                                            <!-- Which commit took this file; silent with only one, already named by the summary above (`manyCommits`). -->
-                                            <span
-                                                v-else-if="file.carriedBy !== undefined && manyCommits"
-                                                class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-subtle"
-                                                v-tooltip.right="t(`agents.agentReviewPanel.yourCommit`)"
-                                                >{{ file.carriedBy.short }}</span
-                                            >
-                                            <span
-                                                v-else-if="mixedLanding && file.carriedBy === undefined && !file.change.landed"
-                                                class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-                                                v-tooltip.right="t(`agents.agentReviewPanel.unlanded`)"
-                                            ></span>
-                                            <!-- `of` turns the badge into a rail: weight against the heaviest file on screen, scanned rather than read digit by digit. -->
-                                            <ReviewStat
-                                                :code="file.change.code"
-                                                :additions="file.change.additions"
-                                                :deletions="file.change.deletions"
-                                                :of="heaviest"
-                                            />
+                                            <span class="flex-1"></span>
+                                            <!-- Its size, always: the only place a folded package's +/- survives, and what marks it worth folding. -->
+                                            <ReviewStat :code="bucket.code" :additions="bucket.additions" :deletions="bucket.deletions" />
                                         </button>
-                                        <button
-                                            type="button"
-                                            :class="
-                                                ui.iconButton(
-                                                    { size: mobile ? `lg` : `sm` },
-                                                    isViewed(file)
-                                                        ? `text-success`
-                                                        : `opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100`,
-                                                )
-                                            "
-                                            @click="toggleViewed(file)"
-                                            v-tooltip.right="isViewed(file) ? reviewedTip() : t(`agents.agentReviewPanel.markReviewed`)"
-                                            :aria-label="markLabel(file)"
-                                        >
-                                            <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />
-                                        </button>
+                                        <ReviewGroupCheck
+                                            :name="bucket.name"
+                                            :total="bucket.rows.length"
+                                            :viewed="groupProgress(bucket.rows)"
+                                            @toggle="toggleGroupViewed(bucket.rows)"
+                                        />
                                     </div>
+                                    <template v-if="!moduleCollapsed(group.key, bucket.key)">
+                                        <div
+                                            v-for="file in bucket.rows"
+                                            :key="file.key"
+                                            :ref="(el) => setRowEl(file.key, el)"
+                                            class="group/file flex items-center transition-colors"
+                                            :class="[
+                                                // Tint only, no edge stripe: the same way the workspace's Changes list marks its picked row.
+                                                file.key === selectedKey ? 'bg-primary-600/10' : 'hover:bg-overlay',
+                                                // Under a header the rows step in, so the module reads as holding them.
+                                                viewOf(group.key).named ? 'pl-2' : '',
+                                            ]"
+                                        >
+                                            <button
+                                                type="button"
+                                                class="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2.5 pr-1.5 text-left max-md:min-h-11"
+                                                :class="isViewed(file) ? 'opacity-50' : ''"
+                                                @click="select(file)"
+                                            >
+                                                <ChangeStatusMark :status="file.change.status" />
+                                                <Icon
+                                                    :name="iconForEntry(basename(file.change.path), 'file', false)"
+                                                    class="shrink-0 text-2xs"
+                                                    :class="explorerColorClass(explorerStyle, basename(file.change.path), 'file', false)"
+                                                />
+                                                <!-- How a changed file is named, shared with the workspace's Changes list (ChangeRowName). -->
+                                                <ChangeRowName :path="file.change.path" :label="file.label" :named="viewOf(group.key).named" />
+                                                <!-- A glyph, not a word: the name is what the reader needs, and the cause is the hover's. -->
+                                                <span
+                                                    v-if="file.blocked !== undefined"
+                                                    class="inline-flex shrink-0 items-center text-2xs text-warning"
+                                                    v-tooltip.right="reasonCopy()[file.blocked].row"
+                                                    :aria-label="t(`agents.agentReviewPanel.conflict`)"
+                                                >
+                                                    <Icon :name="CONFLICT_ICON" class="text-2xs" />
+                                                </span>
+                                                <!-- Which commit took this file; silent with only one, already named by the summary above (`manyCommits`). -->
+                                                <span
+                                                    v-else-if="file.carriedBy !== undefined && manyCommits"
+                                                    class="shrink-0 rounded bg-overlay px-1 py-px font-mono text-2xs text-subtle"
+                                                    v-tooltip.right="t(`agents.agentReviewPanel.yourCommit`)"
+                                                    >{{ file.carriedBy.short }}</span
+                                                >
+                                                <span
+                                                    v-else-if="mixedLanding && file.carriedBy === undefined && !file.change.landed"
+                                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+                                                    v-tooltip.right="t(`agents.agentReviewPanel.unlanded`)"
+                                                ></span>
+                                                <!-- `of` turns the badge into a rail: weight against the heaviest file on screen, scanned rather than read digit by digit. -->
+                                                <ReviewStat
+                                                    :code="file.change.code"
+                                                    :additions="file.change.additions"
+                                                    :deletions="file.change.deletions"
+                                                    :of="heaviest"
+                                                />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :class="
+                                                    ui.iconButton(
+                                                        { size: mobile ? `lg` : `sm` },
+                                                        isViewed(file)
+                                                            ? `text-success`
+                                                            : `opacity-0 focus-visible:opacity-100 group-hover/file:opacity-100 max-md:opacity-100`,
+                                                    )
+                                                "
+                                                @click="toggleViewed(file)"
+                                                v-tooltip.right="isViewed(file) ? reviewedTip() : t(`agents.agentReviewPanel.markReviewed`)"
+                                                :aria-label="markLabel(file)"
+                                            >
+                                                <Icon :name="isViewed(file) ? 'check-square' : 'check'" class="text-2xs" />
+                                            </button>
+                                        </div>
+                                    </template>
                                 </template>
                             </template>
-                        </template>
+                        </div>
                     </div>
-                </div>
-            </aside>
+                </aside>
 
-            <!-- Sits in flow with negative margins, straddling the border without an overlay that scrolls with the list. -->
-            <ResizeSeam
-                v-if="!mobile && listMode === `side`"
-                v-model="seamWidth"
-                :min="toScreenPx(MIN_REVIEW_LIST_WIDTH)"
-                :max="toScreenPx(MAX_REVIEW_LIST_WIDTH)"
-                :reset="toScreenPx(defaultReviewListWidth())"
-                :title="t(`ui.resizeSeam.doubleClickResets`)"
-            />
+                <!-- Sits in flow with negative margins, straddling the border without an overlay that scrolls with the list. -->
+                <ResizeSeam
+                    v-if="!mobile && listMode === `side`"
+                    v-model="seamWidth"
+                    :min="toScreenPx(MIN_REVIEW_LIST_WIDTH)"
+                    :max="toScreenPx(MAX_REVIEW_LIST_WIDTH)"
+                    :reset="toScreenPx(defaultReviewListWidth())"
+                    :title="t(`ui.resizeSeam.doubleClickResets`)"
+                />
 
-            <!-- An open diff on a phone keeps its sideways touches (pager/swipeYields.ts): a finger across code is reading
-                 it, not turning back to the chat. Its own back arrow, and the header's switch, still leave it. -->
-            <section
-                v-if="!mobile || selected !== undefined"
-                class="flex min-h-0 min-w-0 flex-1 flex-col"
-                :data-own-swipe="mobile ? `` : undefined"
-            >
-                <!-- The file list folded into one row over the diff (listMode `switcher`). -->
-                <ReviewFileSwitcher
-                    v-if="listMode === `switcher`"
-                    v-model:filter="filter"
-                    :filters="filterOptions"
-                    :rows="switcherRows"
-                    :selected="selectedKey"
-                    :viewed="changes.viewed.value"
-                    @pick="select"
+                <!-- An open diff on a phone keeps its sideways touches (pager/swipeYields.ts): a finger across code is reading
+                     it, not turning back to the chat. Its own back arrow, and the header's switch, still leave it. -->
+                <section
+                    v-if="!mobile || selected !== undefined"
+                    class="flex min-h-0 min-w-0 flex-1 flex-col"
+                    :data-own-swipe="mobile ? `` : undefined"
                 >
-                    <ReviewTotals :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" :viewed="bodyViewed" :total="bodyFiles.length" />
-                </ReviewFileSwitcher>
-                <template v-if="selected !== undefined">
-                    <!-- The same toolbar the workspace tab renders, so Split|Unified and Comments sit in the same place everywhere. -->
-                    <DiffToolbar
-                        :path="selected.label"
-                        :status="selected.change.status"
-                        :code="selected.change.code"
-                        :additions="selected.change.additions"
-                        :deletions="selected.change.deletions"
-                        :from="selected.change.from"
+                    <!-- The file list folded into one row over the diff (listMode `switcher`). -->
+                    <ReviewFileSwitcher
+                        v-if="listMode === `switcher`"
+                        v-model:filter="filter"
+                        :filters="filterOptions"
+                        :rows="switcherRows"
+                        :selected="selectedKey"
+                        :viewed="changes.viewed.value"
+                        @pick="select"
                     >
-                        <template #lead>
-                            <button
-                                v-if="mobile"
-                                type="button"
-                                :class="ICON_BUTTON"
-                                @click="selectedKey = undefined"
-                                :aria-label="t(`agents.agentReviewPanel.backToFileList`)"
-                            >
-                                <Icon name="arrow-left" class="text-xs" />
-                            </button>
-                        </template>
-                        <!-- The row's mark, carried onto the opened file: a diff without it would read as an ordinary change. -->
-                        <template #badges>
-                            <span
-                                v-if="selected.blocked !== undefined"
-                                class="inline-flex shrink-0 items-center gap-1 ui-status-pill text-2xs font-medium"
-                                :class="toneWash(`warning`)"
-                                v-tooltip.bottom="reasonCopy()[selected.blocked].row"
-                            >
-                                <Icon :name="CONFLICT_ICON" class="text-2xs" />{{ t(`agents.agentReviewPanel.conflict`) }}
-                            </span>
-                            <!-- What this diff is on an already-committed file: the agent's own change, measured the same as every other row, not the commit's own patch. The review's one statement of where committed work went; the rest opens under it on hover. -->
-                            <AgentHistoryChip
-                                v-else-if="selected.carriedBy !== undefined"
-                                :current="selected.carriedBy"
-                                :commits="history.commits.value"
-                                :unaccounted="history.unaccounted.value"
-                                :remote-name="remoteName"
-                                :graphs="graphs"
-                                @open-graph="openGitHistory"
-                            />
-                            <span
-                                v-else-if="mixedLanding && !selected.change.landed"
-                                class="shrink-0 ui-status-pill text-2xs font-medium"
-                                :class="toneWash(`warning`)"
-                                v-tooltip.bottom="t(`agents.agentReviewPanel.awaitingLand`)"
-                            >
-                                {{ t(`agents.agentReviewPanel.notLanded`) }}
-                            </span>
-                        </template>
-                        <!-- The review pass itself, and nothing else: accept this file, step to the next. Both have one-key peers (v, j/k), so they are here to say the pass exists as much as to be pressed. -->
-                        <template #actions>
-                            <button
-                                type="button"
-                                :class="[ICON_BUTTON, isViewed(selected) ? 'text-success' : '']"
-                                @click="toggleViewed(selected)"
-                                v-tooltip.bottom="isViewed(selected) ? reviewedTip(markTip.keys) : markTip"
-                                :aria-label="markLabel(selected)"
-                            >
-                                <Icon :name="isViewed(selected) ? 'check-square' : 'check'" class="text-2xs" />
-                            </button>
-                            <!-- Two halves of one move, so they are drawn as one stepper on a shared plate rather than as two loose glyphs. -->
-                            <span class="flex shrink-0 items-center rounded-md bg-overlay/60">
+                        <ReviewTotals :code="reviewCode" :additions="bodyAdditions" :deletions="bodyDeletions" :viewed="bodyViewed" :total="bodyFiles.length" />
+                    </ReviewFileSwitcher>
+                    <template v-if="selected !== undefined">
+                        <!-- The same toolbar the workspace tab renders, so Split|Unified and Comments sit in the same place everywhere. -->
+                        <DiffToolbar
+                            :path="selected.label"
+                            :status="selected.change.status"
+                            :code="selected.change.code"
+                            :additions="selected.change.additions"
+                            :deletions="selected.change.deletions"
+                            :from="selected.change.from"
+                        >
+                            <template #lead>
                                 <button
+                                    v-if="mobile"
                                     type="button"
                                     :class="ICON_BUTTON"
-                                    @click="move(-1)"
-                                    v-tooltip.bottom="previousTip"
-                                    :aria-label="t(`agents.agentReviewPanel.previousFile`)"
+                                    @click="selectedKey = undefined"
+                                    :aria-label="t(`agents.agentReviewPanel.backToFileList`)"
                                 >
-                                    <Icon name="chevron-up" class="text-2xs" />
+                                    <Icon name="arrow-left" class="text-xs" />
                                 </button>
+                            </template>
+                            <!-- The row's mark, carried onto the opened file: a diff without it would read as an ordinary change. -->
+                            <template #badges>
+                                <span
+                                    v-if="selected.blocked !== undefined"
+                                    class="inline-flex shrink-0 items-center gap-1 ui-status-pill text-2xs font-medium"
+                                    :class="toneWash(`warning`)"
+                                    v-tooltip.bottom="reasonCopy()[selected.blocked].row"
+                                >
+                                    <Icon :name="CONFLICT_ICON" class="text-2xs" />{{ t(`agents.agentReviewPanel.conflict`) }}
+                                </span>
+                                <!-- What this diff is on an already-committed file: the agent's own change, measured the same as every other row, not the commit's own patch. The review's one statement of where committed work went; the rest opens under it on hover. -->
+                                <AgentHistoryChip
+                                    v-else-if="selected.carriedBy !== undefined"
+                                    :current="selected.carriedBy"
+                                    :commits="history.commits.value"
+                                    :unaccounted="history.unaccounted.value"
+                                    :remote-name="remoteName"
+                                    :graphs="graphs"
+                                    @open-graph="openGitHistory"
+                                />
+                                <span
+                                    v-else-if="mixedLanding && !selected.change.landed"
+                                    class="shrink-0 ui-status-pill text-2xs font-medium"
+                                    :class="toneWash(`warning`)"
+                                    v-tooltip.bottom="t(`agents.agentReviewPanel.awaitingLand`)"
+                                >
+                                    {{ t(`agents.agentReviewPanel.notLanded`) }}
+                                </span>
+                            </template>
+                            <!-- The review pass itself, and nothing else: accept this file, step to the next. Both have one-key peers (v, j/k), so they are here to say the pass exists as much as to be pressed. -->
+                            <template #actions>
                                 <button
                                     type="button"
-                                    :class="ICON_BUTTON"
-                                    @click="move(1)"
-                                    v-tooltip.bottom="nextTip"
-                                    :aria-label="t(`agents.agentReviewPanel.nextFile`)"
+                                    :class="[ICON_BUTTON, isViewed(selected) ? 'text-success' : '']"
+                                    @click="toggleViewed(selected)"
+                                    v-tooltip.bottom="isViewed(selected) ? reviewedTip(markTip.keys) : markTip"
+                                    :aria-label="markLabel(selected)"
                                 >
-                                    <Icon name="chevron-down" class="text-2xs" />
+                                    <Icon :name="isViewed(selected) ? 'check-square' : 'check'" class="text-2xs" />
                                 </button>
-                            </span>
-                        </template>
-                        <!-- Leaving for the editor is a once-a-review escape, not part of the pass: it rides in the toolbar's own panel instead of spending a place in the row. Remote agents have no local workspace tab to open. -->
-                        <template #settings="{ item, label, close }">
-                            <button
-                                v-if="!mobile && at === undefined"
-                                type="button"
-                                :class="item"
-                                :disabled="diff === undefined"
-                                @click="
-                                    close();
-                                    openInWorkspace();
-                                "
-                            >
-                                <span :class="label">{{ t(`agents.agentReviewPanel.openDiffInWorkspace`) }}</span>
-                                <Icon name="external-link" class="text-2xs text-subtle" />
-                            </button>
-                        </template>
-                    </DiffToolbar>
+                                <!-- Two halves of one move, so they are drawn as one stepper on a shared plate rather than as two loose glyphs. -->
+                                <span class="flex shrink-0 items-center rounded-md bg-overlay/60">
+                                    <button
+                                        type="button"
+                                        :class="ICON_BUTTON"
+                                        @click="move(-1)"
+                                        v-tooltip.bottom="previousTip"
+                                        :aria-label="t(`agents.agentReviewPanel.previousFile`)"
+                                    >
+                                        <Icon name="chevron-up" class="text-2xs" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        :class="ICON_BUTTON"
+                                        @click="move(1)"
+                                        v-tooltip.bottom="nextTip"
+                                        :aria-label="t(`agents.agentReviewPanel.nextFile`)"
+                                    >
+                                        <Icon name="chevron-down" class="text-2xs" />
+                                    </button>
+                                </span>
+                            </template>
+                            <!-- Leaving for the editor is a once-a-review escape, not part of the pass: it rides in the toolbar's own panel instead of spending a place in the row. Remote agents have no local workspace tab to open. -->
+                            <template #settings="{ item, label, close }">
+                                <button
+                                    v-if="!mobile && at === undefined"
+                                    type="button"
+                                    :class="item"
+                                    :disabled="diff === undefined"
+                                    @click="
+                                        close();
+                                        openInWorkspace();
+                                    "
+                                >
+                                    <span :class="label">{{ t(`agents.agentReviewPanel.openDiffInWorkspace`) }}</span>
+                                    <Icon name="external-link" class="text-2xs text-subtle" />
+                                </button>
+                            </template>
+                        </DiffToolbar>
 
-                    <div class="min-h-0 flex-1">
-                        <p v-if="diffError !== undefined" class="p-4 text-xs text-danger">{{ diffError }}</p>
                         <!-- A file read is one line where the diff's first line will be: the toolbar above already names the file
                              and its counts, and code lines guessed for it (or remembered from another agent's diff of the same
                              path) would only be torn down. -->
-                        <template v-else-if="diff === undefined">
-                            <ReviewWaitLine v-if="diffOutline" :label="t(`workspace.diffSkeleton.readingFile`)" class="px-4" />
-                        </template>
-                        <!-- One box around whichever viewer FileDiffPane picks. -->
-                        <div v-else class="h-full">
-                            <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace editor. -->
-                            <FileDiffPane
-                                :key="diffKey"
-                                :path="selected.change.path"
-                                :before="diff.before"
-                                :after="diff.after"
-                                :binary="diff.binary"
-                                :partial="diff.partial"
-                                :before-raw="rawSides.beforeRaw"
-                                :after-raw="rawSides.afterRaw"
-                                :at="at"
-                            />
+                        <div class="min-h-0 flex-1">
+                            <Await :of="diffRead" :label="t(`workspace.diffSkeleton.readingFile`)">
+                                <template #fallback><ReviewWaitLine :label="t(`workspace.diffSkeleton.readingFile`)" class="px-4" /></template>
+                                <template #failed="{ error }"><p class="p-4 text-xs text-danger">{{ error }}</p></template>
+                                <template #default="{ data: body, refreshError }">
+                                    <p v-if="refreshError !== undefined" class="p-4 text-xs text-danger">{{ refreshError }}</p>
+                                    <!-- One box around whichever viewer FileDiffPane picks. -->
+                                    <div v-else class="h-full">
+                                        <!-- Bytes, a patch, or two whole sides: FileDiffPane decides, same as it does in the workspace editor. -->
+                                        <FileDiffPane
+                                            :key="diffKey"
+                                            :path="selected.change.path"
+                                            :before="body.before"
+                                            :after="body.after"
+                                            :binary="body.binary"
+                                            :partial="body.partial"
+                                            :before-raw="rawSides.beforeRaw"
+                                            :after-raw="rawSides.afterRaw"
+                                            :at="at"
+                                        />
+                                    </div>
+                                </template>
+                            </Await>
                         </div>
-                    </div>
-                </template>
-                <p v-else class="p-4 text-2xs text-subtle">{{ t(`agents.agentReviewPanel.pickFileToSee`) }}</p>
-            </section>
-        </div>
+                    </template>
+                    <p v-else class="p-4 text-2xs text-subtle">{{ t(`agents.agentReviewPanel.pickFileToSee`) }}</p>
+                </section>
+            </div>
+        </Await>
     </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { type TurnBriefingNoteId, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract/schemas/personas";
-import { ui, Icon } from "@intentic/ui";
+import { Icon, SectionHeader, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
 import { useT } from "@intentic/ui/i18n";
@@ -38,7 +38,7 @@ const showFixtures = ref(false);
 <template>
     <div class="flex flex-col gap-3">
         <div class="flex flex-col gap-0.5">
-            <span :class="ui.sectionLabel()">{{ t(`sandbox.personaBriefingFields.sentEveryMessage`) }}</span>
+            <SectionHeader :label="t(`sandbox.personaBriefingFields.sentEveryMessage`)" />
             <span class="text-xs text-subtle">
                 {{ t(`sandbox.personaBriefingFields.sandboxPutsInFront`) }}
             </span>

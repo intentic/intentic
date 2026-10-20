@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { CAPABILITY_CATALOG, localModelGb } from "@intentic/capability-catalog";
+import { useLoaded } from "@intentic/extension-api";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
 import type { LocalModelFitResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import { LOCAL_MODEL_WINDOW_DEFAULT, type CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { Button, Icon, type IconName, type NoticeModel, Row, RowNote, SkeletonSnapshot, StatusBadge, type StatusVariant, ui, vSkeletonSource } from "@intentic/ui";
+import { Await, Button, Icon, type IconName, type NoticeModel, Row, RowNote, StatusBadge, type StatusVariant, ui } from "@intentic/ui";
 import { computed, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useOperation } from "../../../workbench/operations/operations";
@@ -29,6 +30,8 @@ const t = useT();
 
 const { fit } = defineProps<{ fit: LocalModelFitResponse | undefined }>();
 const emit = defineEmits<{ ready: [provider: string]; stopPrefetch: [] }>();
+// Nothing is offered before the machine has answered: until its measurement is in, the lane waits.
+const measured = useLoaded(() => ({ data: fit, error: undefined, fetching: fit === undefined, wanted: true }));
 
 const { capabilities, add } = useCapabilities();
 const card = CAPABILITY_CATALOG.find((entry) => entry.id === `localmodel`)!;
@@ -235,123 +238,134 @@ const rungs = computed(() => {
 
 <template>
     <div>
-        <!-- Nothing is offered before the machine has answered; a skeleton beats a number we would have to take back. The
-             lane as this machine last drew it, once it has been seen; until then the words. -->
-        <SkeletonSnapshot v-if="fit === undefined" of="connect.local-model" :label="t(`connect.localModelLane.measuring`)">
-            <p class="flex items-center gap-1.5 px-4 py-3.5 text-xs text-subtle">
-                <Icon name="spinner" spin />{{ t(`connect.localModelLane.measuring`) }}
-            </p>
-        </SkeletonSnapshot>
+        <!-- A skeleton beats a number we would have to take back: the lane as this machine last drew it, once it has been
+             seen; until then the words. -->
+        <Await :of="measured" imprint="connect.local-model" :label="t(`connect.localModelLane.measuring`)">
+            <template #fallback>
+                <p class="flex items-center gap-1.5 px-4 py-3.5 text-xs text-subtle">
+                    <Icon name="spinner" spin />{{ t(`connect.localModelLane.measuring`) }}
+                </p>
+            </template>
+            <template #default="{ data: fit }">
+                <!-- Its parts divided as the rows of the card it sits in. -->
+                <div class="divide-y divide-line-subtle">
+                    <RowNote variant="block">
+                        <div class="flex flex-col gap-1">
+                            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                                <span class="flex items-center gap-1.5"><Icon name="database" class="text-2xs text-subtle" />{{ memoryFact }}</span>
+                            </div>
+                            <p v-if="machineHint" class="text-2xs text-subtle">{{ machineHint }}</p>
+                        </div>
+                    </RowNote>
 
-        <!-- One element, so its imprint is the whole lane; its parts divided as the rows of the card it sits in. -->
-        <div v-else v-skeleton-source="`connect.local-model`" class="divide-y divide-line-subtle">
-            <RowNote variant="block">
-                <div class="flex flex-col gap-1">
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-                        <span class="flex items-center gap-1.5"><Icon name="database" class="text-2xs text-subtle" />{{ memoryFact }}</span>
-                    </div>
-                    <p v-if="machineHint" class="text-2xs text-subtle">{{ machineHint }}</p>
-                </div>
-            </RowNote>
+                    <!-- llama-server is baked into the standard image, so this is the dev-run and core-image case, not the usual one. -->
+                    <p v-if="!fit.serverReady" :class="ui.emptyState(`px-4 py-3.5 text-left`)">{{ t(`connect.localModelLane.needsRebuild`) }}</p>
 
-            <!-- llama-server is baked into the standard image, so this is the dev-run and core-image case, not the usual one. -->
-            <p v-if="!fit.serverReady" :class="ui.emptyState(`px-4 py-3.5 text-left`)">{{ t(`connect.localModelLane.needsRebuild`) }}</p>
+                    <p v-else-if="nothingFits" :class="ui.emptyState(`px-4 py-3.5 text-left`)">
+                        {{
+                            fit.fullSpeedBytes === undefined
+                                ? t(`connect.localModelLane.nothingFits`, { memory: gb(fit.memoryBytes) })
+                                : t(`connect.localModelLane.nothingRunsWhole`, { free: gb(fit.fullSpeedBytes) })
+                        }}
+                    </p>
 
-            <p v-else-if="nothingFits" :class="ui.emptyState(`px-4 py-3.5 text-left`)">
-                {{
-                    fit.fullSpeedBytes === undefined
-                        ? t(`connect.localModelLane.nothingFits`, { memory: gb(fit.memoryBytes) })
-                        : t(`connect.localModelLane.nothingRunsWhole`, { free: gb(fit.fullSpeedBytes) })
-                }}
-            </p>
-
-            <Row v-for="rung in rungs" v-else :key="rung.key" indent>
-                <template #lead="{ iconClass }">
-                    <Icon :name="rung.icon" class="shrink-0" :class="[iconClass, rung.iconClass]" />
-                </template>
-                <template #title>
-                    <span class="flex flex-wrap items-center gap-2">
-                        {{ optionOf(rung.model)?.label }}
-                        <StatusBadge :variant="rung.badgeVariant" :label="rung.badge" size="xs" />
-                    </span>
-                </template>
-                <!-- What it is for, then what it costs as short facts, read as one block under the name. -->
-                <template #description>
-                    <span class="block">{{ rung.pitch }}</span>
-                    <span class="mt-0.5 block text-2xs tabular-nums text-subtle">{{ rung.facts.join(` · `) }}</span>
-                </template>
-                <template #control>
-                    <!-- Taken: where it has got to, in place of a button whose second press would write a second entry and
-                         leave this one without the machine's single server slot. -->
-                    <StatusBadge v-if="rung.status" :variant="rung.status.variant" dot>
-                        <Icon v-if="rung.status.icon" :name="rung.status.icon" spin class="text-2xs" />{{ rung.status.label }}
-                    </StatusBadge>
-                    <Button
-                        v-else
-                        size="small"
-                        :label="rung.action"
-                        :loading="busy === rung.model"
-                        :disabled="busy !== undefined"
-                        @click="addModel(rung.model, rung.context)"
-                    />
-                </template>
-                <!-- Only what needs a second look: a warning, the daemon's own words, where to use it, a download running. -->
-                <template v-if="hasBelow(rung)" #below>
-                    <div class="flex flex-col items-start gap-1.5">
-                        <p v-if="rung.warn" class="flex items-start gap-1.5 text-2xs text-warning">
-                            <Icon name="exclamation-triangle" class="mt-px shrink-0 text-2xs" /><span>{{ rung.warn }}</span>
-                        </p>
-                        <!-- The daemon's own words, on a line of their own, with the place its advice points at. -->
-                        <p v-if="rung.detail" class="flex items-start gap-1.5 text-2xs" :class="DETAIL_TONE[rung.detail.tone]">
-                            <Icon :name="DETAIL_ICON[rung.detail.tone]" :spin="rung.detail.tone === `muted`" class="mt-px shrink-0 text-2xs" />
-                            <span class="min-w-0"
-                                >{{ rung.detail.text }}
-                                <RouterLink
-                                    v-if="rung.detail.tone !== `muted`"
-                                    to="/capabilities/localmodel"
-                                    :class="ui.textButton({ size: `xs` }, `ml-1`)"
-                                    >{{ t(`connect.localModelLane.openSettings`) }}<Icon name="arrow-right" class="text-2xs"
-                                /></RouterLink>
+                    <Row v-for="rung in rungs" v-else :key="rung.key" indent>
+                        <template #lead="{ iconClass }">
+                            <Icon :name="rung.icon" class="shrink-0" :class="[iconClass, rung.iconClass]" />
+                        </template>
+                        <template #title>
+                            <span class="flex flex-wrap items-center gap-2">
+                                {{ optionOf(rung.model)?.label }}
+                                <StatusBadge :variant="rung.badgeVariant" :label="rung.badge" size="xs" />
                             </span>
-                        </p>
-                        <!-- Served and helper-only: where it earns its keep is a settings list, not a chat, so that is where this points. -->
-                        <RouterLink
-                            v-if="quickJobsOnly(rung.model) && rung.installed?.status.state === `active`"
-                            to="/sandbox/agent#models"
-                            :class="ui.textButton({ size: `xs` })"
-                        >
-                            {{ t(`connect.localModelLane.useForQuickJobs`) }}<Icon name="arrow-right" class="text-2xs" />
-                        </RouterLink>
+                        </template>
+                        <!-- What it is for, then what it costs as short facts, read as one block under the name. -->
+                        <template #description>
+                            <span class="block">{{ rung.pitch }}</span>
+                            <span class="mt-0.5 block text-2xs tabular-nums text-subtle">{{ rung.facts.join(` · `) }}</span>
+                        </template>
+                        <template #control>
+                            <!-- Taken: where it has got to, in place of a button whose second press would write a second entry and
+                                 leave this one without the machine's single server slot. -->
+                            <StatusBadge v-if="rung.status" :variant="rung.status.variant" dot>
+                                <Icon v-if="rung.status.icon" :name="rung.status.icon" spin class="text-2xs" />{{ rung.status.label }}
+                            </StatusBadge>
+                            <Button
+                                v-else
+                                size="small"
+                                :label="rung.action"
+                                :loading="busy === rung.model"
+                                :disabled="busy !== undefined"
+                                @click="addModel(rung.model, rung.context)"
+                            />
+                        </template>
+                        <!-- Only what needs a second look: a warning, the daemon's own words, where to use it, a download running. -->
+                        <template v-if="hasBelow(rung)" #below>
+                            <div class="flex flex-col items-start gap-1.5">
+                                <p v-if="rung.warn" class="flex items-start gap-1.5 text-2xs text-warning">
+                                    <Icon name="exclamation-triangle" class="shrink-0 text-2xs" /><span>{{ rung.warn }}</span>
+                                </p>
+                                <!-- The daemon's own words, on a line of their own, with the place its advice points at. -->
+                                <p v-if="rung.detail" class="flex items-start gap-1.5 text-2xs" :class="DETAIL_TONE[rung.detail.tone]">
+                                    <Icon
+                                        :name="DETAIL_ICON[rung.detail.tone]"
+                                        :spin="rung.detail.tone === `muted`"
+                                        class="shrink-0 text-2xs"
+                                    />
+                                    <span class="min-w-0"
+                                        >{{ rung.detail.text }}
+                                        <RouterLink
+                                            v-if="rung.detail.tone !== `muted`"
+                                            to="/capabilities/localmodel"
+                                            :class="ui.textButton({ size: `xs` }, `ml-1`)"
+                                            >{{ t(`connect.localModelLane.openSettings`) }}<Icon name="arrow-right" class="text-2xs"
+                                        /></RouterLink>
+                                    </span>
+                                </p>
+                                <!-- Served and helper-only: where it earns its keep is a settings list, not a chat, so that is where this points. -->
+                                <RouterLink
+                                    v-if="quickJobsOnly(rung.model) && rung.installed?.status.state === `active`"
+                                    to="/sandbox/agent#models"
+                                    :class="ui.textButton({ size: `xs` })"
+                                >
+                                    {{ t(`connect.localModelLane.useForQuickJobs`) }}<Icon name="arrow-right" class="text-2xs" />
+                                </RouterLink>
 
-                        <!-- The prefetch is why a rung can be instant; said as a fact, with its own stop, never as a silent
-                             transfer. Gone once the rung is taken: the entry's own status reports the same bytes from then on. -->
-                        <p
-                            v-if="!rung.installed && fit.prefetch.state === `downloading` && fit.prefetch.model === rung.model"
-                            class="flex items-center gap-1.5 text-2xs text-subtle"
-                        >
-                            <Icon name="spinner" spin />
-                            <span class="min-w-0">{{
-                                fit.prefetch.totalBytes > 0
-                                    ? t(`connect.localModelLane.gettingReady`, {
-                                          received: gb(fit.prefetch.receivedBytes),
-                                          total: gb(fit.prefetch.totalBytes),
-                                      })
-                                    : t(`connect.localModelLane.gettingReadyPlain`)
-                            }}</span>
-                            <!-- Leaves the part file: stopping is declining to wait, not throwing away what has arrived. -->
-                            <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)" @click="emit(`stopPrefetch`)">
-                                {{ t(`connect.localModelLane.stop`) }}
-                            </button>
-                        </p>
-                    </div>
-                </template>
-            </Row>
+                                <!-- The prefetch is why a rung can be instant; said as a fact, with its own stop, never as a silent
+                                     transfer. Gone once the rung is taken: the entry's own status reports the same bytes from then on. -->
+                                <p
+                                    v-if="!rung.installed && fit.prefetch.state === `downloading` && fit.prefetch.model === rung.model"
+                                    class="flex items-center gap-1.5 text-2xs text-subtle"
+                                >
+                                    <Icon name="spinner" spin />
+                                    <span class="min-w-0">{{
+                                        fit.prefetch.totalBytes > 0
+                                            ? t(`connect.localModelLane.gettingReady`, {
+                                                  received: gb(fit.prefetch.receivedBytes),
+                                                  total: gb(fit.prefetch.totalBytes),
+                                              })
+                                            : t(`connect.localModelLane.gettingReadyPlain`)
+                                    }}</span>
+                                    <!-- Leaves the part file: stopping is declining to wait, not throwing away what has arrived. -->
+                                    <button
+                                        type="button"
+                                        :class="ui.textButton({ tone: `quiet`, size: `xs` }, `shrink-0`)"
+                                        @click="emit(`stopPrefetch`)"
+                                    >
+                                        {{ t(`connect.localModelLane.stop`) }}
+                                    </button>
+                                </p>
+                            </div>
+                        </template>
+                    </Row>
 
-            <!-- The add's last log line, or why it failed: only while there is one, never an empty row. -->
-            <RowNote v-if="note || failure" variant="block">
-                <p v-if="note" class="text-2xs text-subtle">{{ note }}</p>
-                <p v-if="failure" class="text-2xs text-danger">{{ failure }}</p>
-            </RowNote>
-        </div>
+                    <!-- The add's last log line, or why it failed: only while there is one, never an empty row. -->
+                    <RowNote v-if="note || failure" variant="block">
+                        <p v-if="note" class="text-2xs text-subtle">{{ note }}</p>
+                        <p v-if="failure" class="text-2xs text-danger">{{ failure }}</p>
+                    </RowNote>
+                </div>
+            </template>
+        </Await>
     </div>
 </template>

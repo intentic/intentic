@@ -1,9 +1,15 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { type AccountUsage, TranslatorAccountsSchema, type UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import {
+    type AccountUsage,
+    type TranslatorAccounts,
+    TranslatorAccountsSchema,
+    type UsageWindow,
+} from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { type FleetCapacity, fleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { createCliProxyClient, renderConfig, TRANSLATOR_BINARY_MISSING } from "../translator.js";
+import { type CliProxyClient, createCliProxyClient, renderConfig, TRANSLATOR_BINARY_MISSING } from "../translator.js";
 
 // In-memory account-usage store every client in this file shares; `accounts` reads it on every call.
 const memoryStore = () => {
@@ -496,7 +502,12 @@ describe("translator subscription usage", () => {
         // A benched file's row reports the proxy's retry instant, overriding whatever the last reading said.
         expect(first.kimi[0]).toMatchObject({ name: "kimi-a.json", cooling: { until: 1_800_000_600, reason: "quota exceeded" } });
         expect(first.gemini[0]).not.toHaveProperty("cooling");
-        await expect(client.turnLimit("kimi", "kimi-k2")).resolves.toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_800_000_600 });
+        await expect(capacityOf(client, "kimi", "kimi-k2")).resolves.toEqual({
+            kind: "spent",
+            accounts: 1,
+            reopensAt: 1_800_000_600,
+            pool: undefined,
+        });
         // A file the provider holds alone is what a pushed reading can be filed under; a fleet is not.
         await expect(client.sharedUsageKey("codex")).resolves.toBe("codex:codex-a.json");
     });
@@ -521,6 +532,14 @@ describe("translator subscription usage", () => {
                   })
                 : Response.json({ status_code: 500 })) as typeof fetch;
 
+    // What a provider's credentials, as the translator lists them, can serve of a model by the one rule (fleetCapacity).
+    const capacityOf = async (client: CliProxyClient, provider: keyof TranslatorAccounts, model: string): Promise<FleetCapacity> =>
+        fleetCapacity(
+            (await client.accounts())[provider].map((row) => ({ account: row.name, label: row.label, usage: row.usage, cooling: row.cooling })),
+            [],
+            { id: model },
+        );
+
     const clientOver = (store: ReturnType<typeof memoryStore>["store"], provider: string, names: readonly string[]) =>
         createCliProxyClient({
             managementUrl: "http://cliproxy.test",
@@ -542,14 +561,14 @@ describe("translator subscription usage", () => {
         }
         const client = clientOver(store, "antigravity", Object.keys(windows));
 
-        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
-            pool: "Claude and GPT models",
-            spent: 2,
-            withHeadroom: 0,
+        await expect(capacityOf(client, "gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
+            kind: "spent",
+            accounts: 2,
             reopensAt: 2_000,
+            pool: "Claude and GPT models",
         });
         // Another provider's accounts are not this provider's headroom, however spent they are.
-        await expect(client.turnLimit("codex", "gpt-5")).resolves.toEqual({ spent: 0, withHeadroom: 0 });
+        await expect(capacityOf(client, "codex", "gpt-5")).resolves.toEqual({ kind: "unknown" });
     });
 
     // One Google sign-in meters Gemini separately from Claude/GPT models, on separate clocks; a turn reads the pool its
@@ -565,14 +584,19 @@ describe("translator subscription usage", () => {
         });
         const client = clientOver(store, "antigravity", ["spent-for-gemini.json"]);
 
-        await expect(client.turnLimit("gemini", "gemini-3-pro")).resolves.toEqual({
-            pool: "Gemini models",
-            spent: 1,
-            withHeadroom: 0,
+        await expect(capacityOf(client, "gemini", "gemini-3-pro")).resolves.toEqual({
+            kind: "spent",
+            accounts: 1,
             reopensAt: 2_000,
+            pool: "Gemini models",
         });
         // Nothing is out, so there is no pool to name; the reading with room says when it was taken.
-        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({ spent: 0, withHeadroom: 1, roomMeasuredAt: 0 });
+        await expect(capacityOf(client, "gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
+            kind: "serving",
+            serving: 1,
+            accounts: 1,
+            roomMeasuredAt: 0,
+        });
     });
 
     // The translator balances across every account, so one with room can still serve the turn among many spent ones.
@@ -590,16 +614,16 @@ describe("translator subscription usage", () => {
         });
         const client = clientOver(store, "antigravity", ["spent-1.json", "spent-2.json", "has-room.json"]);
 
-        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
-            pool: "Claude and GPT models",
-            spent: 2,
-            withHeadroom: 1,
+        await expect(capacityOf(client, "gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
+            kind: "serving",
+            serving: 1,
+            accounts: 3,
             roomMeasuredAt: 0,
         });
     });
 
-    // An unmeasured or renamed bucket counts as nothing, not another pool's reading.
-    test("counts an account with no reading for this pool in neither tally", async () => {
+    // An unmeasured or renamed bucket is no reading of this pool, never another pool's: such an account may still answer.
+    test("keeps a model servable on accounts with no reading for its pool", async () => {
         const { store } = memoryStore();
         await store.record("gemini:unread.json", {
             windows: [{ kind: "google:gemini-weekly", ...GEMINI, utilization: 100, resetsAt: 1_000 }],
@@ -607,7 +631,12 @@ describe("translator subscription usage", () => {
         });
         const client = clientOver(store, "antigravity", ["unread.json", "never-polled.json"]);
 
-        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({ spent: 0, withHeadroom: 0 });
+        await expect(capacityOf(client, "gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
+            kind: "serving",
+            serving: 2,
+            accounts: 2,
+            roomMeasuredAt: undefined,
+        });
     });
 
     test("treats an undivided plan's every window as gating, with no pool to name", async () => {
@@ -621,7 +650,7 @@ describe("translator subscription usage", () => {
         });
         const client = clientOver(store, "codex", ["one.json"]);
 
-        await expect(client.turnLimit("codex", "gpt-5")).resolves.toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_000 });
+        await expect(capacityOf(client, "codex", "gpt-5")).resolves.toEqual({ kind: "spent", accounts: 1, reopensAt: 1_000, pool: undefined });
     });
 
     // Runs at boot for the sandboxes that collected one before the sign-in guard existed: without it the user keeps
@@ -706,7 +735,12 @@ describe("translator subscription usage", () => {
         // No reopen instant: nothing about waiting gives that account a project.
         expect(accounts.gemini[0]?.cooling).not.toHaveProperty("until");
         // Spent despite the reading with room, so the fleet's headroom never counts an account that cannot answer.
-        await expect(client.turnLimit("gemini", "claude-opus-4-6-thinking")).resolves.toEqual({ spent: 1, withHeadroom: 0 });
+        await expect(capacityOf(client, "gemini", "claude-opus-4-6-thinking")).resolves.toEqual({
+            kind: "spent",
+            accounts: 1,
+            reopensAt: undefined,
+            pool: undefined,
+        });
     });
 
     test("asks the proxy to drop the account it is told to disconnect", async () => {

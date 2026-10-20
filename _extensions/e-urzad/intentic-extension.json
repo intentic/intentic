@@ -6,7 +6,7 @@
     "category": "connections",
     "icon": "folder-open",
     "engines": {
-        "intentic": "^2.32.0"
+        "intentic": "^2.34.0"
     },
     "server": "dist/server.js",
     "permissions": {

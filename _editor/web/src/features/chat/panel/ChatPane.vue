@@ -1070,11 +1070,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 <button
                     v-if="fallbackName"
                     type="button"
-                    class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                    class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
                     :disabled="!canSend"
                     @click="sendOnFallback()"
                 >
-                    <Icon name="user" class="mt-0.5 shrink-0 text-xs text-subtle" />
+                    <Icon name="user" class="shrink-0 text-xs text-subtle" />
                     <span class="flex min-w-0 flex-col">
                         <span class="truncate text-sm text-content md:text-xs">{{
                             t(`chat.composerIntent.sendNowOn`, { account: fallbackName })
@@ -1085,11 +1085,11 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                 <button
                     v-if="canReset"
                     type="button"
-                    class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3"
+                    class="ui-row-select flex items-start gap-2 rounded-lg px-2.5 py-1.5 text-left max-md:py-3 text-sm md:text-xs"
                     :disabled="!canSend || resetting"
                     @click="resetAndSend()"
                 >
-                    <Icon name="refresh" class="mt-0.5 shrink-0 text-xs text-subtle" />
+                    <Icon name="refresh" class="shrink-0 text-xs text-subtle" />
                     <span class="flex min-w-0 flex-col">
                         <span class="truncate text-sm text-content md:text-xs">{{ t(`chat.composerIntent.resetAndSend`) }}</span>
                         <span class="text-2xs text-subtle">{{ t(`chat.composerIntent.resetAndSendNote`) }}</span>

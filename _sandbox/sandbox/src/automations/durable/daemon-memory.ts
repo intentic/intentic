@@ -1,6 +1,6 @@
 import type { Services } from "../../composition.js";
 
-// What the automation dispatchers keep in memory (fire lanes, listener batchers, chore queues, what the inboxes carry),
+// What the automation dispatchers keep in memory (fire lanes, listener batchers, chore queues),
 // one copy per daemon, found by its automations store. A process runs one daemon, so in production there is one copy,
 // as when these were module singletons. A restart test runs a second daemon on the same history beside the first, and
 // that one starts with nothing of the first's in memory, exactly as a restarted process does.

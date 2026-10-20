@@ -37,7 +37,7 @@ const what = computed(() => (submitStartedAt !== undefined ? t(`capabilities.cap
     >
         <Icon
             :name="probeResult.ok ? 'check-circle' : probeResult.checked ? 'exclamation-triangle' : 'info-circle'"
-            class="mt-0.5 shrink-0 text-2xs"
+            class="shrink-0 text-2xs"
             :class="probeResult.ok ? 'text-success' : probeResult.checked ? 'text-danger' : 'text-subtle'"
         />
         {{ probeResult.message }}

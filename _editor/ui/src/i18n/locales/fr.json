@@ -139,7 +139,17 @@
         "historyTooLong": "la dernière récupération a manqué de temps",
         "historyShallow": "la copie du sandbox est un clone superficiel",
         "historyFailed": "git a refusé la dernière récupération",
-        "historyRetry": "prochain essai {when}"
+        "historyRetry": "prochain essai {when}",
+        "held": "retenue",
+        "fileSyncingHeld": "synchro des fichiers retenue",
+        "heldBy": {
+            "gone": "Retenue parce que ce sandbox n'existerait plus. La synchro reprend d'elle-même s'il répond de nouveau.",
+            "containerMissing": "Retenue tant que le conteneur de ce sandbox n'est pas dans le Docker de cet ordinateur. La synchro reprend d'elle-même dès son retour.",
+            "containerTrashed": "Retenue parce que ce sandbox est dans la corbeille de cet ordinateur. Le restaurer rétablit sa synchro.",
+            "swap": "Retenue pendant que ce sandbox est mis à jour ou reconstruit sur cet ordinateur. La synchro reprend d'elle-même dès que la nouvelle version tient.",
+            "unreachable": "Retenue parce que ce sandbox ne répond plus depuis une heure. La synchro reprend d'elle-même dès qu'il répond.",
+            "other": "Retenue par l'agent de cet ordinateur. La synchro reprend d'elle-même."
+        }
     },
     "imageView": {
         "actualSize": "Taille réelle",
@@ -254,5 +264,9 @@
     },
     "coachMark": {
         "notNow": "Pas maintenant"
+    },
+    "await": {
+        "couldntLoad": "Impossible de charger ceci",
+        "stillWaiting": "Toujours en chargement · {elapsed}"
     }
 }

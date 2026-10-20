@@ -50,15 +50,13 @@ const missingRequired = (entries: readonly SecretInventoryEntry[]): number =>
 
 export function useSecretInventory() {
     const queryClient = useQueryClient();
-    const { query } = useSandboxQuery(rpcQuery(`secrets.inventory`));
+    const { query, loaded } = useSandboxQuery(rpcQuery(`secrets.inventory`));
     const inventory = computed<SecretInventoryEntry[]>(() => query.data.value?.entries ?? []);
     return {
         inventory,
         missingRequiredCount: computed(() => missingRequired(inventory.value)),
-        // isPending, not isLoading: true until the first data lands, so the page shows a reading placeholder instead of
-        // a
-        // fake empty state.
-        inventoryPending: computed(() => query.isPending.value),
+        // Waited for until the first answer lands, so the page never shows a fake empty state.
+        loaded,
         refreshInventory: (): void => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) }),
     };
 }

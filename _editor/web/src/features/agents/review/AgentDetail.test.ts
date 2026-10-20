@@ -5,7 +5,7 @@
 import "@intentic/testing/dom";
 import { type App, createApp, defineComponent, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-// The threshold the header's bars wait for, read from where it's defined rather than restated as a number here.
+// The threshold the review's wait line waits for, read from where it's defined rather than restated as a number here.
 import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
 import * as actualVueRouter from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
@@ -208,16 +208,16 @@ it(`holds the header's places and the review's shape while the fleet is still be
     app.mount(el);
     await nextTick();
 
-    // Under the reveal delay the answer still reads as immediate, so nothing is drawn.
-    expect(el.querySelector(`.skeleton`)).toBeNull();
+    // The header keeps a bar where the name and the status will be from the first frame, and never prints the word
+    // "Agent" as a stand-in. Under the reveal delay the review below still reads as immediate, so it draws nothing.
+    const header = el.querySelector<HTMLElement>(`.view-header`)!;
+    expect(header.querySelectorAll(`.skeleton`).length).toBe(2);
+    expect(header.textContent).not.toContain(`Agent`);
+    expect(el.querySelector(`[role="status"]`)).toBeNull();
 
     jest.advanceTimersByTime(REVEAL_DELAY_MS);
     await nextTick();
 
-    // The header keeps a bar where the name and the status will be, and never prints the word "Agent" as a stand-in.
-    const header = el.querySelector<HTMLElement>(`.view-header`)!;
-    expect(header.querySelectorAll(`.skeleton`).length).toBe(2);
-    expect(header.textContent).not.toContain(`Agent`);
     // And the pane below is the review's frame with one line in it, instead of the empty screen it used to be, and
     // instead of the last review seen replayed as bars: another agent's files say nothing about this one's.
     const status = el.querySelector(`[role="status"]`)!;

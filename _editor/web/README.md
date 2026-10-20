@@ -169,7 +169,16 @@ flowchart LR
   always did. One that ended while nobody watched raises a receipt with a way back, and waits in its view until it has
   been seen. A view inside a hub also marks that hub's row while the work runs. `useAsyncAction()` and
   `useConcurrentActions()` keep their state per caller, so `viewWork.guard.test.ts` refuses them anywhere they would
-  die with a view. Questions (a confirm dialog, a form's inputs) stay the view's own.
+  die with a view. Questions (a confirm dialog, a form's inputs) stay the view's own. A commit from the Changes
+  panels is the changes model's record (`commitPress` in `models/changes/useChanges.ts`), and the press bar's one
+  line is picked from every source that wants it by one function (`changes/commit/commitBar.ts`), so a panel opened
+  again mid-commit draws the press as it was pressed and says it once.
+- **Data that is not here yet is drawn by `<Await>`.** A region draws a read's `Loaded` (`@intentic/extension-api`)
+  through `<Await :of imprint>` (`@intentic/ui`), never from `isLoading`/`isPending`: a read held while the sandbox
+  wakes is a wait, never an empty answer, and one its view has not asked for is never a wait.
+  `useSandboxQuery` returns `loaded` beside the query, and every such read joins the region it is read in, whose host
+  (a route, a hub section, an extension view) is an `<Await>` too. `viewWait.guard.test.ts` refuses a view that
+  wires its own wait from `SkeletonSnapshot`, `v-skeleton-source` or `useLoadingReveal`.
 - **When the sandbox stops answering.** A failed `/events` stream starts a diagnosis (`features/sandbox/diagnosis/`):
   bounded probes of the sandbox's address (netd's own `/system/vitals`, which answers whatever state Node is in,
   plus an opaque reach check), the platform, a hosted machine's power state, this computer's loopback where no
@@ -200,9 +209,10 @@ flowchart LR
   send. It shows what was served as served, and `SandboxOutdatedNotice.vue` says the sandbox needs an update, what the
   view lacks until then, and how to update: the sandbox page's Update card, or `ic sandbox update <slug>` for a sandbox
   installed by hand. The chat's accounts read "older" off the routes the daemon advertises (`supportsRoute`,
-  `accountsOutdated`): `agent.switchAccount` arrived in v1.313. Such a sandbox's account rows carry no verdict
-  (`state`) and read as unknown, no held turn is offered another account, and the model picker, the continue card and Sandbox ▸ Models say it needs an
-  update. The editor sends a session id only for a conversation the daemon has no record of (a past session opened
+  `accountsOutdated`): `agent.switchAccount` arrived in v1.313. On such a sandbox no held turn is offered another
+  account, and the model picker, the continue card and Sandbox ▸ Models say it needs an update. An account's verdict is
+  never a field the daemon sends: the editor judges every row by the contract's rule over the rows and every refusal on
+  file (`models/providers/usageStatus.ts` `accountState`, `modelCapacity`), the very facts the daemon judges by. The editor sends a session id only for a conversation the daemon has no record of (a past session opened
   from the history menu), and reads the account a failed turn ran on only off its error frame. Nothing else is guessed
   either: a card without `awaitingWake` is not waiting on a wake, a reading without `memoryRoom` warns of nothing, and a
   device row's card is its own `card`, never parsed out of its key.

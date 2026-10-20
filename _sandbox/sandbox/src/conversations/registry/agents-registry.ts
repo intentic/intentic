@@ -23,8 +23,9 @@ import { parentOfActor } from "../../auth/principal.js";
 import { liveRunOf } from "../actor/conversation-holdings.js";
 import { queueView } from "../actor/conversation-queue.js";
 import { restoredLimitHold } from "../actor/limit-hold.js";
-import { type LimitBooking, limitBooking } from "../actor/limit-booking.js";
-import { limitBookingKeeper, limitHold, rebooked, reportedFailure, switchedEntry } from "./limit-ending.js";
+import { nextOf } from "../actor/conversation-next.js";
+import { limitHold, reportedFailure, switchedEntry } from "./limit-ending.js";
+import { type WallAnswersSource, wallAnswersFollower } from "../actor/wall-answers.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
@@ -404,16 +405,7 @@ const restored = (entry: PersistedAgent): PersistedAgent => {
     }
     const { limitHold: _stale, ...rest } = entry;
     return rest.ending.kind === "limited"
-        ? {
-              ...rest,
-              ending: {
-                  kind: "limited",
-                  ...opt("failure", rest.ending.failure),
-                  ...opt("resetsAt", rest.ending.resetsAt),
-                  held: false,
-                  scheduled: false,
-              },
-          }
+        ? { ...rest, ending: { kind: "limited", ...opt("failure", rest.ending.failure), ...opt("resetsAt", rest.ending.resetsAt), held: false } }
         : rest;
 };
 
@@ -537,27 +529,14 @@ export interface AgentsRegistry {
     readonly setAutoLand: (id: string, autoLand: boolean | null) => Promise<AgentSummary | undefined>;
     // Same grammar as `setAutoLand`, once for every ending: read by the resume pass after the turn has already
     // died, so arming it mid-unwind is the ordinary case, and a limit's press is often made on a card whose turn died
-    // hours ago. Refuses an answer the ending does not allow rather than persisting one no pass would ever read.
-    // `effective` is the answer the pass will now read (this one, or the sandbox's it inherits on null); a held limit's
-    // booking is re-read from it, so the card says what the pass will do. Absent leaves the booking as it stood.
-    readonly setBreakPolicy: (
-        id: string,
-        ending: TurnBreak,
-        policy: TurnBreakPolicy | null,
-        effective?: TurnBreakPolicy,
-    ) => Promise<AgentSummary | undefined>;
+    // hours ago. Refuses an answer the ending does not allow rather than persisting one no pass would ever read. The
+    // card's `next` is derived from the answer it now holds, so the write's own broadcast says what the pass will do.
+    readonly setBreakPolicy: (id: string, ending: TurnBreak, policy: TurnBreakPolicy | null) => Promise<AgentSummary | undefined>;
     // Points the conversation at another account of the provider it runs on: the one write that moves who pays
     // (switchAccount). The session goes with the caller's say, separately (`session-cleared`). Leaves `updatedAt` alone.
     // `limit` re-times a spent-allowance ending to the new account's reopen (absent: it reads unspent), so the card states
-    // the instant the re-pointed hold now waits for; the move there is taken back, since the pick has replaced it.
-    // `limit` re-points a spent allowance's held turn too: the reset the card states for the picked account, and the booking
-    // the pick leaves it (limit-booking.ts), written in this same write so the one broadcast already says when it goes.
-    readonly switchAccount: (id: string, account: string, limit?: { readonly resetsAt?: number; readonly booking?: LimitBooking }) => Promise<AgentSummary | undefined>;
-    // Holds a spent allowance's stored booking to what the resume pass will do (limit-booking.ts), and states the reset a
-    // hold refused with none has since been timed to (`resetsAt`, epoch s). Writes, persists and broadcasts only when
-    // something changed, and never moves `updatedAt`: a parent reads that to know whether it heard its child's stop
-    // (heardByParent). Answers whether it wrote. Called by the pass on every beat (held-standing.ts keepLimitBooking).
-    readonly keepLimitBooking: (id: string, booking: LimitBooking | undefined, resetsAt?: number) => Promise<boolean>;
+    // the reset of the account it now waits on.
+    readonly switchAccount: (id: string, account: string, limit?: { readonly resetsAt?: number }) => Promise<AgentSummary | undefined>;
     // Moves every conversation running on account `from` to `to`, the survivor a superseded account merged into
     // (account-identity.ts). One write; answers how many moved. Leaves `updatedAt` and every session alone: it is the same
     // person's seat.
@@ -716,8 +695,11 @@ export const createFleet = (
     {
         rosterWindowMs = ROSTER_WINDOW_MS,
         refusalRecheckMs = REFUSAL_RECHECK_MS,
-    }: { readonly rosterWindowMs?: number; readonly refusalRecheckMs?: number } = {},
+        settings,
+    }: { readonly rosterWindowMs?: number; readonly refusalRecheckMs?: number; readonly settings?: WallAnswersSource } = {},
 ): Fleet => {
+    // The answers each card's `next` is derived by: its own, else the sandbox's, followed as Settings changes them.
+    const answers = wallAnswersFollower(settings);
     let entries: PersistedAgent[] = [];
     // Entries changed since the last write, and the journal row of each turn opened since, which goes down with its
     // opening entry; both drained only once the write commits, so a failed one is retried by the next.
@@ -1046,6 +1028,7 @@ export const createFleet = (
             ...opt("review", entry.review),
             ...opt("reach", entry.reach),
             ...reportedFailure(entry.ending, status, limitHold(state)),
+            ...opt("next", nextOf(state, entry, answers.of(entry.postures))),
             ...postures(entry.postures),
             ...spentBy(entry.totals, state?.turn.usage ?? NO_USAGE, subagentCountsOf(conversations, entry.id).running),
             ...liveReadings(entry, state),
@@ -1110,6 +1093,7 @@ export const createFleet = (
         init: async () => {
             entries = store.agents.load().map(restored);
             activateLoadedFleet(entries, conversations, broadcast, reprobe);
+            await answers.follow(broadcast);
         },
         adopted: (ids) => {
             const arrived = new Set(ids);
@@ -1256,7 +1240,7 @@ export const createFleet = (
                 const { autoLand: _cleared, ...held } = entry.postures;
                 return { ...entry, postures: autoLand === null ? held : { ...held, autoLand } };
             }),
-        setBreakPolicy: async (id, ending, policy, effective) => {
+        setBreakPolicy: async (id, ending, policy) => {
             // An answer the ending cannot take is refused here rather than stored: no pass would ever read it, and a card
             // showing a policy nothing acts on is worse than one showing none.
             if (policy !== null && !isTurnBreakPolicy(ending, policy)) {
@@ -1266,15 +1250,10 @@ export const createFleet = (
             // named ending's key moves; the others carry through untouched.
             return amend(id, (entry) => {
                 const { [ending]: _cleared, ...held } = entry.postures;
-                return {
-                    ...entry,
-                    postures: (policy === null ? held : { ...held, [ending]: policy }) as Postures,
-                    ...(ending === "limit" && effective !== undefined ? { ending: rebooked(entry.ending, limitBooking(limitHold(conversations.state(id)), effective)) } : {}),
-                };
+                return { ...entry, postures: (policy === null ? held : { ...held, [ending]: policy }) as Postures };
             });
         },
         switchAccount: (id, account, limit) => amend(id, (entry) => switchedEntry(entry, account, limit)),
-        keepLimitBooking: limitBookingKeeper(entryOf, amend),
         repointAccount: async (from, to) => {
             const moving = entries.filter((entry) => entry.profile.account === from);
             for (const entry of moving) {

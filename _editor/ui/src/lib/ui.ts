@@ -199,7 +199,9 @@ export interface SectionLabelVariants {
     tone?: `neutral` | `danger` | `warning` | `success`;
 }
 
-/** Uppercase section heading ("CONNECTIONS", "YOUR APPS"). */
+/** The section header's look, drawn by <SectionHeader> (and so by <Section>, <RowGroup> and <NavRail>), whose tier picks
+ *  the size. In this repository nothing else calls it (`recipe-tiers.mjs`): a header styled by hand at a call site is
+ *  how counts, captions, bands and per-view spacing kept coming back. Kept on `ui` for installed extensions. */
 const sectionLabelRecipe = tv({
     base: `font-semibold uppercase tracking-wide`,
     variants: {

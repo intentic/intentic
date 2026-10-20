@@ -24,6 +24,9 @@ export const RunnerHelloSchema = z.object({
     // tag names its own container (`intentic-sandbox-env-<slug>:<hash>`), so two sides on one base and one overlay
     // never share it. Absent on an old image, which is then compared by `image` alone.
     baseImage: z.string().optional(),
+    // That base's registry digest (SANDBOX_BASE_DIGEST), when the runner's machine could read one; parity then compares
+    // the exact image rather than a tag two machines may have pulled at different moments (state/sandbox-build.ts).
+    baseDigest: z.string().optional(),
     channel: z.string().optional(),
     overlayHash: z.string().optional(),
     // Runner's declared settings-only sandbox.toml (definition.ts), diffed against the parent's to itemize drift;
@@ -147,7 +150,7 @@ export const RunnerSummarySchema = z.object({
     overlayHash: z.string().optional(),
     facts: RunnerFactsSchema.optional(),
     lastSeen: z.number().optional(),
-    // Computed once by the daemon (runners/runner-parity.ts), so every surface shows the same badge.
+    // Computed once by the daemon (buildParity, state/sandbox-build.ts), so every surface shows the same badge.
     parity: RunnerParitySchema,
     // Where the runner's environment differs from this sandbox's, one line per difference; absent if never reported,
     // empty if they agree. A Setting line is fixable live; an overlay line needs a rebuild.

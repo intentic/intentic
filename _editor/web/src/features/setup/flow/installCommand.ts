@@ -1,4 +1,5 @@
 import { DEFAULT_SYNC_ROOT, oneLinerFits, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
+import { DEV_SANDBOX_IMAGE } from "@intentic/sandbox-contract/policy/overlay-lint";
 import { powershellQuote, shellQuote } from "@intentic/sandbox-run/quote";
 import { bashCommand, oneLiner, psCommand } from "../../../app/environments/scriptCommand";
 
@@ -11,9 +12,6 @@ import { bashCommand, oneLiner, psCommand } from "../../../app/environments/scri
 // nothing and so bundles for the browser): a folder or a token holding a quote stays one value, and PowerShell's
 // typographic quotes ‘ ’ ‚ ‛ cannot end its literal either.
 
-// Locally built dev image; without it connect.sh pulls `:stable`, whose daemon predates unreleased routes.
-export const DEV_SANDBOX_IMAGE = `intentic-sandbox:dev`;
-
 export interface CommandInput {
     readonly os: `unix` | `windows`;
     readonly code: string;
@@ -21,7 +19,8 @@ export interface CommandInput {
     readonly cfToken: string | undefined;
     // The local-dev platform origin (`platformUrlOf`), which also brings the shared agent-auth volume.
     readonly platformUrl: string | undefined;
-    // A dev build invoked by path, the only form with a checkout to build the dev image from.
+    // A dev build invoked by path, the only form with a checkout to build the dev image from; without that image
+    // connect.sh pulls `:stable`, whose daemon predates unreleased routes.
     readonly fromCheckout: boolean;
     // This page's origin, where it is not the default the sandbox's CORS already allows (`webOriginOf`).
     readonly webOrigin: string | undefined;

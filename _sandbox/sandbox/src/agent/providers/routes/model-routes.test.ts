@@ -51,7 +51,7 @@ describe("the Claude Code loop, as the harness dialled it before routes", () => 
         expect(route.model).toBe(catalog.default);
         expect(route.account).toBeUndefined();
         expect(route.allowance?.vendor).toBe(PROVIDER_VENDOR[provider]);
-        expect(route.allowance?.limit).toBeTypeOf("function");
+        expect(route.allowance?.capacity).toBeTypeOf("function");
         expect(route.shield).toBe(provider);
     });
 

@@ -75,8 +75,8 @@ const held = computed(() => displayChanging.value !== undefined);
 
 <template>
     <section v-if="screens.length > 0" class="flex flex-col gap-3 rounded-xl border border-line p-4" :aria-busy="held">
-        <header class="flex items-start gap-2.5">
-            <Icon name="screen" class="mt-0.5 shrink-0 text-link" />
+        <header class="flex items-start gap-2.5 text-sm">
+            <Icon name="screen" class="shrink-0 text-link" />
             <h2 class="min-w-0 flex-1 text-sm leading-tight font-semibold">{{ t(`desktop.os.display.title`, {}, screens.length) }}</h2>
         </header>
 

@@ -3,7 +3,8 @@
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import BringProjectButton from "../explorer/BringProjectButton.vue";
-import { ContextMenu, formatCount, SearchBar, SegmentedControl, SkeletonSnapshot, useHoverIntent, useLoadingReveal, vSkeletonSource } from "@intentic/ui";
+import { useLoaded } from "@intentic/extension-api";
+import { Await, ContextMenu, formatCount, SearchBar, SegmentedControl, useHoverIntent } from "@intentic/ui";
 import { basename, parentDir } from "@intentic/ui/path";
 import { computed, inject, nextTick, ref, shallowRef, watch } from "vue";
 import { localFace } from "../../../app/environments/local";
@@ -142,8 +143,9 @@ const homeHeight = computed(() => bands.total.value);
 const hiddenTooling = computed(() => technicalHidden(children.value ?? [], layout.explorerFilters.value));
 const hiddenByCap = computed(() => hiddenIn(homeDir.value));
 
-const loading = computed(() => (homeDir.value === `` ? isLoading.value : children.value === undefined && lazyLoading.value.has(homeDir.value)));
-const revealed = useLoadingReveal(loading, homeDir);
+// The open folder's listing: the tree, held until the sandbox answers, or a lazy listing of a folder the walk skipped.
+const fetching = computed(() => isLoading.value || (children.value === undefined && lazyLoading.value.has(homeDir.value)));
+const loaded = useLoaded(() => ({ data: fetching.value ? undefined : listed.value, error: undefined, fetching: fetching.value, wanted: true }));
 // What the wait draws: the tiles as they last stood. The top folder keeps its own, since it is the wait that opens the
 // app; any other folder draws the last one seen below it, as one key per folder would crowd every other view's out.
 const homeImprint = computed(() => (homeDir.value === workspaceDir.value ? `workspace.home` : `workspace.home.folder`));
@@ -553,17 +555,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                     aria-multiselectable="true"
                     :aria-label="t(`workspace.homeView.contents`, { here })"
                 >
-                    <!-- A wait long enough to show: tile-shaped placeholders, still. -->
-                    <SkeletonSnapshot v-if="revealed" :of="homeImprint">
-                        <div class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5" aria-hidden="true">
-                            <div v-for="index in 8" :key="index" class="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
-                                <div class="skeleton h-9 w-9 rounded-lg"></div>
-                                <div class="skeleton h-3 w-14"></div>
-                            </div>
-                        </div>
-                    </SkeletonSnapshot>
-                    <!-- One element, so its imprint is everything the wait stood in for; a block, as the listbox is. -->
-                    <div v-else v-skeleton-source="homeImprint">
+                    <Await :of="loaded" :imprint="homeImprint">
                         <!-- The entry being named, drawn first in the open folder before it exists; the field owns its keys. -->
                         <div v-if="edit.kind === 'creating'" class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5 pt-3">
                             <div class="flex flex-col items-center gap-1.5 rounded-lg px-2 pt-3 pb-2">
@@ -587,7 +579,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                             </div>
                         </div>
                         <p
-                            v-if="order.length === 0 && !loading && !searching && edit.kind !== 'creating'"
+                            v-if="order.length === 0 && !searching && edit.kind !== 'creating'"
                             class="py-12 text-center text-xs text-subtle"
                         >
                             {{
@@ -657,7 +649,15 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                                 </div>
                             </template>
                         </div>
-                    </div>
+                        <template #fallback>
+                            <div class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-0.5" aria-hidden="true">
+                                <div v-for="index in 8" :key="index" class="flex flex-col items-center gap-2 px-2 pt-3 pb-2">
+                                    <div class="skeleton h-9 w-9 rounded-lg"></div>
+                                    <div class="skeleton h-3 w-14"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </Await>
                     <p v-if="hiddenTooling > 0 && !querying" class="px-2 pt-4 text-2xs text-subtle">
                         {{ t(`workspace.homeView.toolingHidden`, { count: formatCount(hiddenTooling) }, hiddenTooling) }}
                     </p>

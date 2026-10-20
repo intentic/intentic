@@ -111,6 +111,19 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
         { agents: agentsStore, journal: turnJournalRows(conversationsDb), transaction: conversationsDb.transaction, units },
         createLandStandings(agentWorktrees),
         landedPresences,
+        {
+            // The sandbox's answers to the walls a card's `next` is derived by (wall-answers.ts), read once the registry loads.
+            settings: {
+                get: () =>
+                    whole()
+                        .sandboxSettings.get()
+                        .catch((error: Error) => {
+                            logger.warn({ err: error }, "agents: the sandbox's answers to a spent allowance and to low memory could not be read, cards keep the last ones");
+                            return undefined;
+                        }),
+                onSet: (listener) => whole().sandboxSettings.onSet(listener),
+            },
+        },
     );
     // Its attribution caches report into the resource series, like the presences above.
     const agentOrigins = createAgentOrigins({ agents, logger, expiry: landingExpiry });

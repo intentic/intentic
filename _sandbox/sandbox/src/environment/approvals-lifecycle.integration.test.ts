@@ -27,22 +27,8 @@ import { PROVIDER_MODULES } from "../runtimes/runtime-table.js";
 import { memoryNeedsStore } from "../needs/needs-store.testing.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { createDriftSweep } from "./drift-sweep.js";
-import {
-    approveDraft,
-    approvedPath,
-    approveEnvironment,
-    composeEnvironment,
-    customPath,
-    decideRuntimeInstall,
-    draftsDir,
-    proposalPath,
-    proposeDraft,
-    readEnvironment,
-    rejectDraft,
-    rejectEnvironment,
-    removeFromEnvironment,
-    toolStanding,
-} from "./environment.js";
+import { approveDraft, approveEnvironment, decideRuntimeInstall, draftsDir, proposalPath, proposeDraft, readEnvironment, rejectDraft, rejectEnvironment, removeFromEnvironment, toolStanding } from "./environment.js";
+import { approvedPath, composeEnvironment, customPath } from "./overlay.js";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
 
 // No base image bakes any pack here, whatever machine runs the suite.
@@ -116,7 +102,7 @@ const world = (): World => {
         approve: (tool) => approveDraft(services, tool),
         reject: (tool) => rejectDraft(services, tool),
         standing: (subject) => toolStanding(services, subject),
-        composedHash: () => composeEnvironment(services),
+        composedHash: async () => (await composeEnvironment(services))?.hash,
     });
     const told: World["told"] = [];
     let next = 0;

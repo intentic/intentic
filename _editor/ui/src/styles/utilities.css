@@ -94,6 +94,27 @@
         vertical-align: -0.125em;
         flex: none;
     }
+
+    /* A GLYPH LEADING A LINE THAT MAY WRAP (`flex items-start`: a notice, a warning under a field, a menu row with a
+       description) sits on the centre of that line, wherever it wraps and whatever the line's size: the offset is the
+       line's own height less the glyph's, halved. The line's height is read where the line's type is stated, on the
+       `items-start` box, into a registered length, so a glyph sized up or down (`text-sm` on a `text-2xs` line) still
+       centres on the line it leads rather than on a line of its own size. It used to be typed per call site, as
+       `mt-px` or `mt-0.5`, each right for the one size it was typed at and a pixel or two off at every other: the
+       "fixed in some cases, but not others" that kept coming back. `mark-alignment.mjs` refuses the typed offset. */
+    .items-start {
+        --ui-line: 1lh;
+    }
+
+    .items-start > .ui-icon {
+        margin-block-start: max(0px, calc((var(--ui-line) - 1em) / 2));
+    }
+}
+
+@property --ui-line {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
 }
 
 /* LOADING PLACEHOLDER: a bar of the ink's own hue, with a soft band of light passing over it and a breath of rest

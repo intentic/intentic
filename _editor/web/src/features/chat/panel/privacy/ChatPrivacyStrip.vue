@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { withConversationTrust } from "@intentic/sandbox-contract/schemas/privacy";
+import { isPrivacyRefusal } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import { Button, Icon, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
@@ -24,8 +25,6 @@ const standing = computed(() =>
 );
 const owner = computed(() => active.value?.role === `owner`);
 const failed = ref(false);
-// The refusals a grant answers: a runtime the shield cannot read, and what it found in one it can.
-const PRIVACY_REFUSALS: ReadonlySet<string> = new Set([`privacy-unshielded`, `privacy-instructions`]);
 
 const grant = async (on: boolean): Promise<void> => {
     const now = standing.value;
@@ -40,8 +39,9 @@ const grant = async (on: boolean): Promise<void> => {
         failed.value = true;
         return;
     }
-    // A message the refusal held goes now: letting the provider through is what the press was for.
-    if (on && queuePaused.value === `refused` && PRIVACY_REFUSALS.has(lastFailure.value?.code ?? ``)) {
+    // A message the refusal held goes now: letting the provider through is what the press was for, whether the shield
+    // refused the turn's route or what it found where it could not mask.
+    if (on && queuePaused.value === `refused` && isPrivacyRefusal(lastFailure.value?.code)) {
         await resumeQueue();
     }
 };

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import type { NoticeModel } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AddDeviceDialog from "./AddDeviceDialog.vue";
@@ -12,11 +11,7 @@ import { boardRoute, DELETED_ANCHOR, deviceRoute, selectedKey } from "../../../m
 import { machineRows, slugOfDaemonUrl, withSandboxNames } from "../../../models/sandbox/devices/deviceRows";
 import { useDevices } from "../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
-import { useT } from "@intentic/ui/i18n";
-
-const t = useT();
 
 // The Devices view's body: what is on the other end of this sandbox. Two screens, one URL — the
 // board of every machine, and `?device=<key>` for one of them — so a machine is deep-linkable and the back
@@ -27,19 +22,13 @@ const router = useRouter();
 // `readAt` is the only clock this tab keeps: when the list landed, not the wall clock. Every machine is judged on
 // what it said when we last heard from it, so a list restored from cache or left on screen cannot age into "gone
 // quiet" by itself, and nothing here re-derives on a tick.
-const { devices, cardlessHosts, sharedIdentities, readAt, error, isLoading, refetch } = useDevices();
+const { devices, cardlessHosts, sharedIdentities, readAt, loaded, refetch } = useDevices();
+// Whether the list has been read: before then, "no device is paired" and "no such machine" are guesses.
+const listed = computed(() => loaded.value.state === `ready`);
 
 // Pairing opens from the board, and from the Workspace's "Open in local editor" shortcut, which lands here
 // with the mint already asked for. Read before the redirects below, which rewrite the query out from under it.
 const adding = ref(route.query[`enable`] === `desktop-sync`);
-
-// Before the list lands, "no device is paired" would be a guess; the outline holds the board's shape
-// instead, for the first read only.
-const outline = useSandboxOutline(isLoading);
-// The list query's bare error, in the words of the screen that asked for it.
-const notice = computed<NoticeModel | undefined>(() =>
-    error.value === undefined ? undefined : { tone: `danger`, title: t(`sandbox.sandboxDevices.couldntListDevices`), detail: error.value },
-);
 
 // The release this sandbox knows about, from the shared /info query (same value as its own update badge);
 // undefined on a sandbox that hasn't reached the registry, or a dev build.
@@ -65,9 +54,9 @@ const selected = computed(() => {
 // the list settles rather than as a fallback, so the board stays reachable once asked for.
 const chosen = ref(false);
 watch(
-    [rows, isLoading],
-    ([known, reading]) => {
-        if (reading || chosen.value) {
+    [rows, listed],
+    ([known, read]) => {
+        if (!read || chosen.value) {
             return;
         }
         chosen.value = true;
@@ -85,10 +74,10 @@ watch(
 // unknown tab slug. Immediate, since a dead link is dead on arrival and not only once something changes —
 // but still gated on the read, or a perfectly good one would bounce before the list lands.
 watch(
-    [() => route.query[`device`], rows, isLoading],
-    ([asked, known, reading]) => {
+    [() => route.query[`device`], rows, listed],
+    ([asked, known, read]) => {
         const key = selectedKey(asked);
-        if (!reading && key !== undefined && !known.some((row) => row.key === key)) {
+        if (read && key !== undefined && !known.some((row) => row.key === key)) {
             void router.replace(boardRoute());
         }
     },
@@ -113,16 +102,7 @@ watch(
             :read-at="readAt"
             :refetch="refetch"
         />
-        <DeviceBoard
-            v-else
-            :rows="rows"
-            :is-loading="isLoading"
-            :notice="notice"
-            :outline="outline"
-            :own-slug="ownSlug"
-            :read-at="readAt"
-            @add="adding = true"
-        />
+        <DeviceBoard v-else :rows="rows" :loaded="loaded" :own-slug="ownSlug" :read-at="readAt" @add="adding = true" />
 
         <!-- Connections no device card holds, left behind by a removed or renamed device: housekeeping, so under the
              machines rather than above them, and on both screens, since a one-machine fleet opens on its page. -->

@@ -144,7 +144,7 @@ onBeforeUnmount(close);
                             <Icon
                                 v-if="graphs.get(commit.repo) !== undefined"
                                 name="sitemap"
-                                class="mt-0.5 shrink-0 text-2xs text-subtle opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                                class="shrink-0 text-2xs text-subtle opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                             />
                         </button>
                     </li>

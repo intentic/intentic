@@ -171,7 +171,7 @@ onMounted(() => {
                             v-else-if="row.option.icon !== undefined"
                             :name="row.option.icon"
                             class="shrink-0 text-xs"
-                            :class="[row.option.value === selectedValue ? `text-accent` : `text-muted`, hinted ? `mt-0.5` : ``]"
+                            :class="row.option.value === selectedValue ? `text-accent` : `text-muted`"
                             aria-hidden="true"
                         />
                     </slot>
@@ -192,13 +192,7 @@ onMounted(() => {
                     <span v-if="row.option.description !== undefined" class="min-w-0 flex-1 truncate text-right text-2xs text-subtle">{{
                         row.option.description
                     }}</span>
-                    <Icon
-                        v-if="row.option.value === selectedValue"
-                        name="check"
-                        class="ml-auto shrink-0 text-2xs text-accent"
-                        :class="hinted ? `mt-0.5` : ``"
-                        aria-hidden="true"
-                    />
+                    <Icon v-if="row.option.value === selectedValue" name="check" class="ml-auto shrink-0 text-2xs text-accent" aria-hidden="true" />
                 </button>
             </template>
             <p v-if="flat.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">{{ t(`ui.pickerPanel.noMatches`) }}</p>

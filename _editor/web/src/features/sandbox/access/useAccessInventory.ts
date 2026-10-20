@@ -1,3 +1,4 @@
+import { useLoaded } from "@intentic/extension-api";
 import { computed } from "vue";
 import { rpcQuery } from "../../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../../client/sandbox/useSandboxQuery";
@@ -55,7 +56,11 @@ export function useAccessInventory() {
         }
         return counted;
     });
-    // A read that has not started (the sandbox is not answering) is not loading: its door reads "not readable right now".
-    const loading = computed(() => [webhooks, gates, ci, devices].some(({ query }) => query.isLoading.value) || runners.isLoading.value);
-    return { inventory, loading };
+    // A wait while any count is still out (held while the sandbox is not answering included), then every count there is:
+    // a read that failed leaves its door unknown, "not readable right now", rather than failing the whole tab.
+    const loaded = useLoaded(() => {
+        const reading = [webhooks, gates, ci, devices].some(({ loaded: read }) => read.value.state === `waiting`) || runners.isLoading.value;
+        return { data: reading ? undefined : inventory.value, error: undefined, fetching: reading, wanted: true };
+    });
+    return { inventory, loaded };
 }

@@ -75,17 +75,16 @@ concluded, and only the jobs that publish wait on the others passing). When main
 did not touch may be main's own: not yours to chase unless your task is about it.
 
 If you weakened a test file on purpose, end your final message with a `Test-Note: <why>` line. The land writes it
-into the landed commit, and CI's push check reads it there. If you changed the wire contract (`_shared/sandbox-contract/src`),
-its lock changes with it. Before work lands from a worktree, the repository's fixers run there
-(`_tools/scripts/verify/fixers.mjs`, from `_sandbox/sandbox/src/conversations/land/worktree-fixers.ts`): they emit the
-contract and rewrite `contract.lock.json` when the change reached the contract, regenerate the daemon's indexes
-(`state-registry.ts`, `app-raw-routes.ts` and `slice-registry.ts`) when it reached a daemon source, and freeze `state-shapes.json` when it
-reached a daemon or contract source, so the land carries them and its drafted commit gets
-the `!` and `Breaking-Note:` a removal needs. Work in the main tree gets no fixers: regenerate the lock yourself
-(`pnpm --filter @intentic/sandbox-contract lock`, or `tsgo -b && node scripts/write-lock.mjs` in that package where
-pnpm cannot link), the daemon's indexes with the generator named under "Stored data", and the shapes with
-`node --import tsx src/store/shapes/write-state-shapes.ts --freeze` in `_sandbox/sandbox`. A stale lock fails the contract's own
-test in CI.
+into the landed commit, and CI's push check reads it there.
+
+Derived files are never yours to carry: the contract's `contract.lock.json`, the stored shapes (`state-shapes.json`)
+and the daemon's generated indexes are marked `merge=derived` in `.gitattributes`. A land leaves them out of its patch
+and the repository's fixers (`_tools/scripts/verify/fixers.mjs`, its `DERIVED` table) write them again in the tree the
+work lands in, from what landed; a rebase keeps the side it lands on, so none of them is ever a conflict. Regenerate one
+in your own tree only to run its tests there: `pnpm --filter @intentic/sandbox-contract lock`, `pnpm indexes` and
+`bun --conditions=@intentic/src src/store/shapes/write-state-shapes.ts --freeze` in `_sandbox/sandbox`, all from
+source with no build first. A removal from the contract still needs its `!` and `Breaking-Note:`; the drafted commit
+reads the lock the land wrote. CI checks each derived file against its sources.
 
 ## Before it leaves the machine
 

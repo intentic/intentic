@@ -186,17 +186,10 @@ export interface ChildRecord {
     // Its turn was refused in a way its spawn's fallbacks answer: set the moment the refusal arrives, so the report of the
     // run that ended is not told to the parent as the end (child-report.ts), and cleared once the move is made or fails.
     movingOn: { readonly failure: string } | undefined;
-    // Its turn ended on a wall the sandbox re-runs it past by itself: what stopped it, the run that ended so, the look
-    // that ends the pause as failed if the re-run never comes, and what stops hearing for that and strikes the pause off
-    // the record a restart reads (paused-children.ts).
-    paused:
-        | {
-              readonly failure: string;
-              readonly run: string | undefined;
-              readonly look: ReturnType<typeof setInterval>;
-              readonly unrecord: () => void;
-          }
-        | undefined;
+    // Its turn ended on a wall the sandbox re-runs it past by itself: what stopped it, the run that ended so, and what
+    // stops the watch that ends the pause as failed if the re-run never comes (paused-children.ts). Written on its file
+    // as `paused`, so a restart brings it back with the child.
+    paused: { readonly failure: string; readonly run: string | undefined; readonly stop: () => void } | undefined;
 }
 
 // The run a person started in a spawned child's own chat, held by the child under its own id. A parent leaving stops the
@@ -916,15 +909,10 @@ const askAbout = (kid: ChildRecord, move: ChildMove, childId: string, message: s
     message: quoted(message),
 });
 
-// Whether the privacy shield keeps children on this machine; an unreadable policy keeps them here too.
-const shieldHoldsHere = async (services: Pick<Services, "privacyShield">): Promise<boolean> => {
-    try {
-        return (await services.privacyShield.policy()).mode !== "off";
-    } catch {
-        // allow(silent-catch): an unreadable policy may be one that is on, and a child kept here costs only a slot.
-        return true;
-    }
-};
+// Whether the privacy shield keeps a child on this provider here: it would refuse it on a runner, as it refuses its
+// parent there (stream-agent.ts). A fresh child has no conversation of its own a grant could name.
+const shieldHoldsHere = async (services: Pick<Services, "privacyShield">, provider: AgentProvider): Promise<boolean> =>
+    (await services.privacyShield.refusal({ provider, route: "runner" })) !== undefined;
 
 // The runner a child goes to, undefined for here. No preference: the scheduler places it. A named machine gets it, or
 // here if that machine is unusable.
@@ -934,9 +922,9 @@ const childPlacement = async (
     provider: AgentProvider,
     harness: AgentHarness,
 ): Promise<string | undefined> =>
-    // A runner calls its provider from its own machine, past this sandbox's privacy shield, so while the shield is on
-    // or watching every child stays here, wherever it was asked to go.
-    spec.on === "here" || (await shieldHoldsHere(services))
+    // A runner calls its provider from its own machine, past this sandbox's privacy shield, so a child the shield would
+    // refuse there stays here, wherever it was asked to go.
+    spec.on === "here" || (await shieldHoldsHere(services, provider))
         ? undefined
         : placeFanOut(
               await freshRunnerSummaries(services),
@@ -1610,6 +1598,8 @@ const cancelRecord = async (services: ChildCancelDeps, childId: string, kid: Chi
             services.conversations.send(childId, { kind: "resume-dropped" });
         }
         settleChild(services.conversations, childId, { status: "killed", report: kid.report ?? "", error: `${failure} ${CANCELLED}` });
+        // Its file is the only place the pause lives, and no turn follows to write over it: a boot would put it back.
+        kid.persist?.();
         return { ok: true, note: CANCEL_NOTES.paused };
     }
     if (!kid.running) {

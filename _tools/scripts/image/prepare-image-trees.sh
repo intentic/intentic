@@ -74,10 +74,12 @@ done
 
 # Which source the daemon was built from, for its /health and startup line (src/system/boot/build-info.ts): every
 # working-tree build is version 0.0.0, so the commit is what tells whether a fix is live. A checkout with uncommitted
-# changes says so, since its commit alone would claim code it does not hold.
+# changes says so, since its commit alone would claim code it does not hold. Inside dist/, beside the code it names: a
+# dev sandbox mounts its checkout's dist over the image's, and a stamp beside package.json then named the image's commit
+# for the checkout's code.
 commit="$(git rev-parse HEAD 2>/dev/null || true)"
 if [ -n "$commit" ] && ! git diff --quiet HEAD 2>/dev/null; then commit="$commit-dirty"; fi
-printf '{"commit":"%s","builtAt":"%s"}\n' "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$out/sandbox/build-info.json"
+printf '{"commit":"%s","builtAt":"%s"}\n' "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$out/sandbox/dist/build-info.json"
 
 # The bundles. They are COMPILED OUTPUT, and compiled output reaches the image only through this context: the
 # root build context excludes **/dist (.dockerignore, since the first commit), so a COPY of these straight from

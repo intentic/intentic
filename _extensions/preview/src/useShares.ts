@@ -1,6 +1,5 @@
 import type { SharedConversation } from "@intentic/sandbox-contract/schemas/share";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
-import { computed } from "vue";
 import { host } from "./host";
 
 // Conversations published as pages, via the daemon's `share` procedures, the outbox's other half. Not part of
@@ -12,9 +11,10 @@ export function useShares() {
     const queryClient = useQueryClient();
     const queryKey = api.sandbox.readKey(`share.list`);
 
-    const { query, error } = api.sandbox.query({
+    const { loaded } = api.sandbox.query({
         queryKey,
         queryFn: () => api.sandbox.rpc.share.list(),
+        select: (answer): SharedConversation[] => answer.shares,
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
@@ -29,9 +29,7 @@ export function useShares() {
     });
 
     return {
-        shares: computed<SharedConversation[]>(() => query.data.value?.shares ?? []),
-        error,
-        isLoading: query.isLoading,
+        loaded,
         update,
         remove,
     };

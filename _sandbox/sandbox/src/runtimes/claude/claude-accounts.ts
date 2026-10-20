@@ -43,7 +43,6 @@ export type ClaudeAccountDeps = Pick<
     | "claudeSeats"
     | "claudeStore"
     | "headroom"
-    | "observedLimits"
     | "providerRefusals"
     | "hostHub"
     | "webextHub"
@@ -236,7 +235,7 @@ export const claudeAccountDoor = (services: ClaudeAccountDeps): AccountDoor => {
             return withSeat(toAccount(renamed), (await services.claudeSeats.read())[id]);
         },
         identityOf: signInIdentity,
-        // Clears the credential, usage, observed ledger, refusals and seat state together, so nothing is left to orphan.
+        // Clears the credential, usage, refusals and seat state together, so nothing is left to orphan.
         forget,
     };
 };

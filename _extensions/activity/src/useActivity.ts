@@ -1,4 +1,5 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract/schemas/activity";
+import { useLoaded } from "@intentic/extension-api";
 import { useInfiniteQuery } from "@tanstack/vue-query";
 import { computed, type Ref, watch } from "vue";
 import { sinceOf, type TimeWindow } from "@intentic/extension-ui";
@@ -37,6 +38,14 @@ export function useActivity(window: Ref<TimeWindow>) {
     });
 
     const events = computed<ActivityEvent[]>(() => (feed.data.value?.pages ?? []).flat());
+    // The feed as the timeline draws it: wanted whenever it is shown, so a feed held while the sandbox wakes is a wait.
+    const loaded = useLoaded(() => ({
+        data: feed.data.value === undefined ? undefined : events.value,
+        error: feed.error.value?.message,
+        fetching: feed.isFetching.value,
+        wanted: true,
+        retry: () => void feed.refetch(),
+    }));
     const pages = computed(() => feed.data.value?.pages.length ?? 0);
     // Whether history reaches the window's edge; false drives the pull below and, if capped, `truncated`.
     const covered = computed(() => {
@@ -62,8 +71,9 @@ export function useActivity(window: Ref<TimeWindow>) {
     return {
         events,
         status: computed<ActivityStatus | undefined>(() => status.data.value),
-        error: computed(() => feed.error.value?.message ?? statusError.value),
-        isLoading: computed(() => feed.isLoading.value || status.isLoading.value),
+        // A feed that failed with nothing to show says so in the timeline (`loaded`); this is the rest.
+        error: computed(() => (loaded.value.state === `failed` ? statusError.value : (feed.error.value?.message ?? statusError.value))),
+        loaded,
         // True when the window needs more than the page bound allows; the feed is a prefix, and says so.
         truncated: computed(() => !covered.value && pages.value >= MAX_PAGES),
         oldestAt: computed(() => events.value.at(-1)?.at),

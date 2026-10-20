@@ -180,7 +180,9 @@ const fixture = (options: FixtureOptions = {}) => {
         activity: unstubbed<Services["activity"]>("activity", {
             append: options.append ?? (async (event) => void activity.push(event)),
         }),
-        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { clear: async () => {} }),
+        providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { settle: async () => {} }),
+        // What an answer covers is read off the readings it speaks for; none here.
+        headroom: unstubbed<Services["headroom"]>("headroom", { read: async () => ({}) }),
         usage: unstubbed<Services["usage"]>("usage", { record: async (turn) => void usage.push(turn) }),
         events: unstubbed<Services["events"]>("events", {
             publish: (name, payload) => void published.push({ name, payload }),
@@ -276,7 +278,7 @@ test("an unreadable protected policy refuses without trusting root mode or enter
 test("a preflight refusal before acquisition still closes the real admission", async () => {
     const turn = fixture();
     expect(await collect(streamAgent(turn.services, { ...input, attachments: ["../outside"] }, undefined))).toEqual([
-        { kind: "error", message: "invalid attachment path: ../outside" },
+        { kind: "error", message: "invalid attachment path: ../outside", own: true },
         { kind: "done" },
     ]);
     expect(turn.operations).toEqual(["policy", "environment"]);
@@ -305,7 +307,7 @@ test.each(["consume", "return"] as const)("a planner refusal releases its acquir
         return { ok: false, message: "synthetic planner refusal" };
     } });
     const stream = streamAgent(turn.services, input, undefined);
-    expect(await stream.next()).toEqual({ done: false, value: { kind: "error", message: "synthetic planner refusal" } });
+    expect(await stream.next()).toEqual({ done: false, value: { kind: "error", message: "synthetic planner refusal", own: true } });
     if (ending === "consume") {
         expect(await collect(stream)).toEqual([{ kind: "done" }]);
     } else {
@@ -415,7 +417,7 @@ test("a coded session-probe refusal is not swallowed as permission to resume", a
         throw new AgentDomainRefusedError("synthetic session execution refused");
     } });
     expect(await collect(streamAgent(turn.services, { ...input, sessionId: "synthetic-session", unattended: true }, undefined))).toEqual([
-        { kind: "error", code: "agent-domain-refused", message: "synthetic session execution refused", unattended: true },
+        { kind: "error", code: "agent-domain-refused", message: "synthetic session execution refused", own: true, unattended: true },
         { kind: "done" },
     ]);
     // Settings come before the probe: whether a cold follow-up resumes a trimmed copy is decided first (turn/cold-trim.ts).
@@ -438,7 +440,7 @@ test("an ordinary session-store probe failure still trusts the requested session
         },
     });
     expect(await collect(streamAgent(turn.services, { ...input, sessionId: "synthetic-session" }, undefined))).toEqual([
-        { kind: "error", message: "synthetic planner refusal" },
+        { kind: "error", message: "synthetic planner refusal", own: true },
         { kind: "done" },
     ]);
     expect(turn.warnings).toEqual([[{ err: failure, sessionId: "synthetic-session" }, "session probe failed, resuming as asked"]]);
@@ -454,7 +456,7 @@ const unprivileged = { policy: async () => ({ agentDomain: "unprivileged" as con
 test("unprivileged mode refuses a runtime the domain cannot hold yet, before probing or placing anything", async () => {
     const turn = fixture(unprivileged);
     expect(await collect(streamAgent(turn.services, { ...input, agent: "codex" }, undefined))).toEqual([
-        { kind: "error", message: "Only Claude Code runs inside the unprivileged agent domain so far. Switch this conversation to a Claude model, or set the agent domain back to root." },
+        { kind: "error", message: "Only Claude Code runs inside the unprivileged agent domain so far. Switch this conversation to a Claude model, or set the agent domain back to root.", own: true },
         { kind: "done" },
     ]);
     expect(turn.operations).toEqual(["policy", "environment"]);
@@ -465,7 +467,7 @@ test("unprivileged mode refuses a runtime the domain cannot hold yet, before pro
 test("unprivileged mode refuses a sandbox that cannot build namespaces rather than running the turn as root", async () => {
     const turn = fixture({ ...unprivileged, namespaces: false });
     expect(await collect(streamAgent(turn.services, input, undefined))).toEqual([
-        { kind: "error", message: "This sandbox cannot build namespaces (it has no CAP_SYS_ADMIN), so the unprivileged agent domain cannot run here. Set the agent domain back to root, or recreate the sandbox with it." },
+        { kind: "error", message: "This sandbox cannot build namespaces (it has no CAP_SYS_ADMIN), so the unprivileged agent domain cannot run here. Set the agent domain back to root, or recreate the sandbox with it.", own: true },
         { kind: "done" },
     ]);
     expect(turn.operations).toEqual(["policy", "environment", "namespace-probe"]);

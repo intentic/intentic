@@ -1,4 +1,5 @@
-import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
+import { useLoaded } from "@intentic/extension-api";
+import { messageOr, type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, shallowRef, watch } from "vue";
 import { useOperation } from "./operations";
@@ -21,9 +22,10 @@ export interface TokenSource<Token, Request, Minted> {
 // leaves to paste it into a CI secret and comes back still finds it, and a mint still being answered holds the button
 // on the view opened again.
 export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Token, Request, Minted>) {
-    const tokens = shallowRef<readonly Token[]>([]);
-    const initialLoading = shallowRef(true);
-    const loading = shallowRef(true);
+    // This owner's list as last read; undefined until it has been, and again when the owner changes.
+    const listed = shallowRef<readonly Token[]>();
+    const reading = shallowRef(false);
+    const readFailure = shallowRef<string>();
     const kind = source.key ?? `tokens/minted`;
     const minting = useOperation<Minted>(() => (source.owner === undefined ? kind : `${kind}/${String(source.owner())}`));
     // The last mint's raw value, never refetchable.
@@ -34,23 +36,26 @@ export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Toke
 
     // A list that didn't load is said, not shown as "no tokens": a live token nobody can see is one nobody revokes.
     const refresh = async (): Promise<void> => {
-        loading.value = true;
+        reading.value = true;
         try {
-            tokens.value = await source.list();
+            listed.value = await source.list();
+            readFailure.value = undefined;
         } catch (caught) {
-            tokens.value = [];
+            listed.value = undefined;
+            readFailure.value = messageOr(caught, t(`common.useMintedTokens.couldntLoad`));
             listNotice.value ??= noticeFrom(caught, t(`common.useMintedTokens.couldntLoad`));
         } finally {
-            loading.value = false;
-            initialLoading.value = false;
+            reading.value = false;
         }
     };
+    // What a view draws the list from (<Await :of>): waiting until this owner's list is read, never another's.
+    const loaded = useLoaded(() => ({ data: listed.value, error: readFailure.value, fetching: reading.value, wanted: true, retry: () => void refresh() }));
 
     watch(
         source.owner ?? (() => undefined),
         () => {
             listNotice.value = undefined;
-            initialLoading.value = true;
+            listed.value = undefined;
             void refresh();
         },
         { immediate: true },
@@ -88,8 +93,8 @@ export function useMintedTokens<Token, Request, Minted>(source: TokenSource<Toke
             await refresh();
             return;
         }
-        tokens.value = live;
+        listed.value = live;
     };
 
-    return { tokens, minted, minting: minting.busy, notice, mint, forgetMinted, revoke, loading, initialLoading };
+    return { tokens: computed(() => listed.value ?? []), minted, minting: minting.busy, notice, mint, forgetMinted, revoke, loaded };
 }

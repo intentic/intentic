@@ -66,9 +66,7 @@ export const planGrokTurn = async (
             message: "No Grok account connected, sign in with your xAI (SuperGrok/X Premium) account in Setup before chatting.",
         };
     }
-    const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "grok").catch((error: unknown) =>
-        error instanceof Error ? error.message : "the privacy shield's policy could not be read",
-    );
+    const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "grok", input.conversationId);
     if (refused !== undefined) {
         return { ok: false, message: refused };
     }

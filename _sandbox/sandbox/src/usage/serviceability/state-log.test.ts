@@ -19,11 +19,11 @@ test("writes one line per change of verdict, naming the account by its label and
     const { lines, logger } = recordingLogger();
     const log = createAccountStateLog(logger, () => NOW);
     const ready = [{ account: "uuid-1", label: "rkrohmorath", usage: weekly(40) }];
-    log.note("claude", ready, judge(ready), undefined);
-    log.note("claude", ready, judge(ready), undefined);
+    log.note("claude", ready, judge(ready), []);
+    log.note("claude", ready, judge(ready), []);
     const spent = [{ account: "uuid-1", label: "rkrohmorath", usage: weekly(100) }];
-    log.note("claude", spent, judge(spent), undefined);
-    log.note("claude", spent, judge(spent), undefined);
+    log.note("claude", spent, judge(spent), []);
+    log.note("claude", spent, judge(spent), []);
     // A first sight of an account that can serve is no news; becoming spent is, once.
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatchObject({
@@ -42,7 +42,7 @@ test("a rounded pool read at 100 is at the line, not spent, and a standing refus
     const { lines, logger } = recordingLogger();
     const log = createAccountStateLog(logger, () => NOW);
     const atLine = [{ account: "a", usage: weekly(100, { rounded: true }) }];
-    log.note("claude", atLine, judge(atLine), undefined);
+    log.note("claude", atLine, judge(atLine), []);
     const refusal: ProviderRefusal = { at: NOW - 500, kind: "limit", message: "usage limit reached", account: "a" };
     log.note("claude", atLine, judge(atLine, [refusal]), [refusal]);
     expect(lines.map((line) => line["message"])).toEqual(["accounts: claude account a unseen → ready (at the line)", "accounts: claude account a ready (at the line) → spent"]);
@@ -54,8 +54,8 @@ test("judgements scoped to different models are tracked apart", () => {
     const { lines, logger } = recordingLogger();
     const log = createAccountStateLog(logger, () => NOW);
     const facts = [{ account: "a", usage: weekly(100) }];
-    log.note("claude", facts, judge(facts), undefined);
-    log.note("claude", facts, serviceStates(facts, undefined, { id: "claude-opus-5-5" }, NOW), undefined, { id: "claude-opus-5-5" });
+    log.note("claude", facts, judge(facts), []);
+    log.note("claude", facts, serviceStates(facts, [], { id: "claude-opus-5-5" }, NOW), [], { id: "claude-opus-5-5" });
     expect(lines.map((line) => line["model"])).toEqual([undefined, "claude-opus-5-5"]);
 });
 
@@ -67,9 +67,9 @@ test("an account coming back to ready from spent is announced, once, to whoever 
     const stop = onAccountReopened((event) => heard.push(event));
     const spent = [{ account: "uuid-1", label: "work", usage: weekly(100) }];
     const ready = [{ account: "uuid-1", label: "work", usage: weekly(30) }];
-    log.note("claude", spent, judge(spent), undefined);
-    log.note("claude", ready, judge(ready), undefined);
-    log.note("claude", ready, judge(ready), undefined);
+    log.note("claude", spent, judge(spent), []);
+    log.note("claude", ready, judge(ready), []);
+    log.note("claude", ready, judge(ready), []);
     stop();
     expect(heard).toEqual([{ provider: "claude", account: "uuid-1", label: "work", from: "spent" }]);
 });
@@ -84,9 +84,9 @@ test("a provider is asked to be judged again at the soonest reopen its accounts 
     try {
         const facts = [{ account: "a" }, { account: "b" }];
         const soon = Math.ceil(Date.now() / 1000) + 1;
-        log.note("claude", facts, new Map<string, AccountState>([["a", { kind: "spent", reopensAt: soon }], ["b", { kind: "spent", reopensAt: soon + 3_600 }]]), undefined);
-        log.note("codex", facts, new Map<string, AccountState>([["a", { kind: "blocked", fix: "wait", reason: "cooling", until: soon }]]), undefined);
-        log.note("codex", facts, new Map<string, AccountState>([["a", { kind: "ready", room: 50 }]]), undefined);
+        log.note("claude", facts, new Map<string, AccountState>([["a", { kind: "spent", reopensAt: soon }], ["b", { kind: "spent", reopensAt: soon + 3_600 }]]), []);
+        log.note("codex", facts, new Map<string, AccountState>([["a", { kind: "blocked", fix: "wait", reason: "cooling", until: soon }]]), []);
+        log.note("codex", facts, new Map<string, AccountState>([["a", { kind: "ready", room: 50 }]]), []);
         await waitFor(() => expect(due).toEqual(["claude"]), { timeout: 4_000, interval: 20 });
     } finally {
         unhear();

@@ -65,7 +65,15 @@ const VIEWS = computed(
 );
 
 // Runs only while Contents is selected (probing versions spawns processes).
-const { groups, loading, fetching, error: contentsError, refresh: reprobe, readAt } = useEnvironmentContents(() => view.value === `contents`);
+const {
+    groups,
+    contents,
+    loading,
+    fetching,
+    error: contentsError,
+    refresh: reprobe,
+    readAt,
+} = useEnvironmentContents(() => view.value === `contents`);
 // When the recipe last changed under an open card (the watch below re-reads Contents then): rows read before it cannot
 // mark what the change proposes, so they do not count as its review.
 const recipeChangedAt = ref(0);
@@ -175,15 +183,11 @@ const fromCheckout = computed(
     () => pending.value !== undefined && localImage.value !== undefined && slug.value !== undefined && canOperate.value,
 );
 
-// What Contents says arrives with a rebuild, named where the card says why none is offered.
-const arriving = computed(() => groups.value.flatMap((group) => group.items).filter((item) => item.state === `after-rebuild`));
-
 // How a rebuild happens from here, or why it doesn't (rebuildRoute.ts). Every lane draws something: the card once drew
 // nothing at all for a container with no rebuild route, under a banner asking for one.
 const route = computed(() =>
     rebuildRouteOf({
         pending: pending.value !== undefined,
-        arriving: arriving.value.length > 0,
         hosted: hosted.value !== undefined,
         owner: isOwner.value,
         serverManaged: serverManaged.value,
@@ -305,14 +309,6 @@ watch(
                 />
                 <!-- A container the installer did not start: nothing here can rebuild it, and the recipe is what to take. -->
                 <p v-else-if="route === `elsewhere`" class="text-xs text-content">{{ t(`sandbox.environmentCard.noRebuildHere`) }}</p>
-                <!-- Contents says something arrives with a rebuild, yet nothing approved is waiting to be built. -->
-                <p v-else-if="route === `nothing-pending`" class="text-xs text-content">
-                    {{
-                        proposal
-                            ? t(`sandbox.environmentCard.nothingToRebuildDecide`)
-                            : t(`sandbox.environmentCard.nothingToRebuild`, { names: arriving.map((item) => item.name).join(`, `) })
-                    }}
-                </p>
             </div>
 
             <Notice v-if="actionNotice && decidedAt === `step`" :of="actionNotice" />
@@ -323,9 +319,7 @@ watch(
             <!-- Leads in every state, including a pending proposal (incoming entries show marked as awaiting approval). -->
             <EnvironmentContents
                 v-if="view === `contents`"
-                :groups="groups"
-                :loading="loading"
-                :error="contentsError"
+                :loaded="contents"
                 :removable="canOperate"
                 :busy="busy"
                 @remove="(item) => (removing = item)"

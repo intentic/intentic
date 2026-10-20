@@ -1,5 +1,4 @@
 import { resetSandboxScope } from "@intentic/extension-api";
-import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { ContextUsage } from "@intentic/sandbox-contract/events/requests";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
@@ -271,13 +270,15 @@ describe(`ComposerSelection`, () => {
 // Which account the next turn runs on, as the picker ticks it: the account the daemon will place the turn on, never the
 // first row by position (the reported bug: an org-disabled account ticked, the turn run on another).
 describe(`the account the next turn runs on`, () => {
-    const account = (id: string, state: AccountState): OauthAccount => ({ id, label: id, connectedAt: 0, state });
-    const SEATLESS: AccountState = { kind: `blocked`, fix: `admin`, reason: `Your organization has disabled Claude subscription access.` };
+    // An account as the daemon lists it: the facts the one rule judges (a seat mark, a reading), never a verdict.
+    const account = (id: string, facts: Partial<OauthAccount> = {}): OauthAccount => ({ id, label: id, connectedAt: 0, ...facts });
+    const room = (left: number): Partial<OauthAccount> => ({ usage: { measuredAt: Date.now(), windows: [{ kind: `seven_day`, utilization: 100 - left, gates: `all` }] } });
+    const SEATLESS: Partial<OauthAccount> = { seatRefusal: `Your organization has disabled Claude subscription access.` };
 
     beforeEach(() => {
         providerAccounts.value = {
             ...providerAccounts.value,
-            claude: [account(`work`, SEATLESS), account(`personal`, { kind: `ready`, room: 40 }), account(`spare`, { kind: `ready`, room: 70 })],
+            claude: [account(`work`, SEATLESS), account(`personal`, room(40)), account(`spare`, room(70))],
         };
     });
 

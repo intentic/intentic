@@ -4,6 +4,7 @@ import { DEFAULT_PRIVACY_SHIELD, type PrivacyLedgerEntry, type PrivacyShieldPoli
 import type { JsonFile } from "../store/json-file.js";
 import { memoryPrivacyImages } from "./privacy-images.js";
 import type { PrivacyLedger } from "./privacy-ledger.js";
+import type { PrivacyPolicyStore } from "./privacy-policy.js";
 import { createPrivacyShield } from "./privacy-shield.js";
 import type { PrivacySlice } from "./privacy-slice.js";
 import { createPrivacyVault, type VaultValue } from "./privacy-vault.js";
@@ -46,6 +47,8 @@ export interface PrivacyFakeOptions {
     readonly capabilities?: () => Promise<readonly Capability[]>;
     readonly readers?: LocalReaders;
     readonly loopbackBase?: string;
+    // A store of the suite's own instead of the in-memory policy: one that cannot be read, say.
+    readonly policyStore?: PrivacyPolicyStore;
 }
 
 export const privacySliceFake = (
@@ -57,7 +60,7 @@ export const privacySliceFake = (
     return {
         privacyLedger: ledger,
         privacyShield: createPrivacyShield({
-            policyStore: {
+            policyStore: options.policyStore ?? {
                 get: async () => policy,
                 set: async (next) => {
                     policy = next;

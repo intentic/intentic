@@ -97,9 +97,10 @@ export interface LandLease {
     readonly held: number;
 }
 
-// A held turn with the resume pass's own bookkeeping: when it was held, whether its one dispatch went out, and how many
-// rungs of the stop ladder it inherited.
-export type HeldRecord = HeldTurn & { readonly recordedAt: number; readonly fired: boolean; readonly tries: number };
+// A held turn with the resume pass's own bookkeeping: when it was held, whether its one dispatch went out, how many
+// rungs of the stop ladder it inherited, and the wall in front of where it would go (ms), where the pass last read that
+// account as spent with a reopen still ahead (limit-due.ts): a reading, so a restart re-reads it rather than keeping it.
+export type HeldRecord = HeldTurn & { readonly recordedAt: number; readonly fired: boolean; readonly tries: number; readonly walledUntil?: number };
 
 /**
  * Whether a spent allowance holds this conversation and its window is known to be shut at `now`: a turn started then

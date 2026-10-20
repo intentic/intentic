@@ -1,17 +1,18 @@
 #!/usr/bin/env node
-// Checks four facts about a package's tests no test run reports: coverage, budgets, mock coverage, and build-reference
-// order. All four are recognized by shape, not a list, so a new package needs no addition here.
+// Checks three facts about a package's tests no test run reports: coverage, budgets and build-reference order. All
+// three are recognized by shape, not a list, so a new package needs no addition here. Whether a module mock provides
+// what the code under test imports is no longer read here: every mock stands in for its whole module at run time
+// (@intentic/testing module-mocks.ts), and one naming a module that moved fails at its own line.
 // 1. every test file sits inside some type-check program; a suite reaching the machine is named as one
 //    (`.integration.`/`.e2e.`), even through an imported fixture module
 // 2. every package running `suites` preloads the shared budget through its bunfig.toml, and every preload it names
 //    exists
-// 3. an allow-list `jest.mock` of a workspace package provides every name the code under test imports from it
-// 4. an emitted package's tsconfig references every emitted package it depends on, so `tsgo -b` builds them in order
+// 3. an emitted package's tsconfig references every emitted package it depends on, so `tsgo -b` builds them in order
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { INTEGRATION_NAME } from "../constants/src/test-suites.mjs";
 import { finish } from "./lib/report.mjs";
-import { byName, configFor, emitsDist, excludesOf, packages, root, sourceOf, TEST_FILE, walk } from "./lib/repo.mjs";
+import { configFor, emitsDist, excludesOf, packages, root, sourceOf, TEST_FILE, walk } from "./lib/repo.mjs";
 
 // Coverage, and the integration name.
 
@@ -142,95 +143,6 @@ for (const { name, dir, pkg } of packages) {
     }
 }
 
-// Mock coverage.
-
-const MOCK = /jest\.mock\(\s*["']([^"']+)["']\s*,\s*(async\s*)?\(\s*\)\s*=>\s*\(?\s*\{/g;
-const RELATIVE_IMPORT = /import\s+(?:[\w$]+\s*,?\s*)?(?:\{[^}]*\}\s*)?from\s*["'](\.[^"']+)["']/g;
-// The object literal that opens at `from`, found by brace depth.
-const literalAt = (source, from) => {
-    let depth = 0;
-    for (let i = from; i < source.length; i += 1) {
-        if (source[i] === "{") {
-            depth += 1;
-        } else if (source[i] === "}") {
-            depth -= 1;
-            if (depth === 0) {
-                return source.slice(from, i + 1);
-            }
-        }
-    }
-    return source.slice(from);
-};
-// Keys an object literal states: `name:`, `name(`, a shorthand, or a quoted key.
-const keysOf = (literal) =>
-    new Set(
-        [...literal.matchAll(/(?:^|[,{]\s*)(?:async\s+)?(?:["']([^"']+)["']|([A-Za-z_$][\w$]*))\s*(?=[:(,}])/gm)].map(
-            (match) => match[1] ?? match[2],
-        ),
-    );
-// Runtime names `source` imports from `specifier`: default as "default", named by their exported name.
-const namedImportsOf = (source, specifier) => {
-    const escaped = specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const names = new Set();
-    for (const match of source.matchAll(
-        new RegExp(String.raw`import\s+(?!type\s)([\w$]+)?\s*,?\s*(?:\{([^}]*)\})?\s*from\s*["']${escaped}["']`, "g"),
-    )) {
-        if (match[1] !== undefined) {
-            names.add("default");
-        }
-        for (const binding of (match[2] ?? "").split(",")) {
-            const name = binding
-                .trim()
-                .split(/\s+as\s+/)[0]
-                ?.trim();
-            if (name !== undefined && name !== "" && !name.startsWith("type ")) {
-                names.add(name);
-            }
-        }
-    }
-    return names;
-};
-// The test file and the modules it stands up (its relative imports, one level), each as `[path, text]`.
-const readersOf = (file, source) => {
-    const readers = [[file, source]];
-    for (const [, specifier] of source.matchAll(RELATIVE_IMPORT)) {
-        const target = sourceOf(file, specifier);
-        if (target !== undefined && existsSync(target) && !TEST_FILE.test(target)) {
-            readers.push([target, readFileSync(target, "utf8")]);
-        }
-    }
-    return readers;
-};
-// What one mock leaves unprovided: a line per reader importing a name the factory's object lacks.
-const mockGaps = (file, source, match, readers) => {
-    const [, specifier] = match;
-    const provided = keysOf(literalAt(source, source.indexOf("{", match.index + match[0].length - 1)));
-    return readers.flatMap(([reader, text]) => {
-        const missing = [...namedImportsOf(text, specifier)].filter((name) => !provided.has(name));
-        return missing.length === 0
-            ? []
-            : [
-                  `${file.slice(root.length + 1)}: jest.mock("${specifier}") provides {${[...provided].join(", ")}} but ` +
-                      `${reader.slice(root.length + 1)} imports {${missing.join(", ")}} from it: spread the original module into the factory, or add them`,
-              ];
-    });
-};
-const unmocked = [];
-for (const { dir, pkg } of packages) {
-    if (!runsSuites(pkg)) {
-        continue;
-    }
-    for (const file of walk(dir)) {
-        const source = readFileSync(file, "utf8");
-        const mocks = [...source.matchAll(MOCK)].filter(([, specifier]) => byName.has(specifier.split("/").slice(0, 2).join("/")));
-        if (mocks.length === 0) {
-            continue;
-        }
-        const readers = readersOf(file, source);
-        unmocked.push(...mocks.flatMap((match) => mockGaps(file, source, match, readers)));
-    }
-}
-
 // References.
 
 // An emitted dependency or peer must appear in `references`; a dev dependency doesn't count.
@@ -260,13 +172,11 @@ finish(
     [
         ["Test files outside the program or the budget they belong in", problems],
         ["A package's suites run without the shared budget, or name a preload that does not exist", budgetless],
-        ["A workspace package is mocked with an allow-list that misses a name the code under test imports", unmocked],
         ["An emitted package depends on another without a project reference, so the emit may run in the wrong order", unreferenced],
     ],
     [
         "typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one",
         "test budgets: every package running suites preloads the shared budget, and every preload it names exists",
-        "mock coverage: every allow-list mock of a workspace package provides what the code under test imports from it",
         "references: every emitted package names the emitted packages it depends on, so tsgo -b builds them first",
     ],
 );

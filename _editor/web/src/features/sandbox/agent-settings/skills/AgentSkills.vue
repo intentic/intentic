@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import type { SkillDraft, SkillSummary } from "@intentic/sandbox-contract/schemas/settings";
-import { DisclosureRow, Row, RowGroup, RowNote, SearchBar, SkeletonRows, SkeletonSnapshot, vSkeletonSource } from "@intentic/ui";
+import { Await, DisclosureRow, Row, RowGroup, RowNote, SearchBar, SkeletonRows } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { useCapabilities } from "../../../../models/capabilities/useCapabilities";
 import { useExtensions } from "../../../../models/extensions/useExtensions";
-import { useSandboxOutline } from "../../overview/useSandboxOutline";
 import { useSkills } from "../../environment/useSkills";
 import SkillForm from "./SkillForm.vue";
 import SkillRow from "./SkillRow.vue";
@@ -22,8 +21,7 @@ const FILTERABLE_FROM = 8;
 // Below this many borrowed rows, the fold saves nothing worth a click.
 const FOLD_FROM = 6;
 
-const { skills, settings, error, save, remove, setEnabled, readBody, forgetBody } = useSkills();
-const outline = useSandboxOutline(computed(() => settings.value === undefined));
+const { skills, settings, loaded, save, remove, setEnabled, readBody, forgetBody } = useSkills();
 const { capabilities } = useCapabilities();
 const { enabled: enabledExtensions } = useExtensions();
 
@@ -55,10 +53,6 @@ const sources = computed<SkillSources>(() => ({ capabilities: capabilities.value
 // Which row is open; `adding` is its own flag since a new skill has no id yet.
 const openId = ref<string | undefined>();
 const adding = ref(false);
-// Nothing in the group yet but the wait: no list, no settings, no error, no skill being written. Only then does the whole
-// group stand in as it last looked; rows that arrive before the settings stay on screen, disabled, above the outline
-// drawn inside the group.
-const nothingYet = computed(() => error.value === undefined && settings.value === undefined && skills.value.length === 0 && !adding.value);
 // The open row's text, once fetched; its own ref rather than a suspense boundary since the row is already on screen.
 const openBody = ref<string | undefined>();
 const bodyError = ref<string | undefined>();
@@ -107,82 +101,40 @@ const removeSkill = (skill: SkillSummary): void => {
 </script>
 
 <template>
-    <SkeletonSnapshot v-if="outline && nothingYet" of="sandbox.agent.skills" :label="t(`sandbox.agentSkills.readingSandboxsSkills`)">
-        <!-- Until it has been seen once: the group as it reads while loading, the outline over the write action. -->
-        <RowGroup :label="t(`sandbox.agentSkills.skills`)">
-            <div role="status" aria-busy="true">
-                <span class="sr-only">{{ t(`sandbox.agentSkills.readingSandboxsSkills`) }}</span>
-                <SkeletonRows :rows="3" description control />
-            </div>
-            <RowNote variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
-        </RowGroup>
-    </SkeletonSnapshot>
-    <RowGroup v-else v-skeleton-source="`sandbox.agent.skills`" data-setting="agent-skills" :label="t(`sandbox.agentSkills.skills`)">
-        <!-- One field, not a toolbar: a full bar for a single control would look like it belongs to more than this group. -->
-        <template v-if="filterable" #actions>
-            <SearchBar
-                v-model="query"
-                variant="field"
-                clearable
-                :placeholder="t(`sandbox.agentSkills.nameTriggerOrigin`)"
-                :aria-label="t(`sandbox.agentSkills.filterSkills`)"
-                autocapitalize="off"
-                spellcheck="false"
-                class="w-full max-w-64"
-            />
+    <Await :of="loaded" imprint="sandbox.agent.skills" :label="t(`sandbox.agentSkills.readingSandboxsSkills`)">
+        <template #fallback>
+            <!-- Until it has been seen once: the group as it reads while loading, the outline over the write action. -->
+            <RowGroup :label="t(`sandbox.agentSkills.skills`)">
+                <div role="status" aria-busy="true">
+                    <span class="sr-only">{{ t(`sandbox.agentSkills.readingSandboxsSkills`) }}</span>
+                    <SkeletonRows :rows="3" description control />
+                </div>
+                <RowNote variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
+            </RowGroup>
         </template>
+        <template #failed="{ error }">
+            <RowGroup :label="t(`sandbox.agentSkills.skills`)">
+                <Row icon="exclamation-triangle" :description="error" />
+            </RowGroup>
+        </template>
+        <template #default="{ refreshError }">
+            <RowGroup data-setting="agent-skills" :label="t(`sandbox.agentSkills.skills`)">
+                <!-- One field, not a toolbar: a full bar for a single control would look like it belongs to more than this group. -->
+                <template v-if="filterable" #actions>
+                    <SearchBar
+                        v-model="query"
+                        variant="field"
+                        clearable
+                        :placeholder="t(`sandbox.agentSkills.nameTriggerOrigin`)"
+                        :aria-label="t(`sandbox.agentSkills.filterSkills`)"
+                        autocapitalize="off"
+                        spellcheck="false"
+                        class="w-full max-w-64"
+                    />
+                </template>
 
-        <SkillRow
-            v-for="skill in tunable"
-            :key="skill.id"
-            :skill="skill"
-            :expanded="openId === skill.id"
-            :body="openId === skill.id ? openBody : undefined"
-            :body-error="openId === skill.id ? bodyError : undefined"
-            :sources="sources"
-            :disabled="settings === undefined"
-            @toggle="void toggle(skill)"
-            @enable="(value: boolean) => setEnabled(skill, value)"
-            @save="saveDraft"
-            @remove="removeSkill(skill)"
-        />
-
-        <Row v-if="error !== undefined" icon="exclamation-triangle" :description="error" />
-        <!-- No settings yet means no skills to show and no grounds to say the list is empty; shows a loading state instead. -->
-        <div v-else-if="settings === undefined" role="status" aria-busy="true">
-            <template v-if="outline">
-                <span class="sr-only">{{ t(`sandbox.agentSkills.readingSandboxsSkills`) }}</span>
-                <SkeletonRows :rows="3" description control />
-            </template>
-        </div>
-        <Row v-else-if="skills.length === 0 && !adding" icon="book" :description="t(`sandbox.agentSkills.noSkillsAddedYet`)" />
-        <!-- Distinct from an empty list or from hits hidden inside the closed fold below. -->
-        <Row v-else-if="matches.length === 0" icon="search" :description="t(`sandbox.agentSkills.nothingMatchesFilter`)" />
-
-        <!-- Adding uses the same row surface a written skill is read on. -->
-        <!-- Padding and tint values mirror <DisclosureRow>'s own; keep them in sync if that component's spacing changes. -->
-        <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.words.newSkill`)" @update:open="close">
-            <template #below>
-                <SkillForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
-            </template>
-        </DisclosureRow>
-
-        <!-- Hidden while a row is open, so only one skill is written or read at a time. -->
-        <RowNote v-else-if="openId === undefined" variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
-
-        <!-- Borrowed skills come last, inside the same list rather than a separate section. -->
-        <details v-if="borrowed.length > 0" class="group/fold" :open="borrowedOpen" @toggle="rememberFold">
-            <summary
-                class="flex cursor-pointer list-none items-center gap-2.5 py-2.5 pl-2.5 pr-3 transition-colors hover:bg-content/4 [&::-webkit-details-marker]:hidden"
-            >
-                <Icon name="chevron-right" aria-hidden="true" class="shrink-0 text-2xs text-subtle transition-transform group-open/fold:rotate-90" />
-                <span class="text-sm text-muted">{{ t(`sandbox.agentSkills.cameWhatInstalledConnected`, { count: borrowed.length }) }}</span>
-                <!-- Hidden in a narrow pane rather than wrapped, since it's a footnote to the line above, not a second fact. -->
-                <span class="hidden min-w-0 truncate text-2xs text-subtle @xl:inline">{{ t(`sandbox.agentSkills.toDropOneDrop`) }}</span>
-            </summary>
-            <div class="divide-y divide-line-subtle border-t border-line-subtle">
                 <SkillRow
-                    v-for="skill in borrowed"
+                    v-for="skill in tunable"
                     :key="skill.id"
                     :skill="skill"
                     :expanded="openId === skill.id"
@@ -195,7 +147,51 @@ const removeSkill = (skill: SkillSummary): void => {
                     @save="saveDraft"
                     @remove="removeSkill(skill)"
                 />
-            </div>
-        </details>
-    </RowGroup>
+
+                <Row v-if="refreshError !== undefined" icon="exclamation-triangle" :description="refreshError" />
+                <Row v-else-if="skills.length === 0 && !adding" icon="book" :description="t(`sandbox.agentSkills.noSkillsAddedYet`)" />
+                <!-- Distinct from an empty list or from hits hidden inside the closed fold below. -->
+                <Row v-else-if="matches.length === 0" icon="search" :description="t(`sandbox.agentSkills.nothingMatchesFilter`)" />
+
+                <!-- Adding uses the same row surface a written skill is read on. -->
+                <!-- Padding and tint values mirror <DisclosureRow>'s own; keep them in sync if that component's spacing changes. -->
+                <DisclosureRow v-if="adding" open body="drawer" icon="plus" :title="t(`sandbox.words.newSkill`)" @update:open="close">
+                    <template #below>
+                        <SkillForm :disabled="settings === undefined" @save="saveDraft" @cancel="close" />
+                    </template>
+                </DisclosureRow>
+
+                <!-- Hidden while a row is open, so only one skill is written or read at a time. -->
+                <RowNote v-else-if="openId === undefined" variant="action" :label="t(`sandbox.words.writeSkill`)" @click="startAdd" />
+
+                <!-- Borrowed skills come last, inside the same list rather than a separate section. -->
+                <details v-if="borrowed.length > 0" class="group/fold" :open="borrowedOpen" @toggle="rememberFold">
+                    <summary
+                        class="flex cursor-pointer list-none items-center gap-2.5 py-2.5 pl-2.5 pr-3 transition-colors hover:bg-content/4 [&::-webkit-details-marker]:hidden"
+                    >
+                        <Icon name="chevron-right" aria-hidden="true" class="shrink-0 text-2xs text-subtle transition-transform group-open/fold:rotate-90" />
+                        <span class="text-sm text-muted">{{ t(`sandbox.agentSkills.cameWhatInstalledConnected`, { count: borrowed.length }) }}</span>
+                        <!-- Hidden in a narrow pane rather than wrapped, since it's a footnote to the line above, not a second fact. -->
+                        <span class="hidden min-w-0 truncate text-2xs text-subtle @xl:inline">{{ t(`sandbox.agentSkills.toDropOneDrop`) }}</span>
+                    </summary>
+                    <div class="divide-y divide-line-subtle border-t border-line-subtle">
+                        <SkillRow
+                            v-for="skill in borrowed"
+                            :key="skill.id"
+                            :skill="skill"
+                            :expanded="openId === skill.id"
+                            :body="openId === skill.id ? openBody : undefined"
+                            :body-error="openId === skill.id ? bodyError : undefined"
+                            :sources="sources"
+                            :disabled="settings === undefined"
+                            @toggle="void toggle(skill)"
+                            @enable="(value: boolean) => setEnabled(skill, value)"
+                            @save="saveDraft"
+                            @remove="removeSkill(skill)"
+                        />
+                    </div>
+                </details>
+            </RowGroup>
+        </template>
+    </Await>
 </template>

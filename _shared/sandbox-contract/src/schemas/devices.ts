@@ -346,7 +346,9 @@ export const DevicePairingSchema = z.object({
     conflicts: z.number().int().nonnegative().optional(),
     // Conflicted paths, capped at `CONFLICT_PATHS_MAX`; `conflicts` above is the true, uncapped count.
     conflictedPaths: z.array(DeviceConflictSchema).optional(),
+    // Mutagen's word, and why the agent holds it still, owner first (DeviceSyncHoldSchema); agreeing by its next pass.
     paused: z.boolean().optional(),
+    heldBy: z.array(z.string()).optional(),
     // Second session's status (the state-dir backup mirror), reported separately: the two fail independently.
     backupStatus: z.string().optional(),
     // (2026-10-18) While the drive holding `localDir` is nearly full, the reading that paused its sync and git bridge; and the
@@ -659,14 +661,11 @@ const doorsRunningSandbox = (devices: readonly Device[], slug: string | undefine
         ? []
         : devices.filter((device) => device.hostId !== undefined && device.online === true && (device.sandboxes ?? []).some((box) => box.slug === slug));
 
-// The connected, online device whose docker reports a given sandbox slug: the machine that sandbox RUNS ON, as opposed
-// to any machine merely paired with it. Answers the question every "run it there instead of asking the owner to type
-// it" path starts from, and is `undefined` for a sync-only agent, which reports no containers at all.
-// Reads the row's own container list, not the report's: a card that grants sandbox management without "Run commands"
-// can run every swap this answer leads to while refusing to describe itself, and judging it on the report would print
-// a terminal command for a machine one click could have done it on.
-// Answers with a door, and a container verb may take any door of the machine; a command written for a PATH may not
-// (`hostHoldingPath`).
+// The connected, online device whose docker reports a given sandbox slug: the machine that sandbox RUNS ON, not any
+// machine merely paired with it, and `undefined` for a sync-only agent, which reports no containers. Read off the row's
+// own container list, not the report's: a card granting sandbox management without "Run commands" refuses to describe
+// itself yet runs every swap this answer leads to, so judging it on the report printed a command one click could do.
+// Answers with a door, any of which a container verb may take; a command written for a PATH may not (`hostHoldingPath`).
 export const hostRunningSandbox = (devices: readonly Device[], slug: string | undefined): string | undefined =>
     doorsRunningSandbox(devices, slug)[0]?.hostId;
 

@@ -42,13 +42,14 @@ const notice = tv({
             success: { box: [toneTint(`success`), toneInk(`success`)] },
         },
         size: {
-            xs: { box: `gap-1 rounded px-2 py-0.5 text-2xs`, icon: `mt-0.5 text-[0.6rem]` },
-            sm: { box: `gap-x-2 gap-y-1 rounded-xl px-3 py-2 text-2xs`, icon: `mt-px` },
-            md: { box: `gap-2 rounded-lg px-3 py-2 text-xs`, icon: `mt-px` },
-            lg: { box: `gap-2 rounded-lg px-4 py-3 text-sm`, icon: `mt-0.5` },
+            xs: { box: `gap-1 rounded px-2 py-0.5 text-2xs`, icon: `text-[0.6rem]` },
+            sm: { box: `gap-x-2 gap-y-1 rounded-xl px-3 py-2 text-2xs` },
+            md: { box: `gap-2 rounded-lg px-3 py-2 text-xs` },
+            lg: { box: `gap-2 rounded-lg px-4 py-3 text-sm` },
         },
-        // A row of actions wraps under the sentence in a narrow column, and the glyph centres on the line it shares.
-        actions: { true: { box: `flex-wrap items-center`, icon: `mt-0` }, false: { box: `items-start` } },
+        // A row of actions wraps under the sentence in a narrow column, and the glyph centres on the line it shares. Without
+        // them the glyph leads the sentence's first line, placed there by `.ui-icon` (utilities.css), at every size.
+        actions: { true: { box: `flex-wrap items-center` }, false: { box: `items-start` } },
         strip: { true: { box: `shrink-0 rounded-none border-x-0 border-t-0 py-1.5` } },
     },
     defaultVariants: { size: `md`, actions: false, strip: false },

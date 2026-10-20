@@ -18,6 +18,7 @@ import { parseHeaders, unversionedBase, versionedBase } from "../../../endpoints
 import { endpointModelId } from "../../../endpoints/endpoint-translator.js";
 import { endpointConfigOf } from "../../../endpoints/local-model.js";
 import type { TurnAllowance } from "../harness-credentials.js";
+import { fleetCapacityOf, type ServiceabilityDeps } from "../../../usage/serviceability/serviceability.js";
 
 // Where a model is reached, apart from which loop drives it. One answer per (provider, account, model, loop): the wire
 // the loop speaks there, the URL and bearer it sends to, the model id that URL knows, whose account and allowance the
@@ -80,7 +81,8 @@ export type RouteResult = { readonly ok: true; readonly route: ModelRoute } | Ro
 export type RouteDeps = Pick<
     Services,
     "capabilities" | "cliProxy" | "config" | "endpointModels" | "minted" | "providerCatalogs" | "trial" | "wakeLocalModel"
->;
+> &
+    ServiceabilityDeps;
 
 export interface RouteInput {
     readonly provider: AgentProvider;
@@ -195,7 +197,7 @@ const resolveTranslatorRoute = async (services: RouteDeps, provider: TranslatorP
             model,
             ...opt("modelRow", row),
             shield: provider,
-            allowance: { vendor: PROVIDER_VENDOR[provider], limit: () => services.cliProxy.turnLimit(provider, model) },
+            allowance: { vendor: PROVIDER_VENDOR[provider], capacity: () => fleetCapacityOf(services, provider, { id: model }) },
         },
     };
 };

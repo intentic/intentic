@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ResourceGroupSchema, type Deployment } from "@intentic/api-contract";
-import { Button, Card, ui, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, StatusBadge } from "@intentic/ui";
+import { Button, Card, CopyButton, InfoHint, Notice, type NoticeModel, Page, PageAction, PageHeader, Section, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, reactive, ref } from "vue";
 import PlanStepRow from "../PlanStepRow.vue";
@@ -141,9 +141,8 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
 
             <div class="flex flex-col gap-4">
                 <!-- TOP, desired state: the dependency graph, nodes colored by their last reconcile status. -->
-                <section class="rounded-lg bg-card shadow-sm p-4">
-                    <h3 :class="ui.sectionLabel('mb-3 flex items-center gap-2')">
-                        {{ t(`views.words.planned`) }}
+                <Section class="rounded-lg bg-card shadow-sm p-4" :label="t(`views.words.planned`)" :heading="3">
+                    <template #info>
                         <InfoHint :label="t(`views.liveStatusView.graphLegend`)">
                             <span class="block text-xs font-medium text-content">{{ t(`shared.category`) }}</span>
                             <ul class="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -160,7 +159,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                                 </li>
                             </ul>
                         </InfoHint>
-                    </h3>
+                    </template>
                     <DependencyGraph :resources="state?.resources ?? []" v-model="selectedId" />
                     <ResourceDetails
                         v-if="selectedNode"
@@ -169,11 +168,10 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                         :deployments="deployments"
                         v-model="selectedId"
                     />
-                </section>
+                </Section>
 
                 <!-- BOTTOM, actual state: live Komodo deployments plus an on-demand live `intentic deploy plan` read. -->
-                <section class="rounded-lg bg-card shadow-sm p-4">
-                    <h3 :class="ui.sectionLabel('mb-3 flex items-baseline gap-2')">{{ t(`views.words.runningNow`) }}</h3>
+                <Section class="rounded-lg bg-card shadow-sm p-4" :label="t(`views.words.runningNow`)" :heading="3">
 
                     <Notice v-if="appsNotice" :of="appsNotice" class="mb-3" />
 
@@ -240,10 +238,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                     </div>
 
                     <!-- Live check: streams "intentic deploy plan" to diff the desired graph against live infrastructure. -->
-                    <div class="mt-4 border-t border-line-subtle pt-3">
-                        <div class="mb-2 flex items-center gap-2">
-                            <h3 class="text-2xs font-semibold uppercase tracking-wide text-subtle/70">{{ t(`views.liveStatusView.liveCheck`) }}</h3>
-                        </div>
+                    <Section class="mt-4 border-t border-line-subtle pt-3" :label="t(`views.liveStatusView.liveCheck`)" :heading="3">
                         <WaitProgress v-if="checking && checkWait" :wait="checkWait" :what="t(`views.liveStatusView.readingLiveInfrastructure`)" />
                         <Notice v-if="liveError" :of="liveError" />
                         <div v-else-if="liveRan && !checking" class="flex flex-col gap-1.5">
@@ -254,12 +249,11 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                             </p>
                         </div>
                         <p v-else-if="!checking" class="text-2xs text-subtle">{{ t(`views.liveStatusView.refreshToReadLive`) }}</p>
-                    </div>
-                </section>
+                    </Section>
+                </Section>
 
                 <!-- Access: URLs + admin logins for what's provisioned. -->
-                <section v-if="access.length > 0" class="rounded-lg bg-card shadow-sm p-4">
-                    <h3 :class="ui.sectionLabel('mb-3')">{{ t(`views.words.access`) }}</h3>
+                <Section v-if="access.length > 0" class="rounded-lg bg-card shadow-sm p-4" :label="t(`views.words.access`)" :heading="3">
                     <Notice v-if="accessError" :of="accessError" class="mb-2" />
                     <div class="flex flex-col gap-2">
                         <div v-for="entry in access" :key="entry.id" class="flex flex-col gap-1.5 rounded-lg border border-line px-3 py-2.5">
@@ -310,7 +304,7 @@ const toggleAccessReveal = async (key: string): Promise<void> => {
                             </div>
                         </div>
                     </div>
-                </section>
+                </Section>
             </div>
         </Page>
     </div>

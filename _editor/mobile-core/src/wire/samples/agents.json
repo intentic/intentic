@@ -59,8 +59,7 @@
             "failureCode": "rate_limit",
             "limitResetsAt": 1760885000,
             "limitHeld": true,
-            "limitScheduled": true,
-            "limitNextAt": 1760885060,
+            "next": { "kind": "rerun", "at": 1760885060000 },
             "provider": "claude",
             "harness": "claude-code",
             "updatedAt": 1760866000000,
@@ -78,6 +77,7 @@
                 "items": [{ "id": "msg_7", "text": "Pick this up after the land", "voice": "person", "queuedAt": 1760866500000, "revision": 2, "after": "cnv_soft_deletes" }],
                 "revision": 2
             },
+            "next": { "kind": "land", "after": "cnv_soft_deletes", "count": 1 },
             "updatedAt": 1760866600000,
             "attention": { "plan": false, "question": false, "permission": false, "capability": false, "credential": false, "conflict": false }
         },
