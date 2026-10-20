@@ -24,6 +24,8 @@ import { createCiHookReconciler } from "./hooks.js";
 import { createCiWebhookRoute } from "./webhook.routes.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../seams/domain-events.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact these tests state in one line.
@@ -79,7 +81,10 @@ const harness = async (
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        // Real actors under a wake's detached run (turn-runs.ts), and a bus for its settle that nobody hears.
+        conversations: memoryFleet().conversations,
+        events: createDomainEvents(() => {}),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
     const prompts: string[] = [];
     const wake: TurnStarter["stream"] = async function* (input) {
@@ -289,7 +294,10 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        // Real actors under a wake's detached run (turn-runs.ts), and a bus for its settle that nobody hears.
+        conversations: memoryFleet().conversations,
+        events: createDomainEvents(() => {}),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
     const prompts: string[] = [];
     const wake: TurnStarter["stream"] = async function* (input) {

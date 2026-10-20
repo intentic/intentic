@@ -21,6 +21,8 @@ import { PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
 import { fileSendersStore } from "./senders-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../seams/domain-events.js";
 import { opt } from "../opt.js";
 
 // The listener paths touch automations/capabilities/activity/workspace/logger, the senders roster, and on a hold the
@@ -29,6 +31,10 @@ const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSche
     unstubbed<Services>("services", {
         // No conversation here is on record, so a thread resumes the session it kept (routing.ts sessionFor).
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        // Real actors under a wake's detached run (turn-runs.ts): the archived check, and the run it holds while live.
+        conversations: memoryFleet().conversations,
+        // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse(settings) }),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
@@ -42,7 +48,7 @@ const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSche
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
 
 const fakeWake = (prompts: string[]): TurnStarter["stream"] =>

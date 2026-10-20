@@ -24,6 +24,8 @@ import { createWebchatRoutes } from "./webchat.routes.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { conversationEntry } from "../conversations/registry/agents-store.testing.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../seams/domain-events.js";
 
 const ORIGIN = "https://site.example";
 
@@ -36,12 +38,16 @@ const fakeServices = (root: string, appends: ActivityEvent[], archived: Readonly
         agents: unstubbed<Services["agents"]>("agents", {
             entry: (id: string) => (archived.has(id) ? conversationEntry({ id, archivedAt: 1 }) : undefined),
         }),
+        // Real actors under a wake's detached run (turn-runs.ts), archived where this fleet's registry says so.
+        conversations: { ...memoryFleet().conversations, archived: (id: string) => archived.has(id) },
+        // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
         webchatOutbox: fileWebchatOutbox(join(root, "webchat-outbox.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
         // Identity reads authorized emails for the `member` tag; empty is the ordinary case for a public Visitor chat.
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         // Held automations notify fire-and-forget; a missing stub would surface only as an unhandled rejection later.

@@ -14,6 +14,8 @@ import { conversationsDbPath, openConversationsDb } from "../../store/conversati
 import type { TurnStarter } from "../../seams/turn-starter.js";
 import { conversationEntry } from "../../conversations/registry/agents-store.testing.js";
 import { drivenBy, fakeTurns } from "../../seams/turn-starter.testing.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../../seams/domain-events.js";
 import { fileHeldWakesStore } from "../held-wakes-store.js";
 import { fileScheduleCoverageStore } from "../schedule-coverage.js";
 import { type AutomationRecord, fileAutomationsStore } from "../automations-store.js";
@@ -35,7 +37,14 @@ const fakeServices = (root: string, registry: readonly PersistedAgent[] = [], pu
             ids: () => registry.map((entry) => entry.id),
             entry: (id) => registry.find((entry) => entry.id === id),
         }),
-        conversations: unstubbed<Services["conversations"]>("conversations", { liveSessionIds: () => [], sessionIdOf: () => undefined }),
+        // Real actors under a wake's detached run (turn-runs.ts): the archived check, and the run it holds while live.
+        conversations: unstubbed<Services["conversations"]>("conversations", {
+            ...memoryFleet().conversations,
+            liveSessionIds: () => [],
+            sessionIdOf: () => undefined,
+        }),
+        // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         heldWakes: fileHeldWakesStore(join(root, "history")),

@@ -36,6 +36,9 @@ import {
 } from "./scheduler.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { conversationEntry } from "../conversations/registry/agents-store.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../seams/domain-events.js";
+import { liveRunOf } from "../conversations/actor/conversation-holdings.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
 import { opt } from "../opt.js";
 
@@ -53,6 +56,8 @@ const fakeServices = (
             entry: (id) => registry.find((entry) => entry.id === id),
         }),
         conversations: unstubbed<Services["conversations"]>("conversations", {
+            // Real actors under a wake's detached run (turn-runs.ts): the archived check, and the run it holds while live.
+            ...memoryFleet().conversations,
             liveSessionIds: () => live,
             // A conversation on record keeps the session its last turn reported, as the registry does.
             sessionIdOf: (id) => registry.find((entry) => entry.id === id)?.sessionId,
@@ -72,7 +77,9 @@ const fakeServices = (
         // No device subscribed, which is what a workspace that has never granted push reports.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
+        // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
         // The real resolver, which answers undefined for every origin that is not a Visitor chat visitor's — what these
         // fires are. Wired rather than stubbed so it stays the production answer if that rule changes.
         outboxStreamFor: (origin) => outboxStreamFor(services, origin),
@@ -116,6 +123,26 @@ test("a due cron wakes the agent once and records a completed run", async () => 
     await waitFor(async () => expect((await services.automations.get("inbox"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts).toEqual(["wake:inbox"]);
     expect((await services.automations.get("inbox"))?.runs[0]?.outcome).toBe("completed");
+});
+
+// A window opening a wake's conversation mid-turn attaches to the run its conversation holds; a wake that streamed its
+// turn outside one left the chat on skeletons until the record was written at the end (2026-10-20, a-mkt-x-engage).
+test("a wake's turn is a live run its conversation holds, so a window opened mid-turn has rows to draw", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    await services.automations.upsert(automationConfig("engage"));
+    const { wake, started, release } = heldPerConversation();
+    const fired = fireAutomation(drivenBy(services, wake), await saved(services, "engage"));
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    const conversationId = started[0] ?? "";
+
+    const live = liveRunOf(services.conversations, conversationId);
+    expect(live).toMatchObject({ done: false, id: expect.any(String) });
+    expect(JSON.stringify(live?.rows)).toContain("wake:engage");
+
+    release(conversationId);
+    await fired;
+    expect(liveRunOf(services.conversations, conversationId)).toBeUndefined();
+    expect((await services.automations.get("engage"))?.runs[0]).toMatchObject({ outcome: "completed", conversationId });
 });
 
 test("a failing guard skips the wake and records why; a passing guard wakes", async () => {

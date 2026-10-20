@@ -146,11 +146,12 @@ export interface TurnStarter {
     readonly resume: (conversationId: string, routing?: ResumeRouting) => Promise<StartedRun | undefined>;
     // A detached run its starter reads, recorded to the conversation but neither pinned nor announced, and started at once
     // so its starter follows it from its first frame (the run routes its model itself, before the provider is asked).
-    // Unjournalled unless `journalled`: a loop keeps those books itself (its run is marked so, and the journal invariant
-    // does not count it); a spawned child's turn is journalled, since its parent keeps waiting on it across a container
-    // recreate.
+    // Unjournalled unless `journalled`: a loop and an automation's fire keep those books themselves (the run is marked
+    // so, and the journal invariant does not count it); a spawned child's turn is journalled, since its parent keeps
+    // waiting on it across a container recreate.
     readonly run: (turn: TurnInput & { readonly conversationId: string }, options?: DetachedRunOptions) => StartedRun | BeginRefusal;
-    // The turn itself, for a caller folding its own frames (an automation's fire, a runner's dispatched turn). Routed like
+    // The turn itself, for a caller folding its own frames (a runner's dispatched turn). Nothing holds it as the
+    // conversation's run, so no window can attach to it while it runs: a conversation's own turn takes `run`. Routed like
     // the other two doors (a persona or run role names a model the turn left unnamed), and left alone where it already
     // names one, which a caller that walked its own model ladder does.
     readonly stream: (turn: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;

@@ -6,8 +6,6 @@ import type { ListenerPlanItem, ListenerStep, ListenerTurnOpened } from "@intent
 import type { Zone } from "@intentic/sandbox-contract/time/zone";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { cronOptions, wallClockIn } from "@intentic/sandbox-contract/time/zone";
-import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
-import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
 import { reposOf } from "../conversations/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
@@ -704,15 +702,19 @@ const runFire = async (
             // Nobody presses Send again on a wake: it answers a spent allowance or a stop itself (wake-fallback.ts).
             postures: wakePostures((await services.sandboxSettings.get()).limitPolicy),
         };
-        // Transcript folds as it streams; opens stamped with when the turn began, not when appended, minutes later.
-        const fold = new TranscriptFold(openingRows(turn, services.workspace.root, Date.now()), Date.now);
-        // Opened before the provider runs, like every other conversation turn (a fork's copy; nothing else opens).
-        await openTurnTranscript(services, turn);
-        announceOpened(services, stream, conversationId);
-        const progress = turnProgressReader();
-        try {
-            for await (const event of services.turns.stream(turn, undefined)) {
-                fold.apply(event);
+        // The detached run every daemon-started turn takes (a loop's iteration, a spawned child): held by the
+        // conversation, so a window opening it attaches to the live rows instead of waiting on a record written only
+        // at the end, then opened, folded and recorded by the run itself. Unjournalled: the fire journal above is what
+        // a restart re-fires from, and a turn entry beside it could resume the same wake twice.
+        const run = services.turns.run(turn);
+        if (run === "busy" || run === "archived") {
+            failure = run === "busy" ? "A turn was already running on this conversation." : "The conversation is archived, and only a person reopens it.";
+            services.logger.warn({ automation: automation.id, conversationId, refused: run }, "automation turn not started");
+        } else {
+            announceOpened(services, stream, conversationId);
+            const progress = turnProgressReader();
+            // Every frame from the first (taken before the run's first await), ending once the turn is on the record.
+            for await (const event of run.frames()) {
                 if (event.kind === "session") {
                     runtimeSessionId = event.sessionId;
                 }
@@ -722,12 +724,6 @@ const runFire = async (
                 }
                 tellStream(stream, progress, event);
             }
-        } catch (error) {
-            failure = error instanceof Error ? error.message : "automation turn failed";
-            services.logger.warn({ err: error, automation: automation.id, conversationId }, "automation turn failed");
-        } finally {
-            fold.finish("settled");
-            await recordTurnTranscript(services, turn, fold.rows, fold.steerRows);
         }
         // Tells the sink the turn failed before the finally closes it, so a dead wake doesn't read as silence.
         if (failure !== undefined) {
