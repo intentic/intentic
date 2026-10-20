@@ -14,10 +14,10 @@ import dev.intentic.app.core.SessionState
 import dev.intentic.app.state.AppState
 
 /**
- * Notifications through Firebase Messaging. Firebase is configured from BuildConfig (the `intentic.fcm.*` Gradle
- * properties), never a google-services.json, and is not started at all without an API key. The token is registered by
- * the core on the platform's relay and on every sandbox (`RegisterPush`), once signed in and again whenever the list of
- * sandboxes changes; the core skips a sandbox it already registered under the same token.
+ * Notifications through Firebase Messaging, configured from BuildConfig (the app's Firebase identifiers, in
+ * build.gradle.kts), not a google-services.json; a build with the API key blanked out starts no Firebase at all. The
+ * token is registered by the core on the platform's relay and on every sandbox (`RegisterPush`), once signed in and
+ * again whenever the list of sandboxes changes; the core skips a sandbox it already registered under the same token.
  */
 object PushSupport {
     @Volatile private var token: String? = null

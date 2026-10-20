@@ -41,9 +41,10 @@ android {
         manifestPlaceholders["webHost"] = URI(property("webUrl", "https://app.intentic.dev")).host
         buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
         // Firebase Messaging, for notifications (src/main/kotlin/.../push): the app registered in Firebase project
-        // intentic-device. These are an app's public identifiers, not secrets; the API key comes in as a Gradle
-        // property (`intentic.fcm.apiKey`) so it is not committed. Without it Firebase is not started at all.
-        buildConfigField("String", "FCM_API_KEY", "\"${property("fcm.apiKey", "").trim()}\"")
+        // intentic-device, as its google-services.json states it. These are public identifiers that ship inside every
+        // APK, the API key included (Google restricts it to this package); the secret that can SEND is the platform's
+        // service account (FCM_SERVICE_ACCOUNT), never here. An `intentic.fcm.*` property overrides each.
+        buildConfigField("String", "FCM_API_KEY", "\"${property("fcm.apiKey", "AIzaSyDUbgFyQL0Fh8eY3V8twqv1Ru4OKMnhC_w")}\"")
         buildConfigField("String", "FCM_APP_ID", "\"${property("fcm.appId", "1:912688827811:android:37a02648a658388d2ede16")}\"")
         buildConfigField("String", "FCM_PROJECT_ID", "\"${property("fcm.projectId", "intentic-device")}\"")
         buildConfigField("String", "FCM_SENDER_ID", "\"${property("fcm.senderId", "912688827811")}\"")
