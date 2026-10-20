@@ -1,3 +1,4 @@
+import { openMicStream } from "./micChoice";
 import { CAPTURE_WORKLET } from "./useVoiceInput";
 import { resampleTo16k } from "./voiceAudio";
 
@@ -8,6 +9,8 @@ import { resampleTo16k } from "./voiceAudio";
 // with listening on has the microphone at once and waits for one click anywhere before it hears anything.
 
 export interface WakeMic {
+    /** The microphone's name as the browser gives it ("Microphone (HyperX QuadCast)"), or empty when it gives none. */
+    readonly label: string;
     /** The audio graph runs, so frames arrive. */
     readonly running: () => boolean;
     /** Asks the audio graph to run; settles once it does (which a browser holds back until the page is clicked). */
@@ -20,7 +23,7 @@ export interface WakeMic {
 export type OpenWakeMic = (onFrame: (samples: Float32Array) => void) => Promise<WakeMic>;
 
 export const openWakeMic: OpenWakeMic = async (onFrame) => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    const stream = await openMicStream();
     const audio = new AudioContext();
     const close = (): void => {
         stream.getTracks().forEach((track) => track.stop());
@@ -44,6 +47,7 @@ export const openWakeMic: OpenWakeMic = async (onFrame) => {
         throw cause;
     }
     return {
+        label: stream.getAudioTracks()[0]?.label ?? ``,
         running: () => audio.state === `running`,
         resume: () => audio.resume(),
         onLost: (listener) => {

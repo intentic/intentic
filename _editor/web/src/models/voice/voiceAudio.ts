@@ -83,8 +83,20 @@ export interface SegmenterTuning {
     readonly keptTailMs: number;
 }
 
+/** How loud (RMS, 0…1) a frame must be to open a phrase: below it, nothing said is heard at all. */
+export const SPEECH_START_LEVEL = 0.015;
+
+// The meter's floor: -60 dBFS is a quiet room through a microphone with gain control, so the bar rests near empty.
+const METER_FLOOR_DB = -60;
+
+/** A level (RMS, 0…1) as a share of a meter's width, on the decibel scale an ear hears it on. */
+export const meterShare = (level: number): number => {
+    const db = 20 * Math.log10(Math.max(level, 1e-6));
+    return Math.min(1, Math.max(0, (db - METER_FLOOR_DB) / -METER_FLOOR_DB));
+};
+
 const SEGMENTER_DEFAULTS: SegmenterTuning = {
-    startThreshold: 0.015,
+    startThreshold: SPEECH_START_LEVEL,
     sustainThreshold: 0.008,
     silenceMs: 1500,
     minSpeechMs: 300,

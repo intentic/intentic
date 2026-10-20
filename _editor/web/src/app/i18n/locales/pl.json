@@ -4523,7 +4523,8 @@
                 "blocked": "Kliknij, aby słuchać",
                 "blockedDetail": "Przeglądarka pozwala stronie słyszeć dopiero, gdy od wczytania ktoś w nią kliknął. Kliknij gdziekolwiek tutaj, a znów będę słuchać „{word}”.",
                 "goOn": "Mów dalej…",
-                "listeningDetail": "Słucham „{word}” na tym urządzeniu. Kliknij, aby wstrzymać na godzinę."
+                "listeningDetail": "Słucham „{word}” na tym urządzeniu. Kliknij, aby wstrzymać na godzinę.",
+                "listeningWithDetail": "Słucham „{word}” przez {mic}. Kliknij, aby wstrzymać na godzinę."
             }
         },
         "effortScale": {
@@ -9779,7 +9780,24 @@
             "word": "Słowo wywołujące",
             "wordNote": "Imię, którym wołasz agenta, to samo na każdym urządzeniu. Dwie lub trzy sylaby budzą go niezawodnie.",
             "wordMaintainer": "Słowo wybiera opiekun tego sandboxa.",
-            "wordChange": "Zmień słowo w Sandbox ▸ Agent ▸ Narzędzia"
+            "wordChange": "Zmień słowo w Sandbox ▸ Agent ▸ Narzędzia",
+            "micGroup": "Mikrofon",
+            "mic": "Mikrofon",
+            "micNote": "Przez niego to urządzenie słucha „{word}” i przyjmuje dyktowanie.",
+            "micDefault": "Domyślny przeglądarki",
+            "micUnnamed": "Mikrofon {n}",
+            "micAway": "Wybrany mikrofon (niepodłączony)",
+            "micNames": "Przeglądarka pokazuje nazwy mikrofonów, gdy ta strona może używać mikrofonu. Włącz słuchanie albo podyktuj coś raz, aby na to zezwolić.",
+            "listeningWith": "Słucham przez {mic}",
+            "listeningWithBrowser": "Słucham przez mikrofon wybrany przez przeglądarkę",
+            "levelNote": "Pasek rusza się, gdy cię słyszy. Mowa musi przekroczyć kreskę, aby się liczyła.",
+            "lastHeard": "Ostatnio usłyszane",
+            "heardName": "„{text}”: rozpoznane jako „{word}”.",
+            "heardRequest": "„{text}”: przekazane agentowi.",
+            "heardTalk": "„{text}”: to nie „{word}”, więc pominięte.",
+            "heardNothing": "Dźwięk bez słów.",
+            "heardNone": "Jeszcze nic. Powiedz „{word}, …”, a tutaj pojawi się, co zapisał model.",
+            "heardPrivacy": "Widoczne tylko na tym ekranie i zapominane, gdy słuchanie się kończy."
         },
         "hostedMachine": {
             "shared": "{cpus} współdzielony vCPU · {memory} GB pamięci · {disk} GB dysku | {cpus} współdzielone vCPU · {memory} GB pamięci · {disk} GB dysku | {cpus} współdzielonych vCPU · {memory} GB pamięci · {disk} GB dysku",

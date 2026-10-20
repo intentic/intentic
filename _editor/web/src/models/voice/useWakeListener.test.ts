@@ -30,7 +30,9 @@ const harness = (options: { readonly running?: boolean; readonly granted?: boole
     const gestures: (() => void)[] = [];
     let held: (() => void) | undefined;
     const store = new Map<string, string>();
+    let opened = 0;
     const mic: WakeMic = {
+        label: `Microphone (HyperX QuadCast)`,
         running: () => running,
         resume: () => (running ? Promise.resolve() : new Promise(() => {})),
         onLost: () => {},
@@ -46,6 +48,7 @@ const harness = (options: { readonly running?: boolean; readonly granted?: boole
     const deps: WakeDeps = {
         openMic: async (onFrame) => {
             frame = onFrame;
+            opened += 1;
             return mic;
         },
         openLink: (_lang, said) => {
@@ -103,6 +106,7 @@ const harness = (options: { readonly running?: boolean; readonly granted?: boole
         final,
         store,
         gestures,
+        opened: () => opened,
         hold: () => held?.(),
         run: () => {
             running = true;
@@ -271,4 +275,43 @@ test(`switched on and paused are this device's to remember`, async () => {
     wake.listener.setEnabled(false);
     expect(wake.store.has(`intentic.wake.on`)).toBe(false);
     expect(wake.listener.phase.value).toBe(`off`);
+});
+
+test(`what the model wrote down, and what it came to, is kept for the settings to show until listening stops`, async () => {
+    const wake = harness();
+    wake.listener.setEnabled(true);
+    await settle();
+    expect(wake.listener.lastHeard.value).toBeUndefined();
+    wake.say(1200);
+    wake.final(0, `No.`);
+    expect(wake.listener.lastHeard.value).toMatchObject({ text: `No.`, verdict: `talk` });
+    wake.say(1200);
+    wake.final(1, `Okej, Leon.`);
+    expect(wake.listener.lastHeard.value).toMatchObject({ text: `Okej, Leon.`, verdict: `name` });
+    // The name alone made the next phrase the request, once the "go on" sound it plays first is over.
+    await settle(400);
+    wake.say(1200);
+    wake.final(2, `napraw build`);
+    expect(wake.listener.lastHeard.value).toMatchObject({ text: `napraw build`, verdict: `request` });
+    wake.listener.setEnabled(false);
+    expect(wake.listener.lastHeard.value).toBeUndefined();
+});
+
+test(`the microphone it opened is named, and picking another opens that one instead`, async () => {
+    const wake = harness();
+    expect(wake.listener.micLabel.value).toBeUndefined();
+    wake.listener.setEnabled(true);
+    await settle();
+    expect(wake.listener.micLabel.value).toBe(`Microphone (HyperX QuadCast)`);
+    expect(wake.opened()).toBe(1);
+    wake.listener.reopen();
+    await settle();
+    expect(wake.opened()).toBe(2);
+    expect(wake.listener.phase.value).toBe(`listening`);
+    wake.listener.setEnabled(false);
+    expect(wake.listener.micLabel.value).toBeUndefined();
+    // Switched off, a new pick opens nothing until listening is switched on again.
+    wake.listener.reopen();
+    await settle();
+    expect(wake.opened()).toBe(2);
 });

@@ -148,6 +148,14 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
         terms: () => [t(`settings.search.wakeWord`)],
         shown: (reader) => !reader.phone,
     },
+    {
+        id: `microphone`,
+        slug: `notifications`,
+        partLabel: () => t(`settings.section.voice`),
+        title: () => t(`settings.settingsVoice.micGroup`),
+        terms: () => [t(`settings.search.wakeWord`)],
+        shown: (reader) => !reader.phone,
+    },
 
     // Data, drawn at the foot of Profile.
     {

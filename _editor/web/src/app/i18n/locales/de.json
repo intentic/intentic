@@ -2237,7 +2237,8 @@
                 "blocked": "Klicken zum Zuhören",
                 "blockedDetail": "Ein Browser lässt eine Seite erst hören, wenn seit dem Laden auf sie geklickt wurde. Klicke irgendwo hier, und sie hört wieder auf „{word}“.",
                 "goOn": "Sprich weiter…",
-                "listeningDetail": "Hört auf diesem Gerät auf „{word}“. Klicke, um eine Stunde zu pausieren."
+                "listeningDetail": "Hört auf diesem Gerät auf „{word}“. Klicke, um eine Stunde zu pausieren.",
+                "listeningWithDetail": "Hört mit {mic} auf „{word}“. Klicke, um eine Stunde zu pausieren."
             }
         },
         "failure": {
@@ -5244,7 +5245,24 @@
             "word": "Weckwort",
             "wordNote": "Der Name, mit dem du den Agenten rufst, auf jedem Gerät derselbe. Zwei oder drei Silben wecken ihn zuverlässig.",
             "wordMaintainer": "Das Wort wählt eine Betreuerin oder ein Betreuer dieser Sandbox.",
-            "wordChange": "Das Wort unter Sandbox ▸ Agent ▸ Werkzeuge ändern"
+            "wordChange": "Das Wort unter Sandbox ▸ Agent ▸ Werkzeuge ändern",
+            "micGroup": "Mikrofon",
+            "mic": "Mikrofon",
+            "micNote": "Damit hört dieses Gerät auf „{word}“ und nimmt Diktate auf.",
+            "micDefault": "Standard des Browsers",
+            "micUnnamed": "Mikrofon {n}",
+            "micAway": "Gewähltes Mikrofon (nicht verbunden)",
+            "micNames": "Dein Browser zeigt die Namen der Mikrofone, sobald diese Seite eines verwenden darf. Schalte das Zuhören ein oder diktiere einmal, um es zu erlauben.",
+            "listeningWith": "Hört mit {mic}",
+            "listeningWithBrowser": "Hört mit dem Mikrofon des Browsers",
+            "levelNote": "Der Balken bewegt sich, wenn es dich hört. Sprache muss die Markierung überschreiten, um zu zählen.",
+            "lastHeard": "Zuletzt gehört",
+            "heardName": "„{text}“: als „{word}“ erkannt.",
+            "heardRequest": "„{text}“: an den Agenten weitergegeben.",
+            "heardTalk": "„{text}“: nicht „{word}“, daher ignoriert.",
+            "heardNothing": "Ein Geräusch ohne Worte.",
+            "heardNone": "Noch nichts. Sag „{word}, …“, dann steht hier, was das Modell aufgeschrieben hat.",
+            "heardPrivacy": "Nur auf diesem Bildschirm zu sehen und vergessen, sobald das Zuhören endet."
         },
         "search": {
             "pages": {

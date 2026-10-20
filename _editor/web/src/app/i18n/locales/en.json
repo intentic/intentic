@@ -4523,7 +4523,8 @@
                 "blocked": "Click to start listening",
                 "blockedDetail": "A browser lets a page hear only once it has been clicked since it loaded. Click anywhere here and it listens for “{word}” again.",
                 "goOn": "Go on…",
-                "listeningDetail": "Listening for “{word}” on this device. Click to pause for an hour."
+                "listeningDetail": "Listening for “{word}” on this device. Click to pause for an hour.",
+                "listeningWithDetail": "Listening for “{word}” with {mic}. Click to pause for an hour."
             }
         },
         "effortScale": {
@@ -10250,7 +10251,24 @@
             "word": "Wake word",
             "wordNote": "The name you call the agent by, the same on every device. Two or three syllables wake it reliably.",
             "wordMaintainer": "A maintainer of this sandbox chooses the word.",
-            "wordChange": "Change the word in Sandbox ▸ Agent ▸ Tools"
+            "wordChange": "Change the word in Sandbox ▸ Agent ▸ Tools",
+            "micGroup": "Microphone",
+            "mic": "Microphone",
+            "micNote": "What this device listens for “{word}” and dictates with.",
+            "micDefault": "Browser default",
+            "micUnnamed": "Microphone {n}",
+            "micAway": "Picked microphone (not connected)",
+            "micNames": "Your browser shows the microphones' names once this site may use one. Switch listening on, or dictate once, to allow it.",
+            "listeningWith": "Listening with {mic}",
+            "listeningWithBrowser": "Listening with the browser's microphone",
+            "levelNote": "The bar moves as it hears you. Speech has to pass the mark to count.",
+            "lastHeard": "Last heard",
+            "heardName": "“{text}”: taken as “{word}”.",
+            "heardRequest": "“{text}”: passed to the agent.",
+            "heardTalk": "“{text}”: not “{word}”, so ignored.",
+            "heardNothing": "A sound with no words in it.",
+            "heardNone": "Nothing yet. Say “{word}, …” and what the model wrote down shows here.",
+            "heardPrivacy": "Shown on this screen only, and forgotten when listening stops."
         },
         "hostedMachine": {
             "shared": "{cpus} shared vCPU · {memory} GB memory · {disk} GB disk | {cpus} shared vCPUs · {memory} GB memory · {disk} GB disk",

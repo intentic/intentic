@@ -2246,7 +2246,8 @@
                 "blocked": "Haz clic para escuchar",
                 "blockedDetail": "Un navegador deja oír a una página solo después de que se haga clic en ella desde que cargó. Haz clic en cualquier parte y volverá a escuchar «{word}».",
                 "goOn": "Sigue…",
-                "listeningDetail": "Escuchando «{word}» en este dispositivo. Haz clic para pausar una hora."
+                "listeningDetail": "Escuchando «{word}» en este dispositivo. Haz clic para pausar una hora.",
+                "listeningWithDetail": "Escuchando «{word}» con {mic}. Haz clic para pausar una hora."
             }
         },
         "failure": {
@@ -5264,7 +5265,24 @@
             "word": "Palabra de activación",
             "wordNote": "El nombre con el que llamas al agente, el mismo en cada dispositivo. Dos o tres sílabas lo activan con fiabilidad.",
             "wordMaintainer": "La palabra la elige quien mantiene este sandbox.",
-            "wordChange": "Cambia la palabra en Sandbox ▸ Agente ▸ Herramientas"
+            "wordChange": "Cambia la palabra en Sandbox ▸ Agente ▸ Herramientas",
+            "micGroup": "Micrófono",
+            "mic": "Micrófono",
+            "micNote": "Con él este dispositivo escucha «{word}» y toma dictados.",
+            "micDefault": "El del navegador",
+            "micUnnamed": "Micrófono {n}",
+            "micAway": "Micrófono elegido (no conectado)",
+            "micNames": "Tu navegador muestra los nombres de los micrófonos cuando este sitio puede usar uno. Activa la escucha o dicta una vez para permitirlo.",
+            "listeningWith": "Escuchando con {mic}",
+            "listeningWithBrowser": "Escuchando con el micrófono del navegador",
+            "levelNote": "La barra se mueve cuando te oye. La voz tiene que pasar la marca para contar.",
+            "lastHeard": "Último oído",
+            "heardName": "«{text}»: reconocido como «{word}».",
+            "heardRequest": "«{text}»: enviado al agente.",
+            "heardTalk": "«{text}»: no es «{word}», así que se ignoró.",
+            "heardNothing": "Un sonido sin palabras.",
+            "heardNone": "Nada todavía. Di «{word}, …» y aquí aparece lo que escribió el modelo.",
+            "heardPrivacy": "Solo se muestra en esta pantalla y se olvida cuando deja de escuchar."
         },
         "search": {
             "pages": {

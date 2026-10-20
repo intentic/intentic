@@ -3,6 +3,7 @@ import { Latest } from "@intentic/base/async";
 import { ref, type Ref, shallowRef } from "vue";
 import { track } from "../../app/analytics";
 import { type BrowserSpeech, browserSpeechFor } from "./browserSpeech";
+import { openMicStream } from "./micChoice";
 import { openSpeechLink, prepareSpeech, type SpeechLink, type SpeechTransport } from "./speechLink";
 import { createSegmenter, resampleTo16k, type Segmenter } from "./voiceAudio";
 
@@ -379,9 +380,7 @@ export function useVoiceInput(options: { readonly lang?: () => string; readonly 
 
         void (async () => {
             try {
-                const captured = await navigator.mediaDevices.getUserMedia({
-                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-                });
+                const captured = await openMicStream();
                 if (!alive()) {
                     captured.getTracks().forEach((audioTrack) => audioTrack.stop());
                     return;

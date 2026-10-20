@@ -10,8 +10,77 @@ export interface WakeHeard {
     readonly request: string;
 }
 
-// The openers a person puts before a name ("Hey Leon", "Hej Leon", "OK Leon"), in the languages the model hears best.
-const OPENERS: ReadonlySet<string> = new Set([`hey`, `hi`, `hello`, `ok`, `okay`, `hej`, `halo`, `hallo`, `hola`, `oye`, `yo`, `ey`, `eh`]);
+// The openers a person puts before a name ("Hey Leon", "Hej Leon", "OK Leon"), in the languages the model hears best, as
+// the model spells them: Parakeet writes a Polish "OK" as "Okej".
+const OPENERS: ReadonlySet<string> = new Set([
+    `hey`,
+    `hi`,
+    `hello`,
+    `ok`,
+    `okay`,
+    `okej`,
+    `okey`,
+    `hej`,
+    `ej`,
+    `dobra`,
+    `sluchaj`,
+    `halo`,
+    `hallo`,
+    `hola`,
+    `oye`,
+    `yo`,
+    `ey`,
+    `eh`,
+]);
+
+// Cyrillic as Latin letters, so a name the model wrote in the wrong script is still the name. Parakeet guesses the
+// language from the sound, and it now and then writes a Polish phrase as Russian ("Леон, направ будет"). Applied after
+// accents are gone, so й, ё and ї arrive as и, е and і.
+const CYRILLIC = new Map(
+    Object.entries({
+        а: `a`,
+        б: `b`,
+        в: `v`,
+        г: `g`,
+        ґ: `g`,
+        д: `d`,
+        е: `e`,
+        є: `e`,
+        ж: `zh`,
+        з: `z`,
+        и: `i`,
+        і: `i`,
+        к: `k`,
+        л: `l`,
+        м: `m`,
+        н: `n`,
+        о: `o`,
+        п: `p`,
+        р: `r`,
+        с: `s`,
+        т: `t`,
+        у: `u`,
+        ў: `u`,
+        ф: `f`,
+        х: `h`,
+        ц: `c`,
+        ч: `ch`,
+        ш: `sh`,
+        щ: `shch`,
+        ъ: ``,
+        ы: `y`,
+        ь: ``,
+        э: `e`,
+        ю: `yu`,
+        я: `ya`,
+    }),
+);
+// Polish ł is a letter of its own to Unicode, not an l with an accent, so NFKD leaves it: "Słuchaj" is "sluchaj" here.
+const latin = (text: string): string =>
+    text
+        .replaceAll(`ł`, `l`)
+        .replaceAll(/дж/gu, `j`)
+        .replaceAll(/[Ѐ-ӿ]/gu, (letter) => CYRILLIC.get(letter) ?? letter);
 
 // One word of the transcript, where it sits, so the request keeps the transcript's own casing and punctuation.
 interface Word {
@@ -19,8 +88,8 @@ interface Word {
     readonly end: number;
 }
 
-/** Lowercased, accents gone: how a heard word and the wake word are compared ("Léon" is "leon"). */
-export const foldWord = (text: string): string => text.normalize(`NFKD`).replaceAll(/\p{M}/gu, ``).toLowerCase().replaceAll(/['’-]/gu, ``);
+/** Lowercased, accents gone, ł and Cyrillic as Latin: how a heard word and the wake word are compared ("Léon" and "Леон" are "leon"). */
+export const foldWord = (text: string): string => latin(text.normalize(`NFKD`).replaceAll(/\p{M}/gu, ``).toLowerCase()).replaceAll(/['’-]/gu, ``);
 
 const wordsOf = (text: string): Word[] =>
     Array.from(text.matchAll(/[\p{L}\p{M}\p{N}'’-]+/gu), (match) => ({ folded: foldWord(match[0]), end: (match.index ?? 0) + match[0].length })).filter(

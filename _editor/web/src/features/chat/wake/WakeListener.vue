@@ -11,6 +11,7 @@ import { handsFreeOn } from "../composer/voice/useComposerVoice";
 import { summonChat, summonTurn } from "../../../models/conversations/run/summon";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { active, conversations } from "../../../models/conversations/tabs/useChat-tabs";
+import { chosenMic, MIC_KEY, rereadMic } from "../../../models/voice/micChoice";
 import { useSpeechPlayer } from "../../../models/voice/speechPlayer";
 import { cardWords } from "../voice/useVoiceTalk";
 import { spokenCardOf } from "../voice/voiceCards";
@@ -48,6 +49,9 @@ watch(
     { immediate: true },
 );
 watch(handsFreeOn, (on) => listener.rest(`hands-free`, on), { immediate: true });
+
+// Another microphone picked (Settings ▸ Voice, here or in another window): listening moves to it.
+watch(chosenMic, () => listener.reopen());
 
 const open = (id: string): Conversation | undefined => conversations.value.find((conversation) => conversation.conversationId === id);
 
@@ -113,10 +117,13 @@ watch(activeSandboxId, () => {
 });
 
 const stopDesktop = startWakeDesktop(listener);
-// Another window of this browser switched listening, or paused it: this one takes it up.
+// Another window of this browser switched listening, paused it or picked another microphone: this one takes it up.
 const otherWindow = (event: StorageEvent): void => {
     if (event.key?.startsWith(`intentic.wake.`) === true) {
         listener.reload();
+    }
+    if (event.key === MIC_KEY) {
+        rereadMic();
     }
 };
 window.addEventListener(`storage`, otherWindow);

@@ -1,4 +1,4 @@
-import { createSegmenter, pcm16Of, resampleTo16k, TARGET_RATE, wavOf16k } from "./voiceAudio";
+import { createSegmenter, meterShare, pcm16Of, resampleTo16k, SPEECH_START_LEVEL, TARGET_RATE, wavOf16k } from "./voiceAudio";
 
 // A frame of constant-amplitude 16kHz samples: RMS of a constant signal IS the amplitude, so the segmenter's
 // thresholds can be exercised with plain numbers.
@@ -144,5 +144,20 @@ describe(`createSegmenter`, () => {
         // Discarding while idle drops nothing: there is no segment.
         segmenter.discard();
         expect(said).toEqual([`begin`, `drop`, `begin`, `drop`]);
+    });
+});
+
+describe(`meterShare`, () => {
+    test(`a level reads on the decibel scale, from a quiet room's -60 dBFS to full scale`, () => {
+        expect(meterShare(0)).toBe(0);
+        expect(meterShare(0.001)).toBeCloseTo(0);
+        expect(meterShare(0.01)).toBeCloseTo(1 / 3);
+        expect(meterShare(1)).toBe(1);
+        expect(meterShare(2)).toBe(1);
+    });
+
+    test(`the level a phrase must start at sits well inside the bar, so the mark can be seen`, () => {
+        expect(meterShare(SPEECH_START_LEVEL)).toBeGreaterThan(0.3);
+        expect(meterShare(SPEECH_START_LEVEL)).toBeLessThan(0.5);
     });
 });

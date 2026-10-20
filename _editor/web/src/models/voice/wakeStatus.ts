@@ -18,7 +18,7 @@ export interface WakeStatus {
     readonly press: `pause` | `resume` | `settings` | `none`;
 }
 
-type Reading = Pick<WakeListener, `enabled` | `phase` | `mode` | `pausedUntil` | `error` | `word` | `speaking` | `hearing`>;
+type Reading = Pick<WakeListener, `enabled` | `phase` | `mode` | `pausedUntil` | `error` | `word` | `speaking` | `hearing` | `micLabel`>;
 
 const failure = (listener: Reading): WakeStatus => {
     const word = listener.word.value;
@@ -59,7 +59,9 @@ export const wakeStatus = (listener: Reading, now: number): WakeStatus | undefin
         case `listening`: {
             const busy = listener.speaking.value || listener.hearing.value > 0 || listener.mode.value !== `wake`;
             const label = listener.mode.value === `wake` ? word : t(`chat.wake.status.goOn`);
-            return { icon: `microphone`, label, detail: t(`chat.wake.status.listeningDetail`, { word }), tone: busy ? `active` : `quiet`, press: `pause` };
+            const mic = listener.micLabel.value;
+            const detail = mic === undefined ? t(`chat.wake.status.listeningDetail`, { word }) : t(`chat.wake.status.listeningWithDetail`, { word, mic });
+            return { icon: `microphone`, label, detail, tone: busy ? `active` : `quiet`, press: `pause` };
         }
     }
 };

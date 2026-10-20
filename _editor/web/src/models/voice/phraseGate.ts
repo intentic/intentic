@@ -29,6 +29,12 @@ export interface WakeRequest {
     readonly via: WakeMode;
 }
 
+/**
+ * What a heard phrase came to: the agent's name (`name`), words said to it (`request`: after the name, or while it
+ * expected a reply), or talk that was not for it (`talk`).
+ */
+export type HeardVerdict = `name` | `request` | `talk`;
+
 /** What the gate needs of the listener around it. */
 export interface GateHost {
     readonly mode: () => WakeMode;
@@ -40,6 +46,8 @@ export interface GateHost {
     readonly request: (request: WakeRequest) => void;
     /** The name was said on its own: the next phrase is the request. */
     readonly called: () => void;
+    /** Every phrase's words as the model wrote them and what they came to, so the person can see what was heard. */
+    readonly heard: (text: string, verdict: HeardVerdict) => void;
     /** Nothing is open or in flight any more, so the wire may be let go. */
     readonly idle: () => void;
     readonly speaking: Ref<boolean>;
@@ -185,6 +193,7 @@ export class PhraseGate {
         if (phrase.verdict === `wake`) {
             // The whole phrase, heard again after its probe opened with the name.
             this.forget(phrase);
+            this.host.heard(text, `request`);
             this.host.request({ text: wakeHeard(text, this.host.word())?.request ?? withoutFirstWord(text), via: `wake` });
             return;
         }
@@ -235,15 +244,18 @@ export class PhraseGate {
         const called = wakeHeard(text, this.host.word());
         const request = called === undefined ? text.trim() : called.request;
         if (mode === `called` && request === ``) {
+            this.host.heard(text, `name`);
             this.host.called();
             return;
         }
+        this.host.heard(text, `request`);
         this.host.request({ text: request, via: called === undefined ? mode : `wake` });
     }
 
     // A probe's words: talk to let go, or the name, which is claimed and then heard whole.
     private probed(phrase: Phrase, text: string): void {
         const called = wakeHeard(text, this.host.word());
+        this.host.heard(text, called === undefined ? `talk` : `name`);
         if (called === undefined) {
             phrase.verdict = `talk`;
             phrase.full = undefined;

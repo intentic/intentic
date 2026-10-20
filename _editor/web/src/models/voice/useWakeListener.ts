@@ -5,11 +5,11 @@ import { sandboxRaw } from "../../client/sandbox/sandboxRaw";
 import { openSpeechLink, type SpeechLink, type SpeechLinkEvents } from "./speechLink";
 import { voiceUnsupported } from "./useVoiceInput";
 import { createSegmenter, type Segmenter } from "./voiceAudio";
-import { PhraseGate, type WakeMode, type WakeRequest } from "./phraseGate";
+import { type HeardVerdict, PhraseGate, type WakeMode, type WakeRequest } from "./phraseGate";
 import { type OpenWakeMic, openWakeMic, type WakeMic } from "./wakeMic";
 import { playWakeSound, type WakeSound, wakeSoundMs } from "./wakeSounds";
 
-export type { WakeMode, WakeRequest } from "./phraseGate";
+export type { HeardVerdict, WakeMode, WakeRequest } from "./phraseGate";
 
 // LISTENING FOR THE AGENT'S NAME, on a device whose reader switched it on: the microphone stays open, the silence
 // segmenter (voiceAudio.ts) cuts what it hears into phrases, and only a phrase that opens with the wake word becomes a
@@ -54,6 +54,16 @@ export type WakePhase = `off` | `unsupported` | `elsewhere` | `starting` | `bloc
 /** `needs-rebuild`: a sandbox that cannot hear at all; `unavailable`: one too old for the live wire. */
 export type WakeError = `mic-blocked` | `no-mic` | `needs-rebuild` | `unavailable`;
 
+/**
+ * The last phrase the model wrote down and what it came to, so the person can tell "it did not hear me" from "it heard
+ * something else". Held in this window's memory for the Voice settings to show: never stored, never sent anywhere.
+ */
+export interface LastHeard {
+    readonly text: string;
+    readonly verdict: HeardVerdict;
+    readonly at: number;
+}
+
 /** The seams a test replaces. */
 export interface WakeDeps {
     readonly openMic: OpenWakeMic;
@@ -88,6 +98,9 @@ class Listener {
     readonly speaking = ref(false);
     /** Phrases sent and not heard back yet. */
     readonly hearing = ref(0);
+    /** The open microphone's name, as the browser gives it; undefined while none is open or it gives none. */
+    readonly micLabel = ref<string>();
+    readonly lastHeard = ref<LastHeard>();
     private readonly deafFor = shallowRef<ReadonlySet<string>>(new Set());
     /** The microphone is open but deaf: the agent's own voice speaks, a composer took the microphone, a sound plays. */
     readonly deaf: ComputedRef<boolean> = computed(() => this.deafFor.value.size > 0);
@@ -126,6 +139,9 @@ class Listener {
                 }
             },
             called: this.called,
+            heard: (text, verdict) => {
+                this.lastHeard.value = { text: text.trim(), verdict, at: deps.now() };
+            },
             idle: this.idleLater,
             speaking: this.speaking,
             hearing: this.hearing,
@@ -202,6 +218,15 @@ class Listener {
     readonly listenForName = (): void => this.setMode(`wake`);
     /** Holds the person's other devices off this exchange for `ms`. */
     readonly hold = (ms: number): void => void this.deps.claim(this.device, ms);
+
+    /** Opens the microphone again, on the one now picked (micChoice.ts), when this window is the one listening. */
+    readonly reopen = (): void => {
+        if (!this.started || this.phase.value === `off` || this.phase.value === `unsupported`) {
+            return;
+        }
+        this.stop(`off`);
+        this.sync();
+    };
 
     /** Drops what is in flight and the wire: the sandbox changed under it. */
     readonly reset = (): void => {
@@ -324,6 +349,8 @@ class Listener {
         this.segmenter = undefined;
         this.mic?.close();
         this.mic = undefined;
+        this.micLabel.value = undefined;
+        this.lastHeard.value = undefined;
         this.closeLink();
         this.setMode(`wake`);
         this.level.value = 0;
@@ -370,6 +397,7 @@ class Listener {
             return;
         }
         this.mic = opened;
+        this.micLabel.value = opened.label === `` ? undefined : opened.label;
         opened.onLost(() => {
             if (current === this.generation) {
                 this.fail(`no-mic`);
@@ -449,6 +477,8 @@ export type WakeListener = Pick<
     | `level`
     | `speaking`
     | `hearing`
+    | `micLabel`
+    | `lastHeard`
     | `deaf`
     | `device`
     | `setEnabled`
@@ -459,6 +489,7 @@ export type WakeListener = Pick<
     | `expectRequest`
     | `listenForName`
     | `hold`
+    | `reopen`
     | `reset`
     | `onRequest`
     | `sound`

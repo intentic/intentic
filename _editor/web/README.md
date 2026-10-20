@@ -115,7 +115,8 @@ flowchart LR
   (`SectionLink.vue`). 2026-10-17: these were two groups of six rows (Privacy & safety, then Records); collapsible
   groups were the alternative, rejected because a folded group still costs its heading and can hide the page open.
 - **Finding a setting.** A setting can sit four steps down (hub, page, the page's own category, card), and one subject
-  is often split between the hubs: the wake word this device listens for is Settings ▸ Notifications ▸ Voice, the agent's spoken
+  is often split between the hubs: the wake word this device listens for, and the microphone it and dictation hear with
+  (with a live level and the last phrase the model wrote down), are Settings ▸ Notifications ▸ Voice, the agent's spoken
   replies are Sandbox ▸ Agent ▸ Tools. So both hubs open on a search field above their index (`/` reaches it), and it
   searches both hubs' pages and cards at once, this hub's answers first. It matches each card's own name, the names of
   the rows it holds, and a line of the words people use for it in each language (`settings.search.*`,

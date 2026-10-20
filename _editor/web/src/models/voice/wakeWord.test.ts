@@ -34,6 +34,21 @@ describe(`wakeHeard`, () => {
         expect(wakeHeard(`OK Leon open the logs`, `Leon`)).toEqual({ request: `open the logs` });
     });
 
+    test(`a Polish opener is one too, as the model spells it`, () => {
+        // Parakeet writes a Polish "OK" as "Okej".
+        expect(wakeHeard(`Okej, Leon.`, `Leon`)).toEqual({ request: `` });
+        expect(wakeHeard(`Dobra Leon, napraw build`, `Leon`)).toEqual({ request: `napraw build` });
+        expect(wakeHeard(`Słuchaj, Leon, co dalej?`, `Leon`)).toEqual({ request: `co dalej?` });
+    });
+
+    test(`the name written in Cyrillic still calls it`, () => {
+        // Parakeet now and then takes Polish for Russian and writes it so.
+        expect(wakeHeard(`Леон, направ будет.`, `Leon`)).toEqual({ request: `направ будет.` });
+        expect(wakeHeard(`Леон`, `Leon`)).toEqual({ request: `` });
+        expect(wakeHeard(`Джарвис, deploy`, `Jarvis`)).toEqual({ request: `deploy` });
+        expect(wakeHeard(`Лимон`, `Leon`)).toBeUndefined();
+    });
+
     test(`a name said in passing is not a call`, () => {
         expect(wakeHeard(`I told Leon yesterday`, `Leon`)).toBeUndefined();
         expect(wakeHeard(`Hey, so I think Leon is right`, `Leon`)).toBeUndefined();
