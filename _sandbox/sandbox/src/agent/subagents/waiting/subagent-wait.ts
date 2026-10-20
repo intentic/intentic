@@ -219,7 +219,9 @@ const WAIT_WORDS =
     "`blocked` with `waitingForInput`, since nothing in your turn can type into it and waiting again will " +
     "not end it. Target a subagent your runtime's own " +
     "tool started by that call's id, one you spawned by the id spawn returned, a background command by " +
-    'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once). ' +
+    'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once; ' +
+    "a background command counts only while a child is still running, so with no child left it answers at once and " +
+    "lists the commands still running in `running`). " +
     "An agent `paused` has not finished: its turn stopped on a spent allowance or stopped short, the sandbox " +
     "runs it again by itself (its `error` says when), and its report comes after that; cancel it before " +
     "giving its task to another agent. " +
@@ -436,14 +438,15 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                         timeoutMs,
                         signal: deps.signal,
                     });
+                    // The shared answer's own note, where it has one, says more than the generic one.
                     return answer({
+                        ...(result.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
                         ...workWaitAnswer(result, {
                             pendingQuestion: (childId) => deps.children?.pendingQuestion(childId),
                             report: (childId) => reportOf(deps, childId),
                             landing: (childId) => deps.children?.landing(childId),
                             result: (childId) => deps.children?.result(childId),
                         }),
-                        ...(result.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
                     });
                 },
                 // Moves only which endings this conversation was told, marked as a wait settles, so parallel waits never share one.

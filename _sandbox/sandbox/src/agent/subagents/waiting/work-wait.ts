@@ -4,7 +4,18 @@ import type { SubagentSession } from "@intentic/sandbox-contract/schemas/termina
 import type { PendingChildCard } from "../children.js";
 import type { ResultValue } from "../child-result.js";
 import { whenFileAppears } from "../../tools/file-appears.js";
-import { type BackgroundJob, backgroundJobOf, jobFinished, jobInputWait, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../../tools/jobs/background-jobs.js";
+import {
+    type BackgroundJob,
+    backgroundJobOf,
+    jobCommandLine,
+    jobFinished,
+    jobHandle,
+    jobInputWait,
+    type JobReport,
+    jobReport,
+    jobStatusPath,
+    runningJobsOf,
+} from "../../tools/jobs/background-jobs.js";
 import { followRun } from "../../tools/jobs/input-wait-follow.js";
 import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "../subagents.js";
 import { type SubagentsWaitOptions, type SubagentsWaitOutcome, waitForSubagents } from "./subagent-waits.js";
@@ -23,6 +34,15 @@ export interface WorkWaitOutcome {
     readonly agent?: SubagentSession;
     // The command that finished, or the target's snapshot on a timeout.
     readonly job?: JobReport;
+    // On an `unknown-target` for "any": the background commands still running, which "any" stops waiting on once no
+    // child is left, so the caller can name one.
+    readonly running?: readonly RunningCommand[];
+}
+
+/** A background command still running, as a wait on "any" names it once no child is left to wait on. */
+export interface RunningCommand {
+    readonly id: string;
+    readonly command: string;
 }
 
 // A job's completion is bin/tmux-run's status file appearing; polled at this cadence, in ms, only where unwatchable.
@@ -111,9 +131,6 @@ const fromSubagent = async (actors: Actors, conversationId: string, options: Sub
     const result = await waitForSubagent(actors, conversationId, options);
     return { outcome: result.outcome, ...(result.matched === undefined ? {} : { agent: result.matched }) };
 };
-
-// Never settles: a race partner with nothing to wait for leaves the answer to the other.
-const NEVER = new Promise<WorkWaitOutcome>(() => {});
 
 // How long a wait lets words said into its turn travel to the runtime before it hands the turn back, so they arrive with
 // its answer rather than after the next tool call.
@@ -233,7 +250,14 @@ export const childrenWaitAnswer = (
     };
 };
 
-// The park itself: the named command, else the children, raced against every command still running for "any".
+// The commands of this conversation still running, as an answer names them.
+const stillRunning = (actors: Actors, conversationId: string): readonly RunningCommand[] =>
+    runningJobsOf(actors, conversationId).map((job) => ({ id: jobHandle(actors, job), command: jobCommandLine(job.command) }));
+
+/* "ANY" WAITS ON COMMANDS ONLY WHILE A CHILD RUNS. Parents call "any" to hear from their children, and a command they
+   left running in the background (a dev server, a watcher) never ends by itself: once every child had ended and been
+   reported, such a wait sat out its whole timeout, up to half an hour, on a server (2026-10-20). A command that ends
+   while a child is still running still answers it; with no child left the wait answers at once and names the commands. */
 const parkOnWork = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
     // A command finishes, which answers a named wait whatever `until` asks for, or sits at a prompt, which answers one
     // that counts `blocked`.
@@ -242,18 +266,16 @@ const parkOnWork = async (actors: Actors, conversationId: string, options: Subag
         return waitForJobs(actors, [named], options);
     }
     const jobs = options.target === undefined && options.until.includes("finished") ? runningJobsOf(actors, conversationId) : [];
-    if (jobs.length === 0) {
-        return fromSubagent(actors, conversationId, options);
-    }
     // The loser of the race is stopped with the winner's answer, or with the caller's stop.
     const race = new AbortController();
     const signal = anySignal(race.signal, options.signal);
     try {
         const children = fromSubagent(actors, conversationId, { ...options, signal }).then((result) =>
-            // No child to wait on is not a move.
-            result.outcome === "unknown-target" ? NEVER : result,
+            result.outcome === "unknown-target" && options.target === undefined ? { ...result, running: stillRunning(actors, conversationId) } : result,
         );
-        return await Promise.race([children, waitForJobs(actors, jobs, { timeoutMs: options.timeoutMs, signal, until: options.until })]);
+        return await (jobs.length === 0
+            ? children
+            : Promise.race([children, waitForJobs(actors, jobs, { timeoutMs: options.timeoutMs, signal, until: options.until })]));
     } finally {
         race.abort();
     }
@@ -266,6 +288,10 @@ const AT_A_PROMPT = (id: string): string =>
 // What a wait handed back for words said into its turn tells the model, since the words themselves come after it.
 const WORDS_SAID =
     "Something was said into your turn while you waited (the owner, a watch that fired, a child's report or the sandbox): it follows this result. Read it, then wait again if you still need to; nothing you were waiting on has moved.";
+
+// What a wait on "any" tells the model when no child is left but commands still run, which it no longer waits on.
+const ONLY_COMMANDS_LEFT =
+    "No subagent of this conversation is still running or has an ending left to hand over. \"any\" waits on background commands only while a child runs, since a server never ends by itself: the ones still running are in `running`. Wait on one by its ID if you need it to end.";
 
 // What a wait door reads of a spawned child beyond its roster row.
 export interface ChildLookups {
@@ -297,6 +323,21 @@ const resultFields = (lookups: ChildLookups, agent: SubagentSession | undefined)
 // A child whose turn has ended (or paused for the sandbox's re-run) has a report to hand over whole.
 const ENDED: ReadonlySet<string> = new Set(["completed", "failed", "killed", "paused"]);
 
+// The commands an "any" answered with no child left still names, where there are any.
+const commandsLeft = (result: WorkWaitOutcome): readonly RunningCommand[] | undefined =>
+    result.outcome === "unknown-target" && result.running !== undefined && result.running.length > 0 ? result.running : undefined;
+
+// What the answer adds in words, where its fields alone would mislead the next step.
+const answerNote = (result: WorkWaitOutcome): string | undefined => {
+    if (result.outcome === "message") {
+        return WORDS_SAID;
+    }
+    if (result.outcome === "blocked" && result.job?.waitingForInput !== undefined) {
+        return AT_A_PROMPT(result.job.id);
+    }
+    return commandsLeft(result) === undefined ? undefined : ONLY_COMMANDS_LEFT;
+};
+
 /** The answer every wait door gives: a blocked child's whole question, and an ended one's whole report where its row cut it. */
 export const workWaitAnswer = (result: WorkWaitOutcome, lookups: ChildLookups): Record<string, unknown> => {
     const agent = result.agent;
@@ -310,12 +351,10 @@ export const workWaitAnswer = (result: WorkWaitOutcome, lookups: ChildLookups): 
         ...(agent === undefined ? {} : { agent }),
         ...resultFields(lookups, agent),
         ...(result.job === undefined ? {} : { job: result.job }),
+        ...opt("running", commandsLeft(result)),
         ...(question === undefined ? {} : { question }),
         ...opt("report", report),
         ...opt("landing", landing),
-        ...opt(
-            "note",
-            result.outcome === "message" ? WORDS_SAID : result.outcome === "blocked" && result.job?.waitingForInput !== undefined ? AT_A_PROMPT(result.job.id) : undefined,
-        ),
+        ...opt("note", answerNote(result)),
     };
 };

@@ -55,11 +55,38 @@ describe("waitForWork", () => {
         });
     });
 
-    it("with no target, a command finishing ends the wait even with no child to wait on", async () => {
-        const build = job("conv-w3", "tu-w3", "bsh-w3");
-        const wait = waitForWork(actors, "conv-w3", { until: ["blocked", "finished"], timeoutMs: 5_000 });
+    // A server left running never ends by itself: a wait on "any" once every child had ended sat out its whole timeout.
+    it("with no target and no child left, answers at once and names the commands still running", async () => {
+        job("conv-w3", "tu-w3", "bsh-w3");
+        expect(await waitForWork(actors, "conv-w3", { until: ["blocked", "finished"], timeoutMs: 5_000 })).toEqual({
+            outcome: "unknown-target",
+            running: [{ id: "bsh-w3", command: "pnpm build" }],
+        });
+    });
+
+    it("with no target, a child that ended and was reported leaves nothing to park on, whatever still runs", async () => {
+        job("conv-w3b", "tu-w3b", "bsh-w3b");
+        openSpawnedChild(
+            { conversationId: "conv-w3b", conversations: actors, subagentsDir: undefined },
+            { id: "sub-w3b", description: "port it" },
+        );
+        settleSpawnedChild(actors, "sub-w3b", { status: "completed", report: "ported" });
+        expect(await waitForWork(actors, "conv-w3b", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "finished", agent: { id: "sub-w3b" } });
+        expect(await waitForWork(actors, "conv-w3b", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
+            outcome: "unknown-target",
+            running: [{ id: "bsh-w3b" }],
+        });
+    });
+
+    it("with no target, a command finishing while a child still runs ends the wait", async () => {
+        const build = job("conv-w3c", "tu-w3c", "bsh-w3c");
+        openSpawnedChild(
+            { conversationId: "conv-w3c", conversations: actors, subagentsDir: undefined },
+            { id: "sub-w3c", description: "port it" },
+        );
+        const wait = waitForWork(actors, "conv-w3c", { until: ["blocked", "finished"], timeoutMs: 5_000 });
         finish(build, "0", "built\n");
-        expect(await wait).toMatchObject({ outcome: "finished", job: { id: "bsh-w3", exitCode: 0 } });
+        expect(await wait).toMatchObject({ outcome: "finished", job: { id: "bsh-w3c", exitCode: 0 } });
     });
 
     it("with no target, a child moving first ends the wait, not the command still running", async () => {
@@ -216,5 +243,12 @@ describe("what a wait answers with", () => {
             outcome: "timeout",
             agent: { ...agent, status: "running" },
         });
+    });
+
+    it("names the commands still running when no child is left, and says why it did not wait on them", () => {
+        const said = workWaitAnswer({ outcome: "unknown-target", running: [{ id: "bsh-1", command: "pnpm dev" }] }, lookups(undefined));
+        expect(said).toMatchObject({ outcome: "unknown-target", running: [{ id: "bsh-1", command: "pnpm dev" }] });
+        expect(said["note"]).toContain("only while a child runs");
+        expect(workWaitAnswer({ outcome: "unknown-target", running: [] }, lookups(undefined))).toEqual({ outcome: "unknown-target" });
     });
 });
