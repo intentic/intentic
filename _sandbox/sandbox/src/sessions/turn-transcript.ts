@@ -144,6 +144,11 @@ const recordSteerAnchors = async (
     positions: readonly number[],
     base: number | undefined,
 ): Promise<void> => {
+    // Steers wait in the conversation's actor. One with none queued nothing, and a send would make one: for a conversation
+    // disposed while this turn's rows were written, that brings back what the discard removed.
+    if (services.conversations.state(conversationId) === undefined) {
+        return;
+    }
     const anchors = services.conversations.send(conversationId, { kind: "steers-taken" }).reply;
     if (base === undefined) {
         return;
