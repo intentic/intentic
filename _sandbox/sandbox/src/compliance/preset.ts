@@ -4,7 +4,7 @@ import {
     OUTWARD_ACTION_KEYS,
     type RetentionSettings,
 } from "@intentic/sandbox-contract/schemas/data-protection";
-import { type AdmissionPolicy, type AdmissionRule, AdmissionRuleSchema } from "@intentic/sandbox-contract/schemas/agent";
+import { type AdmissionPolicy, type AdmissionRule, AdmissionRuleSchema } from "@intentic/sandbox-contract/schemas/command-admission";
 import type { PresetApplyResult, PresetGroup, PresetItem, PresetValue } from "@intentic/sandbox-contract/schemas/compliance";
 import type { PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";

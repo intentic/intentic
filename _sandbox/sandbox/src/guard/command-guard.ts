@@ -9,7 +9,7 @@ import {
     matchCommand,
     mergeSpans,
 } from "@intentic/sandbox-contract/policy/command-classes";
-import type { CommandClass, CommandLocus } from "@intentic/sandbox-contract/schemas/agent";
+import type { CommandClass, CommandLocus } from "@intentic/sandbox-contract/schemas/command-admission";
 import type { CommandJudgeMode, SafetyLogEntry, SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";

@@ -1,4 +1,4 @@
-import type { AdmissionPolicy, AdmissionRule, CommandClass, CommandLocus, WakeSource } from "@intentic/sandbox-contract/schemas/agent";
+import type { AdmissionPolicy, AdmissionRule, CommandClass, CommandLocus, WakeSource } from "@intentic/sandbox-contract/schemas/command-admission";
 import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract/policy/command-classes";
 import { hardRuleClasses } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { Trigger } from "@intentic/sandbox-contract/schemas/automations";

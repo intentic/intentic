@@ -3,7 +3,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
-import { restartResume } from "../../agent/run/turn/restart-resume-policy.js";
+import { restartResume } from "../../agent/run/turn/recovery/restart-resume-policy.js";
 import { fileCapabilitiesStore } from "../../capabilities/capabilities-store.js";
 import type { Services } from "../../composition.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";

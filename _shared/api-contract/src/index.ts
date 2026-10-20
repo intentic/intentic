@@ -10,14 +10,6 @@ import {
     AdoptionTicketSchema,
     MintedIdentityAssertionSchema,
     MintedOwnerTicketSchema,
-    AdminActionResultSchema,
-    AdminAttentionSchema,
-    AdminCostsSchema,
-    AdminFunnelSchema,
-    AdminOverviewSchema,
-    AdminTrendsSchema,
-    AdminUserDetailSchema,
-    AdminUserListSchema,
     ApiTokenMintedSchema,
     ApiTokenSchema,
     ApiTokenScopeSchema,
@@ -49,8 +41,19 @@ import {
     UserSchema,
     WalletPolicySchema,
 } from "./schemas.js";
+import {
+    AdminActionResultSchema,
+    AdminAttentionSchema,
+    AdminCostsSchema,
+    AdminFunnelSchema,
+    AdminOverviewSchema,
+    AdminTrendsSchema,
+    AdminUserDetailSchema,
+    AdminUserListSchema,
+} from "./admin.js";
 
 export * from "./schemas.js";
+export * from "./admin.js";
 export * from "./organisations.js";
 
 // Current authenticated user, or null with no session. `export` is the caller's GDPR data export as JSON; credentials

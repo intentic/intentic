@@ -28,7 +28,7 @@ flowchart LR
   that acknowledgement before it sleeps, so an older or unreachable platform leaves it awake; one with nothing due
   sleeps whatever the answer. (2026-10-18: accepting sleep before a platform alarm exists could strand a distant
   scheduled message or automation.)
-- `src/schemas.ts` holds the platform's own shapes: users, hosted plans, invites, tokens, the admin reads. It
+- `src/schemas.ts` holds the platform's own shapes: users, hosted plans, invites, tokens; `src/admin.ts` the admin reads. It
   re-exports nothing of the daemon's: a daemon wire shape is imported from `@intentic/sandbox-contract`, so which
   contract a type belongs to is read off its import. A platform shape may still be built from a daemon one (a member's
   `GrantedRole`, a push's `PushNotification`).
@@ -47,6 +47,7 @@ flowchart LR
 
 - [src/index.ts](src/index.ts) — `apiContract`: every platform route, grouped by domain, with who may call it.
 - [src/schemas.ts](src/schemas.ts) — platform schemas and limits such as `SANDBOX_RECOVERY_DAYS`.
+- [src/admin.ts](src/admin.ts) — the operator's admin reads (overview, funnel, attention, costs, users, trends).
 - [src/ingress/routes.ts](src/ingress/routes.ts) — `PLATFORM_INGRESS`: every route a machine calls, and what proves the caller.
 - [../../_platform/api/src/router.ts](../../_platform/api/src/router.ts) — where the per-domain handlers are assembled into the contract's shape.
 - [../../_editor/web/src/lib/useApi.ts](../../_editor/web/src/lib/useApi.ts) — the single typed client the editor uses.

@@ -11,7 +11,7 @@ import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "./loops-store.js";
 import { loopRunning, resumeLoops, runLoop } from "./loop-runner.js";
-import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
+import { restartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { unpinnedRouting } from "../agent/run/turn/turn-routing.testing.js";

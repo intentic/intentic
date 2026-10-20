@@ -1,5 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import type { AdmissionRule } from "@intentic/sandbox-contract/schemas/agent";
+import type { AdmissionRule } from "@intentic/sandbox-contract/schemas/command-admission";
 import { classifyOutboundCall } from "../activity/outbound.js";
 import { outboundSend } from "./actions.js";
 import { guard } from "./guard.js";

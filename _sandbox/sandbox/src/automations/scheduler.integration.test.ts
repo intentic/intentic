@@ -18,7 +18,7 @@ import { automationConfig, automationRecord } from "../harness/route-stores.test
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { resumeInterruptedFires } from "./fire-resume.js";
-import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
+import { restartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { fileScheduleCoverageStore } from "./schedule-coverage.js";
 import { nextDueAfter } from "./schedule-zone.js";

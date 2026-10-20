@@ -2,7 +2,7 @@ import { consumeInbox } from "./durable/inbox-store.js";
 import { liveHere } from "./durable/fire-admission.js";
 import { resumeListenerInbox } from "./listeners.js";
 import { resumeWorkspaceInbox } from "./workspace-events.js";
-import type { RestartResume } from "../agent/run/turn/restart-resume-policy.js";
+import type { RestartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { consumeEntry, type JournalEntry, resumeBars, spendAttempt } from "../store/journals/turn-journal.js";
 import { settingsResume } from "../agent/run/turn/turn-resume.js";
 import type { Services } from "../composition.js";
@@ -133,7 +133,7 @@ const heldSince = async (services: Services, entry: JournalledFire): Promise<boo
 // entry is consumed or spent before it fires, so a fire that kills the daemon can't loop the boot. Interrupted fires and
 // queued ones come back in the order they were admitted. First the inbox rows (durable/inbox-store.ts) a journalled fire already
 // took over are dropped, so `resumeAutomationInboxes`, after this, fires nothing twice.
-// `policy`: whether this boot resumes what the restart cut (agent/run/turn/restart-resume-policy.ts), decided once for
+// `policy`: whether this boot resumes what the restart cut (agent/run/turn/recovery/restart-resume-policy.ts), decided once for
 // every pass; absent, it is the settings' autoResumeOnRestart alone.
 export const resumeInterruptedFires = async (services: Services, now: number = Date.now(), policy?: RestartResume): Promise<void> => {
     const listed = await services.turnJournal.list().catch((error: unknown): JournalEntry[] => {

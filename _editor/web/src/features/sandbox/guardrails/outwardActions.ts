@@ -1,4 +1,4 @@
-import type { AdmissionPolicy, AdmissionRule } from "@intentic/sandbox-contract/schemas/agent";
+import type { AdmissionPolicy, AdmissionRule } from "@intentic/sandbox-contract/schemas/command-admission";
 import { effectiveActionRule, OUTWARD_ACTION_KEYS, outwardActionService } from "@intentic/sandbox-contract/schemas/data-protection";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { PickerOption } from "@intentic/ui";

@@ -4,7 +4,7 @@
 // behaviour except for restore points: that copy grows without bound on disk. Thirty days still covers recovering a
 // deleted file; zero remains available for people who want every snapshot. The public-office preset sets the rest.
 import { z } from "zod";
-import type { AdmissionRule } from "./agent.js";
+import type { AdmissionRule } from "./command-admission.js";
 
 export const AgentRetentionDaysSchema = z
     .number()

@@ -18,7 +18,7 @@ import { drivenBy } from "../seams/turn-starter.testing.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { unpinnedRouting } from "../agent/run/turn/turn-routing.testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
-import { restartResume } from "../agent/run/turn/restart-resume-policy.js";
+import { restartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 
 // Scheduler's graph behavior end to end: the seam between steps, not a step's own loop (tested elsewhere). The tree has
 // no git, so `treeDigest` never changes and the stall detector is live: every step needs its own reason to stop.

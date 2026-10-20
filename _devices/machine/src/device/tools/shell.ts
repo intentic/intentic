@@ -2,7 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homeDir } from "@intentic/local-agent";
 import { COMMAND_CLASS_LABELS, matchCommand } from "@intentic/sandbox-contract/policy/command-classes";
-import type { CommandClass } from "@intentic/sandbox-contract/schemas/agent";
+import type { CommandClass } from "@intentic/sandbox-contract/schemas/command-admission";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { hardRuleClasses } from "@intentic/sandbox-contract/policy/safety-policy";
 import { isOsPower, managesSandbox, type SandboxPowerCommand, sandboxPowerCommands } from "@intentic/sandbox-contract/policy/sandbox-power";

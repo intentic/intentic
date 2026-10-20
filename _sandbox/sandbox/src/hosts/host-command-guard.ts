@@ -1,5 +1,5 @@
 import { COMMAND_CLASS_LABELS, matchCommand } from "@intentic/sandbox-contract/policy/command-classes";
-import type { CommandClass, CommandLocus } from "@intentic/sandbox-contract/schemas/agent";
+import type { CommandClass, CommandLocus } from "@intentic/sandbox-contract/schemas/command-admission";
 import { type CommandJudgeMode, hardRuleClasses, type SafetyVerdict } from "@intentic/sandbox-contract/policy/safety-policy";
 import { DeviceScopesSchema } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type ProgramKind, type ProgramReading, programInCall } from "@intentic/sandbox-contract/policy/device-programs";

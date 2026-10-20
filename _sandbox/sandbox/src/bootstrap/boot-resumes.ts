@@ -4,7 +4,7 @@ import { restoreSpawnedChildren, settleRestoredChildren } from "../agent/subagen
 import { resumeScriptRuns } from "../agent/subagents/workflows/script-runs.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
 import { nudgeResumesOn } from "../agent/run/turn/holds/resume-nudges.js";
-import { type RestartResume, restartResume } from "../agent/run/turn/restart-resume-policy.js";
+import { type RestartResume, restartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { restoreLimitHolds } from "../conversations/actor/limit-hold.js";
 import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
 import { restoreBackgroundJobs, settleLostRuns } from "../agent/tools/jobs/background-jobs.js";
@@ -43,7 +43,7 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
     // Detached: an interrupted turn is a whole turn, an interrupted automation fire a whole fire, and a stranded loop or
     // workflow run a whole run. What waited in a queue goes after the turns: behind a resumed turn when its conversation
     // has one, at once when it has none. Whether any of it comes back is decided once, here, for all three passes
-    // (agent/run/turn/restart-resume-policy.ts): the owner's ask for this restart, autoResumeOnRestart, and whether this
+    // (agent/run/turn/recovery/restart-resume-policy.ts): the owner's ask for this restart, autoResumeOnRestart, and whether this
     // boot is one of a restart storm, which resumes nothing (system/boot/boot-history.ts, 2026-10-05).
     const policy = bootResumePolicy({ logger, services });
     void Promise.all([policy, restoredChildren])

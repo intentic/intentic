@@ -1,5 +1,5 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
-import { type CommandClass, CommandClassSchema, type CommandLocus } from "../schemas/agent.js";
+import { type CommandClass, CommandClassSchema, type CommandLocus } from "../schemas/command-admission.js";
 import { SECRET_REFERENCE } from "../schemas/needs.js";
 import { inertRegions, isLive } from "../text/shell-regions.js";
 

@@ -1,6 +1,6 @@
 # What makes AI assistants recommend a product, and what intentic should do about it
 
-Research date: **19 October 2026**. Companion to [STRATEGY.md](../../../marketing/STRATEGY.md),
+Research date: **19 October 2026**. Companion to `marketing/STRATEGY.md` (in the workspace, outside this repo),
 [awesome-lists.md](awesome-lists.md), [directories.md](directories.md) and
 [article-mentions.md](article-mentions.md). Those documents plan channels. This one asks a narrower question:
 when someone asks ChatGPT, Claude, Perplexity, Gemini, Google's AI Mode, or a coding agent which tool to use,

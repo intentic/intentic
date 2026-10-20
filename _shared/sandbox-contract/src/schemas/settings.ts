@@ -6,7 +6,7 @@ import { claudeExperimentSettings, iqSearchSettings } from "./settings-experimen
 import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safety-policy.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
-import { AdmissionPolicySchema, AdmissionRuleSchema } from "./agent.js";
+import { AdmissionPolicySchema, AdmissionRuleSchema } from "./command-admission.js";
 import { KeepWarmSettingsSchema } from "./keep-warm.js";
 import { LimitHandoffSchema } from "./providers/handoff.js";
 import { SessionsPlacementSchema } from "./offload.js";

@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { type AgentTurn, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { Loop, LoopDocument, LoopIteration, LoopRecord, LoopState } from "@intentic/sandbox-contract/schemas/loops";
-import { notResumedDetail, type RestartResume } from "../agent/run/turn/restart-resume-policy.js";
+import { notResumedDetail, type RestartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { sumUsage, type UsageFrame } from "../agent/run/turn/turn-usage.js";
 import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
 import type { Holding, Holdings } from "../conversations/actor/conversation-holdings.js";
@@ -294,7 +294,7 @@ const RESUME_MAX = 2;
 
 // Resumes every run still marked running that nothing drives (the ledger is the journal: `running` means no settle
 // landed), counting each resume; past RESUME_MAX it is abandoned, so a run that reliably kills the daemon ends. When
-// this boot resumes nothing (autoResumeOnRestart off, or a restart storm: agent/run/turn/restart-resume-policy.ts),
+// this boot resumes nothing (autoResumeOnRestart off, or a restart storm: agent/run/turn/recovery/restart-resume-policy.ts),
 // each is settled stopped instead, saying why, uncounted: like a cut turn, it stays on the record rather than coming back.
 export const resumeCapped = async <R extends { readonly resumed: number }>(
     candidates: readonly R[],

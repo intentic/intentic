@@ -476,7 +476,7 @@
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/run/turn/interrupted-ledger.ts": "standing when the check arrived (2026-10-16)",
+    "_sandbox/sandbox/src/agent/run/turn/recovery/interrupted-ledger.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/agent/run/turn/message-receipts.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/agent/run/turn/turn-admission.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/agent/run/turn/turn-interactions.ts": "standing when the check arrived (2026-10-16)",

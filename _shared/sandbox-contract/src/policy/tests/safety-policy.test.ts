@@ -1,6 +1,6 @@
 import { COMMAND_CLASS_LABELS, COMMAND_CLASS_PATTERNS } from "../command-classes.js";
 import { COMMAND_RULE_CATALOG, DEFAULT_SAFETY_POLICY, hardRuleClasses } from "../safety-policy.js";
-import { CommandClassSchema, CommandLocusSchema } from "../../schemas/agent.js";
+import { CommandClassSchema, CommandLocusSchema } from "../../schemas/command-admission.js";
 
 // The hard rule is the one thing on this page nobody can argue with, so it's pinned here rather than trusted to review:
 // a class added silently is one an owner can never decide about for themselves.

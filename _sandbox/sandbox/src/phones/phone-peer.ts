@@ -1,7 +1,7 @@
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { COMMAND_CLASS_LABELS, matchCommand } from "@intentic/sandbox-contract/policy/command-classes";
-import type { CommandClass } from "@intentic/sandbox-contract/schemas/agent";
+import type { CommandClass } from "@intentic/sandbox-contract/schemas/command-admission";
 import { hardRuleClasses } from "@intentic/sandbox-contract/policy/safety-policy";
 import { PHONE_HEARTBEAT_MS, PHONE_WAKE_WAIT_MS, type PhoneHello, PhoneHelloSchema } from "@intentic/sandbox-contract/protocol/doors/phone-protocol";
 import {

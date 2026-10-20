@@ -5,7 +5,7 @@ import type { Loop, LoopDocument, LoopRecord, LoopState } from "@intentic/sandbo
 import type { RepoBase } from "@intentic/sandbox-contract/schemas/agent";
 import type { Workflow, WorkflowRun, WorkflowRunState, WorkflowStep, WorkflowStepRun } from "@intentic/sandbox-contract/schemas/workflows";
 import type { Services } from "../composition.js";
-import type { RestartResume } from "../agent/run/turn/restart-resume-policy.js";
+import type { RestartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { resumeCapped, resumeLoops, runLoop, stopLoop } from "../loops/loop-runner.js";
 import { resolvedBranches } from "./handover-branches.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";

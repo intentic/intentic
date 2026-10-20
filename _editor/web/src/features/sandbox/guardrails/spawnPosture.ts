@@ -1,4 +1,4 @@
-import type { AdmissionRule } from "@intentic/sandbox-contract/schemas/agent";
+import type { AdmissionRule } from "@intentic/sandbox-contract/schemas/command-admission";
 import type { PickerOption } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 

@@ -3163,7 +3163,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/api-contract/src/schemas.ts": {
-        "count": 902,
+        "count": 656,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/capability-catalog/src/index.ts": {

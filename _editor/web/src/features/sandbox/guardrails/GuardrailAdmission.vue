@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AdmissionPolicy, AdmissionRule } from "@intentic/sandbox-contract/schemas/agent";
+import type { AdmissionPolicy, AdmissionRule } from "@intentic/sandbox-contract/schemas/command-admission";
 import { Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";

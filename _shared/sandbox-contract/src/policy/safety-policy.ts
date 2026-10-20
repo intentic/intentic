@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { COMMAND_CLASS_LABELS, COMMAND_CLASS_PATTERNS, type CommandPattern } from "./command-classes.js";
-import { type CommandClass, CommandClassSchema, type CommandLocus, CommandLocusSchema } from "../schemas/agent.js";
+import { type CommandClass, CommandClassSchema, type CommandLocus, CommandLocusSchema } from "../schemas/command-admission.js";
 
 // The owner's safety policy as prose, judged by a model rather than a table of verdicts, since deciding whether a
 // command is malicious takes understanding a regex can't reach. Patterns (command-classes.ts) are now just triage,

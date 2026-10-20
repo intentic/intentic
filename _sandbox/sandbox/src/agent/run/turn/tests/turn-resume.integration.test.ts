@@ -47,7 +47,7 @@ import { conversationUnit } from "../../../../store/conversation-units.js";
 import { parkedCards } from "../../../../conversations/actor/parked-cards.js";
 import { opt } from "../../../../opt.js";
 import type { Caller } from "../../../../auth/auth.js";
-import { restartResume } from "../restart-resume-policy.js";
+import { restartResume } from "../recovery/restart-resume-policy.js";
 
 // SAFETY: a matcher standing in for a row's id, which the run or the record mints; compared only by toEqual.
 const ROW_ID = expect.any(String) as string;
