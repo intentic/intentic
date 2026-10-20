@@ -1,6 +1,8 @@
 import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { runsPollMs } from "./usePipelines";
-import { boardLanded, jobsPollMs } from "./useRunJobs";
+import { hashKey } from "@tanstack/vue-query";
+import { computed, effect, ref } from "vue";
+import { boardLanded, jobsPollMs, keyHash } from "./useRunJobs";
 
 // What the board and a row ask the daemon for, and how often: the push (runtime-state's `ci`) only reaches a repo
 // whose hook delivers, so these intervals are what a reader watching a run land waits out where it does not.
@@ -51,5 +53,22 @@ describe(`an open row following the board`, () => {
         expect(boardLanded(event(`updated`, `error`, `runs`), `runs`)).toBe(false);
         expect(boardLanded(event(`updated`, `success`, `jobs`), `runs`)).toBe(false);
         expect(boardLanded(event(`added`, `success`, `runs`), `runs`)).toBe(false);
+    });
+});
+
+describe(`the board's cache hash`, () => {
+    // A contract key ends in the live active-sandbox ref; once a computed tracks that ref, its reactive graph is cyclic,
+    // and hashing the raw key crashed the whole view ("Converting circular structure to JSON").
+    it(`hashes a key ending in a tracked sandbox ref as vue-query files it`, () => {
+        const sandbox = ref(`box-1`);
+        const tracker = computed(() => sandbox.value.length);
+        // A live subscriber, as the shell's own readers of the sandbox id are: what closes the cycle.
+        const runner = effect(() => tracker.value);
+        const key = [`ci.runs`, sandbox];
+
+        expect(keyHash(key)).toBe(hashKey([`ci.runs`, `box-1`]));
+        sandbox.value = `box-2`;
+        expect(keyHash(key)).toBe(hashKey([`ci.runs`, `box-2`]));
+        runner.effect.stop();
     });
 });

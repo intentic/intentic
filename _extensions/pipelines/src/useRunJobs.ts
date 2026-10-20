@@ -1,6 +1,6 @@
 import { type CiJobsResponse, isPipelineInFlight, type PipelineJob, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { hashKey, useQueryClient } from "@tanstack/vue-query";
-import { computed, onScopeDispose, type Ref, watch } from "vue";
+import { computed, onScopeDispose, type Ref, toValue, watch } from "vue";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
 
@@ -28,6 +28,11 @@ interface CacheEvent {
 export const boardLanded = (event: CacheEvent, runsHash: string): boolean =>
     event.type === `updated` && event.action?.type === `success` && event.query.queryHash === runsHash;
 
+/** A key's cache hash as vue-query files it: a contract key ends in the live active-sandbox ref (sandboxKey), which vue-query
+ *  unwraps before hashing, and which `hashKey` on the raw key would walk into its reactive graph, a cycle once anything
+ *  tracks the sandbox id. */
+export const keyHash = (key: readonly unknown[]): string => hashKey(key.map((part) => toValue(part)));
+
 export function useRunJobs(run: Ref<PipelineRun | undefined>) {
     const api = host();
     const queryKey = computed(() =>
@@ -51,9 +56,10 @@ export function useRunJobs(run: Ref<PipelineRun | undefined>) {
     // run moved and a settled row's graph is final. So an in-flight row follows the board here rather than being
     // invalidated by the push itself: one read per open in-flight row per landing, none for a settled one.
     const queryClient = useQueryClient();
-    const runsHash = hashKey(ciRunsQuery().queryKey);
+    // A computed, so the hash follows a sandbox switch.
+    const runsHash = computed(() => keyHash(ciRunsQuery().queryKey));
     const stopFollowing = queryClient.getQueryCache().subscribe((event) => {
-        if (inFlight.value && boardLanded(event, runsHash)) {
+        if (inFlight.value && boardLanded(event, runsHash.value)) {
             void query.refetch();
         }
     });
