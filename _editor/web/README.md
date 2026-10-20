@@ -224,7 +224,9 @@ flowchart LR
   undo) and offers "Ask an agent about this". Files dropped from the system's file manager land in the folder row or
   home tile they are dropped on, and anywhere else in the window in the folder itself (`useRootDrop.ts`, the
   workspace's own floor), as writes alone: the upload queue skips the unchanged-file diff, the archive and the install,
-  which a folder does not serve. A document's own window takes no drop. A refused call says the feature is not there for a folder rather than
+  which a folder does not serve. The home's project button opens the native folder picker in a local window, labelled
+  "Open a folder…"; in a sandbox it opens "Bring a project in" and its import choices. A folder chosen through that
+  button opens in its own window, keeping this one's unsaved edits. A document's own window takes no drop. A refused call says the feature is not there for a folder rather than
   asking for an update, and a recording plays from its bytes over `/workspace/raw` where no media ticket is minted.
   `local/` holds the window's own parts: its shell (`LocalShell.vue`, the sandbox shell's rail from
   `shell/rail/iconRail.css`, holding the place chip `LocalPlaceSwitcher.vue`, Files with the folder menu on the folder's
