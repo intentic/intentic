@@ -172,6 +172,7 @@ const tileFacts = computed(() =>
                     line: accessKnown.value ? tileLine(tile, facts) : undefined,
                     count: accessKnown.value ? tileCount(facts) : undefined,
                     standing: accessKnown.value ? standing : undefined,
+                    found: accessKnown.value && facts.found && facts.count === 0,
                 },
             ];
         }),
@@ -485,6 +486,7 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                 :selected="selected === tile"
                 :line="tileFacts[tile]?.line"
                 :standing="tileFacts[tile]?.standing"
+                :found="tileFacts[tile]?.found ?? false"
                 :controls="panelId"
                 @select="select(tile)"
             />

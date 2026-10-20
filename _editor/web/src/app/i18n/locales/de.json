@@ -2345,6 +2345,7 @@
             "foundKeyFrom": "Aus {source}, endet auf {hint}. Beim Hinzufügen wird der Schlüssel in diese Sandbox kopiert.",
             "foundKeyTitle": "{provider}-API-Schlüssel",
             "foundSignedIn": "Auf diesem Computer angemeldet. Verbinden Sie es hier mit einem Klick im Browser; dort bleiben Sie ebenfalls angemeldet.",
+            "foundConnectHint": "Mit einem Klick verbinden",
             "foundTitle": "Auf diesem Computer gefunden"
         },
         "localModelLane": {

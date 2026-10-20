@@ -42,11 +42,11 @@ const facts = (overrides: Partial<TileFacts> = {}): TileFacts => ({
     ...overrides,
 });
 
-test("a tile's one line says what is happening, else that this computer has it; how many it holds is the corner count", () => {
+test("a tile's one line says what is happening; computer badges and counts do not add a line", () => {
     // Nothing to say is nothing said; the price is the tile's corner label, not this line.
     expect(tileLine(`claude`, facts())).toBeUndefined();
     expect(tileLine(`gemini`, facts())).toBeUndefined();
-    expect(tileLine(`claude`, facts({ found: true }))).toEqual({ text: `On this computer`, tone: `live` });
+    expect(tileLine(`claude`, facts({ found: true }))).toBeUndefined();
     expect(tileLine(`gemini`, facts({ count: 31, standing: `waiting` }))).toBeUndefined();
     expect(tileLine(`claude`, facts({ count: 1, standing: `attention` }))).toBeUndefined();
     expect(tileLine(LOCAL_TILE, facts({ count: 2, standing: `ready` }))).toBeUndefined();
@@ -56,6 +56,8 @@ test("a tile's one line says what is happening, else that this computer has it; 
     // What is happening outranks everything.
     expect(tileLine(`claude`, facts({ count: 3, signingIn: true }))).toEqual({ text: `Signing in…`, tone: `live` });
     expect(tileLine(`claude`, facts({ count: 3, failed: true }))).toEqual({ text: `Didn't connect`, tone: `danger` });
+    expect(tileLine(`claude`, facts({ found: true, signingIn: true }))).toEqual({ text: `Signing in…`, tone: `live` });
+    expect(tileLine(`claude`, facts({ found: true, failed: true }))).toEqual({ text: `Didn't connect`, tone: `danger` });
 });
 
 // The chat's "Finish sign-in" landed on a page with nothing open, and the sign-in it pointed at was nowhere in sight.

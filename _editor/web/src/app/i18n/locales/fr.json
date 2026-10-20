@@ -2346,6 +2346,7 @@
             "foundKeyFrom": "De {source}, se termine par {hint}. L'ajouter copie la clé dans ce sandbox.",
             "foundKeyTitle": "Clé API {provider}",
             "foundSignedIn": "Connecté sur cet ordinateur. Connectez-le ici en un clic dans votre navigateur ; vous y restez connecté.",
+            "foundConnectHint": "Connecter en un clic",
             "foundTitle": "Trouvé sur cet ordinateur"
         },
         "localModelLane": {

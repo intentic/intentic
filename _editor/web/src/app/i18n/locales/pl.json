@@ -4654,6 +4654,7 @@
             "foundKeyFrom": "Z {source}, kończy się na {hint}. Dodanie kopiuje klucz do tego sandboxa.",
             "foundKeyTitle": "Klucz API {provider}",
             "foundSignedIn": "Zalogowano na tym komputerze. Połącz tutaj jednym kliknięciem w przeglądarce; tam też logowanie pozostaje bez zmian.",
+            "foundConnectHint": "Połącz jednym kliknięciem",
             "foundTitle": "Znalezione na tym komputerze",
             "free": "Za darmo",
             "landed": "Połączono. Ta przestrzeń robocza może już uruchamiać tury.",

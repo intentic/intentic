@@ -13,12 +13,13 @@ import { isFreeTile, LOCAL_TILE, type TileKey, type TileTone } from "./providerG
 
 const t = useT();
 
-const { tile, selected, line, standing, controls } = defineProps<{
+const { tile, selected, line, standing, found, controls } = defineProps<{
     tile: TileKey;
     selected: boolean;
     line: { readonly text: string; readonly tone: TileTone } | undefined;
     // What its connections are in, drawn as a dot on the mark; nothing connected, no dot.
     standing: ModelSourceStanding | undefined;
+    found: boolean;
     // The panel this tile opens, for assistive tech.
     controls: string;
 }>();
@@ -44,11 +45,13 @@ const LINE = {
 
 <template>
     <button
+        v-tooltip.top="found ? { title: t(`connect.providerGrid.onThisComputer`), note: t(`connect.connect.foundConnectHint`) } : undefined"
         type="button"
         class="ui-row-select group relative flex w-[5.75rem] shrink-0 flex-col items-center gap-2 rounded-xl px-2 pb-3 pt-6"
         :class="{ 'ui-row-select-on': selected }"
         :aria-pressed="selected"
         :aria-controls="controls"
+        :aria-description="found ? t(`connect.connect.foundSignedIn`) : undefined"
         @click="emit(`select`)"
     >
         <div v-if="isFreeTile(tile)" class="absolute inset-x-1.5 top-1.5 h-4">
@@ -56,6 +59,9 @@ const LINE = {
                 t(`connect.connect.free`)
             }}</span>
         </div>
+        <span v-if="found" class="absolute right-1.5 top-1.5 flex size-4 items-center justify-center text-xs text-accent" aria-hidden="true">
+            <Icon name="desktop" />
+        </span>
         <!-- The mark itself, no plate: the provider's logo is what the tile is recognised by. -->
         <span
             class="relative flex shrink-0 items-center justify-center px-1.5 py-1 text-3xl"

@@ -48,7 +48,7 @@ export interface TileFacts {
 export type TileTone = `muted` | `live` | `warning` | `danger`;
 
 /**
- * The one line under a tile's name: what is happening with it, else that this computer already has it. How many it holds
+ * The one line under a tile's name: what is happening with it. A sign-in found on this computer is a corner badge. How many it holds
  * is the tile's top-right corner (tileCount), not this line. Not the price: "Free" is the tile's own corner label
  * (isFreeTile), so it stays said once the tile holds accounts.
  */
@@ -59,7 +59,7 @@ export const tileLine = (_key: TileKey, facts: TileFacts): { readonly text: stri
     if (facts.failed) {
         return { text: t(`connect.providerGrid.didntConnect`), tone: `danger` };
     }
-    return facts.found && facts.count === 0 ? { text: t(`connect.providerGrid.onThisComputer`), tone: `live` } : undefined;
+    return undefined;
 };
 
 /** How many accounts or models the tile holds, when there is any; drawn as a number only, in the tile's top-right corner. */

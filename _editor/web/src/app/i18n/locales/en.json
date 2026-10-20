@@ -4654,6 +4654,7 @@
             "foundKeyFrom": "From {source}, ending in {hint}. Adding it copies the key into this sandbox.",
             "foundKeyTitle": "{provider} API key",
             "foundSignedIn": "Signed in on this computer. Connect it here with one click in your browser; it stays signed in there too.",
+            "foundConnectHint": "Connect in one click",
             "foundTitle": "Found on this computer",
             "free": "Free",
             "landed": "Connected. This workspace can run turns now.",
