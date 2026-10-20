@@ -190,7 +190,7 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
 <template>
     <!-- No surface of its own: whitespace and the heading mark it as a region, not a panel with a border or fill. -->
     <!-- Placed and sized by ChatSideRail, which owns the strip this shares with the chat's checklist. -->
-    <section class="flex min-h-0 flex-1 flex-col" :aria-label="t(`chat.chatCapacityRail.planHeadroom`)">
+    <section class="flex min-h-0 flex-col" :aria-label="t(`chat.chatCapacityRail.planHeadroom`)">
         <!-- The refresh control stays at the edge; the heading beside it names what the figures are. -->
         <div class="flex shrink-0 items-center justify-end gap-2 px-3 py-2">
             <!-- Says once what every figure below is, in the row the refresh control already takes, so it costs no height:

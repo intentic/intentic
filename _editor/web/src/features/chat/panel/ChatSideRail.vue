@@ -15,9 +15,12 @@ const t = useT();
 
 <template>
     <!-- No surface of its own: whitespace marks it as a region, not a panel with a border or fill. Starts under the
-         desktop window's buttons when the panel holds the corner (`--window-band`, ChatPanel.vue). -->
+         desktop window's buttons when the panel holds the corner (`--window-band`, ChatPanel.vue).
+         Two rows that each take their content's height while both fit, so neither scrolls with room to spare. Once
+         they don't, the grid shares the height out evenly: a block shorter than half keeps its whole height, the other
+         one takes the rest and scrolls inside, and when both are long each gets half. -->
     <aside
-        class="absolute top-(--window-band) bottom-0 z-10 flex min-h-0 flex-col"
+        class="absolute top-(--window-band) bottom-0 z-10 grid min-h-0 grid-rows-[minmax(0,auto)_minmax(0,auto)] content-start"
         :style="{ width: uiLength(CAPACITY_RAIL_PX), right: `var(--chat-scrollbar)` }"
         :aria-label="t(`chat.chatSideRail.chatWhatRun`)"
     >

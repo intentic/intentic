@@ -34,14 +34,15 @@ useRowReveal(section, { key: () => `${active.value.conversationId}:${todos.value
         v-if="todos"
         ref="section"
         :key="active.conversationId"
-        class="flex max-h-[45%] shrink-0 flex-col gap-2 px-3 pt-3 pb-4"
+        class="flex min-h-0 flex-col gap-2 px-3 pt-3 pb-4"
         :aria-label="t(`chat.chatRailChecklist.chatsChecklist`)"
     >
         <div class="flex items-baseline gap-1.5">
             <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ t(`chat.chatRailChecklist.checklist`) }}</span>
             <span class="shrink-0 text-2xs tabular-nums text-subtle" :aria-label="progress">{{ done }}/{{ todos.length }}</span>
         </div>
-        <!-- Scrolls on its own so a long list can't push plan headroom off the rail entirely. -->
+        <!-- Scrolls on its own only once the rail runs out of height (ChatSideRail shares it out), so a long list can't
+             push plan headroom off the rail entirely. -->
         <div class="min-h-0 overflow-y-auto">
             <ChatTodoList :todos="todos" :live="live" dense />
         </div>
