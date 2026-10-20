@@ -91,7 +91,7 @@ export const readEmbed = (search: string): boolean => {
     return on;
 };
 
-// allow(module-state): read once per page, from the address it was loaded at, before the router drops the query.
+// Read once per page, from the address it was loaded at, before the router drops the query.
 let mode: boolean | undefined;
 
 /** Whether this page is in the Android app's WebView. */

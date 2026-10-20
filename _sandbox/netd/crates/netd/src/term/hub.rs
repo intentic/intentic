@@ -344,6 +344,8 @@ impl Drop for Viewer {
 }
 
 impl Hubs {
+    /// Hubs that tell no one: the suites' own, since the daemon always builds its hubs `telling`.
+    #[cfg(test)]
     pub fn new(tmux: Tmux) -> Arc<Self> {
         Self::telling(tmux, None)
     }
@@ -408,10 +410,10 @@ impl Hubs {
     ) {
         let mut hub = Hub::default();
         // Only the editor's own sessions, where the person types, and only where Node can be told.
-        if session.starts_with(WEB_SESSION_PREFIX) {
-            if let Some(teller) = &self.teller {
-                hub.hidden = Some((session.clone(), HiddenTap::default(), teller.clone()));
-            }
+        if session.starts_with(WEB_SESSION_PREFIX)
+            && let Some(teller) = &self.teller
+        {
+            hub.hidden = Some((session.clone(), HiddenTap::default(), teller.clone()));
         }
         let ended = match self.tmux.control(&argv) {
             Ok(child) => self.serve(&mut hub, child, &session, id, &mut queue).await,

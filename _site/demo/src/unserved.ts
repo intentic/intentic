@@ -339,6 +339,7 @@ export const UNSERVED = {
     "public.publish": UNSIMULATED_WRITE,
     "public.unpublish": UNSIMULATED_WRITE,
     "push.config": REAL_MACHINE,
+    "push.notification": REAL_MACHINE,
     "push.subscribe": REAL_MACHINE,
     "push.test": REAL_MACHINE,
     "push.unsubscribe": REAL_MACHINE,

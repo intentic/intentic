@@ -1114,7 +1114,10 @@ describe("agents registry", () => {
         const after = createFleet(store, standings(), presences());
         await after.agents.init();
         expect(after.agents.get("c1")?.queue).toEqual({
-            items: [{ id: "m-1", text: "and the docs", voice: "person", queuedAt: 1_500, revision: 1 }],
+            // Who will serve the words rides the view too: a request that names no one goes on the defaults.
+            items: [
+                { id: "m-1", text: "and the docs", voice: "person", queuedAt: 1_500, revision: 1, serves: { agent: "claude", harness: "native" } },
+            ],
             revision: 2,
             paused: "stopped",
         });
