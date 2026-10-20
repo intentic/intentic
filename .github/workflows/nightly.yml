@@ -44,6 +44,9 @@ on:
           - tidy
           - ci-audit
           - nav-trend
+          - verify-clocks
+          - perf-instr
+          - perf-browser
 
 concurrency:
   group: nightly
@@ -442,10 +445,16 @@ jobs:
           export DOCKER_HOST="$JOB_DOCKER_HOST"
           docker image prune -f --filter until=12h || true
 
-  # Desktop verification tier 3: verify-desktop-setup.sh runs the connect.sh EXTRACTED FROM THE INSTALLER on a
-  # clean Docker host and waits for the sandbox daemon to answer /health. It pulls the sandbox image, so it is
-  # nightly rather than per-push — tiers 1 and 2 run in ci.yml's desktop-verify on every main push that touches
-  # the desktop tree.
+  # Desktop verification tiers 1 to 3 for main's Linux bundles, built the way the release builds them:
+  #   1. build-desktop.sh ends by running verify-desktop-bundle.sh over its own output.
+  #   2. verify-desktop-install.sh installs the .deb and the AppImage on a bare Debian, starts the app under Xvfb and
+  #      fires a real intentic:// link at it.
+  #   3. verify-desktop-setup.sh runs the connect.sh EXTRACTED FROM THE INSTALLER on a clean Docker host and waits for
+  #      the sandbox daemon to answer /health. It pulls the sandbox image.
+  # Tiers 1 and 2 used to run in ci.yml's desktop-verify on every main push. They are here, and in a releasing push's
+  # release.yml linux-build, because the desktop filter matched nearly every push and the build cost the shared fleet
+  # 13 runner-minutes each time; ci.yml keeps desktop-verify for a desktop_smoke dispatch. Tiers 2 and 3 each need only
+  # the build, so one failing does not hide the other.
   desktop-setup:
     if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'desktop-setup' }}
     runs-on: [self-hosted, intentic, desktop]
@@ -480,8 +489,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: ./.github/actions/pnpm-setup
-      - run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --linux-only
-      - run: bash _tools/scripts/desktop/verify-desktop-setup.sh
+      - id: build
+        run: bash _tools/scripts/desktop/build-desktop.sh 0.0.0 --linux-only
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: bash _tools/scripts/desktop/verify-desktop-install.sh
+      - if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: bash _tools/scripts/desktop/verify-desktop-setup.sh
 
   # Desktop verification tier 3b: does the app move ITSELF onto the release that was published?
   #
@@ -520,7 +533,7 @@ jobs:
       - run: bash _tools/scripts/desktop/verify-desktop-update.sh
 
   # The Windows artifacts this file's Windows tiers run, cross-built on Linux exactly as ci.yml's
-  # desktop-windows-build does and for the same two reasons — the installer has always been cross-built, and
+  # desktop-windows-build does (on a windows_smoke dispatch) and for the same two reasons — the installer has always been cross-built, and
   # `ic` has to come from THIS checkout or the shim would download the last release's flow and verify that
   # instead. Built here rather than reused from a ci.yml run because a nightly is its own trigger with its own
   # commit, and reaching across workflows for an artifact would make this job's subject "whatever main last
@@ -577,8 +590,10 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Windows desktop verification tiers 2 and 3 — the two that need a real Docker daemon and a connected
-  # account, which is what puts them here rather than in ci.yml beside tier 1.
+  # Windows desktop verification for main, every night: tier 1 (the installer installs, opens a link and
+  # uninstalls), tiers 2 and 3 below (the two that need a real Docker daemon and a connected account), and tier 4 (the
+  # engine). ci.yml runs tier 1 and 4 only on a windows_smoke dispatch; a releasing push's release.yml windows-verify
+  # runs tier 1 at the real version.
   #
   #   setup   runs the connect.ps1 the INSTALLER put on this machine, with the direct-token path that needs no
   #           Cloudflare and no platform, and waits for the sandbox daemon to answer. It pulls the sandbox
@@ -868,6 +883,136 @@ jobs:
       # the self-hosted fleet is six processes on one box, and a check that needs nothing from it should want
       # nothing from it.
       - run: node _tools/checks/run.mjs --gate=tidy
+
+  # THE SUITES THAT MEASURE TIME, RUN SOMEWHERE THAT IS NOT UTC.
+  #
+  # Every job in ci.yml runs in a UTC container, which is the same clock the daemon ships on. That makes
+  # a whole class of defect structurally invisible: a cron evaluated in the process's own zone, a day bucket that is
+  # the reader's only by coincidence, a date test that passes because the author and the runner happen to agree.
+  # An automation set for 20:43 fired at 22:43 for its owner for as long as the feature existed, and the suite
+  # passed throughout — it could not have been anything else.
+  #
+  # Two zones, chosen as the extremes rather than as realistic ones: Kiritimati is UTC+14 and Niue is UTC−11, so
+  # between them every "is it the same calendar day" question is answered both ways on the same instant, and a
+  # 25-hour spread means no off-by-one can hide. Neither observes summer time, so a failure here is a zone bug and
+  # never a changeover flake.
+  #
+  # THE FILES THAT CAN SEE A CLOCK, NOT WHOLE PACKAGES. This job used to run the four packages' entire suites, the web's
+  # 875 files among them, once per zone as a two-leg matrix: 47 runner-minutes a push, the largest single cost in the
+  # pipeline (2026-10-07), nearly all of it suites whose answer cannot depend on the zone. clock-suites.mjs selects the
+  # test files whose own text touches dates, zones, crons or a fake clock (about a fifth of them) and runs those in
+  # both zones, one after the other, every zone and package whatever the one before it did; its log groups each
+  # `zone: package` run, so an east-only or west-only failure still says which. Its header says what a selection by
+  # text can miss and how a suite opts in. Widen the package list when another one starts bucketing days or
+  # evaluating crons: `_tools/checks/time-zones.mjs` is what notices the code, this is what notices the behaviour.
+  #
+  # No TURBO_FORCE any more: the suites run outside turbo, so there is no UTC result for turbo to replay in their place,
+  # and the build below is the same build every other job replays.
+  #
+  # NIGHTLY, NOT PER PUSH. It ran in ci.yml on every push for 11 to 13 runner-minutes, about 8,000 tests that verify-core
+  # and verify-platform had just run in UTC, and it gated nothing. A zone bug now surfaces the next morning with the
+  # day's commits as its range instead of on its own push; `_tools/checks/time-zones.mjs`, which reads the code, still
+  # runs on every push in preflight.
+  verify-clocks:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'verify-clocks' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      # THE HOST'S TEST MEMORY POOL, the same four values ci.yml and verify.yml set (docs/ops/ci-runner.md says when to
+      # change them): a nightly runs beside whatever main's pipeline is doing on the same box, so its suites draw from the
+      # same pool instead of sizing themselves against a sixth of the machine.
+      TEST_SLOTS_DIR: /ci-cache/test-slots
+      TEST_SLOTS: "16"
+      TEST_SLOTS_RESERVED: "6"
+      TEST_SLOTS_WAIT: "90"
+      # It gates nothing, so it draws from the open band and holds at most six slots a run: two web workers or three of
+      # the daemon's. Uncapped it took ten to twelve of the sixteen while the platform gate's web suite ran on one.
+      TEST_SLOTS_CAP: "6"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # What the suites import of their dependencies is those dependencies' dist, as under `turbo run test`'s `^build`.
+      - run: pnpm turbo run build --filter=@intentic/sandbox^... --filter=@intentic/sandbox-contract^... --filter=@intentic/ext-automations^... --filter=@intentic/web^... --continue=dependencies-successful
+      # `@intentic/ui` is absent on purpose and not by oversight: the kit holds the formatters every date on screen goes
+      # through, and it has no test script at all, so naming it here would claim a coverage that does not exist. Its
+      # formatters are exercised through `@intentic/web`, which imports them. The script checks that each zone took
+      # before it judges anything by it (a container without tzdata silently reports UTC).
+      - run: node _tools/scripts/verify/clock-suites.mjs _sandbox/sandbox _shared/sandbox-contract _extensions/automations _editor/web
+
+  # Counts, not timings (_tools/perf/README.md). Each job publishes its diff against the baseline checked into
+  # _tools/perf as the job summary, and fails only on a declared budget (src/*/*-budgets.ts): a count that moved is a
+  # report, re-recorded by perf-record.yml when someone decides it should be, never by whoever a failed run lands on.
+  #
+  # NIGHTLY, NOT PER PUSH: in ci.yml the two ran on nearly every push (their filter reaches the demo, so the editor),
+  # about 10 runner-minutes together, and gated nothing. A budget broken today is now reported the next morning.
+  #
+  # Instructions executed by the daemon's pure-JS hot paths, under Valgrind with node --predictable.
+  perf-instr:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'perf-instr' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # This job is Valgrind's only user, so it installs it rather than ci-base carrying it for every job.
+      - run: apt-get update && apt-get install -y --no-install-recommends valgrind
+      # Four at a time: the host runs six runner processes, and the counts do not depend on the parallelism.
+      - run: pnpm perf:instr --jobs 4
+
+  # Vue renders, V8 calls, layouts, style recalcs and DOM mutations per interaction, in the real editor (_site/demo).
+  perf-browser:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'perf-browser' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      # Not $HOME, which a job container maps to a throwaway /github/home.
+      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      - name: Install Chromium and its system dependencies
+        shell: bash
+        run: |
+          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
+          # with an empty package index does not become a permanent "Unable to locate package" failure.
+          for attempt in 1 2 3; do
+            if pnpm --filter @intentic/perf exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 15))"
+          done
+      - run: pnpm perf:browser
 
   # WHICH GATE TO BUILD NEXT. The failing steps of the last hundred pipelines on main, grouped and counted, as
   # this job's summary: the extraction the CI failure audit was written from (runs → jobs → failed step →

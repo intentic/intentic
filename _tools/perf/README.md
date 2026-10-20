@@ -11,7 +11,7 @@ flowchart LR
     perf --> budgets["*-budgets.ts<br/>fails the run"]
     perf --> judge["baseline.ts<br/>diff as a report"]
     judge --> files["baselines/<br/>instr.json · browser.json"]
-    ci["ci.yml<br/>perf-instr · perf-browser jobs"] --> perf
+    ci["nightly.yml<br/>perf-instr · perf-browser jobs"] --> perf
     record["perf-record.yml<br/>workflow_dispatch"] -->|"--update, patch"| files
 ```
 

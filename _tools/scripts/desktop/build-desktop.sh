@@ -33,9 +33,9 @@ VERSION="${1:?usage: build-desktop.sh <version> [--linux-only|--windows-only|--w
 # and the publish wants the assembled whole. One build script either way, so the artifacts a CI job verifies
 # are produced by exactly the path that produces the released ones.
 #
-#   --linux-only    skips the Windows cross-build and the cargo-xwin toolchain it needs. For desktop-verify
-#                   and the release's linux-build job, which exercise the Linux bundles on a real host and
-#                   have no use for an installer they cannot run.
+#   --linux-only    skips the Windows cross-build and the cargo-xwin toolchain it needs. For desktop-verify,
+#                   nightly's desktop-setup and the release's linux-build job, which exercise the Linux bundles on a
+#                   real host and have no use for an installer they cannot run.
 #   --windows-only  skips the Linux bundles. For the job that hands the NSIS installer to the Windows runner:
 #                   a deb/rpm/AppImage build costs it several minutes of artifacts nothing downstream opens.
 #   --windows-prebuilt <dir>
@@ -276,23 +276,24 @@ if [ "$ASSEMBLE" -eq 0 ]; then
     rm -rf "$LINUX_BUNDLES" "$WIN_BUNDLES"
 fi
 
+# ONE `tauri build` FOR ALL THREE LINUX BUNDLES. It used to be two, deb+rpm and then the AppImage, and the second
+# recompiled the app crate from scratch with LTO (2m11s after the first's 2m47s on desktop-verify, run 39487890026)
+# for a binary identical to the one already built. One invocation compiles once and bundles each kind from that binary.
+# The retry is for linuxdeploy, the AppImage bundler's flaky step; a retry finds the binary fresh and re-bundles only.
 if [ "$WINDOWS_ONLY" -eq 0 ] && [ "$ASSEMBLE" -eq 0 ]; then
-    echo "==> building Linux packages (deb, rpm)"
-    pnpm exec tauri build --config "$CONFIG" --bundles deb,rpm
-
-    echo "==> building Linux AppImage"
+    echo "==> building Linux packages (deb, rpm, AppImage)"
     for attempt in 1 2 3; do
-        if pnpm exec tauri build --verbose --config "$CONFIG" --bundles appimage; then
+        if pnpm exec tauri build --verbose --config "$CONFIG" --bundles deb,rpm,appimage; then
             break
         fi
         if [ "$attempt" -eq 3 ]; then
-            echo "error: AppImage bundling failed after 3 attempts" >&2
+            echo "error: Linux bundling failed after 3 attempts" >&2
             exit 1
         fi
         # A retry cannot reuse linuxdeploy's partial AppDir.
         rm -rf "$LINUX_BUNDLES/appimage"
         delay=$((attempt * 5))
-        echo "==> AppImage bundling failed (attempt $attempt/3) — retrying in ${delay}s" >&2
+        echo "==> Linux bundling failed (attempt $attempt/3) — retrying in ${delay}s" >&2
         sleep "$delay"
     done
 fi

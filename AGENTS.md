@@ -68,8 +68,8 @@ memory. CI runs all of it on what the owner pushes.
 
 **After the land**: the dependency reconciler installs when the land moved a manifest or the lockfile, or brought a
 project the main tree never installed (`_sandbox/sandbox/src/workspace/deps/reconcile-deps.ts`), and nothing else runs. The owner commits and pushes, and CI
-checks the commit (`.github/workflows/ci.yml`: its `quick` job type-checks the packages a push changed and runs the
-push check within minutes, and the verify groups build and test the rest; every one of them runs whatever preflight
+checks the commit (`.github/workflows/ci.yml`: its `quick` job runs the push check within minutes, and the verify
+groups typecheck, build and test the rest; every one of them runs whatever preflight
 concluded, and only the jobs that publish wait on the others passing). When main's CI fails, one fix agent takes it
 (below). The "Checks after landing" note every conversation gets says so too, and that a failure in code you
 did not touch may be main's own: not yours to chase unless your task is about it.

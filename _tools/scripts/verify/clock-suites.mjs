@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// THE SUITES THAT MEASURE TIME, IN ZONES THAT ARE NOT UTC: ci.yml's `verify-clocks`.
+// THE SUITES THAT MEASURE TIME, IN ZONES THAT ARE NOT UTC: nightly.yml's `verify-clocks`.
 //
 // Every other CI job runs in a UTC container, the same clock the daemon ships on, which makes a whole class of defect
 // invisible there: a cron evaluated in the process's own zone, a day bucket that is the reader's only by coincidence. So

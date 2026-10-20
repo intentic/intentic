@@ -93,8 +93,6 @@ const LOOSE = {
     netd: /^(_sandbox\/netd\/|_sandbox\/sandbox\/src\/(netd|git\/feed)\/|_platform\/ingress\/|_shared\/relay\/|_shared\/sandbox-contract\/src\/(netd\/|ids\/hostnames\.fixture\.json|protocol\/ingress-contract\.(fixture\.json|ts))|\.github\/workflows\/ci\.yml)/,
     images: /^(_sandbox\/sandbox\/(Dockerfile|packs\/)|_sandbox\/netd\/|_shared\/relay\/|_tools\/scripts\/image\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
     platform: /^(_tools\/scripts\/platform\/|_sandbox\/netd\/crates\/(tunnel|browser-wire)\/|_shared\/relay\/|\.github\/(actions\/pnpm-setup\/|workflows\/(ci|release)\.yml))/,
-    "perf-instr": /^\.github\/workflows\/ci\.yml/,
-    "perf-browser": /^\.github\/workflows\/ci\.yml/,
     // The tier's own spec and harness live in @intentic/e2e, which nothing of the face depends on.
     "local-face": /^(_tools\/e2e\/local-face\/|\.github\/workflows\/ci\.yml)/,
     // The sign-in gate's spec, fakes and stack live in @intentic/e2e, which neither the api nor the web depends on. The
@@ -120,9 +118,6 @@ const ROOTS = {
     images: [...imagePayload],
     // Grouped under one trigger because one pipeline builds and ships them together, not by naming convention.
     platform: ["@intentic/api", "@intentic/web", "@intentic/ingress"],
-    // The counts are of the code the harness imports, and of the editor the demo serves.
-    "perf-instr": ["@intentic/perf"],
-    "perf-browser": ["@intentic/perf", "@intentic/demo"],
     // What the local face is built from and served by: the editor, the UI kit, the sidecar and the contract all reach
     // it through the desktop app's graph.
     "local-face": ["@intentic/desktop-app", "@intentic/local-files"],
@@ -149,6 +144,21 @@ for (const trigger of Object.keys(LOOSE)) {
         }${viaPath.length > 0 ? ` · paths: ${viaPath.slice(0, 4).join(", ")}${viaPath.length > 4 ? ` +${viaPath.length - 4}` : ""}` : ""}`,
     );
 }
+// `images-recipe`, for ci.yml's images-dry alone: the push changed what the image is BUILT FROM rather than only the source
+// in it. The image's own recipe (the `images` paths: Dockerfile, packs, the image scripts, netd, the workflows), or a
+// manifest or lockfile that reaches the payload, since that is what `pnpm deploy --prod` prunes by. A failing push
+// that changed only source no longer builds a dry image: the next push whose gates pass builds and boots the real one
+// in `images` before any tag moves, so what such a push could break about the image is found one round later instead.
+const MANIFEST = /(^|\/)package\.json$|^pnpm-(lock|workspace)\.yaml$/;
+const manifestReach = affectedBy(graph, changed.filter((path) => MANIFEST.test(path)));
+const recipeViaManifest = [...imagePayload].filter((name) => manifestReach.affected.has(name));
+const recipeViaPath = changed.filter((path) => LOOSE.images.test(path));
+answers["images-recipe"] = recipeViaManifest.length > 0 || recipeViaPath.length > 0;
+note(
+    `images-recipe=${answers["images-recipe"]}${recipeViaManifest.length > 0 ? ` · manifests reach: ${recipeViaManifest.slice(0, 6).join(", ")}` : ""}${
+        recipeViaPath.length > 0 ? ` · paths: ${recipeViaPath.slice(0, 4).join(", ")}` : ""
+    }`,
+);
 for (const [trigger, value] of Object.entries(answers)) {
     process.stdout.write(`${trigger}=${value}\n`);
 }

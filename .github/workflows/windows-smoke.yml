@@ -43,7 +43,7 @@ on:
       deep:
         description: >-
           Run tiers 2 and 3 as well — the two that need a real Docker daemon and a connected account, which is
-          what puts them in the nightly rather than beside tier 1 on every main push. Turns on the registry
+          what puts them in the nightly rather than beside tier 1 in ci.yml. Turns on the registry
           login, `doctor --needs-docker`, and `--keep-installed` (tiers 2 and 3 run the scripts the INSTALLER
           put on the machine, so the install has to survive the tier that made it).
         required: false

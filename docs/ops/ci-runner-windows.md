@@ -4,7 +4,7 @@ One interactive Windows machine, labelled `windows-desktop`, installs and drives
 
 ```mermaid
 flowchart LR
-    ci["ci.yml<br/>desktop-verify-windows"] --> smoke["windows-smoke.yml"]
+    ci["ci.yml<br/>desktop-verify-windows, on dispatch"] --> smoke["windows-smoke.yml"]
     rel["release.yml<br/>windows-verify"] --> smoke
     night["nightly.yml<br/>desktop-windows, deep"] --> smoke
     smoke --> runner(["windows-desktop runner<br/>logon task"])
@@ -12,7 +12,7 @@ flowchart LR
     runner -.-> docker["Docker Desktop<br/>tiers 2 and 3"]
 ```
 
-- The installer is cross-built on the Linux fleet in `ci-desktop` with cargo-xwin. This machine only runs it, through [`desktop-smoke-windows`](../../_tools/desktop-smoke-windows). Tier 1 installs it, fires an `intentic://` link before and after launch, and uninstalls it; it needs no Docker, so it gates main and the release. Tiers 2 and 3 connect a sandbox and run a turn, so they need Docker and a connected account and run nightly with `deep: true`.
+- The installer is cross-built on the Linux fleet in `ci-desktop` with cargo-xwin. This machine only runs it, through [`desktop-smoke-windows`](../../_tools/desktop-smoke-windows). Tier 1 installs it, fires an `intentic://` link before and after launch, and uninstalls it; it needs no Docker, so it gates the release, and runs from `ci.yml` on a `windows_smoke` dispatch. Tiers 2 and 3 connect a sandbox and run a turn, so they need Docker and a connected account. Main gets all of them nightly with `deep: true`.
 - The label is its own because `runs-on` is an AND over labels: a Windows box carrying `intentic` would be handed the Linux fleet's container jobs.
 - A service runs in session 0, which has no desktop, and every tier-1 assertion reads a window title. [`setup-windows-runner.ps1`](../../_tools/scripts/ci/setup-windows-runner.ps1) therefore registers a logon task that starts the listener windowless through `intentic-launch.exe` and re-runs every few minutes, so a dead listener comes back without anyone signing in.
 - A sleeping machine is an offline runner, and a locked one takes jobs and fails them. `-KeepAwake` sets the power and lock policy; `-AutoLogon` signs in after a reboot by storing the password in the registry. Use both only on a dedicated box.

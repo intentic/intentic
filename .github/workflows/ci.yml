@@ -179,9 +179,8 @@ jobs:
       ic: ${{ steps.filter.outputs.ic }}
       netd: ${{ steps.filter.outputs.netd }}
       images: ${{ steps.filter.outputs.images }}
+      images-recipe: ${{ steps.filter.outputs.images-recipe }}
       platform: ${{ steps.filter.outputs.platform }}
-      perf-instr: ${{ steps.filter.outputs.perf-instr }}
-      perf-browser: ${{ steps.filter.outputs.perf-browser }}
       local-face: ${{ steps.filter.outputs.local-face }}
       signin: ${{ steps.filter.outputs.signin }}
     steps:
@@ -368,28 +367,21 @@ jobs:
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: node --test "_tools/scripts/**/*.test.mjs" "_tools/checks/**/*.test.mjs" "_tools/turbo-cache/**/*.test.mjs"
 
-  # THE FIRST ANSWER A PUSH GETS, a few minutes after it: the packages it changed type-checked, then the push check.
-  # Nothing checks a land, a commit or a push on the way out, so this is where what a push broke is first said: on the
-  # run's page, while the verify groups are still building. It gates nothing and no job needs it: the verify groups
-  # still type-check and test each whole closure, dependents included. Main's fix agent hears this job with the rest
-  # of the run, once the run has finished measuring (_sandbox/sandbox/src/ci/main-fixer.ts).
+  # THE PUSH CHECK, the first answer a push gets: what only a range can answer, measured against the same base the
+  # `changes` job reads from the same event fields. It gates nothing and no job needs it. Main's fix agent hears this
+  # job with the rest of the run, once the run has finished measuring (_sandbox/sandbox/src/ci/main-fixer.ts).
   #
-  # The range is the one `changes` reads, from the same event fields. The typecheck covers the packages holding a file
-  # the range changed (_tools/scripts/verify/changed-packages.mjs), and `--only` leaves their dependencies' typecheck
-  # out: the declarations those read come from the emit, the same one verify.yml runs. Not turbo's `[<base>...HEAD]`,
-  # which reads a changed root file (the lockfile, the root package.json, turbo.json) as every package changed: a pnpm
-  # bump made this job typecheck all 97 packages for 9 to 10 minutes, at the same moment the verify groups typechecked
-  # the same 97 and each missed the others' cache (runs 37694488316, 37694899281). A root file's reach is the verify
-  # groups' to measure; they typecheck every package of their closures on every push. The
-  # push check (_tools/scripts/verify/verify-push.mjs, `pnpm verify:push` by hand) asks the same range what only a
-  # range can answer: every check the manifest lists with a `tidy` finding counted only when the range added it
-  # (preflight merely warns about tidiness, and the nightly tidy job reads it a day later with no author attached),
-  # the assertion ratchet over the range's test files, and `pnpm lint` over the files it changed. It is also where the
-  # checks that want an install (`needs: node_modules` in the manifest) run against a fresh one.
+  # The push check (_tools/scripts/verify/verify-push.mjs, `pnpm verify:push` by hand) runs every check the manifest
+  # lists, with a `tidy` finding counted only when the range added it (preflight merely warns about tidiness, and the
+  # nightly tidy job reads it a day later with no author attached), the assertion ratchet over the range's test files,
+  # and `pnpm lint` over the files it changed. It is also where the checks that want an install (`needs: node_modules`
+  # in the manifest) run against a fresh one.
   #
-  # The typecheck runs before the push check so that a failure stays in the log's tail, which is where a reader of the
-  # job's page looks first: a push check that passes prints a few lines, and turbo's output is cut to the tasks that
-  # failed.
+  # NO TYPECHECK HERE ANY MORE. This job used to type-check the packages the push changed, to answer before the verify
+  # groups did. It never did: nearly every push touches @intentic/web, whose vue-tsc took 12 to 18 minutes here (6 GB of
+  # heap, out of memory on run 39494680942), so this job finished within minutes of the verify groups while running a
+  # third copy of the same check beside them on the same six-runner box, each copy missing the others' cache. The verify
+  # groups type-check every package of their closures on every push; that is where a type error is reported.
   quick:
     needs: [changes, preflight]
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
@@ -450,36 +442,6 @@ jobs:
         uses: ./.github/actions/pnpm-setup
         with:
           lockfile-drift: measure
-      - id: declarations
-        if: steps.base.outputs.sha != ''
-        run: node _tools/scripts/build/emit-declarations.mjs
-      # WHAT A SANDBOX ALREADY TYPECHECKED ON THIS TREE (_tools/turbo-cache/README.md). An agent's turn sends its typecheck
-      # passes to the fleet's turbo-cache server, which keeps them apart in /ci-cache/turbo-sandbox; this copies into
-      # /ci-cache/turbo only the entries whose hash this job's own dry run gives to an output-less task, re-written as that
-      # task's log alone, so nothing a sandbox wrote can become a build output. The arguments are the step below's, minus
-      # the flags that do not move a hash. Never fails the job: an import that cannot run leaves the typecheck its work.
-      - name: Import sandbox typecheck results
-        if: ${{ !cancelled() && steps.declarations.outcome == 'success' }}
-        shell: bash
-        env:
-          BASE: ${{ steps.base.outputs.sha }}
-        run: node _tools/turbo-cache/import.mjs -- run typecheck "--filter=[$BASE...HEAD]" --only
-      # Through the environment, quoted: the filter is one argument. The task count is sized to the free memory the
-      # way the root `typecheck` script sizes it, since this box is shared with five other jobs.
-      - name: Typecheck the packages the push changed
-        if: ${{ !cancelled() && steps.declarations.outcome == 'success' }}
-        shell: bash
-        env:
-          BASE: ${{ steps.base.outputs.sha }}
-        # One `--filter=<name>` per word, which is why $filters goes unquoted; empty when no package's own file changed,
-        # and the script has said so.
-        run: |
-          set -euo pipefail
-          filters="$(node _tools/scripts/verify/changed-packages.mjs "$BASE")"
-          if [ -z "$filters" ]; then exit 0; fi
-          # shellcheck disable=SC2086
-          pnpm turbo run typecheck $filters --only --continue=dependencies-successful \
-            --output-logs=errors-only --concurrency="$(node _tools/scripts/verify/test-workers.mjs --typecheck-concurrency)"
       # After the install: the linter and the checks that read templates need it, and so does the tidy checks' run at
       # the base, in a throwaway worktree lent this one's node_modules (check-snapshot.mjs).
       - name: Check what the push changed
@@ -771,7 +733,7 @@ jobs:
   # THE ONE JOB THAT RUNS THE WEB'S SUITE (875 files, the largest in the repo). It used to run in five jobs a push:
   # here, verify-site, desktop-check and both verify-clocks legs, at 19 to 25 minutes each on one worker, which was half
   # of every pipeline's runner-minutes (2026-10-07). verify-core subtracts web, desktop-check tests only the desktop
-  # packages, verify-clocks runs only the web files that can see a clock, and verify-site is gone.
+  # packages, verify-clocks (nightly.yml now) runs only the web files that can see a clock, and verify-site is gone.
   verify-platform:
     needs: preflight
     if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
@@ -833,69 +795,6 @@ jobs:
       - run: bash _tools/scripts/ci/install-provider-clis.sh
       - run: pnpm e2e:providers
 
-  # THE SUITES THAT MEASURE TIME, RUN SOMEWHERE THAT IS NOT UTC.
-  #
-  # Every other job in this pipeline runs in a UTC container, which is the same clock the daemon ships on. That makes
-  # a whole class of defect structurally invisible: a cron evaluated in the process's own zone, a day bucket that is
-  # the reader's only by coincidence, a date test that passes because the author and the runner happen to agree.
-  # An automation set for 20:43 fired at 22:43 for its owner for as long as the feature existed, and the suite
-  # passed throughout — it could not have been anything else.
-  #
-  # Two zones, chosen as the extremes rather than as realistic ones: Kiritimati is UTC+14 and Niue is UTC−11, so
-  # between them every "is it the same calendar day" question is answered both ways on the same instant, and a
-  # 25-hour spread means no off-by-one can hide. Neither observes summer time, so a failure here is a zone bug and
-  # never a changeover flake.
-  #
-  # THE FILES THAT CAN SEE A CLOCK, NOT WHOLE PACKAGES. This job used to run the four packages' entire suites, the web's
-  # 875 files among them, once per zone as a two-leg matrix: 47 runner-minutes a push, the largest single cost in the
-  # pipeline (2026-10-07), nearly all of it suites whose answer cannot depend on the zone. clock-suites.mjs selects the
-  # test files whose own text touches dates, zones, crons or a fake clock (about a fifth of them) and runs those in
-  # both zones, one after the other, every zone and package whatever the one before it did; its log groups each
-  # `zone: package` run, so an east-only or west-only failure still says which. Its header says what a selection by
-  # text can miss and how a suite opts in. Widen the package list when another one starts bucketing days or
-  # evaluating crons: `_tools/checks/time-zones.mjs` is what notices the code, this is what notices the behaviour.
-  #
-  # No TURBO_FORCE any more: the suites run outside turbo, so there is no UTC result for turbo to replay in their place,
-  # and the build below is the same build every other job replays.
-  verify-clocks:
-    # After ci-base for verify-core's reason: @intentic/sandbox's suites need the tools the image carries.
-    needs: [preflight, ci-base]
-    if: ${{ !cancelled() && needs.preflight.result != 'skipped' }}
-    runs-on: [self-hosted, intentic]
-    timeout-minutes: 30
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-verify-clocks
-      cancel-in-progress: true
-    container:
-      image: ghcr.io/intentic/ci-base:latest
-      volumes:
-        - /ci-cache:/ci-cache
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    env:
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      PNPM_STORE: /ci-cache/pnpm-store
-      TURBO_CACHE_DIR: /ci-cache/turbo
-      # It gates nothing, so it draws from the open band and holds at most six slots a run: two web workers or three of
-      # the daemon's. Uncapped it took ten to twelve of the sixteen while the platform gate's web suite ran on one.
-      TEST_SLOTS_CAP: "6"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          clean: false
-      - uses: ./.github/actions/pnpm-setup
-        with:
-          lockfile-drift: measure
-      # What the suites import of their dependencies is those dependencies' dist, as under `turbo run test`'s `^build`.
-      - run: pnpm turbo run build --filter=@intentic/sandbox^... --filter=@intentic/sandbox-contract^... --filter=@intentic/ext-automations^... --filter=@intentic/web^... --continue=dependencies-successful
-      # `@intentic/ui` is absent on purpose and not by oversight: the kit holds the formatters every date on screen goes
-      # through, and it has no test script at all, so naming it here would claim a coverage that does not exist. Its
-      # formatters are exercised through `@intentic/web`, which imports them. The script checks that each zone took
-      # before it judges anything by it (a container without tzdata silently reports UTC).
-      - run: node _tools/scripts/verify/clock-suites.mjs _sandbox/sandbox _shared/sandbox-contract _extensions/automations _editor/web
-
   # THE SUITES THAT NEED MORE OF THE MACHINE THAN A VERIFY GROUP HAS, run where it is provided on purpose. Each one
   # asks for its need with `requires(…, { lane: "machine" })` (@intentic/testing/requires): in this job, which names the
   # lane in INTENTIC_CI_LANE, a missing need FAILS; in every other CI job the test stands down, titled with this lane.
@@ -912,7 +811,7 @@ jobs:
   #                            in one too, so watch-check needs it as well.
   #   claude-policy            CAP_SYS_ADMIN as above, to lay the image's Claude Code managed settings over /etc for
   #                            one probe (its own tmpfs holds the overlay's upper layer), with the bundled CLI.
-  #   webq cli                 Playwright's Chromium, into the shared browser cache perf-browser also fills (the same
+  #   webq cli                 Playwright's Chromium, into the shared browser cache nightly's perf-browser also fills (the same
   #                            catalog playwright), with its shared libraries installed per run. Not baked into
   #                            ci-base: ~400 MB for one suite, and a browser every job could see wakes suites that
   #                            stand down without one (images-platform's PLAYWRIGHT_BROWSERS_PATH note).
@@ -1003,86 +902,6 @@ jobs:
           pnpm --filter @intentic/scaffold exec suites src/inject-template.integration.test.ts || failed=1
           pnpm --filter @intentic/iq-engine exec suites src/query/query-worker.integration.test.ts src/verbs/natural.integration.test.ts || failed=1
           exit "$failed"
-
-  # Counts, not timings (_tools/perf/README.md). Each job publishes its diff against the baseline checked into
-  # _tools/perf as the job summary, and fails only on a declared budget (src/*/*-budgets.ts): a count that moved is a
-  # report, re-recorded by perf-record.yml when someone decides it should be, never by whoever a failed run lands on.
-  # Instructions executed by the daemon's pure-JS hot paths, under Valgrind with node --predictable.
-  perf-instr:
-    needs: [changes, preflight]
-    if: ${{ !cancelled() && needs.changes.outputs.perf-instr == 'true' && needs.preflight.result != 'skipped' }}
-    runs-on: [self-hosted, intentic]
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-perf-instr
-      cancel-in-progress: true
-    timeout-minutes: 30
-    container:
-      image: ghcr.io/intentic/ci-base:latest
-      volumes:
-        - /ci-cache:/ci-cache
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    env:
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      PNPM_STORE: /ci-cache/pnpm-store
-      TURBO_CACHE_DIR: /ci-cache/turbo
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          clean: false
-      - uses: ./.github/actions/pnpm-setup
-        with:
-          lockfile-drift: measure
-      # This job is Valgrind's only user, so it installs it rather than ci-base carrying it for every job.
-      - run: apt-get update && apt-get install -y --no-install-recommends valgrind
-      # Four at a time: the host runs six runner processes, and the counts do not depend on the parallelism.
-      - run: pnpm perf:instr --jobs 4
-
-  # Vue renders, V8 calls, layouts, style recalcs and DOM mutations per interaction, in the real editor (_site/demo).
-  perf-browser:
-    needs: [changes, preflight]
-    if: ${{ !cancelled() && needs.changes.outputs.perf-browser == 'true' && needs.preflight.result != 'skipped' }}
-    runs-on: [self-hosted, intentic]
-    concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-perf-browser
-      cancel-in-progress: true
-    timeout-minutes: 30
-    container:
-      image: ghcr.io/intentic/ci-base:latest
-      volumes:
-        - /ci-cache:/ci-cache
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    env:
-      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-      PNPM_STORE: /ci-cache/pnpm-store
-      TURBO_CACHE_DIR: /ci-cache/turbo
-      # Not $HOME, which a job container maps to a throwaway /github/home.
-      PLAYWRIGHT_BROWSERS_PATH: /ci-cache/ms-playwright
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          clean: false
-      - uses: ./.github/actions/pnpm-setup
-        with:
-          lockfile-drift: measure
-      - name: Install Chromium and its system dependencies
-        shell: bash
-        run: |
-          # A runner can briefly lose its route to the apt mirrors. Retry the complete install so a failed update
-          # with an empty package index does not become a permanent "Unable to locate package" failure.
-          for attempt in 1 2 3; do
-            if pnpm --filter @intentic/perf exec playwright install --with-deps chromium; then
-              exit 0
-            fi
-            [ "$attempt" -lt 3 ] || exit 1
-            sleep "$((attempt * 15))"
-          done
-      - run: pnpm perf:browser
 
   # The desktop app's local face, the editor a window on a folder shows (_tools/e2e/local-face): built, then booted in
   # Chromium over the real intentic-files sidecar granted a temp folder, with no Tauri. It fails on what an editor
@@ -1389,19 +1208,17 @@ jobs:
   # WINDOWS: the NSIS installer is also verified as an archive here (tier 1 reads it with 7z) — and EXECUTED by
   # the two jobs below, which is a thing no Linux runner can do.
   #
-  # FROM THE START OF THE PIPELINE, NOT AFTER THE RELEASE HAS DECIDED. `release` builds this same tree at the REAL
-  # version (linux-build runs the identical build-desktop.sh + verify-desktop-install.sh pair), so this job used to
-  # wait on the release call and run only when it released nothing, to save a second release-profile build on a
-  # releasing push. That wait was every gate the release has (verify-core, verify-providers, verify-machine): the
-  # build started 28 minutes into a pipeline and the desktop chain behind it was the last thing to finish in 17 of 31
-  # pushes (2026-10-03 to 10-07). It now starts beside the verify groups, and the cost is said plainly: on a releasing
-  # push this Linux build is a second one, in its own cargo target directory, on the Linux fleet. The scarce half, the
-  # ONE Windows machine, still runs only one smoke per push: desktop-verify-windows keeps the release gate. A manual
-  # dispatch with desktop_smoke also runs this job on a branch, to check a CI-only fix on the same desktop runner
-  # before it reaches main.
+  # ON DEMAND ONLY: a dispatch with desktop_smoke, to prove a desktop or CI-only fix on a branch on the same desktop
+  # runner before it reaches main. It used to run on every main push, and the desktop filter matches nearly every push
+  # (desktop-app's closure reaches the web editor and the sandbox): 15 of 15 pushes on 2026-10-19 and 10-20, 13
+  # runner-minutes each, plus the Windows build and smoke below, on a box whose jobs were queueing for up to 8 minutes.
+  # Main is now covered twice without it: nightly.yml's desktop-setup builds the same bundles and runs this same
+  # verify-desktop-install.sh before its setup tier, and a releasing push's release.yml linux-build runs the identical
+  # build-desktop.sh + verify-desktop-install.sh pair at the real version before anything is published. The cost, said
+  # plainly: a desktop packaging break on main now surfaces at the next nightly or release rather than on its push.
   desktop-verify:
     needs: [changes, preflight, ci-base, ci-desktop]
-    if: ${{ !cancelled() && ((github.ref == 'refs/heads/main' && needs.changes.outputs.desktop == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure') || (github.event_name == 'workflow_dispatch' && inputs.desktop_smoke)) }}
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.desktop_smoke && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-desktop-verify
@@ -1446,15 +1263,12 @@ jobs:
   # same checkout and handed to the shim through IC_BIN, its own local-dev override. The Linux setup tier does
   # exactly this, for exactly this reason.
   #
-  # From the start of the pipeline, for the reason desktop-verify spells out: the cross-build is a few minutes on the
-  # Linux fleet, and waiting for the release's verdict before starting it put those minutes on the tail of every push.
-  # What must not run twice is the Windows half, on the one Windows machine: desktop-verify-windows waits for the
-  # release and runs only when it released nothing, since on a releasing push the release's own windows-verify runs
-  # the installer at the real version on that same machine.
-  # A manual windows_smoke dispatch also builds it on a branch, so installer fixes can be proved before landing.
+  # ON DEMAND ONLY, for desktop-verify's reason: a manual windows_smoke dispatch builds it, on a branch or on main, so
+  # installer fixes can be proved before landing. On main the Windows tiers run in nightly.yml (its own cross-build,
+  # then tiers 1 to 4 on the Windows machine) and in a releasing push's release.yml windows-verify, at the real version.
   desktop-windows-build:
     needs: [changes, preflight, ci-base, ci-desktop]
-    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || inputs.windows_smoke) && needs.changes.outputs.desktop == 'true' && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
+    if: ${{ !cancelled() && inputs.windows_smoke && needs.preflight.result != 'skipped' && needs.ci-base.result != 'failure' && needs.ci-desktop.result != 'failure' }}
     runs-on: [self-hosted, intentic, desktop]
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-desktop-windows-build
@@ -1519,23 +1333,21 @@ jobs:
   # running instance, and uninstalls it with the app still running (its tray is where it lives, so that is the
   # ordinary state at uninstall time).
   #
-  # NO DOCKER, NO CREDENTIALS, NO NETWORK beyond the installer's own. That is what lets it gate main rather than
-  # sit in the nightly: everything it asserts is a property of the package and the OS. The tiers that DO need a
-  # Docker daemon and a connected account are in nightly.yml.
+  # NO DOCKER, NO CREDENTIALS, NO NETWORK beyond the installer's own: everything it asserts is a property of the
+  # package and the OS. The tiers that DO need a Docker daemon and a connected account are in nightly.yml.
   #
   # `runs-on` names a label the Linux fleet does not carry, and that is load-bearing: `[self-hosted, intentic]`
   # is an AND over labels, so a Windows box carrying `intentic` would be handed container jobs it cannot run.
   # See docs/ops/ci-runner-windows.md — including why this runner must be started from a logged-in session rather
   # than installed as a service (a service session has no desktop, and every assertion here reads a window).
-  # Tier 1 only — everything it asserts is a property of the package and the OS, which is what lets it gate
-  # main rather than sit in the nightly. The tiers that DO need a Docker daemon and a connected account are the
-  # `deep` call in nightly.yml. A glob for the installer: this job builds at 0.0.0 and holds no version to
-  # demand, unlike release.yml's call.
+  # Tier 1 (and tier 4, the engine) on a windows_smoke dispatch, which is the only thing that builds its installer
+  # (desktop-windows-build). On main, nightly.yml's `deep` call runs tiers 1 to 4 every night and a releasing push's
+  # release.yml windows-verify runs tier 1 at the real version. A glob for the installer: this job builds at 0.0.0 and
+  # holds no version to demand, unlike release.yml's call.
   #
   # AFTER THE RELEASE'S VERDICT, and only when it released nothing: on a releasing push the release's own windows-verify
   # runs the real-version installer on the same single Windows machine, and this one would be a redundant
-  # install/uninstall cycle in that machine's queue. The installer itself is built from the pipeline's start
-  # (desktop-windows-build), so all this waits for is the verdict.
+  # install/uninstall cycle in that machine's queue.
   desktop-verify-windows:
     needs: [desktop-windows-build, release]
     if: ${{ !cancelled() && needs.desktop-windows-build.result == 'success' && needs.release.outputs.version == '' }}
@@ -1546,8 +1358,8 @@ jobs:
     with:
       artifact-name: windows-desktop-artifacts
       installer: Intentic-*-x64-setup.exe
-      # Tier 4's quick half on every main push: our engine installs beside Docker Desktop and Windows reaches a port
-      # it publishes. The engine is what a new PC without Docker Desktop gets, so a regression there is every new user.
+      # Tier 4's quick half: our engine installs beside Docker Desktop and Windows reaches a port it publishes. The
+      # engine is what a new PC without Docker Desktop gets, so a regression there is every new user.
       engine: true
 
   # The money path end to end, and the one suite that gates the platform deploy (`images-platform` needs it).
@@ -1863,15 +1675,23 @@ jobs:
   # waits on preflight and the verify groups, but the proof that rides with it — the prod-pruned tree builds, and the
   # daemon in it boots and converges (smoke-image.sh) — is nobody else's, so a commit failing a gate used to learn
   # about its broken image only after the gate was fixed: one more round. This job runs exactly when `images` would
-  # have run but for a failed gate (its condition is the complement of that one gate clause, with every other clause
-  # the same), builds the amd64 half of both profiles into this runner's docker store, boots them, and removes them.
+  # have run but for a failed gate (its condition is the complement of that one gate clause, with the recipe trigger below
+  # in place of `images`), builds the amd64 half of both profiles into this runner's docker store, boots them, and removes them.
   #
   # DRY BY ITS TOKEN, NOT BY A FLAG. `packages: read` is all it holds, so even a script that ignored PUSH=0 could not
   # move a tag; PUSH=0 is what makes the build `--load` instead of `--push`, and SMOKE_PULL=0 what boots the loaded
   # image instead of pulling a tag that does not exist. dind-host and the arm64 half are left to `images`: neither has
   # a boot proof of its own to run here, and the arm64 half is a GitHub-hosted runner's hour.
   #
-  # The cost, said plainly: one more amd64 image build, on the fleet, for each failing main push that changes the image.
+  # ONLY WHEN THE PUSH CHANGED THE IMAGE'S RECIPE (affected.mjs `images-recipe`): its Dockerfile, packs or scripts, or a
+  # manifest or lockfile that reaches the payload, which is what the prod-pruned tree is cut by. The broader `images`
+  # trigger matched nearly every push (the payload is most of the workspace), and main's gates fail on most pushes, so
+  # this ran on 10 of 15 pushes on 2026-10-19 and 10-20 for about 8 runner-minutes each. A failing push that changed only
+  # source now builds nothing here; the next push whose gates pass boots the real image in `images` before a tag moves.
+  #
+  # The cost, said plainly: one more amd64 image build, on the fleet, for each failing main push that changes the image's
+  # recipe, and an image break caused by source alone (an import of a package the pruned tree lacks) is found one round
+  # later than it was.
   #
   # NOT FOR A GATE THAT WAS CANCELLED. A gate a newer push superseded (SUPERSEDED in the header) did not fail: the push on
   # top builds this image, published or dry, so building it here too would be one more image for a commit nobody ships.
@@ -1879,7 +1699,7 @@ jobs:
     needs: [changes, preflight, verify-core, verify-machine, netd-check, release]
     if: |
       !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-      && needs.changes.outputs.images == 'true'
+      && needs.changes.outputs.images-recipe == 'true'
       && (needs.release.outputs.version == '' || needs.release.result != 'success')
       && !(needs.preflight.result == 'success'
         && needs.verify-core.result == 'success'

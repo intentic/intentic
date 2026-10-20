@@ -12,8 +12,8 @@
 //      newer lockfile than the one it typechecked against.
 //   2. Send the results this worktree already has: an agent that ran `pnpm typecheck` left them in .turbo/cache.
 //   3. Typecheck what is still missing, through turbo with the cache as its remote, which uploads each pass itself.
-//   4. File each pass under the `--only` hash as well. CI's `quick` job typechecks with `--only`, which hashes the same
-//      package differently (it leaves out the dependencies' hashes), so one run serves both quick and the verify groups.
+//   4. File each pass under the `--only` hash as well. reach-typecheck.mjs asks with `--only`, which hashes the same
+//      package differently (it leaves out the dependencies' hashes), so one run serves both it and the verify groups.
 //      The claim is the same one: this command passed on this package's inputs, in this tree.
 // The server keeps log-only entries alone, and CI takes them only for hashes it attributes to output-less tasks
 // (import.mjs), so nothing here can put a file into a build.
@@ -203,7 +203,7 @@ const typecheckMissing = async (run, missing) => {
     );
 };
 
-// 4. Each result under the `--only` hash quick asks for, from the entry the full hash now has. When the change selects
+// 4. Each result under the `--only` hash reach-typecheck asks for, from the entry the full hash now has. When the change selects
 // every package a task depends on, the two hashes are the same one and there is nothing to file.
 const fileTwins = async (run, tasks) => {
     const shared = await heldRemotely(run.cache, tasks.map((task) => task.hash));
@@ -231,7 +231,7 @@ const fileTwins = async (run, tasks) => {
         }
     }
     if (filed.length > 0) {
-        run.said.push(`filed ${named(filed)} under quick's --only hashes too`);
+        run.said.push(`filed ${named(filed)} under their --only hashes too`);
     }
 };
 

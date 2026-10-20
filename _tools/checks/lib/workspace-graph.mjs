@@ -117,7 +117,7 @@ export const readWorkspaceGraph = (root) => {
 
 // The packages holding one of `changed`, each path owned by the deepest member containing it. A root file (GLOBAL, a
 // README) belongs to none: it changes no package's own source, whatever it does to the graph around them.
-export const ownersOf = (graph, changed) => {
+const ownersOf = (graph, changed) => {
     const owners = new Set();
     for (const path of changed) {
         const owner = graph.byDir.find(([dir]) => path === dir || path.startsWith(`${dir}/`));

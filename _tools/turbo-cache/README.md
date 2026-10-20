@@ -29,7 +29,7 @@ What remains is the risk the design accepts: a sandbox could claim a typecheck p
 1. It skips everything if `node_modules` was not installed from this checkout's `pnpm-lock.yaml`.
 2. It sends the typecheck passes turbo already holds in its local cache for the changed packages. Turbo never uploads a local hit by itself.
 3. It typechecks what is still missing, with the server as turbo's remote.
-4. It files each pass under the `--only` hash as well. CI's `quick` job typechecks with `--only`, which gives a package a different hash whenever the change does not select its dependencies.
+4. It files each pass under the `--only` hash as well. [reach-typecheck.mjs](../scripts/verify/reach-typecheck.mjs) asks under `--only`, which gives a package a different hash whenever the change does not select its dependencies.
 
 The hashes match because a sandbox and CI run the same turbo on the same lockfile with the same Node. For commit `6d4c368`, a sandbox's dry run reproduced every typecheck and build hash in CI's log. Test hashes match only with `CI=true`, which `turbo.json` hashes on purpose, so tests are not warmed today.
 
@@ -49,7 +49,7 @@ On the fleet host, in the distro the runners use:
 3. `TURBO_CACHE_TOKEN=<token> TUNNEL_TOKEN=<tunnel token> docker compose up -d` with [docker-compose.yml](docker-compose.yml). The tunnel's public hostname routes to `http://turbo-cache:3000`.
 4. Connect the `turbo-cache` card in each sandbox: the hostname, and the same token.
 
-CI needs nothing beyond its import steps (`quick` in `ci.yml`, and `verify.yml`). The server ages its own directory out after 14 days, as `pnpm-setup` does for the runners' cache.
+CI needs nothing beyond its import step in `verify.yml`. The server ages its own directory out after 14 days, as `pnpm-setup` does for the runners' cache.
 
 ## Files
 

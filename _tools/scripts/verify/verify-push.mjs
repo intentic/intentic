@@ -10,8 +10,8 @@
 // range's test files; the linter over the files the range changed. By hand it also asks the two questions only a working
 // tree can: whether a manifest is committed without the lockfile change beside it, and whether the crates the range
 // touched are formatted (in CI the checkout holds nothing uncommitted, and the crate jobs run `cargo fmt --check`).
-// Exits 1 on a finding. Typecheck, build and test are not its to run: the quick job type-checks what the push changed,
-// the verify groups measure the rest, and `pnpm verify` runs them all here.
+// Exits 1 on a finding. Typecheck, build and test are not its to run: the verify groups measure them in CI, and
+// `pnpm verify` runs them all here.
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
