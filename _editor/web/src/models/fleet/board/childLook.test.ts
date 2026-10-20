@@ -55,6 +55,12 @@ describe(`what a child says it runs on`, () => {
         expect(childLook(spawned({ provider: `claude` }), `claude`).titleHint).toBeUndefined();
     });
 
+    it(`names the account that pays: a spawned child its own, an in-process one its parent's`, () => {
+        expect(childLook(spawned({ model: `claude-custom-model`, account: `acct-1` }), `claude`).run?.account).toBe(`acct-1`);
+        expect(childLook(spawned({ model: `claude-custom-model` }), `claude`, `parent-acct`).run?.account).toBeUndefined();
+        expect(childLook(inProcess({ model: `claude-custom-model` }), `claude`, `parent-acct`).run?.account).toBe(`parent-acct`);
+    });
+
     it(`names only a chosen subagent type, and only in the title's hover`, () => {
         expect(childLook(inProcess({ description: `Scan`, agentType: `general-purpose` }), `claude`).titleHint?.title).toBe(`In-process`);
         expect(childLook(inProcess({ description: `Scan` }), `claude`).titleHint?.title).toBe(`In-process · Explore`);

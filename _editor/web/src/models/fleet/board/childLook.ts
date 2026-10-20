@@ -10,6 +10,7 @@ import { activityLine, agentDisplayTitle, agentStatusMeta, subagentStatusMeta } 
 import { limited, onlyOwnerCanAnswer, turnWorking, watching } from "../../agent-status/agentStatus-standing";
 import { subagentLive } from "../subagentRoster";
 import { modelLabelFor } from "../../providers/providerCatalog";
+import { providerAccounts } from "../../providers/providerAccounts";
 import { clampEffort, effortsFor } from "../../providers/effortScale";
 import { inProcess, subagentTitle, type TrayChild } from "./childFold";
 import { FRESH_ICONS } from "../freshKinds";
@@ -87,6 +88,9 @@ export interface RunLook {
     // The id itself, for the reader who needs the exact string (the chip's accessible name).
     readonly modelId: string;
     readonly effort: EffortLook | undefined;
+    // Which connected account pays for it, by the name the reader gave it (the id itself where it is no longer connected
+    // here). A child may run on any account of its provider, and which one is spent is the reader's to know.
+    readonly account: string | undefined;
 }
 
 export interface EffortLook {
@@ -101,12 +105,22 @@ export const runLook = (
     model: string | undefined,
     effort: string | undefined,
     thinking: boolean | undefined,
+    account?: string,
 ): RunLook | undefined => {
     if (model === undefined || model === ``) {
         return undefined;
     }
-    return { provider, model: modelLabelFor(provider, model), modelId: model, effort: effortLook(provider, model, effort, thinking) };
+    return {
+        provider,
+        model: modelLabelFor(provider, model),
+        modelId: model,
+        effort: effortLook(provider, model, effort, thinking),
+        account: accountLabel(provider, account),
+    };
 };
+
+const accountLabel = (provider: AgentProvider, account: string | undefined): string | undefined =>
+    account === undefined || account === `` ? undefined : ((providerAccounts.value[provider] ?? []).find((entry) => entry.id === account)?.label ?? account);
 
 // A tier off the model's scale is drawn as the one it runs at (clampEffort); a provider with no ladder names it bare.
 const effortLook = (provider: AgentProvider, model: string, effort: string | undefined, thinking: boolean | undefined): EffortLook | undefined => {
@@ -120,7 +134,7 @@ const effortLook = (provider: AgentProvider, model: string, effort: string | und
 };
 
 // An in-process subagent: no chat of its own, so its row shows its transcript in its parent's.
-const inProcessLook = (child: SubagentSession, provider: AgentProvider): ChildLook => {
+const inProcessLook = (child: SubagentSession, provider: AgentProvider, account: string | undefined): ChildLook => {
     const live = subagentLive(child);
     const meta = subagentStatusMeta(child.status);
     const title = subagentTitle(child) ?? t(`shared.subagent`);
@@ -140,8 +154,8 @@ const inProcessLook = (child: SubagentSession, provider: AgentProvider): ChildLo
         since: child.startedAt,
         doing: child.lastTool ?? t(`ui.status.working`),
         at: child.endedAt ?? child.activityAt,
-        // Its parent's provider: an in-process subagent runs inside the parent's own runtime.
-        run: runLook(provider, child.model, child.effort, undefined),
+        // Its parent's provider and account: an in-process subagent runs inside the parent's own runtime.
+        run: runLook(provider, child.model, child.effort, undefined, account),
         fresh: undefined,
     };
 };
@@ -170,9 +184,10 @@ const spawnedTitle = (child: FleetAgent, provider: AgentProvider): Pick<ChildLoo
     return { title: agentDisplayTitle(child), titleHint: child.provider === provider ? undefined : { title: providerLabel(child.provider) } };
 };
 
-export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook => {
+// `account` is the parent's: what an in-process subagent spends, having no turn of its own.
+export const childLook = (child: TrayChild, provider: AgentProvider, account?: string): ChildLook => {
     if (inProcess(child)) {
-        return inProcessLook(child, provider);
+        return inProcessLook(child, provider, account);
     }
     const lane = laneOf(child);
     // What it asks of the reader; never in the archive, where every press waits for a restore.
@@ -188,7 +203,7 @@ export const childLook = (child: TrayChild, provider: AgentProvider): ChildLook 
         since: child.startedAt,
         doing: activityLine(child) ?? t(`ui.status.working`),
         at: child.updatedAt,
-        run: runLook(child.provider, child.model, child.effort, child.thinking),
+        run: runLook(child.provider, child.model, child.effort, child.thinking, child.account),
         fresh: freshLook(child),
     };
 };

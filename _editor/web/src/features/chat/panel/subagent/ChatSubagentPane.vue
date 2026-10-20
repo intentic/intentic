@@ -207,6 +207,7 @@ const takeFocus = (): void => {
                         :child="session"
                         :parent-title="parentTitle"
                         :provider="parentCard?.provider ?? parent.selection.provider.value"
+                        :account="parentCard?.account"
                         @back="closeSubagent(parent.conversationId)"
                     />
                 </div>

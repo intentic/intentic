@@ -15,7 +15,7 @@ import { inProcess, type TrayChild } from "../../../../models/fleet/board/childF
 //   whose it is: the parent, as the way back, a breadcrumb above the rest;
 //   which it is and how it stands: its title, with its standing and clock in one pill at the end (childLook, the same
 //   glyph and clock its row in the parent's tray wears);
-//   what it is: the model and tier it runs on (RunFacts; its kind is only the title's hover), where the composer's picker would name them;
+//   what it is: the model, tier and account it runs on (RunFacts; its kind is only the title's hover), where the composer's picker would name them;
 //   what the reader can do: one short line on why there is no box, and the presses there are instead.
 //
 // A spawned subagent is a conversation of its own, so the reader may still speak to it directly ("Write to it") and stop
@@ -27,6 +27,8 @@ const props = defineProps<{
     // The parent's title, and the provider it runs on: a subagent is named by its provider only when that differs.
     parentTitle: string;
     provider: AgentProvider;
+    // The parent's account: what an in-process subagent spends. A spawned one names its own.
+    account?: string;
     // Offer the press that stops it: a spawned one whose turn is running.
     stoppable?: boolean;
 }>();
@@ -34,7 +36,7 @@ const emit = defineEmits<{ back: []; stop: []; write: [] }>();
 
 const t = useT();
 
-const look = computed(() => childLook(props.child, props.provider));
+const look = computed(() => childLook(props.child, props.provider, props.account));
 const now = useNow(() => look.value.working);
 const spawned = computed(() => !inProcess(props.child));
 // The clock the pill carries: how long it has worked, else when it settled.
@@ -79,9 +81,9 @@ const clock = computed(() =>
                     <span>{{ clock ?? look.glyph.label }}</span>
                 </span>
             </div>
-            <!-- What it runs on, each a chip, where the composer's picker would name them. -->
+            <!-- What it runs on and who pays, drawn as the composer draws them, where its picker would name them. -->
             <div v-if="look.run !== undefined" class="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5">
-                <RunFacts :run="look.run" chips />
+                <RunFacts :run="look.run" bar />
             </div>
         </div>
         <!-- What the reader can do instead of typing: why there is no box, and the presses there are. -->
