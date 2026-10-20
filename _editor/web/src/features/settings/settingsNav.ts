@@ -75,13 +75,13 @@ const SETTINGS_GROUPS = [`account`, `preferences`, `developer`] as const;
 // name in the palette ("Settings: Voice") and its old address, which the router sends to the anchor (router/index.ts).
 // A section whose parts this reader is shown may wear a longer name (`withinLabel`), so the index says what is on it.
 const SETTINGS_SECTIONS = [
-    // Data was a row of its own until 2026-10-17: the analytics switch, an export and the account's deletion, which
-    // every settings page people know keeps at the foot of the account's own.
-    { slug: `profile`, icon: `user`, group: `account`, within: [{ slug: `data`, icon: `database` }] },
+    { slug: `profile`, icon: `user`, group: `account` },
     // Named "Billing" for the errand, not the product.
     { slug: `billing`, icon: `credit-card`, group: `account`, plan: true },
     // The organisations this account is in, and the console an organisation admin runs them from (organisations/).
     { slug: `organisation`, icon: `users`, group: `account` },
+    // Collection preferences and account data belong together, away from the default Profile page.
+    { slug: `data`, icon: `shield`, group: `account` },
     { slug: `appearance`, icon: `palette`, group: `preferences` },
     // What a sandbox's daemon pushes to this device (usePushNotifications.ts), and, below it, whether this device
     // listens for the agent's name (chat/wake): its own microphone, heard by the sandbox's model. What this device says

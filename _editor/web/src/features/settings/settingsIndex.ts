@@ -157,26 +157,23 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
         shown: (reader) => !reader.phone,
     },
 
-    // Data, drawn at the foot of Profile.
+    // Data & privacy.
     {
         id: `product-analytics`,
-        slug: `profile`,
-        partLabel: () => t(`settings.section.data`),
+        slug: `data`,
         title: () => t(`settings.analytics.title`),
         terms: () => [t(`settings.search.productAnalytics`)],
         shown: () => analyticsAvailable(),
     },
     {
         id: `export-data`,
-        slug: `profile`,
-        partLabel: () => t(`settings.section.data`),
+        slug: `data`,
         title: () => t(`settings.settingsData.exportMyData`),
         terms: () => [t(`settings.search.exportData`)],
     },
     {
         id: `delete-account`,
-        slug: `profile`,
-        partLabel: () => t(`settings.section.data`),
+        slug: `data`,
         title: () => t(`settings.settingsData.deleteAccount`),
         terms: () => [t(`settings.search.deleteAccount`)],
     },

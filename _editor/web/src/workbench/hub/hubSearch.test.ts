@@ -175,7 +175,7 @@ describe(`what people type`, () => {
         expect(voice?.to.path).toBe(`/settings/voice`);
         const wake = ask(`wake word`).find((result) => result.setting === `wake-word`);
         expect(wake?.to).toEqual({ path: `/settings/notifications`, query: {}, hash: `#setting-wake-word` });
-        expect(ask(`delete account`).find((result) => result.setting === `delete-account`)?.to.path).toBe(`/settings/profile`);
+        expect(ask(`delete account`).find((result) => result.setting === `delete-account`)?.to.path).toBe(`/settings/data`);
     });
 
     it(`puts a page before a card of its own name`, () => {

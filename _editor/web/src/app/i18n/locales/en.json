@@ -10048,7 +10048,7 @@
         "section": {
             "appearance": "Appearance",
             "billing": "Billing",
-            "data": "Data",
+            "data": "Data & privacy",
             "keybindings": "Keyboard shortcuts",
             "notifications": "Notifications",
             "profile": "Profile",
@@ -10250,7 +10250,7 @@
         },
         "analytics": {
             "title": "Product analytics",
-            "description": "Usage events and recordings of the interface as you use it, linked to your account, so we can see where people get stuck. What your workspace contains is masked out of them. Switched off, this browser sends nothing."
+            "description": "Share usage and masked replays to help improve Intentic."
         },
         "settingsVoice": {
             "group": "Wake word",

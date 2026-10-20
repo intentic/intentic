@@ -67,6 +67,14 @@ it(`opens Billing on a cold load, address and query intact, while the plan read 
 it(`shows the default section for a param-less address`, async () => {
     const { el } = await mount(`/settings`);
     expect(shown(el)).toBe(`profile`);
+    expect(el.querySelector(`[data-section="data"]`)).toBeNull();
+});
+
+it(`opens data and privacy on its own page`, async () => {
+    const { el, router } = await mount(`/settings/data`);
+    expect(shown(el)).toBe(`data`);
+    expect(router.currentRoute.value.path).toBe(`/settings/data`);
+    expect(el.querySelector(`[data-section="profile"]`)).toBeNull();
 });
 
 it(`cleans a slug that is still unknown once the read has answered`, async () => {

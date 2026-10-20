@@ -143,6 +143,7 @@ useSectionWarmup(() => sections.value.flatMap((section) => pageOf(section.slug))
         <template #default="{ slug }">
             <div class="flex flex-col gap-6">
                 <SettingsProfile v-if="slug === `profile`" />
+                <SettingsData v-else-if="slug === `data`" />
                 <SettingsBilling v-else-if="slug === `billing`" />
                 <SettingsAppearance v-else-if="slug === `appearance`" />
                 <SettingsNotifications v-else-if="slug === `notifications`" />
@@ -151,7 +152,6 @@ useSectionWarmup(() => sections.value.flatMap((section) => pageOf(section.slug))
                 <OrgConsole v-else-if="slug === `organisation`" />
                 <section v-for="part in partsOf(slug)" :id="part.slug" :key="part.slug" class="scroll-mt-4">
                     <SettingsVoice v-if="part.slug === `voice`" />
-                    <SettingsData v-else-if="part.slug === `data`" />
                 </section>
             </div>
         </template>
