@@ -317,9 +317,9 @@ test("a loop whose conversation is disposed stops after the iteration in flight,
     expect(settled).toMatchObject({ state: "stopped", iterations: 1 });
     expect(loopRunning(services.conversations, "c11")).toBe(false);
     expect(services.conversations.state("c11")?.loop).toBeUndefined();
-    // A bare actor, made by the turn's own transcript tail filing its steer anchors after the dispose (only a test
-    // disposes mid-turn: a discard refuses a running conversation); nothing of the loop's.
-    expect(services.conversations.traces("c11")).toEqual(["actor"]);
+    // Nothing at all: not the loop's, and not a bare actor from the turn's transcript tail filing its steer anchors after
+    // the dispose, which a conversation with no actor skips (turn-transcript.ts).
+    expect(services.conversations.traces("c11")).toEqual([]);
 });
 
 // Loops used to restart on every boot whatever autoResumeOnRestart said, and through a restart storm the boot history

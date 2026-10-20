@@ -191,19 +191,19 @@ const sayToParent = async (engine: Engine, stored: StoredChild, prompt: string, 
     return receipt.delivered === "queued" ? "queued" : "said";
 };
 
-// The task settled over there: the record ends, and its report reaches the parent unless a wait already took it.
+// The task settled over there: filed before the record ends (a restart finds the report), which reaches the parent unless a wait took it.
 const settle = async (engine: Engine, child: Live, status: "completed" | "failed" | "killed", report: string, error?: string): Promise<void> => {
     const { stored } = child;
     const { conversations, logger } = engine.deps;
     child.report = report;
     // The far side's words reach the parent's live turn whichever door hands them over.
     markConversationTaint(stored.parent, outsideFrom(stored.sandbox));
-    settleSpawnedChild(conversations, stored.id, { status, report, ...opt("error", error) });
     if (stored.settledAt === undefined) {
         stored.settledAt = Date.now();
         stored.report = report === "" ? undefined : report;
         await engine.put(stored).catch((failure: Error) => logger.warn({ err: failure, child: stored.id }, "linked task: its ending was not filed"));
     }
+    settleSpawnedChild(conversations, stored.id, { status, report, ...opt("error", error) });
     const reported = subagentEndingReporter(conversations, stored.id);
     if (subagentEndingReported(conversations, stored.id)) {
         return;
