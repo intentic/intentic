@@ -29,6 +29,12 @@ commit or content tags, and without deploying. It runs the same release script w
 so an existing image cannot turn a registry-push check into a retag. Desktop downloads retry DNS failures within
 a bounded budget; AppImage tools are checksum-verified and cached before bundling.
 
+Release artifact downloads, including Windows smoke verification, use
+[`download-artifact-retry`](../../.github/actions/download-artifact-retry/action.yml): up to three attempts,
+with 15- and 45-second delays. This also retries metadata and signed-URL requests, so a connection reset before
+the transfer does not discard completed builds. The final failure still stops the job, and the upstream action's
+digest verification remains enabled.
+
 ## The fork boundary
 
 The repository is public and the runners hold release credentials, a shared cache and the host docker socket, so a fork's code must never reach them.

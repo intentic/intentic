@@ -1,0 +1,56 @@
+# Run 39479847779 lost release / publish before publishing anything: GetSignedArtifactURL returned ECONNRESET
+# after both installers had been built and verified. Retry the whole action, including the metadata and signed-URL
+# requests, just as upload-artifact-retry does for CreateArtifact. Repeating a download extracts the same immutable
+# artifact into the same destination; it must not clear that destination, which can be the workspace root.
+#
+# The first two failures are provisional; the third fails the job. Missing artifacts and digest mismatches still
+# fail, after the same bounded retries: the upstream action does not expose a failure category to the caller.
+name: download artifact
+description: Download a build artifact with bounded retries for transient artifact-service failures.
+
+inputs:
+  name:
+    description: Artifact name from the current workflow run.
+    required: true
+  path:
+    description: Destination directory. Passed to actions/download-artifact unchanged.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: first
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      continue-on-error: true
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+
+    - if: steps.first.outcome == 'failure'
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.name }}
+      run: |
+        echo "::warning::downloading $(printenv ARTIFACT_NAME) failed — retrying in 15s (attempt 2 of 3)"
+        sleep 15
+    - id: second
+      if: steps.first.outcome == 'failure'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      continue-on-error: true
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+
+    - if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.name }}
+      run: |
+        echo "::warning::downloading $(printenv ARTIFACT_NAME) failed again — retrying in 45s (attempt 3 of 3)"
+        sleep 45
+    # Leave the last failure visible to the caller.
+    - if: steps.first.outcome == 'failure' && steps.second.outcome == 'failure'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}

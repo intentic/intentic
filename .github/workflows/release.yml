@@ -215,7 +215,7 @@ jobs:
       # The release's own ic, which the installer carries beside the app: build-desktop.sh stages ic-windows-amd64.exe
       # from here (stage-desktop-ic.sh --release) rather than cross-building a second one. After prepare-workspace,
       # which empties this directory.
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: ./.github/actions/download-artifact-retry
         with:
           name: ic-release-binaries
           path: _sandbox/ic/dist-bin
@@ -412,7 +412,7 @@ jobs:
       - run: bash _tools/scripts/build/build-agent-binaries.sh _devices/keyring intentic-keyring linux-x64 linux-arm64 darwin-x64 darwin-arm64 windows-x64
       # The ic host-side CLI, all five platforms, as ic-build made them: the Linux bundles below carry ic-linux-amd64
       # beside the app (stage-desktop-ic.sh --release), and the upload at the end carries the directory to publish.
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: ./.github/actions/download-artifact-retry
         with:
           name: ic-release-binaries
           path: _sandbox/ic/dist-bin
@@ -544,14 +544,14 @@ jobs:
       # same four directories, so a stale bundle would be published as part of this release, over the name of
       # a version it is not; and the assemble step refuses to guess between two artifacts of one kind, which
       # is what failed run 31697229807 (`2 'deb' artifacts … expected one`).
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: ./.github/actions/download-artifact-retry
         with:
           name: windows-release-candidate
           path: windows-release-candidate
       # Into the workspace root: the artifact stores each dist-bin under its repo-relative path (see the
       # upload in linux-build), so this reconstructs the tree exactly where release-prepare.sh,
       # publish-github.sh and the attestation expect it.
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: ./.github/actions/download-artifact-retry
         with:
           name: linux-release-artifacts
           path: ${{ github.workspace }}
