@@ -374,7 +374,6 @@ fn recreate(
                 // `docker run` reuses a cached tag without re-pulling. A no-op is reported honestly, not
                 // recreated into the same image and claimed as success.
                 ui::note(&format!("pulling {registry_image}…"));
-                let cached = docker::image_id(&registry_image);
                 let _ = docker::pull(&registry_image, &log);
                 let pulled = docker::image_id(&registry_image);
                 if pulled.is_none() {
@@ -392,10 +391,13 @@ fn recreate(
                 /* "Already current" means THIS CONTAINER runs the image the tag now names — not that the pull moved nothing. */
                 let already_current = match (&old_base_id, &pulled) {
                     (Some(old), Some(new)) => old == new,
-                    // An overlay whose base could not be named: built on what the tag names now, or not current.
-                    (None, Some(new)) => docker::inspect(&container, "{{.Image}}")
-                        .and_then(|running| identity::built_on(&running, new))
-                        .unwrap_or(cached.is_some() && cached == pulled),
+                    (None, Some(new)) => {
+                        let running = docker::inspect(&container, "{{.Image}}");
+                        let built_on = running
+                            .as_deref()
+                            .and_then(|running| identity::built_on(running, new));
+                        unnamed_base_is_current(running.as_deref(), new, built_on)
+                    }
                     _ => false,
                 };
                 if already_current {
@@ -1530,6 +1532,7 @@ pub(crate) fn build_overlay(
     if pull {
         docker::pull(base, log)?;
     }
+    keep_running_build(tag, slug, log);
     log.section(&format!("docker build {tag}"));
     let content = std::fs::read(overlay).unwrap_or_default();
     let label = docker::image_id(base).map(|id| format!("{}={id}", identity::BASE_ID_LABEL));
@@ -1552,6 +1555,50 @@ pub(crate) fn build_overlay(
         );
     }
     Ok(())
+}
+
+/* A BUILD MUST NOT TAKE THE RUNNING BUILD WITH IT. The overlay's tag is keyed on the recipe alone, so a `prepare` onto a
+new base with an unchanged recipe builds onto the very tag the sandbox runs. With Docker's graph drivers the build being
+replaced was left dangling and still answered to its id; on the containerd image store (Docker 29's default, Docker
+Desktop's) BuildKit replaces the image record outright: the container runs on, and its image no longer exists to
+`docker image inspect`. Its base label and layers went with it, so `identity::running_base` could no longer name the base
+it runs, the next background prepare read that as "already current" and dropped the staged update, and every update after
+it ended in "no newer sandbox image" while the sandbox sat on the old release; the rollback pin of that build failed with
+it (2026-10, a sandbox stuck on 1.338.0 under 1.344.0). So the build a container of this sandbox runs is pinned first,
+under the protected tag an update's rollback pin gives it anyway (`rollback_env_tag`): tidy keeps it while a container
+runs it or the record names it, and removes it once neither does. */
+fn keep_running_build(tag: &str, slug: &str, log: &Log) {
+    let Some(named) = docker::image_id(tag) else {
+        return;
+    };
+    let running: Vec<Option<String>> = [
+        crate::sandbox::container_of(slug),
+        crate::sandbox::parked_of(slug),
+    ]
+    .iter()
+    .map(|container| docker::inspect(container, "{{.Image}}"))
+    .collect();
+    if !runs_build(&named, &running) {
+        return;
+    }
+    let pin = rollback_env_tag(slug, &named);
+    log.section(&format!("docker tag {named} {pin}"));
+    docker::quiet(&["tag", &named, &pin]);
+}
+
+/// Whether a sandbox whose base could not be named (`identity::running_base` said None) already runs what the channel's
+/// tag names now (`pulled`): it runs that very image, or an image its layers show is built on it. Anything short of that
+/// proof is NOT current. It used to fall back to "the pull moved nothing", which is no statement about the container at
+/// all: once a prepare had pulled the release and its build had taken the running image's record away (see
+/// `keep_running_build`), that fallback said "already current" on every run and the sandbox never moved again. Pure.
+fn unnamed_base_is_current(running: Option<&str>, pulled: &str, built_on: Option<bool>) -> bool {
+    running == Some(pulled) || built_on == Some(true)
+}
+
+/// Whether one of a sandbox's containers (`running`, each its image id or None when it does not exist) runs the build
+/// `named`. Pure.
+fn runs_build(named: &str, running: &[Option<String>]) -> bool {
+    running.iter().flatten().any(|image| image == named)
 }
 
 /// The overlay a re-basing recreate builds and the hash its container carries, derived together because they have
@@ -2728,5 +2775,56 @@ mod tests {
         );
         assert_eq!(action, Action::Rebuild);
         assert!(said.contains("0123456789ab on 1.316.0"), "{said}");
+    }
+
+    /* A sandbox stuck on 1.338.0 under 1.344.0 (2026-10): a prepare rebuilt its overlay's tag on the new base, the
+    containerd image store took the running build's record with it, and "the pull moved nothing" was read as "already
+    current" on every update after that. */
+    #[test]
+    fn a_base_that_cannot_be_named_is_current_only_on_proof() {
+        let pulled = "sha256:new";
+        // The running image IS the tag's, or its layers show it is built on it.
+        assert!(unnamed_base_is_current(Some(pulled), pulled, None));
+        assert!(unnamed_base_is_current(
+            Some("sha256:overlay"),
+            pulled,
+            Some(true)
+        ));
+        // Built on something else, an image that cannot be inspected any more, or a container that cannot be read:
+        // not current, whatever the pull said.
+        assert!(!unnamed_base_is_current(
+            Some("sha256:overlay"),
+            pulled,
+            Some(false)
+        ));
+        assert!(!unnamed_base_is_current(Some("sha256:gone"), pulled, None));
+        assert!(!unnamed_base_is_current(None, pulled, None));
+    }
+
+    #[test]
+    fn the_build_a_sandbox_container_runs_is_pinned_before_its_tag_is_rebuilt() {
+        let named = "sha256:694100c0598c0000";
+        // The live container, or the one a swap parked, runs what the tag names: that build is kept.
+        assert!(runs_build(named, &[Some(named.to_string()), None]));
+        assert!(runs_build(
+            named,
+            &[Some("sha256:other".to_string()), Some(named.to_string())]
+        ));
+        // A tag naming a build no container of this sandbox runs is the build's own business.
+        assert!(!runs_build(
+            named,
+            &[Some("sha256:other".to_string()), None]
+        ));
+        assert!(!runs_build(named, &[None, None]));
+        // Under the very tag an update's rollback pin gives it, which tidy already knows as a pin of this sandbox.
+        let pin = rollback_env_tag("sandbox-0c785df85d3a", named);
+        assert_eq!(
+            pin,
+            "intentic-sandbox-rollback-sandbox-0c785df85d3a:env-694100c0598c"
+        );
+        assert_eq!(
+            crate::sandbox::tidy::owner_of(&pin),
+            Some(("sandbox-0c785df85d3a".to_string(), true))
+        );
     }
 }
