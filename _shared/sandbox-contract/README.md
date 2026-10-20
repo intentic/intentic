@@ -33,6 +33,12 @@ flowchart LR
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404. The desktop app's folder
   sidecar sends the same frame with `surface: "folder"` and only the few routes it serves, which the browser offers
   and never reads as out of date.
+- Every file the daemon keeps says whether it travels in an environment bundle (`carry`, `secret`, `identity` or
+  `derived`, `src/state/state-portability.ts`). There are three tables, one per root: `WORKSPACE_STATE_FILES`,
+  `HISTORY_STATE_FILES`, and `AUTH_STATE_FILES` for the auth root of provider logins, secret vaults and trust
+  files. In the auth root, the owner's restrictions (credential gates, host guards, the privacy shield) travel without
+  secrets, and this sandbox's own keys, pairings and the yeses its owner gave never travel. A path no entry names keeps
+  the directory's own class: `carry` on the workspace, `derived` on `/history`, `secret` in the auth root.
 - The oldest daemon the editor supports is declared here, `OLDEST_SUPPORTED_DAEMON` in `src/state/daemon-floor.ts`,
   with a dated line for why it is that release. The editor reads a daemon's version off the head of the hello's
   `build` (`<version>:<mtime>`) and draws a single "needs an update" page below it. The floor's test freezes the fields

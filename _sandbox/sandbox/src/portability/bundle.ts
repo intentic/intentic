@@ -2,6 +2,7 @@ import { mkdtemp, open, readdir, readlink, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { pipeline, Readable } from "node:stream";
+import { isInside } from "@intentic/base/contained";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { BundleManifest } from "@intentic/sandbox-contract/state/definition";
 import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
@@ -12,7 +13,17 @@ import type { Services } from "../composition.js";
 import type { SandboxPresentation } from "../system/platform-client.js";
 import { conversationsDbPath } from "../store/conversations-db.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
-import { carries, historyMayContain, historyPortability, IGNORE_SCOPE_EXCLUSIONS, workspaceMayContain, workspacePortability } from "./classify.js";
+import { authRootOf } from "../state-paths.js";
+import {
+    carries,
+    historyMayContain,
+    historyPortability,
+    IGNORE_SCOPE_EXCLUSIONS,
+    storageExclusions,
+    WORKSPACE_STATE_WITH_AUTH,
+    workspaceMayContain,
+    workspacePortability,
+} from "./classify.js";
 import { deriveDefinition, sweepVaults } from "../definition/definition.js";
 import { levelledGzip } from "./bundle-gzip.js";
 import { webStream } from "@intentic/base/web-stream";
@@ -153,12 +164,20 @@ const packSnapshot = async (packer: Pack, name: string, database: Pick<Services[
     }
 };
 
+// The auth root when AGENT_AUTH_DIR keeps it outside the workspace, where the walk never reaches it; undefined when it
+// sits inside, where the walk classifies it file by file.
+const authRootOutside = (services: Services): string | undefined => {
+    const authRoot = authRootOf({ agentAuthDir: services.config.agentAuthDir, workspaceRoot: services.workspace.root });
+    return isInside(services.workspace.root, authRoot) ? undefined : authRoot;
+};
+
 // The manifest's `excluded` list, derived from the same tables the walk consults, so it can never describe a different
-// bundle than the one written — plus what the IgnoreScope prunes, which the tables cannot express and which was
-// therefore being left out of the report entirely (IGNORE_SCOPE_EXCLUSIONS says which and why).
-const excludedEntries = (secrets: boolean): BundleManifest["excluded"] => {
+// bundle than the one written — plus what the IgnoreScope prunes and the storage the walk never enters, which the
+// tables cannot express and which were therefore being left out of the report entirely (classify.ts says which and why).
+const excludedEntries = (secrets: boolean, authOutside: string | undefined): BundleManifest["excluded"] => {
     const declared: BundleManifest["excluded"] = [
-        ...WORKSPACE_STATE_FILES.filter((file) => !carries(file.portability, secrets)),
+        // Outside, the auth root's files are not under the workspace path its table is nested at: one entry says so.
+        ...(authOutside === undefined ? WORKSPACE_STATE_WITH_AUTH : WORKSPACE_STATE_FILES).filter((file) => !carries(file.portability, secrets)),
         ...HISTORY_STATE_FILES.filter((file) => !carries(file.portability, secrets)),
     ]
         .map((file) =>
@@ -169,7 +188,7 @@ const excludedEntries = (secrets: boolean): BundleManifest["excluded"] => {
         .toSorted((left, right) => left.path.localeCompare(right.path));
     // Appended rather than sorted in: the tables describe named state, these describe whole subtrees, and mixing them
     // alphabetically would bury the one entry (the shelf) that costs somebody 49 repositories.
-    return [...declared, ...IGNORE_SCOPE_EXCLUSIONS];
+    return [...declared, ...IGNORE_SCOPE_EXCLUSIONS, ...storageExclusions(authOutside)];
 };
 
 // The manifest's `sandbox` and `presentation` blocks. Two keys rather than one because they come from different
@@ -219,7 +238,7 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
                 secrets: options.secrets,
                 repos: (await discoverRepos(services.workspace.root)).toSorted(),
                 definition: (await deriveDefinition(services)).definition,
-                excluded: excludedEntries(options.secrets),
+                excluded: excludedEntries(options.secrets, authRootOutside(services)),
             };
             const body = Buffer.from(`${JSON.stringify(manifest, undefined, 2)}\n`);
             packer.entry({ name: BUNDLE_MANIFEST_ENTRY, size: body.byteLength, type: "file" }).end(body);

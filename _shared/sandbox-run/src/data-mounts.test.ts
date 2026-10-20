@@ -1,17 +1,32 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
-import { DATA_MOUNTS } from "./index.js";
+import { DATA_MOUNTS, SANDBOX_VOLUMES } from "./index.js";
 
-// ic cannot import this package, so it keeps a copy of DATA_MOUNTS, and its test (_sandbox/ic/src/sandbox/preflight.rs)
-// holds that copy to this golden file. A change to the list that the file does not carry fails here, naming it;
-// `INTENTIC_WRITE_GOLDEN=1` rewrites it, and the Rust test then says whether ic's copy still agrees.
+// ic cannot import this package, so it keeps copies of DATA_MOUNTS (_sandbox/ic/src/sandbox/preflight.rs) and of the
+// volumes' destinations (storage.rs), and its tests hold each copy to a golden file here. A change to a list that its
+// file does not carry fails here, naming it; `INTENTIC_WRITE_GOLDEN=1` rewrites them, and the Rust tests then say
+// whether ic's copies still agree.
 
-test("golden/data-mounts.json is the run contract's list of data mounts", () => {
-    const path = join(packageRoot(import.meta.url), "golden", "data-mounts.json");
-    const expected = `${JSON.stringify(DATA_MOUNTS, undefined, 2)}\n`;
+// The golden file's text and the text the list would write, rewriting the file first when asked to.
+const golden = (name: string, value: unknown) => {
+    const path = join(packageRoot(import.meta.url), "golden", name);
+    const expected = `${JSON.stringify(value, undefined, 2)}\n`;
     if (process.env["INTENTIC_WRITE_GOLDEN"] === "1") {
         writeFileSync(path, expected);
     }
-    expect(readFileSync(path, "utf8")).toBe(expected);
+    return { onDisk: readFileSync(path, "utf8"), expected };
+};
+
+test("golden/data-mounts.json is the run contract's list of data mounts", () => {
+    const { onDisk, expected } = golden("data-mounts.json", DATA_MOUNTS);
+    expect(onDisk).toBe(expected);
+});
+
+test("golden/volumes.json is where the run contract mounts each named volume", () => {
+    const { onDisk, expected } = golden(
+        "volumes.json",
+        SANDBOX_VOLUMES.map(({ destination }) => destination),
+    );
+    expect(onDisk).toBe(expected);
 });

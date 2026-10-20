@@ -34,15 +34,45 @@ export const sandboxNames = (slug: string): SandboxNames => ({
 // Where a dev sandbox's shared AI-provider logins are mounted, a mount and AGENT_AUTH_DIR together (`mounts` carries it).
 export const AGENT_AUTH_ROOT = "/agent-auth";
 
+// Where the sandbox's own Docker engine keeps its images, containers and their volumes.
+export const DOCKER_ROOT = "/var/lib/docker";
+
+// One named volume of a sandbox, and what each reader of the run contract needs to know about it.
+export interface SandboxVolume {
+    readonly destination: string;
+    // Its name, as sandboxNames spells it for a slug.
+    readonly volume: "workspaceVolume" | "historyVolume" | "dockerVolume";
+    // The state planner's flag (the daemon's state-plan.ts) for a volume holding files the daemon converts.
+    readonly planner?: "--workspace" | "--history";
+    // Why an environment bundle leaves the volume out, shown to the owner in the bundle's report. Absent for a volume
+    // the bundle walks, file by file, through the contract's state tables.
+    readonly unbundled?: string;
+}
+
+// Every named volume a sandbox runs on, in the order `docker run` mounts them: the one list of what a sandbox's
+// storage is. A swap must carry each over unchanged (ic's storage.rs holds its copy to golden/volumes.json), the run
+// line mounts each, and an environment bundle either walks one or says why it does not.
+export const SANDBOX_VOLUMES: readonly SandboxVolume[] = [
+    // Never optional: the owner's files and every repo's working tree.
+    { destination: WORKSPACE_ROOT, volume: "workspaceVolume", planner: "--workspace" },
+    // Never optional: holds the fleet registry, transcripts, every repo's git dir, the checkpoints.
+    { destination: HISTORY_ROOT, volume: "historyVolume", planner: "--history" },
+    {
+        destination: DOCKER_ROOT,
+        volume: "dockerVolume",
+        unbundled:
+            "The sandbox's own Docker engine (its images, containers and their volumes) does not travel. A database kept in a container volume is only there: dump it into the workspace before exporting, or recreate the containers in the target.",
+    },
+];
+
 // Where a sandbox's stored data lives inside its container, and the state planner's flag for each (the daemon's
 // state-plan.ts): every file the daemon converts is on one of these. The update pre-flight (ic, preflight.rs) mounts
 // exactly these from the running container, read-only, and plans against them; its copy is held to this list by
 // golden/data-mounts.json. `required: false` rides only where the container has it.
-export const DATA_MOUNTS = [
-    { destination: WORKSPACE_ROOT, planner: "--workspace", required: true },
-    { destination: HISTORY_ROOT, planner: "--history", required: true },
+export const DATA_MOUNTS: readonly { readonly destination: string; readonly planner: string; readonly required: boolean }[] = [
+    ...SANDBOX_VOLUMES.flatMap(({ destination, planner }) => (planner === undefined ? [] : [{ destination, planner, required: true }])),
     { destination: AGENT_AUTH_ROOT, planner: "--auth", required: false },
-] as const;
+];
 
 // Container-scoped capabilities every sandbox gets: SYS_ADMIN for mount namespaces, SYS_PTRACE for diagnosis.
 export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;
@@ -190,71 +220,87 @@ export const hostRuntimeOf = (value: string | undefined): string[] => allowliste
 // Stamps the overlay's demand as provenance: inspect alone can't tell overlay privilege from owner's.
 export const OVERLAY_RUNTIME_ENV = "SANDBOX_OVERLAY_RUNTIME";
 
+// What a replayed variable says about the sandbox, which decides what a recreate elsewhere keeps of it: a move to another
+// machine keeps all but `machine`, a copy keeps neither `identity` nor `machine`.
+// - layout: where things are inside the container (roots, key files, the daemon's listeners)
+// - platform: which platform, editor and edge it answers to; the same for every sandbox of one deployment
+// - identity: who this sandbox is to the platform and the edge, and to the parent it runs for
+// - machine: the computer it runs on, and what that computer paired with it at setup
+// - choice: the owner's standing asks of the container
+// - purpose: what the sandbox was made for
+type ReplayRole = "layout" | "platform" | "identity" | "machine" | "choice" | "purpose";
+
+interface ReplayVar {
+    readonly name: string;
+    readonly role: ReplayRole;
+    // A credential: the daemon seals it out of its own environment at boot, alongside its config schema's own secret
+    // leaves, so no process it spawns inherits one (sandbox src/seams/sealed-env.ts); a replayed name the daemon's schema
+    // also reads must agree with it, which the daemon's suite checks.
+    readonly secret?: true;
+}
+
 // Vars a recreate replays, in order; image-identity vars are absent, derived from the emitter's own inputs.
-export const REPLAY_ENV = [
-    "WORKSPACE_ROOT",
-    "HISTORY_ROOT",
-    "AGENT_AUTH_DIR",
-    "INTENTIC_AT_REST_KEY_FILE",
-    "INTENTIC_AT_REST_PREVIOUS_KEY_FILE",
-    "SANDBOX_HOST",
-    "SANDBOX_PORT",
-    "SANDBOX_NAME",
-    "PREVIEW_PORT",
-    "GOOGLE_CLIENT_ID",
-    "CONNECT_TOKEN",
-    "OWNER_EMAIL",
-    "WEB_ORIGIN",
-    "SANDBOX_PUBLIC_URL",
-    "PLATFORM_URL",
+export const REPLAY_VARS = [
+    { name: "WORKSPACE_ROOT", role: "layout" },
+    { name: "HISTORY_ROOT", role: "layout" },
+    { name: "AGENT_AUTH_DIR", role: "layout" },
+    // The paths of the mounted at-rest keys, never their contents.
+    { name: "INTENTIC_AT_REST_KEY_FILE", role: "layout" },
+    { name: "INTENTIC_AT_REST_PREVIOUS_KEY_FILE", role: "layout" },
+    { name: "SANDBOX_HOST", role: "layout" },
+    { name: "SANDBOX_PORT", role: "layout" },
+    { name: "SANDBOX_NAME", role: "identity" },
+    { name: "PREVIEW_PORT", role: "layout" },
+    { name: "GOOGLE_CLIENT_ID", role: "platform" },
+    { name: "CONNECT_TOKEN", role: "identity", secret: true },
+    { name: "OWNER_EMAIL", role: "identity" },
+    { name: "WEB_ORIGIN", role: "platform" },
+    { name: "SANDBOX_PUBLIC_URL", role: "identity" },
+    { name: "PLATFORM_URL", role: "platform" },
     // Reachability: the signed grant and the edge it dials; replaying it keeps the same public name.
-    "SANDBOX_GRANT",
-    "INGRESS_URL",
-    "CLOUDFLARE_API_TOKEN",
-    "HOST_SSH_KEY",
-    "SELF_HOST_USER",
-    "SYNC_PAIR_TOKEN",
+    { name: "SANDBOX_GRANT", role: "identity", secret: true },
+    { name: "INGRESS_URL", role: "platform" },
+    // The owner's own Cloudflare account, on the path where they mint their own tunnels.
+    { name: "CLOUDFLARE_API_TOKEN", role: "platform", secret: true },
+    // A multi-line private key for self-hosted deploys: this machine wired as a deploy target.
+    { name: "HOST_SSH_KEY", role: "machine", secret: true },
+    { name: "SELF_HOST_USER", role: "machine" },
+    { name: "SYNC_PAIR_TOKEN", role: "machine", secret: true },
     // Describes the machine, which a recreate doesn't move off; the daemon can't re-derive it.
-    "HOST_PAIR_TOKEN",
-    "HOST_PLATFORM",
-    "HOST_LABEL",
-    "SELF_HOST_ADDRESS",
-    "SELF_HOST_VIA",
+    { name: "HOST_PAIR_TOKEN", role: "machine", secret: true },
+    { name: "HOST_PLATFORM", role: "machine" },
+    { name: "HOST_LABEL", role: "machine" },
+    { name: "SELF_HOST_ADDRESS", role: "machine" },
+    { name: "SELF_HOST_VIA", role: "machine" },
     // The owner's explicit cgroup cap; replayed so it re-emits, unlike docker update's silent retune.
-    "SANDBOX_MEMORY",
+    { name: "SANDBOX_MEMORY", role: "choice" },
     // The owner's other standing asks, replayed like the memory cap: CPU ceiling and runtime directives.
-    "SANDBOX_CPUS",
-    "SANDBOX_RUNTIME",
+    { name: "SANDBOX_CPUS", role: "choice" },
+    { name: "SANDBOX_RUNTIME", role: "choice" },
     // A runner's parent sandbox and pairing token, replayed since a recreate can't re-derive either.
-    "RUNNER_PARENT_URL",
-    "RUNNER_PAIR_TOKEN",
+    { name: "RUNNER_PARENT_URL", role: "identity" },
+    { name: "RUNNER_PAIR_TOKEN", role: "identity", secret: true },
     // The dev checkout this container was launched from; allowlisted so `INTENTIC_SET_ENV` can deliver it and every
     // later dev recreate keeps it. A path on the host, meaningless in here except as an argument sent back out.
-    "SANDBOX_DEV_ROOT",
+    { name: "SANDBOX_DEV_ROOT", role: "machine" },
     // The arriving profile's own sandbox definition. Replayed rather than consumed, because a recreate is how a
     // workspace that never filled gets a second chance at it; the daemon applies it only to one that arrived empty.
-    "SANDBOX_DEFINITION_SEED",
+    { name: "SANDBOX_DEFINITION_SEED", role: "purpose" },
     // The folder of the owner's computer this sandbox was made for, synced into `/work/<name>` (connect.rs). What the
     // sandbox IS rather than a setting: a recreate that dropped it would seed a starter site beside the owner's project.
-    "SANDBOX_PROJECT_DIR",
+    { name: "SANDBOX_PROJECT_DIR", role: "purpose" },
     // This computer's own sandbox, which folders attach to later (connect.rs). Also what the sandbox is: a recreate that
     // dropped it would seed a starter site and stop taking the folders the machine agent attaches.
-    "SANDBOX_PROJECTS_HOST",
-] as const;
+    { name: "SANDBOX_PROJECTS_HOST", role: "purpose" },
+] as const satisfies readonly ReplayVar[];
 
-// The replayed names whose value is a credential. The daemon seals each out of its own environment at boot, alongside
-// its config schema's own secret leaves, so no process it spawns inherits one (sandbox src/seams/sealed-env.ts); a
-// replayed name the daemon's schema also reads must agree with it, which the daemon's suite checks.
-export const REPLAY_SECRET_ENV: ReadonlySet<(typeof REPLAY_ENV)[number]> = new Set([
-    "CONNECT_TOKEN",
-    "SANDBOX_GRANT",
-    "CLOUDFLARE_API_TOKEN",
-    // A multi-line private key for self-hosted deploys.
-    "HOST_SSH_KEY",
-    "SYNC_PAIR_TOKEN",
-    "HOST_PAIR_TOKEN",
-    "RUNNER_PAIR_TOKEN",
-]);
+type ReplayName = (typeof REPLAY_VARS)[number]["name"];
+
+// The replayed names, in order.
+export const REPLAY_ENV: readonly ReplayName[] = REPLAY_VARS.map(({ name }) => name);
+
+// The replayed names whose value is a credential (ReplayVar's `secret`).
+export const REPLAY_SECRET_ENV: ReadonlySet<ReplayName> = new Set(REPLAY_VARS.flatMap((entry) => ("secret" in entry ? [entry.name] : [])));
 
 // `printenv -0` / `env -0` output → name/value pairs. NUL framing is the only safe channel for these values:
 // HOST_SSH_KEY is a multi-line private key, so anything line-based re-splits it.
@@ -414,13 +460,7 @@ export const sandboxRunArgv = (run: SandboxRun): string[] => {
         ...SANDBOX_CAPABILITIES.map((cap) => `--cap-add=${cap}`),
         ...directives.flags,
         ...publishArgs(run),
-        "-v",
-        `${run.names.workspaceVolume}:/work`,
-        // Never optional: holds the fleet registry, transcripts, every repo's git dir, the checkpoints.
-        "-v",
-        `${run.names.historyVolume}:/history`,
-        "-v",
-        `${run.names.dockerVolume}:/var/lib/docker`,
+        ...SANDBOX_VOLUMES.flatMap(({ destination, volume }) => ["-v", `${run.names[volume]}:${destination}`]),
         ...(run.mounts ?? []).flatMap((mount) => ["-v", mount]),
         ...identityEnv(run),
         ...directives.stamps,

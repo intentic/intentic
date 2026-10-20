@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { AUTH_STATE_FILES } from "@intentic/sandbox-contract/state/auth-state";
 import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
 import { type StateFile, stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
@@ -50,9 +51,9 @@ export interface DocumentSpec<
     // the value; declared so the shape check (conversion-types.ts, VanishedKeys) knows the key left on purpose.
     readonly movedByStep: MovedByStep;
     // What the contract's state-file tables say of this path (@intentic/sandbox-contract: WORKSPACE_STATE_FILES,
-    // HISTORY_STATE_FILES), found by the path rather than spelled again here: whether it travels in a bundle, and for a
-    // workspace file which views it invalidates. Undefined for the auth root, which no table covers, and for a path no
-    // entry claims, which the registry's test refuses.
+    // HISTORY_STATE_FILES, AUTH_STATE_FILES), found by the path rather than spelled again here: whether it travels in a
+    // bundle, and for a workspace file which views it invalidates. Undefined for a path no entry claims, which the
+    // registry's test refuses.
     readonly stateFile: StateFile | undefined;
 }
 
@@ -76,8 +77,12 @@ export interface DocumentDefinition<
 }
 
 // The contract's entry for a path under its root: the longest one that claims it.
-const stateFileOf = (root: DocumentRoot, path: string): StateFile | undefined =>
-    root === "workspace" ? stateFileFor(path, WORKSPACE_STATE_FILES) : root === "history" ? stateFileFor(path, HISTORY_STATE_FILES) : undefined;
+const STATE_FILES = {
+    workspace: WORKSPACE_STATE_FILES,
+    history: HISTORY_STATE_FILES,
+    auth: AUTH_STATE_FILES,
+} as const satisfies Readonly<Record<DocumentRoot, readonly StateFile[]>>;
+const stateFileOf = (root: DocumentRoot, path: string): StateFile | undefined => stateFileFor(path, STATE_FILES[root]);
 
 export const documentKey = (spec: Pick<DocumentSpec, "root" | "path">): string => `${spec.root}:${spec.path}`;
 

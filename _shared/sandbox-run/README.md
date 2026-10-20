@@ -18,12 +18,20 @@ flowchart LR
 - Privilege arrives only through `RUNTIME_DIRECTIVES`, an allowlist read from an overlay's `# intentic:runtime` lines
   and the owner's `SANDBOX_RUNTIME`. An `OPTIONAL_DIRECTIVES` entry such as `--gpus=all` is probed on the host and
   dropped when the host cannot honour it.
-- `REPLAY_ENV` is what a recreate carries over. `parseNulEnv` reads it NUL-framed because a value can be a multi-line
-  private key. It includes the paths of optional mounted at-rest keys, never their contents.
+- `REPLAY_VARS` is what a recreate carries over: one row per variable, with the role it plays (layout, platform,
+  identity, machine, choice, purpose) and whether it is a credential. A move to another machine keeps every role but
+  `machine`. A copy keeps neither `identity` nor `machine`. `REPLAY_ENV` and `REPLAY_SECRET_ENV` are derived from
+  it. `parseNulEnv` reads the values NUL-framed because one can be a multi-line private key. The table includes the
+  paths of optional mounted at-rest keys, never their contents.
 - `localDaemonPort` derives a sandbox's host loopback port from its id, so a recreate lands on the same port and the
   editor and machine agent compute it without being told.
-- `DATA_MOUNTS` names where a sandbox's stored data lives in its container and the state planner's flag for each; the
-  update pre-flight in `ic` mounts exactly these, read-only, and its copy is held to `golden/data-mounts.json`.
+- `SANDBOX_VOLUMES` lists a sandbox's storage: the workspace, `/history` and the sandbox's own Docker engine. The run
+  line mounts each one, and a swap in `ic` must carry each over unchanged; ic's copy (`storage.rs`) is held to
+  `golden/volumes.json`. A volume an environment bundle does not walk says why (`unbundled`), and the bundle's report
+  repeats it.
+- `DATA_MOUNTS`, derived from the volumes plus the optional `/agent-auth`, names where the daemon's converted files
+  live and the state planner's flag for each. The update pre-flight in `ic` mounts exactly these, read-only, and its
+  copy is held to `golden/data-mounts.json`.
 - `./quote` holds the shell, SQL and env-file quoters the daemon, providers, CLI and editor share. It imports
   nothing, so a browser bundle can take it. `powershellQuote` doubles all five characters PowerShell reads as a
   single quote (`'` and the typographic `‘ ’ ‚ ‛`), not only the ASCII one.
@@ -36,7 +44,7 @@ flowchart LR
 
 ## Key files
 
-- [src/index.ts](src/index.ts) — names, capabilities, caps, directives, replay env and `sandboxRunArgv`.
+- [src/index.ts](src/index.ts) — names, volumes, capabilities, caps, directives, replay env and `sandboxRunArgv`.
 - [src/fly.ts](src/fly.ts) — the hosted flavour: `flyMachineConfig` and the single-volume layout.
 - [src/quote.ts](src/quote.ts) — quoters to compose outward, one per parser a value crosses.
 - [src/slug.ts](src/slug.ts) — a sandbox's slug and id read back off a container name, an address or a token.

@@ -449,6 +449,54 @@ test("the manifest names the reference shelf it leaves behind, instead of droppi
     await cleanup();
 });
 
+test("the auth root is classified file by file: its keys stay, the owner's gates go even without secrets", async () => {
+    const source = await makeRoots();
+    const auth = join(source.work, `${STATE_DIR}/secrets/auth`);
+    await mkdir(join(auth, "claude"), { recursive: true });
+    await writeFile(join(auth, "credential-gates.json"), `{"github":["owner@example.com"]}`);
+    await writeFile(join(auth, "sandbox-secrets.json"), `{"OPENAI_API_KEY":"sk-test"}`);
+    await writeFile(join(auth, "keyring-keys.json"), `{"sign":{"publicKey":"p","privateKey":"k"}}`);
+    await writeFile(join(auth, "owner-grants.json"), `{"commands":[]}`);
+    await writeFile(join(auth, "claude", "models.json"), "[]");
+
+    // Without secrets the gate still travels, since a secret stored again on the target must not arrive ungated.
+    const plain = await makeRoots();
+    await arrive(await bundleOf(source, false), plain);
+    const landed = join(plain.work, `${STATE_DIR}/secrets/auth`);
+    expect(await readFile(join(landed, "credential-gates.json"), "utf8")).toContain("owner@example.com");
+    await expect(readFile(join(landed, "sandbox-secrets.json"), "utf8")).rejects.toThrow();
+
+    // With secrets the values travel, and this sandbox's own key, the owner's yeses and a fetched catalog still do not.
+    const withSecrets = await makeRoots();
+    await arrive(await bundleOf(source, true), withSecrets);
+    const taken = join(withSecrets.work, `${STATE_DIR}/secrets/auth`);
+    expect(await readFile(join(taken, "sandbox-secrets.json"), "utf8")).toContain("sk-test");
+    await expect(readFile(join(taken, "keyring-keys.json"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(taken, "owner-grants.json"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(taken, "claude", "models.json"), "utf8")).rejects.toThrow();
+    await cleanup();
+});
+
+test("the manifest names the storage the walk never enters: the engine's volume, and an auth root kept off the workspace", async () => {
+    const source = await makeRoots();
+    const manifestOf = async (agentAuthDir: string) => {
+        const config = { ...testConfig, workspaceRoot: source.work, historyRoot: source.history, agentAuthDir };
+        const held = await spoolBundle(await bundleOf(source, true, [], { config }), source.history, LIMIT);
+        await dropSpool(held.spool);
+        return held.index.manifest.excluded;
+    };
+
+    const inside = await manifestOf("");
+    expect(inside).toContainEqual(expect.objectContaining({ path: "/var/lib/docker/", portability: "volume", note: expect.stringMatching(/\S/) }));
+    // Inside the workspace the walk classifies the auth root itself, so its key is listed by its own path.
+    expect(inside).toContainEqual(expect.objectContaining({ path: `${STATE_DIR}/secrets/auth/keyring-keys.json`, portability: "identity" }));
+    expect(inside.map((entry) => entry.portability)).not.toContain("auth-root");
+
+    const outside = await manifestOf("/agent-auth");
+    expect(outside).toContainEqual(expect.objectContaining({ path: "/agent-auth/", portability: "auth-root", note: expect.stringMatching(/\S/) }));
+    await cleanup();
+});
+
 test("a sandbox's display name and logo ride along, since no volume holds them", async () => {
     const source = await makeRoots();
     await writeFile(join(source.work, "keep.md"), "# real content\n");

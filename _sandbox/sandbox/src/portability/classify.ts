@@ -1,6 +1,9 @@
+import { AUTH_ROOT_IN_WORKSPACE, AUTH_STATE_FILES } from "@intentic/sandbox-contract/state/auth-state";
+import type { BundleManifest } from "@intentic/sandbox-contract/state/definition";
 import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
 import { type Portability, type StateFile, stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
+import { SANDBOX_VOLUMES } from "@intentic/sandbox-run";
 
 // Single source of truth for what happens to one path in a bundle; both the exporter and the restorer ask it, since a
 // bundle is hand-editable and the restorer must re-enforce, not just trust, what was packed.
@@ -9,9 +12,17 @@ import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspac
 // - /history defaults to skip: daemon machinery only, and an undeclared file there is either stale or unnamed state
 // Neither default is an oversight; they're opposite because the two volumes are opposite kinds of content.
 
+// The workspace table with the auth root's own table nested under the place the auth root sits in the workspace. The
+// workspace table claims that directory whole as `secret`, so an auth path no entry names keeps that class (a provider's
+// home is a login), while a named one (a keyring key, a credential gate) says for itself whether it travels.
+export const WORKSPACE_STATE_WITH_AUTH: readonly StateFile[] = [
+    ...WORKSPACE_STATE_FILES,
+    ...AUTH_STATE_FILES.map((file) => ({ ...file, path: `${AUTH_ROOT_IN_WORKSPACE}${file.path}` })),
+];
+
 // Workspace-root-relative, forward-slash. Longest match over the table, then the default; a needed exception belongs in
 // the table, not a branch here.
-export const workspacePortability = (relPath: string): Portability => stateFileFor(relPath, WORKSPACE_STATE_FILES)?.portability ?? "carry";
+export const workspacePortability = (relPath: string): Portability => stateFileFor(relPath, WORKSPACE_STATE_WITH_AUTH)?.portability ?? "carry";
 
 // historyRoot-relative, forward-slash. Unclaimed defaults to `derived`, per the asymmetry above.
 export const historyPortability = (relPath: string): Portability => stateFileFor(relPath, HISTORY_STATE_FILES)?.portability ?? "derived";
@@ -48,13 +59,34 @@ export const IGNORE_SCOPE_EXCLUSIONS: readonly { readonly path: string; readonly
     },
 ];
 
+// WHAT LIES OUTSIDE THE TWO WALKED VOLUMES, SAID OUT LOUD.
+//
+// A bundle walks /work and /history. A volume the run contract mounts beside them (the sandbox's own Docker engine) is
+// never walked, and neither is an auth root AGENT_AUTH_DIR moved off the workspace: before these entries both were left
+// out silently, the second taking the owner's credential gates and guards with it even on an export with secrets.
+// Each volume says why in the run contract (SANDBOX_VOLUMES' `unbundled`), so a volume added there is reported here.
+export const storageExclusions = (authRootOutsideWorkspace: string | undefined): BundleManifest["excluded"] => [
+    ...SANDBOX_VOLUMES.flatMap(({ destination, unbundled }) =>
+        unbundled === undefined ? [] : [{ path: `${destination}/`, portability: "volume", note: unbundled }],
+    ),
+    ...(authRootOutsideWorkspace === undefined
+        ? []
+        : [
+              {
+                  path: `${authRootOutsideWorkspace.replace(/\/$/, "")}/`,
+                  portability: "auth-root",
+                  note: "This sandbox keeps its AI-provider logins, secret vaults and credential gates and guards outside the workspace (AGENT_AUTH_DIR), so none of them travel, even with secrets included. Sign in, store the secrets and set the gates and guards again on the target.",
+              },
+          ]),
+];
+
 // Whether to descend into a directory, not whether the directory itself travels: a skipped directory can still own a
 // carried child, so this asks whether it or anything beneath it travels.
 const mayContainCarried = (relPath: string, secrets: boolean, own: Portability, files: readonly StateFile[]): boolean =>
     carries(own, secrets) || files.some((file) => file.path.startsWith(`${relPath}/`) && carries(file.portability, secrets));
 
 export const workspaceMayContain = (relPath: string, secrets: boolean): boolean =>
-    mayContainCarried(relPath, secrets, workspacePortability(relPath), WORKSPACE_STATE_FILES);
+    mayContainCarried(relPath, secrets, workspacePortability(relPath), WORKSPACE_STATE_WITH_AUTH);
 
 export const historyMayContain = (relPath: string, secrets: boolean): boolean =>
     mayContainCarried(relPath, secrets, historyPortability(relPath), HISTORY_STATE_FILES);

@@ -10,7 +10,9 @@ see their workspace gone, desktop sync would carry the "deletions" to their own 
 on the empty volumes. The data would still be in the old volumes, which nobody would know to look for. A mount dropped
 from one run shape wiped the hosted fleet's /history once already. */
 
-/// The mounts a swap must carry over unchanged: the workspace, the daemon's records, and the sandbox's own Docker.
+/// The mounts a swap must carry over unchanged: the workspace, the daemon's records, and the sandbox's own Docker. A copy
+/// of the run contract's volume list (SANDBOX_VOLUMES in _shared/sandbox-run), which this binary cannot import; a test
+/// below holds it to that package's golden/volumes.json.
 pub const DATA_DESTINATIONS: [&str; 3] = ["/work", "/history", "/var/lib/docker"];
 
 /// Where `argv` (docker's arguments, as the run contract prints them) mounts something at `destination`, spelled as
@@ -236,5 +238,20 @@ mod tests {
             "img",
         ]);
         assert!(moves(&current("w", "h"), &line).is_empty());
+    }
+
+    /// Where the run contract mounts each named volume, written by sandbox-run's data-mounts.test.ts.
+    const GOLDEN_VOLUMES: &str =
+        include_str!("../../../../_shared/sandbox-run/golden/volumes.json");
+
+    #[test]
+    fn the_destinations_a_swap_holds_are_the_run_contracts_volumes() {
+        let contract: Vec<String> =
+            serde_json::from_str(GOLDEN_VOLUMES).expect("golden/volumes.json is a list of paths");
+        let ours: Vec<String> = DATA_DESTINATIONS
+            .iter()
+            .map(|destination| destination.to_string())
+            .collect();
+        assert_eq!(ours, contract);
     }
 }

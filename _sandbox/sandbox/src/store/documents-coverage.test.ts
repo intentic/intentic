@@ -121,11 +121,11 @@ test("JSON written whole outside the store goes through a document, or is one of
     expect(writers).toEqual(RAW_JSON_WRITERS);
 });
 
-test("every document the daemon keeps on the workspace or /history is one the contract's state-file tables describe", () => {
+test("every document the daemon keeps is one the contract's state-file tables describe", () => {
     // Interchange formats a person or another sandbox hands in, read by their own parser: not state this sandbox keeps.
     const INTERCHANGE = ["workspace:intentic-bundle.json", "workspace:sandbox.toml"];
     const undescribed = stateDocuments()
-        .filter((spec) => spec.root !== "auth" && spec.stateFile === undefined)
+        .filter((spec) => spec.stateFile === undefined)
         .map(documentKey)
         .toSorted();
     expect(undescribed).toEqual(INTERCHANGE);
