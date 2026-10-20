@@ -37,7 +37,11 @@ const SCREEN_SECONDS = 60;
 // From the setup screen to the CLI stand-in the app starts powershell.exe and has it load connect.ps1, which on a
 // loaded runner is its own wait: run 38459232153's setup screen took 28 s to appear and the stand-in had not run 10 s
 // later, where every run before it found it already run (the release smoke passed the same build an hour earlier).
-const SETUP_START_SECONDS = 45;
+// Measured since: 0.5 to 6 s on a quiet runner, 30.5 s on one release run (2026-10-18) and past 45 s on the next
+// (run 39457009059), both while this machine's WSL fleet ran a pipeline's typechecks beside it. What this asserts is WHICH
+// `ic` the setup ran, and a setup that ran a real one never writes the stand-in's marker however long it is given, so a
+// generous bound costs a broken build some minutes and a working one nothing.
+const SETUP_START_SECONDS = 120;
 
 /** The app's own folders: its settings (roaming) and the webview's profile (local), each named for its identifier. */
 const appFolders = (): readonly string[] =>

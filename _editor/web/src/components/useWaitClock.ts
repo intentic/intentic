@@ -1,4 +1,4 @@
-import { formatElapsed } from "@intentic/ui";
+import { formatElapsed } from "@intentic/ui/format";
 import { useNow } from "@intentic/ui/async";
 import { computed, type ComputedRef, type MaybeRefOrGetter, ref, type Ref, toValue, watch } from "vue";
 import type { WaitExpectation } from "./waitProgress";
