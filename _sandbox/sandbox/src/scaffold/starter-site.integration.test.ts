@@ -131,12 +131,13 @@ describe("seedStarterSite", () => {
         expect(started).toEqual([]);
     });
 
-    // The path the Dockerfile writes to and this module reads from, in one place on each side. A rename that
+    // The path the starter's build writes to and this module reads from, in one place on each side. A rename that
     // touches only one of them would leave every new sandbox opening empty with nothing else failing, so the two
-    // sides are read against each other here.
+    // sides are read against each other here. The tree is scaffolded by starter/starter.Dockerfile, built outside the
+    // image by prepare-image-trees.sh, and the image lays it at the same path (`COPY --from=trees layers/starter/ /`).
     it("reads the tree from the path the image bakes", () => {
-        const dockerfile = readFileSync(join(packageRoot(import.meta.url), "Dockerfile"), "utf8");
-        expect(/intentic scaffold add-app --dir (\S+)/.exec(dockerfile)?.[1]).toBe(STARTER_BAKED_DIR);
+        const dockerfile = readFileSync(join(packageRoot(import.meta.url), "starter", "starter.Dockerfile"), "utf8");
+        expect(/\bscaffold add-app --dir (\S+)/.exec(dockerfile)?.[1]).toBe(STARTER_BAKED_DIR);
     });
 });
 

@@ -32,8 +32,9 @@ const choice: Ref<SkinChoice> = definePreference<SkinChoice>({
 
 const { scheme, set: setScheme } = useTheme();
 
-// A skin the window is handed, worn over the setting and never stored: the Android app's look, beside the scheme it
-// hands useTheme (app/environments/nativeApp.ts). Undefined while the setting decides.
+// allow(module-state): the skin the window is handed, worn over the setting and never stored: the Android app's look,
+// beside the scheme it hands useTheme (app/environments/nativeApp.ts). One window's, not one sandbox's. Undefined while
+// the setting decides.
 const given = ref<SkinChoice | undefined>(undefined);
 
 // THE APP'S OWN LOOK, IN EACH LIGHT: sanctum is the dark one and there is no light one, so daylight is the app
