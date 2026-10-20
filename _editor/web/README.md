@@ -261,6 +261,9 @@ flowchart LR
   (`announceDesktopRoster` in `app/environments/desktop.ts`), and a sign-out tells it there are none. A sandbox picked
   there reaches a workspace page already loaded without a reload: the app calls the opener the page registered
   (`installDesktopOpener`), and `openInPage` (`router/index.ts`) selects the sandbox the path names and routes there.
+  The general Workspace button asks for `/` explicitly, so returning from This computer cannot just reveal an old
+  setup page. Before the shell sends an account to setup, it confirms a cached list with no working sandbox against
+  a fresh platform list; a sandbox connected while the page was hidden opens through the workspace's connection flow.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, side
   panel, terminal and status bar) or `ShellMobile.vue` (the board with a rail beside it, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the

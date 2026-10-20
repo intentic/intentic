@@ -1,5 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { setupRedirect } from "./setupGate";
+import { readSetupRedirect, setupRedirect } from "./setupGate";
 
 const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">): SandboxSummary => ({
     name: overrides.id,
@@ -18,6 +18,47 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
     providedAddress: false,
     localHostname: null,
     ...overrides,
+});
+
+describe(`checking setup before opening the workspace`, () => {
+    it.each([
+        { name: `an empty cached list`, cached: [] },
+        { name: `a cached row that had not checked in yet`, cached: [sandbox({ id: `local` })] },
+    ])(`opens a sandbox connected since $name was read`, async ({ cached }) => {
+        const refresh = jest.fn(async () => [sandbox({ id: `local`, ...CONNECTED })]);
+
+        expect(await readSetupRedirect({ list: async () => cached, refresh })).toBeUndefined();
+        expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it(`keeps a sleeping sandbox in the workspace without another platform request`, async () => {
+        const refresh = jest.fn(async () => []);
+        const asleep = sandbox({ id: `local`, lastSeenAt: CONNECTED.lastSeenAt, daemonUrl: null });
+
+        expect(await readSetupRedirect({ list: async () => [asleep], refresh })).toBeUndefined();
+        expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it(`resumes the unfinished sandbox in the fresh list`, async () => {
+        expect(
+            await readSetupRedirect({ list: async () => [], refresh: async () => [sandbox({ id: `pending` })] }),
+        ).toEqual({ path: `/setup`, query: { sandbox: `pending` } });
+    });
+
+    it(`opens setup once a fresh list confirms there are no sandboxes`, async () => {
+        expect(await readSetupRedirect({ list: async () => [sandbox({ id: `removed` })], refresh: async () => [] })).toBe(`/setup`);
+    });
+
+    it(`propagates a failed refresh so the router can show the platform outage`, async () => {
+        await expect(
+            readSetupRedirect({
+                list: async () => [],
+                refresh: async () => {
+                    throw new Error(`platform unavailable`);
+                },
+            }),
+        ).rejects.toThrow(`platform unavailable`);
+    });
 });
 
 const CONNECTED = { daemonUrl: `https://box.intentic.dev`, lastSeenAt: `2026-08-02T10:00:00.000Z` } as const;

@@ -27,7 +27,7 @@ import { useSandboxSession } from "../client/session/sandboxSession";
 import { retryOnEntry } from "../client/auth/platformRetry";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
 import { openOnProject } from "../app/projectScope";
-import { setupRedirect } from "./setupGate";
+import { readSetupRedirect } from "./setupGate";
 import { SETTINGS_DEFAULT_SECTION, settingsPartHosts } from "../features/settings/settingsNav";
 import { normalizeDaemonUrl } from "../lib/daemonUrl";
 import { ownsMissingSandboxes } from "../client/directory/deviceDirectory";
@@ -72,14 +72,16 @@ const startGoogleMint = (to: RouteLocationNormalized): true => {
 // that offers nothing to open while this device remembers sandboxes of the account's own goes to recovery rather than
 // onboarding (2026-10-02): a platform answering from a database that forgot them looks exactly like a new account.
 const requireSetup = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
-    const { list } = useSandbox();
     // allow(silent-catch): any failure to list means the same thing here, the platform could not be asked; the outage
     // screen says so and retries.
-    const rows = await list().catch(() => undefined);
-    if (rows === undefined) {
+    const result = await readSetupRedirect(useSandbox()).then(
+        (redirect) => ({ redirect }),
+        () => undefined,
+    );
+    if (result === undefined) {
         return unavailable(to);
     }
-    const setup = setupRedirect(rows);
+    const setup = result.redirect;
     if (setup === undefined) {
         return true;
     }

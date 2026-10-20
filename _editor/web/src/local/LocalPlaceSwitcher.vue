@@ -82,8 +82,8 @@ const attempt = async (key: string, act: () => Promise<void>): Promise<void> => 
     }
 };
 
-// The way to agents, as the rail's foot offers it too: the workspace once this install has an account, else a sign-in.
-const toAgents = (): void => void attempt(`:agents`, () => (facts.value?.accountSeen === true ? host.openWorkspace() : host.signIn()));
+// A destination is required: bringing the workspace window forward alone can restore an old /setup page.
+const toAgents = (): void => void attempt(`:agents`, () => (facts.value?.accountSeen === true ? host.openWorkspace(`/`) : host.signIn()));
 
 // A sandbox is the workspace opened on it (router/sandboxArrival.ts), which says so when the account no longer lists it.
 const sandboxKey = (box: LocalSandbox): string => `sandbox:${box.id}`;
