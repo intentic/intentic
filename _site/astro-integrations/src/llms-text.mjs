@@ -1,6 +1,8 @@
 // @ts-check
 // Markdown mirrors for machine readers, generated from the just-built pages, all derived so none can drift:
-// - /llms.txt: the llmstxt.org index, every page as a titled link
+// - /llms.txt: the llmstxt.org index. With `compact`, a short one (what the product is, when it fits, where to start)
+//   that links the full index, since an agent reads it whole and a 35 KB index of API routes buries the answer
+// - /llms-index.txt: every page as a titled link, written only alongside a compact llms.txt
 // - /llms-full.txt: the same pages inlined, so one fetch is the whole site
 // - /<page>.md: a Markdown mirror of each page, linked from its HTML as rel="alternate"
 // noindex pages are excluded: what isn't for a search engine isn't for a model either.
@@ -42,8 +44,59 @@ function frontMatter(fields) {
 }
 
 /**
+ * An llms.txt-shaped index: the name, the summary, optional details, then each section's built pages as titled links.
+ * @param {{ name: string, summary: string }} head
+ * @param {string | undefined} details
+ * @param {{ label: string, paths: string[] }[]} listed
+ * @param {Map<string, { mdUrl: string, title: string, description: string }>} built
+ */
+function indexLines(head, details, listed, built) {
+    const lines = [`# ${head.name}`, "", `> ${head.summary}`];
+    if (details) {
+        lines.push("", details);
+    }
+    for (const section of listed) {
+        const entries = section.paths.map((pathname) => built.get(pathname)).filter(Boolean);
+        if (entries.length === 0) {
+            continue;
+        }
+        lines.push("", `## ${section.label}`, "");
+        for (const entry of entries) {
+            lines.push(`- [${entry.title}](${entry.mdUrl}): ${entry.description}`);
+        }
+    }
+    return lines;
+}
+
+/**
+ * Writes /llms.txt, and with `compact` also /llms-index.txt: the compact index then links the full one.
+ * @param {string} distDir
+ * @param {string} origin
+ * @param {{ name: string, summary: string, details?: string, compact?: { details?: string, sections: { label: string, paths: string[] }[] } }} options
+ * @param {Map<string, { mdUrl: string, title: string, description: string }>} built
+ * @param {{ label: string, paths: string[] }[]} sections every section of the full index, "More" included
+ */
+function writeIndexes(distDir, origin, options, built, sections) {
+    const index = indexLines(options, options.details, sections, built);
+    if (!options.compact) {
+        writeFileSync(path.join(distDir, "llms.txt"), `${index.join("\n")}\n`);
+        return;
+    }
+    const short = indexLines(options, options.compact.details ?? options.details, options.compact.sections, built);
+    short.push(
+        "",
+        "## Optional",
+        "",
+        `- [Every page](${origin}/llms-index.txt): the full index, including docs, comparisons and the API reference`,
+        `- [Every page, inlined](${origin}/llms-full.txt): the whole site in one Markdown file`,
+    );
+    writeFileSync(path.join(distDir, "llms.txt"), `${short.join("\n")}\n`);
+    writeFileSync(path.join(distDir, "llms-index.txt"), `${index.join("\n")}\n`);
+}
+
+/**
  * @typedef {{ label: string, paths: string[] }} LlmsSection
- * @param {{ name: string, summary: string, details?: string, sections?: LlmsSection[] }} options
+ * @param {{ name: string, summary: string, details?: string, sections?: LlmsSection[], compact?: { details?: string, sections: LlmsSection[] } }} options
  * @returns {import('astro').AstroIntegration}
  */
 export default function llmsText(options) {
@@ -106,21 +159,7 @@ export default function llmsText(options) {
                 const listed = new Set(sections.flatMap((section) => section.paths));
                 const unlisted = [...built.keys()].filter((pathname) => pathname !== "/" && !listed.has(pathname));
 
-                const index = [`# ${options.name}`, "", `> ${options.summary}`];
-                if (options.details) {
-                    index.push("", options.details);
-                }
-                for (const section of [...sections, ...(unlisted.length ? [{ label: "More", paths: unlisted }] : [])]) {
-                    const entries = section.paths.map((pathname) => built.get(pathname)).filter(Boolean);
-                    if (entries.length === 0) {
-                        continue;
-                    }
-                    index.push("", `## ${section.label}`, "");
-                    for (const entry of entries) {
-                        index.push(`- [${entry.title}](${entry.mdUrl}): ${entry.description}`);
-                    }
-                }
-                writeFileSync(path.join(distDir, "llms.txt"), `${index.join("\n")}\n`);
+                writeIndexes(distDir, origin, options, built, [...sections, ...(unlisted.length ? [{ label: "More", paths: unlisted }] : [])]);
 
                 // Landing page first, then sections in reading order, the order a human would read them.
                 const order = [...new Set(["/", ...sections.flatMap((section) => section.paths), ...unlisted])];

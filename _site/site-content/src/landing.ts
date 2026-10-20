@@ -102,13 +102,13 @@ export const landingContent: LandingContent = {
         title: "intentic · Open-source workspace for parallel coding agents",
         // Providers appear here only as plural examples (messaging.md); "parallel" and "sandbox" are the searched words.
         description:
-            "A workspace for coding agents. Run Claude Code, Codex and more in parallel, each in a sandbox on your machine. They keep running when you close the browser.",
+            "An orchestrator for coding agents. Run Claude Code, Codex and more in parallel, each in a sandbox on your machine. They keep running when you close the browser.",
     },
     hero: {
         // Split 2+1 so line two lands the promise; three beats, last one alone.
         headlineLines: ["More work. Less AI waste.", "Same subscriptions."],
-        // Names the category; nothing else above the fold does. Visibility comes from the surfaces beside it, not text.
-        subhead: "A workspace for parallel coding agents, each in a sandbox on your machine.",
+        // Names the category in the word the category's own pages use ("orchestrator"); nothing else above the fold does.
+        subhead: "An orchestrator for parallel coding agents, each in a sandbox on your machine.",
         screens: {
             app: [
                 {

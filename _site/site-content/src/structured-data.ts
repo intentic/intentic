@@ -1,7 +1,19 @@
 import { LEGAL_CONTACT_EMAIL } from "@intentic/constants";
 import { creatorRole } from "./about";
 import { deskLanding } from "./landing";
-import { APP_URL, DESK_PATH, FOUNDER_NAME, FOUNDER_SAME_AS, githubProfileUrl, LOGO_URL, ORG_DESCRIPTION, ORG_NAME, SAME_AS, SITE_URL } from "./site";
+import {
+    APP_URL,
+    DESK_PATH,
+    FOUNDER_NAME,
+    FOUNDER_SAME_AS,
+    githubProfileUrl,
+    LOGO_URL,
+    ORG_DESCRIPTION,
+    ORG_DISAMBIGUATION,
+    ORG_NAME,
+    SAME_AS,
+    SITE_URL,
+} from "./site";
 
 // One JSON-LD graph per page: each entity is declared once under a stable @id, so publisher and organization resolve to
 // the same node rather than duplicating. @ids anchor on SITE_URL + "/", matching <link rel="canonical">; a page's own
@@ -57,6 +69,7 @@ function organizationNode() {
         logo: { "@type": "ImageObject", "@id": LOGO_ID, url: LOGO_URL, contentUrl: LOGO_URL, width: 326, height: 326 },
         image: { "@id": LOGO_ID },
         description: ORG_DESCRIPTION,
+        disambiguatingDescription: ORG_DISAMBIGUATION,
         email: LEGAL_CONTACT_EMAIL,
         founder: founderRef,
         sameAs: [...SAME_AS],

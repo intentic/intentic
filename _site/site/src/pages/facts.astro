@@ -1,0 +1,102 @@
+---
+/* /facts: one dated sheet of plain answers, the page an answer engine's `site:` search should land on. */
+import { gitStats, latestRelease } from "@intentic/astro-integrations";
+import { FACTS_CHECKED, FACTS_PATH, factRows, factsIntro, factsNext } from "@intentic/site-content/facts";
+import { githubIssuesUrl } from "@intentic/site-content/site";
+import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Footer from "../components/Footer.astro";
+import Nav from "../components/Nav.astro";
+import { formatReleaseDate } from "../lib/release";
+
+// Read at build, never typed: a version GitHub would not give and a first commit a shallow clone cannot see leave
+// their rows out rather than print a stale or empty figure.
+const release = await latestRelease();
+const since = gitStats()?.since;
+const rows = factRows({
+    release: release === null ? undefined : { version: release.version, released: formatReleaseDate(release.date), url: release.notes },
+    since: since === undefined ? undefined : formatReleaseDate(since),
+});
+
+// The day this page was built, which is the day its computed rows (sizes, prices, providers, version) were read.
+const builtOn = new Date().toISOString().slice(0, 10);
+---
+
+<BaseLayout breadcrumbs={[{ name: "Facts", path: FACTS_PATH }]} extraJsonLd={[buildSoftwareAppSchema()]}>
+    <Nav />
+    <main class="flex-1">
+        <section class="page-hero">
+            <div class="below-bar relative mx-auto max-w-5xl px-6 pb-10">
+                <div class="eyebrow">{factsIntro.eyebrow}</div>
+                <h1 class="display mt-3 text-3xl leading-tight font-semibold sm:text-4xl">{factsIntro.heading}</h1>
+                <p class="mt-4 max-w-copy text-lg leading-relaxed text-muted">{factsIntro.sub}</p>
+                <p class="mt-3 max-w-copy text-sm leading-relaxed text-subtle">
+                    Last checked against the source on <time datetime={FACTS_CHECKED}>{formatReleaseDate(FACTS_CHECKED)}</time>. Prices,
+                    hours, the provider list and the version are read from the code each time the site is built, last on{" "}
+                    <time datetime={builtOn}>{formatReleaseDate(builtOn)}</time>.
+                </p>
+            </div>
+        </section>
+
+        <section class="mx-auto max-w-5xl px-6 pb-14">
+            <table class="w-full border-collapse text-left">
+                <thead>
+                    <tr class="border-b border-line-strong">
+                        <th scope="col" class="pr-6 pb-2.5 text-2xs font-semibold tracking-wide text-subtle uppercase">Fact</th>
+                        <th scope="col" class="pb-2.5 text-2xs font-semibold tracking-wide text-subtle uppercase">Answer</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {
+                        rows.map((row) => (
+                            <tr id={row.id} class="scroll-mt-28 border-b border-line max-sm:flex max-sm:flex-col max-sm:py-3">
+                                <th scope="row" class="w-1/4 py-4 pr-6 align-top text-sm font-medium text-content max-sm:w-auto max-sm:py-0">
+                                    <a href={`#${row.id}`} class="transition-colors hover:text-link">
+                                        {row.fact}
+                                    </a>
+                                </th>
+                                <td class="py-4 align-top text-sm leading-relaxed text-muted max-sm:pt-1 max-sm:pb-0">
+                                    {row.answer}
+                                    {row.links && (
+                                        <span class="ml-1 inline-flex flex-wrap gap-x-3">
+                                            {row.links.map((link) => (
+                                                <a href={link.href} class="text-link hover:underline">
+                                                    {link.label} →
+                                                </a>
+                                            ))}
+                                        </span>
+                                    )}
+                                </td>
+                            </tr>
+                        ))
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        <section class="border-t band-rule">
+            <div class="mx-auto max-w-5xl px-6 py-10 pb-20">
+                <h2 class="text-sm font-semibold tracking-tight text-content">Read next</h2>
+                <ul class="mt-4 flex flex-wrap gap-2">
+                    {
+                        factsNext.map((link) => (
+                            <li>
+                                <a
+                                    href={link.href}
+                                    class="border border-line px-3 py-1.5 text-2xs text-muted transition-colors hover:border-primary-600/40 hover:text-link"
+                                >
+                                    {link.label}
+                                </a>
+                            </li>
+                        ))
+                    }
+                </ul>
+                <p class="mt-5 max-w-copy text-sm leading-relaxed text-subtle">
+                    Something here wrong or out of date?{" "}
+                    <a href={githubIssuesUrl} target="_blank" rel="noopener" class="text-link hover:underline">Report it on GitHub</a>.
+                </p>
+            </div>
+        </section>
+    </main>
+    <Footer />
+</BaseLayout>

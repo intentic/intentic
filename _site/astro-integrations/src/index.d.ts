@@ -13,9 +13,14 @@ export interface LlmsTextOptions {
     details?: string;
     /** Grouping and order for the index; anything built but unlisted lands under "More". */
     sections?: LlmsTextSection[];
+    /**
+     * A short /llms.txt for agents that read it whole: these sections, then links to the full index (written to
+     * /llms-index.txt instead) and to /llms-full.txt. `details` falls back to the top-level one.
+     */
+    compact?: { details?: string; sections: LlmsTextSection[] };
 }
 
-/** Write /llms.txt, /llms-full.txt and a Markdown mirror of every indexable page. */
+/** Write /llms.txt, /llms-full.txt (and /llms-index.txt with `compact`) and a Markdown mirror of every indexable page. */
 export function llmsText(options: LlmsTextOptions): AstroIntegration;
 
 /** ISO `lastmod` for a sitemap URL from git history, or null if unavailable. */

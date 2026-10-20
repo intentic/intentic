@@ -1,4 +1,5 @@
 import type { FaqEntry } from "./structured-data";
+import { recentComparePages } from "./compare-recent";
 
 // Plain-language comparisons. Keep competitor strengths, qualify deployment/model claims,
 // and update each verifiedOn date only after opening every retained official source.
@@ -80,14 +81,14 @@ export const compareFamilies: CompareFamily[] = [
         label: "Multi-agent coding workspaces",
         verdict: "the closest alternatives",
         body: "Conductor, Superset, Claude Squad, Sculptor and others put multiple coding agents in one interface. Several already offer remote access, mobile clients or automations. Compare operating systems, licences, running costs and how each tool manages machines and reviews.",
-        examples: ["Conductor", "Superset", "T3 Code", "Synara", "Nimbalyst", "Claude Squad", "Vibe Kanban", "Sculptor", "Agentor"],
+        examples: ["Conductor", "Superset", "T3 Code", "Synara", "Nimbalyst", "Claude Squad", "Vibe Kanban", "Sculptor", "Agentor", "Emdash", "Orca", "Paseo", "Pane", "Intent"],
     },
     {
         id: "cloud",
         label: "Cloud coding agents",
         verdict: "managed or self-hosted",
         body: "Devin, Jules and other cloud agents can work while your laptop is off. intentic can do the same on an always-on machine you run or rent. Managed services handle more setup; self-hosting gives you more infrastructure choice. Some cloud products also support customer-hosted workers.",
-        examples: ["Devin", "OpenHands", "Google Jules", "Codex cloud", "Claude Code on the web", "Cursor cloud agents", "Replit Agent"],
+        examples: ["Devin", "OpenHands", "Google Jules", "Codex cloud", "Claude Code on the web", "Cursor cloud agents", "Replit Agent", "Warp", "Factory"],
     },
     {
         id: "sandboxes",
@@ -995,52 +996,7 @@ export const comparePages: ComparePage[] = [
         verifiedOn: "2026-10-06",
         meta: { title: "Docker Sandboxes Alternative for Coding Agents | intentic", description: "Compare Docker Sandboxes vs intentic: microVM isolation, pricing, Linux and Windows support, Claude Code setup, parallel agents and a browser review workspace.", datePublished: "2026-10-06" },
     },
-    {
-        slug: "agentor",
-        name: "Agentor",
-        url: "https://github.com/lonetis/agentor",
-        navLabel: "intentic vs Agentor",
-        menuBlurb: "Two MIT, self-hosted alternatives to Claude Code on the web: compare containers, remote access and review.",
-        family: "orchestrators",
-        heading: "Self-hosted Claude Code web alternatives: Agentor vs intentic",
-        sub: "Agentor and intentic both run Claude Code and Codex in Docker on hardware you own and put them in a browser. Compare isolation, remote access, review and teams.",
-        theirPitch: "Agentor is a self-hosted web dashboard that spawns Claude Code, Codex and Gemini CLI workers in Docker containers, each with a terminal, VS Code in the browser and a virtual desktop.",
-        verdict: [
-            "Both are free, MIT-licensed answers to the same need: Claude Code on the web, on your own hardware. Choose Agentor for a full Linux desktop and VS Code per worker on one Docker host. Choose intentic for plan approval, review before landing and access through a private tunnel without your own domain.",
-            "Agentor is a young project with no versioned releases yet, and intentic's app is new too. Read the code and the defaults before trusting either with credentials.",
-        ],
-        overlap: { title: "Browser access to agents in Docker", body: "Both run agents in Docker containers on a machine you control and keep them working after you close the browser. Both support Claude Code and Codex on your own subscriptions, and both let several people sign in." },
-        differences: [
-            { title: "A container per worker or a worktree per conversation", body: "Agentor gives each worker its own container with cloned repos, a tmux terminal, code-server and a noVNC desktop. intentic runs a sandbox with the tools you approved and gives each conversation a git worktree inside it." },
-            { title: "Defaults that decide safety", body: "Agentor starts agents with permission prompts skipped, gives the worker user passwordless sudo and leaves the network unrestricted unless you pick a firewall mode. intentic starts agents in plan mode and waits for your approval before changing the sandbox's Dockerfile." },
-            { title: "Remote access without a domain", body: "Agentor's dashboard listens on localhost; remote access means configuring Traefik with your own domain and TLS, or your own reverse proxy. intentic gives each sandbox an address through a private tunnel, with no open ports and no Cloudflare account." },
-        ],
-        table: [
-            { label: "Licence and price", intentic: "MIT; free to self-host", them: "MIT; free, with no hosted offer" },
-            { label: "Per-agent environment", intentic: "Shared sandbox; a git worktree per conversation", them: "Container per worker with VS Code, terminal and virtual desktop", theirs: true },
-            { label: "Agents", intentic: "Claude Code, Codex, Grok, Kimi Code, Gemini and ACP agents", them: "Claude Code, Codex and Gemini CLI preinstalled" },
-            { label: "Review", intentic: "Plan approval and file-by-file diffs before landing", them: "VS Code or the terminal; no diff view documented" },
-            { label: "Remote access", intentic: "Private tunnel; no domain or open ports needed", them: "Traefik with your domain and TLS, or your own proxy" },
-            { label: "Ops tooling", intentic: "Sandbox API and per-turn usage and cost", them: "OpenAPI, MCP server, logs, rate-limit monitors and worker export", theirs: true },
-        ],
-        pickThem: "Pick Agentor if you want each agent in its own container with a full desktop, browser VS Code and port mapping, and you are comfortable running Traefik on a server you own. Its API and MCP server make it scriptable. Choose intentic for guided review, tunnel access and more agent choice.",
-        faq: [
-            { question: "What is a self-hosted alternative to Claude Code on the web?", answer: "Run the agent on hardware you control and reach it from a browser. Agentor does this with Docker workers and a web dashboard. intentic does it with a Docker sandbox, a private tunnel and a review workspace. Both still use Anthropic's models through your Claude account." },
-            { question: "Is Agentor free and open source?", answer: "Yes. Agentor is MIT-licensed with no paid tier or hosted service. It publishes container images rebuilt weekly rather than versioned releases. intentic is also MIT and free to self-host; you pay your model providers in both cases." },
-            { question: "How does Agentor isolate agents?", answer: "Each worker is a Docker container, not a microVM. The agent user has passwordless sudo, Docker-in-Docker makes the worker privileged, and the network is open unless you choose a firewall mode. intentic's sandbox is also a Docker container, so neither offers microVM isolation." },
-            { question: "Can I reach Agentor from my phone or another network?", answer: "Yes, once you expose it. Set a dashboard subdomain and Traefik serves it with Let's Encrypt or self-signed TLS, or put it behind your own proxy. Mobile use is not documented. intentic's sandbox gets an address through a private tunnel and works in a phone browser." },
-            { question: "Agentor vs Docker Sandboxes: which isolates better?", answer: "Docker Sandboxes runs each agent in a microVM with outbound traffic denied by default and credentials injected from outside. Agentor uses ordinary containers with an optional firewall, and adds a browser dashboard, VS Code and a desktop. intentic uses a container sandbox with a browser workspace and review." },
-            { question: "Does Agentor support Codex and Gemini?", answer: "Yes. Its worker image includes Claude Code, Codex and Gemini CLI, each signed in with your subscription or an API key. intentic runs Claude Code, Codex, Grok, Kimi Code and Gemini, plus ACP agents such as OpenCode." },
-        ],
-        sources: [
-            { label: "Licence", url: "https://github.com/lonetis/agentor/blob/main/LICENSE" },
-            { label: "Worker image", url: "https://github.com/lonetis/agentor/blob/main/docs/worker.md" },
-            { label: "Environments and firewall", url: "https://github.com/lonetis/agentor/blob/main/docs/environments.md" },
-            { label: "Networking", url: "https://github.com/lonetis/agentor/blob/main/docs/networking.md" },
-        ],
-        verifiedOn: "2026-10-06",
-        meta: { title: "Agentor vs intentic: Self-Hosted Claude Code Web Options", description: "Compare Agentor and intentic, two MIT self-hosted alternatives to Claude Code on the web: Docker isolation, remote access, review, supported agents and teams.", datePublished: "2026-10-06" },
-    },
+    ...recentComparePages,
 ];
 
 export const comparePage = (slug: string): ComparePage | undefined => comparePages.find((page) => page.slug === slug);

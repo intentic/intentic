@@ -1,6 +1,6 @@
 # Comparison search research
 
-Research date: **4 October 2026**. Scope: all existing comparison detail pages and the comparison hub. Six pages added on **6 October 2026** (Claude Squad, Vibe Kanban, Sculptor, OpenHands, Docker Sandboxes and Agentor) were researched that day with the same method; their sections record 6 October observations and source checks.
+Research date: **4 October 2026**. Scope: all existing comparison detail pages and the comparison hub. Six pages added on **6 October 2026** (Claude Squad, Vibe Kanban, Sculptor, OpenHands, Docker Sandboxes and Agentor) were researched that day with the same method; their sections record 6 October observations and source checks. Seven pages added on **19 October 2026** (Emdash, Orca, Paseo, Pane, Warp, Factory and Intent) were researched that day the same way: English/US autocomplete, live search results for discovery, and official pages for every product claim.
 
 ## Method and limits
 
@@ -585,6 +585,195 @@ Added 6 October 2026 because github.com/lonetis/agentor ranked first in live res
 | 10 | self hosted codex cloud alternative | I · Low · Agentor's own positioning | Does Agentor support Codex and Gemini? | Agent support |
 
 **Official facts checked 2026-10-06:** [README](https://github.com/lonetis/agentor) · [Licence](https://github.com/lonetis/agentor/blob/main/LICENSE) · [Worker image](https://github.com/lonetis/agentor/blob/main/docs/worker.md) · [Environments and firewall](https://github.com/lonetis/agentor/blob/main/docs/environments.md) · [Networking](https://github.com/lonetis/agentor/blob/main/docs/networking.md).
+
+## /compare/emdash/
+
+**Primary intent:** Emdash vs intentic: open-source desktop app or browser workspace
+
+Added 19 October 2026. Emdash is the orchestrator competitor roundups list most often, but its name collides with the punctuation mark: bare `emdash`, `emdash ai`, `emdash app` and `emdash windows` predict em-dash usage and keyboard shortcuts, and `emdash cms` and `emdash vs wordpress` point to an unrelated EmDash CMS. Those were excluded, and the sub says "the coding app, not the punctuation mark". `emdash vs` predicted `em dash vs orca` and `em dash vs conductor`; both partners are coding tools, so they are read as this product's pairs. The site moved from emdash.sh to emdash.com. Emdash's own agent counts disagree (25+ on the homepage, 35 on the providers page), so the table says "more than 25" and the FAQ cites the providers page.
+
+**Autocomplete evidence:** [emdash alternative](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=emdash%20alternative) · [emdash vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=emdash%20vs) · [emdash agent](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=emdash%20agent) · [emdash coding](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=emdash%20coding) · [emdash.sh](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=emdash.sh) · [emdash open source](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=emdash%20open%20source).
+
+**Live-result discovery:** [Emdash vs Intent, by Augment Code](https://www.augmentcode.com/tools/emdash-vs-intent) · [Pane vs Emdash, by Pane](https://runpane.com/compare/emdash) · [Open-source orchestrators roundup](https://www.augmentcode.com/tools/open-source-agent-orchestrators) · [Show HN launch thread](https://news.ycombinator.com/item?id=47140322). Apart from the launch thread, all are written by competing vendors.
+
+**Observed prediction examples (19 October):** `emdash alternatives` · `emdash.sh alternatives` · `emdash agentic development` · `emdash agentic coding` · `emdash coding agents` · `emdash coding tool` · `em dash y combinator` · `emdash sh github` · `emdash.sh reddit` · `em dash vs orca` · `em dash vs conductor`. `emdash claude code`, `emdash open source` and `emdash linux` only echoed the seed; `emdash codex` and `emdash vs superset` returned nothing relevant.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | emdash alternatives | A · High · alternative seed | Emdash vs intentic: open-source desktop app or browser workspace | Find alternatives |
+| 2 | emdash.sh alternatives | A · High · alternative and domain seeds | A desktop app or a sandbox in the browser | Find alternatives |
+| 3 | emdash vs orca | A · Medium · `em dash vs orca` under the vs seed | Emdash vs Orca or Conductor: which should I choose? | Compare workspaces |
+| 4 | emdash vs conductor | A · Medium · `em dash vs conductor` under the vs seed | Emdash vs Orca or Conductor: which should I choose? | Compare workspaces |
+| 5 | emdash agentic development environment | A · High · agent and agentic seeds | What is Emdash? | Category |
+| 6 | emdash coding agents | A · High · coding seed | Which agents does Emdash support? | Agent support |
+| 7 | emdash open source | I · Low · seed echoed only | Is Emdash free and open source? | Licensing |
+| 8 | emdash windows linux | I · Low · keyboard-shortcut predictions swamp the seeds | Does Emdash work on Windows and Linux? | Platform |
+| 9 | emdash remote ssh | I · Low · relevant feature question | Can Emdash run agents remotely or on a schedule? | Remote use |
+| 10 | emdash github | A · Medium · `emdash sh github` under the domain seed | Licence | Licensing |
+
+**Official facts checked 2026-10-19:** [Homepage and FAQ](https://emdash.com/) · [Supported agents](https://emdash.com/docs/providers) · [Tasks and worktrees](https://emdash.com/docs/tasks) · [Remote development](https://emdash.com/docs/remote-development) · [Automations](https://emdash.com/docs/automations) · [Tmux sessions](https://emdash.com/docs/tmux-sessions) · [Issue trackers](https://emdash.com/docs/issues) · [Source, README and licence](https://github.com/generalaction/emdash) · [Company](https://emdash.com/about).
+
+## /compare/orca/
+
+**Primary intent:** Orca vs intentic: agent IDE or a sandboxed browser workspace
+
+Added 19 October 2026. Orca is a crowded name: bare `orca vs` predicts whales, and `orca alternatives` mixes Orca Slicer, Orca Security, Orca Scan and others, so the title says "Orca ADE" and the sub names Stably AI and onorca.dev. ADE-, IDE- and agent-qualified seeds were rich. Orca's own pages give three agent counts (27 in the homepage table, 34 in the README, about 40 in the supported-agents table); the page uses "about 40 preconfigured" from the docs table. The permission-bypass default is quoted from Orca's docs and set beside intentic's own default, which also skips per-tool prompts for a conversation on its own branch (`_editor/web/src/models/conversations/run/turnDefaults.ts`); the page does not present one as safe and the other as reckless. `competitor-teardowns/orca.md` was background only; every page claim was rechecked on Orca's site.
+
+**Autocomplete evidence:** [orca ade](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=orca%20ade) · [orca ide](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=orca%20ide) · [orca alternative](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=orca%20alternative) · [orca agent](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=orca%20agent) · [orca claude code](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=orca%20claude%20code) · [orca vs conductor](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=orca%20vs%20conductor) · [orca vs paseo](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=orca%20vs%20paseo).
+
+**Live-result discovery:** [Orca alternative, by Paseo](https://paseo.sh/alternatives/orca) · [Orca alternatives, by Superset](https://superset.sh/compare/orca-alternative) · [Orca IDE alternatives, by Agentastic](https://www.agentastic.dev/alternatives/orca) · [Orca alternatives, by AQ](https://aq.dev/alternatives/orca/). All are written by competing vendors.
+
+**Observed prediction examples (19 October):** `orca ade alternative` · `orca ide alternative` · `orca ade github` · `orca ade reddit` · `orca ade mobile` · `orca ade reviews` · `orca agent orchestration` · `orca agent development environment` · `orca coding agent` · `orca claude code` · `orca vs claude code` · `orca vs conductor` · `orca vs conductor reddit` · `orca vs paseo` · `orca ide vs cursor` · `orca ide vs herdr` · `orca stablyai`. `orca vs cmux` and `orca vs superset` echoed the seed only.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | orca ade alternative | A · High · ADE and alternative seeds | Orca vs intentic: agent IDE or a sandboxed browser workspace | Find alternatives |
+| 2 | orca ide alternative | A · High · IDE and alternative seeds | Desktop app or browser workspace | Find alternatives |
+| 3 | orca ade github | A · High · ADE seed | Is Orca free and open source? | Licensing |
+| 4 | orca ade mobile | A · High · ADE and mobile seeds | Does Orca have a mobile app? | Mobile use |
+| 5 | orca vs conductor | A · High · pair seed | Orca vs Paseo or Conductor: what is the difference? | Compare workspaces |
+| 6 | orca vs paseo | A · High · pair seed | Orca vs Paseo or Conductor: what is the difference? | Compare workspaces |
+| 7 | orca claude code | A · High · Claude Code seed | Agents | Agent support |
+| 8 | orca agent orchestration | A · Medium · agent seed | What is Orca ADE? | Category |
+| 9 | orca skip permissions | I · Low · documented default; no seed checked | Does Orca skip permission prompts by default? | Safety |
+| 10 | orca remote server | I · Low · relevant feature question | Can Orca keep agents running when my laptop sleeps? | Remote use |
+
+**Official facts checked 2026-10-19:** [Homepage and FAQ](https://www.onorca.dev/) · [Supported agents and permissions](https://www.onorca.dev/docs/agents/supported) · [Ways to run](https://www.onorca.dev/docs/ways-to-run) · [Remote Orca Servers](https://www.onorca.dev/docs/remote-servers) · [Mobile](https://www.onorca.dev/docs/mobile) · [Diff comments](https://www.onorca.dev/docs/review/annotate-ai-diff) · [Enterprise](https://www.onorca.dev/enterprise) · [Source and licence](https://github.com/stablyai/orca).
+
+## /compare/paseo/
+
+**Primary intent:** Paseo vs intentic: agents on your machine, from every device
+
+Added 19 October 2026. The bare name predicts streets, apartments and an Austin shopping centre, and `paseo hub` collides with a Polkadot "Paseo Asset Hub" testnet; those were excluded. AI-, agent-, relay- and pair seeds were relevant. The relay row is a genuine loss for intentic and the page says so: Paseo's relay is end-to-end encrypted, while intentic's ingress decrypts browser traffic in memory to route it (`_site/site-content/src/legal.ts`). Paseo Hub's paid plan is named without a price. `competitor-teardowns/paseo.md` was background only.
+
+**Autocomplete evidence:** [paseo ai](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=paseo%20ai) · [paseo vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=paseo%20vs) · [paseo alternative](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=paseo%20alternative) · [paseo relay](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=paseo%20relay) · [paseo agent](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=paseo%20agent) · [paseo mobile](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=paseo%20mobile) · [paseo github](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=paseo%20github).
+
+**Live-result discovery:** [Orca vs Paseo directory page](https://openalternative.co/compare/orca/vs/paseo) · [Paseo vs Orca article](https://vibecodinghub.org/blog/paseo-vs-orca) · [Orchestrator roundup](https://openalternative.co/blog/best-ai-coding-agent-orchestrators) · [Third-party Show HN](https://news.ycombinator.com/item?id=48377250).
+
+**Observed prediction examples (19 October):** `paseo ai agent` · `paseo ai review` · `paseo vs orca` · `paseo vs orca reddit` · `paseo vs conductor` · `paseo vs herdr` · `paseo vs openchamber` · `paseo vs t3 code` · `paseo vs claude code` · `paseo vs codex` · `paseo vs opencode` · `paseo sh alternatives` · `paseo ai alternative` · `paseo coding agent` · `paseo agent orchestration` · `paseo relay server` · `paseo self host relay` · `paseo disable relay` · `paseo mobile app` · `getpaseo paseo github`.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | paseo alternatives | A · High · alternative and domain seeds | Paseo vs intentic: agents on your machine, from every device | Find alternatives |
+| 2 | paseo vs orca | A · High · vs seed | Paseo vs Orca or Conductor: which should I choose? | Compare workspaces |
+| 3 | paseo vs conductor | A · High · vs seed | Paseo vs Orca or Conductor: which should I choose? | Compare workspaces |
+| 4 | paseo ai | A · High · brand seed | What is Paseo? | Brand research |
+| 5 | paseo relay | A · High · relay seed | Is the Paseo relay end-to-end encrypted? | Security |
+| 6 | paseo self host relay | A · Medium · relay seed | How the remote connection is protected | Self-hosting |
+| 7 | paseo mobile app | A · Medium · mobile seed, mixed with T-Mobile stores | Does Paseo have mobile apps? | Mobile use |
+| 8 | paseo coding agents | A · Medium · agent and coding seeds | Which agents does Paseo support? | Agent support |
+| 9 | paseo vs claude code | A · Medium · vs seed | Which agents does Paseo support? | Agent vs interface |
+| 10 | paseo github | A · Medium · github seed | Is Paseo free and open source? | Licensing |
+
+**Official facts checked 2026-10-19:** [Homepage and FAQ](https://paseo.sh/) · [Security and relay](https://paseo.sh/docs/security) · [Connectivity](https://paseo.sh/docs/connectivity) · [Worktrees](https://paseo.sh/docs/worktrees) · [Supported agents](https://paseo.sh/agents) · [Paseo Hub](https://paseo.sh/hub) · [Downloads and platforms](https://paseo.sh/download) · [Maintainer and funding](https://paseo.sh/sponsor) · [Source and licence](https://github.com/getpaseo/paseo).
+
+## /compare/pane/
+
+**Primary intent:** Pane vs intentic: terminal-first agent manager or sandboxed workspace
+
+Added 19 October 2026. Thin evidence: all opportunities but four are low-confidence or exploratory. `runpane` is corrected to Tulane, and bare `pane` predicts window panes, glass and Italian bread (`pane ai cereali`), so only agent-qualified seeds were useful. `runpane vs`, `pane ai coding`, `runpane alternatives`, `pane vs orca` and `pane terminal agent` returned nothing; `pane vs conductor` and `runpane github` echoed the seed only, and `pane claude code` predictions are about tmux panes. Live results put runpane.com and the GitHub repository first for `runpane pane agent manager`, and Pane publishes many alternatives pages of its own. The homepage now brands the maker "Greenfield, formerly Dcouple" while the pricing page and licence still say Dcouple Inc; the page uses both names.
+
+**Autocomplete evidence:** [pane agent](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=pane%20agent) · [pane ai](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=pane%20ai) · [pane claude code](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=pane%20claude%20code) · [pane vs conductor](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=pane%20vs%20conductor) · [runpane](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=runpane) · [runpane github](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=runpane%20github).
+
+**Live-result discovery:** [runpane.com, first result](https://runpane.com/) · [GitHub repository](https://github.com/greenfield-inc/Pane) · [Pane's alternatives index](https://runpane.com/alternatives) · [Pane vs Emdash, by Pane](https://runpane.com/compare/emdash).
+
+**Observed prediction examples (19 October):** `pane agents` · `pane agent manager` · `pane agent orchestrator` · `pane ai agent` · `pane ai tool`. Everything else on the brand seeds was unrelated.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | pane agent manager | A · Medium · agent seed | Pane vs intentic: terminal-first agent manager or sandboxed workspace | Find alternatives |
+| 2 | pane agent orchestrator | A · Medium · agent seed | What is Pane (RunPane)? | Category |
+| 3 | pane ai agent | A · Low · ai seed, mixed with bread predictions | What is Pane (RunPane)? | Brand research |
+| 4 | runpane | S · Medium · runpane.com ranks first; predictions correct to Tulane | Introduction | Brand research |
+| 5 | pane vs conductor | I · Low · seed echoed only | Pane vs Conductor or Claude Squad: what is different? | Compare workspaces |
+| 6 | runpane github | I · Low · seed echoed only | Is Pane free and open source? | Licensing |
+| 7 | pane windows wsl | I · Low · platform question | Does Pane work on Windows and WSL? | Platform |
+| 8 | pane sandbox agents | I · Low · security question | Does Pane sandbox coding agents? | Isolation |
+| 9 | pane remote access | I · Low · remote question | Can I use Pane remotely or from my phone? | Remote use |
+| 10 | pane claude code | I · Low · seed predictions are about tmux panes | Agents | Agent support |
+
+**Official facts checked 2026-10-19:** [Homepage](https://runpane.com/) · [Security and permissions](https://runpane.com/docs/security) · [Remote control and phones](https://runpane.com/docs/remote-control) · [Review and commit](https://runpane.com/docs/review-and-commit) · [Pricing](https://runpane.com/pricing) · [Source, README and licence](https://github.com/greenfield-inc/Pane).
+
+## /compare/warp/
+
+**Primary intent:** Warp vs intentic: Oz, Warp Factories or agents on your machine
+
+Added 19 October 2026. Warp's agent platform is mid-rename: the Oz product page still exists, the changelog renames the Oz agent UI to Warp Agent, and the docs send new multi-stage workflows to Warp Factories (early access) while the Oz web app, CLI and SDKs stay for existing workflows. The page names all three because predictions do (`warp oz …`, `warp factory …`). Excluded: Cloudflare WARP (`cloudflare warp alternatives`, `warp pricing cloudflare`), weaving (`warp vs weft`), Star Trek speeds, the WarpFactory physics toolkit and vocoder, and `warp ai payroll`. Most `warp alternative` predictions ask for another terminal, so the FAQ answers by which part is being replaced. Pricing predictions were observed, but the page carries no prices. The page sits in the cloud family because the comparison is about where agents run.
+
+**Autocomplete evidence:** [warp oz](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=warp%20oz) · [warp factories](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=warp%20factories) · [warp vs claude code](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=warp%20vs%20claude%20code) · [warp oz vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=warp%20oz%20vs) · [warp alternative](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=warp%20alternative) · [warp open source](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=warp%20open%20source) · [warp self hosted](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=warp%20self%20hosted) · [warp agents](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=warp%20agents) · [warp agentic development environment](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=warp%20agentic%20development%20environment).
+
+**Live-result discovery:** [Warp's Oz launch post](https://www.warp.dev/blog/oz-orchestration-platform-cloud-agents) · [Warp vs Claude Code, Warp docs](https://docs.warp.dev/guides/agent-workflows/warp-vs-claude-code/) · [Warp vs Claude Code for software factories, by Warp](https://www.warp.dev/articles/warp-vs-claude-code-software-factory) · [Third-party Claude Code vs Warp](https://www.lowcode.agency/blog/claude-code-vs-warp).
+
+**Observed prediction examples (19 October):** `warp oz agents` · `warp oz platform` · `warp oz cloud agent control` · `warp oz cli` · `warp oz github` · `warp oz review` · `warp oz vs claude code` · `warp oz self hosted` · `warp dev factories` · `warp factory github` · `warp factory pricing` · `warp vs claude code` · `warp vs cursor` · `warp vs codex` · `warp alternative open source` · `warp alternatives for windows` · `warp alternative for linux` · `warp open source github` · `warp terminal is now open source` · `warp cloud agents` · `warp agentic development environment` · `warp ade`.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | warp alternatives | A · High · alternative seed | What are the best Warp alternatives? | Find alternatives |
+| 2 | warp oz | A · High · brand seed | What is Warp Oz, and is it now Warp Factories? | Product naming |
+| 3 | warp factories | A · Medium · `warp dev factories`; physics and vocoder predictions excluded | Factories as code or a fleet board | Product research |
+| 4 | warp vs claude code | A · High · vs seed | Warp vs Claude Code: what is the difference? | Compare tools |
+| 5 | warp oz vs claude code | A · High · Oz vs seed | Warp vs Claude Code: what is the difference? | Compare tools |
+| 6 | warp open source | A · High · open-source seed | Is Warp open source? | Licensing |
+| 7 | warp oz self hosted | A · Medium · self-hosted seed | Can Warp cloud agents run on my own infrastructure? | Deployment |
+| 8 | warp cloud agents | A · Medium · agents seed | Managed runners or your own machine | Where agents run |
+| 9 | warp alternative for linux | A · High · alternative seed | Does Warp work on Windows and Linux? | Platform |
+| 10 | warp agentic development environment | A · Medium · ADE seed | A terminal or a workspace | Category |
+
+**Official facts checked 2026-10-19:** [Homepage](https://www.warp.dev/) · [Oz](https://www.warp.dev/oz) · [From Oz to Warp Factories](https://docs.warp.dev/platform/transitioning-from-oz/) · [Changelog](https://docs.warp.dev/changelog/2026/) · [Runners](https://docs.warp.dev/factories/runners/) · [Infrastructure and security](https://docs.warp.dev/factories/infrastructure-and-security/) · [Orchestration](https://docs.warp.dev/platform/orchestration/) · [Third-party CLI agents](https://docs.warp.dev/agents/cli-agents/overview/) · [Open-source client](https://www.warp.dev/blog/warp-is-now-open-source) · [Source and licence](https://github.com/warpdotdev/warp) · [Downloads](https://www.warp.dev/download).
+
+## /compare/factory/
+
+**Primary intent:** Factory vs intentic: Droids or your own agents on your machine
+
+Added 19 October 2026. factory.ai now redirects to factory.com, and docs.factory.ai to docs.factory.com; the sub says so because predictions still use `factory.ai`. Excluded: Star Wars droid builders, factory resets, `factory air`, and an unrelated retailer on `factory.com` seeds. Factory's benchmark claims (Terminal-Bench, Agent Arena) are on its docs but not on the page: they are the vendor's own measurements. Plan names are stated; prices are not. Signing in to Droid with a Claude or ChatGPT subscription, and running third-party agents inside Factory, were not found on official pages, so the page claims neither.
+
+**Autocomplete evidence:** [factory ai](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=factory%20ai) · [factory droid](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=factory%20droid) · [factory ai vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=factory%20ai%20vs) · [factory droid vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=factory%20droid%20vs) · [factory ai alternative](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=factory%20ai%20alternative) · [factory ai open source](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=factory%20ai%20open%20source) · [droid cli](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=droid%20cli) · [factory ai review](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=factory%20ai%20review) · [factory droid computers](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=factory%20droid%20computers).
+
+**Live-result discovery:** [Vibe Check on Droid, by Every](https://every.to/vibe-check/vibe-check-i-canceled-two-ai-max-plans-for-factory-s-coding-agent-droid) · [Factory AI vs Claude Code](https://continuumcode.ai/guides/factory-ai-vs-claude-code/) · [Claude Code vs Droid](https://www.developersdigest.tech/blog/claude-code-vs-droid-2026).
+
+**Observed prediction examples (19 October):** `factory ai droids` · `factory droid cli` · `factory droid missions` · `factory droid vs claude code` · `factory droid vs cursor` · `factory droid vs opencode` · `factory ai vs claude code` · `factory ai vs devin` · `factory ai vs cursor` · `factory ai vs codex` · `factory ai alternatives` · `factory ai open source alternative` · `is factory ai droid open source` · `factory.ai competitors` · `droid cli byok` · `factory droid byok` · `droid cli free` · `factory ai droid computers` · `factory ai mission control` · `factory ai code review`. `factory droid self hosted` returned nothing.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | factory ai alternatives | A · High · alternative seed | Factory vs intentic: Droids or your own agents on your machine | Find alternatives |
+| 2 | factory droid vs claude code | A · High · vs seed | Factory Droid vs Claude Code: what is the difference? | Compare agents |
+| 3 | factory ai droids | A · High · brand seed | What is Factory AI? | Brand research |
+| 4 | is factory ai droid open source | A · High · open-source seed | Is Factory's Droid CLI open source? | Licensing |
+| 5 | factory ai open source alternative | A · High · open-source seed | What are the best Factory AI alternatives? | Find alternatives |
+| 6 | factory droid byok | A · Medium · byok seed | Factory's agent or the ones you already use | Model choice |
+| 7 | factory ai droid computers | A · Medium · computers seed | Where the work runs | Where agents run |
+| 8 | factory droid self hosted | I · Low · seed returned nothing | Can Factory Droids run on my own machine? | Deployment |
+| 9 | droid cli free | A · Medium · droid cli seed | Does Factory have a free plan? | Cost |
+| 10 | factory ai code review | A · Medium · review seed | Code review | Review |
+
+**Official facts checked 2026-10-19:** [Homepage](https://factory.com/) · [Droid CLI](https://docs.factory.com/droid-cli/overview) · [Droid Computers](https://docs.factory.com/droid-computers/overview) · [Remote Control](https://docs.factory.com/remote-control) · [OpenCompute](https://docs.factory.com/opencompute/overview) · [Bring your own key](https://docs.factory.com/model-independence/byok) · [Automations](https://docs.factory.com/software-factory/automations) · [Code review](https://docs.factory.com/software-factory/code-review-ci) · [Compliance](https://docs.factory.com/enterprise/compliance-audit-and-monitoring) · [Air-gapped deployment](https://docs.factory.com/enterprise/airgapped-deployment) · [Plans](https://factory.com/pricing) · [Open-source access](https://factory.com/oss) · [CLI package licence](https://registry.npmjs.org/droid/latest).
+
+## /compare/intent/
+
+**Primary intent:** intentic vs Intent (Augment Code): unrelated agent workspaces compared
+
+Added 19 October 2026, partly for name disambiguation: people and language models confuse intentic with Intent. `intentic` itself predicts `intentico` first and unrelated words after it, and `intentic vs intent`, `intent vs conductor`, `intent vs emdash` and `intent augment open source` returned nothing, so the disambiguation target is inferred. Bare `intent vs` and `intent app` are about the English word and other apps, and `intent hq` is an unrelated London company (Intent's GitHub organisation happens to be named intent-hq). Augment-qualified seeds were rich. Intent's status changed recently: augmentcode.com/product/intent now redirects (HTTP 308) to intentapp.dev, whose docs say Intent is Apache-2.0 and whose notice says it "originated as Intent by Augment"; Augment's February to June pages describe a closed public beta that used Augment credits. The page states the current position and cites both. Whether Augment still develops Intent was not established on an official page, so the page says "began as" rather than naming a current maker beyond the notice.
+
+**Autocomplete evidence:** [intent augment](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=intent%20augment) · [augment intent](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=augment%20intent) · [augment code intent](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=augment%20code%20intent) · [augment intent vs](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=augment%20intent%20vs) · [intent spec driven](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=intent%20spec%20driven) · [intentic](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=intentic) · [intentic vs intent](https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q=intentic%20vs%20intent).
+
+**Live-result discovery:** [Claude Code vs Intent, by Augment Code](https://www.augmentcode.com/tools/intent-vs-claude-code) · [Agent Teams vs Intent, by Augment Code](https://www.augmentcode.com/tools/claude-code-agent-teams-vs-intent) · [Emdash vs Intent, by Augment Code](https://www.augmentcode.com/tools/emdash-vs-intent) · [Practitioner comparison](https://medium.com/@talirezun/three-philosophies-one-goal-a-practitioners-comparison-of-augment-code-claude-code-codex-cd19489e5802).
+
+**Observed prediction examples (19 October):** `intent augment code` · `intent augment download` · `augment intent app` · `augment intent windows` · `augment intent pricing` · `augment intent github` · `augment intent vs claude code` · `augment intent changelog` · `augment intent review` · `augment code intent linux` · `augment code intent vs cosmos` · `augment intent alternatives` · `intent by augment code` · `intent spec driven development`.
+
+| Priority | Search target | Evidence / confidence / source | Visible answer location | Search intent |
+| --- | --- | --- | --- | --- |
+| 1 | intentic vs intent | I · Low · seed returned nothing; name confusion is why the page exists | Is intentic the same as Intent by Augment Code? | Disambiguation |
+| 2 | augment intent | A · High · brand seed | What is Augment Intent? | Brand research |
+| 3 | augment intent vs claude code | A · High · vs seed | Augment Intent vs Claude Code: what is the difference? | Compare tools |
+| 4 | augment intent windows | A · High · brand seed | Does Intent work on Windows and Linux? | Platform |
+| 5 | augment intent linux | A · Medium · `augment code intent linux` | Does Intent work on Windows and Linux? | Platform |
+| 6 | augment intent github | A · High · brand seed | Is Intent open source? | Licensing |
+| 7 | augment intent alternatives | A · Medium · alternative seed | intentic vs Intent (Augment Code): unrelated agent workspaces compared | Find alternatives |
+| 8 | intent spec driven development | A · Medium · spec seed | A living spec or a plan per conversation | Workflow |
+| 9 | augment intent app | A · High · brand seed | Desktop app or browser workspace | Clients |
+| 10 | intent by augment code | A · High · brand seed | Maker and licence | Brand research |
+
+**Official facts checked 2026-10-19:** [Homepage](https://intentapp.dev/) · [Intent docs](https://intentapp.dev/docs) · [Remote machines](https://intentapp.dev/docs/remote) · [Notice and licence lineage](https://github.com/intent-hq/intent/blob/main/NOTICE) · [Augment launch post](https://www.augmentcode.com/blog/intent-a-workspace-for-agent-orchestration) · [Augment product page, now a redirect](https://www.augmentcode.com/product/intent) · [Augment pricing, which no longer names Intent](https://www.augmentcode.com/pricing).
 
 ## Verification
 

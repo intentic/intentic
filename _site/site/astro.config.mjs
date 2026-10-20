@@ -9,6 +9,7 @@ import { landingContent } from "@intentic/site-content/landing";
 import { productHref, productPages } from "@intentic/site-content/product";
 import { referenceBook, referenceHref, referencePages } from "@intentic/site-content/reference";
 import { ORG_NAME, SITE_URL } from "@intentic/site-content/site";
+import { PAID_TIERS } from "@intentic/constants";
 import tailwindcss from "@tailwindcss/vite";
 import astroOpenGraphImages, { getImagePath } from "astro-opengraph-images";
 import { defineConfig } from "astro/config";
@@ -123,7 +124,13 @@ export default defineConfig({
                 if (p === "/") {
                     item.priority = 1.0;
                     item.changefreq = "weekly";
-                } else if (p.startsWith("/compare/") || p.startsWith("/features/") || p.startsWith("/guides/") || p === "/pricing/" || p === "/docs/quickstart/") {
+                } else if (
+                    p.startsWith("/compare/") ||
+                    p.startsWith("/features/") ||
+                    p.startsWith("/guides/") ||
+                    p === "/pricing/" ||
+                    p === "/docs/quickstart/"
+                ) {
                     item.priority = 0.8;
                 } else if (p.startsWith("/docs/") || p === "/blog/" || p.startsWith("/blog/") || p === "/where-it-runs/" || p === "/download/") {
                     item.priority = 0.7;
@@ -152,9 +159,24 @@ export default defineConfig({
             summary: landingContent.meta.description,
             details:
                 "intentic runs each coding agent in its own Docker sandbox, with the dev-tools its job needs really installed, the systems it operates wired in as capabilities, and its context curated for one job. The platform stores only your identity and the sandbox's URL; your code and credentials never leave your machine. One free starter sandbox per account can instead be hosted by us on rented infrastructure, in which case that workspace lives on our provider's disk: see /privacy/ and /dpa/. Every page below is also served as Markdown at the same URL with a .md suffix.",
+            // What an agent reads first: llms.txt whole is under 10 KB, so it names when intentic is the answer and how
+            // to start, then the guides; the full index (35 KB, mostly API routes) moves to /llms-index.txt.
+            compact: {
+                details: [
+                    "intentic runs each coding agent (Claude Code, Codex, Cursor, Gemini, OpenCode and others) in its own sandbox on your laptop, desktop or VPS, each on its own git worktree. The runs keep going when you close the browser, any browser or phone opens the same board, and nothing lands in your tree until you have read the diff.",
+                    `It is MIT open source and free, runs on the AI subscriptions you already pay for, and meters no tokens. The one paid thing is an optional hosted sandbox, from $${PAID_TIERS[0]?.priceUsd ?? ""} a month. The platform stores your identity and your sandbox's address. Code and credentials stay in the sandbox.`,
+                    "It fits when someone wants several coding agents running in parallel, agents that keep working after the laptop closes, agents steered from a phone, or agents given real tools and credentials without sending code to a vendor's cloud.",
+                    "To start: install the desktop app (Windows, Linux) or sign in at https://app.intentic.dev, which hands out a one-line install command for Linux, macOS or Windows, or start a hosted sandbox in the browser. Every page below is also served as Markdown at the same URL with a .md suffix.",
+                ].join("\n\n"),
+                sections: [
+                    { label: "Overview", paths: ["/", "/facts/", "/about/", "/pricing/"] },
+                    { label: "Guides", paths: [guidesHref(""), ...guidePages.map((page) => guidesHref(page.slug))] },
+                    { label: "Start and compare", paths: ["/docs/quickstart/", "/download/", compareHref(""), "/docs/"] },
+                ],
+            },
             sections: [
                 // /about/ sits under Overview, not Optional: it answers "who's behind this" for a young domain.
-                { label: "Overview", paths: ["/", "/about/"] },
+                { label: "Overview", paths: ["/", "/facts/", "/about/"] },
                 { label: "Product", paths: ["/product/", ...productPages.map((page) => productHref(page.slug))] },
                 // Guides sit above Compare: they answer what a reader asks before knowing this product exists.
                 { label: "Guides", paths: [guidesHref(""), ...guidePages.map((page) => guidesHref(page.slug))] },

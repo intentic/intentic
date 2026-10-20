@@ -6,7 +6,7 @@ Build-time Astro integrations and helpers for intentic.dev that write Markdown m
 flowchart LR
     build["astro build<br/>_site/site"] --> dist["dist/<br/>built HTML"]
     dist --> integ(["astro-integrations"])
-    integ --> llms["llms.txt, llms-full.txt<br/>page .md mirrors"]
+    integ --> llms["llms.txt, llms-index.txt,<br/>llms-full.txt, page .md mirrors"]
     integ --> search["dist/search.json"]
     git["git log"] --> integ
     apis["GitHub, npm,<br/>OpenSSF Scorecard"] --> integ
@@ -19,12 +19,14 @@ flowchart LR
 - `gitStats`, `latestRelease`, `npmDownloads` and `scorecard` return `null` on any failure, so a page leaves a figure out instead of printing a wrong one; the network readers say so in the build log. `gitStats` counts commits authored by `agent@intentic.dev` and needs a full clone.
 - `lastModForUrl` maps a URL back to its source files and returns the last commit date touching any of them. Comparison
   details fall back to `src/pages/compare/[slug].astro`; both details and the `/compare/` hub include
-  `../site-content/src/compare.ts` alongside their page template. Paths resolve from `process.cwd()`, the site being built.
+  `../site-content/src/compare.ts` alongside their page template. Pages whose words live in a content module (the home
+  page, `/about/`, `/pricing/`, `/facts/`) also count that module, listed in `pageContent`. Paths resolve from `process.cwd()`, the site being built.
 
 ## Key files
 
 - [src/index.d.ts](src/index.d.ts) — every export with its types and a one-line contract.
-- [src/llms-text.mjs](src/llms-text.mjs) — llms.txt, llms-full.txt and the per-page `.md` mirrors.
+- [src/llms-text.mjs](src/llms-text.mjs) — llms.txt, llms-full.txt and the per-page `.md` mirrors. With `compact`,
+  llms.txt is a short index of the pages an agent should read first and the full one moves to llms-index.txt.
 - [src/docs-search.mjs](src/docs-search.mjs) — splits built docs pages into heading-led search blocks.
 - [src/html-to-markdown.mjs](src/html-to-markdown.mjs) — the HTML parser and Markdown writer both integrations share.
 - [src/git-lastmod.mjs](src/git-lastmod.mjs) — URL to source files to last commit date.

@@ -2,6 +2,7 @@ import { aboutMeta } from "./about";
 import { developersHref, developersPages } from "./developers";
 import { compareHref, compareIndex, comparePages } from "./compare";
 import { docsHref, docsPages } from "./docs";
+import { FACTS_PATH, factsMeta } from "./facts";
 import { guidePages, guidesHref, guidesIndex } from "./guides";
 import { deskLanding, landingContent } from "./landing";
 import { productHref, productPages } from "./product";
@@ -45,6 +46,8 @@ export const pageMeta: Record<string, PageMeta> = {
     },
     // Every sitemap route needs an entry here, or it falls back to BaseLayout's generic brand line.
     "/about/": aboutMeta,
+    // The dated fact sheet answer engines check with a `site:` search; its rows live in facts.ts.
+    [FACTS_PATH]: factsMeta,
     // Only the blog index is here; a post's title/description live in its own frontmatter instead.
     "/blog/": {
         title: "The intentic blog",

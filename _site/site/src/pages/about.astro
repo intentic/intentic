@@ -13,7 +13,7 @@ import {
     trustCards,
     whyIntentic,
 } from "@intentic/site-content/about";
-import { discordUrl, githubIssuesUrl, githubUrl } from "@intentic/site-content/site";
+import { discordUrl, githubIssuesUrl, githubUrl, ORG_DISAMBIGUATION } from "@intentic/site-content/site";
 import { buildProfilePageSchema } from "@intentic/site-content/structured-data";
 import { gitStats, npmDownloads } from "@intentic/astro-integrations";
 import { Image } from "astro:assets";
@@ -247,6 +247,7 @@ const claimIcons = [
                                     <p class="mt-4 max-w-copy text-base leading-relaxed text-muted first:mt-5">{paragraph}</p>
                                 ))
                             }
+                            <p class="mt-6 max-w-copy text-sm leading-relaxed text-muted">{ORG_DISAMBIGUATION}</p>
                         </div>
                     </div>
                 </div>

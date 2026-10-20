@@ -1,73 +1,15 @@
-import { compareHref, comparePages } from "./compare";
+import { compareHref } from "./compare";
 import { docsHref } from "./docs";
+import { compareLink, type GuidePage, guidesHref } from "./guides-model";
+import { phoneGuide } from "./guides-phone";
 import { productHref } from "./product";
 
-// The guides shelf answers what people ask before they know intentic exists, built backwards from retrieval: title is
-// the literal question, faq covers its other phrasings.
-// - Nothing about another tool that isn't true of it as of `PUBLISHED`.
-// - No invented benchmarks; omit a number rather than invent one.
-// - If the honest answer is "you don't need this product," say so.
-
-export const guidesHref = (slug: string): string => (slug ? `/guides/${slug}/` : `/guides/`);
+export * from "./guides-model";
 
 /** Written against the state of the field on this date; the pages say so out loud. */
 const PUBLISHED = "2026-08-12";
 /** The second shelf: Docker sandboxes, self-hosted web agents, background agents and the parallel-tools roundup. */
 const PUBLISHED_OCTOBER = "2026-10-06";
-
-/** A compare link that appears only once its page exists, so a guide never points at a comparison still being written. */
-const compareLink = (slug: string, label: string): { label: string; href: string }[] =>
-    comparePages.some((page) => page.slug === slug) ? [{ label, href: compareHref(slug) }] : [];
-
-/** One approach to the problem, including the ones this product does not sell. */
-export interface GuideOption {
-    name: string;
-    /** What it actually is, in one line. */
-    what: string;
-    /** The case for it: a reader should be able to pick this and be right. */
-    goodFor: string;
-    /** Where it stops working. */
-    breaksWhen: string;
-}
-
-/** A body section. Heading is a statement, and the first sentence under it answers the heading. */
-export interface GuideSection {
-    heading: string;
-    /** Paragraphs. The first one carries the answer to the heading; the rest support it. */
-    body: string[];
-    /** Optional list under the prose, for the steps or conditions the prose refers to. */
-    points?: string[];
-}
-
-export interface GuideFaq {
-    /** Anchor id, so a single question is linkable and quotable on its own. */
-    id: string;
-    question: string;
-    /** One paragraph. It has to survive being read with no page around it. */
-    answer: string;
-}
-
-export interface GuidePage {
-    slug: string;
-    /** The h1, and the question itself. */
-    question: string;
-    /** Nav and card label: the question, shortened, still a question. */
-    navLabel: string;
-    /** One line of scent in listings. */
-    blurb: string;
-    /** Under 70 words, stands alone, names the mechanism; rendered under the h1 and reused as the meta description. */
-    answer: string;
-    /** Checkable specifics: the things a reader or a model can be right about after reading. */
-    facts: string[];
-    options: GuideOption[];
-    /** The recommendation, stated plainly, after the options have been given their due. */
-    verdict: string[];
-    sections: GuideSection[];
-    faq: GuideFaq[];
-    /** Where to go next on this site. */
-    related: { label: string; href: string }[];
-    meta: { title: string; description: string; datePublished: string };
-}
 
 export const guidesIndex = {
     eyebrow: "Guides",
@@ -835,7 +777,8 @@ export const guidePages: GuidePage[] = [
             {
                 name: "Stay on the cloud product",
                 what: "Claude Code on the web, Codex cloud, or a peer such as Cursor's cloud agents. The vendor runs a fresh VM per task.",
-                goodFor: "Operating nothing, starting work from a phone, parallel sessions on someone else's hardware, and no extra charge on plans that include it.",
+                goodFor:
+                    "Operating nothing, starting work from a phone, parallel sessions on someone else's hardware, and no extra charge on plans that include it.",
                 breaksWhen:
                     "Code or credentials must stay on your infrastructure, the repository is not on GitHub, or the environment needs more than a setup script can install. Shell commands in Claude Code cloud sessions time out after two minutes by default, ten at most.",
             },
@@ -884,9 +827,7 @@ export const guidePages: GuidePage[] = [
             },
             {
                 heading: "What self-hosting changes",
-                body: [
-                    "Self-hosting moves the agent, not the model. Everything below changes; what the provider sees does not.",
-                ],
+                body: ["Self-hosting moves the agent, not the model. Everything below changes; what the provider sees does not."],
                 points: [
                     "Where the code lives: the checkout and its history stay on a disk you control rather than a vendor VM.",
                     "Whose credentials: database passwords and deploy keys stay on your machine instead of going into a vendor's environment settings.",
@@ -952,6 +893,7 @@ export const guidePages: GuidePage[] = [
             datePublished: PUBLISHED_OCTOBER,
         },
     },
+    phoneGuide,
     {
         slug: "self-hosted-background-coding-agents",
         question: "How do you run coding agents in the background on your own hardware?",
@@ -969,7 +911,8 @@ export const guidePages: GuidePage[] = [
             {
                 name: "cron and headless mode",
                 what: "A crontab line on an always-on machine that creates a worktree and calls claude -p or codex exec with a fixed prompt.",
-                goodFor: "One or two scheduled chores, such as a nightly dependency audit or a weekly changelog draft. It is free and you can read the whole system in one line.",
+                goodFor:
+                    "One or two scheduled chores, such as a nightly dependency audit or a weekly changelog draft. It is free and you can read the whole system in one line.",
                 breaksWhen:
                     "Runs overlap, several jobs want the same checkout, or you need to find out what happened last Tuesday. Logs, isolation and review are all yours to build.",
             },
@@ -1116,21 +1059,24 @@ export const guidePages: GuidePage[] = [
             {
                 name: "Claude Squad",
                 what: "Open-source terminal app (AGPL-3.0) that gives each agent a tmux session and a git worktree. Runs Claude Code by default, plus Codex, Gemini, Aider or any command.",
-                goodFor: "The worktree and tmux recipe with the bookkeeping done for you, without leaving the terminal. Builds exist for macOS and Linux.",
+                goodFor:
+                    "The worktree and tmux recipe with the bookkeeping done for you, without leaving the terminal. Builds exist for macOS and Linux.",
                 breaksWhen:
                     "Agents collide on ports or services, since the isolation is worktrees. Windows needs tmux through WSL, and the agents live on one machine, reachable only from its terminal.",
             },
             {
                 name: "Conductor",
                 what: "Mac app that runs Claude Code, Codex, Cursor and OpenCode in parallel, each in its own worktree, with review built in. Free tier; Pro is $50 a month.",
-                goodFor: "Mac users who want a polished interface built for this, plus the option of Pro cloud workspaces that keep running after the app closes.",
+                goodFor:
+                    "Mac users who want a polished interface built for this, plus the option of Pro cloud workspaces that keep running after the app closes.",
                 breaksWhen:
                     "You are not on a Mac. Its own docs note that worktrees are not a security boundary: local agents run on your Mac with your user permissions.",
             },
             {
                 name: "Superset",
                 what: "Desktop app and CLI giving any CLI agent its own worktree, terminals and diff. Source-available (Elastic License 2.0); the desktop app is free, Pro is $20 per user a month.",
-                goodFor: "Many agents at once with a preview port per worktree, and reaching workspaces on another connected machine, including from an iPhone with Pro.",
+                goodFor:
+                    "Many agents at once with a preview port per worktree, and reaching workspaces on another connected machine, including from an iPhone with Pro.",
                 breaksWhen: "You need Windows, which is not yet available, or first-class Linux, which is an experimental AppImage.",
             },
             {

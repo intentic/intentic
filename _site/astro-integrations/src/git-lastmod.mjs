@@ -38,8 +38,11 @@ function isShallow() {
     if (shallow === undefined) {
         try {
             shallow =
-                execSync("git rev-parse --is-shallow-repository", { cwd: projectRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() !==
-                "false";
+                execSync("git rev-parse --is-shallow-repository", {
+                    cwd: projectRoot,
+                    encoding: "utf8",
+                    stdio: ["ignore", "pipe", "ignore"],
+                }).trim() !== "false";
         } catch {
             shallow = true;
         }
@@ -59,6 +62,18 @@ const generatedRoutes = [
 ];
 
 /**
+ * Pages whose `.astro` file is a thin shell around words kept in a content module: dated from the shell alone, the home
+ * page kept its August date through every later rewrite of the landing copy and the FAQ. Keyed by trimmed pathname.
+ * @type {Record<string, string[]>}
+ */
+const pageContent = {
+    "": ["src/components/Landing.astro", "../site-content/src/landing.ts", "../site-content/src/faq.ts"],
+    "/about": ["../site-content/src/about.ts"],
+    "/pricing": ["../site-content/src/pricing.ts"],
+    "/facts": ["../site-content/src/facts.ts"],
+};
+
+/**
  * Map a public URL pathname to its source file paths.
  * Tries `src/pages/<path>.astro` first, then `src/pages/<path>/index.astro`.
  * Comparison details fall back to their shared template; the hub and details also depend on compare.ts.
@@ -67,8 +82,9 @@ const generatedRoutes = [
  */
 function urlPathToSources(pathname) {
     const trimmed = pathname.replace(/\/+$/, "");
+    const content = (pageContent[trimmed] ?? []).filter((source) => existsSync(path.join(projectRoot, source)));
     if (trimmed === "") {
-        return ["src/pages/index.astro"];
+        return ["src/pages/index.astro", ...content];
     }
     const comparisonDetail = /^\/compare\/[^/]+$/.test(trimmed);
     const candidates = [`src/pages${trimmed}.astro`, `src/pages${trimmed}/index.astro`];
@@ -77,7 +93,7 @@ function urlPathToSources(pathname) {
     }
     for (const c of candidates) {
         if (existsSync(path.join(projectRoot, c))) {
-            return trimmed === "/compare" || comparisonDetail ? [c, "../site-content/src/compare.ts"] : [c];
+            return trimmed === "/compare" || comparisonDetail ? [c, "../site-content/src/compare.ts"] : [c, ...content];
         }
     }
     for (const route of generatedRoutes) {

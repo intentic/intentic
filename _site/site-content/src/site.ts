@@ -33,6 +33,14 @@ export const githubProfileUrl = "https://github.com/radarsu";
 export const linkedinProfileUrl = "https://www.linkedin.com/in/radarsu/";
 export const personalSiteUrl = "https://radarsu.com/";
 
+// The npm scope every published package lives under (@intentic/cli, @intentic/iq, …).
+export const npmOrgUrl = "https://www.npmjs.com/org/intentic";
+
 // Official profiles a search engine uses to resolve this domain; Discord belongs here like the GitHub org does.
-export const SAME_AS: readonly string[] = [orgUrl, githubUrl, discordUrl];
+export const SAME_AS: readonly string[] = [orgUrl, githubUrl, npmOrgUrl, discordUrl];
+
+// Other things share the name: Augment Code's "Intent" works in the same category, and Intentic Technologies is a
+// training company in Bengaluru. Said once, in the schema and on /about/, so a reader or a model keeps them apart.
+export const ORG_DISAMBIGUATION =
+    "intentic (intentic.dev) is an open-source workspace for coding agents. It is not related to Augment Code's Intent or to Intentic Technologies.";
 export const FOUNDER_SAME_AS: readonly string[] = [githubProfileUrl, linkedinProfileUrl, personalSiteUrl];

@@ -3,6 +3,7 @@ import { DESKTOP_ROUTES } from "./src/lib/desktop-downloads";
 import { createReleaseResolver } from "./src/lib/release";
 import { type LiveContent, LIVE_CACHE_SECONDS, LIVE_CONTENT_URL, type LiveSwitch, parseLiveContent } from "./src/lib/live";
 import { injectPs1, injectSh, parseVerbRoute, refusalScript, resolveVerbRequest, scriptUrlOf, type VerbRequest } from "./src/lib/worker-verbs";
+import { aiFetchOf, sendAiFetch } from "./src/lib/ai-fetch";
 import { handleSiteWire, type WireEnv } from "./src/lib/site-wire";
 
 // The Worker's bindings: the static assets, and the site counter's PostHog key and salt (lib/site-wire.ts), set as
@@ -28,9 +29,11 @@ const MOVED_VERBS: Record<string, string> = {
     delegate: "host",
 };
 
-// Pages moved to a different book, matched exactly not by prefix; redirects into the generated /api/ page.
+// Pages moved or retired, matched exactly not by prefix. /developers/http moved into the generated /api/ page; /earn
+// was the revenue-share offer, retired when intentic went free, and a Hacker News post still links to it.
 const MOVED_PAGES: Record<string, string> = {
     "/developers/http": "/api/",
+    "/earn": "/pricing/",
 };
 
 function movedPath(pathname: string): string | undefined {
@@ -198,8 +201,13 @@ function permanentSlash(response: Response, url: URL): Response {
     return Response.redirect(target.href, 301);
 }
 
+// The one piece of the Worker's execution context used here: work that may finish after the response has gone.
+interface WorkerContext {
+    waitUntil(promise: Promise<unknown>): void;
+}
+
 export default {
-    async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+    async fetch(request: Request, env: WorkerEnv, ctx?: WorkerContext): Promise<Response> {
         const url = new URL(request.url);
 
         // The site counter answers before anything else: no live notice, redirect or asset is any of its business.
@@ -219,6 +227,12 @@ export default {
         // Rewrite only documents; `/demo/` is skipped since it is an app with no notice strip or controls to rewrite.
         const isDocument = response.headers.get("content-type")?.includes("text/html") === true;
         const shaped = live !== undefined && isDocument && !url.pathname.startsWith("/demo") ? withLiveContent(response, live) : response;
+
+        // An AI assistant or crawler reading a page is counted after the response, so the count never delays it.
+        const aiFetch = aiFetchOf(request.headers.get("user-agent") ?? "", url.pathname, shaped.status, request.cf?.verifiedBotCategory);
+        if (aiFetch !== undefined) {
+            ctx?.waitUntil(sendAiFetch(env, url.origin, aiFetch));
+        }
 
         // Header sets are immutable on a response that came from fetch(), so this is a copy either way.
         const headers = new Headers(shaped.headers);
