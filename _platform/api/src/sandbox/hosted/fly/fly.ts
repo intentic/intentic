@@ -74,11 +74,24 @@ export interface FlyUnanswered {
 export interface FlyRequest {
     readonly method: string;
     readonly token: string;
+    // How the token is presented. The Machines and GraphQL APIs take any token as Bearer; Fly's Prometheus does not, and
+    // answers an org macaroon sent that way with 401 "something went wrong resolving organization".
+    readonly scheme?: `bearer` | `native`;
     // Sent as JSON.
     readonly json?: unknown;
     readonly deadlineMs?: number;
     readonly unanswered: FlyUnanswered;
 }
+
+// A token in the scheme Fly itself sends it in: a macaroon (what `fly tokens create` prints, `FlyV1 fm2_…`, or its bare
+// `fm1r_`/`fm1a_`/`fm2_` body) goes as `FlyV1 <macaroon>`; anything older is a Bearer token.
+export const flyAuthorization = (token: string): string => {
+    const trimmed = token.trim();
+    if (trimmed.startsWith(`FlyV1 `)) {
+        return trimmed;
+    }
+    return /^fm\d[a-z]?_/.test(trimmed) ? `FlyV1 ${trimmed}` : `Bearer ${trimmed}`;
+};
 
 // One call to any of Fly's APIs (Machines, GraphQL, metrics) over the shared JSON transport: the deadline, the bearer
 // token, and every refusal answered with its status and parsed body. A failure that never got an answer is a
@@ -89,7 +102,7 @@ export const flyRequest = async (url: string, request: FlyRequest): Promise<Json
     try {
         return await fetchJsonResponse(url, {
             method: request.method,
-            headers: { authorization: `Bearer ${request.token}` },
+            headers: { authorization: request.scheme === `native` ? flyAuthorization(request.token) : `Bearer ${request.token}` },
             json: request.json,
             timeoutMs: deadlineMs,
             accept: FLY_REFUSALS,

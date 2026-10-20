@@ -242,6 +242,22 @@ describe(`reconcileHostedPool`, () => {
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(1);
     });
 
+    // The registry being unreachable this tick (stock resolves to the bare tag) is not a push: a machine pinned to a
+    // digest stays stock, rather than the whole pool being destroyed and rebuilt on every failed lookup.
+    it(`keeps digest-pinned stock when the tag cannot be resolved this tick`, async () => {
+        const del = jest.fn().mockResolvedValue({});
+        const pinned = `ghcr.io/intentic/sandbox@sha256:a2efc11a3e6b517557ad0b46cbae6f2b6270b632d93e09cb8b816c7ad8487125`;
+        const calls = stubFetch([
+            { match: (method, url) => method === `GET` && url.includes(`/machines/m1`), respond: () => json({ id: `m1`, state: `stopped` }) },
+            ...builderRoutes,
+        ]);
+        const prisma = fakePrisma({ hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([poolRow({ image: pinned })]), delete: del } });
+        await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
+        expect(del).not.toHaveBeenCalled();
+        expect(calls.some((entry) => entry.method === `DELETE`)).toBe(false);
+        expect(calls.some((entry) => entry.method === `POST`)).toBe(false);
+    });
+
     it(`drains the whole pool when it is switched off: nothing in it is ever somebody's`, async () => {
         const del = jest.fn().mockResolvedValue({});
         const calls = stubFetch(builderRoutes);

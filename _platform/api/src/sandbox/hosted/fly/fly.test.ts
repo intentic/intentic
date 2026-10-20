@@ -1,6 +1,8 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
+import { queryMachineMetric } from "./fly-metrics.js";
 import {
+    flyAuthorization,
     createApp,
     createMachine,
     createVolume,
@@ -378,5 +380,25 @@ describe(`the volume calls a migration needs`, () => {
         await destroyVolume(`tok`, `app`, `vol_1`);
         await destroyVolume(`tok`, `app`, `vol_gone`);
         expect(calls).toHaveLength(2);
+    });
+});
+
+describe(`flyAuthorization`, () => {
+    // Fly's Prometheus refuses an org macaroon sent as Bearer (401 "something went wrong resolving organization").
+    it(`presents a macaroon in Fly's own scheme, and anything older as Bearer`, () => {
+        expect(flyAuthorization(`FlyV1 fm2_abc,fm2_def`)).toBe(`FlyV1 fm2_abc,fm2_def`);
+        expect(flyAuthorization(`fm2_abc,fm2_def`)).toBe(`FlyV1 fm2_abc,fm2_def`);
+        expect(flyAuthorization(` fm1r_abc `)).toBe(`FlyV1 fm1r_abc`);
+        expect(flyAuthorization(`legacy-personal-token`)).toBe(`Bearer legacy-personal-token`);
+    });
+
+    it(`is what the metrics client sends, while the Machines API keeps Bearer`, async () => {
+        const seen: string[] = [];
+        stubGlobal(`fetch`, (_url: URL | string, init?: RequestInit) => {
+            seen.push(new Headers(init?.headers).get(`authorization`) ?? ``);
+            return Promise.resolve(new Response(JSON.stringify({ status: `success`, data: { resultType: `vector`, result: [] } }), { status: 200 }));
+        });
+        await queryMachineMetric({ metricsUrl: `https://api.fly.io/prometheus`, flyOrg: `intentic`, flyApiToken: `FlyV1 fm2_abc` }, `up`);
+        expect(seen).toEqual([`FlyV1 fm2_abc`]);
     });
 });

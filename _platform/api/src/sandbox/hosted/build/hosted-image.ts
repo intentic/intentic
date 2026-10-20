@@ -105,7 +105,7 @@ export const forgetHostedImage = (): void => {
 const memo = (configured: string, now: () => number): string | undefined =>
     cached !== undefined && cached.ref === configured && now() - cached.at < CACHE_TTL_MS ? cached.pinned : undefined;
 
-/* Image resolution fails open to the configured tag when digest lookup cannot authenticate. */
+/* Image resolution fails open: to the last digest resolved for this tag, else to the configured tag itself. */
 export const resolveHostedImage = async (config: Config, logger?: Logger, now: () => number = Date.now): Promise<string> => {
     const configured = config.hosted.image;
     const parsed = parseImageRef(configured);
@@ -122,10 +122,15 @@ export const resolveHostedImage = async (config: Config, logger?: Logger, now: (
         return undefined;
     });
     if (digest === undefined) {
-        logger?.warn(
-            { image: configured, ...(failure === undefined ? {} : { err: failure }) },
-            `hosted image: could not resolve a digest; using the tag, so a claim may have to pull`,
-        );
+        // A registry hiccup is not a push: the digest this tag named a minute ago is still the best answer. Handing
+        // back the bare tag instead made every pinned warm machine read as drifted, so the pool destroyed and rebuilt
+        // its whole stock on each failed lookup (and a claim in that window skipped the stock and went cold).
+        // pino leaves an undefined `err` out of the line.
+        if (cached?.ref === configured) {
+            logger?.warn({ image: configured, pinned: cached.pinned, err: failure }, `hosted image: could not resolve a digest; keeping the last one resolved`);
+            return cached.pinned;
+        }
+        logger?.warn({ image: configured, err: failure }, `hosted image: could not resolve a digest; using the tag, so a claim may have to pull`);
         return configured;
     }
     const pinned = `${parsed.registry}/${parsed.repository}@${digest}`;

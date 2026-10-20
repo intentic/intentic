@@ -90,6 +90,20 @@ describe(`resolveHostedImage`, () => {
         expect(await resolveHostedImage(config(`ghcr.io/intentic/sandbox:stable`), logger)).toBe(`ghcr.io/intentic/sandbox:stable`);
     });
 
+    // A tag and a digest never compare equal, so falling back to the tag once a digest is known made every pinned
+    // warm machine read as drifted: the pool destroyed and rebuilt its stock on each failed lookup.
+    it(`keeps the last digest it resolved for this tag when a later lookup fails`, async () => {
+        let clock = 0;
+        const image = config(`ghcr.io/intentic/sandbox:stable`);
+        stubRegistry(DIGEST);
+        expect(await resolveHostedImage(image, logger, () => clock)).toBe(`ghcr.io/intentic/sandbox@${DIGEST}`);
+        clock = 10 * 60_000;
+        stubGlobal(`fetch`, () => Promise.reject(new Error(`The operation timed out.`)));
+        expect(await resolveHostedImage(image, logger, () => clock)).toBe(`ghcr.io/intentic/sandbox@${DIGEST}`);
+        // ...and only for the tag it was resolved for: another tag has no digest to lend it.
+        expect(await resolveHostedImage(config(`ghcr.io/intentic/sandbox:next`), logger, () => clock)).toBe(`ghcr.io/intentic/sandbox:next`);
+    });
+
     it(`falls back to the tag when the registry answers without a digest header`, async () => {
         stubRegistry(null);
         expect(await resolveHostedImage(config(`ghcr.io/intentic/sandbox:stable`), logger)).toBe(`ghcr.io/intentic/sandbox:stable`);

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { FlyError, flyRequest, isFlyOk } from "./fly.js";
 
-// Fly's managed Prometheus, read with the same org token as the Machines API: one instant query, answered per machine.
+// Fly's managed Prometheus, read with the same org token as the Machines API (sent in its own FlyV1 scheme, see fly.ts): one instant query, answered per machine.
 // `instance` in Fly's labels is the machine id, which is what tells a sandbox's machine from a builder in the same app.
 
 const vectorSchema = z.object({
@@ -26,6 +26,7 @@ export const queryMachineMetric = async (
     const response = await flyRequest(url, {
         method: `GET`,
         token: metrics.flyApiToken,
+        scheme: `native`,
         unanswered: {
             timedOut: (seconds) => `Fly's metrics API did not answer within ${seconds}s`,
             unreachable: (detail) => `Fly's metrics API could not be reached: ${detail}`,

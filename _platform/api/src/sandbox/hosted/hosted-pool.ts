@@ -9,7 +9,7 @@ import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
 import { mintConnectToken } from "../mint-sandbox.js";
 import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine, isFlyCapacity } from "./fly/fly.js";
 import { hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
-import { resolveHostedImage } from "./build/hosted-image.js";
+import { digestIn, resolveHostedImage } from "./build/hosted-image.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
 import { hostedShapeFor, volumeOptions } from "./hosted-shape.js";
 
@@ -132,6 +132,11 @@ const refillStock = async (
     }
 };
 
+// A tag that could not be resolved this tick says nothing about a machine pinned to a digest: tag and digest never
+// compare equal, so reading that as drift destroyed the whole stock on every failed registry lookup.
+const drifted = (held: string, stock: string): boolean =>
+    held !== stock && !(digestIn(stock) === undefined && digestIn(held) !== undefined);
+
 // One reconcile pass, sequential and per-row: the pool is small, Fly is rate-limited, and a half-succeeded tick
 // converges on the next one.
 export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, logger: Logger): Promise<void> => {
@@ -168,7 +173,7 @@ export const reconcileHostedPool = async (prisma: PrismaClient, config: Config, 
     const live = new Map<string, (typeof rows)[number][]>();
     for (const row of rows) {
         // A drifted image is worth nothing claimable, for the same reason a wrong rootfs is.
-        if (row.image !== stockImage) {
+        if (drifted(row.image, stockImage)) {
             await destroyPoolMachine(prisma, config, row).catch((error: unknown) =>
                 logger.error({ err: error, app: row.appName }, `hosted pool: replacing a drifted machine failed`),
             );
