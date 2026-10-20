@@ -10,11 +10,11 @@ import { retirePairingMirror, teardownAllForwards } from "./mirror.js";
 import {
     MUTAGEN_CALL_TIMEOUT_MS,
     MUTAGEN_RUN_VALUE,
-    ownMutagenPath,
     retireOrphanSessions,
     startMutagenDaemon,
     syncSessionNames,
 } from "./mutagen.js";
+import { ownMutagenPath } from "./binary/mutagen-binary.js";
 import { moveOffSharedMutagen } from "./mutagen-move.js";
 import { pairingSshConfig, removeManagedSshConfig, writeManagedSshConfig } from "./ssh.js";
 

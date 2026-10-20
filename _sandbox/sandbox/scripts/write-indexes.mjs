@@ -20,6 +20,14 @@ const importsOf = (definitions, from) => {
         .map(([module, exported]) => `import { ${exported.toSorted().join(", ")} } from "${from(module.replace(/\.ts$/, ".js"))}";`);
 };
 
+// The documents in path order, in even runs of at most DOCUMENT_CHUNK: one list per run, so no function of the
+// registry outgrows the function-length cap (_tools/checks code-shape) as definitions are added.
+const DOCUMENT_CHUNK = 64;
+const documentChunks = (documents) => {
+    const size = Math.ceil(documents.length / Math.max(1, Math.ceil(documents.length / DOCUMENT_CHUNK)));
+    return Array.from({ length: Math.ceil(documents.length / size) }, (_, at) => documents.slice(at * size, (at + 1) * size));
+};
+
 // The registry module's source: an import of every definition by the name its module exports it under, and two lists
 // read when called, so a module that reaches the registry back through an import cycle never meets an unfilled binding.
 const registrySource = ({ documents, steps }) =>
@@ -33,8 +41,14 @@ const registrySource = ({ documents, steps }) =>
         'import type { StructuralStep } from "../store/evolution/state-steps.js";',
         ...importsOf([...documents, ...steps], (path) => (path.startsWith("bootstrap/") ? `./${path.slice("bootstrap/".length)}` : `../${path}`)),
         "",
+        ...documentChunks(documents).flatMap((chunk, at) => [
+            `const documentsPart${at + 1} = (): readonly DocumentSpec[] => [`,
+            ...chunk.map(({ name }) => `    ${name},`),
+            "];",
+            "",
+        ]),
         "export const stateDocuments = (): readonly DocumentSpec[] => [",
-        ...documents.map(({ name }) => `    ${name},`),
+        ...documentChunks(documents).map((_, at) => `    ...documentsPart${at + 1}(),`),
         "];",
         "",
         "// By id, not by the order modules happened to load in: the plan must not depend on an import graph.",

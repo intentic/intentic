@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
 import { renderPage, toPageState } from "@intentic/browser/page";
-import { askConfirm, clickRef, collectPage, describeRef, fillRef, pinFocusedField, readPageText, selectRef, typeSecretInto, waitForText } from "./driver.js";
+import { askConfirm } from "./overlay.js";
+import { clickRef, collectPage, describeRef, fillRef, pinFocusedField, readPageText, selectRef, typeSecretInto, waitForText } from "./driver.js";
 
 // Tests the page walk against real DOM via jsdom, which is enough for the judgements that matter (what's clickable,
 // what to call it, sensitivity) but cannot lay out elements or run a page's own JavaScript.

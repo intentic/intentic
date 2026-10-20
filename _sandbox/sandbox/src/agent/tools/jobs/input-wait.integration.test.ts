@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requires } from "@intentic/testing/requires";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
-import { waitForWork, workWaitAnswer } from "../../subagents/work-wait.js";
+import { waitForWork, workWaitAnswer } from "../../subagents/waiting/work-wait.js";
 import { openBackgroundJob } from "./background-jobs.js";
 import { INPUT_WAIT_MS, sampleRuns } from "./input-wait.js";
 import { followRun, INPUT_WAIT_FILE, inputWaitAt, lookAtRuns } from "./input-wait-follow.js";

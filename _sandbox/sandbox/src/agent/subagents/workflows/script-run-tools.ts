@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
-import { sdk } from "../../engines/claude-sdk.js";
-import { opt } from "../../opt.js";
-import { ResultValueSchema } from "./child-result.js";
+import { sdk } from "../../../engines/claude-sdk.js";
+import { opt } from "../../../opt.js";
+import { ResultValueSchema } from "../child-result.js";
 import { MAX_CALLS } from "./script-run-calls.js";
 import {
     DEFAULT_CONCURRENCY,

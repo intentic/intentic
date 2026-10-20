@@ -7,7 +7,7 @@ import { opt } from "../../opt.js";
 import type { AgentRequest, TurnHooks, TurnTools } from "../../agent/providers/agent-request.js";
 import { formatAnswers } from "../../sessions/vocabulary/question-answers.js";
 import type { SubagentWaitUntil } from "../../agent/subagents/subagents.js";
-import { workWaitAnswer } from "../../agent/subagents/work-wait.js";
+import { workWaitAnswer } from "../../agent/subagents/waiting/work-wait.js";
 import { spawnedNote } from "../../agent/subagents/children.js";
 import { ResultValueSchema } from "../../agent/subagents/child-result.js";
 import { type CommandGuard, consultWith, JS_SUBJECT } from "../../guard/command-guard.js";
@@ -88,7 +88,7 @@ const askTool = (request: AgentRequest, push: (event: AgentEvent) => void): SDKC
 // Only askQuestion; task stays, a subagent the daemon can't see inside beats one removed.
 export const TOOLS_WITHHELD: readonly ToolName[] = ["askQuestion"];
 
-// Same supervision calls the Claude Code loop mounts as an SDK MCP server (agent/subagent-wait.ts), through Cursor's
+// Same supervision calls the Claude Code loop mounts as an SDK MCP server (agent/subagents/waiting/subagent-wait.ts), through Cursor's
 // own seam. The gate arrives already set on the request, so children are indistinguishable across runtimes.
 const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:

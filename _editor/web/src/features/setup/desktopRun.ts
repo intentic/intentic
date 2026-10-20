@@ -1,5 +1,5 @@
 import { formatFixed } from "@intentic/ui/format";
-import type { DesktopSetupReport } from "../../app/environments/desktop";
+import type { DesktopSetupReport } from "../../app/environments/desktopSetupReport";
 
 // The desktop app's run as this page reads it off the app's reports (desktopSetup.ts hears them): whether the app has
 // gone quiet for longer than its kind of app ever does, how far the image download has got, and whether that download

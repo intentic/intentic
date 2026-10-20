@@ -1,7 +1,7 @@
 import { fileRestartResume } from "../system/restart-resume.js";
 import { settleRestartPauses } from "../agent/subagents/paused-children.js";
 import { restoreSpawnedChildren, settleRestoredChildren } from "../agent/subagents/child-restore.js";
-import { resumeScriptRuns } from "../agent/subagents/script-runs.js";
+import { resumeScriptRuns } from "../agent/subagents/workflows/script-runs.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
 import { type RestartResume, restartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { restoreLimitHolds } from "../conversations/actor/limit-hold.js";
@@ -109,7 +109,7 @@ const settleCutChildren = async ({ role, services }: Pick<BootPhase, "role" | "s
     await settleRestoredChildren(services, await restored);
 };
 
-// Workflow runs a restart cut, once their workers' records are back (agent/subagents/script-runs.ts): each goes on where
+// Workflow runs a restart cut, once their workers' records are back (agent/subagents/workflows/script-runs.ts): each goes on where
 // it was, its finished calls handed back and its workers still working waited on, as the restart's answer says. Never
 // throws.
 const resumeCutRuns = async (

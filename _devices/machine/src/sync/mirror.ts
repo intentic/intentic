@@ -34,7 +34,6 @@ import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
 import { guardDisks } from "./low-disk.js";
 import {
-    ensureMutagen,
     ensureSyncSession,
     existingSyncSessions,
     forwardedPorts,
@@ -56,6 +55,7 @@ import {
     syncMode,
     syncSessionNames,
 } from "./mutagen.js";
+import { ensureMutagen } from "./binary/mutagen-binary.js";
 import { moveOffSharedMutagen } from "./mutagen-move.js";
 import { quieted } from "./repeats.js";
 import { deviceReport, scopedReport } from "./report.js";

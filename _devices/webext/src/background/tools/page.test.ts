@@ -1,4 +1,5 @@
-import { type ActionResult, askConfirm, clickRef, collectPage, describeRef, type RefDescription } from "../../page/driver.js";
+import { askConfirm } from "../../page/overlay.js";
+import { type ActionResult, clickRef, collectPage, describeRef, type RefDescription } from "../../page/driver.js";
 import { store } from "../store.js";
 import { click } from "./page.js";
 

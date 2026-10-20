@@ -9,7 +9,7 @@ import { agentInDistro } from "../environments/crossing.js";
 import { heldDistros } from "../environments/machine.js";
 import { WINDOWS_SIDE } from "../environments/wsl.js";
 import { readState } from "./config.js";
-import { ensureMutagen } from "./mutagen.js";
+import { ensureMutagen } from "./binary/mutagen-binary.js";
 import { answer } from "./project/project-commands.js";
 import { retireSandbox, type Retired, sandboxesNamed } from "./retire.js";
 

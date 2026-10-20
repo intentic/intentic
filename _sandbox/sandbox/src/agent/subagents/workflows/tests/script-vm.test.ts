@@ -1,4 +1,4 @@
-import type { ResultValue } from "../child-result.js";
+import type { ResultValue } from "../../child-result.js";
 import { readLiteral, runScript, type ScriptHost } from "../script-vm.js";
 import { splitScript } from "../script-source.js";
 

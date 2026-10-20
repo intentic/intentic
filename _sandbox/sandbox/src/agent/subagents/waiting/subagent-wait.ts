@@ -1,22 +1,22 @@
 import { HISTORY_ROOT } from "@intentic/constants";
 import { join } from "node:path";
-import { retainToolText, type McpOutputOptions } from "../../guard/mcp-output.js";
-import { spawnCatalogText } from "./spawn-catalog.js";
+import { retainToolText, type McpOutputOptions } from "../../../guard/mcp-output.js";
+import { spawnCatalogText } from "../spawn-catalog.js";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "../../engines/claude-sdk.js";
+import { sdk } from "../../../engines/claude-sdk.js";
 import { type AgentHarness, AgentHarnessSchema, type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract/models/agent-catalog";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
-import { type ChildRehome, type ChildSpawnSpec, type ChildSupervisor, spawnedNote } from "./children.js";
-import type { ChildResultDoor } from "./child-records.js";
-import { ResultSchemaSchema, ResultValueSchema, resultValidator } from "./child-result.js";
-import { HALF_A_MOVE } from "./child-words.js";
-import type { SubagentWaitUntil } from "./subagents.js";
+import { type ChildRehome, type ChildSpawnSpec, type ChildSupervisor, spawnedNote } from "../children.js";
+import type { ChildResultDoor } from "../child-records.js";
+import { ResultSchemaSchema, ResultValueSchema, resultValidator } from "../child-result.js";
+import { HALF_A_MOVE } from "../child-words.js";
+import type { SubagentWaitUntil } from "../subagents.js";
 import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForWork, workWaitAnswer } from "./work-wait.js";
-import { opt } from "../../opt.js";
-import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import { keepBackgroundJob, type KeepOutcome } from "../tools/jobs/background-jobs.js";
+import { opt } from "../../../opt.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import { keepBackgroundJob, type KeepOutcome } from "../../tools/jobs/background-jobs.js";
 
 // A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
 
@@ -40,7 +40,7 @@ export interface SubagentWaitDeps {
     // childResultDoor); absent for every other turn, which gets no `result` tool.
     readonly result?: ChildResultDoor;
     // More tools for the same server, built by whoever mounts it: the workflow tools over this turn's runs
-    // (agent/subagents/script-run-tools.ts), which reach the child engine from above, so this server never names them.
+    // (agent/subagents/workflows/script-run-tools.ts), which reach the child engine from above, so this server never names them.
     readonly extraTools?: readonly ServerTool[];
     readonly logsDir?: string;
 }

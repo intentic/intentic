@@ -1,4 +1,4 @@
-import type { DesktopSetupReport } from "../../../app/environments/desktop";
+import type { DesktopSetupReport } from "../../../app/environments/desktopSetupReport";
 import {
     appRunLive,
     appSilence,

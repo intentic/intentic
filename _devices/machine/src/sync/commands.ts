@@ -39,7 +39,6 @@ import { asidePrefix } from "./project/adopt.js";
 import { attachCommands } from "./attach-commands.js";
 import { projectCommands } from "./project/project-commands.js";
 import {
-    ensureMutagen,
     existingSyncSessions,
     healDerivedConflicts,
     resumeSessions,
@@ -49,6 +48,7 @@ import {
     startMutagenDaemon,
     syncSessionNames,
 } from "./mutagen.js";
+import { ensureMutagen } from "./binary/mutagen-binary.js";
 import { forget } from "./forget-command.js";
 import { revokeEnrollment, syncsAFolder, uninstallPairings } from "./uninstall.js";
 import { refuseAcrossPc } from "./siblings.js";

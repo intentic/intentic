@@ -8,8 +8,8 @@ import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { activityLogDocument } from "../activity/activity-store.js";
 import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
 import { pausedChildrenDocument } from "../agent/subagents/paused-children.js";
-import { scriptRunsDocument } from "../agent/subagents/script-run-store.js";
 import { spawnedChildrenDocument } from "../agent/subagents/spawned-children.js";
+import { scriptRunsDocument } from "../agent/subagents/workflows/script-run-store.js";
 import { keptJobRecordsDocument } from "../agent/tools/jobs/kept-job-records.js";
 import { approvalDecisionsDocument } from "../approvals/approval-decisions.js";
 import { approvalsDocument } from "../approvals/approvals-store.js";
@@ -122,12 +122,12 @@ import { agentDomainPolicyDocument } from "../workload/domain/agent-domain-polic
 import { heavyCommandsDocument } from "../workload/heavy-commands.js";
 import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js";
 
-export const stateDocuments = (): readonly DocumentSpec[] => [
+const documentsPart1 = (): readonly DocumentSpec[] => [
     activityLogDocument,
     claudeSeatsDocument,
     pausedChildrenDocument,
-    scriptRunsDocument,
     spawnedChildrenDocument,
+    scriptRunsDocument,
     keptJobRecordsDocument,
     approvalDecisionsDocument,
     approvalsDocument,
@@ -167,6 +167,9 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     engineStateDocument,
     runtimeInstallsDocument,
     extensionSettingsDocument,
+];
+
+const documentsPart2 = (): readonly DocumentSpec[] => [
     extensionUpdatePolicyDocument,
     extensionUpdatesDocument,
     extensionUsageDocument,
@@ -211,6 +214,9 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     keyringNeedsDocument,
     keyringCopiesDocument,
     keyringDevicesDocument,
+];
+
+const documentsPart3 = (): readonly DocumentSpec[] => [
     keyringSyncMailboxDocument,
     secretHostGuardsDocument,
     secretProgramGuardsDocument,
@@ -254,6 +260,12 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
     agentDomainPolicyDocument,
     heavyCommandsDocument,
     dependencyRequestsDocument,
+];
+
+export const stateDocuments = (): readonly DocumentSpec[] => [
+    ...documentsPart1(),
+    ...documentsPart2(),
+    ...documentsPart3(),
 ];
 
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.

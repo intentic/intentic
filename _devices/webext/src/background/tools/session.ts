@@ -1,5 +1,5 @@
 import { type WebExtCookie, webextSessionUrl } from "@intentic/sandbox-contract/webext";
-import { askConfirm } from "../../page/driver.js";
+import { askConfirm } from "../../page/overlay.js";
 import { assertScope, RefusedError, siteOf } from "../policy.js";
 import { store } from "../store.js";
 import { targetTab } from "./tab-access.js";

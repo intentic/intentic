@@ -8,7 +8,7 @@ import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { cleanMcpResult, mcpHeldOut, type McpOutputOptions } from "../../guard/mcp-output.js";
 import { outsideResultHooks, sealedDoor } from "../../guard/outside-results.js";
-import { boundChildReport } from "../subagents/subagent-wait.js";
+import { boundChildReport } from "../subagents/waiting/subagent-wait.js";
 import { redactionHooks } from "./agent-redaction.js";
 
 const dirs: string[] = [];

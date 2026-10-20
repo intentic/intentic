@@ -1,16 +1,16 @@
 import { anySignal, whenAborted } from "@intentic/base/async";
 import { DisposableStore } from "@intentic/base/lifecycle";
 import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
-import type { PendingChildCard } from "./children.js";
-import type { ResultValue } from "./child-result.js";
-import { whenFileAppears } from "../tools/file-appears.js";
-import { type BackgroundJob, backgroundJobOf, jobFinished, jobInputWait, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/jobs/background-jobs.js";
-import { followRun } from "../tools/jobs/input-wait-follow.js";
-import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "./subagents.js";
+import type { PendingChildCard } from "../children.js";
+import type { ResultValue } from "../child-result.js";
+import { whenFileAppears } from "../../tools/file-appears.js";
+import { type BackgroundJob, backgroundJobOf, jobFinished, jobInputWait, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../../tools/jobs/background-jobs.js";
+import { followRun } from "../../tools/jobs/input-wait-follow.js";
+import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "../subagents.js";
 import { type SubagentsWaitOptions, type SubagentsWaitOutcome, waitForSubagents } from "./subagent-waits.js";
-import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import { whenSteered } from "../../conversations/actor/conversation-holdings.js";
-import { opt } from "../../opt.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import { whenSteered } from "../../../conversations/actor/conversation-holdings.js";
+import { opt } from "../../../opt.js";
 import { withdrawQueuedReport } from "./queued-reports.js";
 
 // The one park for work a conversation started here: a child agent, or a background command.

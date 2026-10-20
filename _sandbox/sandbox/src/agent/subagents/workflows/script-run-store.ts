@@ -1,9 +1,9 @@
 import { join } from "node:path";
 import { z } from "zod";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
-import type { Services } from "../../composition.js";
-import { defineDocument } from "../../store/evolution/documents.js";
-import { openDirectory } from "../../store/open-document.js";
+import type { Services } from "../../../composition.js";
+import { defineDocument } from "../../../store/evolution/documents.js";
+import { openDirectory } from "../../../store/open-document.js";
 
 // A workflow run as it is written down (script-runs.ts runs it): one file per run under the history volume, written as it
 // moves and read back by a restart, a resume and the status tool.

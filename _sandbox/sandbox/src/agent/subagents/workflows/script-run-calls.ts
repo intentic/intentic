@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
-import type { Services } from "../../composition.js";
-import { canonicalJson } from "../../audit/audit-chain.js";
-import { opt } from "../../opt.js";
-import { type ResultSchema, ResultSchemaSchema, type ResultValue, resultSchemaFault } from "./child-result.js";
-import { type ChildParent, childReportOf, sendToChild, spawnChild } from "./children.js";
-import { type ChildSettlement, childResultOf, childSettlementOf, onChildSettled } from "./child-records.js";
+import type { Services } from "../../../composition.js";
+import { canonicalJson } from "../../../audit/audit-chain.js";
+import { opt } from "../../../opt.js";
+import { type ResultSchema, ResultSchemaSchema, type ResultValue, resultSchemaFault } from "../child-result.js";
+import { type ChildParent, childReportOf, sendToChild, spawnChild } from "../children.js";
+import { type ChildSettlement, childResultOf, childSettlementOf, onChildSettled } from "../child-records.js";
 import { type Cache, keepRun, type LiveRun, type ScriptCall, type ScriptDefaults } from "./script-run-store.js";
 
 // One agent() call of a workflow run (script-runs.ts): what it asks, read and keyed; handed back from the cache where the

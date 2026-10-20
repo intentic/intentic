@@ -46,7 +46,8 @@ flowchart LR
 - [src/background/main.ts](src/background/main.ts) — the service worker: keepalive alarm, pairing, popup messages.
 - [src/background/policy.ts](src/background/policy.ts) — every allow or refuse decision, with its message.
 - [src/background/mcp.ts](src/background/mcp.ts) — the tool surface the sandbox calls.
-- [src/page/driver.ts](src/page/driver.ts) — what runs inside a tab: snapshot, click, fill, banner.
+- [src/page/driver.ts](src/page/driver.ts) — what runs inside a tab: snapshot, click, fill.
+- [src/page/overlay.ts](src/page/overlay.ts) — what a tab shows the person: the action banner and the in-page Allow/No question.
 - [src/popup/popup.ts](src/popup/popup.ts) — the popup, where every permission is granted; `preview` renders its states.
 - [src/background/native.ts](src/background/native.ts) — the one native-messaging port to Passwords on this computer, requests correlated by id.
 - [src/background/passwords.ts](src/background/passwords.ts) — registers the passwords content script and routes capture/fill.

@@ -30,7 +30,7 @@
     "_devices/machine/src/installed.ts": 2,
     "_devices/machine/src/release.ts": 4,
     "_devices/machine/src/status.ts": 1,
-    "_devices/machine/src/sync/mutagen.ts": 2,
+    "_devices/machine/src/sync/binary/mutagen-binary.ts": 2,
     "_devices/machine/src/sync/residue.ts": 1,
     "_devices/machine/src/upgrade.ts": 3,
     "_devices/webext/src/background/policy.ts": 2,

@@ -195,10 +195,7 @@
         "count": 126,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_devices/machine/src/sync/commands.ts": {
-        "count": 970,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_devices/machine/src/sync/commands.ts": 983,
     "_devices/machine/src/sync/commands.ts#runSetup#cognitive": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
@@ -219,12 +216,9 @@
         "count": 41,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_devices/machine/src/sync/mirror.ts": {
-        "count": 1482,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
+    "_devices/machine/src/sync/mirror.ts": 1560,
     "_devices/machine/src/sync/mutagen.ts": {
-        "count": 1319,
+        "count": 1267,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_devices/machine/src/sync/retire.ts#retireSandbox#cognitive": {
@@ -311,10 +305,6 @@
     },
     "_editor/web/src/app/analytics.ts#initAnalytics#lines": {
         "count": 101,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_editor/web/src/app/environments/desktop.ts": {
-        "count": 657,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/client/sandbox/lazyByPath.ts#lazyByPath#lines": {
@@ -416,7 +406,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/auth/DesktopAuth.vue": {
-        "count": 741,
+        "count": 619,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/features/auth/useEmailCode.ts#useEmailCode#lines": {
@@ -753,7 +743,7 @@
         "count": 184,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/workspace/home/HomeView.vue": 714,
+    "_editor/web/src/features/workspace/home/HomeView.vue": 689,
     "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue": 1080,
     "_editor/web/src/features/workspace/page/WorkspaceDesktop.vue#<anonymous>#lines": {
         "count": 129,
@@ -1506,7 +1496,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts": {
-        "count": 1089,
+        "count": 1056,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#rehydrateParkedTurn#lines": {
@@ -1618,7 +1608,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts": {
-        "count": 1268,
+        "count": 1190,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cognitive": {
@@ -2502,10 +2492,6 @@
     },
     "_sandbox/sandbox/src/runtimes/opencode/opencode-events.ts#openEventStream#lines": {
         "count": 135,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/runtimes/opencode/opencode.ts": {
-        "count": 669,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/runtimes/opencode/opencode.ts#createOpenCodeService#lines": {

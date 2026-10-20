@@ -11,7 +11,7 @@ import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
-import { mintConversationId } from "./scheduler.js";
+import { mintConversationId } from "./fire/fire-sessions.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
 

@@ -7,7 +7,7 @@ import { bookedRerunWords } from "../../conversations/land/child-lands.js";
 import { childVerification } from "./child-verification.js";
 import { familyEnded } from "./family-cancel.js";
 import { subagentEndingReported, subagentEndingReporter } from "./subagents.js";
-import { noteQueuedReport, queuedChildReportId } from "./queued-reports.js";
+import { noteQueuedReport, queuedChildReportId } from "./waiting/queued-reports.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 

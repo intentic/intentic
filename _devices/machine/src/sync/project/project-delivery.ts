@@ -12,7 +12,8 @@ import {
 import { baseDir } from "../../config.js";
 import { deliversByItself, isProjectPairing, type Pairing, pairingKey, readState } from "../config.js";
 import { runProcess } from "../exec.js";
-import { ensureMutagen, sessionName } from "../mutagen.js";
+import { sessionName } from "../mutagen.js";
+import { ensureMutagen } from "../binary/mutagen-binary.js";
 import { isPortablePath } from "./project-files.js";
 import { assertFolder, type Durability, hashFile, installFile, localFile, localTarget, realDurability, removeFile } from "./project-local.js";
 import { mutagenSession, realProjectRunner } from "./project-remote.js";

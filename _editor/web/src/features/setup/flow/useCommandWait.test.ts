@@ -2,7 +2,7 @@ import "@intentic/testing/dom";
 import type { SetupReport } from "@intentic/api-contract";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type EffectScope, effectScope, nextTick, ref } from "vue";
-import type { DesktopSetupReport } from "../../../app/environments/desktop";
+import type { DesktopSetupReport } from "../../../app/environments/desktopSetupReport";
 import type { desktopInstaller } from "../../../app/environments/desktopDownloads";
 import { useCommandWait } from "./useCommandWait";
 

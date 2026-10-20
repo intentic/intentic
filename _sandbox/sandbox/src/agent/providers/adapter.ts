@@ -8,7 +8,7 @@ import type { SteeringQueue } from "../checkpoints/agent-steering.js";
 import type { TurnTrim } from "../prompt/window/context-trim.js";
 import { opt } from "../../opt.js";
 import type { ChildSupervisor } from "../subagents/children.js";
-import type { ScriptRunDoor } from "../subagents/script-runs.js";
+import type { ScriptRunDoor } from "../subagents/workflows/script-runs.js";
 import type { AgentRequest, TurnBase, TurnCredential, TurnSpec } from "./agent-request.js";
 import { assertAgentExecution, type AgentExecutionContext } from "../../workload/agent-execution.js";
 

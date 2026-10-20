@@ -7,7 +7,8 @@ import { installedBuild } from "../installed.js";
 import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../environments/wsl.js";
 import { deliversByItself, isProjectPairing, mirrorHeartbeatPath, type Pairing, pairingKey, readState, type SyncState } from "./config.js";
-import { backupSessionName, ensureMutagen, type LiveSession, readAllSessions, sessionName, sessionsByName, sessionStateOf } from "./mutagen.js";
+import { backupSessionName, type LiveSession, readAllSessions, sessionName, sessionsByName, sessionStateOf } from "./mutagen.js";
+import { ensureMutagen } from "./binary/mutagen-binary.js";
 
 // Everything this agent knows about the device, in one shape fed to `status`, `status --json`, the mirror
 // watcher's post, and the device connection's `report` call, so they can't drift. No docker scan: enumerating a machine's containers

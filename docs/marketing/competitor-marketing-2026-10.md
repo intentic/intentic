@@ -241,5 +241,5 @@ cannot be verified backfire: "Beautiful" got Paseo its only HN front page and it
 11. **Count installs and say Windows.** Synara has about 10 downloads per star and 41% of them are Windows;
     stars undercount a desktop tool. Post install milestones too.
 
-The plan that puts this into practice, and runs it without the owner, is
-[`/work/marketing/STRATEGY.md`](../../../marketing/STRATEGY.md).
+The plan that puts this into practice, and runs it without the owner, is `marketing/STRATEGY.md` in the workspace's
+marketing area, which lives outside this repository.

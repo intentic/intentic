@@ -1,5 +1,6 @@
 import { WEBEXT_TICKET_TTL_MS, WebExtSecretAnswerSchema, webextSecretUrl } from "@intentic/sandbox-contract/webext";
-import { askConfirm, pinFocusedField, typeSecretInto } from "../../page/driver.js";
+import { pinFocusedField, typeSecretInto } from "../../page/driver.js";
+import { askConfirm } from "../../page/overlay.js";
 import { needsConfirm, RefusedError } from "../policy.js";
 import { store } from "../store.js";
 import { announce, inject } from "./page.js";

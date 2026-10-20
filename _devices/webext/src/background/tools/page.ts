@@ -3,18 +3,17 @@ import { errorMessage } from "@intentic/base/errors";
 import { renderPage, toPageState } from "@intentic/browser/page";
 import {
     type ActionResult,
-    askConfirm,
     clickRef,
     collectPage,
     describeRef,
     fillRef,
-    flashBanner,
     pressKeyOnPage,
     readPageText,
     scrollPage,
     selectRef,
     waitForText,
 } from "../../page/driver.js";
+import { askConfirm, flashBanner } from "../../page/overlay.js";
 import { APPROVAL_HOLD_MS, assertRunning, assertScope, needsConfirm, RefusedError } from "../policy.js";
 import { store } from "../store.js";
 import { type TargetTab, targetTab } from "./tab-access.js";
@@ -103,7 +102,7 @@ export const openUrl = async (url: string, where: "current" | "new"): Promise<st
 type Consent = "unasked" | "asked" | "kept";
 
 // Asks the person when the switches require it. The question renders in the page, next to what it's about; an
-// unanswered question is a no (page/driver.ts).
+// unanswered question is a no (page/overlay.ts).
 const confirmed = async (tab: TargetTab, what: string, sensitive: boolean): Promise<Consent> => {
     const scopes = await store.scopes();
     if (!needsConfirm(scopes, sensitive)) {

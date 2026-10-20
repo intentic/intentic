@@ -140,14 +140,21 @@ publish() {
     # throughout. Docker reads zstd from Engine 23.0, and ic tells an older engine to update before it pulls
     # (_sandbox/ic/src/docker.rs, too_old_to_unpack). Level 9 is klauspost's "better" encoder: built once per release,
     # pulled by every host.
-    local output=--push
+    #
+    # A dry build writes no cache. Its image is loaded, booted once and removed (ci.yml images-dry), so cache keys
+    # written into it reach no later build, and preparing them is the one step that outgrew the runner: from
+    # 2026-10-18 buildkitd climbed past 22 GB on "preparing layers for inline cache" for the sandbox image and the
+    # kernel killed it (exit 255, or `buildkitd.sock: connection refused`), failing every images-dry since. The
+    # pushing builds keep `--cache-to type=inline`, which is the cache every build, this one included, reads back.
+    local output=--push cache_to=(--cache-to "type=inline")
     if [ "$PUSH" = "0" ]; then
         output=--load
+        cache_to=()
     elif [ "${ZSTD:-0}" = "1" ]; then
         output="--output=type=registry,oci-mediatypes=true,compression=zstd,compression-level=9,force-compression=true"
     fi
     registry_retry docker buildx build -f "$dockerfile" "${tag_args[@]}" "${cache_args[@]}" \
-        --cache-to "type=inline" \
+        "${cache_to[@]}" \
         "$@" "$output" "$context"
 }
 

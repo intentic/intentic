@@ -1,4 +1,5 @@
-import { askConfirm, type FocusedField, pinFocusedField, typeSecretInto } from "../../page/driver.js";
+import { askConfirm } from "../../page/overlay.js";
+import { type FocusedField, pinFocusedField, typeSecretInto } from "../../page/driver.js";
 import { handleMcpMessage } from "../mcp.js";
 import { store } from "../store.js";
 

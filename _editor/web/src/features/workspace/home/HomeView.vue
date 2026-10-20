@@ -25,9 +25,9 @@ import { bandOfIndex, homeLayout, type HomeProbed } from "./homeLayout";
 import { useHomeGallery } from "./useHomeGallery";
 import { dateLine } from "./homeDates";
 import { type HomeArrange, homeGroups, homeOrder, labelsShown } from "./homeOrder";
-import { contentMatches, nameMatches, RESULTS_CAP } from "./homeResults";
-import { HOME_DIR_ACTIONS, HOME_SEARCH, useHome } from "../../../models/workspace/home/useHome";
+import { HOME_DIR_ACTIONS, useHome } from "../../../models/workspace/home/useHome";
 import { useHomeActions } from "./useHomeActions";
+import { useHomeQuery } from "./useHomeQuery";
 import HomeCover from "./HomeCover.vue";
 import HomeCoverPicker from "./HomeCoverPicker.vue";
 import HomeGallerySwitch from "./HomeGallerySwitch.vue";
@@ -59,49 +59,18 @@ keepListed(() => homeDir.value);
 // The same three switches as the tree, so the home never lists what the tree hides.
 const shows = (entry: WorkspaceTreeEntry): boolean => explorerShows(entry, layout.explorerFilters.value);
 
-// --- The query: the sidebar's own (HOME_SEARCH), answered here under the open folder ---------------------------------
-// Names the home matches itself over the loaded tree; text and smart are the daemon's, and the home draws the files
-// its groups name. Typing on the home writes the same query, so the tree narrows with it.
-const search = inject(HOME_SEARCH, undefined);
-const query = computed<string>({
-    get: () => search?.filter.value ?? ``,
-    set: (value) => {
-        if (search !== undefined) {
-            search.filter.value = value;
-        }
-    },
+// --- The query: the sidebar's own, answered here under the open folder (useHomeQuery) ---------------------------------
+const { search, query, querying, searching, results, whereByPath, placeholder } = useHomeQuery({
+    dir: () => homeDir.value,
+    children: () => children.value,
+    entryAt,
+    listingOf,
+    shows,
 });
-const querying = computed(() => query.value.trim() !== ``);
-const searching = computed(() => search?.searching.value === true);
-const results = computed(() => {
-    if (search === undefined || !querying.value) {
-        return [];
-    }
-    return search.contentMode.value
-        ? contentMatches(
-              search.groups.value.map((group) => group.path),
-              homeDir.value,
-              entryAt,
-          )
-        : nameMatches(query.value, homeDir.value, children.value ?? [], (folder) => listingOf(folder.path), shows);
-});
-// How many tiles the query found, said inside the field; a capped count says it is one.
-const resultCount = computed(() =>
-    querying.value && !searching.value ? `${formatCount(results.value.length)}${results.value.length >= RESULTS_CAP ? `+` : ``}` : undefined,
-);
-// The folder each result sits in, for the line under its name; "" (the open folder itself) draws nothing.
-const whereByPath = computed(() => new Map(results.value.map((result) => [result.entry.path, result.where])));
 const clearQuery = (): void => {
     search?.clear();
     home.value?.focus({ preventScroll: true });
 };
-const placeholder = computed(() =>
-    search?.scope.value === `text`
-        ? t(`workspace.homeView.searchText`)
-        : search?.scope.value === `smart`
-          ? t(`workspace.homeView.smartSearch`)
-          : t(`workspace.homeView.filterNames`),
-);
 const queryField = ref<InstanceType<typeof SearchBar>>();
 // The field owns its keys; Escape (the field's own clear) hands the home back, Enter lands on the first result so the
 // next Enter opens it.

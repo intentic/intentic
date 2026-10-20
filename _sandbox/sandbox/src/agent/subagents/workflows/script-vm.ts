@@ -1,7 +1,7 @@
 import { newQuickJSWASMModuleFromVariant, type QuickJSContext, type QuickJSDeferredPromise, type QuickJSHandle, type QuickJSRuntime, type QuickJSWASMModule } from "quickjs-emscripten-core";
 import { errorMessage } from "@intentic/base/errors";
 import { z } from "zod";
-import { type ResultValue, ResultValueSchema } from "./child-result.js";
+import { type ResultValue, ResultValueSchema } from "../child-result.js";
 
 /* WHERE A WORKFLOW SCRIPT RUNS: a QuickJS interpreter compiled to WebAssembly, inside the daemon but sealed from it. A
    script is code an agent wrote, and the daemon holds what no agent should reach (every secret, every conversation), so

@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { serialLock } from "@intentic/base/async";
 import type { Trigger, WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import type { Services } from "../composition.js";
-import { fireAutomation, firedBy } from "./scheduler.js";
+import { firedBy } from "./fire/fire-sessions.js";
+import { fireAutomation } from "./scheduler.js";
 import { perDaemon } from "./durable/daemon-memory.js";
 import { addWorkspaceEvent, consumeInbox, dropWorkspaceBacklog, workspaceBacklog } from "./durable/inbox-store.js";
 

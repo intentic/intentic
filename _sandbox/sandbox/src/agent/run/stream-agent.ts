@@ -27,7 +27,7 @@ import { settleLandingInBackground, versionMainTree } from "../../conversations/
 import { turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild, spawnDepthOf } from "../subagents/children.js";
 import { childRerunHorizonMs } from "../subagents/child-records.js";
-import { type ScriptRunDoor, scriptRunDoor } from "../subagents/script-runs.js";
+import { type ScriptRunDoor, scriptRunDoor } from "../subagents/workflows/script-runs.js";
 import { withRuntimeSubagents } from "../subagents/runtime-subagents.js";
 import { checkoutDirtyPaths } from "../tools/agent-shell-edits.js";
 import { scanProducedDocuments, withProducedDocuments } from "../tools/produced-documents.js";

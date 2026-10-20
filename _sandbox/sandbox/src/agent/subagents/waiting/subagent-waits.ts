@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { SubagentSession, SubagentStatus } from "@intentic/sandbox-contract/schemas/terminal";
-import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import { ROSTER, subagentRunning } from "../../conversations/actor/subagent-roster.js";
-import { type SubagentRecord, WAITERS, wire } from "./subagents.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import { ROSTER, subagentRunning } from "../../../conversations/actor/subagent-roster.js";
+import { type SubagentRecord, WAITERS, wire } from "../subagents.js";
 
 // Where a conversation's children and the waits on them are held: each conversation's actor.
 type Actors = Pick<ConversationActors, "holdings">;

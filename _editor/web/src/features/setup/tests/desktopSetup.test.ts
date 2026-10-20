@@ -1,4 +1,4 @@
-import type { DesktopSetupReport } from "../../../app/environments/desktop";
+import type { DesktopSetupReport } from "../../../app/environments/desktopSetupReport";
 import { CLAIM_PATIENCE_MS, setupUnderWay } from "../desktopSetup";
 
 // "Set it up now" stayed pressable through a four-minute install in the app; a second press starts a second install.

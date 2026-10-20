@@ -5,7 +5,7 @@ import "@intentic/testing/dom";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, reactive } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import type { DesktopSetupReport } from "../../../app/environments/desktop";
+import type { DesktopSetupReport } from "../../../app/environments/desktopSetupReport";
 
 const track = jest.fn();
 jest.mock(`../../../app/analytics`, () => ({ track, replaySessionId: () => undefined }));

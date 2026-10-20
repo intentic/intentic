@@ -12,6 +12,7 @@ import { RouterLinkStub } from "../../../testing/routerLinkStub";
 import * as actualUi from "@intentic/ui";
 import * as actualDesktop from "../../../app/environments/desktop";
 import * as actualDesktopDownloads from "../../../app/environments/desktopDownloads";
+import { DESKTOP_SETUP_EVENT } from "../../../app/environments/desktopSetupReport";
 
 // Both useDevice (matchMedia) and environment.ts (window.env) read globals at module scope on import.
 
@@ -1337,7 +1338,7 @@ describe(`a download too slow to wait for, given up for a machine of ours`, () =
     // The app's report of a pull with twenty-five minutes still to go: the offer's cue.
     const reportSlowPull = (): void => {
         window.dispatchEvent(
-            new CustomEvent(actualDesktop.DESKTOP_SETUP_EVENT, {
+            new CustomEvent(DESKTOP_SETUP_EVENT, {
                 detail: { name: `workspace`, state: `running`, percent: 40, step: `pulling-image`, remainingSeconds: 1500, at: Date.now() },
             }),
         );
@@ -1347,7 +1348,7 @@ describe(`a download too slow to wait for, given up for a machine of ours`, () =
 
     afterEach(() => {
         // The page's hearing of the app is module state: put away here, so no later mount opens on this run.
-        window.dispatchEvent(new CustomEvent(actualDesktop.DESKTOP_SETUP_EVENT, { detail: { state: `closed`, percent: 0 } }));
+        window.dispatchEvent(new CustomEvent(DESKTOP_SETUP_EVENT, { detail: { state: `closed`, percent: 0 } }));
     });
 
     it(`tells the app to stop this row's install before it starts the machine`, async () => {

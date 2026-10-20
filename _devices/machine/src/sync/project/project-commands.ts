@@ -10,7 +10,8 @@ import { baseDir } from "../../config.js";
 import { readResidentPid } from "../../resident/resident.js";
 import { isProjectPairing, type Pairing, pairingKey, pairingRemoteDir, type ProjectDirection, readState, setProjectDirection } from "../config.js";
 import { canonicalFolder, foldersOverlap, sameFolder } from "../folders.js";
-import { ensureMutagen, sessionName } from "../mutagen.js";
+import { sessionName } from "../mutagen.js";
+import { ensureMutagen } from "../binary/mutagen-binary.js";
 import { pairingEndpoint } from "../endpoint.js";
 import { mutagenSession, projectShell, realProjectRunner, sandboxCopy } from "./project-remote.js";
 import {

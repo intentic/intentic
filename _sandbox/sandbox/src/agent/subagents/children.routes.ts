@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import { AgentHarnessSchema, type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
 import { listSubagentSessions, type SubagentWaitUntil } from "./subagents.js";
-import { type ChildLookups, waitForWork, workWaitAnswer } from "./work-wait.js";
+import { type ChildLookups, waitForWork, workWaitAnswer } from "./waiting/work-wait.js";
 import { soleLiveConversation } from "../../conversations/actor/conversation-holdings.js";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";

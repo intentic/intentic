@@ -26,7 +26,8 @@ import { keyringInstalled, keyringPid, serviceHere, uninstallKeyring } from "../
 import { agentPath } from "../release.js";
 import { machineLauncher, readResident, retireResident } from "../resident/supervision.js";
 import { runProcess } from "../sync/exec.js";
-import { MUTAGEN_CALL_TIMEOUT_MS, MUTAGEN_RUN_VALUE, ownMutagenPath } from "../sync/mutagen.js";
+import { MUTAGEN_CALL_TIMEOUT_MS, MUTAGEN_RUN_VALUE } from "../sync/mutagen.js";
+import { ownMutagenPath } from "../sync/binary/mutagen-binary.js";
 import { removeManagedSshConfig } from "../sync/ssh.js";
 import { legacyAutostart, linkWatchPaths, retiredPaths } from "../upkeep/retired.js";
 import { exists, isInside, linkTarget, processesFrom } from "../upkeep/trash.js";

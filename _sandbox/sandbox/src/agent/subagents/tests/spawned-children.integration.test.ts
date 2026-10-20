@@ -31,8 +31,8 @@ import { SEATS } from "../child-records.js";
 import { FAN_OUT } from "../fan-out-governor.js";
 import { restoreSpawnedChildren, settleRestoredChildren } from "../child-restore.js";
 import { waitForSubagent } from "../subagents.js";
-import { noteQueuedReport, queuedChildReportId } from "../queued-reports.js";
-import { waitForWork } from "../work-wait.js";
+import { noteQueuedReport, queuedChildReportId } from "../waiting/queued-reports.js";
+import { waitForWork } from "../waiting/work-wait.js";
 
 // What a parent supervises its spawned children by, on file across a restart: the boot's decision for each child, and
 // the files themselves.

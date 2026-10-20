@@ -8,7 +8,7 @@ import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
 import { parentOfActor } from "../auth/principal.js";
 import type { ChildActionResult, ChildParent, ChildSpawnResult, PendingChildCard } from "../agent/subagents/children.js";
-import { noteQueuedReport } from "../agent/subagents/queued-reports.js";
+import { noteQueuedReport } from "../agent/subagents/waiting/queued-reports.js";
 import {
     blockedMoveReporter,
     type LinkedChildBirth,

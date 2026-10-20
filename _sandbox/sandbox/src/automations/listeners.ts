@@ -15,7 +15,8 @@ import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/autom
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { doorAdmission } from "./door-admission.js";
-import { fireOnThread, mintConversationId, PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
+import { mintConversationId } from "./fire/fire-sessions.js";
+import { fireOnThread, PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
 import { TITLE_MAX } from "../seams/conversation-title.js";
 import { type SenderLane, senderLane } from "./senders.js";
 

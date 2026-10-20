@@ -1,6 +1,6 @@
 import { readonly, ref, type Ref } from "vue";
 import { track } from "../../app/analytics";
-import { DESKTOP_SETUP_EVENT, readDesktopSetupReport, type DesktopSetupReport } from "../../app/environments/desktop";
+import { DESKTOP_SETUP_EVENT, readDesktopSetupReport, type DesktopSetupReport } from "../../app/environments/desktopSetupReport";
 import { downloadMb, type DownloadMb } from "./desktopRun";
 
 /** A session Windows has to end before Docker can run, which outlasts the app's card being put away. */

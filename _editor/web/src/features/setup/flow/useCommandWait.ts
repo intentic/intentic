@@ -2,7 +2,7 @@ import type { SetupReport } from "@intentic/api-contract";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, type Ref, watch } from "vue";
 import { track } from "../../../app/analytics";
-import type { DesktopSetupReport } from "../../../app/environments/desktop";
+import type { DesktopSetupReport } from "../../../app/environments/desktopSetupReport";
 import { appRunLive } from "../desktopRun";
 import { setupReportView } from "../setupReport";
 import { handoffOf, nudgeAfterMs, nudgeVariantOf, SLOW_BUILD_MS, STALLED_MS, waitedFrom } from "./commandHandoff";

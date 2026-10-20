@@ -1,9 +1,9 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { unstubbed } from "@intentic/testing";
 import { z } from "zod";
-import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
-import type { ChildSupervisor } from "../children.js";
-import { subagentWaitServer } from "../subagent-wait.js";
+import type { ConversationActors } from "../../../../conversations/actor/conversation-actors.js";
+import type { ChildSupervisor } from "../../children.js";
+import { subagentWaitServer } from "../../waiting/subagent-wait.js";
 import { workflowTools } from "../script-run-tools.js";
 
 // The workflow tools as a delegating turn's `subagents` server lists and answers them: one schema the SDK cannot convert

@@ -27,7 +27,7 @@ export const mutagenEnv = (base: NodeJS.ProcessEnv = process.env): NodeJS.Proces
 });
 
 // Whether a command is a Mutagen binary, by its file name: this agent's own copy and a user's on PATH alike, each an
-// absolute path (mutagen.ts ensureMutagen).
+// absolute path (mutagen-binary.ts ensureMutagen).
 export const isMutagenCommand = (command: string): boolean => /^mutagen(?:\.exe)?$/i.test(basename(command.replaceAll("\\", "/")));
 
 // The environment for one child: what the caller set, else Mutagen's own for a Mutagen binary, else this process's

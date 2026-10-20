@@ -3,7 +3,8 @@
 import { Button, Notice, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, watch } from "vue";
-import { DESKTOP_LAUNCHER_LINK, openDesktopLink, type DesktopSetupReport } from "../../app/environments/desktop";
+import { DESKTOP_LAUNCHER_LINK, openDesktopLink } from "../../app/environments/desktop";
+import type { DesktopSetupReport } from "../../app/environments/desktopSetupReport";
 import { useT } from "@intentic/ui/i18n";
 import { appSilence, downloadFigures, minutesLeft, slowDownload } from "./desktopRun";
 import { tellSlowDownloadOffered } from "./desktopSetup";

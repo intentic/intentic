@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { ROSTER } from "../../conversations/actor/subagent-roster.js";
-import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
-import type { Holding } from "../../conversations/actor/conversation-holdings.js";
+import { ROSTER } from "../../../conversations/actor/subagent-roster.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import type { Holding } from "../../../conversations/actor/conversation-holdings.js";
 
 // A child's report that waits in its parent's queue (the parent was busy with a turn that takes no words): kept by the
 // child it is about, so the wait that hands the same ending over first takes the queued copy back out, and the parent

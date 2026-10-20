@@ -13,13 +13,12 @@ import {
     MUTAGEN_CALL_TIMEOUT_MS,
     MUTAGEN_RUN_VALUE,
     ownershipOf,
-    ownMutagenPath,
-    resolveOnPath,
     saysDaemonDown,
     saysVersionMismatch,
     SESSION_PREFIX,
     startMutagenDaemon,
 } from "./mutagen.js";
+import { ownMutagenPath, resolveOnPath } from "./binary/mutagen-binary.js";
 import { movedAlready, mutagenDataDir, recordMove } from "./mutagen-env.js";
 
 /* OFF MUTAGEN'S SHARED DATA DIRECTORY, once (2026-10-18). Builds before mutagen-env.ts kept this agent's sessions and

@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
 import type { AccountReopened } from "../../usage/serviceability/state-log.js";
-import { parentsWaitingOn } from "./subagent-waits.js";
+import { parentsWaitingOn } from "./waiting/subagent-waits.js";
 
 /* CAPACITY BACK, SAID TO WHOEVER IS WAITING ON IT. A parent whose children failed or paused on a spent provider sat in
    its wait while the second Claude account came back at 13:29:30; the only sign was a log line, and a person told the

@@ -5,20 +5,20 @@ import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { unstubbed } from "@intentic/testing";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { Services } from "../../../composition.js";
-import { spawnServices } from "../../../harness/spawn-services.testing.js";
-import { drivenBy } from "../../../seams/turn-starter.testing.js";
-import type { TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
-import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
-import { conversationEntry } from "../../../conversations/registry/agents-store.testing.js";
-import { childActor } from "../../../auth/principal.js";
-import { resetChildrenForTest, spawnChild } from "../children.js";
-import { isWorker } from "../child-records.js";
-import { resetSubagents, waitForSubagent } from "../subagents.js";
+import type { Services } from "../../../../composition.js";
+import { spawnServices } from "../../../../harness/spawn-services.testing.js";
+import { drivenBy } from "../../../../seams/turn-starter.testing.js";
+import type { TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
+import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
+import { conversationEntry } from "../../../../conversations/registry/agents-store.testing.js";
+import { childActor } from "../../../../auth/principal.js";
+import { resetChildrenForTest, spawnChild } from "../../children.js";
+import { isWorker } from "../../child-records.js";
+import { resetSubagents, waitForSubagent } from "../../subagents.js";
 import { awaitScriptRun, resetScriptRunsForTest, resumeScriptRuns, type ScriptRunStatus, startScriptRun, stopScriptRun } from "../script-runs.js";
 import { callKey } from "../script-run-calls.js";
 import { scriptRunsDocument } from "../script-run-store.js";
-import { openDirectory } from "../../../store/open-document.js";
+import { openDirectory } from "../../../../store/open-document.js";
 
 // A workflow run end to end over the real child engine: its workers are spawned children, its calls are kept, and its
 // ending reaches its parent once.

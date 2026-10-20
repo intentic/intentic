@@ -44,7 +44,7 @@ import {
 } from "./family-cancel.js";
 import { endPause, pauseChild } from "./paused-children.js";
 import { capForRoom, FAN_OUT, type Lane, siblingNewsWords } from "./fan-out-governor.js";
-import { waitForWork, type WorkWaitOutcome } from "./work-wait.js";
+import { waitForWork, type WorkWaitOutcome } from "./waiting/work-wait.js";
 import { deliverWake } from "../../seams/wake-delivery.js";
 import { spokenBy } from "../../seams/turn-speaker.js";
 import type { TurnInput } from "../../seams/turn-starter.js";

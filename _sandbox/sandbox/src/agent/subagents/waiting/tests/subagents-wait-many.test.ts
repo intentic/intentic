@@ -1,6 +1,6 @@
-import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
+import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { waitForSubagents } from "../subagent-waits.js";
-import { openSpawnedChild, resetSubagents, settleSpawnedChild } from "../subagents.js";
+import { openSpawnedChild, resetSubagents, settleSpawnedChild } from "../../subagents.js";
 
 /* A WAIT ON SEVERAL CHILDREN AS ONE. 2026-10-17: a parent waited on "any" over seven children and was woken once per
    child, each wake a model call on a context past 300K tokens. Named together, they come back once: early for trouble,

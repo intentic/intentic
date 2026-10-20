@@ -29,7 +29,7 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // (its run, session, last report and result), read back at boot so a restart does not orphan it. Part of the
     // conversations' own record, so it goes where they go.
     { path: "spawned-children/", portability: "carry" },
-    // One file per workflow run a conversation started (agent/script-runs/script-runs.ts): its script, its calls and what
+    // One file per workflow run a conversation started (agent/subagents/workflows/script-runs.ts): its script, its calls and what
     // each handed back, so a restart picks it up where it was and a later run can resume from its finished calls. Part of
     // the conversations' own record, so it goes where they go.
     { path: "script-runs/", portability: "carry" },
