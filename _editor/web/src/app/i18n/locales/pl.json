@@ -157,7 +157,10 @@
             "saveSettingsAndLand": "Zapisz ustawienia i scal",
             "commitThenLand": "Zrób commit, potem scal ponownie.",
             "markersHint": "Konflikty kończysz ręcznie",
-            "markersTitle": "Scala wszystko teraz"
+            "markersTitle": "Scala wszystko teraz",
+            "alreadyMerged": "Już scalone",
+            "alreadyMergedTitle": "Scalone ręcznie?",
+            "alreadyMergedHint": "Oznacza scalenie, nic nie zapisuje"
         },
         "agentDetail": {
             "agentGoneFrom": "{name} nie ma już tego agenta: mógł zostać odrzucony albo jego id należy do innego sandboxa.",
@@ -836,6 +839,9 @@
             "autoLandFailed": "Nie udało się zmienić, kiedy ten agent scala swoją pracę.",
             "askResolveFailed": "Nie udało się poprosić agenta o rozwiązanie.",
             "discardFailed": "Nie udało się odrzucić zmian.",
+            "settleFailed": "Nie udało się oznaczyć jako scalone.",
+            "settling": "Oznaczanie pracy jako już scalonej: {name}",
+            "settled": "Oznaczono pracę jako już scaloną: {name}",
             "includeScratchFailed": "Nie udało się dodać tego do pracy.",
             "deleteScratchFailed": "Nie udało się tego usunąć.",
             "copyIgnoredFailed": "Nie udało się skopiować tego do Twojego drzewa.",

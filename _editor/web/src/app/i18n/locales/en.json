@@ -157,7 +157,10 @@
             "saveSettingsAndLand": "Save settings and land",
             "commitThenLand": "Commit, then land again.",
             "markersHint": "You finish conflicts by hand",
-            "markersTitle": "Lands everything now"
+            "markersTitle": "Lands everything now",
+            "alreadyMerged": "Already merged",
+            "alreadyMergedTitle": "Merged by hand?",
+            "alreadyMergedHint": "Marks it landed, writes nothing"
         },
         "agentDetail": {
             "agentGoneFrom": "{name} doesn't have this agent any more: it may have been discarded, or its id belongs to another sandbox.",
@@ -836,6 +839,7 @@
             "autoLandFailed": "Couldn't change when this agent lands.",
             "askResolveFailed": "Couldn't ask the agent to resolve it.",
             "discardFailed": "Discard failed.",
+            "settleFailed": "Couldn't mark it merged.",
             "includeScratchFailed": "Couldn't add it to the work.",
             "deleteScratchFailed": "Couldn't delete it.",
             "copyIgnoredFailed": "Couldn't copy it into your tree.",
@@ -847,6 +851,8 @@
             "askingResolve": "Asking {name} to resolve its conflict",
             "discarding": "Discarding {name}'s work",
             "discarded": "Discarded {name}'s work",
+            "settling": "Recording {name}'s work as already merged",
+            "settled": "Recorded {name}'s work as already merged",
             "includingScratch": "Adding files to {name}'s work",
             "deletingScratch": "Deleting files from {name}'s copy",
             "copyingIgnored": "Copying files from {name}'s copy into your tree",

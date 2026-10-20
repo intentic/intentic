@@ -29,7 +29,8 @@ export const backgroundJobsInFlight = defineInFlight({
             services.logger.info({ jobs: jobs.length }, "background jobs still running were taken back, their terminals are spared");
         }
         for (const conversationId of new Set(jobs.map((job) => job.conversationId))) {
-            void adoptBackgroundJobs(services.conversations, conversationId, services.logger);
+            // The restart cut the turn that would have adopted them: nobody chose to wait on these.
+            void adoptBackgroundJobs(services.conversations, conversationId, services.logger, { cut: true });
         }
     },
 });

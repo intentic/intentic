@@ -3,7 +3,7 @@ import { mapPool } from "@intentic/base/async";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { feedHeadSha, statusPaths } from "../../git/changes/changes.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
-import { anchorOf, carriesContent } from "./agent-changes.js";
+import { absorbedIn, anchorOf, carriesContent } from "./agent-changes.js";
 import { agentBranchTips } from "../../git/agent-refs.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
@@ -128,12 +128,17 @@ const passReaders = (worktrees: AgentWorktrees, git: GitRunner) => {
 };
 
 // Whether the branch still carries content the main line has not absorbed, and whether it ever carried any: the two
-// halves of "outstanding" that the stored refusal is only ever an explanation of.
+// halves of "outstanding" that the stored refusal is only ever an explanation of. `refused`: a stored refusal stands,
+// so the work may have been brought in by hand onto a main line that moved on, which only a merge can tell (absorbedIn).
+// Asked of nothing else, since a refusal is the one verdict here nothing but a land re-judges: on 2026-10-20 a parent
+// applied a held child's diff with `git apply -3`, landed, and the child read `conflict` (its parent's card with it)
+// for good.
 const deltaOf = async (
     worktrees: AgentWorktrees,
     placement: { readonly parent?: string | undefined },
     repos: readonly RepoShas[],
     git: GitRunner,
+    refused: boolean,
 ): Promise<{ outstanding: boolean; produced: boolean }> => {
     let outstanding = false;
     let produced = false;
@@ -153,6 +158,9 @@ const deltaOf = async (
         // re-offer the whole delta; measured against main's own tree instead, a tip main already holds has nothing left.
         // The review keeps listing those paths as absorbed, which is why this reading lives here and not in the anchor.
         if (head !== undefined && !(await carriesContent(main, head, tip, git))) {
+            continue;
+        }
+        if (refused && head !== undefined && (await absorbedIn(main, anchor, head, tip, git))) {
             continue;
         }
         outstanding = true;
@@ -191,7 +199,7 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
                 if (cached?.key === key) {
                     return;
                 }
-                const { outstanding, produced } = await deltaOf(worktrees, entry.placement, shas, git);
+                const { outstanding, produced } = await deltaOf(worktrees, entry.placement, shas, git, refusal.stands);
                 // The report explains a refusal, it does not create one: nothing outstanding, nothing to be about.
                 const standing: LandStanding = outstanding ? (refusal.stands ? "conflict" : "ready") : produced ? "landed" : "idle";
                 // Causes ride only their own verdict: a report that outlived its delta says nothing about the card.

@@ -638,6 +638,7 @@ const seamWidth = computed<number>({
             :queued="changes.fixQueued.value"
             :box="remoteName"
             @merge="changes.land('merge')"
+            @settle="changes.settle()"
             @commit="openChanges"
             @save-settings="(paths: readonly string[]) => changes.land(`check`, undefined, false, paths)"
             @stop="stopAgent(agentId, at)"

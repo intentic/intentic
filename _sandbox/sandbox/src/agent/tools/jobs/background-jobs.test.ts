@@ -14,7 +14,6 @@ import {
     jobHandle,
     jobLabel,
     JOB_MAX_MS,
-    jobReport,
     jobStatusPath,
     keptJobDirs,
     keptJobSessions,
@@ -27,6 +26,7 @@ import {
     settledBackgroundJobs,
     sweepJobEnds,
 } from "./background-jobs.js";
+import { jobReport } from "./job-report.js";
 import { fakeTurns } from "../../../seams/turn-starter.testing.js";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { awaitingWake } from "../../../conversations/actor/conversation-state.js";
@@ -202,6 +202,13 @@ describe("background job registry", () => {
         noteJobShell(actors, "tu-persist", "bsh-persist");
         settledBackgroundJobs(actors, "conv-persist");
         expect(JSON.parse(readFileSync(join(job.dir, "job.json"), "utf8"))).toMatchObject({ id: job.id, shellId: "bsh-persist", adopted: true });
+        expect(JSON.parse(readFileSync(join(job.dir, "job.json"), "utf8"))).not.toHaveProperty("cut");
+    });
+
+    it("writes down that a cut-off turn adopted it, so the next daemon knows nobody chose to wait on it", () => {
+        const job = opened("conv-persist-cut", "pnpm build", "tu-persist-cut");
+        settledBackgroundJobs(actors, "conv-persist-cut", true);
+        expect(JSON.parse(readFileSync(join(job.dir, "job.json"), "utf8"))).toMatchObject({ id: job.id, adopted: true, cut: true });
     });
 
     it("ends a job whose command never reached a terminal once its turn settles, and hands it out as unseen", async () => {
@@ -377,6 +384,16 @@ describe("background job adoption", () => {
             opened("conv-close-running", "pnpm test");
             expect(await close("conv-close-running").armWakes()).toBe(true);
             expect(awaitingWake(actors.state("conv-close-running")!)).toBe(true);
+        });
+
+        it("marks what a failed turn leaves awaiting as left by a cut, and what a finished one leaves as chosen", async () => {
+            stop = startWatcherRuntime(runtime());
+            const cut = opened("conv-close-cut", "pnpm test");
+            const chosen = opened("conv-close-chosen", "pnpm test");
+            expect(await close("conv-close-cut").armWakes({ failed: true })).toBe(true);
+            expect(await close("conv-close-chosen").armWakes({ failed: false })).toBe(true);
+            expect(JSON.parse(readFileSync(join(cut.dir, "job.json"), "utf8"))).toMatchObject({ adopted: true, cut: true });
+            expect(JSON.parse(readFileSync(join(chosen.dir, "job.json"), "utf8"))).not.toHaveProperty("cut");
         });
 
         it("counts a job that finished unseen, whose wake is already on its way", async () => {

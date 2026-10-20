@@ -203,6 +203,11 @@ describe("a job's fate, from what its turn did", () => {
     it("still hands over one the agent kept for the person, prompt or not: answering it is theirs", () => {
         expect(jobFate({ kept: true, ports: [], targets: [], handed: none, reachedBefore: none, waiting: true })).toBe("handed");
     });
+
+    it("stops a leftover of a cut-off turn the clean run never reached, unless the agent kept it for the person", () => {
+        expect(jobFate({ kept: false, ports: [], targets: [], handed: none, reachedBefore: none, waiting: false, leftover: true })).toBe("stopped");
+        expect(jobFate({ kept: true, ports: [], targets: [], handed: none, reachedBefore: none, waiting: false, leftover: true })).toBe("handed");
+    });
 });
 
 describe("keeping a job for the person", () => {
@@ -378,6 +383,55 @@ describe("a turn's ending, over a real job", () => {
         await ended(job);
         // A watch that arms after the stop has nobody to wake: the adoption is told so, and disarms it.
         expect(noteJobWatch(actors, job, "watch-late")).toBe(false);
+    });
+});
+
+// 2026-10-20: a transcript scan an architect ran in the foreground overran into a job, the turn died on a usage limit
+// and handed it to a six-hour watch, and the re-run that finished the work ended cleanly without it. Four hours on it
+// was still scanning, and its exit would have woken a conversation that was done.
+describe("what a cut-off turn left awaited", () => {
+    const quiet = { conversations: actors, logger, scanPorts: () => Promise.resolve([]) };
+
+    it("is stopped once the run that carried the work on ends cleanly without reaching it", async () => {
+        const { job } = await running("conv-cut-left");
+        settledBackgroundJobs(actors, "conv-cut-left", true);
+        turnWith("conv-cut-left", [said("All six tasks are done.")], "run-cut-left-2");
+        await resolveTurnJobs(quiet, "conv-cut-left", { clean: true });
+        expect(card("conv-cut-left", job.id)?.stoppedBy).toBe("turn");
+        await ended(job);
+        expect(card("conv-cut-left", job.id)).toMatchObject({ stoppedBy: "turn", exitCode: 143 });
+    });
+
+    it("stays awaited through a run that was cut off too", async () => {
+        const { job } = await running("conv-cut-again");
+        settledBackgroundJobs(actors, "conv-cut-again", true);
+        turnWith("conv-cut-again", [said("Picking the audit back up.")], "run-cut-again-2");
+        await resolveTurnJobs(quiet, "conv-cut-again", { clean: false });
+        expect(card("conv-cut-again", job.id)?.stoppedBy).toBeUndefined();
+        expect(existsSync(jobStatusPath(job))).toBe(false);
+        await stopBackgroundJob(actors, job, "agent");
+    });
+
+    it("becomes the wait of a clean run that reached it, which a later run's ending leaves alone", async () => {
+        const { job } = await running("conv-cut-reached");
+        settledBackgroundJobs(actors, "conv-cut-reached", true);
+        turnWith("conv-cut-reached", [called(`wait ${job.id}`), said("Still scanning; I'll read it when it ends.")], "run-cut-reached-2");
+        await resolveTurnJobs(quiet, "conv-cut-reached", { clean: true });
+        expect(card("conv-cut-reached", job.id)?.stoppedBy).toBeUndefined();
+        turnWith("conv-cut-reached", [said("Answered the question.")], "run-cut-reached-3");
+        await resolveTurnJobs(quiet, "conv-cut-reached", { clean: true });
+        expect(card("conv-cut-reached", job.id)?.stoppedBy).toBeUndefined();
+        expect(existsSync(jobStatusPath(job))).toBe(false);
+        await stopBackgroundJob(actors, job, "agent");
+    });
+
+    it("leaves a job a clean ending awaited alone, as before: that turn ended to wait on it", async () => {
+        const { job } = await running("conv-ended-on");
+        settledBackgroundJobs(actors, "conv-ended-on");
+        turnWith("conv-ended-on", [said("Fixed the typo while the build runs.")], "run-ended-on-2");
+        await resolveTurnJobs(quiet, "conv-ended-on", { clean: true });
+        expect(card("conv-ended-on", job.id)?.stoppedBy).toBeUndefined();
+        await stopBackgroundJob(actors, job, "agent");
     });
 });
 

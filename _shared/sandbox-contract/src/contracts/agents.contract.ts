@@ -386,6 +386,18 @@ export const agentsContract = {
         .meta({ control: "land" })
         .input(AgentIdSchema)
         .output(OkSchema),
+    // For work somebody brought in themselves after a refused land: the review's "Already merged" press.
+    settle: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/settle",
+            summary: "Mark a conversation's held work as already merged",
+            description:
+                "For work brought in by hand after a land was refused (a patch applied, a merge resolved elsewhere): records it as landed where it was headed and clears the conflict report, so the card files as landed. Nothing is written into any tree, and the branch keeps every commit. Refused while a turn is running or a land is under way, and refused for a conversation working in the shared tree.",
+        })
+        .meta({ control: "land" })
+        .input(AgentIdSchema)
+        .output(AgentSummarySchema),
     archive: procedure
         .route({
             method: "POST",

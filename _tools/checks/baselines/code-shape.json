@@ -1527,7 +1527,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/tools/jobs/background-jobs.ts": {
-        "count": 845,
+        "count": 819,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/tools/turn-mounts.ts#createTurnMounts#lines": {

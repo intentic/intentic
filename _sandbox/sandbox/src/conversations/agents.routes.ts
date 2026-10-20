@@ -28,7 +28,7 @@ import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
 import { endingOf } from "./registry/turn-ending.js";
 import { archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
-import { landByHandLeased } from "./land/land-by-hand.js";
+import { landByHandLeased, settleByHand } from "./land/land-by-hand.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
@@ -37,6 +37,26 @@ import { cancelFamily, familyOf } from "../agent/subagents/children.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
+// The card as a press left it, for the press to answer with; missing only once the conversation was deleted meanwhile.
+const summaryAfter = (services: Pick<Services, "agents">, id: string): NonNullable<ReturnType<Services["agents"]["get"]>> => {
+    const summary = services.agents.get(id);
+    if (summary === undefined) {
+        throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
+    }
+    return summary;
+};
+
+// The settle press: refused for a conversation in the shared tree or with a turn running (the guards, the routes' own),
+// then the card as it now stands.
+const settleRoute =
+    (services: Services, isolated: (id: string, context: OrpcContext) => IsolatedAgent, idle: (id: string) => void) =>
+    async ({ input, context }: { readonly input: { readonly id: string }; readonly context: OrpcContext }) => {
+        const entry = isolated(input.id, context);
+        idle(input.id);
+        await settleByHand(services, entry.id);
+        return summaryAfter(services, entry.id);
+    };
+
 export const createAgentsRoutes = (services: Services) => {
     const i = implement(agentsContract).$context<OrpcContext>();
     // The one lookup every route here addresses a conversation through: unknown is NOT_FOUND, and one the caller may not
@@ -535,6 +555,8 @@ export const createAgentsRoutes = (services: Services) => {
             await cancelFamily(services, family, "discarded");
             return { ok: true } as const;
         }),
+        // Held work somebody brought in by hand, recorded as landed with nothing written (land/land-by-hand.ts).
+        settle: i.settle.handler(settleRoute(services, isolatedEntryOf, notRunning)),
         // Archives exactly the ids named, the board's Clear included. Answers with what moved, not the roster, so
         // overlapping requests can't undo each other.
         archive: i.archive.handler(async ({ input, context }) => {

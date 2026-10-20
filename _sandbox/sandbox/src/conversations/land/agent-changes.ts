@@ -100,6 +100,21 @@ export const carriesContent = async (dir: string, from: string, tip: string, git
     }
 };
 
+// Whether everything a branch changed since `from` is in `head` already: merged into it, the branch would change
+// nothing. Where carriesContent asks whether two trees are the same, this asks whether one holds the other's change, so
+// work brought in by hand onto a main line that moved on still reads as brought in. It costs a merge, so only work a
+// refused land holds asks it (standing.ts). A conflicting merge exits non-zero, which is the same no.
+export const absorbedIn = async (dir: string, from: string, head: string, tip: string, git: GitRunner = defaultGit): Promise<boolean> => {
+    try {
+        const merged = (await git(dir, ["merge-tree", "--write-tree", `--merge-base=${from}`, head, tip])).stdout.trim().split("\n")[0];
+        const headTree = (await git(dir, ["rev-parse", `${head}^{tree}`])).stdout.trim();
+        return merged !== undefined && merged !== "" && merged === headTree;
+        // allow(silent-catch): a merge that conflicts, or a revision git cannot read, is no proof the work is there.
+    } catch {
+        return false;
+    }
+};
+
 // One repo's changes in the shape the Changes panel renders, from the checkout when attached or the two main-repo refs
 // otherwise, decided by attachment rather than archivedAt. Held scratch is no change: no capture will commit it.
 export const agentRepoChanges = async (

@@ -1,5 +1,5 @@
 import { type Logger, pino } from "pino";
-import { inLogContext, logContext, loggerOptions } from "./logger.js";
+import { inLogContext, logContext, loggerOptions, outsideLogContext } from "./logger.js";
 
 const capturing = (): { logger: Logger; lines: Record<string, unknown>[] } => {
     const lines: Record<string, unknown>[] = [];
@@ -61,4 +61,24 @@ test("leaving a wrapped generator early still runs its cleanup inside the contex
     }
 
     expect(lines).toMatchObject([{ message: "released", ctx: { conversationId: "calm-reef-a1b2" } }]);
+});
+
+test("a timer armed outside the log context names nobody, though the turn that armed it was running", async () => {
+    const { logger, lines } = capturing();
+    await logContext.run({ conversationId: "first-to-arm-a1b2" }, async () => {
+        await new Promise<void>((resolve) => {
+            outsideLogContext(() =>
+                setTimeout(() => {
+                    logger.info("fleet clock");
+                    resolve();
+                }, 1),
+            );
+        });
+        logger.info("the turn itself");
+    });
+
+    expect(lines.map((line) => [line["message"], line["ctx"]])).toEqual([
+        ["fleet clock", undefined],
+        ["the turn itself", { conversationId: "first-to-arm-a1b2" }],
+    ]);
 });

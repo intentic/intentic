@@ -23,6 +23,7 @@ interface ReportProps {
     readonly box?: string;
     readonly onSaveSettings?: (paths: readonly string[]) => void;
     readonly onShow?: () => void;
+    readonly onSettle?: () => void;
     readonly onCancel?: () => void;
 }
 
@@ -86,6 +87,16 @@ it(`says how many files conflict and why, and leaves the fix to the header`, asy
     expect(hasButton(el, `Fix`)).toBe(false);
     expect(hasButton(el, `Land with conflict markers`)).toBe(true);
     expect(hasButton(el, `Open in`)).toBe(false);
+});
+
+// 2026-10-20: a parent merged a held child by hand, adapting it on the way, and the child's card read "Land conflict"
+// for good, its parent's with it; Discard, which deletes the conversation, was the only way out.
+it(`offers to record work already brought in by hand, whatever held the land`, async () => {
+    let settled = 0;
+    const el = await mount({ conflicts: mixed, onSettle: () => (settled += 1) });
+    expect(hasButton(el, `Already merged`)).toBe(true);
+    press(el, `Already merged`);
+    expect(settled).toBe(1);
 });
 
 // The paths were a wall of monorepo paths in the bar; now the list below narrows to them.

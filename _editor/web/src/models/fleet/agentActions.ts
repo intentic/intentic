@@ -358,6 +358,11 @@ export const discardAgent = (id: string, at: AgentReach = undefined): Promise<vo
         await sandboxRpc.agents.discard({ id }, { context: { at } });
     });
 
+// Work somebody brought in by hand after a refused land (a patch applied, a merge resolved elsewhere): the sandbox
+// records it as landed where it was headed and clears the report, writing nothing (its land-by-hand.ts settleByHand), so the card
+// files as landed. The one way out for work adapted on its way in, which the sandbox cannot recognise by its content.
+export const settleAgent = (id: string, at: AgentReach = undefined): Promise<AgentSummary> => sandboxRpc.agents.settle({ id }, { context: { at } });
+
 // Scratch is what a land leaves in the conversation's copy (AgentChanges.scratch). Including stages it there, so the
 // next land carries it; deleting removes it from the copy. Both name paths exactly as the review listed them.
 export const includeAgentScratch = async (id: string, repo: string, paths: readonly string[], at: AgentReach = undefined): Promise<void> => {

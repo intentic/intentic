@@ -11,11 +11,10 @@ import {
     jobFinished,
     jobHandle,
     jobInputWait,
-    type JobReport,
-    jobReport,
     jobStatusPath,
     runningJobsOf,
 } from "../../tools/jobs/background-jobs.js";
+import { type JobReport, jobReport } from "../../tools/jobs/job-report.js";
 import { followRun } from "../../tools/jobs/input-wait-follow.js";
 import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "../subagents.js";
 import { type SubagentsWaitOptions, type SubagentsWaitOutcome, waitForSubagents } from "./subagent-waits.js";
@@ -114,7 +113,7 @@ const waitForJobs = (
                 return;
             }
             // Hears the job start waiting for input the moment the daemon is sure of it; one already waiting answers now.
-            held.push(followRun(job.dir, look));
+            held.push(followRun(job.dir, look, { owner: job.conversationId }));
             look();
             if (settled) {
                 return;

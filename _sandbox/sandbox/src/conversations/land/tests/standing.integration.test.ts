@@ -98,6 +98,41 @@ test("a conflict report cannot outlive its delta: work merged into main by hand 
     expect(await standingOf(worktrees, stranded)).toBe("landed");
 });
 
+// 2026-10-20: a parent brought a held child's work in with `git apply -3` onto a main line other work had moved, and
+// landed; main's tree was nobody's tip, so the child read `conflict` for good and held its parent's card with it.
+test("work brought in by hand onto a main line that moved on reads landed, while work only partly there stays a conflict", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "agent work");
+    const stranded = isolatedAgent(conversation.repos, { landing: { conflicts: report } });
+    expect(await standingOf(worktrees, stranded)).toBe("conflict");
+
+    // Somebody else's work moves main first, so main's tree is never the branch's.
+    await writeFile(join(work, "other.ts"), "another agent's file\n");
+    await sh(work, "add", "-A");
+    await commit(work, "other work");
+    expect(await standingOf(worktrees, stranded)).toBe("conflict");
+
+    // Half of it by hand: still a conflict, since merging the branch would still change main.
+    await writeFile(join(work, "app.ts"), "line one EDITED\nline two\nline three\nline four\n");
+    await sh(work, "add", "-A");
+    await commit(work, "half of it, and more");
+    await writeFile(join(conversation.cwd, "second.ts"), "only on the branch\n");
+    await sh(conversation.cwd, "add", "-A");
+    await commit(conversation.cwd, "more agent work");
+    expect(await standingOf(worktrees, stranded)).toBe("conflict");
+
+    // The rest by hand, the way the parent did it: the branch's diff applied onto main.
+    const patch = await sh(work, "diff", "--binary", conversation.repos[0]?.base ?? "", "agent/c1", "--", "second.ts");
+    await writeFile(join(work, "rest.patch"), `${patch}\n`);
+    await sh(work, "apply", "rest.patch");
+    await rm(join(work, "rest.patch"));
+    await sh(work, "add", "-A");
+    await commit(work, "the rest by hand");
+    expect(await standingOf(worktrees, stranded)).toBe("landed");
+});
+
 test("a standing is re-derived when either the branch or the main tree moves", async () => {
     const { work, worktrees, conversation } = await setup();
     const standings = createLandStandings(worktrees);

@@ -14,6 +14,12 @@ export interface LogContext {
 // running, never who owns the line.
 export const logContext = new AsyncLocalStorage<LogContext>();
 
+// For what serves the whole fleet but is started lazily by whoever needs it first (one clock over every conversation's
+// runs): started in here, it names nobody, rather than naming that first conversation on every line for the rest of
+// the daemon's life. On 2026-10-20 the input-wait clock, armed in one subagent's turn, logged another conversation's
+// stuck `grep` under that subagent's id an hour after its turn had ended.
+export const outsideLogContext = <T>(start: () => T): T => logContext.exit(start);
+
 // Every step of `source` runs inside `context`, since an async generator's body resumes in whoever calls next().
 export async function* inLogContext<T>(context: LogContext, source: AsyncGenerator<T>): AsyncGenerator<T> {
     try {

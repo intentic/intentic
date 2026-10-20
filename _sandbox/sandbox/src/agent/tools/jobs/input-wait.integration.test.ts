@@ -7,7 +7,8 @@ import { memoryFleet } from "../../../conversations/registry/agents-registry.tes
 import { waitForWork, workWaitAnswer } from "../../subagents/waiting/work-wait.js";
 import { openBackgroundJob } from "./background-jobs.js";
 import { INPUT_WAIT_MS, sampleRuns } from "./input-wait.js";
-import { followRun, INPUT_WAIT_FILE, inputWaitAt, lookAtRuns } from "./input-wait-follow.js";
+import { logContext } from "../../../logger.js";
+import { followRun, INPUT_WAIT_FILE, inputWaitAt, lookAtRuns, onInputWaitStarted } from "./input-wait-follow.js";
 import { jobRunnerPids } from "./job-processes.js";
 
 // Real programs on a real terminal, read through the real /proc: each runs under a runner shaped like bin/tmux-run's,
@@ -105,7 +106,7 @@ describe("following a run", () => {
         expect(await readerOf(run)).toMatchObject({ program: `bash ${join(run.dir, "cmd")}` });
         const heard: unknown[] = [];
         const t0 = Date.now();
-        const unfollow = followRun(run.dir, (wait) => heard.push(wait), t0 - 10_000);
+        const unfollow = followRun(run.dir, (wait) => heard.push(wait), { now: t0 - 10_000 });
         try {
             await lookAtRuns("/proc", t0);
             expect(inputWaitAt(run.dir)).toBeUndefined();
@@ -122,10 +123,29 @@ describe("following a run", () => {
         }
     });
 
+    // 2026-10-20: the clock that finds a stalled run was armed inside one subagent's turn, so the log named that subagent
+    // for another conversation's stuck `grep` an hour after its turn ended. The run's own owner is what is said now.
+    test.skipIf(!terminal.runs)(terminal.title("a stalled run is told as its owner's, whoever's turn was running when it was followed"), async () => {
+        const run = await onTerminal(`read -p "Proceed? (y) " answer`);
+        expect(await readerOf(run)).toMatchObject({ program: `bash ${join(run.dir, "cmd")}` });
+        const told: { owner: string | undefined; ambient: string | undefined }[] = [];
+        onInputWaitStarted((_dir, _wait, owner) => told.push({ owner, ambient: logContext.getStore()?.conversationId }));
+        const t0 = Date.now();
+        const unfollow = logContext.run({ conversationId: "someone-elses-turn" }, () => followRun(run.dir, undefined, { now: t0 - 10_000, owner: "the-runs-owner" }));
+        try {
+            await logContext.run({ conversationId: "someone-elses-turn" }, () => lookAtRuns("/proc", t0));
+            await logContext.exit(() => lookAtRuns("/proc", t0 + INPUT_WAIT_MS));
+            expect(told).toEqual([{ owner: "the-runs-owner", ambient: undefined }]);
+        } finally {
+            onInputWaitStarted(undefined);
+            unfollow();
+        }
+    });
+
     test.skipIf(!terminal.runs)(terminal.title("a run that keeps printing is never a wait"), async () => {
         const run = await onTerminal(`while true; do echo tick; sleep 0.2; done`);
         const t0 = Date.now();
-        const unfollow = followRun(run.dir, undefined, t0 - 10_000);
+        const unfollow = followRun(run.dir, undefined, { now: t0 - 10_000 });
         try {
             for (let step = 0; step <= 5; step += 1) {
                 await lookAtRuns("/proc", t0 + step * 2_000);

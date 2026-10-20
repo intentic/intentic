@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { oneLine } from "@intentic/base/one-line";
@@ -13,6 +13,7 @@ import { tellJobEnded } from "./job-ended.js";
 import { publishRuntimeChange } from "../../../seams/runtime-feed.js";
 import { endSession } from "../../../seams/session-processes.js";
 import { opt } from "../../../opt.js";
+import { outsideLogContext } from "../../../logger.js";
 import { followRun, inputWaitAt } from "./input-wait-follow.js";
 import { readRunFile, renameRunFile, writeRunFile } from "./run-files.js";
 import { forgetKeptJob, rememberKeptJob } from "./kept-job-records.js";
@@ -77,6 +78,8 @@ const JobFileSchema = z.object({
     shellId: z.string().optional(),
     // Whether its completion was handed to a watch; a restored unadopted job is adopted at boot.
     adopted: z.boolean().optional(),
+    // Handed to that watch by a turn that was cut off rather than one that ended (JobRecord.cut).
+    cut: z.boolean().optional(),
     // Left running for the person instead (job-fates.ts); never adopted, restart or not.
     handed: z.boolean().optional(),
     kept: z.string().optional(),
@@ -134,6 +137,12 @@ export interface JobRecord {
     // A foreground call filed as a job when it ran past its time. The CLI never knew it as a task, so no completion
     // notice marks its end read: one that finished inside its turn was the agent's to look at, and wakes nobody after.
     overran: boolean;
+    // Awaited because its turn was cut off (a spent allowance, an outage, a restart), not because the agent ended its
+    // turn on it: nobody chose to wait. The next run that ends cleanly without reaching it shows nobody does
+    // (job-fates.ts), and it is stopped then rather than holding a six-hour wake: on 2026-10-20 a transcript scan whose
+    // turn died on a usage limit outlived the clean re-run that finished the work, and would have woken a done
+    // conversation four hours later.
+    cut: boolean;
 }
 
 // A conversation's jobs, by job id, until nothing depends on one any more.
@@ -147,7 +156,7 @@ const END_POLL_ID = "end-poll";
 
 type Actors = Pick<ConversationActors, "holdings" | "send">;
 // What a reader of the jobs needs of them, which writes nothing to a card.
-type Holders = Pick<ConversationActors, "holdings">;
+export type Holders = Pick<ConversationActors, "holdings">;
 
 export const jobStatusPath = (job: BackgroundJob): string => join(job.dir, STATUS_FILE);
 export const jobOutputPath = (job: BackgroundJob): string => join(job.dir, OUTPUT_FILE);
@@ -271,11 +280,11 @@ const sweepEnds = (actors: Actors): void => {
 export const sweepJobEnds = (actors: Actors): void => sweepEnds(actors);
 
 // One timer for every running job, stopped once none is left; unref'd, since a job never holds the daemon up. It
-// sweeps the fleet that armed it.
+// sweeps the fleet that armed it, and is armed outside the arming turn's log context, since it serves every conversation.
 const followEnds = (actors: Actors): void => {
     const poll = actors.holdings(END_POLL);
     if (!poll.has(END_POLL_ID)) {
-        const timer = setInterval(() => sweepEnds(actors), END_POLL_MS);
+        const timer = outsideLogContext(() => setInterval(() => sweepEnds(actors), END_POLL_MS));
         timer.unref();
         poll.hold(undefined, END_POLL_ID, timer);
     }
@@ -284,11 +293,15 @@ const followEnds = (actors: Actors): void => {
 const followJob = (actors: Actors, record: JobRecord): void => {
     record.unwatch = whenFileAppears(jobStatusPath(record.job), () => sweepEnds(actors));
     // Its card says so the moment it starts or stops waiting for input, and a parked `wait` hears it (work-wait.ts).
-    record.unfollow = followRun(record.job.dir, () => {
-        if (actors.holdings(JOBS).get(record.job.id) === record) {
-            publish(actors, record.job.conversationId);
-        }
-    });
+    record.unfollow = followRun(
+        record.job.dir,
+        () => {
+            if (actors.holdings(JOBS).get(record.job.id) === record) {
+                publish(actors, record.job.conversationId);
+            }
+        },
+        { owner: record.job.conversationId },
+    );
     followEnds(actors);
 };
 
@@ -322,6 +335,7 @@ const persist = (record: JobRecord): void => {
                 ...opt("kept", record.kept),
                 ...(record.shellId === undefined ? {} : { shellId: record.shellId }),
                 ...(record.fate === "awaited" ? { adopted: true } : {}),
+                ...(record.fate === "awaited" && record.cut ? { cut: true } : {}),
                 ...(record.fate === "handed" ? { handed: true } : {}),
                 ...(record.ports === undefined ? {} : { ports: [...record.ports] }),
                 ...(record.watch === undefined ? {} : { watch: record.watch }),
@@ -420,6 +434,7 @@ const UNJUDGED = {
     stoppedBy: undefined,
     kept: undefined,
     overran: false,
+    cut: false,
 } as const satisfies Omit<JobRecord, "job" | "shellId" | "toolUseId">;
 
 // Undefined for anything that is not a job file; never throws, so a bad entry cannot fail a boot.
@@ -429,7 +444,7 @@ const recordOf = (dir: string): JobRecord | undefined => {
         if (!parsed.success) {
             return undefined;
         }
-        const { shellId, adopted, handed, kept, ports, watch, turn, overran, ...rest } = parsed.data;
+        const { shellId, adopted, handed, kept, ports, watch, turn, overran, cut, ...rest } = parsed.data;
         return {
             ...UNJUDGED,
             job: { ...rest, dir, profile: profileOf(turn) },
@@ -440,6 +455,7 @@ const recordOf = (dir: string): JobRecord | undefined => {
             watch,
             ports,
             overran: overran === true,
+            cut: cut === true,
         };
     } catch {
         // allow(silent-catch): an entry whose file is unreadable or torn is not a job this can adopt, and a bad entry must not fail a boot.
@@ -577,9 +593,10 @@ export interface SettledJobs {
 
 /**
  * A settled turn's jobs, each handed out once; a job whose completion the model read retires here. Only a job its
- * turn's ending left undecided is handed out: one left running for the person, or being stopped, wakes nothing.
+ * turn's ending left undecided is handed out: one left running for the person, or being stopped, wakes nothing. `cut`
+ * is whether that turn was cut off rather than ended (JobRecord.cut).
  */
-export const settledBackgroundJobs = (actors: Actors, conversationId: string): SettledJobs => {
+export const settledBackgroundJobs = (actors: Actors, conversationId: string, cut = false): SettledJobs => {
     const running: BackgroundJob[] = [];
     const unseen: BackgroundJob[] = [];
     for (const record of actors.holdings(JOBS).of(conversationId)) {
@@ -598,6 +615,7 @@ export const settledBackgroundJobs = (actors: Actors, conversationId: string): S
             continue;
         }
         record.fate = "awaited";
+        record.cut = cut;
         persist(record);
         running.push(record.job);
     }
@@ -639,6 +657,10 @@ export interface JudgedJob {
     readonly toolUseId: string | undefined;
     // Whether the agent kept it for the person with the `keep` tool.
     readonly kept: boolean;
+    // Awaited since a turn that was cut off (JobRecord.cut).
+    readonly cut: boolean;
+    // The id the CLI knows it by, which a call reaching it names.
+    readonly shellId: string | undefined;
 }
 
 export type KeepOutcome = "kept" | "unknown" | "ended" | "stopped";
@@ -676,7 +698,16 @@ export const jobsToJudge = (actors: Holders, conversationId: string): readonly J
         .holdings(JOBS)
         .of(conversationId)
         .filter((record) => !jobFinished(record.job) && (record.fate === undefined || record.fate === "awaited"))
-        .map((record) => ({ job: record.job, toolUseId: record.toolUseId, kept: record.kept !== undefined }));
+        .map((record) => ({ job: record.job, toolUseId: record.toolUseId, kept: record.kept !== undefined, cut: record.fate === "awaited" && record.cut, shellId: record.shellId }));
+
+/** A job a cut-off turn left awaited that a later run reached: the wait is that run's own now, like any it ended on. */
+export const awaitedByRun = (actors: Holders, job: BackgroundJob): void => {
+    const record = actors.holdings(JOBS).get(job.id);
+    if (record?.fate === "awaited" && record.cut) {
+        record.cut = false;
+        persist(record);
+    }
+};
 
 /** Where a running job's pane leads a session, for the dirs that have one; the pid is the session's id. */
 export const jobPanes = (jobs: readonly BackgroundJob[]): Promise<Map<string, number>> => jobRunnerPids(jobs.map((job) => job.dir));
@@ -783,63 +814,6 @@ export const jobShellId = (actors: Holders, job: BackgroundJob): string | undefi
 
 /** The id the model was given for the job, else the daemon's own. */
 export const jobHandle = (actors: Holders, job: BackgroundJob): string => actors.holdings(JOBS).get(job.id)?.shellId ?? job.id;
-
-// Empty when the file cannot be read.
-// Through run-files.ts, never a link: what this returns is handed to the agent as its job's output.
-const tailOf = async (job: BackgroundJob, name: string, bytes: number): Promise<string> => {
-    try {
-        return readRunFile(job.dir, name, bytes).text;
-    } catch {
-        // allow(silent-catch): a capture not yet written, already swept or refused as a link has nothing this may show, which the report reads as empty.
-        return "";
-    }
-};
-
-export interface JobReport {
-    readonly id: string;
-    readonly command: string;
-    // Undefined while it runs, or when the status is not a number.
-    readonly exitCode: number | undefined;
-    readonly running: boolean;
-    readonly outputTail: string;
-    readonly outputFile: string;
-    // While it runs: how long since it last printed anything, so an unchanged tail reads as the silence it is.
-    readonly quietForSeconds?: number;
-    // While it sits at a prompt nobody will answer (input-wait.ts): the process waiting, and for how long.
-    readonly waitingForInput?: { readonly program: string; readonly pid: number; readonly forSeconds: number };
-}
-
-// Whole seconds since the output last grew, from the capture's own mtime; the start when it never printed.
-const quietSince = (job: BackgroundJob, now: number): number | undefined => {
-    try {
-        return Math.max(0, Math.round((now - Math.max(job.startedAt, statSync(jobOutputPath(job)).mtimeMs)) / 1000));
-    } catch {
-        // allow(silent-catch): a capture the tmp sweep already took has no silence to measure.
-        return undefined;
-    }
-};
-
-
-export const jobReport = async (actors: Holders, job: BackgroundJob, now: number = Date.now()): Promise<JobReport> => {
-    const finished = jobFinished(job);
-    const status = finished ? (await tailOf(job, STATUS_FILE, 64)).trim() : "";
-    const code = status === "" ? Number.NaN : Number(status);
-    const quiet = finished ? undefined : quietSince(job, now);
-    const waiting = finished ? undefined : inputWaitAt(job.dir);
-    return {
-        id: jobHandle(actors, job),
-        command: jobCommandLine(job.command),
-        exitCode: Number.isInteger(code) ? code : undefined,
-        running: !finished,
-        outputTail: await tailOf(job, OUTPUT_FILE, OUTPUT_TAIL_BYTES),
-        outputFile: jobOutputPath(job),
-        ...opt("quietForSeconds", quiet),
-        ...opt(
-            "waitingForInput",
-            waiting === undefined ? undefined : { program: waiting.program, pid: waiting.pid, forSeconds: Math.max(0, Math.round((now - waiting.since) / 1000)) },
-        ),
-    };
-};
 
 /** The job's input wait, if it is sitting at a prompt nobody will answer (input-wait.ts). */
 export const jobInputWait = (job: BackgroundJob) => (jobFinished(job) ? undefined : inputWaitAt(job.dir));

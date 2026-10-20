@@ -1,5 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { outsideLogContext } from "../../../logger.js";
 import { type InputWait, inputWaitOf, type RunStillness, type RunToSample, sampleRuns, stillnessAfter } from "./input-wait.js";
 import { jobRunnerPids } from "./job-processes.js";
 import { writeRunFile } from "./run-files.js";
@@ -27,6 +28,9 @@ type Listener = (wait: InputWait | undefined) => void;
 interface Followed {
     readonly since: number;
     readonly listeners: Set<Listener>;
+    // The conversation the run belongs to, from the first follower that names it: what the log says stalled, since the
+    // clock that finds it runs on behalf of nobody (arm).
+    owner: string | undefined;
     leader: number | undefined;
     stillness: RunStillness | undefined;
     wait: InputWait | undefined;
@@ -35,10 +39,11 @@ interface Followed {
 const followed = new Map<string, Followed>();
 let clock: NodeJS.Timeout | undefined;
 let looking = false;
-let started: ((dir: string, wait: InputWait) => void) | undefined;
+type StartedListener = (dir: string, wait: InputWait, owner: string | undefined) => void;
+let started: StartedListener | undefined;
 
-/** Told of each run the moment it is found waiting for input: the daemon's log, so the record says what stalled. */
-export const onInputWaitStarted = (listener: ((dir: string, wait: InputWait) => void) | undefined): void => {
+/** Told of each run the moment it is found waiting for input, and whose it is: the daemon's log, so the record says what stalled. */
+export const onInputWaitStarted = (listener: StartedListener | undefined): void => {
     started = listener;
 };
 
@@ -66,7 +71,7 @@ const settle = (dir: string, entry: Followed, wait: InputWait | undefined): void
     entry.wait = wait;
     mark(dir, wait);
     if (began && wait !== undefined) {
-        started?.(dir, wait);
+        started?.(dir, wait, entry.owner);
     }
     for (const listener of entry.listeners) {
         listener(wait);
@@ -82,7 +87,9 @@ const stop = (): void => {
 
 const arm = (): void => {
     if (clock === undefined) {
-        clock = setInterval(() => void lookAtRuns(), LOOK_MS);
+        // The fleet's one clock, armed by whichever conversation's run is followed first: outside that turn's log context,
+        // or every run it finds stalled is logged as that conversation's.
+        clock = outsideLogContext(() => setInterval(() => void lookAtRuns(), LOOK_MS));
         clock.unref();
     }
 };
@@ -90,14 +97,16 @@ const arm = (): void => {
 /**
  * Follows the run whose capture is `dir` until the returned stop is called; `listener` hears each time it starts or
  * stops waiting for input. Several followers share one look: a foreground call filed as a job is followed by both
- * until the call's own follower lets go, so nothing it learned is lost in the hand-over.
+ * until the call's own follower lets go, so nothing it learned is lost in the hand-over. `owner` is the conversation
+ * the run belongs to, said when it is found waiting.
  */
-export const followRun = (dir: string, listener?: Listener, now: number = Date.now()): (() => void) => {
+export const followRun = (dir: string, listener?: Listener, options: { readonly now?: number; readonly owner?: string | undefined } = {}): (() => void) => {
     let entry = followed.get(dir);
     if (entry === undefined) {
-        entry = { since: now, listeners: new Set(), leader: undefined, stillness: undefined, wait: undefined };
+        entry = { since: options.now ?? Date.now(), listeners: new Set(), owner: undefined, leader: undefined, stillness: undefined, wait: undefined };
         followed.set(dir, entry);
     }
+    entry.owner ??= options.owner;
     const own: Listener = listener ?? (() => undefined);
     entry.listeners.add(own);
     arm();

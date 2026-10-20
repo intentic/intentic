@@ -40,13 +40,17 @@ const specOf = (job: BackgroundJob): WatcherSpec => ({
     profile: job.profile,
 });
 
-/** Answers how many jobs it handed to a watch; never throws, since it runs off a turn's ending. */
+/**
+ * Answers how many jobs it handed to a watch; never throws, since it runs off a turn's ending. `cut`: that turn was cut
+ * off (a failure, a restart) rather than ended, so nobody chose to wait on what it left (background-jobs.ts JobRecord.cut).
+ */
 export const adoptBackgroundJobs = async (
     conversations: Pick<ConversationActors, "holdings" | "send">,
     conversationId: string,
     logger: Logger,
+    options: { readonly cut?: boolean } = {},
 ): Promise<number> => {
-    const { running, unseen } = settledBackgroundJobs(conversations, conversationId);
+    const { running, unseen } = settledBackgroundJobs(conversations, conversationId, options.cut === true);
     let handed = 0;
     for (const job of [...running, ...unseen]) {
         try {

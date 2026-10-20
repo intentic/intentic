@@ -19,6 +19,7 @@ import {
     copyAgentIgnored,
     deleteAgentScratch,
     discardAgent,
+    settleAgent,
     includeAgentScratch,
     invalidateAgentAction,
     landAgent,
@@ -153,6 +154,57 @@ const askToResolve = async (id: string): Promise<void> => {
         throw new Error(ask.why);
     }
 };
+
+// The two presses that end a review's work and tell the reader how, wherever they are: what each says, and the sandbox
+// call it makes. Discard takes the branch and worktree away; settle records work somebody already brought in by hand as
+// landed, writing nothing.
+const FINISHES = {
+    discard: {
+        press: discardAgent,
+        what: (name: string) => t(`agents.useAgentChanges.discarding`, { name }),
+        done: (name: string) => () => t(`agents.useAgentChanges.discarded`, { name }),
+        failed: () => t(`agents.useAgentChanges.discardFailed`),
+    },
+    settle: {
+        press: settleAgent,
+        what: (name: string) => t(`agents.useAgentChanges.settling`, { name }),
+        done: (name: string) => () => t(`agents.useAgentChanges.settled`, { name }),
+        failed: () => t(`agents.useAgentChanges.settleFailed`),
+    },
+} as const;
+
+// What one of them needs of the review it is pressed in: the agent and its box, read at the press; its name; and the
+// review's own ledger, which holds one press at a time.
+interface Finishing {
+    readonly agentId: Ref<string>;
+    readonly reach: Ref<string | undefined>;
+    readonly name: () => string;
+    readonly act: (
+        tag: string,
+        options: { readonly what: string; readonly done: () => string; readonly failed: string; readonly quiet: boolean; readonly task: () => Promise<void> },
+    ) => Promise<unknown>;
+}
+
+// Each press, not quiet, like a land: a reader who left should hear how it ended.
+const finisherOf =
+    (review: Finishing) =>
+    (how: keyof typeof FINISHES) =>
+    async (): Promise<void> => {
+        const id = review.agentId.value;
+        const box = review.reach.value;
+        const called = review.name();
+        const words = FINISHES[how];
+        await review.act(how, {
+            what: words.what(called),
+            done: words.done(called),
+            failed: words.failed(),
+            quiet: false,
+            task: async () => {
+                await words.press(id, box);
+                await invalidateAgentAction(id, box);
+            },
+        });
+    };
 
 // Empty agentId means no review yet (draft agent, or one the roster hasn't resolved); the query below stays
 // disabled until it does.
@@ -366,22 +418,7 @@ export function useAgentChanges(
         { immediate: true },
     );
 
-    // Not quiet, like a land: the branch and worktree go, and a reader who left should hear that they did.
-    const discard = async (): Promise<void> => {
-        const id = agentId.value;
-        const box = reach.value;
-        const called = name();
-        await act(`discard`, {
-            what: t(`agents.useAgentChanges.discarding`, { name: called }),
-            done: () => t(`agents.useAgentChanges.discarded`, { name: called }),
-            failed: t(`agents.useAgentChanges.discardFailed`),
-            quiet: false,
-            task: async () => {
-                await discardAgent(id, box);
-                await invalidateAgentAction(id, box);
-            },
-        });
-    };
+    const finish = finisherOf({ agentId, reach, name, act });
 
     // Scratch the review named: carried with the work from the next land on, or deleted from the copy.
     const includeScratch = async (repo: string, paths: readonly string[]): Promise<void> => {
@@ -475,7 +512,8 @@ export function useAgentChanges(
         fixConflicts,
         cancelFix,
         fixQueued,
-        discard,
+        discard: finish(`discard`),
+        settle: finish(`settle`),
         includeScratch,
         deleteScratch,
         copyIgnored,

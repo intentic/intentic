@@ -60,7 +60,7 @@ export async function* placedTurn(
             closer?.hush();
             // allow(silent-catch): armWakes never throws by its own contract and logs what it could not do; a close that
             // could not arm still settles, as awaiting nothing.
-            armed = (closer?.armWakes() ?? Promise.resolve(false)).catch(() => false);
+            armed = (closer?.armWakes({ failed }) ?? Promise.resolve(false)).catch(() => false);
         }
         return armed;
     };

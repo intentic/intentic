@@ -4,6 +4,7 @@ import { nudgeResumesOn } from "../agent/run/turn/holds/resume-nudges.js";
 import { type RestartResume, restartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { restoreLimitHolds } from "../conversations/actor/limit-hold.js";
 import { onInputWaitStarted } from "../agent/tools/jobs/input-wait-follow.js";
+import { logContext } from "../logger.js";
 import { bootFacts, RESTART_STORM, reportRestartStorm } from "../system/boot/restarts/boot-history.js";
 import { type LeftWork, recoverLeftWork } from "../seams/restart/in-flight.js";
 import type { BootPhase } from "./boot-phase.js";
@@ -24,10 +25,16 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
     shutdown.push(() => turnResume.stop());
 
     // Every agent command found sitting at a prompt is on the record as it happens (input-wait.ts), so a turn that stalled
-    // on one can be read back from the log rather than pieced together from a transcript.
-    onInputWaitStarted((dir, wait) => {
+    // on one can be read back from the log rather than pieced together from a transcript: under the conversation the run
+    // belongs to, which the clock that found it (input-wait-follow.ts) cannot know from its own context.
+    onInputWaitStarted((dir, wait, owner) => {
         // `childPid`, not `pid`: the logger's own `pid` is the daemon's, and a field of that name overwrote it.
-        logger.warn({ dir, program: wait.program, childPid: wait.pid, since: wait.since }, "agent command: waiting for input nobody in the sandbox will type");
+        const line = (): void => logger.warn({ dir, program: wait.program, childPid: wait.pid, since: wait.since }, "agent command: waiting for input nobody in the sandbox will type");
+        if (owner === undefined) {
+            line();
+        } else {
+            logContext.run({ conversationId: owner }, line);
+        }
     });
 
     void bootResumePolicy({ logger, services })

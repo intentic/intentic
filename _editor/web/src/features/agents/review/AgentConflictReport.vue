@@ -30,7 +30,8 @@ const props = defineProps<{
 }>();
 
 // `saveSettings`: the held paths, to save before landing again.
-const emit = defineEmits<{ merge: []; commit: []; saveSettings: [readonly string[]]; stop: []; chat: []; cancel: []; show: []; cross: [] }>();
+// `settle`: the work is in already, brought in by hand.
+const emit = defineEmits<{ merge: []; settle: []; commit: []; saveSettings: [readonly string[]]; stop: []; chat: []; cancel: []; show: []; cross: [] }>();
 
 const { mobile } = useDevice();
 
@@ -118,6 +119,18 @@ const ROW = `flex flex-wrap items-center gap-x-2 gap-y-1`;
                 <span class="text-2xs text-muted">{{ t(`agents.agentConflictReport.commitThenLand`) }}</span>
             </template>
             <span class="flex-1"></span>
+            <!-- Quiet: for work somebody already brought in themselves, which the sandbox cannot recognise once it was
+                 adapted on the way in. It writes nothing, it only says so, and the card files as landed. -->
+            <Button
+                size="small"
+                tier="quiet"
+                class="whitespace-nowrap"
+                :disabled="busy"
+                @click="emit('settle')"
+                v-tooltip.bottom="{ title: t(`agents.agentConflictReport.alreadyMergedTitle`), note: t(`agents.agentConflictReport.alreadyMergedHint`) }"
+            >
+                {{ t(`agents.agentConflictReport.alreadyMerged`) }}
+            </Button>
             <!-- Last and quiet: the only option here that writes conflict markers into the user's tree. -->
             <Button
                 v-if="mergeable"

@@ -190,7 +190,7 @@ interface ForegroundCall {
 // where a job could be filed for it. Followed meanwhile, so a call sitting at a prompt comes back as soon as that is
 // clear rather than at its soft timeout: the marker it is followed for is what tmux-run returns on.
 const holdForeground = (
-    call: Omit<ForegroundCall, "unfollow"> & { readonly toolUseId: string; readonly timeoutMs: number | undefined },
+    call: Omit<ForegroundCall, "unfollow"> & { readonly toolUseId: string; readonly timeoutMs: number | undefined; readonly owner: string | undefined },
     foreground: Map<string, ForegroundCall> | undefined,
 ): void => {
     const soft = softTimeoutOf(call.timeoutMs);
@@ -198,7 +198,7 @@ const holdForeground = (
         writeRunFile(call.dir, "soft", `${String(soft)}\n`);
     }
     if (foreground !== undefined) {
-        foreground.set(call.toolUseId, { ...call, unfollow: followRun(call.dir) });
+        foreground.set(call.toolUseId, { ...call, unfollow: followRun(call.dir, undefined, { owner: call.owner }) });
     }
 };
 
@@ -426,7 +426,7 @@ export const bashTmuxHooks = (
                         writeRunFile(dir, "name", windowSlug(tool.description));
                         if (job === undefined) {
                             const { description, timeout } = CallFieldsSchema.parse(tool);
-                            holdForeground({ dir, command, session, description, startedAt: Date.now(), toolUseId: input.tool_use_id, timeoutMs: timeout }, foreground);
+                            holdForeground({ dir, command, session, description, startedAt: Date.now(), toolUseId: input.tool_use_id, timeoutMs: timeout, owner }, foreground);
                         }
                         const jobFlag = job === undefined ? "" : `-b ${shellQuote(job.dir)} `;
                         return {

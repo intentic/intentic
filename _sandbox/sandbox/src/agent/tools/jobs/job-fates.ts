@@ -14,6 +14,7 @@ import {
     jobsToJudge,
     type JudgedJob,
     stopBackgroundJob,
+    awaitedByRun,
 } from "./background-jobs.js";
 
 // What happens to what a turn leaves running, decided the moment it ends, from facts the sandbox holds and never from
@@ -32,6 +33,11 @@ import {
 // - stopped too, when it sits at a prompt (input-wait.ts: blocked reading its terminal, nothing moving) and nobody kept
 //   it: no agent is left to answer it, and awaiting it armed a six-hour watch that held the land the whole time. On
 //   2026-10-04 an `npx eslint` asking "Ok to proceed? (y)" did exactly that to a conversation whose work was done;
+// - stopped too, when a turn that was cut off left it awaited (background-jobs.ts JobRecord.cut) and the next run that
+//   ended cleanly never reached it: nobody chose to wait on it, and the run that carried the work on finished without
+//   it. On 2026-10-20 a transcript scan outlived the re-run that finished its conversation's work by hours, holding a
+//   six-hour wake that would have started a turn on a conversation already done. A run that did reach it (waited on it,
+//   read its output) makes the wait its own, as if it had ended on it;
 // - awaited, anything else: work whose exit the conversation waits on (background-adoption.ts), a listener the turn
 //   never reached included (a test suite's own server mid-run), so a turn that ended to wait on its tests keeps them.
 
@@ -68,7 +74,8 @@ type JobFateVerdict = "handed" | "stopped" | "awaited";
  * One job's fate from what its turn did: `kept` whether the agent kept it for the person, `ports` where it listens,
  * `targets` what the turn's calls acted on, `handed` ports this conversation already left for the person (a restarted
  * server keeps its standing without being kept twice), `reachedBefore` ports its earlier turns reached, `waiting`
- * whether it sits at a prompt nobody will answer.
+ * whether it sits at a prompt nobody will answer, `leftover` whether a cut-off turn left it awaited and this clean run
+ * never reached it.
  */
 export const jobFate = (fact: {
     readonly kept: boolean;
@@ -77,6 +84,7 @@ export const jobFate = (fact: {
     readonly handed: ReadonlySet<number>;
     readonly reachedBefore: ReadonlySet<number>;
     readonly waiting: boolean;
+    readonly leftover?: boolean;
 }): JobFateVerdict => {
     if (fact.kept || fact.ports.some((port) => fact.handed.has(port))) {
         return "handed";
@@ -84,8 +92,13 @@ export const jobFate = (fact: {
     if (fact.ports.some((port) => fact.reachedBefore.has(port) || fact.targets.some((target) => reachedAt(port).test(target)))) {
         return "stopped";
     }
-    return fact.waiting ? "stopped" : "awaited";
+    return fact.waiting || fact.leftover === true ? "stopped" : "awaited";
 };
+
+// Whether a run's calls reached a job by what the agent knows it as: the id `wait` takes, the CLI's own task id, or its
+// capture dir (its output file is in it).
+const reachesJob = (targets: readonly string[], judged: JudgedJob): boolean =>
+    targets.some((target) => target.includes(judged.job.id) || target.includes(judged.job.dir) || (judged.shellId !== undefined && target.includes(judged.shellId)));
 
 // Disarming a watch that already fired or was stopped is nothing to report; any other failure is logged, never thrown,
 // since a stop must end the job whatever the watch journal did.
@@ -130,6 +143,7 @@ const carryOut = async (
     verdict: JobFateVerdict,
     ports: readonly number[],
     waiting: ReturnType<typeof jobInputWait>,
+    leftover: boolean,
 ): Promise<void> => {
     const { job, kept } = judged;
     const { conversationId } = job;
@@ -144,7 +158,9 @@ const carryOut = async (
     if (verdict !== "stopped") {
         return;
     }
-    if (waiting === undefined) {
+    if (waiting === undefined && leftover) {
+        deps.logger.info({ conversationId, job: job.id, label: job.label }, "background job: stopped, a cut-off turn left it and the run that carried the work on finished without it");
+    } else if (waiting === undefined) {
         deps.logger.info({ conversationId, job: job.id, ports }, "background job: stopped with its turn, which used it and handed it to nobody");
     } else {
         deps.logger.warn({ conversationId, job: job.id, program: waiting.program, since: waiting.since }, "background job: stopped with its turn, it was waiting for input nobody would type");
@@ -157,9 +173,9 @@ const carryOut = async (
  * Judges every job the conversation still has running as its turn ends, once per run: the turn's close asks it first,
  * whatever way the turn ended, before it arms the wakes the awaited ones are handed to and before any land (so a
  * reclaimed server no longer holds it). Never throws: a turn's ending must not fail on it, and a job it could not judge
- * stays awaited.
+ * stays awaited. `clean`: the run ended rather than failed, which is what lets it settle a job a cut-off turn left.
  */
-export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string): Promise<void> => {
+export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string, ending: { readonly clean: boolean } = { clean: true }): Promise<void> => {
     const run = turnRunOf(deps.conversations, conversationId);
     if (run === undefined) {
         return;
@@ -178,8 +194,13 @@ export const resolveTurnJobs = async (deps: JobFateDeps, conversationId: string)
             const ports = pane === undefined ? [] : listeners.filter((listener) => listener.pane === pane).map((listener) => listener.port);
             const targets = run.rows.flatMap((row) => targetsOf(row.tools ?? [], starterOf(judged)));
             const waiting = jobInputWait(judged.job);
-            const verdict = jobFate({ kept: judged.kept, ports, targets, handed, reachedBefore, waiting: waiting !== undefined });
-            await carryOut(deps, judged, verdict, ports, waiting);
+            const reached = judged.cut && reachesJob(targets, judged);
+            const leftover = judged.cut && ending.clean && !reached;
+            const verdict = jobFate({ kept: judged.kept, ports, targets, handed, reachedBefore, waiting: waiting !== undefined, leftover });
+            if (verdict === "awaited" && reached) {
+                awaitedByRun(deps.conversations, judged.job);
+            }
+            await carryOut(deps, judged, verdict, ports, waiting, leftover);
         }
     } catch (error) {
         deps.logger.warn({ err: error, conversationId }, "background job: the turn's jobs could not be judged, each stays awaited");

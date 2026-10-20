@@ -11,8 +11,9 @@ import { resolveTurnJobs } from "../../tools/jobs/job-fates.js";
 // 1. hush: the body has ended, so words said from here (a person's, a wake that fires now) wait in the conversation's
 //    queue for the next turn instead of going into a steering queue no model reads any more.
 // 2. judge jobs: each job the run left running is stopped, left to the person, or awaited (job-fates.ts); once per run.
+//    A run that ended cleanly also settles what an earlier, cut-off turn left awaited and it never reached.
 // 3. arm wakes: each awaited job, and each finished one whose exit the model never read, is handed to a watch
-//    (background-adoption.ts). A card the agent stopped waiting on (a device command, a secret's release, a payment:
+//    (background-adoption.ts), marked as left by a cut-off turn when this one failed. A card the agent stopped waiting on (a device command, a secret's release, a payment:
 //    guard/held-asks.ts) holds the turn here, still live and parked on the card, until it settles; a yes or a decline
 //    with a note is queued as a wake in the gate's own words (guard/held-cards.ts), and a stop cancels the card. What the conversation holds then says whether it runs again by itself (awaitingWake,
 //    conversation-state.ts), so nothing later predicts it.
@@ -30,8 +31,9 @@ export type PlacedTurnEnding = "failed" | "stopped" | "awaiting-wake" | "finishe
 // Steps 1 to 3, bound to one conversation's turn; placedTurn runs them once, before its land or in its finally.
 export interface TurnCloser {
     readonly hush: () => void;
-    // Answers whether the conversation now awaits a wake.
-    readonly armWakes: () => Promise<boolean>;
+    // Answers whether the conversation now awaits a wake. `failed`: the turn was cut off (an error frame or a throw)
+    // rather than ended, so what it left running is nobody's choice to wait on.
+    readonly armWakes: (ending?: { readonly failed: boolean }) => Promise<boolean>;
 }
 
 export interface TurnCloserDeps {
@@ -44,11 +46,11 @@ export interface TurnCloserDeps {
 // `signal` is the turn's own: a stop while the close holds for a card cancels the card.
 export const turnCloser = (deps: TurnCloserDeps, conversationId: string, steering: SteeringQueue | undefined, signal?: AbortSignal): TurnCloser => ({
     hush: () => steering?.close(),
-    armWakes: async () => {
-        await resolveTurnJobs(deps, conversationId);
+    armWakes: async (ending = { failed: false }) => {
+        await resolveTurnJobs(deps, conversationId, { clean: !ending.failed });
         await deps.heldCards.hold(conversationId, signal);
         // A job that exited before its watch armed wakes the conversation at once: a wake already on its way.
-        const handed = await adoptBackgroundJobs(deps.conversations, conversationId, deps.logger);
+        const handed = await adoptBackgroundJobs(deps.conversations, conversationId, deps.logger, { cut: ending.failed });
         const state = deps.conversations.state(conversationId);
         return handed > 0 || (state !== undefined && awaitingWake(state));
     },
