@@ -99,13 +99,8 @@
     "deviceAgent": {
         "agentStalled": "Agent się zawiesił — to, co poniżej, może być nieaktualne.",
         "agentStopped": "Agent zatrzymany — nic nie dociera do jego folderów ani portów.",
-        "commands": "Polecenia",
-        "device": "Urządzenie",
-        "folders": "Foldery",
         "installedBuild": "Zainstalowany build",
         "nothingDownloaded": "Bez pobierania",
-        "oneProcess": "Jeden proces",
-        "ports": "Porty",
         "restartAgent": "Uruchom agenta ponownie",
         "roundsStopped": "Obiegi wstrzymane",
         "running": "działa",
@@ -113,11 +108,6 @@
         "servingOlderBuild": "Działa build starszy niż zainstalowany {installed} — restart go wczyta.",
         "stalled": "zawieszony",
         "stopped": "zatrzymany"
-    },
-    "deviceAgentGroup": {
-        "agent": "Agent",
-        "agent2": "Agent {version}",
-        "agentOnThisDevice": "Agent na tym urządzeniu"
     },
     "deviceDetail": {
         "asleep": "uśpiony",
@@ -217,6 +207,14 @@
             "unreachable": "Wstrzymane, bo ten sandbox nie odpowiada od godziny. Synchronizacja wznowi się sama, gdy odpowie.",
             "other": "Wstrzymane przez agenta tego komputera. Synchronizacja wznowi się sama."
         }
+    },
+    "deviceMachine": {
+        "capacity": "{memory} · {cpus} rdzeń | {memory} · {cpus} rdzenie | {memory} · {cpus} rdzeni"
+    },
+    "devicePage": {
+        "allDevices": "Wszystkie urządzenia",
+        "dangerZone": "Strefa zagrożenia",
+        "sandboxes": "Sandboxy"
     },
     "imageView": {
         "actualSize": "Rozmiar rzeczywisty",

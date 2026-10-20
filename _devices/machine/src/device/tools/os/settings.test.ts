@@ -215,7 +215,7 @@ describe("os_wifi_connect", () => {
         const refused = wifiConnect("Office", undefined, scopes(), fakeIc({ code: 5, output: "error: Office needs a password" }).deps);
         await expect(refused).rejects.toThrow(/"Office" needs a password this machine does not know/);
         await expect(wifiConnect("Office", undefined, scopes(), fakeIc({ code: 5, output: "" }).deps)).rejects.toThrow(
-            /Do not ask the owner to paste it into chat.*This computer on this machine's own screen/,
+            /Do not ask the owner to paste it into chat.*the Devices page on this machine's own screen/,
         );
     });
 

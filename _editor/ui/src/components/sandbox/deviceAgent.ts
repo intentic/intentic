@@ -1,13 +1,13 @@
 // One device's agent as the panel that both states it and changes it: the build its process serves, what that
 // process wants, and the verbs that move it. DOM-free, so both callers (the web Devices tab, which reads a
 // daemon's device registry, and the desktop app, which asks the machine it runs on) build the same object
-// from their own facts and hand it to <DeviceAgentGroup>.
+// from their own facts and hand it to <DeviceEnvironmentRow>, the machine's masthead on both Devices pages.
 
 import type { IconName } from "../../icons/iconSets.js";
 import type { StatusVariant } from "../feedback/statusBadge.js";
 import type { NoticeTone } from "../feedback/notice.js";
 import { t } from "../../i18n/index.js";
-import type { Tip, TooltipValue } from "../../lib/tooltip.js";
+import type { TooltipValue } from "../../lib/tooltip.js";
 
 // The agent, in the three states a reader can act on. `stalled` is decided by the caller (see
 // `agentStalled` in the sandbox contract), so browser and terminal can't disagree about one machine.
@@ -37,19 +37,6 @@ export interface AgentNote {
     /** What the line leaves out, on hover: a word or two, or a tip card of figures. Absent when the line says it all. */
     readonly hint?: TooltipValue;
 }
-
-// What this one process carries, as the row's description: three glyphs, not a sentence about them.
-export const agentDuties = (): readonly { readonly icon: IconName; readonly label: string }[] => [
-    { icon: `folder`, label: t(`ui.deviceAgent.folders`) },
-    { icon: `ports`, label: t(`ui.deviceAgent.ports`) },
-    { icon: `terminal`, label: t(`ui.deviceAgent.commands`) },
-];
-
-/** What the duty strip adds up to, on hover: all three go through the one process on that machine. */
-export const agentCarries = (machine: string): Tip => ({
-    title: t(`ui.deviceAgent.oneProcess`),
-    rows: [{ label: t(`ui.deviceAgent.device`), value: machine }],
-});
 
 export interface AgentPanel<Op extends string = string> {
     /** The build the process serves, or the best-known version; absent when no door has named one. */

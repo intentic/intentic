@@ -40,8 +40,10 @@ export function useWallpaper() {
  */
 export const WALLPAPERED_EXTENSIONS: ReadonlySet<string> = new Set([`workflows`, `automations`, `pipelines`, `approvals`]);
 
-/** The shell's own routes a wallpaper shows behind, for the same reason: Devices draws every machine as a card of its own. */
-export const WALLPAPERED_ROUTES: ReadonlySet<string> = new Set([`devices`]);
+// The shell's own routes a wallpaper shows behind, for the same reason: Devices draws every machine as a card of its own.
+// `device` is the same view in a desktop app's local window (its LocalView, named after its path, which the app's own
+// windows.rs opens by): one page about one machine, worn the same way, so the two never look like different screens.
+export const WALLPAPERED_ROUTES: ReadonlySet<string> = new Set([`devices`, `device`]);
 
 /** Whether the shell's main column should wear the wallpaper for the route on screen. The board draws its own. */
 export function useWallpaperedRoute(): ComputedRef<boolean> {

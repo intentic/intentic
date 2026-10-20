@@ -30,8 +30,8 @@ import { useDevice } from "./device/useDevice";
 import { followPasswords, passwordsBadge, passwordsInRail } from "./passwords/passwordsState";
 
 // THE APP'S HALF OF A LOCAL WINDOW'S SHELL (the web's app/environments/localHost.ts): what the editor asks of this
-// computer, answered by the app's own commands, the account the workspace signed in with (account.ts), and the view the
-// app adds to the rail, This device and Passwords. Installed on the
+// computer, answered by the app's own commands, the account the workspace signed in with (account.ts), and the views the
+// app adds to the rail, Devices and Passwords. Installed on the
 // window by the local face's bootstrap (local/main.ts) before the editor's modules run, so the router finds the view
 // when it builds its routes.
 //
@@ -56,7 +56,10 @@ const badge = computed(() => {
     });
 });
 
-/** This device: this computer's sandboxes, its machine agent, its engine and the app's work on it (device/DeviceView.vue). */
+/**
+ * Devices: this computer's page, as the workspace's Devices view draws one machine (device/DeviceView.vue), with the app's
+ * work on it. Named and tiled as the sandbox shell's Devices is, so one glyph on the rail never carries two names.
+ */
 const DEVICE_VIEW: LocalView = {
     path: `device`,
     section: `devices`,
@@ -77,7 +80,7 @@ const PASSWORDS_VIEW: LocalView = {
         return import(`./passwords/PasswordsPage.vue`);
     },
     badge: passwordsBadge,
-    // Off the rail until this computer has Passwords set up; This device offers the setup until then.
+    // Off the rail until this computer has Passwords set up; Devices offers the setup until then.
     inRail: passwordsInRail,
 };
 
@@ -96,7 +99,7 @@ const folderPath = (): string | undefined => {
 // start of the engine ended.
 const MACHINE_ACTIONS: Readonly<Record<LocalMachineAction, () => Promise<void>>> = {
     signIn: () => signIn(),
-    // This window's own start of the engine, the one This device's card draws; the app looks again once it answers.
+    // This window's own start of the engine, the one Devices' card draws; the app looks again once it answers.
     startDocker: () => startDockerAndSay(),
     retry: () => machineVerbs.retry(),
     start: () => machineVerbs.start(),
@@ -129,7 +132,7 @@ const PROJECT: LocalProjectHost = {
         await workspaceOpen(projectPathOf({ sandboxId: record?.sandboxId, project: folder?.name }));
     },
     act: (action) => MACHINE_ACTIONS[action](),
-    // This device, where this computer's sandbox, its every step and anything it asks of the reader are drawn.
+    // Devices, where this computer's sandbox, its every step and anything it asks of the reader are drawn.
     detailsPath: `/${DEVICE_VIEW.path}`,
 };
 

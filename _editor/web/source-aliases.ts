@@ -170,10 +170,10 @@ export const sourceAliases = (): Record<string, string> => ({
     // boot beside the theme), how fast a looping glyph may turn, and the moves played from script (folds, slides, row
     // reveals). Read by the thinking rosette and the board's folds, which must not boot the component graph to ask.
     "@intentic/ui/motion": fromRoot("_editor/ui/src/motion/index.ts"),
-    // A device agent's panel shape and the wording every caller shares; built from a device registry here and from a
-    // machine's own reading in the desktop app, and unit-tested without rendering anything. Before `device`, which
-    // shares its prefix.
+    // A device agent's panel and what a machine is (its OS mark, its engine's size), built from a device registry here and
+    // from a machine's own reading in the desktop app, tested without rendering anything. Before `device`, a shared prefix.
     "@intentic/ui/device-agent": fromRoot("_editor/ui/src/components/sandbox/deviceAgent.ts"),
+    "@intentic/ui/device-machine": fromRoot("_editor/ui/src/components/sandbox/deviceMachine.ts"),
     // Folds a machine's flat folder/port lists into one block per sandbox; drawn by <DeviceDetail>, and reasoned over
     // by deviceFacts.ts without rendering anything.
     "@intentic/ui/device": fromRoot("_editor/ui/src/components/sandbox/deviceDetail.ts"),

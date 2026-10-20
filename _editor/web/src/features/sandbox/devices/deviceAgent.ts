@@ -15,7 +15,7 @@ import { environmentTitle } from "./machineEnvironments";
 import { t } from "@intentic/ui/i18n";
 
 // What this sandbox's device registry knows about one machine's agent, folded into the kit's AgentPanel —
-// the shape <DeviceAgentGroup> draws on both this tab and the desktop app's manager window. The wording every
+// the shape <DeviceEnvironmentRow> heads both this view and the desktop app's Devices view with. The wording every
 // caller shares lives in the kit; what is here is what only a registry can answer: whether the machine is
 // reachable at all, and whether a newer agent has been published.
 // Pure, so every rule below is checkable without mounting anything (deviceAgent.test.ts).

@@ -1,4 +1,4 @@
-import { type DeviceSandboxRow, sandboxGroups } from "@intentic/ui";
+import { type DeviceSandboxRow, engineCapacity, osMarkOf, sandboxGroups } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import {
@@ -130,30 +130,19 @@ export const refresh = async (): Promise<void> => {
     read.value = true;
 };
 
-/** Where the other side of this computer keeps the sandbox `slug`, by name (`WSL (archlinux)`); undefined for this side's own. */
-export const keptByOf = (slug: string | undefined): string | undefined => {
-    const sandbox = sandboxes.value.find((held) => held.slug === slug);
-    return sandbox === undefined ? undefined : keptBy(sandbox, environments.value);
-};
-
 /** The other environments of this computer whose own machine agent runs, by name. */
 export const agentsElsewhere = computed(() => otherAgents(environments.value));
 
-/* THE SANDBOXES, as the kit's rows (the same rows the workspace's Devices tab draws). */
+/* THE SANDBOXES, as the kit's rows: ic's own, exactly as the machine agent hands them to the workspace's Devices view
+   (DeviceSandbox is the contract's row), so both pages say the same about one container: its version, how long the
+   version before the last swap stays ready, and which side of this computer keeps it. Until 2026-10-20 this page copied
+   four fields out of each and dropped the rest, and its rows said less than the workspace's about the same sandbox. */
 
-// ic's rows already leave a key absent rather than null, since absent and false differ (no sidecar vs. a down one).
+// The side of this computer that keeps a sandbox, by the name a person reads it by: ic's own when it names one, else the
+// distro this computer's own agents say it is (keeper.ts). <DeviceDetail> says it on the row's own line.
 const rowOf = (sandbox: SandboxStatus): DeviceSandboxRow => {
-    const row: DeviceSandboxRow = { slug: sandbox.slug, running: sandbox.running, image: sandbox.image };
-    if (sandbox.name !== undefined) {
-        row.name = sandbox.name;
-    }
-    if (sandbox.tunnelRunning !== undefined) {
-        row.tunnelRunning = sandbox.tunnelRunning;
-    }
-    if (sandbox.resources !== undefined) {
-        row.resources = sandbox.resources;
-    }
-    return row;
+    const keeper = keptBy(sandbox, environments.value);
+    return keeper === undefined ? sandbox : { ...sandbox, keptElsewhereName: keeper };
 };
 export const sandboxRows = computed(() => sandboxes.value.map(rowOf));
 
@@ -163,11 +152,16 @@ export const groups = computed(() => sandboxGroups(status.value?.sync.pairings ?
 // The agent as the kit's panel (deviceAgent.ts), the same object the workspace's Devices tab hands its group.
 export const agentPanel = computed(() => desktopAgentPanel(status.value));
 
-// The machine's own facts in the quietest ink: what identifies this computer among several enrolled ones. Only once the
-// machine agent has named it: the OS alone tells the reader nothing about which computer this is. The OS by its product
-// name (osName.ts), never the agent's `win32`.
-export const hardware = computed(() =>
-    status.value === undefined ? `` : [status.value.sync.hostname, osNameOf(status.value.sync.os)].filter((fact) => fact !== ``).join(` · `),
-);
-// Named rather than "this device" wherever the machine can name itself; the hover sentence reads as prose.
-export const machineName = computed(() => status.value?.sync.hostname ?? t(`desktop.device.thisDevice`));
+/* THE MASTHEAD, as the workspace's Devices view heads one machine's page (the kit's DeviceEnvironmentRow): the
+   computer's name, its OS by the name people know it by and in its own mark, and the size of the engine its sandboxes
+   share. Named once the machine agent has named it; before, the page says "This computer", which is all it knows. */
+export const machineName = computed(() => status.value?.sync.hostname ?? t(`desktop.device.unnamed`));
+/** The OS by its product name (osName.ts), never the agent's `win32`; this app's own platform before an agent reports. */
+export const machineOs = computed(() => {
+    const os = status.value?.sync.os ?? info.value?.os;
+    return os === undefined || os === `` ? undefined : osNameOf(os);
+});
+// By the platform alone: the agent's `win32` or this app's `windows` (the kit knows both), since neither names a distro.
+export const machineMark = computed(() => osMarkOf([], { platform: status.value?.sync.os ?? info.value?.os }));
+/** The engine's size, once Docker has said it: the ceiling every sandbox here shares. */
+export const hardware = computed(() => (engine.value === undefined ? undefined : engineCapacity(engine.value)));

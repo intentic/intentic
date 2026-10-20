@@ -1,12 +1,12 @@
 # desktop-app
 
-The Tauri app for Windows and Linux that opens the editor on a folder of the user's own computer from the first launch, with no account, runs sandboxes on that computer from its This device view, and shows the hosted workspace in the same window once they sign in.
+The Tauri app for Windows and Linux that opens the editor on a folder of the user's own computer from the first launch, with no account, runs sandboxes on that computer from its Devices view, and shows the hosted workspace in the same window once they sign in.
 
 ```mermaid
 flowchart LR
     spa["Workspace face<br/>hosted editor, no IPC"] -->|"intentic:// navigation"| app(["desktop-app<br/>Rust shell"])
     os["OS link handler<br/>browser, second launch"] -->|"intentic://"| app
-    local["Local windows<br/>the editor's shell on a folder:<br/>the main one, each folder's"] -->|"Tauri commands:<br/>places, This device"| app
+    local["Local windows<br/>the editor's shell on a folder:<br/>the main one, each folder's"] -->|"Tauri commands:<br/>places, Devices"| app
     local -->|"intentic://window, local"| app
     local -->|"HTTP on loopback, token"| files["intentic-files<br/>sidecar"]
     app -->|"stdin: grants, answers"| files
@@ -49,17 +49,17 @@ flowchart LR
 - **The main window.** The editor's shell with the sandbox shell's rail, holding what needs no sandbox and no
   account: at the top the place chip (the folder this window shows, and the account's sandboxes, each opening the
   workspace on itself at `/?sandbox=<id>` and picked from anywhere in the window by Alt+1–9 as in the workspace, or
-  the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then This device
+  the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then Devices
   (`/device`), then Passwords (`/passwords`) once this computer has it set up or an agent's request waits on it. Until
   then Passwords has no tile, so a new owner doesn't meet a password manager, and a quiet "Set up Passwords" card at
-  the foot of This device (`src/passwords/PasswordsOffer.vue`) is the way in. At the foot of the rail is the sandbox
+  the foot of Devices (`src/passwords/PasswordsOffer.vue`) is the way in. At the foot of the rail is the sandbox
   shell's own account control (who is signed in, Settings, Sign out), or the sign-in in the default browser until
-  there is an account. The **first task** the reader writes on This device's card
+  there is an account. The **first task** the reader writes on Devices' card
   for this PC (below) is kept in `first-task.json` under the app config dir, announced on `desktop://first-task`,
   attached to this computer's sandbox when it is ready, and opened in the workspace with `?task=`; the workspace answers
   on `intentic://first-task?do=sent|failed&id=…`. "Ask about this" while no sandbox can answer leaves a draft of one
   (`first_task.rs` `prefill_from_ask`: announced on `desktop://first-task-draft`, and kept in memory for a main window
-  still being built, which takes it with `first_task_take_draft`) and opens This device on it. Settings open in the window itself (`#/settings`), and
+  still being built, which takes it with `first_task_take_draft`) and opens Devices on it. Settings open in the window itself (`#/settings`), and
   signing out leaves it on its folder. The sandboxes and the account are what the workspace last told the app: its
   switcher hands them over on `intentic://roster` whenever either changes, a sign-out empties them, and the app keeps
   them in `roster.json` (`local_roster`), with no address, token or logo, so a row carries a name, where it runs and
@@ -109,12 +109,15 @@ flowchart LR
   `?open=sandbox&id=<id>&at=agents` links only navigate, and a sandbox must still belong to the stored roster.
   The desktop edition’s Security card calls `ic os lock` through local-only commands; PINs travel on stdin, and
   settings store no PIN. The machine agent’s lock tools are separate from this shell.
-- **This device.** A view this app adds to the local shell (`src/host.ts`, the web's
-  `app/environments/localHost.ts`), titled This computer on screen, the name the workspace's switcher, the tray and the
-  place chip give this machine (this page and the code keep This device as the view's name), where the launcher's card
-  used to be: this computer's sandboxes with every verb the
-  workspace's Devices tab has for them (start, stop, restart, update, rollback, resources, logs, remove), its machine
-  agent and its Restart, the Docker engine they run in, and the app's own work here, which leads the page while it runs: a
+- **Devices.** A view this app adds to the local shell (`src/host.ts`, the web's
+  `app/environments/localHost.ts`), named and tiled as the workspace's Devices view is, so one glyph on the rail has one
+  name (the code keeps `device` as its route and `src/device/DeviceView.vue` as its file), where the launcher's card
+  used to be. It is the workspace's page for one machine, opened on this one: the same masthead (`DeviceEnvironmentRow`
+  from `@intentic/ui`: the computer's name, its OS, its engine's size, its agent's build and Restart), the same
+  Sandboxes list with every verb the workspace has for them (start, stop, restart, update, rollback, resources, logs,
+  remove), and the same Danger zone at the foot, which here holds Remove Intentic from this computer
+  (`src/device/uninstall/`). There is no board to go back to: All devices opens the workspace's. Between the masthead and
+  the list stand the Docker engine the sandboxes run in and the app's own work here, which leads while it runs: a
   setup handed over from the workspace, with its requirements and its plan, and a sync enrollment. Above them stands
   this computer's own sandbox (below), once there is an account or a folder waiting for one: its state, the press that
   moves it on, the requirements its setup stopped on and the folders on their way into it. Its state is a store
@@ -128,10 +131,10 @@ flowchart LR
   On Windows the one Docker engine serves Windows and every WSL distro, and `ic` on either side lists every sandbox on
   it. A sandbox the other side keeps (`keptElsewhere` in `ic sandbox list --json`, named by its distro where `ic`
   stamps one, `keptElsewhereName` or `linux/<distro>`) keeps its verbs here, since a person's start, stop and restart reach it from either side, and
-  says under its row where it is kept: "Kept by WSL (archlinux)". The machine agents of this computer's environments are
+  says on its row's own line where it is kept ("kept by WSL (archlinux) on this computer"), as the workspace's Devices does. The machine agents of this computer's environments are
   read off their files (`src-tauri/src/agents.rs`: this app's own home, and through `\\wsl.localhost` each distro that
-  is running, never one that is stopped): their binary, their pidfile and `ic`. This device names the other environments
-  whose agent runs under its own agent's group, and so does the tray's agent row ("Machine agent: … · also in WSL
+  is running, never one that is stopped): their binary, their pidfile and `ic`. Devices names the other environments
+  whose agent runs under its masthead, and so does the tray's agent row ("Machine agent: … · also in WSL
   (archlinux)", or "Machine agent: in WSL (archlinux)" where Windows has none). _(2026-10-05) The app read the Windows
   home alone: blind to a WSL agent, it drew WSL's sandboxes as its own, and its setup put a second agent beside it._
 
@@ -204,13 +207,13 @@ flowchart LR
   not listening yet also starts `ic image prefetch` (`src-tauri/src/prefetch.rs`): the `ic` beside the app, else
   `~/.intentic/ic/bin/ic.exe`, with no window, one at a time, logging to `~/.intentic/logs/prefetch-<stamp>.log`, and
   left running when the setup ends. The sandbox image downloads while Docker is installed, and `ic sandbox connect`
-  loads it instead of pulling. This device reports each step's and each requirement's time
+  loads it instead of pulling. Devices reports each step's and each requirement's time
   (`desktop_install_step`, `desktop_install_requirement`, `src/device/installTelemetry.ts`) and a failed run's last
   error line, scrubbed of the home folder, the account, addresses and the code (`desktop_install_finished.reason`).
 
   _(2026-10-08) The entry was a RunOnce value, which Windows deletes before the launch it makes, and a resumed setup
   never got a new code: two restarts outlast a code's thirty minutes, and "Try again" ran the dead one again._
-- **What runs is `ic`'s to say.** This device's list is `ic sandbox list --json` from the installed `ic` (the shim's
+- **What runs is `ic`'s to say.** Devices' list is `ic sandbox list --json` from the installed `ic` (the shim's
   `--list` when that one is missing or older than this app, whose fetch brings it level). Start, stop and restart are
   `recreate --start|--stop|--restart`, and the Resources form's Apply and Save are `recreate --shape`, all `ic` verbs
   behind the shim's switch, so a Restart here applies a shape saved for the next restart exactly as a Restart from
@@ -226,16 +229,16 @@ flowchart LR
   remembers for the slug. _(2026-10-05) A removal used to forget only the sandbox's display name, and the agent went on
   syncing its folder until a new sandbox was made for that same folder._
 - **Fixing a sandbox the workspace cannot reach.** The workspace's recovery panel sends `intentic://fix?slug=…`; the
-  app brings This device forward in the main window, and it runs `ic sandbox fix <slug> [--code <code>] --source app
-  --json` with the installed `ic`, looked for where This device's listing looks, with no console window, one run at a
+  app brings Devices forward in the main window, and it runs `ic sandbox fix <slug> [--code <code>] --source app
+  --json` with the installed `ic`, looked for where Devices' listing looks, with no console window, one run at a
   time and never beside another run of the app's on this machine, stopped with everything it started after ten minutes
-  (`src-tauri/src/fix.rs`). A second link while one runs brings that run forward. The card at the top of This device
+  (`src-tauri/src/fix.rs`). A second link while one runs brings that run forward. The card at the top of Devices
   is built from `ic`'s `intentic-fix:` progress lines and its final report (`src/fixReport.ts`, `src/device/fix.ts`):
   what `ic` is doing now, every check with its state and, for one that warns or fails, the problem and the remedy,
   then the outcome and what the exit code leaves (3: a yes nobody could give in a terminal; 4: a restart or sign-out).
   Each check whose fix waits on consent becomes a button that runs the fix again with `--accept <that check>` and no
   code. An `ic` that ends without a report, one from before `sandbox fix`, is said to be unable to fix yet, with
-  setting the sandbox up again as the way to update it, and nothing retries. While it runs, the rail's This device
+  setting the sandbox up again as the way to update it, and nothing retries. While it runs, the rail's Devices
   tile spins for a reader who went back to their files. `ic` posts every run to the platform itself; the app never
   talks to the platform about it.
 - **Waking a sandbox asleep on this computer at once.** A page that finds its sandbox asleep asks the platform to
@@ -256,13 +259,13 @@ flowchart LR
   open beside it down too._ The tray's "Open Intentic"
   opens the last face, "This computer" the main window, "Open workspace" appears once an account has been seen, then
   "Open a folder…" and "Open a file…" (each in a window of its own), the wake word's two rows once there is an account
-  (below), the machine agent's row (This device), the update row, "Start Intentic at login" and Quit. Updates download
-  in the background and install on quit or from the editor's banner or This device;
+  (below), the machine agent's row (Devices), the update row, "Start Intentic at login" and Quit. Updates download
+  in the background and install on quit or from the editor's banner or Devices;
   setup and project operations hold an install, while the resumable onboarding downloads pause before it and resume
   on the next launch (or when the install fails). The update smoke checks both the installed bytes and the restarted
   app's native version, so an old window still on screen cannot count as a successful update.
   deb and rpm installs cannot replace themselves and link to the download page instead. A local window never draws the
-  editor's update banner: This device says it instead. A deb or rpm upgraded under the running app (the file at the path
+  editor's update banner: Devices says it instead. A deb or rpm upgraded under the running app (the file at the path
   it started from is no longer the one it runs, `update.rs` `replaced_on_disk`) is offered as a restart onto it ("Restart
   to use the new Intentic"), at every check and whenever the workspace comes back on screen. _(2026-10-05) A deb and an
   rpm have no maintainer script that restarts the app, so the old app and its file server ran on until Quit, and the next
@@ -339,7 +342,7 @@ flowchart LR
 - **The last face.** `last-face.json` (`home` or `workspace`) is the face the user was last seen choosing: every
   showing of the workspace writes `workspace`, and the main window shown on purpose (a launch into it, the tray's "This
   computer", the workspace's way back) writes `home`. An install without the file reads `workspace` if it ever showed the
-  workspace (`workspace-seen.json`) and `home` otherwise. A launch opens This device for a setup parked across a Windows
+  workspace (`workspace-seen.json`) and `home` otherwise. A launch opens Devices for a setup parked across a Windows
   restart, then for a machine that hosts a sandbox and has no Docker engine listening (handing over to the workspace
   once the engine wakes, when the workspace is the last face), and otherwise the last face (`opening` in
   `src-tauri/src/lib.rs`). A launch at sign-in (`--background`, above) opens only the parked setup, if any. A bare
@@ -353,7 +356,7 @@ flowchart LR
   instead of a sandbox. The app starts the sidecar (with the main window, or a few seconds after a launch with recents),
   grants each window one folder by a random token on the sidecar's stdin, and revokes it when the window closes
   (`src-tauri/src/sidecar.rs`). What else a local window may do is the commands its capability names
-  (`capabilities/local.json`): the shell's (its place chip, its folder menu, its account) and This device's, granted by name (`build.rs`); its links are only its
+  (`capabilities/local.json`): the shell's (its place chip, its folder menu, its account) and Devices', granted by name (`build.rs`); its links are only its
   own title bar and `local`. The documents it draws can do none of it: the page's policy runs no script but the
   bundle's own (`vite.local.config.ts`), a frame a document opens is another origin, which holds no capability, and a
   link it carries is heard only as `window` or `local`. No sandbox, account or Docker is needed to open anything. What
@@ -381,7 +384,7 @@ flowchart LR
   reaches no platform. Opening the workspace's own Settings, or a Settings in the window with every account section
   read-only, were rejected: the first is the face swap the reader asked to lose, and the second leaves Profile, the one
   section they came for, unusable. The place chip lost "On this computer" (the folder, its recents, Open folder…/Open
-  file… and This device's cog): the window already shows its folder, the rail already holds This device, and the tray
+  file… and Devices' cog): the window already shows its folder, the rail already holds Devices, and the tray
   opens the rest, so the chip lists the sandboxes, as the workspace's switcher lists only this computer.
 
   (2026-10-01) The sandboxes joined the place chip, where "Your workspace" alone stood for them: a reader on this
@@ -392,14 +395,17 @@ flowchart LR
   shell's shape: the same digits for the same places in both windows (Alt+0 this computer, Alt+1–9 the sandboxes),
   the account at the rail's foot where the way to agents was (that way is the place chip now), one name for this
   machine on screen, and a switch that does not reload the workspace. Renaming the view This computer everywhere
-  was rejected: the workspace's Devices tab says "This device" of a paired machine, a different thing.
+  was rejected: the workspace's Devices tab says "This device" of a paired machine, a different thing. (2026-10-20) The
+  view is Devices on screen now, as the workspace's is: one glyph on the rail had carried two names, and the page under
+  it had drifted from the workspace's page for the same machine. It opens on the workspace's own masthead, list and
+  Danger zone (`DeviceEnvironmentRow`, `DeviceDetail`), and wears the same wallpaper.
 
   (2026-09-30) The launcher window is gone. It was a card of its own design between the reader and everything else:
-  Home (open a folder or a file, recents, sign-in), This device (Docker, the agent, sandboxes), and a handed-over setup,
+  Home (open a folder or a file, recents, sign-in), Devices (Docker, the agent, sandboxes), and a handed-over setup,
   none of it in the editor's shell, and a first launch without an account opened on it. The main window replaced it,
-  so every window of the app is the editor's shell from the first launch, and This device became a view of that shell.
+  so every window of the app is the editor's shell from the first launch, and Devices became a view of that shell.
   The local windows were granted the commands to draw it. The alternative, keeping them capability-less and asking the
-  app for This device by `intentic://` links answered with events, was rejected: a link is a navigation any document
+  app for Devices by `intentic://` links answered with events, was rejected: a link is a navigation any document
   can make on a click, while a command needs script, which the page's policy lets only the bundle run.
 - **The warm window.** After the first folder or document window of a run (never for the main window alone, which
   most runs never go past), the app keeps one hidden spare files window whose page
@@ -478,7 +484,7 @@ flowchart LR
   bring `/work` and `/history` back if this computer still has them; only a row the platform no longer has
   (`row_gone`) makes way for a new one. A record that holds no row (its file unreadable, the app reinstalled) first takes
   up the row this computer still runs (`adoptable`: owned, not hosted, named by this app, its container listed here)
-  instead of making a second. The rows earlier versions left behind are offered for removal on This device
+  instead of making a second. The rows earlier versions left behind are offered for removal on Devices
   (`LeftoverSandboxes.vue`, `machine_sandbox_leftovers`): named the old way for this computer, not the current one, run
   nowhere here and silent for a day; removed only on the reader's press, into the platform's week-long trash.
 
@@ -535,7 +541,7 @@ flowchart LR
   the requirements, Try again beside the log, Start, Set it up again), folds to a line, and remembers the fold for what it
   showed in every window. The folder's button says how far it is ("Waiting for this computer's sandbox (42%)", "Copying
   your folder…") and then opens the sandbox on the folder (`/?sandbox=<id>&project=<name>`, the web's
-  `router/sandboxArrival.ts`), never on the `/work` around it. This device leads with the same states and presses
+  `router/sandboxArrival.ts`), never on the `/work` around it. Devices leads with the same states and presses
   (`src/device/machineSandbox/MachineSandboxSection.vue`), and the rail's tile spins while it is made and marks it while it needs the
   reader.
 
@@ -568,7 +574,7 @@ flowchart LR
   pruned, and the agent let go of a folder's dead sandbox only when a new one was made for that folder.
 
   (2026-10-05) Each folder used to get a sandbox of its own. The question was first the system's own message box, two
-  paragraphs in its look, whose press took the reader to the workspace's full-screen `/setup` and then to This device;
+  paragraphs in its look, whose press took the reader to the workspace's full-screen `/setup` and then to Devices;
   then the window's own dialog, whose press made a sandbox for that folder and ran its setup in that window's store,
   drawn as a build card over the folder. A pane beside the folder for the build was rejected (it takes the reader's
   width for a minute of watching), as was a bare toast (no room to show what is happening). The owner then chose one
@@ -576,7 +582,7 @@ flowchart LR
   rather than a window's store because a window closes and the app quits: a setup a window ran was seen by that window
   alone, and a quit mid-setup left the folder remembered against nothing, since the dying process remembered it after
   its script. Docker is never installed or started for it unasked: a computer whose engine is off has its own reasons,
-  so the reader starts it (This device, or the card), and the next look notices. Folders that already have a sandbox of
+  so the reader starts it (Devices, or the card), and the next look notices. Folders that already have a sandbox of
   their own keep it: it holds their agents' work and conversations, and moving them into another sandbox is a migration
   nobody asked for.
 - **"Ask about this".** A local window can hand one of its files to the workspace: the app grants it to the sidecar
@@ -637,7 +643,7 @@ flowchart LR
   under an install that said it completed, and the command stayed missing._ Linux gets no
   launcher: the deb and rpm put `intentic-desktop` itself on PATH, and it reads the same path arguments.
 - **Intentic OS** ([src-tauri/src/os.rs](src-tauri/src/os.rs), 2026-10-13), the immutable Linux whose desktop edition
-  boots into this app ([_os](../../_os/README.md)). Where `/usr/lib/intentic-os/release.json` exists, This device draws
+  boots into this app ([_os](../../_os/README.md)). Where `/usr/lib/intentic-os/release.json` exists, Devices draws
   a This system card (`src/device/intenticOs/`): edition, version and channel from `ic os status --json`, the boot's
   health with each failed check, how sandboxes are isolated, and, with an update staged or a rollback queued, "Restart
   to update" or "Restart into the previous version", confirmed first: every sandbox restarts with the computer and its
@@ -669,7 +675,7 @@ flowchart LR
   seconds) as the card opens and at Look again. A thread of the app's (`os_settings::start`) asks `ic os drives list`
   every 3 seconds while the app runs on Intentic OS and tells every window when the list changes
   (`desktop://os-drives`). A drive plugged in after its first read is fresh: it gets a system notification ("USB drive
-  KINGSTON plugged in", "Choose where it goes") whose press opens This device, where the Drives card is brought into
+  KINGSTON plugged in", "Choose where it goes") whose press opens Devices, where the Drives card is brought into
   view with the drive lit up. Once the card has been on screen a few seconds the drive is seen, and its notification is
   taken down, as it is when the drive leaves, is copied or is ejected. The notification is in the reader's language:
   each window hands the app its words as it starts and when the language changes (`os_drive_words`), and the app says
@@ -690,16 +696,16 @@ every link and drops what an outside sender may not ask for. The editor builds t
 
 | Link | Accepted from | Does |
 | --- | --- | --- |
-| `setup?code=…[&sandbox=…][&name=…][&syncDir=…]` | anywhere; outside asks first | This device, in the main window, runs that sandbox's setup here. `cfToken`, `platform` and `project` count only from the app. |
+| `setup?code=…[&sandbox=…][&name=…][&syncDir=…]` | anywhere; outside asks first | Devices, in the main window, runs that sandbox's setup here. `cfToken`, `platform` and `project` count only from the app. |
 | `signin[?switch=1]` | anywhere | Opens platform sign-in in the default browser; `switch` asks for the account chooser. |
 | `auth?handoff=…&state=…[&profile=…]` | anywhere | Completes a sign-in this app started and opens the workspace at `/desktop-auth/complete`. A sign-in pressed in a local window carries `back=agent` on that path, and the page sends `launcher?to=agent` once it is redeemed and before it opens a sandbox of its own, so a folder's "Work on this with an agent" ends on that folder rather than on the account's sandbox list. The app remembers which local window pressed it, for the way back. |
-| `sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` | app windows | Enrolls this device in desktop sync from This device; the folder is picked in a system dialog. |
+| `sync?url=…&pair=…[&name=…][&takeover=1][&mirror=1]` | app windows | Enrolls this device in desktop sync from Devices; the folder is picked in a system dialog. |
 | `sync?url=…&pair=…&project=<name>[&sandbox=<id>]` | app windows | A hosted sandbox's project: syncs the parked folder with `/work/<name>` and remembers it with that sandbox. |
-| `recreate?slug=…[&hash=…][&rollback=1]` | app windows | Moves the sandbox to the `:stable` base, a pinned overlay, or its previous image, from This device. |
-| `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it on This device; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
+| `recreate?slug=…[&hash=…][&rollback=1]` | app windows | Moves the sandbox to the `:stable` base, a pinned overlay, or its previous image, from Devices. |
+| `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it on Devices; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
 | `update` | app windows | Installs the downloaded update and restarts. |
-| `setup-stop?sandbox=<id>` | app windows | Stops the setup This device runs for that sandbox, as its card's Stop does, and shows nothing: the setup page sends it when the reader takes a slow download's offer of a machine of ours, which takes over the sandbox's address. A setup for another sandbox, or none running, is left alone; an id that is not a plain token drops the link. |
-| `launcher[?to=files\|agent]` | app windows | Brings the main window back in the workspace's place: at This device (a setup's way back to its run, a sandbox's restart), at its folder with `to=files` (the sandbox switcher's "This computer"), or with `to=agent` at whichever of the two this computer's sandbox is standing at when the link arrives — This device while it is stopped on the reader (`Standing::wants_the_reader_after_sign_in`), otherwise the folder window the sign-in was pressed in, while the sandbox comes up by itself. Signed out counts as coming up: the link arrives before the workspace has said who signed in. An app that predates a `to` reads the bare link, which is This device. |
+| `setup-stop?sandbox=<id>` | app windows | Stops the setup Devices runs for that sandbox, as its card's Stop does, and shows nothing: the setup page sends it when the reader takes a slow download's offer of a machine of ours, which takes over the sandbox's address. A setup for another sandbox, or none running, is left alone; an id that is not a plain token drops the link. |
+| `launcher[?to=files\|agent]` | app windows | Brings the main window back in the workspace's place: at Devices (a setup's way back to its run, a sandbox's restart), at its folder with `to=files` (the sandbox switcher's "This computer"), or with `to=agent` at whichever of the two this computer's sandbox is standing at when the link arrives — Devices while it is stopped on the reader (`Standing::wants_the_reader_after_sign_in`), otherwise the folder window the sign-in was pressed in, while the sandbox comes up by itself. Signed out counts as coming up: the link arrives before the workspace has said who signed in. An app that predates a `to` reads the bare link, which is Devices. |
 | `badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…]` | app windows | The workspace tab's mark (`none`, `asks`, `done`, `working`, `offline`) on the app's icon: `icon` for the tray and `overlay` for the Windows taskbar button, each a PNG as unpadded URL-safe base64 of at most 64 KiB and 256 pixels a side; `count` for a Linux dock, heard only with `asks`; `tooltip` after the app's name in the tray's, one line of at most 100 characters. A value out of shape drops the link. |
 | `notice?do=show&key=…&kind=asks\|finished&title=…[&body=…][&path=…][&silent=1]` | app windows | Puts up one of the system's notifications, replacing the one under the same `key`. `path` is a workspace route (`/?sandbox=<id>&conversation=<id>`) a press opens, `silent` asks for no sound. `do=withdraw&key=…` takes one down, `do=clear` all of them, and `do=status` asks whether the system shows them at all (answered as `intentic-desktop-notices`). A line that is empty, too long or holds a control character, or a path that is not rooted or starts `//`, drops the link. |
 | `wake?state=off\|listening\|paused\|blocked\|error&word=…[&until=…]` | the workspace window | What the workspace page's wake-word listening is doing, whenever that changes: kept for the tray's rows, and whether it is wanted (any state but `off`) and the word written to `wake.json` for the next launch. `word` is one line of 1 to 40 characters; `until` (epoch milliseconds, a positive whole number) rides only with `paused`. A value out of shape drops the link. |
@@ -728,7 +734,7 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 | `intentic-desktop-notices` | the window that sent `notice?do=status` | `{ setting }`: `on`, `off-user` (Windows has every app's notifications off), `off-app`, `off-policy`, `none` (no notification service answers on this Linux desktop) or `unknown`, for Settings ▸ Notifications to say beside its switches. |
 | `intentic-desktop-update` | workspace | `{ version }` of a downloaded update. |
 | `intentic-desktop-wake` | workspace | `{ do: "on" \| "off" \| "pause" \| "resume", minutes? }` from the tray's rows, heard only by a page of the app's origin. Said again every three seconds for up to a minute until the page reports a state that agrees, since a page still loading in the tray has no listener yet. |
-| `intentic-desktop-setup` | workspace | This device's setup progress (`SetupReport`). |
+| `intentic-desktop-setup` | workspace | Devices' setup progress (`SetupReport`). |
 | `intentic:face` | a worn spare | none: `window.__INTENTIC_LOCAL__` has just been set. |
 | `intentic:repoint` | local window pointed at another folder | the folder's face, kept for the window's reloads. Cancelable: the page takes it to move in place (`local/main.ts` seeds the folder's session, the web's `local/folderSwitch.ts` moves), and a page that does not take it is reloaded onto it. |
 | `intentic:open` | local folder window | `{ path }` of a document inside its folder, root-relative. |
@@ -740,7 +746,7 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 | `intentic:sandbox-opening` | local folder window that asked `sandbox` | `{ stage: "starting" \| "shown" }`: its sandbox was stopped and is being started first, or the workspace is going up (`project.rs` `open_existing`). The folder's button says "Opening" from the press until `shown`, and "Starting" in between. |
 | `intentic:drop-copy` | workspace, floating (Windows) | `{ id, kind, … }` for a drop the page handed over: `received`, `declined` (`reason`), `scanning`, `copying`, `progress` and `finished`. See "A big drop" below. |
 
-A local window also hears the app's Tauri events, which This device listens on: `desktop://run` (a script run's
+A local window also hears the app's Tauri events, which Devices listens on: `desktop://run` (a script run's
 `started`, `line` and `exit`), `desktop://pending-setup`, `desktop://setup-stop` (a sandbox id),
 `desktop://pending-recreate`, `desktop://pending-sync`, `desktop://update`, `desktop://machine-sandbox` (this
 computer's own sandbox, its whole record on every change), and on Intentic OS `desktop://os-run` (a change to the
@@ -843,7 +849,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/local.rs](src-tauri/src/local.rs) — the local windows: the main one and its folder, each window's grant, pointing a window at another folder, the warm window, handoffs, launch arguments; the `intentic-files` process itself, its generations and trash asks, is `sidecar.rs`.
 - [src-tauri/src/setup_link.rs](src-tauri/src/setup_link.rs) — every `intentic://` link and which senders it is believed from.
 - [src-tauri/src/drop_copy.rs](src-tauri/src/drop_copy.rs) — a big drop on the workspace, copied into a sandbox on this computer through helper containers (Windows).
-- [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands This device calls, and the script each run starts.
+- [src-tauri/src/commands.rs](src-tauri/src/commands.rs) — the Tauri commands Devices calls, and the script each run starts.
 - [src-tauri/src/resume.rs](src-tauri/src/resume.rs) and [src-tauri/src/prefetch.rs](src-tauri/src/prefetch.rs) — a Windows setup across restarts: the sign-in entry that resumes it, and the sandbox image fetched while Docker is installed.
 - [src-tauri/src/wake.rs](src-tauri/src/wake.rs), [src-tauri/src/microphone.rs](src-tauri/src/microphone.rs) and [src-tauri/src/autostart.rs](src-tauri/src/autostart.rs) — the wake word with the window in the tray: what the page says and is told, the tray's rows, the microphone for the workspace alone, and the start at sign-in.
 - [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.
@@ -852,11 +858,11 @@ reloaded onto their new address and token.
 - [src-tauri/src/machine_sandbox.rs](src-tauri/src/machine_sandbox.rs) — this computer's own sandbox: the record every window hears, the thread that makes and watches it, and the folders it attaches.
 - [explorer-menu](explorer-menu) — "Open with Intentic" in Windows 11's own context menu: the menu command and the identity package it needs.
 - [src-tauri/cli](src-tauri/cli) — `intentic .` in a terminal on Windows: the launchers for cmd/PowerShell and for WSL/Git Bash that the installer puts on PATH.
-- [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the This device view it adds to the rail.
-- [src/device/useDevice.ts](src/device/useDevice.ts) — This device's store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.
+- [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the Devices view it adds to the rail.
+- [src/device/useDevice.ts](src/device/useDevice.ts) — Devices' store: the machine's sandboxes, agent and engine, and the setups, recreates and syncs the app runs here.
 - [src-tauri/src/engine.rs](src-tauri/src/engine.rs) and [src/components/EngineCard.vue](src/components/EngineCard.vue) — which engine this PC's sandboxes run on (Docker Desktop or Intentic's own), and the move between them (`ic engine move`), step by step on the card.
 - [src-tauri/src/engine_keeper.rs](src-tauri/src/engine_keeper.rs) — Intentic's engine started again when it stops while this app runs.
-- [src-tauri/src/os.rs](src-tauri/src/os.rs) and [src/device/intenticOs/SystemCard.vue](src/device/intenticOs/SystemCard.vue) — Intentic OS: the system as `ic os` reports it, the changes This device makes to it, and kiosk mode.
+- [src-tauri/src/os.rs](src-tauri/src/os.rs) and [src/device/intenticOs/SystemCard.vue](src/device/intenticOs/SystemCard.vue) — Intentic OS: the system as `ic os` reports it, the changes Devices makes to it, and kiosk mode.
 - [src-tauri/src/os_settings.rs](src-tauri/src/os_settings.rs) and [src/device/intenticOs/ThisComputer.vue](src/device/intenticOs/ThisComputer.vue) — Intentic OS: this computer's network, sound, screens, keyboard and drives as `ic os` reports them, the changes the This computer cards make, and the thread that watches the drives.
 
 ## Building
@@ -905,12 +911,12 @@ The local face runs in a plain browser too, on the dev server alone: open
 granted that token. With no app behind the page, its commands are answered by a stand-in (`local/devDesktop.ts`,
 Tauri's own IPC mock), for a machine picked by `?machine=fresh|host|setup`: a first launch, one hosting two sandboxes,
 or one mid-setup; and this PC's own setup by `?pc=` (`ready`, `needsSetup`, `settingUp`, `restart`, `cantRun` and the
-rest the stand-in lists), so every phase of This device's card for it can be looked at in a browser.
+rest the stand-in lists), so every phase of Devices' card for it can be looked at in a browser.
 
 ## First launch on Windows (2026-10-09)
 
 At launch the app runs a read-only `ic docker prepare --dry-run` and streams the result to every local window as
-`desktop://onboarding` (`onboarding.rs`, `src/onboarding/pc.ts`). The reader sees it on This device, in a card of its
+`desktop://onboarding` (`onboarding.rs`, `src/onboarding/pc.ts`). The reader sees it on Devices, in a card of its
 own ahead of this computer's sandbox (`src/device/pcSetup/PcSetupCard.vue`, its phase from the pure
 `pcSetup/pcCard.ts`): only on Windows, for as long as the PC is not ready, or nobody is signed in, or the first task
 failed to start. Under a heading that says what agents are and where they run, it walks three numbered steps
@@ -923,7 +929,7 @@ steps. While the card leads a computer with no sandboxes, the page's own lead li
 rows still to do; the met ones are a count beside the machine. Rows are labelled in
 the desktop app's i18n (`desktop.onboarding.rows.*`), falling back to `ic`'s own `title` for an id the catalog does not
 name; a row is ours, the reader's or blocked by `ic`'s `action` (`onboarding.rs` `row_state`). While the card is up,
-This device's no-sandbox card stands back and this computer's sandbox, held for the PC's setup with nothing of its own
+Devices' no-sandbox card stands back and this computer's sandbox, held for the PC's setup with nothing of its own
 to ask, says only that it waits for it; the rail's tile spins while the setup runs, marks it needing the reader while
 it waits or failed, and shows a quiet mark while it is offered (`src/device/badge.ts`).
 
@@ -937,7 +943,7 @@ it waits or failed, and shows a quiet mark while it is offered (`src/device/badg
 
 A few seconds after the first launch, on an unmetered connection, the app prefetches what agents need: `ic engine fetch`
 then `ic image prefetch`, parsing both with the same `intentic-prefetch:` markers (`prefetch.rs`). The reader can pause
-it from This device's card; a metered connection waits until unmetered or the reader starts it anyway. The office editor download
+it from Devices' card; a metered connection waits until unmetered or the reader starts it anyway. The office editor download
 (`sidecar.rs` `prefetch-office`) waits until that prefetch is `done` or `failed`.
 
 "Set up this PC", the `/device` setup flow, and a folder's "Work on this with an agent" when Docker is not ready all
@@ -976,7 +982,7 @@ The engine keeper (`engine_keeper.rs`) looks every 20 seconds and, after two mis
 stopped on purpose (`held`), one the PC does not run on, and everything while a move or a setup runs; each start it
 makes is reported as `desktop_engine_restarted`. Every desktop event carries `desktop_engine`.
 
-The engine card on This device says which engine the sandboxes run on and moves them (`ic engine move`, confirmed
+The engine card on Devices says which engine the sandboxes run on and moves them (`ic engine move`, confirmed
 first): onto Intentic's engine from Docker Desktop, or back. While the migration's switch is off (`ic`'s
 `engine/choice.rs`) the move is only kept in reach; once it flips, the card offers it, and "Not now" saves a preference
 for Docker Desktop (`ic engine prefer`). A sandbox handed the GPU keeps the PC on Docker Desktop.

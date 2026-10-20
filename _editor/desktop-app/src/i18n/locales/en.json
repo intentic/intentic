@@ -29,9 +29,7 @@
         "sandbox": "your sandbox",
         "sandboxRunsInDocker": "Your sandbox runs in Docker, which isn't running yet. This checks what your PC needs first, and asks before changing anything.",
         "sandboxRunsInDocker2": "Your sandbox runs in Docker, which isn't running yet. Setup installs it first, so your system asks for your password once.",
-        "sandboxesOnDevice": "Sandboxes on this computer",
         "saysPairingAlreadyUsed": "If it says the pairing was already used or expired, regenerate it in your workspace.",
-        "seeAllDevices": "See all your devices",
         "settingUp": "Setting up",
         "setupCodeRanOut": "Your setup code ran out while this computer was away. Everything the restart was for is already done; it just needs a fresh code to carry on.",
         "setupCodeRanOutHere": "Your setup code ran out before this computer could use it, and a fresh one couldn't be fetched from here. Nothing done so far is lost; it just needs a fresh code to carry on.",
@@ -60,11 +58,6 @@
         "lookIconByClock": "Look for its icon by the clock, or behind the ^ arrow next to it.",
         "quitIntentic": "Quit Intentic",
         "sandboxesKeepRunningEither": "Your sandboxes keep running either way: they live in Docker, not in this window."
-    },
-    "deviceAgent": {
-        "latestUnknown": "Latest unknown",
-        "servingInstalledBuild": "Serving the build installed on this computer.",
-        "workspaceChecksUpdates": "Workspace checks updates"
     },
     "docker": {
         "accountNotAllowed": "This account isn't allowed to use Docker",
@@ -185,10 +178,8 @@
         "waitingForYou": "Waiting for you"
     },
     "device": {
-        "title": "This computer",
-        "lead": "The sandboxes that run on this computer, its machine agent, and the Docker engine they run in.",
-        "thisDevice": "this computer",
-        "agentHeading": "Agent on this computer",
+        "title": "Devices",
+        "unnamed": "This computer",
         "dockerIsntRunning": "Docker isn't running, so the sandboxes on this computer aren't either.",
         "oursIsntRunning": "Intentic's engine isn't running, so the sandboxes on this computer aren't either.",
         "oursHeld": "Intentic's engine was stopped on purpose (ic engine stop), so the sandboxes on this computer aren't running. Nothing starts it again until you do.",
@@ -205,9 +196,6 @@
         "startingDockerBadge": "starting Docker",
         "updateReadyBadge": "an update is ready",
         "machineBadge": "setting up this computer's sandbox",
-        "keptBy": "Kept by {place}",
-        "keptByNote": "Start, stop, restart work here",
-        "keptByTitle": "Upkeep runs there",
         "agentsElsewhere": "Intentic's machine agent also runs in {places} on this computer, and looks after the sandboxes set up there.",
         "pcSettingUpBadge": "setting up this PC",
         "pcSetupBadge": "this PC can be set up for agents"

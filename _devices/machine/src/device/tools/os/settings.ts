@@ -58,7 +58,7 @@ import { holdIcFlow, type IcRun } from "../sandboxes.js";
 import { answerOf, assertSeeing, notIntenticOs, OS_DEPS, type OsDeps, said } from "./os.js";
 
 // THE MACHINE'S OWN SETTINGS, on Intentic OS (2026-10-16): its network, its sound, its screens, its keyboard and the
-// drives a person plugs into it. Every setting a person can change at the machine (This computer, on its own screen) is a
+// drives a person plugs into it. Every setting a person can change at the machine (the Devices page, on its own screen) is a
 // tool here too, so the agent in the machine's own sandbox can do what they would: "connect to the guest Wi-Fi", "turn it
 // down", "copy the USB stick into my sandbox". Thin callers of `ic os …`, like the OS tools beside them (os.ts): argv
 // spelled by the contract, ic's JSON read as the contract's, ic's exit codes said in words, and nothing of NetworkManager,
@@ -142,7 +142,7 @@ const NO_SCREEN: Refusal = {
 // Where a Wi-Fi password comes from when this machine does not know it: never the chat, where it would stay in the
 // transcript for good.
 const PASSWORD_FROM =
-    "Do not ask the owner to paste it into chat, where it would stay in the transcript: ask them to join the network from This computer on this machine's own screen, or to give you the password some way that leaves no copy in the conversation, and pass it as `password`.";
+    "Do not ask the owner to paste it into chat, where it would stay in the transcript: ask them to join the network from the Devices page on this machine's own screen, or to give you the password some way that leaves no copy in the conversation, and pass it as `password`.";
 
 const wifiPassword = (ssid: string, given: boolean): Refusal => ({
     code: IC_OS_WIFI_PASSWORD_EXIT,
@@ -219,7 +219,7 @@ export const wifiRadio = async (on: boolean, scopes: DeviceScopes, deps: OsDeps 
     });
     return on
         ? `${said(run, "Wi-Fi is on.")}\n\nA network this device knows is rejoined by itself; os_wifi_list shows what is in reach.`
-        : `${said(run, "Wi-Fi is off.")}\n\nos_wifi_radio with \`on: true\`, or This computer on this machine's own screen, turns it back on.`;
+        : `${said(run, "Wi-Fi is off.")}\n\nos_wifi_radio with \`on: true\`, or the Devices page on this machine's own screen, turns it back on.`;
 };
 
 export const soundStatus = async (scopes: DeviceScopes, deps: OsDeps = OS_DEPS): Promise<string> =>
@@ -455,7 +455,7 @@ const NETWORK_TOOLS = (deps: OsDeps): McpTool<DeviceScopes>[] => [
     }),
     tool({
         name: "os_wifi_connect",
-        description: `Join a Wi-Fi network by its name (\`ssid\`, as os_wifi_list gives it) through this device's \`ic os network wifi connect\`. A known network, or one that asks for no password, needs none. One that needs a password this device does not know is refused, saying so: never ask the owner to type a password into chat, where it stays in the transcript. Ask them to join it from This computer on this machine's own screen, or pass \`password\` only when you have it some way that leaves no copy in the conversation. It reaches ic on stdin, never a command line, and this device's audit log keeps only its length. While the device switches networks its connection drops for a moment. ${MANAGING}`,
+        description: `Join a Wi-Fi network by its name (\`ssid\`, as os_wifi_list gives it) through this device's \`ic os network wifi connect\`. A known network, or one that asks for no password, needs none. One that needs a password this device does not know is refused, saying so: never ask the owner to type a password into chat, where it stays in the transcript. Ask them to join it from the Devices page on this machine's own screen, or pass \`password\` only when you have it some way that leaves no copy in the conversation. It reaches ic on stdin, never a command line, and this device's audit log keeps only its length. While the device switches networks its connection drops for a moment. ${MANAGING}`,
         effect: "write",
         input: z.object({
             ssid: IntenticOsSsidSchema.describe("The network's name, exactly as os_wifi_list gives it."),

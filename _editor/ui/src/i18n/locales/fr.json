@@ -91,17 +91,10 @@
         "more": "…et {count} de plus"
     },
     "deviceAgent": {
-        "commands": "Commandes",
-        "device": "Appareil",
-        "folders": "Dossiers",
         "installedBuild": "Build installé",
         "nothingDownloaded": "Aucun téléchargement",
-        "oneProcess": "Un seul processus",
         "restartAgent": "Redémarrer l'agent",
         "roundsStopped": "Tournées arrêtées"
-    },
-    "deviceAgentGroup": {
-        "agentOnThisDevice": "Agent sur cet appareil"
     },
     "deviceDetail": {
         "asleep": "en veille",
@@ -150,6 +143,14 @@
             "unreachable": "Retenue parce que ce sandbox ne répond plus depuis une heure. La synchro reprend d'elle-même dès qu'il répond.",
             "other": "Retenue par l'agent de cet ordinateur. La synchro reprend d'elle-même."
         }
+    },
+    "deviceMachine": {
+        "capacity": "{memory} · {cpus} cœur | {memory} · {cpus} cœurs"
+    },
+    "devicePage": {
+        "allDevices": "Tous les appareils",
+        "dangerZone": "Zone dangereuse",
+        "sandboxes": "Sandboxes"
     },
     "imageView": {
         "actualSize": "Taille réelle",

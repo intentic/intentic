@@ -2,6 +2,7 @@ import { agentBuildSkew, agentStalled, type Device, type DeviceAgent, deviceDist
 import { isBehind } from "@intentic/sandbox-contract/state/versions";
 import { timeAgo } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
+import { type OsMark, osMarkOf } from "@intentic/ui/device-machine";
 
 // What a Devices row says about the machine itself, as distinct from what it's doing for this sandbox
 // (folders, ports, containers). Every fact comes from the daemon's own row (DeviceSchema), the capability
@@ -233,59 +234,12 @@ export const manageBlock = (device: Device, scopes: DeviceScopes | undefined): M
 };
 
 // THE MARK A SCREEN DRAWS FOR AN ENVIRONMENT: the OS it is, as the glyph people recognise it by, in that OS's own
-// colour. A generic monitor on every row told a Windows PC, a Mac and an Arch distro apart by nothing; this does it
-// before a word is read. A distro outranks its platform (a distro says it is Linux, and which Linux is the point on a
-// PC holding two); the platform covers a machine that has not described itself; neither leaves the monitor.
-export interface OsMark {
-    readonly icon: string;
-    /** The OS's own brand colour, for BrandMark's `tint`; absent for the generic monitor. */
-    readonly tint?: string;
-}
-
-// Matched against the distro's name and the OS string both, lowercase, first hit wins: the specific distros before
-// the generic Linux, and macOS before anything whose name happens to contain "os".
-const OS_MARKS: readonly (readonly [RegExp, OsMark])[] = [
-    [/\barch/, { icon: `archlinux`, tint: `#1793D1` }],
-    [/ubuntu/, { icon: `ubuntu`, tint: `#E95420` }],
-    [/debian/, { icon: `debian`, tint: `#A81D33` }],
-    [/fedora/, { icon: `fedora`, tint: `#51A2DA` }],
-    [/windows/, { icon: `windows`, tint: `#0078D4` }],
-    [/macos|mac os|darwin|os x/, { icon: `apple`, tint: `#000000` }],
-    [/linux/, { icon: `linux`, tint: `#FCC624` }],
-];
-
-const LINUX_MARK: OsMark = { icon: `linux`, tint: `#FCC624` };
-
-const PLATFORM_MARKS: Record<string, OsMark> = {
-    windows: { icon: `windows`, tint: `#0078D4` },
-    macos: { icon: `apple`, tint: `#000000` },
-    darwin: { icon: `apple`, tint: `#000000` },
-    linux: LINUX_MARK,
-};
-
-const GENERIC_MARK: OsMark = { icon: `desktop` };
-
-const markOf = (words: readonly (string | undefined)[]): OsMark | undefined => {
-    for (const word of words) {
-        const hit = word === undefined || word === `` ? undefined : OS_MARKS.find(([pattern]) => pattern.test(word.toLowerCase()));
-        if (hit !== undefined) {
-            return hit[1];
-        }
-    }
-    return undefined;
-};
-
+// colour (the kit's table, which the desktop app's Devices view draws its own computer with). A distro outranks its
+// platform (a distro says it is Linux, and which Linux is the point on a PC holding two); the platform covers a machine
+// that has not described itself; neither leaves the monitor.
 export const osMark = (device: Device): OsMark => {
     const distro = deviceDistro(device);
     // A distro that names no Linux anyone draws is still a Linux, which is the one thing its platform slug cannot
     // say: WSL reports a distro's platform as the Windows side's.
-    return (
-        markOf([distro, device.facts?.os]) ??
-        (distro === undefined ? undefined : LINUX_MARK) ??
-        (device.platform === undefined ? undefined : PLATFORM_MARKS[device.platform]) ??
-        GENERIC_MARK
-    );
+    return osMarkOf([distro, device.facts?.os], { linux: distro !== undefined, platform: device.platform });
 };
-
-/** A WSL distro known only by the name WSL registered it under: a side of a PC that holds no door yet. */
-export const distroMark = (name: string): OsMark => markOf([name]) ?? LINUX_MARK;

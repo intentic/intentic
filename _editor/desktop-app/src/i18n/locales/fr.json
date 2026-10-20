@@ -29,9 +29,7 @@
         "sandbox": "votre sandbox",
         "sandboxRunsInDocker": "Votre sandbox tourne dans Docker, qui n'est pas encore lancé. Nous vérifions d'abord ce dont votre PC a besoin, et nous demandons avant de changer quoi que ce soit.",
         "sandboxRunsInDocker2": "Votre sandbox tourne dans Docker, qui n'est pas encore lancé. L'installation commence par l'installer, votre système vous demandera donc votre mot de passe une fois.",
-        "sandboxesOnDevice": "Sandboxes sur cet ordinateur",
         "saysPairingAlreadyUsed": "S'il indique que l'appairage a déjà servi ou a expiré, régénérez-le dans votre espace de travail.",
-        "seeAllDevices": "Voir tous vos appareils",
         "settingUp": "Préparation :",
         "setupCodeRanOut": "Votre code d'installation a expiré pendant que cet ordinateur était absent. Tout ce pour quoi le redémarrage avait lieu est déjà fait ; il ne manque qu'un nouveau code pour continuer.",
         "setupCodeRanOutHere": "Votre code d'installation a expiré avant que cet ordinateur puisse l'utiliser, et un nouveau n'a pas pu être obtenu d'ici. Rien de ce qui est déjà fait n'est perdu ; il ne manque qu'un nouveau code pour continuer.",
@@ -60,11 +58,6 @@
         "lookIconByClock": "Cherchez son icône près de l'horloge, ou derrière la flèche ^ à côté.",
         "quitIntentic": "Quitter Intentic",
         "sandboxesKeepRunningEither": "Vos sandboxes continuent de tourner dans les deux cas : ils vivent dans Docker, pas dans cette fenêtre."
-    },
-    "deviceAgent": {
-        "latestUnknown": "Dernière inconnue",
-        "servingInstalledBuild": "Exécute la version installée sur cet ordinateur.",
-        "workspaceChecksUpdates": "L’espace vérifie les mises à jour"
     },
     "docker": {
         "accountNotAllowed": "Ce compte n'a pas le droit d'utiliser Docker",
@@ -185,10 +178,8 @@
         "waitingForYou": "En attente de votre action"
     },
     "device": {
-        "title": "Cet ordinateur",
-        "lead": "Les sandboxes qui tournent sur cet ordinateur, son agent machine et le moteur Docker dans lequel ils tournent.",
-        "thisDevice": "cet ordinateur",
-        "agentHeading": "Agent sur cet ordinateur",
+        "title": "Appareils",
+        "unnamed": "Cet ordinateur",
         "dockerIsntRunning": "Docker n'est pas lancé, donc les sandboxes de cet ordinateur non plus.",
         "oursIsntRunning": "Le moteur d'Intentic ne tourne pas, donc les sandboxes de cet ordinateur non plus.",
         "oursHeld": "Le moteur d'Intentic a été arrêté volontairement (ic engine stop), donc les sandboxes de cet ordinateur ne tournent pas. Rien ne le relance tant que vous ne le faites pas.",
@@ -205,9 +196,6 @@
         "startingDockerBadge": "démarrage de Docker",
         "updateReadyBadge": "une mise à jour est prête",
         "machineBadge": "préparation du sandbox de cet ordinateur",
-        "keptBy": "Géré par {place}",
-        "keptByNote": "Démarrer, arrêter et redémarrer fonctionnent ici",
-        "keptByTitle": "L'entretien se fait là-bas",
         "agentsElsewhere": "L'agent machine d'Intentic tourne aussi dans {places} sur cet ordinateur, et s'occupe des sandboxes qui y sont installés.",
         "pcSettingUpBadge": "préparation de ce PC",
         "pcSetupBadge": "ce PC peut être préparé pour les agents"

@@ -5084,7 +5084,7 @@
             "interruptedDetail": "Intentic closed while it was being set up, so it's carrying on where it left off.",
             "waiting": "This computer's sandbox is waiting",
             "waitingDetail": {
-                "consent": "This PC needs setting up for agents first. Set it up on This computer.",
+                "consent": "This PC needs setting up for agents first. Set it up in Devices.",
                 "restart": "This computer needs a restart before it can run a sandbox.",
                 "signOut": "This computer needs you to sign out and back in before it can run a sandbox."
             },
@@ -5135,7 +5135,7 @@
                 "log": "Show log",
                 "start": "Start",
                 "recreate": "Set it up again",
-                "details": "Open This computer",
+                "details": "Open Devices",
                 "open": "Open sandbox"
             }
         },
@@ -6606,7 +6606,6 @@
         },
         "devicePage": {
             "actsOn": "Acts on",
-            "allDevices": "All devices",
             "backOnLocalhost": "Back on localhost",
             "batchRemoving": "Removing {at} of {total}…",
             "batchRestarting": "Restarting {at} of {total}…",
@@ -6616,7 +6615,6 @@
             "cantBatch": "Can't batch",
             "clearBuildOutput": "Clear build output",
             "connect": "Connect",
-            "dangerZone": "Danger zone",
             "deviceAloneLosesAccess": "This device alone loses access — every other paired device keeps syncing. Its file sync stops and its mirrored ports drop off its localhost within a minute.",
             "dontMirrorPort": "Don't mirror it",
             "environments": "Environments",
@@ -6641,7 +6639,6 @@
             "revokeSAccess2": "Revoke {label}'s access?",
             "revokingStopsDeviceReaching": "Revoking stops this device reaching the sandbox at all. Nothing on it is deleted, and its agent stays installed.",
             "runsOnDeviceKeeps": "Runs on that device, and keeps going if you leave this page or the connection drops.",
-            "sandboxes": "Sandboxes",
             "sandboxUsingRightNow": "This is the sandbox you are using right now — this page will lose it.",
             "selectAll": "Select all",
             "selected": "{count} selected",
@@ -6683,8 +6680,7 @@
             "stateAttention": "needs attention",
             "stateQuiet": "gone quiet",
             "stateReconnecting": "reconnecting",
-            "stateOffline": "offline",
-            "capacity": "{memory} · {cpus} core | {memory} · {cpus} cores"
+            "stateOffline": "offline"
         },
         "deviceRunners": {
             "addRunner": "Add runner",

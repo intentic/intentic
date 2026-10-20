@@ -29,9 +29,7 @@
         "sandbox": "tu sandbox",
         "sandboxRunsInDocker": "Tu sandbox se ejecuta en Docker, que todavía no está en marcha. Esto comprueba primero lo que necesita tu PC, y pregunta antes de cambiar nada.",
         "sandboxRunsInDocker2": "Tu sandbox se ejecuta en Docker, que todavía no está en marcha. La instalación lo instala primero, así que tu sistema te pedirá la contraseña una vez.",
-        "sandboxesOnDevice": "Sandboxes en este ordenador",
         "saysPairingAlreadyUsed": "Si dice que el emparejamiento ya se usó o caducó, vuelve a generarlo en tu espacio de trabajo.",
-        "seeAllDevices": "Ver todos tus dispositivos",
         "settingUp": "Preparando",
         "setupCodeRanOut": "Tu código de instalación caducó mientras este ordenador estaba ausente. Todo aquello para lo que era el reinicio ya está hecho; solo necesita un código nuevo para continuar.",
         "setupCodeRanOutHere": "Tu código de instalación caducó antes de que este ordenador pudiera usarlo, y no se pudo obtener uno nuevo desde aquí. No se pierde nada de lo ya hecho; solo necesita un código nuevo para continuar.",
@@ -60,11 +58,6 @@
         "lookIconByClock": "Busca su icono junto al reloj, o detrás de la flecha ^ que está al lado.",
         "quitIntentic": "Salir de Intentic",
         "sandboxesKeepRunningEither": "Tus sandboxes siguen en marcha en cualquier caso: viven en Docker, no en esta ventana."
-    },
-    "deviceAgent": {
-        "latestUnknown": "Última desconocida",
-        "servingInstalledBuild": "Sirviendo la versión instalada en este ordenador.",
-        "workspaceChecksUpdates": "El espacio busca novedades"
     },
     "docker": {
         "accountNotAllowed": "Esta cuenta no tiene permiso para usar Docker",
@@ -185,10 +178,8 @@
         "waitingForYou": "Esperándote"
     },
     "device": {
-        "title": "Este ordenador",
-        "lead": "Los sandboxes que se ejecutan en este ordenador, su agente de máquina y el motor de Docker en el que se ejecutan.",
-        "thisDevice": "este ordenador",
-        "agentHeading": "Agente en este ordenador",
+        "title": "Dispositivos",
+        "unnamed": "Este ordenador",
         "dockerIsntRunning": "Docker no está en marcha, así que los sandboxes de este ordenador tampoco.",
         "oursIsntRunning": "El motor de Intentic no está en marcha, así que los sandboxes de este ordenador tampoco.",
         "oursHeld": "El motor de Intentic se detuvo a propósito (ic engine stop), así que los sandboxes de este ordenador no están en marcha. Nada lo vuelve a iniciar hasta que lo hagas tú.",
@@ -205,9 +196,6 @@
         "startingDockerBadge": "iniciando Docker",
         "updateReadyBadge": "hay una actualización lista",
         "machineBadge": "preparando el sandbox de este ordenador",
-        "keptBy": "Mantenido por {place}",
-        "keptByNote": "Iniciar, detener y reiniciar funcionan aquí",
-        "keptByTitle": "El mantenimiento se hace allí",
         "agentsElsewhere": "El agente de máquina de Intentic también se ejecuta en {places} en este ordenador, y se ocupa de los sandboxes configurados allí.",
         "pcSettingUpBadge": "preparando este PC",
         "pcSetupBadge": "este PC se puede preparar para agentes"

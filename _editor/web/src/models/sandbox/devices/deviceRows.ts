@@ -32,11 +32,10 @@ import {
     deviceReconnecting,
     lastSeenNote,
     machineWarnings,
-    type OsMark,
     osLabel,
     osMark,
 } from "./deviceFacts";
-import { formatBinaryBytes } from "@intentic/ui/format";
+import { engineCapacity, type OsMark } from "@intentic/ui/device-machine";
 import { t } from "@intentic/ui/i18n";
 
 // One device as the board and the device page both read it: its state in one word and one colour, its
@@ -191,7 +190,7 @@ export const machineFigures = (machine: MachineRow): MachineFigures => {
 // another fits. One engine per PC, so whichever side describes it speaks for the machine.
 export const machineCapacity = (machine: MachineRow): string | undefined => {
     const engine = machine.environments.find((environment) => environment.device.facts?.engine !== undefined)?.device.facts?.engine;
-    return engine === undefined ? undefined : t(`sandbox.deviceRows.capacity`, { memory: formatBinaryBytes(engine.memoryBytes), cpus: engine.cpus }, engine.cpus);
+    return engine === undefined ? undefined : engineCapacity(engine);
 };
 
 // The tile's second line, what the machine IS: its OS where it is one environment (a many-sided PC names each of its

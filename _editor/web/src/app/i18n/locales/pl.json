@@ -6153,7 +6153,6 @@
         },
         "devicePage": {
             "actsOn": "Obejmuje",
-            "allDevices": "Wszystkie urządzenia",
             "backOnLocalhost": "Z powrotem na localhost",
             "batchRemoving": "Usuwanie {at} z {total}…",
             "batchRestarting": "Restartowanie {at} z {total}…",
@@ -6163,7 +6162,6 @@
             "cantBatch": "Nie w partii",
             "clearBuildOutput": "Wyczyść wyniki budowania",
             "connect": "Podłącz",
-            "dangerZone": "Strefa zagrożenia",
             "deviceAloneLosesAccess": "Dostęp traci tylko to jedno urządzenie — każde inne sparowane urządzenie synchronizuje dalej. Jego synchronizacja plików się zatrzymuje, a odbite porty znikają z jego localhosta w ciągu minuty.",
             "dontMirrorPort": "Nie odbijaj go",
             "environments": "Środowiska",
@@ -6188,7 +6186,6 @@
             "revokeSAccess2": "Odebrać dostęp: {label}?",
             "revokingStopsDeviceReaching": "Odebranie dostępu sprawia, że to urządzenie w ogóle nie sięgnie do sandboxa. Nic na nim nie zostaje usunięte, a jego agent pozostaje zainstalowany.",
             "runsOnDeviceKeeps": "Działa na tamtym urządzeniu i idzie dalej, jeśli opuścisz tę stronę albo połączenie padnie.",
-            "sandboxes": "Sandboxy",
             "sandboxUsingRightNow": "To jest sandbox, którego właśnie używasz — ta strona go straci.",
             "selectAll": "Zaznacz wszystko",
             "selected": "Wybrano: {count}",
@@ -6230,8 +6227,7 @@
             "stateAttention": "wymaga uwagi",
             "stateQuiet": "ucichło",
             "stateReconnecting": "ponowne łączenie",
-            "stateOffline": "offline",
-            "capacity": "{memory} · {cpus} rdzeń | {memory} · {cpus} rdzenie | {memory} · {cpus} rdzeni"
+            "stateOffline": "offline"
         },
         "deviceRunners": {
             "addRunner": "Dodaj runnera",
@@ -12458,7 +12454,7 @@
             "interruptedDetail": "Intentic został zamknięty w trakcie konfiguracji, więc kontynuuje od miejsca, w którym przerwał.",
             "waiting": "Sandbox tego komputera czeka",
             "waitingDetail": {
-                "consent": "Najpierw trzeba przygotować ten komputer dla agentów. Zrób to na stronie Ten komputer.",
+                "consent": "Najpierw trzeba przygotować ten komputer dla agentów. Zrób to na stronie Urządzenia.",
                 "restart": "Ten komputer trzeba uruchomić ponownie, zanim uruchomi sandbox.",
                 "signOut": "Musisz się wylogować i zalogować ponownie, zanim ten komputer uruchomi sandbox."
             },
@@ -12509,7 +12505,7 @@
                 "log": "Pokaż log",
                 "start": "Uruchom",
                 "recreate": "Skonfiguruj ponownie",
-                "details": "Otwórz Ten komputer",
+                "details": "Otwórz Urządzenia",
                 "open": "Otwórz sandbox"
             }
         },

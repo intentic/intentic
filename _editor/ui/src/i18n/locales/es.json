@@ -93,20 +93,10 @@
         "more": "…y {count} más"
     },
     "deviceAgent": {
-        "commands": "Comandos",
-        "device": "Dispositivo",
-        "folders": "Carpetas",
         "installedBuild": "Build instalado",
         "nothingDownloaded": "Sin descargas",
-        "oneProcess": "Un proceso",
-        "ports": "Puertos",
         "restartAgent": "Reiniciar el agente",
         "roundsStopped": "Rondas detenidas"
-    },
-    "deviceAgentGroup": {
-        "agent": "Agente",
-        "agent2": "Agente {version}",
-        "agentOnThisDevice": "Agente en este dispositivo"
     },
     "deviceDetail": {
         "asleep": "en reposo",
@@ -155,6 +145,14 @@
             "unreachable": "Retenida porque este sandbox no responde desde hace una hora. La sincronización sigue sola cuando responda.",
             "other": "Retenida por el agente de este equipo. La sincronización sigue sola."
         }
+    },
+    "deviceMachine": {
+        "capacity": "{memory} · {cpus} núcleo | {memory} · {cpus} núcleos"
+    },
+    "devicePage": {
+        "allDevices": "Todos los dispositivos",
+        "dangerZone": "Zona de peligro",
+        "sandboxes": "Sandboxes"
     },
     "imageView": {
         "actualSize": "Tamaño real",

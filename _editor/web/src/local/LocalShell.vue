@@ -11,6 +11,7 @@ import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
 import AccountPanel from "../shell/AccountPanel.vue";
 import SkipToContent from "../shell/SkipToContent.vue";
 import { railFrame } from "../shell/rail/railFrame";
+import { useWallpaperedRoute } from "../skins/useWallpaper";
 import RailTile from "../shell/rail/RailTile.vue";
 import { useIconRailSize } from "../workbench/window/useIconRailSize";
 import { navigatedPath } from "./appEvents";
@@ -22,8 +23,8 @@ import { useUnsavedGuard } from "./unsaved/useUnsavedGuard";
 
 // THE SHELL OF A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER: the sandbox shell's rail and page, holding what needs no
 // sandbox and no account. At the top, the place this window shows and every other one, the account's sandboxes
-// included (LocalPlaceSwitcher); under it Files, the folder itself, then every view the app adds (This device, titled
-// This computer, localHost.ts); at the foot, the account, the sandbox shell's own control (AccountPanel: Settings open in
+// included (LocalPlaceSwitcher); under it Files, the folder itself, then every view the app adds (Devices, the same
+// tile and the same page the sandbox shell has for its machines, localHost.ts); at the foot, the account, the sandbox shell's own control (AccountPanel: Settings open in
 // this window, Sign out leaves it on its folder), or the sign-in before there is one (LocalAccountTile). The tiles are
 // the sandbox shell's own (shell/rail/iconRail.css), so signing in changes what the rail holds, never what it is.
 
@@ -36,6 +37,10 @@ const { user } = useAccount();
 // The folder this window shows, as the editor knows it: the page is drawn anew for each (folderSwitch.ts).
 const { activeSandboxId } = useSandbox();
 const gridStyle = computed(() => railFrame(iconRailSize.value));
+// The pages a wallpaper shows behind, as the sandbox shell paints them (ShellDesktop.vue): Devices is one of them in
+// both, so the page about this computer is the same page in either window. Painted on the scroller, so the picture
+// stays put as the page scrolls.
+const wallpapered = useWallpaperedRoute();
 
 interface Tile {
     readonly section: string;
@@ -57,7 +62,7 @@ const isActive = (to: string): boolean => route.path === to || route.path.starts
 // Files first, as the sandbox shell ranks its workspace, then the app's views in the order it gives them; a view the app
 // routes without a tile (Repair, opened from where it is needed) is left off the rail, and one whose tile comes and goes
 // (Passwords) keeps it while the reader is on it, so the rail never loses the place they stand. This PC's own setup is
-// This computer's (the app's view), not a tile of its own: the Agents tile that held it until 2026-10-12 had nothing else.
+// Devices' (the app's view), not a tile of its own: the Agents tile that held it until 2026-10-12 had nothing else.
 const tiles = computed<readonly Tile[]>(() => [
     { section: `workspace`, to: `/workspace`, label: t(`shared.files`) },
     ...host.views.filter((view) => unref(view.inRail) !== false || isActive(`/${view.path}`)).map(viewTile),
@@ -77,7 +82,7 @@ onUnmounted(() => window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
 
 // THE WINDOW'S CLOSE, asked about from whichever screen it is on: unsaved edits outlive Files (the buffers are the
 // folder's, not the page's), so a close the app holds back for them is answered here, where the shell stands for the
-// window's whole life. Held by Files until 2026-10-12, a folder window left on This computer or Settings with an edit
+// window's whole life. Held by Files until 2026-10-12, a folder window left on Devices or Settings with an edit
 // unsaved ignored its × and Alt+F4 until the reader went back to Files.
 const { asking: closeAsked, question: closeQuestion, closeAnyway: closeWindow, keepOpen: keepWindow } = useUnsavedGuard();
 
@@ -118,7 +123,7 @@ onUnmounted(() => stopTaking?.());
         </nav>
 
         <main id="main-content" tabindex="-1" class="relative flex min-w-0 flex-col overflow-hidden" style="grid-area: workspace">
-            <div class="min-h-0 flex-1 overflow-auto">
+            <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }">
                 <!-- Keyed by the folder: one pointed at in this window's place gets a page of its own, not the last one's
                      search, selection and layout (folderSwitch.ts). -->
                 <RouterView v-slot="{ Component }">

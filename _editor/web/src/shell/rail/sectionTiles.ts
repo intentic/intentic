@@ -91,7 +91,7 @@ function useWorkspaceBadge(): ComputedRef<ViewBadge | undefined> {
     });
 }
 
-// THE MACHINES THIS SANDBOX REACHES, tiled like This computer in a local window (the same glyph and the same corners):
+// THE MACHINES THIS SANDBOX REACHES, tiled like Devices in a local window (the same glyph, name and corners):
 // a place to go, the count of ports another of your sandboxes took, and the turning mark while one of them is being
 // worked on. A signal tile (registry.ts): kept by a pin, and on the rail by itself while it badges, since an agent
 // update outlives the page that pressed it by a minute or more (devices/runners/deviceWork.ts).

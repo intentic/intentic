@@ -94,17 +94,10 @@
         "more": "…und {count} weitere"
     },
     "deviceAgent": {
-        "commands": "Befehle",
-        "device": "Gerät",
-        "folders": "Ordner",
         "installedBuild": "Installierter Build",
         "nothingDownloaded": "Kein Download",
-        "oneProcess": "Ein Prozess",
         "restartAgent": "Agent neu starten",
         "roundsStopped": "Runden gestoppt"
-    },
-    "deviceAgentGroup": {
-        "agentOnThisDevice": "Agent auf diesem Gerät"
     },
     "deviceDetail": {
         "asleep": "schläft",
@@ -152,6 +145,14 @@
             "unreachable": "Angehalten, weil diese Sandbox seit einer Stunde nicht antwortet. Der Sync läuft von selbst weiter, sobald sie antwortet.",
             "other": "Vom Agenten dieses Computers angehalten. Der Sync läuft von selbst weiter."
         }
+    },
+    "deviceMachine": {
+        "capacity": "{memory} · {cpus} Kern | {memory} · {cpus} Kerne"
+    },
+    "devicePage": {
+        "allDevices": "Alle Geräte",
+        "dangerZone": "Gefahrenbereich",
+        "sandboxes": "Sandboxes"
     },
     "imageView": {
         "actualSize": "Originalgröße",

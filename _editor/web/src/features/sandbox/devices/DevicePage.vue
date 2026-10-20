@@ -8,6 +8,7 @@ import {
     DeviceAgentNotes,
     DeviceDetail,
     type DeviceSandboxGroup,
+    distroMark,
     folderHold,
     Icon,
     mirroringOff,
@@ -67,7 +68,7 @@ import { useSandboxSelection } from "./batch/sandboxSelection";
 import { environmentTitle, wslDistroRows } from "./machineEnvironments";
 import { type ConflictAsk, conflictAsk } from "./sync/conflictAsk";
 import SandboxSyncToggles from "./sync/SandboxSyncToggles.vue";
-import { type DeviceScopes, distroMark, manageBlock, osMark } from "../../../models/sandbox/devices/deviceFacts";
+import { type DeviceScopes, manageBlock, osMark } from "../../../models/sandbox/devices/deviceFacts";
 import { startAgent } from "../../../models/fleet/agentActions";
 import HostConnectDialog from "../../capabilities/connect/hosts/HostConnectDialog.vue";
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
@@ -87,7 +88,8 @@ import { useT } from "@intentic/ui/i18n";
 // last-seen, a paragraph and an agent note — and name its own environments three times over. So: the badge owns
 // the state word, one line owns the errand, and a section is drawn for the MACHINE rather than once per door.
 // <DeviceEnvironment> is that rule made structural: a lone machine's masthead and a many-sided one's rows are the
-// same component, which is why they can no longer drift.
+// same component (the kit's DeviceEnvironmentRow), which is why they can no longer drift; the desktop app's Devices
+// view opens on the same one for the computer it runs on, with the same Sandboxes list and the same Danger zone.
 
 const t = useT();
 
@@ -229,7 +231,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
             <!-- The way back out, above the name rather than beside it, so it is not read as part of the title. -->
             <RouterLink :to="boardRoute()" :class="ui.textButton({ size: `xs` }, `inline-flex w-fit items-center`)">
                 <Icon name="chevron-right" class="rotate-180 text-2xs" aria-hidden="true" />
-                {{ t(`sandbox.devicePage.allDevices`) }}
+                {{ t(`ui.devicePage.allDevices`) }}
             </RouterLink>
 
             <!-- A LONE machine's masthead IS its environment row: the name, the agent it runs and that agent's two
@@ -319,7 +321,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
         <!-- One row per sandbox, the page's only disclosure: a row is a summary and its folder, ports, image and share are the evidence. -->
         <!-- Either answer draws rows: a card granting sandbox management alone lists containers and describes no folders. -->
         <!-- A section, not a group: each sandbox is a card on its own surface. -->
-        <Section v-if="described" :label="t(`sandbox.devicePage.sandboxes`)">
+        <Section v-if="described" :label="t(`ui.devicePage.sandboxes`)">
             <!-- THE LIST'S HEADER: the machine's two switches, each one button whose menu holds its verbs, and the way into
                  acting on several sandboxes at once. -->
             <template v-if="menus.length > 0 || selection.selectable.value" #actions>
@@ -610,7 +612,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
 
         <!-- Cutting an enrollment off entirely, in one group at the bottom: it ends everything above it at once.
              One row per enrollment, since each side of a PC pairs on its own and is revoked on its own. -->
-        <RowGroup v-if="revocable.length > 0" :label="t(`sandbox.devicePage.dangerZone`)">
+        <RowGroup v-if="revocable.length > 0" :label="t(`ui.devicePage.dangerZone`)">
             <template v-for="environment in revocable" :key="`revoke:${environment.device.key}`">
                 <Row
                     icon="times"

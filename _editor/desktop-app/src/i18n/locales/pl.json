@@ -29,9 +29,7 @@
         "sandbox": "Twój sandbox",
         "sandboxRunsInDocker": "Twój sandbox działa w Dockerze, a ten jeszcze nie działa. Najpierw sprawdzamy, czego potrzebuje Twój komputer, i pytamy przed każdą zmianą.",
         "sandboxRunsInDocker2": "Twój sandbox działa w Dockerze, a ten jeszcze nie działa. Instalacja zainstaluje go najpierw, więc system raz poprosi o Twoje hasło.",
-        "sandboxesOnDevice": "Sandboxy na tym komputerze",
         "saysPairingAlreadyUsed": "Jeśli pisze, że parowanie zostało już użyte albo wygasło, wygeneruj je ponownie w swojej przestrzeni roboczej.",
-        "seeAllDevices": "Zobacz wszystkie swoje urządzenia",
         "settingUp": "Trwa konfiguracja:",
         "setupCodeRanOut": "Twój kod instalacyjny wygasł, kiedy tego komputera nie było. Wszystko, po co był restart, jest już zrobione; potrzebny jest tylko nowy kod, żeby iść dalej.",
         "setupCodeRanOutHere": "Twój kod instalacyjny wygasł, zanim ten komputer zdążył go użyć, a nowego nie dało się stąd pobrać. Nic z tego, co już zrobione, nie przepada; potrzebny jest tylko nowy kod, żeby iść dalej.",
@@ -60,11 +58,6 @@
         "lookIconByClock": "Szukaj jego ikony przy zegarze albo za strzałką ^ obok.",
         "quitIntentic": "Zakończ Intentic",
         "sandboxesKeepRunningEither": "Twoje sandboxy tak czy owak działają dalej: żyją w Dockerze, nie w tym oknie."
-    },
-    "deviceAgent": {
-        "latestUnknown": "Najnowsza nieznana",
-        "servingInstalledBuild": "Działa wersja zainstalowana na tym komputerze.",
-        "workspaceChecksUpdates": "Aktualizacje sprawdza przestrzeń"
     },
     "docker": {
         "accountNotAllowed": "To konto nie ma prawa używać Dockera",
@@ -185,10 +178,8 @@
         "waitingForYou": "Czeka na Ciebie"
     },
     "device": {
-        "title": "Ten komputer",
-        "lead": "Sandboxy działające na tym komputerze, jego agent maszyny i silnik Dockera, w którym działają.",
-        "thisDevice": "ten komputer",
-        "agentHeading": "Agent na tym komputerze",
+        "title": "Urządzenia",
+        "unnamed": "Ten komputer",
         "dockerIsntRunning": "Docker nie działa, więc sandboxy na tym komputerze też nie.",
         "oursIsntRunning": "Silnik Intentic nie działa, więc sandboxy na tym komputerze też nie.",
         "oursHeld": "Silnik Intentic został zatrzymany celowo (ic engine stop), więc sandboxy na tym komputerze nie działają. Nic nie uruchomi go ponownie, dopóki ty tego nie zrobisz.",
@@ -205,9 +196,6 @@
         "startingDockerBadge": "uruchamianie Dockera",
         "updateReadyBadge": "aktualizacja jest gotowa",
         "machineBadge": "konfiguracja sandboxa tego komputera",
-        "keptBy": "Obsługiwany przez {place}",
-        "keptByNote": "Start, stop i restart stąd",
-        "keptByTitle": "Utrzymanie działa tam",
         "agentsElsewhere": "Agent maszyny Intentic działa na tym komputerze także w {places} i dba o skonfigurowane tam sandboxy.",
         "pcSettingUpBadge": "konfiguracja tego komputera",
         "pcSetupBadge": "ten komputer można przygotować dla agentów"

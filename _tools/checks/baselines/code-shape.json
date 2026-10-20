@@ -773,7 +773,7 @@
     },
     "_editor/web/src/models/providers/usageStatus.ts": 813,
     "_editor/web/src/models/sandbox/devices/deviceRows.ts": {
-        "count": 825,
+        "count": 824,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/sandbox/devices/useDesktopSync.ts#useDesktopSync#lines": {

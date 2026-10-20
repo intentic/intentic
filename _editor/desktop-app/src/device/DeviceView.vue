@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import {
+    agentLines,
     Button,
-    DeviceAgentGroup,
+    DeviceAgentNotes,
     DeviceDetail,
+    DeviceEnvironmentRow,
     DeviceRunLog,
     Notice,
     Page,
-    PageAction,
-    PageHeader,
+    RowGroup,
     Section,
     SandboxResourcesDialog,
     SandboxVerbs,
@@ -34,20 +35,24 @@ import SecurityCard from "./intenticOs/screen/SecurityCard.vue";
 import ThisComputer from "./intenticOs/ThisComputer.vue";
 import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
-import UninstallSection from "./uninstall/UninstallSection.vue";
+import UninstallRow from "./uninstall/UninstallRow.vue";
 import PasswordsOffer from "../passwords/PasswordsOffer.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
 import { engineBackShown, engineDownSentence, engineEventful, engineQuiet, showMoveLog } from "./engine";
 import { moveTargetOf } from "./engineMove";
 
-// THIS DEVICE: the page the app adds to a local window's rail (host.ts), where the launcher window's card used to be.
-// This computer's sandboxes with every verb the workspace's Devices tab has for them, its machine agent, the Docker
-// engine they run in, and the work the app runs here: the recovery panel's fix and a setup handed over from the workspace
-// lead the page for as long as they are here. A new Windows PC's own setup, its sign-in and the first task written
-// meanwhile are a card of their own (pcSetup/PcSetupCard.vue), the local shell's Agents view until 2026-10-12. A
-// computer that runs no sandbox is told what one is for and offered the way to one, and nothing about Docker: somebody
-// here for their files has no business with it.
+// DEVICES, IN A LOCAL WINDOW: the page the app adds to a local window's rail (host.ts), where the launcher window's card
+// used to be. It is the workspace's Devices view opened on one machine, the one this window runs on: the same masthead
+// (the kit's DeviceEnvironmentRow: the computer's name, its OS, its engine's size, its agent and the agent's verb), the
+// same Sandboxes list with every verb the workspace has for them, and the same Danger zone at the foot, holding what only
+// this computer can do to itself (removing Intentic from it). There is no board to go back to here: "All devices" opens
+// the workspace's. Between the masthead and the list sits what only the app on this computer can do: the recovery
+// panel's fix and a setup handed over from the workspace, which lead for as long as they are here, this PC's own setup
+// (pcSetup/PcSetupCard.vue), this computer's own sandbox, and the Docker engine they run in. A computer that runs no
+// sandbox is told what one is for and offered the way to one, and nothing about Docker: somebody here for their files
+// has no business with it. Until 2026-10-20 this page was "This computer", headed and laid out on its own, and had
+// drifted from the workspace's page about the very same machine.
 
 const t = useT();
 const device = useDevice();
@@ -101,6 +106,8 @@ const {
     reportError,
     agentPanel,
     machineName,
+    machineOs,
+    machineMark,
     hardware,
     agentRestarting,
     agentRestartError,
@@ -108,7 +115,6 @@ const {
     restartAgent,
     sandboxRows,
     groups,
-    keptByOf,
     agentsElsewhere,
     busy,
     act,
@@ -188,6 +194,24 @@ const toSetup = async (): Promise<void> => {
     await (signedIn.value ? workspaceOpen(`/setup`) : signIn());
 };
 
+// The masthead's errands, on its own spine as the workspace's page hangs them: what the agent wants, the answer to the
+// last Restart, an agent that did not answer, and the other sides of this computer that keep sandboxes of their own.
+const agentNotes = computed(() => (agentPanel.value === undefined ? [] : agentLines(agentPanel.value)));
+const mastheadErrands = computed(
+    () =>
+        agentNotes.value.length > 0 ||
+        agentRestartError.value !== undefined ||
+        agentRestartOutcome.value !== undefined ||
+        reportError.value !== undefined ||
+        agentsElsewhere.value.length > 0,
+);
+
+// The row a verb is working on, by the id the list knows it by: its status glyph spins, as on the workspace's page.
+const busyIds = computed(() => {
+    const slug = busy.value?.slug;
+    return slug === undefined ? [] : groups.value.filter((group) => group.sandbox?.slug === slug).map((group) => group.sandboxId);
+});
+
 /* The way back says where it goes, and that leaving this page does not stop a live setup. */
 const backTip = computed((): Tip => ({ title: t(`desktop.app.openWorkspace`), note: running.value ? t(`desktop.app.installKeepsRunning`) : `` }));
 
@@ -216,28 +240,53 @@ onMounted(() => {
 
 <template>
     <Page>
-        <PageHeader :title="t(`desktop.device.title`)">
-            <template #info>
-                <!-- The machine's own facts in the quietest ink: what tells this computer apart from the others enrolled. -->
-                <span v-if="hardware !== ``" class="min-w-0 truncate text-xs text-subtle" v-tooltip.bottom="info?.appUrl">{{ hardware }}</span>
-            </template>
-            <template #actions>
-                <PageAction :label="t(`ui.action.refresh`)" icon="refresh" quiet :disabled="running" @click="refresh" />
-                <!-- The workspace's Devices tab manages these same containers, and every other computer of this account. -->
-                <PageAction
-                    v-if="signedIn"
-                    :label="t(`desktop.app.seeAllDevices`)"
-                    icon="desktop"
-                    quiet
-                    @click="workspaceOpen(DEVICES_PATH)"
-                />
-            </template>
-            <!-- Sandboxes, a machine agent and a Docker engine mean nothing on a computer that has none of them yet: while this
-                 PC's own card leads an empty page, its heading says what the page is for instead (pcSetup/PcSetupCard.vue). -->
-            <template v-if="!(pcCardShown && groups.length === 0)" #description>{{ t(`desktop.device.lead`) }}</template>
-        </PageHeader>
-
         <div class="flex flex-col gap-6">
+            <div class="flex flex-col gap-3">
+                <!-- Where the workspace's page has its way back to the board: every machine of this account is there, one
+                     window away. The arrow says it leaves this window, which a back chevron would not. -->
+                <button
+                    v-if="signedIn"
+                    type="button"
+                    :class="ui.textButton({ size: `xs` }, `inline-flex w-fit items-center`)"
+                    v-tooltip.right="t(`desktop.app.openWorkspace`)"
+                    @click="workspaceOpen(DEVICES_PATH)"
+                >
+                    {{ t(`ui.devicePage.allDevices`) }}
+                    <Icon name="arrow-up-right" class="text-2xs" aria-hidden="true" />
+                </button>
+
+                <!-- THIS COMPUTER'S MASTHEAD, the workspace's own for a machine of one environment: its name, its OS, its
+                     engine's size, its agent's build and state, and the agent's one verb. This window runs ON the device,
+                     so the verb never needs a command to go and type. -->
+                <DeviceEnvironmentRow
+                    :masthead="true"
+                    :name="machineName"
+                    :kind="machineOs"
+                    :mark="machineMark"
+                    :hardware="hardware"
+                    :version="agentPanel?.version"
+                    :state="agentPanel?.state"
+                    :actions="agentPanel?.actions"
+                    :running="agentRestarting ? `restart` : undefined"
+                    :busy="running || busy !== undefined"
+                    @run="void restartAgent()"
+                >
+                    <template v-if="mastheadErrands" #below>
+                        <DeviceAgentNotes :notes="agentNotes" />
+                        <!-- The agent's own answer to Restart, refusal or otherwise; the badge above shows whether the loop came back. -->
+                        <Notice v-if="agentRestartError" tone="danger" class="text-2xs">{{ agentRestartError }}</Notice>
+                        <p v-else-if="agentRestartOutcome" class="text-xs text-muted">{{ agentRestartOutcome }}</p>
+                        <!-- The agent didn't answer, which is a different absence from having none. -->
+                        <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
+                        <!-- This computer's other environments with an agent of their own (a WSL distro's), which keep the sandboxes set up there. -->
+                        <p v-if="agentsElsewhere.length > 0" class="flex items-start gap-1.5 text-xs text-subtle">
+                            <Icon name="server" class="shrink-0" />
+                            <span>{{ t(`desktop.device.agentsElsewhere`, { places: agentsElsewhere.join(`, `) }) }}</span>
+                        </p>
+                    </template>
+                </DeviceEnvironmentRow>
+            </div>
+
             <!-- The app's own update: what is true now, never a promise about later. -->
             <Notice v-if="update.kind === `ready`" tone="info" class="items-center">
                 <span>{{ t(`desktop.app.intenticDownloadedInstallsQuit`, { version: update.version }) }}</span>
@@ -537,44 +586,35 @@ onMounted(() => {
                 />
             </template>
 
-            <!-- One row per sandbox with its folder, ports, image and verbs, in the workspace Devices tab's own group. -->
-            <Section v-if="groups.length > 0" :label="t(`desktop.app.sandboxesOnDevice`)">
-                <div class="flex flex-col">
-                    <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows">
-                        <template #actions="{ group }">
-                            <SandboxVerbs
-                                v-if="group.sandbox"
-                                :running="group.sandbox.running"
-                                :busy="busyVerb(group)"
-                                :disabled="running || busy !== undefined"
-                                :logs-open="logOpen(group)"
-                                @act="(verb) => act(group, verb)"
-                            />
-                        </template>
-                        <!-- The machine's own output, while a row works and for as long as its log tail stays open. -->
-                        <template #footer="{ group }">
-                            <!-- Another side of this computer keeps it (a WSL distro's agent): its care runs there, and the verbs above still reach it. -->
-                            <p
-                                v-if="keptByOf(group.sandbox?.slug)"
-                                class="flex items-start gap-1.5 text-2xs text-subtle"
-                                v-tooltip.top="{ title: t(`desktop.device.keptByTitle`), note: t(`desktop.device.keptByNote`) }"
-                            >
-                                <Icon name="server" class="shrink-0" />
-                                <span>{{ t(`desktop.device.keptBy`, { place: keptByOf(group.sandbox?.slug) }) }}</span>
-                            </p>
-                            <DeviceRunLog
-                                v-if="busyVerb(group) || logOpen(group)"
-                                :lines="paneLines(group)"
-                                :running="busyVerb(group) !== undefined"
-                                :empty="t(`desktop.app.startingOnDevice`)"
-                                :note="t(`desktop.app.runningOnDeviceKeeps`)"
-                            />
-                            <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
-                                {{ rowFailure.message }}
-                            </Notice>
-                        </template>
-                    </DeviceDetail>
-                </div>
+            <!-- THE SANDBOXES, as the workspace's page lists them: one card per sandbox with its folder, ports, image and
+                 version, and one quiet ⋯ holding its verbs, done here through this computer's own ic. -->
+            <Section v-if="groups.length > 0" :label="t(`ui.devicePage.sandboxes`)">
+                <DeviceDetail :pairings="status?.sync.pairings" :ports="status?.sync.ports" :sandboxes="sandboxRows" :busy="busyIds">
+                    <!-- No `busy`: the row's status glyph already spins (DeviceDetail `busy`). -->
+                    <template #actions="{ group }">
+                        <SandboxVerbs
+                            v-if="group.sandbox"
+                            :compact="true"
+                            :running="group.sandbox.running"
+                            :disabled="running || busy !== undefined"
+                            :logs-open="logOpen(group)"
+                            @act="(verb) => act(group, verb)"
+                        />
+                    </template>
+                    <!-- The machine's own output, while a row works and for as long as its log tail stays open. -->
+                    <template #footer="{ group }">
+                        <DeviceRunLog
+                            v-if="busyVerb(group) || logOpen(group)"
+                            :lines="paneLines(group)"
+                            :running="busyVerb(group) !== undefined"
+                            :empty="t(`desktop.app.startingOnDevice`)"
+                            :note="t(`desktop.app.runningOnDeviceKeeps`)"
+                        />
+                        <Notice v-if="rowFailure && rowFailure.slug === group.sandbox?.slug" tone="danger" class="text-2xs">
+                            {{ rowFailure.message }}
+                        </Notice>
+                    </template>
+                </DeviceDetail>
             </Section>
 
             <!-- NO SANDBOX HERE YET: what one is for, where it can run, and the one step to it. Never while a setup or a
@@ -605,32 +645,6 @@ onMounted(() => {
                 </Button>
             </section>
 
-            <!-- The agent didn't answer, which is a different absence from having none. -->
-            <Notice v-if="reportError" tone="danger" class="text-2xs">{{ reportError }}</Notice>
-
-            <!-- The machine agent, drawn from this computer's own reading: this window IS the device, so its one verb never
-                 needs a command to go and type. Absent on a computer that has none, which is an ordinary state. -->
-            <DeviceAgentGroup
-                v-if="agentPanel"
-                :label="t(`desktop.device.agentHeading`)"
-                :panel="agentPanel"
-                :subject="machineName"
-                :busy="running || busy !== undefined"
-                :running="agentRestarting ? `restart` : undefined"
-                :activity="agentRestartError !== undefined || agentRestartOutcome !== undefined"
-                @run="void restartAgent()"
-            >
-                <!-- The agent's own answer, refusal or otherwise; the row above already shows whether the loop came back. -->
-                <template #activity>
-                    <Notice v-if="agentRestartError" tone="danger" class="text-2xs">{{ agentRestartError }}</Notice>
-                    <p v-else class="text-xs text-muted">{{ agentRestartOutcome }}</p>
-                </template>
-            </DeviceAgentGroup>
-            <!-- This computer's other environments with an agent of their own (a WSL distro's), which keep the sandboxes set up there. -->
-            <p v-if="agentsElsewhere.length > 0" class="flex items-start gap-2.5 text-xs text-subtle">
-                <Icon name="server" class="shrink-0" />
-                <span>{{ t(`desktop.device.agentsElsewhere`, { places: agentsElsewhere.join(`, `) }) }}</span>
-            </p>
             <!-- The way back to Docker Desktop, last and in the quietest ink: Intentic's engine is where sandboxes belong on a
                  PC, so the move away is there for whoever looks for it and never put in front of anyone. The move asks first. -->
             <p v-if="engineBackShown && engineState" class="flex flex-wrap items-center gap-x-1.5 text-2xs text-subtle">
@@ -647,9 +661,12 @@ onMounted(() => {
             </p>
             <!-- PASSWORDS, offered while this computer has not set it up: it has no rail tile until then. -->
             <PasswordsOffer />
-            <!-- REMOVING INTENTIC FROM THIS COMPUTER, last of all: there for whoever looks for it, and it asks before anything goes.
+            <!-- THE DANGER ZONE, last of all and in the group the workspace's page ends on, where it revokes a machine's
+                 access: what only this computer can do to itself is remove Intentic, and it asks before anything goes.
                  Not on Intentic OS, where Intentic is the system itself. -->
-            <UninstallSection v-if="!osState" :app-version="info?.version" />
+            <RowGroup v-if="!osState" :label="t(`ui.devicePage.dangerZone`)">
+                <UninstallRow :app-version="info?.version" />
+            </RowGroup>
         </div>
 
         <!-- The sandbox's shape as ic reports it (running and saved for the next restart) and this engine's size for the form's rails. -->

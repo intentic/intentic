@@ -3040,12 +3040,10 @@
         },
         "devicePage": {
             "actsOn": "Betrifft",
-            "allDevices": "Alle Geräte",
             "backOnLocalhost": "Zurück auf localhost",
             "cantBatch": "Nicht im Stapel",
             "clearBuildOutput": "Build-Ausgaben löschen",
             "connect": "Verbinden",
-            "dangerZone": "Gefahrenbereich",
             "deviceAloneLosesAccess": "Nur dieses eine Gerät verliert den Zugriff — jedes andere gekoppelte Gerät synchronisiert weiter. Seine Dateisynchronisierung hört auf, und seine gespiegelten Ports fallen innerhalb einer Minute von seinem localhost.",
             "dontMirrorPort": "Nicht spiegeln",
             "fixAgent": "Mit Agent reparieren",

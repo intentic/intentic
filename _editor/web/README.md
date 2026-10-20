@@ -271,7 +271,7 @@ flowchart LR
   card the sandbox's build stands on in the notification lane while the reader keeps working (`LocalProjectBuild.vue`),
   drawn as the agent's house going up with the setup's real phases (`AgentHouse.vue`, `agentHouse.ts`). A new Windows
   PC's own first-run setup (the PC check, the setup, the sign-in, the download, the first task) is the desktop app's,
-  drawn on its This device view from `LocalOnboardingHost` (`localHost.ts`); the shell's own Agents view that held it
+  drawn on its Devices view from `LocalOnboardingHost` (`localHost.ts`); the shell's own Agents view that held it
   was removed on 2026-10-12, and a folder taken in on a PC not ready yet goes to `project.detailsPath`. The folder's own
   button at the foot of the window says what the sandbox is doing while it is doing it, and IS the next step wherever it
   is stopped on the reader instead — "Set this computer up for agents", "Start Docker", "Sign in" — running the card's
@@ -281,7 +281,7 @@ flowchart LR
   window's folder and lists the account's sandboxes, the only other places the window goes, as the sandbox switcher
   lists "This computer" first in the app's workspace window, with the same digits for the same places in both: Alt+0
   this computer, Alt+1–9 the sandboxes. What only the desktop app can answer (the recent places, whether there is an
-  account, who is signed in and the sandboxes as the workspace last told it, This device, and the account itself)
+  account, who is signed in and the sandboxes as the workspace last told it, its Devices view, and the account itself)
   comes from the host it installs before the editor runs (`app/environments/localHost.ts`); a page without one gets
   the link-only host. The account is `client/auth/useAccount.ts`: in the workspace the editor's own session, in a local
   window the one the workspace signed in with, which the app asks the platform about for the window. A local window's

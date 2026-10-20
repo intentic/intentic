@@ -1,24 +1,14 @@
 // The kit's DOM-free subpath, not the barrel: nothing here draws anything.
-import { type AgentNote, type AgentPanel, agentStateNote, agentProcessState, agentSkewNote, restartAgent } from "@intentic/ui/device-agent";
+import { type AgentPanel, agentStateNote, agentProcessState, agentSkewNote, restartAgent } from "@intentic/ui/device-agent";
 import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract/schemas/devices";
 import type { DeviceStatus } from "./desktop";
-import { t } from "@intentic/ui/i18n";
 
-// This machine's agent as the kit's AgentPanel — the same object the web Devices tab builds from its device
-// registry, so <DeviceAgentGroup> draws one block for both. What differs is only what each side can answer:
+// This machine's agent as the kit's AgentPanel — the same object the web Devices view builds from its device
+// registry, so <DeviceEnvironmentRow> heads both pages with it. What differs is only what each side can answer:
 // this window runs ON the device, so it reads the loop directly and has exactly one verb for it.
 
 /** Restart alone: this app has no way to fetch a newer agent, and a button that can't is worse than none. */
 type DesktopAgentOp = ReturnType<typeof restartAgent>[`op`];
-
-// The quiet line that makes a standing Restart button legible: what it is for on an agent asking for nothing.
-// Never carries a tone — there is no errand in it.
-const settled = (): AgentNote => ({
-    text: t(`desktop.deviceAgent.servingInstalledBuild`),
-    icon: `check-circle`,
-    // Whether something newer is out is the workspace's to say: it reaches the release registry, this window doesn't.
-    hint: { title: t(`desktop.deviceAgent.latestUnknown`), note: t(`desktop.deviceAgent.workspaceChecksUpdates`) },
-});
 
 /** Undefined when this device has no agent — an ordinary state here, not a failure. */
 export const desktopAgentPanel = (status: DeviceStatus | undefined): AgentPanel<DesktopAgentOp> | undefined => {
@@ -36,7 +26,8 @@ export const desktopAgentPanel = (status: DeviceStatus | undefined): AgentPanel<
         version: status.version,
         state: agentProcessState(reported),
         facts: agent.pid === undefined ? [] : [`pid ${agent.pid}`],
-        notes: notes.length === 0 ? [settled()] : notes,
+        // A settled agent says nothing, as on the web's page: what Restart is for lives on its own hint.
+        notes,
         // Always offered: this window is the device, so nothing stands between the press and the loop.
         actions: [restartAgent()],
         blocked: undefined,

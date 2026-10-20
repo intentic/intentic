@@ -1,5 +1,5 @@
-<!-- A device's synced folders, ports and containers. What its agent is doing is <DeviceAgentGroup>'s, stated
-     once above this list rather than a second time riding it. -->
+<!-- A device's synced folders, ports and containers. What its agent is doing is the masthead's (<DeviceEnvironmentRow>),
+     stated once above this list rather than a second time riding it. -->
 <script setup lang="ts">
 import { Comment, computed, Fragment, isVNode, onBeforeUnmount, ref, Text, useId, type VNode, watch } from "vue";
 import CopyButton from "../primitives/CopyButton.vue";

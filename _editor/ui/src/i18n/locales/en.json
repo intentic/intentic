@@ -99,13 +99,8 @@
     "deviceAgent": {
         "agentStalled": "Agent stalled — what is below may be out of date.",
         "agentStopped": "Agent stopped — nothing reaches its folders or ports.",
-        "commands": "Commands",
-        "device": "Device",
-        "folders": "Folders",
         "installedBuild": "Installed build",
         "nothingDownloaded": "Nothing downloaded",
-        "oneProcess": "One process",
-        "ports": "Ports",
         "restartAgent": "Restart agent",
         "roundsStopped": "Rounds stopped",
         "running": "running",
@@ -113,11 +108,6 @@
         "servingOlderBuild": "Serving a build older than the {installed} installed — a restart picks it up.",
         "stalled": "stalled",
         "stopped": "stopped"
-    },
-    "deviceAgentGroup": {
-        "agent": "Agent",
-        "agent2": "Agent {version}",
-        "agentOnThisDevice": "Agent on this device"
     },
     "deviceDetail": {
         "asleep": "asleep",
@@ -217,6 +207,14 @@
             "unreachable": "Held because this sandbox has not answered for an hour. Its sync carries on by itself when it does.",
             "other": "Held by this computer's agent. Its sync carries on by itself."
         }
+    },
+    "deviceMachine": {
+        "capacity": "{memory} · {cpus} core | {memory} · {cpus} cores"
+    },
+    "devicePage": {
+        "allDevices": "All devices",
+        "dangerZone": "Danger zone",
+        "sandboxes": "Sandboxes"
     },
     "imageView": {
         "actualSize": "Actual size",

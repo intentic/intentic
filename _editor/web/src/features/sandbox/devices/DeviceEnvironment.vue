@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { agentLines, BrandMark, Button, DeviceAgentNotes, Row, StatusBadge } from "@intentic/ui";
+import { agentLines, DeviceAgentNotes, DeviceEnvironmentRow } from "@intentic/ui";
 import { computed } from "vue";
 import AgentRunStrip from "./health/AgentRunStrip.vue";
 import DeviceConcern from "./health/DeviceConcern.vue";
@@ -13,13 +13,10 @@ import type { DeviceOps } from "./runners/deviceOps";
 
 // ONE ENVIRONMENT, ONE SHAPE. A PC reached through one door and a PC reached through three are the same kind of
 // thing, so they are the same row: this is the device page's masthead on a machine of one environment, and each
-// line of its Environments list on a machine of several. The page used to draw those two cases differently — a
-// whole <DeviceAgentGroup> section for a lone device's version string, an inlined version of it per row otherwise
-// — and the two had drifted.
-//
-// The row states each fact once. The badge owns the state word, the name owns the identity, the meta cluster owns
-// the agent's build, and everything that is an ERRAND hangs below on the row's own spine, so a sentence about this
-// environment can never be read as a sentence about the machine.
+// line of its Environments list on a machine of several. The row itself is the kit's (DeviceEnvironmentRow), which the
+// desktop app's Devices view opens on as well; this is what a sandbox's registry knows about one environment, and the
+// errands it raises, hung on the row's own spine so a sentence about this environment can never be read as a sentence
+// about the machine.
 
 const { environment, panel, concerns, readAt, ops, masthead, hardware } = defineProps<{
     environment: DeviceRow;
@@ -71,81 +68,44 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
 </script>
 
 <template>
-    <Row
-        :flush="masthead"
-        :heading="masthead ? 2 : undefined"
-        :density="masthead ? `comfortable` : undefined"
-        :spine="!masthead"
-        :title="masthead ? undefined : environmentTitle(environment)"
+    <!-- The kit's row (DeviceEnvironmentRow), the one the desktop app's Devices view opens on too: this fills it with what
+         this sandbox's registry knows, and hangs this environment's errands below it. -->
+    <DeviceEnvironmentRow
+        :name="device.label"
+        :kind="environmentTitle(environment)"
+        :mark="os"
+        :idle="asleep"
+        :masthead="masthead"
+        :identity="identity"
+        :identity-mono="environmentAddressed(environment)"
+        :hardware="hardware"
+        :detail="environmentDetail(environment)"
+        :seen="lastSeenNote(device)"
+        :version="panel?.version"
+        :state="{ word: deviceState(device, readAt), variant: deviceTone(device, readAt) }"
+        :actions="panel?.actions"
+        :running="ops.agentOp(environment)"
+        :busy="ops.working.value"
+        @run="(op) => void ops.runAgent(environment, op)"
     >
-        <!-- The masthead's mark is a plaque rather than a bare glyph: it outranks every row under it. A list row's is the
-             glyph alone, in the OS's own colour, so the sides of one PC are told apart before their names are read. -->
-        <template #lead="{ mark }">
-            <BrandMark :size="mark" :name="device.label" :icon="os.icon" :tint="os.tint" :plain="!masthead" :idle="asleep" />
-        </template>
-
-        <!-- The masthead names the MACHINE and carries its OS beside it; a list row is the environment itself. -->
-        <template v-if="masthead" #title>
-            <span class="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                <span class="min-w-0 truncate">{{ device.label }}</span>
-                <span class="shrink-0 truncate text-sm font-normal text-muted">{{ environmentTitle(environment) }}</span>
-            </span>
-        </template>
-
-        <!-- The door id every tool and skill on this environment is named after, and nothing else: shell, home and
-             the doors this sandbox holds are on hover, since none of them is why anybody opened this page. -->
-        <!-- The hover rides the whole line, not the door id: a masthead that drops the id (because the name above
-             already is it) must still be able to answer what shell this machine takes. -->
-        <template v-if="identity || hardware" #description>
-            <span v-tooltip.top="environmentDetail(environment)" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span v-if="identity" :class="environmentAddressed(environment) ? `font-mono` : ``">{{ identity }}</span>
-                <span v-if="hardware" class="text-subtle">{{ hardware }}</span>
-            </span>
-        </template>
-
-        <template #meta>
-            <!-- Noise on a live machine, the most useful fact on one that isn't. -->
-            <span v-if="lastSeenNote(device)" class="shrink-0">{{ lastSeenNote(device) }}</span>
-            <span v-if="panel?.version" class="shrink-0 font-mono">{{ panel.version }}</span>
-            <StatusBadge :variant="deviceTone(device, readAt)" size="xs" :dot="true" :label="deviceState(device, readAt)" class="shrink-0" />
-        </template>
-
-        <!-- The agent's verbs through this environment's door: Restart for its own process, and Update only where this
-             row is the whole machine, since an update moves every side and a many-sided page draws it once. -->
-        <template v-if="(panel?.actions.length ?? 0) > 0" #control>
-            <Button
-                v-for="action in panel?.actions"
-                :key="action.op"
-                size="small"
-                tier="boring"
-                :label="action.label"
-                :loading="ops.agentOp(environment) === action.op"
-                :disabled="ops.working.value || ops.agentOp(environment) !== undefined"
-                v-tooltip.top="action.hint"
-                @click="void ops.runAgent(environment, action.op)"
-            />
-        </template>
-
         <!-- Everything this environment WANTS, on a spine under its own mark so it reads as this row's, not the
              machine's. Absent entirely on a healthy one, which is nearly all of them. -->
         <template v-if="below" #below>
-            <div class="flex min-w-0 flex-col gap-2">
-                <p v-if="stoppedSync" class="min-w-0 text-xs text-warning">{{ stoppedSync }}</p>
-                <template v-for="concern in concerns" :key="concern.key">
-                    <AgentRunStrip v-if="run && answers(concern)" :run="run" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
-                    <DeviceConcern
-                        v-else
-                        :concern="concern"
-                        :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
-                        :busy="ops.working.value"
-                        :running="concern.fix?.kind === `agent` && ops.agentOp(environment) === concern.fix.op"
-                        @connect="emit(`connect`)"
-                        @agent="(op) => void ops.runAgent(environment, op)"
-                    />
-                </template>
-                <DeviceAgentNotes :notes="notes" />
-                <AgentRunStrip v-if="run && standalone" :run="run" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
-            </div>
+            <p v-if="stoppedSync" class="min-w-0 text-xs text-warning">{{ stoppedSync }}</p>
+            <template v-for="concern in concerns" :key="concern.key">
+                <AgentRunStrip v-if="run && answers(concern)" :run="run" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
+                <DeviceConcern
+                    v-else
+                    :concern="concern"
+                    :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
+                    :busy="ops.working.value"
+                    :running="concern.fix?.kind === `agent` && ops.agentOp(environment) === concern.fix.op"
+                    @connect="emit(`connect`)"
+                    @agent="(op) => void ops.runAgent(environment, op)"
+                />
+            </template>
+            <DeviceAgentNotes :notes="notes" />
+            <AgentRunStrip v-if="run && standalone" :run="run" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
         </template>
-    </Row>
+    </DeviceEnvironmentRow>
 </template>

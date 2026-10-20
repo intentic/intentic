@@ -3041,12 +3041,10 @@
         },
         "devicePage": {
             "actsOn": "Concerne",
-            "allDevices": "Tous les appareils",
             "backOnLocalhost": "De retour sur localhost",
             "cantBatch": "Hors lot",
             "clearBuildOutput": "Effacer les sorties de compilation",
             "connect": "Le connecter",
-            "dangerZone": "Zone dangereuse",
             "deviceAloneLosesAccess": "Cet appareil seul perd l'accès — tous les autres appareils appairés continuent de se synchroniser. Sa synchronisation de fichiers s'arrête et ses ports reflétés disparaissent de son localhost en une minute.",
             "dontMirrorPort": "Ne pas le refléter",
             "fixAgent": "Réparer avec un agent",

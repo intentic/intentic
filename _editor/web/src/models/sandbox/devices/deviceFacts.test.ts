@@ -1,5 +1,6 @@
 import { listedDevice } from "../../../testing/listedDevice";
 import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import { distroMark } from "@intentic/ui/device-machine";
 import {
     agentBehind,
     agentChip,
@@ -11,7 +12,6 @@ import {
     lastSeenNote,
     machineWarnings,
     manageBlock,
-    distroMark,
     osLabel,
     osMark,
     osTitle,

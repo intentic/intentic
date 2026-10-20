@@ -1,4 +1,4 @@
-import { type AgentPanel, type DeviceFolderRow, type DevicePortRow, type DeviceSandboxRow, restartAgent } from "@intentic/ui";
+import { type AgentPanel, type DeviceFolderRow, type DevicePortRow, type DeviceSandboxRow, osMarkOf, restartAgent } from "@intentic/ui";
 
 // The design kit's device samples (DesignKit.vue's device panel section): sandboxes, folder pairings, ports and an agent
 // loop shaped so every row state the panel draws is on screen at once.
@@ -70,4 +70,16 @@ export const KIT_AGENT: AgentPanel = {
         restartAgent(),
     ],
     blocked: undefined,
+};
+
+// A machine's masthead (<DeviceEnvironmentRow>), as both Devices pages open on it, carrying the agent above.
+export const KIT_MASTHEAD = {
+    masthead: true,
+    name: `ada-air`,
+    kind: `macOS 15.3`,
+    mark: osMarkOf([`macOS`]),
+    hardware: `arm64 · 16 GiB · 8 cores`,
+    version: KIT_AGENT.version,
+    state: KIT_AGENT.state,
+    actions: KIT_AGENT.actions,
 };

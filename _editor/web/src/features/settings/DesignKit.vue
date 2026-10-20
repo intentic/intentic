@@ -16,8 +16,8 @@ import {
     CodeField,
     ConfirmDialog,
     CopyButton,
-    DeviceAgentGroup,
     DeviceDetail,
+    DeviceEnvironmentRow,
     DeviceRunLog,
     diffMark,
     DiffStat,
@@ -71,7 +71,7 @@ import Checkbox from "primevue/checkbox";
 import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import DesignKitAssistants from "./DesignKitAssistants.vue";
-import { KIT_AGENT, KIT_PAIRINGS, KIT_PORTS, KIT_SANDBOXES } from "./designKitDevices";
+import { KIT_MASTHEAD, KIT_PAIRINGS, KIT_PORTS, KIT_SANDBOXES } from "./designKitDevices";
 
 const { scheme, set: setScheme } = useTheme();
 const t = useT();
@@ -559,11 +559,11 @@ const pickedTier = ref(`collaborator`);
                 </div>
             </section>
 
-            <!-- Shown here since the desktop app's manager window (which draws the same two blocks) can't be opened in a browser. -->
+            <!-- Shown here since the desktop app's Devices view (which opens on the same masthead and list) can't be opened in a browser. -->
             <section class="flex flex-col gap-4">
-                <SectionHeader label="A device's agent and its sandboxes" :heading="2" />
-                <DeviceAgentGroup :panel="KIT_AGENT" subject="this device" />
-                <Section label="Sandboxes on this device">
+                <SectionHeader label="A device's masthead and its sandboxes" :heading="2" />
+                <DeviceEnvironmentRow v-bind="KIT_MASTHEAD" />
+                <Section :label="t(`ui.devicePage.sandboxes`)">
                     <div class="flex flex-col">
                         <DeviceDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES">
                             <template #actions="{ group }">

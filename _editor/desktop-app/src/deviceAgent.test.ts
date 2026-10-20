@@ -65,7 +65,7 @@ describe(`desktopAgentPanel`, () => {
     // The contract's DEV_VERSION, not a copy of its value: a working-tree install is never stale.
     it(`finds no skew on a working-tree install`, () => {
         const panel = desktopAgentPanel(statusWith({ ...live, installed: DEV_VERSION, build: `1.317.0` }));
-        expect(panel?.notes.map((note) => note.tone)).toEqual([undefined]);
+        expect(panel?.notes).toEqual([]);
         expect(panel?.facts).toEqual([`pid 8984`]);
         expect(panel?.actions.map((action) => action.op)).toEqual([`restart`]);
     });
