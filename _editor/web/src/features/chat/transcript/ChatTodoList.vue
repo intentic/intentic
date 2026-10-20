@@ -22,6 +22,8 @@ const props = defineProps<{
     view?: ChecklistView;
     // The side rail's scale: same rows, one step down, so a 240px column doesn't read as a second type system.
     dense?: boolean;
+    // The rail's list flowed down two columns, each as wide as the rail's one (ChatRailChecklist), so no row rewraps.
+    spread?: boolean;
 }>();
 
 const delta = computed(() => (props.view?.kind === `delta` ? props.view : undefined));
@@ -137,12 +139,18 @@ const hint = computed(() =>
                     <!-- In a transcript, a META ROW per task: the circle in the mark box on the column's edge, the task on the hang,
                          and the meta tier's size — a tier under the answer, so a checklist redrawn every few calls never
                          out-shouts the words it is tracking. -->
-                    <div class="flex w-full flex-col" :class="dense ? 'gap-1.5' : 'chat-meta gap-1 py-1'">
+                    <!-- Dense, each row carries its own gap below it, so the rows' heights add up to the list's in one column
+                         whichever way it is drawn (railChecklistSpread.ts), and a row never splits across two columns. -->
+                    <div
+                        class="w-full"
+                        :class="dense ? (spread ? 'columns-2 gap-x-6' : 'flex flex-col') : 'chat-meta flex flex-col gap-1 py-1'"
+                    >
                         <!-- A row the rail's checklist plays in (`data-reveal`, ChatRailChecklist); inert in a transcript, which reveals nothing. -->
                         <div
                             v-for="(todo, index) in todos"
                             :key="index"
                             class="flex items-start gap-2 text-2xs"
+                            :class="dense && 'break-inside-avoid pb-1.5 last:pb-0'"
                             data-reveal
                         >
                             <Icon v-if="dense" v-bind="todoIcon(todo)" class="mt-0.5 text-3xs" />
