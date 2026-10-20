@@ -129,9 +129,23 @@ pub fn note(slug: &str, kind: &str, auto: bool) {
     let Some(holder) = inside::holder(slug) else {
         return;
     };
-    let now = inside::now_for(&holder);
-    let next = read(&holder).noted(kind, now, auto);
-    let _ = inside::write_stamped(&holder, FILE, &next.json());
+    note_on(&holder, None, kind, auto);
+}
+
+/// `note`, on the container a caller has just inspected (power.rs, before a start or restart), which holds the volume.
+/// `running` is what that inspect said, when it is still true: a stopped container's moment is this machine's clock
+/// without an exec that could only fail, and the write goes in by `docker cp` without asking again whether it runs.
+/// None asks both, as `note` does. (2026-10-19: the note cost a start from sleep five docker calls before anything
+/// started; on the container the start just looked at, it costs two, the read and the write.)
+pub fn note_on(holder: &str, running: Option<bool>, kind: &str, auto: bool) {
+    let now = match running {
+        Some(false) => crate::sandbox::now_ms(),
+        _ => inside::now_for(holder),
+    };
+    let next = read(holder).noted(kind, now, auto);
+    // The budget `inside::write_stamped` gives every write.
+    let budget = crate::docker::READ_LIMIT * 2;
+    let _ = inside::write_stamped_known(holder, FILE, &next.json(), running, budget);
 }
 
 #[cfg(test)]

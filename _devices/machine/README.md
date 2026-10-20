@@ -772,10 +772,19 @@ The keeper now puts an unneeded sandbox to sleep and wakes it when somebody open
 - **Wake.** The platform never calls a machine. A browser that finds the sandbox asleep asks the platform to wake it,
   and this agent's wake round asks the platform for such requests (`ic sandbox wakes --json --source agent`, one request
   for every sleeper on this side, each under its own report key), starting each one asked for through `ic sandbox
-  start`. It asks every fifteen seconds while anything sleeps, and every five minutes otherwise, to catch a sleep made
-  by hand. It runs whatever the keeper's switch says, so a sandbox asleep when the keeper was switched off still wakes.
+  start`. While anything sleeps the ask is held (2026-10-19): `--wait 25` has the platform answer the moment somebody
+  asks for a wake, or after 25 s, and the next ask follows at once, so a wake no longer waits up to fifteen seconds for
+  the next poll. An ic or a platform from before the held ask is asked every fifteen seconds as before; an ic that
+  refuses the flag (clap's exit 2, no JSON) is asked again at once without it, and plainly for an hour. With nothing
+  asleep it asks every five minutes, to catch a sleep made by hand. It runs whatever the keeper's switch says, so a
+  sandbox asleep when the keeper was switched off still wakes.
   The desktop app on the same computer runs the same command the moment its workspace page has asked
   (`--source app`, the app's `sandbox_wakes.rs`), so a sandbox opened there need not wait for this round.
+- **The link comes back with it** (2026-10-19). A sleep leaves this agent's link to the sandbox on its dial ladder,
+  which after twenty failures rests a quarter of an hour between tries: on rog a sandbox woken at 16:48 had its device
+  tools back at 17:12. Each start is acted on as ic prints it, and every link naming the slug is dialled at once and put
+  back on the ladder's first rung (peer-dial's `retryNow`); so is a sandbox somebody else woke, once ic counts nothing
+  asleep or the keeper's next listing shows it running.
 - **The setting** is this environment's `sandboxSleepMinutes` in `machine.json`: absent means 30, `0` means never. Set
   it with `intentic-machine sandbox sleep-after <minutes|off>` and read it with `sleep-after status`. One sandbox can
   be kept awake from its own editor instead (Overview, "Sleep when unused", settings `sleepWhenUnused`, 2026-10-18):

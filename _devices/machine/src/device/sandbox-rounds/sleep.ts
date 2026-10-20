@@ -11,9 +11,27 @@ import { type IcRun, lastLine, type Rounds, startRounds } from "./ic-rounds.js";
    `ic sandbox sleep --idle <minutes>` stops, through Docker, every sandbox whose daemon has said for that long that
    nobody needs it (its work signal's `quietSince`, workload/work-signal.ts in the sandbox), and ic records it asleep.
    Waking is the other half, and the platform cannot do it: it never calls a machine. A browser that finds a sleeping
-   sandbox asks the platform to wake it, and this agent asks the platform for such requests every fifteen seconds while
-   anything of its sleeps (`ic sandbox wakes`), starting what was asked for. While nothing is known to sleep it still asks
-   every five minutes, for a sandbox somebody put to sleep by hand.
+   sandbox asks the platform to wake it, and this agent asks the platform for such requests while anything of its
+   sleeps (`ic sandbox wakes`), starting what was asked for. While nothing is known to sleep it still asks every five
+   minutes, for a sandbox somebody put to sleep by hand.
+   THE ASK IS HELD (2026-10-19). Asked every fifteen seconds, a wake waited 7.5 s on average for the next ask, the largest
+   part of a wake nothing required. So the ask is `--wait 25`: the platform holds it until somebody asks for a wake or
+   the 25 s are up, ic prints each `{"slug","woke"}` line as that start finishes, and its last line says `"held":true`
+   when the platform did hold. After a held ask the next follows at once (HELD_REPOLL_MS, never closer than
+   HELD_SPACING_MS to the last one's start, so a platform that says held without holding cannot make a loop of ic runs);
+   after one that was not (a platform from before the held ask answers at once) the pace stays fifteen seconds. An ic
+   from before `--wait` refuses the flag through clap, which exits 2 having printed no JSON (ic itself never exits 2):
+   that run is asked again at once without the flag, never read as an ic that cannot wake, and if the plain ask answers,
+   ic is asked plainly for an hour (WAIT_REFUSED_MS) before the flag is tried again, since ic is brought up to date under
+   a running agent (ic-binary.ts). Matching clap's sentence instead was rejected: its wording moves between clap
+   releases, and the exit code says the same thing (docs/architecture/conventions.md, "Reading another program's
+   output").
+   A WOKEN SANDBOX'S LINK IS DIALLED AT ONCE (2026-10-19). The sleep left this agent's link to it on the dial loop's
+   ladder, which past twenty failures rests a quarter of an hour between tries: on rog a sandbox woken at 16:48 had its
+   device tools back at 17:12. Each start is acted on the moment ic prints its line, not when ic exits, and `poke` has
+   the resident redial every link naming that slug (peer-dial's `retryNow`); so does a sandbox somebody else woke (a
+   person's `ic sandbox start`, the desktop app's own `ic sandbox wakes`), once ic counts nothing asleep or the keeper's
+   listing shows it running (keeper.ts, relist).
    An ALARM wakes it too (2026-10-18): ic records, as it puts a sandbox to sleep, the soonest moment its daemon promised
    (a cron, a one-time automation), and the same `ic sandbox wakes` starts it a little ahead of that moment, off this
    machine's clock alone, so what it scheduled runs on time. Nothing here changes for it but what the log says. */
@@ -34,17 +52,28 @@ export const withSleepMinutes = (config: MachineConfig, minutes: number): Machin
 
 export const sleepArgs = (minutes: number): string[] => ["sandbox", "sleep", "--idle", String(minutes), "--json", "--source", "agent"];
 export const WAKES_ARGS: readonly string[] = ["sandbox", "wakes", "--json", "--source", "agent"];
+// The longest ic lets the platform hold one ask (`--wait`, 0 to 25 seconds), all of which is asked for.
+export const WAKES_WAIT_SECONDS = 25;
+export const HELD_WAKES_ARGS: readonly string[] = [...WAKES_ARGS, "--wait", String(WAKES_WAIT_SECONDS)];
 
 // A stop of every sleeper is a `docker stop` each, with its grace period.
 export const SLEEP_DEADLINE_MS = 5 * 60_000;
-// A wake starts what was asked for, which may apply a saved shape (a recreate).
+// A wake starts what was asked for, which may apply a saved shape (a recreate); a held ask adds its 25 s to that.
 export const WAKES_DEADLINE_MS = 5 * 60_000;
 export const WAKE_POLL_MS = 15_000;
 export const IDLE_POLL_MS = 5 * 60_000;
+// The pace of held asks (see above): the next at once, and never two starting closer together than the spacing.
+export const HELD_REPOLL_MS = 250;
+export const HELD_SPACING_MS = 5_000;
+// How long ic is asked without `--wait` once it has refused the flag.
+export const WAIT_REFUSED_MS = 60 * 60_000;
+// What clap exits with when it refuses the command line, before ic has run anything; ic's own codes are 1, 3 and 4.
+const CLAP_USAGE_EXIT = 2;
 
 const SleptSchema = z.object({ slug: z.string(), slept: z.boolean(), why: z.string().optional(), wakeAt: z.number().optional() });
 const WokeSchema = z.object({ slug: z.string(), woke: z.boolean(), error: z.string().optional(), for: z.literal("alarm").optional() });
-const AsleepSchema = z.object({ asleep: z.number().int().nonnegative() });
+// `held`: the platform held the ask (`--wait`); absent from an ic or a platform from before the held ask.
+const AsleepSchema = z.object({ asleep: z.number().int().nonnegative(), held: z.boolean().optional() });
 
 const linesAs = <T>(schema: z.ZodType<T>, output: string): T[] =>
     output
@@ -82,20 +111,34 @@ export type WakesReading =
           readonly alarmed: readonly string[];
           readonly failed: readonly { readonly slug: string; readonly error: string }[];
           readonly asleep: number | undefined;
+          // Whether the platform held the ask: the next one may follow at once.
+          readonly held: boolean;
       };
 
 export const readWakesRun = (run: IcRun): WakesReading => {
     const answers = linesAs(WokeSchema, run.output);
-    const asleep = linesAs(AsleepSchema, run.output).at(-1)?.asleep;
-    if (run.code !== 0 && answers.length === 0 && asleep === undefined) {
+    const last = linesAs(AsleepSchema, run.output).at(-1);
+    if (run.code !== 0 && answers.length === 0 && last === undefined) {
         return { unavailable: lastLine(run.output)?.trim() ?? `ic exited with ${run.code}` };
     }
     return {
         woke: answers.filter((answer) => answer.woke).map((answer) => answer.slug),
         alarmed: answers.filter((answer) => answer.woke && answer.for === "alarm").map((answer) => answer.slug),
         failed: answers.filter((answer) => !answer.woke).map((answer) => ({ slug: answer.slug, error: answer.error ?? "it did not start" })),
-        asleep,
+        asleep: last?.asleep,
+        held: last?.held === true,
     };
+};
+
+// A held ask clap refused: an ic from before `--wait` (see above). The same of an ic without `wakes` at all, whose
+// plain ask is then refused too and read as unavailable. Pure.
+export const refusedFlag = (run: IcRun): boolean =>
+    run.code === CLAP_USAGE_EXIT && run.timedOut !== true && !run.output.split(/\r?\n/).some((line) => line.trim().startsWith("{"));
+
+// What the wake round reads off one line of ic's as it is printed: a sandbox it has just started. Pure.
+export const wokeOf = (line: string): { readonly slug: string; readonly alarm: boolean } | undefined => {
+    const answer = parseJsonWith(line.trim(), WokeSchema);
+    return answer?.woke === true ? { slug: answer.slug, alarm: answer.for === "alarm" } : undefined;
 };
 
 /* WHAT THIS AGENT KNOWS SLEEPS, shared by the keeper (which puts sandboxes to sleep, leaves a sleeping one's dead link
@@ -149,24 +192,74 @@ export const runSleep = async (sleepers: Sleepers, seams: SleepSeams, said: Map<
 export interface WakeState {
     nextIdlePollAt: number;
     unavailableUntil: number;
+    // Until when ic is asked without `--wait`, having refused it.
+    plainUntil: number;
     readonly said: Map<string, string>;
 }
 
-export const newWakeState = (): WakeState => ({ nextIdlePollAt: 0, unavailableUntil: 0, said: new Map() });
+export const newWakeState = (): WakeState => ({ nextIdlePollAt: 0, unavailableUntil: 0, plainUntil: 0, said: new Map() });
 
 export interface WakeSeams {
-    readonly wakes: () => Promise<IcRun>;
+    // `ic sandbox wakes` with these arguments, each line handed to `onLine` as ic prints it.
+    readonly wakes: (args: readonly string[], onLine: (line: string) => void) => Promise<IcRun>;
+    // Dials at once every link to a sandbox now starting (resident.ts).
+    readonly poke: (slug: string) => void;
     readonly now: () => number;
 }
 
-// One look: ask only while something sleeps, or once per IDLE_POLL_MS for a sleep this agent did not see.
-export const runWakeRound = async (state: WakeState, sleepers: Sleepers, seams: WakeSeams, log: Log): Promise<void> => {
+const askWakes = async (seams: WakeSeams, args: readonly string[], onLine: (line: string) => void): Promise<IcRun> =>
+    await seams.wakes(args, onLine).catch((error: unknown): IcRun => ({ code: 127, output: errorMessage(error) }));
+
+// The held ask, or the plain one when this ic refuses `--wait` (asked again at once, see above), with what that says.
+const askHeldOrPlain = async (state: WakeState, holds: boolean, seams: WakeSeams, onLine: (line: string) => void, log: Log): Promise<IcRun> => {
+    const run = await askWakes(seams, holds ? HELD_WAKES_ARGS : WAKES_ARGS, onLine);
+    if (!holds) {
+        return run;
+    }
+    if (!refusedFlag(run)) {
+        state.said.delete(":wait");
+        return run;
+    }
+    const plain = await askWakes(seams, WAKES_ARGS, onLine);
+    if (!("unavailable" in readWakesRun(plain))) {
+        state.plainUntil = seams.now() + WAIT_REFUSED_MS;
+        const why = run.output.split(/\r?\n/).find((line) => line.trim() !== "")?.trim() ?? `ic exited with ${run.code}`;
+        if (state.said.get(":wait") !== why) {
+            state.said.set(":wait", why);
+            log(`keeper: this machine's ic cannot hold an ask for wakes yet (${why}), so it asks every ${WAKE_POLL_MS / 1_000} s until it is updated.`);
+        }
+    }
+    return plain;
+};
+
+// One look: ask only while something sleeps, or once per IDLE_POLL_MS for a sleep this agent did not see. Answers how
+// long until the next look: at once after an ask the platform held, else WAKE_POLL_MS.
+export const runWakeRound = async (state: WakeState, sleepers: Sleepers, seams: WakeSeams, log: Log): Promise<number> => {
     const now = seams.now();
     if (now < state.unavailableUntil || (!sleeping(sleepers) && now < state.nextIdlePollAt)) {
-        return;
+        return WAKE_POLL_MS;
     }
     state.nextIdlePollAt = now + IDLE_POLL_MS;
-    const run = await seams.wakes().catch((error: unknown): IcRun => ({ code: 127, output: errorMessage(error) }));
+    // Only an ask about something asleep is held: the idle look is for a sleep made by hand, and waits on nothing.
+    const holds = sleeping(sleepers) && now >= state.plainUntil;
+    // Each start is said and its links dialled once, the moment ic prints it; the whole output is the final word.
+    const started = new Set<string>();
+    const woke = (slug: string, alarm: boolean): void => {
+        if (started.has(slug)) {
+            return;
+        }
+        started.add(slug);
+        sleepers.slugs.delete(slug);
+        log(alarm ? `keeper ${slug}: something it scheduled is due, so it is starting ahead of it.` : `keeper ${slug}: somebody opened it, so it is starting again.`);
+        seams.poke(slug);
+    };
+    const onLine = (line: string): void => {
+        const printed = wokeOf(line);
+        if (printed !== undefined) {
+            woke(printed.slug, printed.alarm);
+        }
+    };
+    const run = await askHeldOrPlain(state, holds, seams, onLine, log);
     const reading = readWakesRun(run);
     if ("unavailable" in reading) {
         // An ic without the verb stays that way until it is updated: asked again at the idle pace, said once.
@@ -175,16 +268,11 @@ export const runWakeRound = async (state: WakeState, sleepers: Sleepers, seams: 
             state.said.set(":wakes", reading.unavailable);
             log(`keeper: this machine's ic cannot wake sleeping sandboxes yet (${reading.unavailable}); start one with \`intentic-machine sandbox start <slug>\`.`);
         }
-        return;
+        return WAKE_POLL_MS;
     }
     state.said.delete(":wakes");
     for (const slug of reading.woke) {
-        sleepers.slugs.delete(slug);
-        log(
-            reading.alarmed.includes(slug)
-                ? `keeper ${slug}: something it scheduled is due, so it is starting ahead of it.`
-                : `keeper ${slug}: somebody opened it, so it is starting again.`,
-        );
+        woke(slug, reading.alarmed.includes(slug));
     }
     for (const { slug, error } of reading.failed) {
         log(`keeper ${slug}: somebody opened it, but it did not start — ${error}`);
@@ -192,12 +280,28 @@ export const runWakeRound = async (state: WakeState, sleepers: Sleepers, seams: 
     if (reading.asleep !== undefined) {
         sleepers.counted = reading.asleep;
         if (reading.asleep === 0) {
+            // Nothing sleeps: whatever this agent still took for asleep somebody else woke, and its links hear it too.
+            for (const slug of sleepers.slugs) {
+                seams.poke(slug);
+            }
             sleepers.slugs.clear();
         }
     }
+    return reading.held ? Math.max(HELD_REPOLL_MS, HELD_SPACING_MS - (seams.now() - now)) : WAKE_POLL_MS;
 };
 
 export const startWakeRound = (log: Log, sleepers: Sleepers, seams: WakeSeams): Rounds => {
     const state = newWakeState();
-    return startRounds("keeper wakes", log, WAKE_POLL_MS, () => WAKE_POLL_MS, async () => await runWakeRound(state, sleepers, seams, log));
+    let next = WAKE_POLL_MS;
+    return startRounds(
+        "keeper wakes",
+        log,
+        WAKE_POLL_MS,
+        () => next,
+        async () => {
+            // A round that throws is paced as one the platform did not hold.
+            next = WAKE_POLL_MS;
+            next = await runWakeRound(state, sleepers, seams, log);
+        },
+    );
 };

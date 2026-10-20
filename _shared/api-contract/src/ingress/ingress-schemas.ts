@@ -178,14 +178,24 @@ export type HostReportPost = z.infer<typeof HostReportPostSchema>;
 // report key, so one request covers every sleeper on the machine and each is authenticated on its own; an ask whose key
 // does not match is dropped without a word. The answer names the sandboxes somebody asked for recently, each once: the
 // platform forgets a request as it hands it out.
+//
+// (2026-10-19) An ask may be held. `waitMs` is how long the machine will let the platform keep the request open while
+// nothing is waiting for it yet; the platform answers as soon as somebody asks for one of its sandboxes, or once that
+// time has passed with nothing (it holds one 25 seconds at most). That takes the pause a machine kept between two asks
+// off every wake. Absent or 0 is the ask as before, answered at once. A platform from before ignores `waitMs` (it reads
+// no field it does not know), and answers at once.
 export const HostWakesAskSchema = z.object({
     asks: z
         .array(z.object({ sandbox: z.string().regex(SANDBOX_ID), key: z.string().min(1).max(128) }))
         .min(1)
         .max(64),
+    waitMs: z.number().int().min(0).max(30_000).optional(),
 });
 export type HostWakesAsk = z.infer<typeof HostWakesAskSchema>;
-export const HostWakesAnswerSchema = z.object({ wake: z.array(z.string()) });
+// `held` (2026-10-19) is true when the platform honoured `waitMs`: the machine may ask again at once rather than pausing
+// between asks, since the platform does the waiting. Absent from a platform that answered at once, an older one
+// included, and for an ask none of whose keys matched, which is never held.
+export const HostWakesAnswerSchema = z.object({ wake: z.array(z.string()), held: z.boolean().optional() });
 export type HostWakesAnswer = z.infer<typeof HostWakesAnswerSchema>;
 
 // `POST /host-report/claim`: a live fix code buys the sandbox it was minted for and that sandbox's report key, which

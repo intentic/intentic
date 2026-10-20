@@ -1,9 +1,13 @@
 import { createHash, createHmac, generateKeyPairSync } from "node:crypto";
 import type { HostReportInput } from "@intentic/api-contract";
-import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
+import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
+import { call as callProcedure } from "@orpc/server";
 import { createApp } from "./app.js";
 import { configSchema, type Config } from "./config.js";
+import type { OrpcContext } from "./context.js";
 import { HOST_REPORT_INTERVAL_MS, reporterOf } from "./sandbox/host-report.js";
+import { sandboxRoutes } from "./sandbox/sandbox.routes.js";
+import { localWakeSignals, type WakeSignals } from "./sandbox/local-wake/wake-signals.js";
 import { INGRESS_TEST_PRIVATE_KEY, testIngressConfig } from "./testing.js";
 import { mintReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { mintAdoptionTicket } from "./sandbox/recovery.js";
@@ -458,11 +462,13 @@ describe(`POST /host-report`, () => {
     });
 });
 
-const askWakes = (prisma: PrismaClient, body: unknown) =>
-    createApp(config, prisma, logger).app.request(`/host-report/wakes`, {
+// `hub` is what sandbox.wake would tell; `signal` ends the request from the machine's side, as a dropped connection.
+const askWakes = (prisma: PrismaClient, body: unknown, { hub, signal }: { hub?: WakeSignals; signal?: AbortSignal } = {}) =>
+    createApp(config, prisma, logger, hub).app.request(`/host-report/wakes`, {
         method: `POST`,
         headers: { "content-type": `application/json` },
         body: JSON.stringify(body),
+        signal,
     });
 
 // A sleeping own-machine sandbox's row as the wakes route selects it, asked for `agoMs` ago.
@@ -512,6 +518,147 @@ describe(`POST /host-report/wakes`, () => {
         expect((await askWakes(fakePrisma({ sandbox: { findMany } }), { asks: [] })).status).toBe(400);
         expect((await askWakes(fakePrisma({ sandbox: { findMany } }), {})).status).toBe(400);
         expect(findMany).not.toHaveBeenCalled();
+    });
+
+    /* A HELD ASK (2026-10-19): an ask naming `waitMs` is answered the moment somebody asks for one of its sandboxes, or
+     * with nothing once that time is up. One sandbox row stands in for the table, so the wake route's stamp and the
+     * held ask's reads and clear meet as they do in Postgres. */
+    describe(`held`, () => {
+        const asks = [{ sandbox: TUNNEL_ID, key: REPORT_KEY }];
+        // The sleeper's row, its request stamped by the wake route and cleared by a claim pinned to the stamp it read.
+        const sleeperTable = (stamp: Date | null = null) => {
+            const row = { stamp };
+            const sandbox = {
+                findFirst: jest.fn().mockResolvedValue({ id: `s1`, tunnelId: TUNNEL_ID, ownerId: `u1`, removedAt: null, hosted: null }),
+                update: jest.fn(async ({ data }: { data: { wakeRequestedAt: Date } }) => {
+                    row.stamp = data.wakeRequestedAt;
+                    return {};
+                }),
+                findMany: jest.fn(async () => [{ id: `s1`, tunnelId: TUNNEL_ID, token: `tok`, wakeRequestedAt: row.stamp }]),
+                updateMany: jest.fn(async ({ where }: { where: { wakeRequestedAt: Date | null } }) => {
+                    if (row.stamp === null || where.wakeRequestedAt?.getTime() !== row.stamp.getTime()) {
+                        return { count: 0 };
+                    }
+                    row.stamp = null;
+                    return { count: 1 };
+                }),
+            };
+            return { row, sandbox, prisma: fakePrisma({ sandbox }) };
+        };
+        // The browser's wake, through the oRPC route itself, on the same hub the held ask waits on.
+        const wake = (prisma: PrismaClient, hub: WakeSignals) =>
+            callProcedure(
+                sandboxRoutes.wake,
+                { sandboxId: `s1` },
+                {
+                    // SAFETY: sandbox.wake on an own-machine sandbox reads prisma, user and wakeSignals, and nothing else.
+                    context: { prisma, config, logger, user: { id: `u1`, email: `owner@example.com`, name: `o`, image: null, emailVerified: true }, wakeSignals: hub } as OrpcContext,
+                },
+            );
+
+        it(`is not held when the ask names no wait, or a wait of nothing: answered at once, as before`, async () => {
+            for (const body of [{ asks }, { asks, waitMs: 0 }]) {
+                const hub = localWakeSignals();
+                const listened = jest.spyOn(hub, `wait`);
+                const { sandbox, prisma } = sleeperTable();
+                sandbox.findMany.mockResolvedValue([]);
+                expect(await (await askWakes(prisma, body, { hub })).json()).toEqual({ wake: [] });
+                expect(listened).not.toHaveBeenCalled();
+                expect(sandbox.findMany).toHaveBeenCalledTimes(1);
+                expect(sandbox.findMany).toHaveBeenCalledWith({
+                    where: { tunnelId: { in: [TUNNEL_ID] }, wakeRequestedAt: { not: null }, hosted: null, removedAt: null },
+                    select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
+                });
+            }
+        });
+
+        it(`answers nothing, held, once its wait is up, having read once and cleared nothing`, async () => {
+            const hub = localWakeSignals();
+            const { sandbox, prisma } = sleeperTable();
+            const startedAt = performance.now();
+            const res = await askWakes(prisma, { asks, waitMs: 150 }, { hub });
+            expect(await res.json()).toEqual({ wake: [], held: true });
+            expect(performance.now() - startedAt).toBeGreaterThanOrEqual(140);
+            // Every sleeper named is read, request or none, since the keys of all of them are what the hold waits on.
+            expect(sandbox.findMany).toHaveBeenCalledTimes(1);
+            expect(sandbox.findMany).toHaveBeenCalledWith({
+                where: { tunnelId: { in: [TUNNEL_ID] }, hosted: null, removedAt: null },
+                select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
+            });
+            expect(sandbox.updateMany).not.toHaveBeenCalled();
+            expect(hub.waiting()).toBe(0);
+        });
+
+        it(`answers a wake requested while it is held within milliseconds, not at its deadline`, async () => {
+            const hub = localWakeSignals();
+            const { row, sandbox, prisma } = sleeperTable();
+            const asked = askWakes(prisma, { asks, waitMs: 5000 }, { hub });
+            await waitFor(() => {
+                expect(sandbox.findMany).toHaveBeenCalledTimes(1);
+                expect(hub.waiting()).toBe(1);
+            });
+            const wokenAt = performance.now();
+            expect(await wake(prisma, hub)).toEqual({ ok: true });
+            const res = await asked;
+            const latencyMs = performance.now() - wokenAt;
+            // Said on every run, for whoever measures what a wake costs.
+            console.warn(`held wakes ask answered ${latencyMs.toFixed(1)} ms after sandbox.wake (hold 5000 ms)`);
+            // Below WAKE_RECHECK_MS, a hold that ran out would answer nothing without reading again: the tunnel id in the
+            // answer is the signal's doing.
+            expect(await res.json()).toEqual({ wake: [TUNNEL_ID], held: true });
+            expect(latencyMs).toBeLessThan(2500);
+            // The look after the signal reads the sandboxes whose keys matched, by id, and decrypts no token again.
+            expect(sandbox.findMany).toHaveBeenCalledTimes(2);
+            expect(sandbox.findMany).toHaveBeenLastCalledWith({
+                where: { id: { in: [`s1`] }, wakeRequestedAt: { not: null }, hosted: null, removedAt: null },
+                select: { id: true, tunnelId: true, wakeRequestedAt: true },
+            });
+            expect(row.stamp).toBeNull();
+            expect(hub.waiting()).toBe(0);
+        });
+
+        it(`is never held, and wakes nothing, for an ask whose key does not match`, async () => {
+            const hub = localWakeSignals();
+            const { row, sandbox, prisma } = sleeperTable(new Date(Date.now() - 1000));
+            const other = createHmac(`sha256`, `other`).update(`intentic/host-report/v1`).digest(`hex`);
+            const res = await askWakes(prisma, { asks: [{ sandbox: TUNNEL_ID, key: other }], waitMs: 5000 }, { hub });
+            expect(await res.json()).toEqual({ wake: [] });
+            expect(sandbox.updateMany).not.toHaveBeenCalled();
+            expect(row.stamp).not.toBeNull();
+            expect(hub.waiting()).toBe(0);
+        });
+
+        it(`lets go of a machine that went away, at once`, async () => {
+            const hub = localWakeSignals();
+            const { prisma } = sleeperTable();
+            const gone = new AbortController();
+            const asked = askWakes(prisma, { asks, waitMs: 5000 }, { hub, signal: gone.signal });
+            await waitFor(() => expect(hub.waiting()).toBe(1));
+            const goneAt = performance.now();
+            gone.abort();
+            await asked;
+            expect(performance.now() - goneAt).toBeLessThan(2500);
+            expect(hub.waiting()).toBe(0);
+        });
+
+        it(`hands nothing to a machine that went away while it looked, and leaves the request for the next ask`, async () => {
+            const hub = localWakeSignals();
+            const { row, sandbox, prisma } = sleeperTable();
+            const gone = new AbortController();
+            const asked = askWakes(prisma, { asks, waitMs: 5000 }, { hub, signal: gone.signal });
+            await waitFor(() => expect(hub.waiting()).toBe(1));
+            // The connection drops while the look the wake set off is reading.
+            sandbox.findMany.mockImplementationOnce(async () => {
+                gone.abort();
+                return [{ id: `s1`, tunnelId: TUNNEL_ID, token: `tok`, wakeRequestedAt: row.stamp }];
+            });
+            await wake(prisma, hub);
+            await asked;
+            expect(sandbox.findMany).toHaveBeenCalledTimes(2);
+            expect(sandbox.updateMany).not.toHaveBeenCalled();
+            expect(row.stamp).not.toBeNull();
+            expect(hub.waiting()).toBe(0);
+        });
     });
 });
 

@@ -5,8 +5,10 @@ import {
     type ConnectionState,
     initialConnection,
     isBlocked,
+    nextAttemptDelayMs,
     watchdogRecoveryDelay,
 } from "./connection";
+import { closeWakeWindow, openWakeWindow, WAKE_FAST_RETRY_MS, wakePendingFor } from "./wake/wakeWindow";
 
 // Drives the machine like the loop does, so a test reads as observations rather than a hand-built state.
 const drive = (...signals: readonly ConnectionSignal[]): ConnectionState => signals.reduce(applyConnectionSignal, initialConnection);
@@ -73,6 +75,54 @@ describe(`watchdogRecoveryDelay`, () => {
     it(`a callback delayed by the browser scheduler gets a bounded drain window`, () => {
         expect(watchdogRecoveryDelay(1_000)).toBe(1_000);
         expect(watchdogRecoveryDelay(60_000)).toBe(1_000);
+    });
+});
+
+// The wait the loop takes after an attempt: the machine's ladder, stretched for a sandbox that seems alive, and cut to a
+// second while a wake this browser asked for is pending.
+describe(`nextAttemptDelayMs`, () => {
+    const fail = failed();
+    // One state per rung, as the machine reaches it over consecutive transient failures.
+    const rungs = [1, 2, 3, 6].map((count) => drive({ kind: `connect` }, ...Array.from({ length: count }, () => fail)));
+    const blocked = drive({ kind: `connect` }, failed(forbidden()));
+    const waitsOn = (context: { busy: boolean; waking: boolean }): number[] => rungs.map((state) => nextAttemptDelayMs(state, context));
+
+    it(`walks the ladder untouched without a wake`, () => {
+        expect(waitsOn({ busy: false, waking: false })).toEqual([1000, 2000, 4000, 5000]);
+        expect(nextAttemptDelayMs(blocked, { busy: false, waking: false })).toBe(5000);
+    });
+
+    it(`stretches every rung to ten seconds for a sandbox that seems alive, without a wake`, () => {
+        expect(waitsOn({ busy: true, waking: false })).toEqual([10_000, 10_000, 10_000, 10_000]);
+    });
+
+    it(`redials after one second within a wake, whichever rung the failures reached`, () => {
+        expect(waitsOn({ busy: false, waking: true })).toEqual([1000, 1000, 1000, 1000]);
+    });
+
+    it(`ignores the busy stretch within a wake`, () => {
+        expect(waitsOn({ busy: true, waking: true })).toEqual([1000, 1000, 1000, 1000]);
+    });
+
+    it(`keeps a refusal at its ceiling within a wake, since no wake changes one`, () => {
+        expect(nextAttemptDelayMs(blocked, { busy: false, waking: true })).toBe(5000);
+        expect(nextAttemptDelayMs(blocked, { busy: true, waking: true })).toBe(5000);
+    });
+
+    it(`keeps a settled stream's free repair free within a wake`, () => {
+        const repair = drive({ kind: `connect` }, { kind: `opened` }, frame(0), failed(network(), 20_000));
+        expect(nextAttemptDelayMs(repair, { busy: false, waking: true })).toBe(0);
+    });
+
+    it(`goes back to the ladder once the waking window has passed`, () => {
+        openWakeWindow(`sb-ladder`, 0);
+        const at = (now: number) => ({ busy: false, waking: wakePendingFor(`sb-ladder`, now) });
+        try {
+            expect(nextAttemptDelayMs(rungs[3]!, at(WAKE_FAST_RETRY_MS - 1))).toBe(1000);
+            expect(nextAttemptDelayMs(rungs[3]!, at(WAKE_FAST_RETRY_MS))).toBe(5000);
+        } finally {
+            closeWakeWindow(`sb-ladder`);
+        }
     });
 });
 

@@ -8730,7 +8730,7 @@
             "machineNeedsYouTitle": "{name} needs a hand on {machine}",
             "machineNeedsYouBody": "It found something it can't fix by itself.",
             "asleepTitle": "Waking {name}",
-            "asleepBody": "{machine} put it to sleep while nobody was using it. It's waking up now, which takes about a minute. Your files and conversations are just as you left them.",
+            "asleepBody": "{machine} put it to sleep while nobody was using it. It's waking up now, which usually takes a few seconds and at most half a minute. Your files and conversations are just as you left them.",
             "asleepStuckTitle": "{name} is still asleep",
             "asleepStuckBody": "{machine} hasn't woken it yet. The computer may be off or asleep itself; it wakes {name} once it's back. Your files are kept there.",
             "redialTitle": "Waiting for {name} to reconnect",

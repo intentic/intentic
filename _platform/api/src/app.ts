@@ -13,6 +13,7 @@ import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
 import { acmeChallengeHolds, CloudflareTokenError, ensureLocalDnsRecord, setAcmeChallenge } from "./sandbox/cloudflare.js";
 import { edgeCertificateFor } from "./sandbox/edge-certificate.js";
 import { hostReportHttpRoutes } from "./sandbox/host-report.js";
+import { localWakeSignals, type WakeSignals } from "./sandbox/local-wake/wake-signals.js";
 import { hostedWakeAlarmRoutes } from "./sandbox/hosted/wake/hosted-wake-alarm.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
 import { DaemonVersionSchema } from "./sandbox/daemon-version.js";
@@ -100,10 +101,13 @@ const logUnexpectedError = (log: Logger, error: unknown): void => {
     log.error({ err: error }, `unexpected error`);
 };
 
+type BuiltApp = { app: Hono<AppEnv>; auth: Auth };
+
 // The platform is a sandbox registry, never a relay: daemons announce over their own tunnel, the browser talks to them
 // directly. Public routes are /setup/claim, /api/reachability/:id and /api/identity; the rest are connect-token-authenticated
-// relays.
-export const createApp = (config: Config, prisma: PrismaClient, logger: Logger): { app: Hono<AppEnv>; auth: Auth } => {
+// relays. `wakeSignals` is what `sandbox.wake` tells a held wakes ask through (sandbox/local-wake/wake-signals.ts): main.ts hands
+// the one that reaches every replica, and an app built without one (the suites) gets one that reaches this process.
+export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, wakeSignals: WakeSignals = localWakeSignals()): BuiltApp => {
     const auth = createAuth(config, prisma, logger);
 
     const app = new Hono<AppEnv>();
@@ -240,7 +244,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
 
     // What `ic sandbox fix` found on the machine a sandbox runs on: `/host-report/claim` redeems the recovery panel's fix
     // code for the report key, `/host-report` takes a report under that key (sandbox/host-report.ts).
-    app.route(`/host-report`, hostReportHttpRoutes({ config, prisma }));
+    app.route(`/host-report`, hostReportHttpRoutes({ config, prisma, wakeSignals }));
     app.route(`/`, hostedWakeAlarmRoutes({ prisma, config }));
 
     // The daemon's phone-home, authenticated by the connect token. A token with no row answers 410 when its id has a
@@ -570,7 +574,7 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger):
 
     // Everything under /rpc flows through the oRPC OpenAPI handler, with the request logger on the context.
     app.all(`${API_BASE_PATH}/*`, async (c) => {
-        const context = await buildOrpcContext({ auth, prisma, config, logger: c.get(`logger`) }, c.req.raw.headers);
+        const context = await buildOrpcContext({ auth, prisma, config, logger: c.get(`logger`), wakeSignals }, c.req.raw.headers);
         const result = await orpcHandler.handle(c.req.raw, { context, prefix: API_BASE_PATH });
         if (result.matched) {
             const cookies = context.sessionHeaders.getSetCookie();

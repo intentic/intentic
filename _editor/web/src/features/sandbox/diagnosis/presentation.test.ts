@@ -169,7 +169,7 @@ describe(`a wait's own clock`, () => {
         expect(shown.wait).toEqual({ elapsedMs: 60_000, typicalMs: USUAL_MS.fixed, giveUpMs: FIXED_PATIENCE_MS });
     });
 
-    it(`gives a sleeping sandbox about a minute, and the owner a way back once waking has taken too long`, () => {
+    it(`gives a sleeping sandbox well under a minute, and the owner a way back once waking has taken too long`, () => {
         const slept = report({ outcome: `healthy`, checks: [], asleep: true });
         expect(present({ kind: `asleep`, report: slept, patient: true }).wait).toEqual({
             elapsedMs: 20_000,

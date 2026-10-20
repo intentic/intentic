@@ -119,15 +119,28 @@ pub fn write_stamped_within(
     body: &Value,
     budget: Duration,
 ) -> Option<u64> {
+    write_stamped_known(container, path, body, None, budget)
+}
+
+/// The same, for a caller that has just read whether the container runs: Some is taken as said rather than asked again.
+pub fn write_stamped_known(
+    container: &str,
+    path: &str,
+    body: &Value,
+    running: Option<bool>,
+    budget: Duration,
+) -> Option<u64> {
     let deadline = Instant::now() + budget;
     let left = || deadline.saturating_duration_since(Instant::now());
     let template = body.to_string();
-    let is_running = docker::ask(
-        &["inspect", "--format", "{{.State.Running}}", container],
-        (budget / 2).min(docker::READ_LIMIT),
-    )
-    .said()
-    .is_some_and(|said| said.trim() == "true");
+    let is_running = running.unwrap_or_else(|| {
+        docker::ask(
+            &["inspect", "--format", "{{.State.Running}}", container],
+            (budget / 2).min(docker::READ_LIMIT),
+        )
+        .said()
+        .is_some_and(|said| said.trim() == "true")
+    });
     if left().is_zero() {
         return None;
     }

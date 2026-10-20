@@ -568,6 +568,35 @@ test("a link whose sandbox the other side keeps is never this side's to fix", as
     expect(fake.asked).toEqual([]);
 });
 
+// Woken by somebody else (a person's `ic sandbox start`, the desktop app's own `ic sandbox wakes`), a sandbox this agent
+// took for asleep would have waited on its link's long rest, a quarter of an hour between tries (sleep.ts).
+test("a sandbox the last listing had asleep that this one lists running has its links dialled at once, and only that one", async () => {
+    const { fake, state, round } = setup();
+    fake.listing = [
+        { slug: SLUG, asleep: true },
+        { slug: "stays-asleep", asleep: true },
+        { slug: "stopped-by-hand", asleep: true },
+        { slug: "never-slept", running: true },
+        { slug: "theirs", keptElsewhere: "linux", asleep: true },
+    ];
+    await round(NOW + 30_000);
+    expect([...state.sleepers.slugs]).toEqual([SLUG, "stays-asleep", "stopped-by-hand"]);
+    expect(fake.poked).toEqual([]);
+    fake.listing = [
+        { slug: SLUG, running: true },
+        { slug: "stays-asleep", asleep: true },
+        { slug: "stopped-by-hand", running: false },
+        { slug: "never-slept", running: true },
+        { slug: "theirs", keptElsewhere: "linux", running: true },
+    ];
+    await round(NOW + 30_000 + 5 * MIN);
+    expect(fake.poked).toEqual([SLUG]);
+    expect([...state.sleepers.slugs]).toEqual(["stays-asleep"]);
+    // Running on the listing after that is no news: nothing is dialled twice.
+    await round(NOW + 30_000 + 10 * MIN);
+    expect(fake.poked).toEqual([SLUG]);
+});
+
 // The logon case: Docker Desktop is off after a reboot, so nothing has listed yet, and the records are all there is.
 test("before Docker has ever answered, ic's records are this environment's sandboxes", async () => {
     const { fake, round } = setup();

@@ -1,6 +1,6 @@
 import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import type { HostLink } from "../device/config.js";
-import { type KeptCheck, reconcileLinks, stillKeeping } from "./resident.js";
+import { type KeptCheck, reconcileLinks, redialSandbox, stillKeeping } from "./resident.js";
 
 const link = (url: string, token = `token-for-${url}`): HostLink => ({
     sandboxUrl: url,
@@ -9,20 +9,24 @@ const link = (url: string, token = `token-for-${url}`): HostLink => ({
     scopes: { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off", programs: "off" },
 });
 
-// A stand-in socket per dial, recording whether it was closed: the test reads which sandboxes are being dialled.
+// A stand-in socket per dial, recording whether it was closed or told to dial at once: the test reads which sandboxes are
+// being dialled.
 const dialer = () => {
     const dialled: string[] = [];
     const stopped: string[] = [];
+    const retried: string[] = [];
     const dial = (held: HostLink): PeerLink =>
         ({
             done: new Promise(() => undefined),
             stop: () => void stopped.push(held.sandboxUrl),
             state: () => "open",
             outage: () => undefined,
+            retryNow: () => void retried.push(held.sandboxUrl),
         }) as unknown as PeerLink;
     return {
         dialled,
         stopped,
+        retried,
         dial: (held: HostLink) => {
             dialled.push(held.sandboxUrl);
             return dial(held);
@@ -73,6 +77,24 @@ describe("reconcileLinks", () => {
 
 // With nothing linked, paired or held, the agent stays only while this machine hosts a sandbox the keeper looks after:
 // asked at once the first time, then at most every five minutes, and said when it starts to be the reason.
+// The keeper has just woken a sandbox, or found it woken: its links are dialled now, not when their ladder comes round.
+describe("redialSandbox", () => {
+    it("tells every link naming the slug, by its hostname or by its sandbox id, to dial at once, and no other", () => {
+        const connections = new Map();
+        const { retried, dial } = dialer();
+        const byHost = "https://sandbox-0123456789ab.sbx.intentic.dev";
+        const other = "https://sandbox-fedcba987654.sbx.intentic.dev";
+        reconcileLinks(connections, [link(byHost), link(other)], dial, () => undefined);
+        redialSandbox(connections, "sandbox-0123456789ab");
+        expect(retried).toEqual([byHost]);
+        // ic names a sandbox with no public hostname by the id its connect token derives, which the hostname carries.
+        redialSandbox(connections, "fedcba987654");
+        expect(retried).toEqual([byHost, other]);
+        redialSandbox(connections, "sandbox-not-linked");
+        expect(retried).toEqual([byHost, other]);
+    });
+});
+
 describe("stillKeeping", () => {
     const NOW = 1_800_000_000_000;
 

@@ -58,8 +58,9 @@ export interface PeerDialSpec<S extends SocketLike> {
     readonly hello: () => Promise<Record<string, unknown>> | Record<string, unknown>;
     // Hand the open socket to the oRPC handler serving the door's contract.
     readonly attach: (socket: S) => void;
-    // The retry ladder: how long to wait after a drop, given how long the socket had held.
-    readonly backoff: { readonly next: (heldMs: number) => number };
+    // The retry ladder: how long to wait after a drop, given how long the socket had held; `reset` puts it back on its
+    // floor (`retryNow`).
+    readonly backoff: { readonly next: (heldMs: number) => number; readonly reset: () => void };
 /* How long this socket may hear nothing before the link is presumed dead: `peerLinkSilenceMs` of the heartbeat the door's own hub pings on. */
     readonly silenceMs: number;
     readonly log: (message: string) => void;
@@ -86,7 +87,70 @@ export interface PeerLink {
     readonly stop: (reason?: string) => void;
     readonly state: () => PeerLinkState;
     readonly outage: () => PeerOutage | undefined;
+    /* SOMEBODY KNOWS THE FAR END IS BACK, so the link need not wait to find out (2026-10-19). A machine agent that has
+       just woken a sleeping sandbox knows it is starting, but the link to it had spent the sleep on the ladder: past
+       LONG_OUTAGE_ATTEMPTS each try rests a quarter of an hour, and on rog a sandbox woken at 16:48 had its link back at
+       17:12, 24 minutes with no device tools. This ends a wait on the ladder (the long rest included) and dials now,
+       and puts the outage behind it as an answer would (`failures`, the quiet rule, its `since`, the ladder's rung), so
+       a dial that finds the sandbox still booting retries on the fast floor. A dial in flight is left to finish and
+       only its ladder is reset, so a failure of it retries fast too; an open or stopped link is untouched. */
+    readonly retryNow: () => void;
 }
+
+/* ONE OUTAGE'S BOOKKEEPING: the attempts that have failed since the link was last open, when the first of them was, and
+   what each may say (the quiet rule above). An answer clears it, and so does `retryNow`. */
+const failureRun = (log: (message: string) => void) => {
+    let failures = 0;
+    // When the loop last complained out loud, and when the CURRENT outage began.
+    let quietSince = 0;
+    let since: number | undefined;
+    return {
+        count: (): number => failures,
+        // One more failed attempt; answers how many that makes.
+        fail: (): number => {
+            failures += 1;
+            since ??= Date.now();
+            return failures;
+        },
+        /* What ONE failed attempt is allowed to say. */
+        complain: (said: string, delay: number): void => {
+            const every = `retrying every ${Math.round(delay / 1000)}s`;
+            if (failures <= LOUD_ATTEMPTS) {
+                log(`${said}; reconnecting in ${Math.round(delay / 1000)}s`);
+                return;
+            }
+            if (failures === LOUD_ATTEMPTS + 1) {
+                quietSince = Date.now();
+                log(`${said}; still nothing after ${failures} attempts — ${every}, and saying so at most every ${Math.round(QUIET_LOG_MS / 60_000)} minutes from here`);
+                return;
+            }
+            if (Date.now() - quietSince >= QUIET_LOG_MS) {
+                quietSince = Date.now();
+                log(`${said}; ${failures} failed attempts, ${every}`);
+            }
+        },
+        clear: (): void => {
+            failures = 0;
+            quietSince = 0;
+            since = undefined;
+        },
+        reading: (): PeerOutage | undefined => (since === undefined ? undefined : { failures, since }),
+    };
+};
+
+/* THE WAIT ON THE LADDER hangs off the loop's stop, so a link stopped during it is done at once and never dials again,
+   and off a controller of its own, which `retryNow` aborts to dial at once. Cutting a wait already over does nothing. */
+const ladderWaits = (stopping: AbortSignal) => {
+    let resting: AbortController | undefined;
+    return {
+        wait: (delay: number, dial: () => Promise<void>): void => {
+            const rest = new AbortController();
+            resting = rest;
+            void sleep(delay, { signal: anySignal(stopping, rest.signal) }).then(() => (stopping.aborted ? undefined : dial()));
+        },
+        cut: (): void => resting?.abort(),
+    };
+};
 
 export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink => {
     // The loop's whole life: every way it ends (a stop, a revocation, a pairing gone) aborts this, and everything the
@@ -96,32 +160,8 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
     const done = new Promise<void>((resolve) => void whenAborted(stopping.signal, () => resolve()));
     let socket: S | undefined;
     let openedAt: number | undefined;
-    // Consecutive attempts that have failed since this link was last open, and when the loop last complained out
-    // loud: between them they are the whole of the quiet rule above.
-    let failures = 0;
-    let quietSince = 0;
-    // When the CURRENT outage began, as opposed to when this link was last complained about.
-    let failingSince: number | undefined;
-
-/* What ONE failed attempt is allowed to say. */
-    const complain = (said: string, delay: number): void => {
-        const every = `retrying every ${Math.round(delay / 1000)}s`;
-        if (failures <= LOUD_ATTEMPTS) {
-            spec.log(`${said}; reconnecting in ${Math.round(delay / 1000)}s`);
-            return;
-        }
-        if (failures === LOUD_ATTEMPTS + 1) {
-            quietSince = Date.now();
-            spec.log(
-                `${said}; still nothing after ${failures} attempts — ${every}, and saying so at most every ${Math.round(QUIET_LOG_MS / 60_000)} minutes from here`,
-            );
-            return;
-        }
-        if (Date.now() - quietSince >= QUIET_LOG_MS) {
-            quietSince = Date.now();
-            spec.log(`${said}; ${failures} failed attempts, ${every}`);
-        }
-    };
+    const outage = failureRun(spec.log);
+    const ladder = ladderWaits(stopping.signal);
 
     const open = async (): Promise<void> => {
         const attempt = await spec.open(stopping.signal);
@@ -155,14 +195,11 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             }
             const rung = spec.backoff.next(openedAt === undefined ? 0 : Date.now() - openedAt);
             openedAt = undefined;
-            failures += 1;
-            failingSince ??= Date.now();
             // The rest is added to the ladder's draw rather than replacing it: a flat fifteen minutes would bring back in
             // lockstep every link that entered the long outage together.
-            const delay = failures >= LONG_OUTAGE_ATTEMPTS ? LONG_OUTAGE_MS + rung : rung;
-            complain(said, delay);
-            // The wait hangs off the stop: a link stopped during it is done at once and never dials again.
-            void sleep(delay, { signal: stopping.signal }).then(() => (stopping.signal.aborted ? undefined : open()));
+            const delay = outage.fail() >= LONG_OUTAGE_ATTEMPTS ? LONG_OUTAGE_MS + rung : rung;
+            outage.complain(said, delay);
+            ladder.wait(delay, open);
         };
 
         const arm = (): void => {
@@ -189,9 +226,7 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             openedAt = Date.now();
             // A link that is up owes nothing to the failures behind it: the next outage is news again, and the
             // "connected to …" line this open is about to log is what reports the recovery.
-            failures = 0;
-            quietSince = 0;
-            failingSince = undefined;
+            outage.clear();
             arm();
             spec.attach(ws);
             const send = (hello: Record<string, unknown>): void => {
@@ -230,7 +265,7 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
 
         /* Socket errors record a cause; the close event owns retry scheduling. */
         ws.addEventListener("error", () => {
-            if (failures < LOUD_ATTEMPTS) {
+            if (outage.count() < LOUD_ATTEMPTS) {
                 spec.log("connection error");
             }
         });
@@ -251,6 +286,15 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
         // ladder) and a finished one is closed: read off the loop itself, not a flag kept beside it that a redial
         // firing after the stop could set back.
         state: () => (socket?.readyState === OPEN ? "open" : stopping.signal.aborted ? "closed" : "connecting"),
-        outage: () => (failingSince === undefined ? undefined : { failures, since: failingSince }),
+        outage: outage.reading,
+        retryNow: () => {
+            if (stopping.signal.aborted || socket?.readyState === OPEN) {
+                return;
+            }
+            outage.clear();
+            spec.backoff.reset();
+            // Waiting on the ladder: the wait ends now and its dial follows. A dial in flight has no wait to end.
+            ladder.cut();
+        },
     };
 };

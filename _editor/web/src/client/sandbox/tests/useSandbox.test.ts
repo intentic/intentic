@@ -1,6 +1,7 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import type { SandboxSummary } from "@intentic/api-contract";
-import { stubGlobal, mocked } from "@intentic/testing/bun";
+import { stubGlobal, mocked, waitFor } from "@intentic/testing/bun";
+import { nextTick } from "vue";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
 jest.mock("../../../lib/useApi", () => ({
@@ -27,6 +28,7 @@ const { setDaemonBoot } = await import("../useDaemonBoot");
 const { signalConnection, useSandbox } = await import("../useSandbox");
 const { rememberListed, rememberedAccount } = await import("../../directory/deviceDirectory");
 const { activeSandboxId } = await import("../../../app/storage/activeSandbox");
+const { wakePendingFor } = await import("../wake/wakeWindow");
 
 const summary = (id: string): SandboxSummary => ({
     id,
@@ -247,10 +249,11 @@ describe(`reachable`, () => {
 // collected on this computer at once, rather than on the keeper's next poll there.
 describe(`the wake a sleeping sandbox is asked back with`, () => {
     const asleep = async (row: SandboxSummary): Promise<void> => {
+        // Torn down first, so the failure a previous case left cannot ask for this box's wake as the list selects it.
+        signalConnection({ kind: `disconnect` });
         listMock.mockResolvedValue({ sandboxes: [row] });
         await useSandbox().refresh();
         activeSandboxId.value = row.id;
-        signalConnection({ kind: `disconnect` });
         signalConnection({ kind: `failed`, failure: { kind: `detached`, message: `no tunnel` }, at: Date.now() });
         // The watch runs, then the platform's answer.
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -292,6 +295,61 @@ describe(`the wake a sleeping sandbox is asked back with`, () => {
         await asleep(summary(`own-4`));
         expect(handed).toEqual([]);
     });
+
+    // The loop redials a sandbox fast while a wake the platform took is pending (wake/wakeWindow.ts).
+    it(`opens the active sandbox's waking window once the platform takes the wake`, async () => {
+        await asleep(summary(`own-5`));
+        expect(wakePendingFor(`own-5`, Date.now())).toBe(true);
+    });
+
+    it(`opens no window on a wake the platform refused`, async () => {
+        mocked(apiClient.sandbox.wake).mockRejectedValue(new Error(`refused`));
+        await asleep(summary(`own-6`));
+        expect(wakePendingFor(`own-6`, Date.now())).toBe(false);
+    });
+
+    it(`closes the window on the stream's first frame`, async () => {
+        await asleep(summary(`own-7`));
+        const before = wakePendingFor(`own-7`, Date.now());
+        signalConnection({ kind: `frame`, at: Date.now() });
+        expect({ before, after: wakePendingFor(`own-7`, Date.now()) }).toEqual({ before: true, after: false });
+    });
+
+    it(`closes the window when the active sandbox changes away`, async () => {
+        await asleep(summary(`own-8`));
+        const before = wakePendingFor(`own-8`, Date.now());
+        activeSandboxId.value = `elsewhere`;
+        await nextTick();
+        expect({ before, after: wakePendingFor(`own-8`, Date.now()) }).toEqual({ before: true, after: false });
+    });
+
+    it(`closes every window when the loop is torn down`, async () => {
+        await asleep(summary(`own-9`));
+        const before = wakePendingFor(`own-9`, Date.now());
+        signalConnection({ kind: `disconnect` });
+        expect({ before, after: wakePendingFor(`own-9`, Date.now()) }).toEqual({ before: true, after: false });
+    });
+
+    it(`opens none for a sandbox the loop is not dialling, nor for one that answered while the ask was out`, async () => {
+        const background = summary(`own-10`);
+        listMock.mockResolvedValue({ sandboxes: [background, summary(`own-11`)] });
+        await useSandbox().refresh();
+        activeSandboxId.value = `own-11`;
+        await useSandbox().wake(background.id, `retry`);
+        expect({ asked: mocked(apiClient.sandbox.wake).mock.calls, pending: wakePendingFor(background.id, Date.now()) }).toEqual({
+            asked: [[{ sandboxId: background.id }]],
+            pending: false,
+        });
+
+        signalConnection({ kind: `disconnect` });
+        const answer = Promise.withResolvers<{ ok: boolean }>();
+        mocked(apiClient.sandbox.wake).mockReturnValue(answer.promise);
+        const asking = useSandbox().wake(`own-11`, `retry`);
+        signalConnection({ kind: `frame`, at: Date.now() });
+        answer.resolve({ ok: true });
+        await asking;
+        expect(wakePendingFor(`own-11`, Date.now())).toBe(false);
+    });
 });
 
 it(`selecting a sleeping hosted sandbox asks the platform to wake it before a failed daemon read`, async () => {
@@ -300,7 +358,10 @@ it(`selecting a sleeping hosted sandbox asks the platform to wake it before a fa
     mocked(apiClient.sandbox.wake).mockResolvedValue({ ok: true });
     const sandbox = useSandbox();
     await sandbox.refresh();
+    signalConnection({ kind: `disconnect` });
     sandbox.select(row.id);
     await Promise.resolve();
     expect(apiClient.sandbox.wake).toHaveBeenCalledWith({ sandboxId: row.id });
+    // That ask opens the same waking window a failure's does, so a hosted wake gets the same fast last hop.
+    await waitFor(() => expect(wakePendingFor(row.id, Date.now())).toBe(true));
 });

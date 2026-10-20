@@ -227,6 +227,15 @@ flowchart LR
   the route takes no other credential). It is answered `{ wake: [tunnel ids] }`: the asks whose key matched and whose
   request is under ten minutes old. Each request is cleared as it is handed out, pinned to the stamp read, so it is
   delivered once. A sleep reported right after a healthy report with the same stage and outcome is not throttled.
+  (2026-10-19) An ask may name `waitMs` (at most 30 000): with nothing asked for yet, the platform holds it, up to 25
+  seconds, and answers as soon as a request for one of its sandboxes is stamped, with `held: true` so the machine asks
+  again at once rather than pausing 15 seconds between asks, which was most of a local wake's wait. The keys are
+  checked once; an ask none of whose keys match is answered at once and never held. `sandbox.wake` says each request
+  through `src/sandbox/local-wake/wake-signals.ts`, to its own replica directly and to the others by Postgres `NOTIFY` on
+  `sandbox_wake`, which every replica `LISTEN`s for on a connection of its own (listened again with a backoff when it
+  drops). A held ask also reads again every ten seconds, so a lost notification costs at most that. A machine that
+  hangs up is let go and handed nothing, a replica shutting down answers its held asks at once, and the hold lifts
+  Bun's idle timeout for itself.
 - The report key is lowercase hex HMAC-SHA256 over `intentic/host-report/v1` (`HOST_REPORT_KEY_LABEL`), keyed with
   the connect token. `ic` derives it from the container's env and keeps it, so the machine agent's own runs report
   with no code. The platform derives it from the token it keeps encrypted and compares in constant time, and it

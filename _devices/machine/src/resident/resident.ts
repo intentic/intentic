@@ -26,6 +26,7 @@ import { UPGRADE_ENV } from "../environments/machine-upgrade.js";
 import { sweepBin } from "../release.js";
 import { assertSupervisor, machineLauncher, readResident, retireResident, startResident } from "./supervision.js";
 import { mirrorHeartbeatPath, readState } from "../sync/config.js";
+import { pairingSlugs } from "../sync/swap-pause.js";
 import { runMirrorWatch } from "../sync/mirror.js";
 import { startUpkeep } from "../upkeep/reconcile.js";
 import { MACHINE_VERSION } from "../version.js";
@@ -226,6 +227,17 @@ export const reconcileLinks = (
     }
 };
 
+// Every link to a sandbox the keeper has just learnt is starting again (woken from sleep, by it or by somebody else) is
+// dialled now rather than when its ladder next comes round, which after a long sleep is a quarter of an hour away
+// (peer-dial's retryNow, sandbox-rounds/sleep.ts).
+export const redialSandbox = (connections: ReadonlyMap<string, Connection>, slug: string): void => {
+    for (const [url, held] of connections) {
+        if (pairingSlugs(url).includes(slug)) {
+            held.peer.retryNow();
+        }
+    }
+};
+
 const reading = (peer: PeerLink): LinkReading => {
     const outage = peer.outage();
     return { state: peer.state(), ...(outage === undefined ? {} : { outage }) };
@@ -293,6 +305,7 @@ const sessionRounds = (supervised: boolean, connections: ReadonlyMap<string, Con
         links: () => [...connections].map(([url, held]) => ({ url, reading: reading(held.peer) })),
         loopback: reachedOverLoopback,
         watching: watch.running,
+        poke: (slug) => redialSandbox(connections, slug),
     });
     const later = supervised ? SUPERVISED_ROUND_DELAY_MS : 0;
     // The device's own upkeep runs everywhere too: each environment holds its own leftovers and stores (upkeep/).

@@ -14,6 +14,7 @@ import { apiClient } from "../../lib/useApi";
 import { withConcurrency } from "../../lib/concurrency";
 import { applyConnectionSignal, type ConnectionSignal, type ConnectionState, initialConnection } from "./connection";
 import { daemonReady } from "./useDaemonBoot";
+import { closeAllWakeWindows, closeWakeWindow, openWakeWindow } from "./wake/wakeWindow";
 import { forgetAddress } from "../directory/deviceDirectory";
 import { directMode } from "../directory/directState";
 import type { LeaveOutcome } from "./leaveSandbox";
@@ -58,6 +59,13 @@ const connection = ref<ConnectionState>(initialConnection);
 // Single writer: every transition goes through the pure reducer so the sequencing rules live in one place.
 export const signalConnection = (signal: ConnectionSignal): void => {
     connection.value = applyConnectionSignal(connection.value, signal);
+    // A waking window (wake/wakeWindow.ts) ends with the wait it speeds up: a frame is the sandbox back, and a disconnect is
+    // the loop that was dialling it torn down.
+    if (signal.kind === `frame` && activeSandboxId.value !== undefined) {
+        closeWakeWindow(activeSandboxId.value);
+    } else if (signal.kind === `disconnect`) {
+        closeAllWakeWindows();
+    }
 };
 
 // True only once the stream is live and the daemon reports ready; liveness alone precedes convergence.
@@ -216,11 +224,24 @@ watch(
         void wake(id, `switch`).catch(() => undefined);
     },
 );
+// A sandbox switched away from is no longer dialled, so a waking window it had closes with it.
+watch(activeSandboxId, (_id, previous) => {
+    if (previous !== undefined) {
+        closeWakeWindow(previous);
+    }
+});
 // A manual retry crosses the same platform gate as selection, and keeps its refusal in the active gate.
 const wake = async (sandboxId: string, source: `retry` | `switch`): Promise<void> => {
     wokeAt.set(sandboxId, Date.now());
     try {
         await apiClient.sandbox.wake({ sandboxId });
+        // Taken, so the sandbox is due back within seconds: the connection loop redials it every second until it answers
+        // (wake/wakeWindow.ts), whether this ask came from a failure (above) or from selecting a hosted one asleep (select).
+        // Only for the sandbox the loop dials, and not one whose stream already proved itself while the ask was out: a
+        // list that still said asleep, or a box that came back on its own (2026-10-19).
+        if (activeSandboxId.value === sandboxId && connection.value.onlineSince === undefined) {
+            openWakeWindow(sandboxId, Date.now());
+        }
         recordWake(sandboxId, undefined);
         collectWakeHere(sandboxes.value.find((box) => box.id === sandboxId));
         track(`sandbox_wake`, { source, outcome: `success` });

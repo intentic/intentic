@@ -12,6 +12,7 @@ import { RECOVERY_WINDOW_MS } from "../durations.js";
 import { FIX_CODE_TTL_MS } from "./host-report.js";
 import { sandboxRoutes } from "./sandbox.routes.js";
 import { verifyAdoptionTicket } from "./recovery.js";
+import { localWakeSignals } from "./local-wake/wake-signals.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null, emailVerified: true };
 const sandboxRow = {
@@ -69,6 +70,7 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
         // No proxy in front: the same-source address cap has nothing to read and skips itself.
         headers: new Headers(),
+        wakeSignals: localWakeSignals(),
         ...overrides,
     }) as OrpcContext;
 
@@ -412,6 +414,16 @@ describe(`sandbox.wake on a sandbox intentic does not host`, () => {
         const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue({ ...sandboxRow, hosted: null }), update } });
         expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: context({ prisma }) })).toEqual({ ok: true });
         expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { wakeRequestedAt: expect.any(Date) } });
+    });
+
+    // (2026-10-19) So the machine's held ask (POST /host-report/wakes) answers now rather than on its next look.
+    it(`says the request to whoever holds the machine's ask, once it is stamped`, async () => {
+        const order: string[] = [];
+        const update = jest.fn(async () => order.push(`stamped`));
+        const wakeSignals = { ...localWakeSignals(), notify: jest.fn(async (tunnelId: string) => void order.push(`told ${tunnelId}`)) };
+        const prisma = fakePrisma({ sandbox: { findFirst: jest.fn().mockResolvedValue({ ...sandboxRow, hosted: null }), update } });
+        expect(await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: context({ prisma, wakeSignals }) })).toEqual({ ok: true });
+        expect(order).toEqual([`stamped`, `told ${sandboxRow.tunnelId}`]);
     });
 
     it(`is NOT_FOUND for a removed sandbox, and stamps nothing`, async () => {

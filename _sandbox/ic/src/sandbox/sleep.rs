@@ -35,7 +35,17 @@ it which its wakes have been taking (`wake_lead`), on this machine's clock alone
 the daemon is up before the moment and fires it on the minute. A moment too close to be worth a sleep (`MIN_ASLEEP_MS`
 past the lead) keeps it awake instead. A sandbox the alarm woke that no person has used since (the signal's `personAt`)
 sleeps again after `ALARM_GRACE_MS` of quiet rather than the keeper's whole limit, so an hourly chore does not keep it up
-half the day. */
+half the day.
+
+ASKED AT ONCE, AND HELD (2026-10-19). A run asked each platform in turn and started nothing until all had answered, so
+one record naming a platform that was not running (rog: a trashed sandbox's dev platform, whose refused localhost
+connect costs two seconds on Windows) delayed every wake on the machine. Every platform is now asked on a thread of its
+own, and each sandbox starts as soon as its own platform names it, one start at a time as before. With `--wait` the
+platform may hold the ask open until somebody asks for a wake, which takes the pause between two polls off every wake;
+the wait is cut to the soonest alarm, so a scheduled start never waits behind it. A record that outlived its sandbox
+kept the agent polling for good: the trash now clears `asleep` (trash.rs), and a run that still finds sleepers lists the
+engine's sandbox containers once, after its starts, and clears the record of every sleeper with neither its container
+nor a parked one. */
 
 /// What `ic sandbox sleep` was asked.
 pub struct Args {
@@ -165,11 +175,18 @@ pub fn next_wake_cost(previous: Option<u64>, took_ms: u64) -> u64 {
 /// Whether a sleeping sandbox's alarm is due for its start now. A moment long past still wakes it: the daemon then fires
 /// what it missed, late and saying so. Pure.
 pub fn alarm_due(record: &ChannelRecord, now_ms: u64) -> bool {
-    record.asleep
-        && !record.held
-        && record
-            .wake_at
-            .is_some_and(|at| at.saturating_sub(wake_lead(record)) <= now_ms)
+    alarm_in(record, now_ms) == Some(0)
+}
+
+/// How long until a sleeping sandbox's alarm is due for its start (its `wake_at`, less its lead): 0 once it is, None for
+/// a sandbox with no alarm, one awake, or one stopped on purpose. Pure.
+pub fn alarm_in(record: &ChannelRecord, now_ms: u64) -> Option<u64> {
+    if !record.asleep || record.held {
+        return None;
+    }
+    record
+        .wake_at
+        .map(|at| at.saturating_sub(wake_lead(record)).saturating_sub(now_ms))
 }
 
 /// The quiet a sleep needs this time: the keeper's limit, or the alarm's short grace for a sandbox the alarm woke that no
@@ -501,16 +518,25 @@ impl Reporter {
     /// Where this sandbox's reports go, off its container's env and its record; None when it has no key or no id.
     fn of(slug: &str) -> Option<Reporter> {
         let env = docker::container_env_nul(&container_of(slug))
-            .map(|env| Env::parse(&String::from_utf8_lossy(&env)))
-            .unwrap_or_default();
-        let record = crate::record::read(slug).unwrap_or_default();
-        let target = report::target_of(
-            slug,
-            env.token.as_deref(),
-            env.platform.as_deref(),
-            &record,
-            report::forced_platform().as_deref(),
-        )?;
+            .ok()
+            .map(|env| String::from_utf8_lossy(&env).into_owned());
+        Reporter::with_env(slug, None, env.as_deref())
+    }
+
+    /// The same off an env already read (NUL-framed; None when docker would not say), and for a wake the platform asked
+    /// for, the target its ask already went to.
+    fn with_env(slug: &str, target: Option<Target>, env: Option<&str>) -> Option<Reporter> {
+        let env = env.map(Env::parse).unwrap_or_default();
+        let target = match target {
+            Some(target) => target,
+            None => report::target_of(
+                slug,
+                env.token.as_deref(),
+                env.platform.as_deref(),
+                &crate::record::read(slug).unwrap_or_default(),
+                report::forced_platform().as_deref(),
+            )?,
+        };
         Some(Reporter {
             target,
             machine: env
@@ -547,6 +573,9 @@ impl Reporter {
 pub struct WakesArgs {
     pub json: bool,
     pub source: Source,
+    /// How long each platform may hold its ask open while nobody has asked for a wake yet (`--wait`), in milliseconds;
+    /// 0 asks and answers at once, as every run did before.
+    pub wait_ms: u64,
 }
 
 /// What a wake's report says while it starts the sandbox.
@@ -600,6 +629,53 @@ pub fn asks_of(
     asks
 }
 
+/// How long the platforms may hold this run's asks: the wait asked for, cut to the soonest alarm among the sleepers so a
+/// start it is due for never waits behind a held ask, and none at all while one is due now. Pure.
+pub fn hold_for(wait_ms: u64, asleep: &[(String, ChannelRecord)], now_ms: u64) -> u64 {
+    asleep
+        .iter()
+        .filter_map(|(_, record)| alarm_in(record, now_ms))
+        .fold(wait_ms, u64::min)
+}
+
+/// Every platform asked at once, each on a thread of its own, and each answer's sandboxes handed to `woke` on this
+/// thread as that answer arrives: a platform slow to answer (one that is not running, whose refused localhost connect
+/// costs two seconds on Windows) or one holding its ask delays no other platform's wake. Answers whether any platform
+/// said it held its ask. No asks, no threads: it answers at once.
+fn ask_each(
+    asks: BTreeMap<String, Vec<(String, Target)>>,
+    ask: impl Fn(&str, &[Target]) -> report::Answer + Sync,
+    mut woke: impl FnMut(Vec<(String, Target)>),
+) -> bool {
+    let mut held = false;
+    std::thread::scope(|scope| {
+        let (answered, answers) = std::sync::mpsc::channel();
+        for (platform, asked) in asks {
+            let answered = answered.clone();
+            let ask = &ask;
+            scope.spawn(move || {
+                let targets: Vec<Target> = asked.iter().map(|(_, target)| target.clone()).collect();
+                let answer = ask(&platform, &targets);
+                let _ = answered.send((asked, answer));
+            });
+        }
+        drop(answered);
+        for (asked, answer) in answers {
+            held |= answer.held;
+            woke(woken_among(asked, &answer.woken));
+        }
+    });
+    held
+}
+
+/// The sandboxes of one ask that its answer names. Pure.
+fn woken_among(asked: Vec<(String, Target)>, ids: &[String]) -> Vec<(String, Target)> {
+    asked
+        .into_iter()
+        .filter(|(_, target)| ids.contains(&target.sandbox))
+        .collect()
+}
+
 /// One woken sandbox's `--json` line, with `"for":"alarm"` when its alarm woke it. Pure.
 fn woke_line(slug: &str, failed: Option<&str>, why: WakeFor) -> String {
     let mut line = match failed {
@@ -613,9 +689,14 @@ fn woke_line(slug: &str, failed: Option<&str>, why: WakeFor) -> String {
 }
 
 /// The run's last `--json` line: how many sandboxes on this side are still asleep, which is what tells the machine
-/// agent to stop polling. Pure.
-fn asleep_line(count: usize) -> String {
-    json!({ "asleep": count }).to_string()
+/// agent to stop polling, and `"held":true` when a platform held its ask (the agent may then ask again at once, the
+/// platform having done the waiting). Pure.
+fn asleep_line(count: usize, held: bool) -> String {
+    if held {
+        json!({ "asleep": count, "held": true }).to_string()
+    } else {
+        json!({ "asleep": count }).to_string()
+    }
 }
 
 /// What a wake from sleep leaves on the record, under its lock when nobody else holds it (a wake that cannot write it
@@ -641,12 +722,13 @@ fn note_wake(slug: &str, started_at: u64, took_ms: u64, why: WakeFor, recreated:
 }
 
 /// Starts one sleeping sandbox as a person's start would: it clears `asleep`, and it is never one the keeper's repair
-/// limit counts, an alarm being its owner's own schedule rather than a repair. Answers why it did not start.
-fn start_from_sleep(slug: &str, why: WakeFor) -> Option<String> {
+/// limit counts, an alarm being its owner's own schedule rather than a repair. `read` gets the container's env as the
+/// start reads it, before anything starts (power.rs `run_by_reading`). Answers why it did not start.
+fn start_from_sleep(slug: &str, why: WakeFor, read: impl FnOnce(Option<&str>)) -> Option<String> {
     let recreates = crate::record::read(slug).is_ok_and(|record| record.desired.is_some());
     let started_at = now_ms();
     let clock = std::time::Instant::now();
-    let failed = power::run_by(Power::Start, Some(slug.to_string()), By::Person)
+    let failed = power::run_by_reading(Power::Start, Some(slug.to_string()), By::Person, read)
         .err()
         .map(|fail| fail.0);
     if failed.is_none() {
@@ -656,63 +738,54 @@ fn start_from_sleep(slug: &str, why: WakeFor) -> Option<String> {
     failed
 }
 
-/// `ic sandbox wakes`: polled every few seconds while anything here sleeps, so it asks docker nothing at all until a
-/// record says asleep, and a platform it cannot reach is nothing to wake rather than an error. Alarms come first and need
-/// no platform: this machine's clock is the whole of their question.
-pub fn wakes(args: WakesArgs) -> Result<()> {
-    if args.json {
-        ui::send_human_to_stderr();
-    }
-    let asleep = asleep_here();
-    let alarms = due_alarms(&asleep, now_ms());
-    let mut woken: Vec<(String, Option<Target>, WakeFor)> = alarms
-        .iter()
-        .map(|slug| (slug.clone(), None, WakeFor::Alarm))
-        .collect();
-    let waiting: Vec<(String, ChannelRecord)> = asleep
-        .iter()
-        .filter(|(slug, _)| !alarms.contains(slug))
-        .cloned()
-        .collect();
-    for (platform, asked) in asks_of(&waiting, report::forced_platform().as_deref()) {
-        let targets: Vec<Target> = asked.iter().map(|(_, target)| target.clone()).collect();
-        let ids = report::wakes(&platform, &targets);
-        woken.extend(
-            asked
-                .into_iter()
-                .filter(|(_, target)| ids.contains(&target.sandbox))
-                .map(|(slug, target)| (slug, Some(target), WakeFor::Visit)),
-        );
-    }
-    // Started only for a wake: the poll that finds nothing spends nothing on it.
-    let mut poster = (!woken.is_empty()).then(Poster::start);
-    for (slug, target, why) in &woken {
-        let reporter = match target {
-            Some(target) => Some(Reporter {
-                target: target.clone(),
-                machine: docker::container_env_value(&container_of(slug), "HOST_LABEL")
-                    .unwrap_or_else(crate::sandbox::connect::machine_label),
-            }),
-            None => Reporter::of(slug),
-        };
-        let doing = if *why == WakeFor::Alarm {
+/// One run's wakes, started one after the other as each is asked for: each sandbox's page told who is waking it while it
+/// starts (`fixing`) and how that went after (`done`), and its `--json` line said as soon as its start ends.
+struct Waker {
+    json: bool,
+    source: Source,
+    /// Started at the first wake: the poll that finds nothing spends nothing on it.
+    poster: Option<Poster>,
+}
+
+impl Waker {
+    fn wake(&mut self, slug: &str, target: Option<Target>, why: WakeFor) {
+        let source = self.source;
+        let poster = self.poster.get_or_insert_with(Poster::start);
+        let doing = if why == WakeFor::Alarm {
             WAKING_FOR_ALARM
         } else {
             WAKING
         };
-        // Told first, so the page says who is waking it while the start runs; the poster sends it beside the start.
-        if let (Some(poster), Some(reporter)) = (&poster, &reporter) {
-            poster.send(
-                &reporter.target,
-                Stage::Fixing,
-                reporter.body(args.source, Stage::Fixing, Some(doing), None, &[], false),
-            );
-        }
-        let failed = start_from_sleep(slug, *why);
-        if let (Some(poster), Some(reporter)) = (&poster, &reporter) {
+        let fixing = |reporter: &Option<Reporter>| {
+            if let Some(reporter) = reporter {
+                poster.send(
+                    &reporter.target,
+                    Stage::Fixing,
+                    reporter.body(source, Stage::Fixing, Some(doing), None, &[], false),
+                );
+            }
+        };
+        // Told as soon as the start has read the container, which names the reporter (its HOST_LABEL), so the page says
+        // who is waking it while the start runs and the env is not asked for twice; the poster sends it beside the start.
+        let mut told: Option<Option<Reporter>> = None;
+        let failed = start_from_sleep(slug, why, |env| {
+            let reporter = Reporter::with_env(slug, target.clone(), env);
+            fixing(&reporter);
+            told = Some(reporter);
+        });
+        // A start that stopped before it read the container (docker down, the lock) still says who was waking it.
+        let reporter = told.unwrap_or_else(|| {
+            let env = docker::container_env_nul(&container_of(slug))
+                .ok()
+                .map(|env| String::from_utf8_lossy(&env).into_owned());
+            let reporter = Reporter::with_env(slug, target, env.as_deref());
+            fixing(&reporter);
+            reporter
+        });
+        if let Some(reporter) = &reporter {
             let done = match &failed {
                 None => reporter.body(
-                    args.source,
+                    source,
                     Stage::Done,
                     None,
                     Some(Outcome::Healthy),
@@ -720,7 +793,7 @@ pub fn wakes(args: WakesArgs) -> Result<()> {
                     false,
                 ),
                 Some(error) => reporter.body(
-                    args.source,
+                    source,
                     Stage::Done,
                     None,
                     Some(Outcome::Failed),
@@ -735,30 +808,125 @@ pub fn wakes(args: WakesArgs) -> Result<()> {
             };
             poster.send(&reporter.target, Stage::Done, done);
         }
-        if args.json {
-            report::emit(&woke_line(slug, failed.as_deref(), *why));
+        if self.json {
+            report::emit(&woke_line(slug, failed.as_deref(), why));
         } else if let Some(error) = &failed {
             ui::warn(&format!("{slug} could not be woken: {error}"));
-        } else if *why == WakeFor::Alarm {
+        } else if why == WakeFor::Alarm {
             ui::done(&format!("{slug} woke up ahead of something it scheduled."));
         } else {
             ui::done(&format!("{slug} woke up because somebody opened it."));
         }
     }
-    if let Some(poster) = &mut poster {
-        poster.finish();
+
+    /// Delivers the reports still waiting (bounded). Answers whether it tried to wake anything.
+    fn finish(mut self) -> bool {
+        match &mut self.poster {
+            Some(poster) => {
+                poster.finish();
+                true
+            }
+            None => false,
+        }
     }
-    let left = if woken.is_empty() {
-        asleep.len()
-    } else {
-        asleep_here().len()
+}
+
+/// The sleepers that outlived their sandbox, judged from one listing of every `intentic-` container on this engine: no
+/// container under the sleeper's own name, its parked one (a swap's `.previous`), or the copy an engine move leaves
+/// behind (`.moved`: the sandbox went on to the other engine, which is not this one's to judge). And only on an engine
+/// that holds some sandbox or trash of this account at all (2026-10-19): an engine with none of them is the wrong one
+/// (another Docker context, a fresh install), and every sleeper would read as stale on it. Pure.
+pub fn stale_sleepers(asleep: &[(String, ChannelRecord)], names: &[String]) -> Vec<String> {
+    let ours = names.iter().any(|name| {
+        name.starts_with(crate::sandbox::CONTAINER_PREFIX)
+            || name.starts_with(crate::sandbox::trash::TRASH_PREFIX)
+    });
+    if !ours {
+        return Vec::new();
+    }
+    asleep
+        .iter()
+        .filter(|(slug, _)| {
+            let own = format!("{}{slug}", crate::sandbox::CONTAINER_PREFIX);
+            !names.iter().any(|name| {
+                name == &own
+                    || name == &format!("{own}{}", crate::sandbox::PARKED_SUFFIX)
+                    || name == &format!("{own}{}", crate::sandbox::MOVED_SUFFIX)
+            })
+        })
+        .map(|(slug, _)| slug.clone())
+        .collect()
+}
+
+/// The records here that say asleep for a sandbox this engine no longer has, set awake (power.rs `forget_sleep`), each
+/// under its lock when no other ic run holds it: one listing of the engine's sandbox containers. Answers the slugs it
+/// set awake; a docker that does not answer changes nothing. Said to a person only (stderr under `--json`).
+fn heal_stale(asleep: &[(String, ChannelRecord)]) -> Vec<String> {
+    let Some(listed) = docker::ps_names(true, "^intentic-") else {
+        return Vec::new();
     };
+    let mut healed = Vec::new();
+    for slug in stale_sleepers(asleep, &listed) {
+        let Ok(Some(_held)) = lock::hold(&slug, Wait::Skip) else {
+            continue;
+        };
+        if power::forget_sleep(&slug) {
+            ui::note(&format!(
+                "{slug} is no longer in Docker on this device, so its record no longer says it is asleep."
+            ));
+            healed.push(slug);
+        }
+    }
+    healed
+}
+
+/// `ic sandbox wakes`: polled while anything here sleeps, so it asks docker nothing at all until a record says asleep,
+/// and a platform it cannot reach is nothing to wake rather than an error. Alarms come first and need no platform: this
+/// machine's clock is the whole of their question. Then every platform is asked at once, each sandbox started as soon as
+/// its own platform's answer names it, and with `--wait` each ask may be held open (cut to the soonest alarm). Last, and
+/// only while something still sleeps, one docker listing finds the records that outlived their sandbox.
+pub fn wakes(args: WakesArgs) -> Result<()> {
     if args.json {
-        report::emit(&asleep_line(left));
-    } else if woken.is_empty() {
+        ui::send_human_to_stderr();
+    }
+    let asleep = asleep_here();
+    let alarms = due_alarms(&asleep, now_ms());
+    let waiting: Vec<(String, ChannelRecord)> = asleep
+        .iter()
+        .filter(|(slug, _)| !alarms.contains(slug))
+        .cloned()
+        .collect();
+    let mut waker = Waker {
+        json: args.json,
+        source: args.source,
+        poster: None,
+    };
+    for slug in &alarms {
+        waker.wake(slug, None, WakeFor::Alarm);
+    }
+    // Cut by the clock after the alarms' starts, which take seconds.
+    let wait_ms = hold_for(args.wait_ms, &asleep, now_ms());
+    let held = ask_each(
+        asks_of(&waiting, report::forced_platform().as_deref()),
+        |platform, targets| report::wakes(platform, targets, wait_ms),
+        |woken| {
+            for (slug, target) in woken {
+                waker.wake(&slug, Some(target), WakeFor::Visit);
+            }
+        },
+    );
+    let woke = waker.finish();
+    let mut left = if woke { asleep_here() } else { asleep };
+    if !left.is_empty() {
+        let healed = heal_stale(&left);
+        left.retain(|(slug, _)| !healed.contains(slug));
+    }
+    if args.json {
+        report::emit(&asleep_line(left.len(), held));
+    } else if !woke {
         ui::quiet(&format!(
             "Nothing to wake. {} asleep here.",
-            crate::util::plural(left, "sandbox")
+            crate::util::plural(left.len(), "sandbox")
         ));
     }
     Ok(())
@@ -1157,7 +1325,12 @@ mod tests {
             serde_json::from_str::<Value>(&woke_line("s", None, WakeFor::Alarm)).expect("JSON"),
             json!({ "slug": "s", "woke": true, "for": "alarm" })
         );
-        assert_eq!(asleep_line(2), r#"{"asleep":2}"#);
+        assert_eq!(asleep_line(2, false), r#"{"asleep":2}"#);
+        assert_eq!(
+            serde_json::from_str::<Value>(&asleep_line(1, true)).expect("JSON"),
+            json!({ "asleep": 1, "held": true }),
+            "a held ask is said beside the count, which stays where the agent reads it"
+        );
     }
 
     #[test]
@@ -1372,5 +1545,237 @@ mod tests {
             vec!["http://localhost:6480".to_string()]
         );
         assert!(asks_of(&[], None).is_empty());
+    }
+
+    #[test]
+    fn a_wait_never_holds_a_due_alarm_back() {
+        let sleeper = |wake_at: Option<u64>| ChannelRecord {
+            asleep: true,
+            wake_at,
+            ..ChannelRecord::default()
+        };
+        let wait = 25_000;
+        assert_eq!(
+            hold_for(wait, &[], NOW),
+            wait,
+            "nothing alarmed: the whole wait"
+        );
+        assert_eq!(
+            hold_for(wait, &[("a".to_string(), sleeper(None))], NOW),
+            wait
+        );
+        assert_eq!(
+            hold_for(
+                wait,
+                &[("a".to_string(), sleeper(Some(NOW + LEAD + 10 * MIN)))],
+                NOW
+            ),
+            wait,
+            "an alarm due later than the wait"
+        );
+        assert_eq!(
+            hold_for(
+                wait,
+                &[
+                    ("far".to_string(), sleeper(Some(NOW + LEAD + 10 * MIN))),
+                    ("soon".to_string(), sleeper(Some(NOW + LEAD + 7_000))),
+                ],
+                NOW
+            ),
+            7_000,
+            "cut to the soonest alarm's start"
+        );
+        assert_eq!(
+            hold_for(wait, &[("due".to_string(), sleeper(Some(NOW + LEAD)))], NOW),
+            0,
+            "one due now: no hold at all"
+        );
+        assert_eq!(
+            hold_for(wait, &[("late".to_string(), sleeper(Some(NOW - MIN)))], NOW),
+            0
+        );
+        let held = ChannelRecord {
+            held: true,
+            ..sleeper(Some(NOW))
+        };
+        assert_eq!(
+            hold_for(wait, &[("held".to_string(), held)], NOW),
+            wait,
+            "an alarm that wakes nothing cuts nothing"
+        );
+        assert_eq!(
+            hold_for(0, &[("a".to_string(), sleeper(Some(NOW)))], NOW),
+            0
+        );
+        assert_eq!(alarm_in(&sleeper(Some(NOW + LEAD + 5)), NOW), Some(5));
+        assert_eq!(alarm_in(&ChannelRecord::default(), NOW), None);
+    }
+
+    #[test]
+    fn a_sleeper_with_no_container_here_is_stale_but_a_parked_or_moved_one_is_not() {
+        let asleep: Vec<(String, ChannelRecord)> = [
+            "sandbox-0123456789ab",
+            "sandbox-ba9876543210",
+            "parked",
+            "trashed",
+            "moved",
+        ]
+        .iter()
+        .map(|slug| {
+            (
+                slug.to_string(),
+                ChannelRecord {
+                    asleep: true,
+                    ..ChannelRecord::default()
+                },
+            )
+        })
+        .collect();
+        // What `ic sandbox wakes` lists: every `intentic-` container on the engine, the trash's and others' among them.
+        let names: Vec<String> = [
+            "intentic-sandbox-sandbox-0123456789ab",
+            "intentic-sandbox-tunnel-sandbox-ba9876543210",
+            "intentic-sandbox-parked.previous",
+            "intentic-sandbox-moved.moved",
+            "intentic-trash-trashed",
+            "intentic-postgres-1",
+        ]
+        .iter()
+        .map(|name| name.to_string())
+        .collect();
+        assert_eq!(
+            stale_sleepers(&asleep, &names),
+            vec!["sandbox-ba9876543210".to_string(), "trashed".to_string()],
+            "a tunnel alone and the trash are no sandbox to wake; a copy a move left behind is the other engine's to judge"
+        );
+        // An engine holding no sandbox and no trash of this account is the wrong engine, not proof that all of them went.
+        assert!(stale_sleepers(&asleep, &["intentic-postgres-1".to_string()]).is_empty());
+        assert!(stale_sleepers(&asleep, &[]).is_empty());
+        assert!(stale_sleepers(&[], &names).is_empty());
+    }
+
+    /// A platform on this machine that answers one wakes ask with `body` after `delay`, and hands back the ask's body.
+    fn platform(
+        listener: std::net::TcpListener,
+        delay: std::time::Duration,
+        body: &'static str,
+    ) -> std::sync::mpsc::Receiver<String> {
+        use std::io::{Read, Write};
+        let (asked, ask) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("an ask");
+            let mut request: Vec<u8> = Vec::new();
+            let mut chunk = [0u8; 4096];
+            let body_of = |request: &[u8]| {
+                let text = String::from_utf8_lossy(request).into_owned();
+                let head = text.find("\r\n\r\n")?;
+                let length = text[..head]
+                    .lines()
+                    .find_map(|line| {
+                        line.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .and_then(|value| value.trim().parse::<usize>().ok())
+                    })
+                    .unwrap_or(0);
+                (request.len() >= head + 4 + length).then(|| text[head + 4..].to_string())
+            };
+            let said = loop {
+                let read = stream.read(&mut chunk).expect("the ask reads");
+                request.extend_from_slice(&chunk[..read]);
+                if let Some(said) = body_of(&request) {
+                    break said;
+                }
+                assert!(read > 0, "the ask ended early");
+            };
+            std::thread::sleep(delay);
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = asked.send(said);
+        });
+        ask
+    }
+
+    /// rog, 2026-10-19: a trashed sandbox's record still named a dev platform that was not running, a refused localhost
+    /// connect cost two seconds, and every wake on the machine waited behind it. Each platform is now asked on its own
+    /// thread and each sandbox is started (here, the seam where the start goes) as soon as its own platform answers.
+    #[test]
+    fn a_slow_platform_holds_up_no_other_platforms_wake() {
+        let bind = || std::net::TcpListener::bind("127.0.0.1:0").expect("a port");
+        let url = |listener: &std::net::TcpListener| {
+            format!("http://{}", listener.local_addr().expect("an address"))
+        };
+        // The slow one first in the map's order, which is the order the asks used to go out in, one after the other.
+        let mut listeners = [bind(), bind()];
+        listeners.sort_by_key(url);
+        let [slow, fast] = listeners;
+        let (slow_url, fast_url) = (url(&slow), url(&fast));
+        let slow_asked = platform(
+            slow,
+            std::time::Duration::from_secs(2),
+            r#"{"wake":["ba9876543210"]}"#,
+        );
+        let fast_asked = platform(
+            fast,
+            std::time::Duration::ZERO,
+            r#"{"wake":["0123456789ab","ffffffffffff"],"held":true}"#,
+        );
+        let ask = |platform: &str, id: &str| {
+            (
+                format!("sandbox-{id}"),
+                Target {
+                    platform: platform.to_string(),
+                    key: format!("key-{id}"),
+                    sandbox: id.to_string(),
+                },
+            )
+        };
+        let mut asks = BTreeMap::new();
+        asks.insert(slow_url.clone(), vec![ask(&slow_url, "ba9876543210")]);
+        asks.insert(fast_url.clone(), vec![ask(&fast_url, "0123456789ab")]);
+        assert_eq!(asks.keys().next(), Some(&slow_url));
+        let began = std::time::Instant::now();
+        let mut started: Vec<(String, std::time::Duration)> = Vec::new();
+        let held = ask_each(
+            asks,
+            |platform, targets| report::wakes(platform, targets, 1_500),
+            |woken| {
+                for (slug, _) in woken {
+                    started.push((slug, began.elapsed()));
+                }
+            },
+        );
+        let all = began.elapsed();
+        eprintln!(
+            "time to first start: {:?} ({}); slow platform's start: {:?}; whole run: {all:?}",
+            started[0].1, started[0].0, started[1].1
+        );
+        let order: Vec<&str> = started.iter().map(|(slug, _)| slug.as_str()).collect();
+        assert_eq!(
+            order,
+            vec!["sandbox-0123456789ab", "sandbox-ba9876543210"],
+            "the fast platform's sandbox first, and only what was asked about"
+        );
+        assert!(
+            started[0].1 < std::time::Duration::from_secs(1),
+            "the fast platform's sandbox waited {:?}",
+            started[0].1
+        );
+        assert!(started[1].1 >= std::time::Duration::from_secs(2));
+        assert!(held, "the fast platform held its ask");
+        for asked in [slow_asked, fast_asked] {
+            let body: Value = serde_json::from_str(&asked.recv().expect("asked")).expect("JSON");
+            assert_eq!(body["waitMs"], json!(1_500), "{body}");
+        }
+        // Nothing asleep with a key: no ask, no hold, an answer at once.
+        let began = std::time::Instant::now();
+        assert!(!ask_each(
+            BTreeMap::new(),
+            |_, _| panic!("nothing to ask"),
+            |_| panic!("nothing to wake")
+        ));
+        assert!(began.elapsed() < std::time::Duration::from_millis(100));
     }
 }

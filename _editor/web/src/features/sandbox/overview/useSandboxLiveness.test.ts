@@ -1,6 +1,7 @@
 // The connection loop holds one `/events` stream and reconnects on failure. These pin what a stop, a switch and the
 // watchdog end: a stop ends the backoff with it and opens nothing after itself, a switch mid-failure is not reported
-// against the box switched to, and the watchdog speaks only for the stream it watches.
+// against the box switched to, and the watchdog speaks only for the stream it watches; and how fast it redials, and how
+// often it asks for the list, while a wake is pending and outside one.
 import { advanceTimersByTimeAsync, waitFor } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 
@@ -20,6 +21,8 @@ class Refused extends Error {
         super(`refused (${status})`);
     }
 }
+// What the diagnosis last made of the sandbox: alive (its netd answering) stretches the loop's waits.
+let seemsAlive = false;
 const events = jest.fn(async (_input: { clientId: string }, _options: { signal: AbortSignal }): Promise<AsyncIterable<unknown>> => {
     throw new Error(`no stream scripted`);
 });
@@ -53,9 +56,10 @@ jest.mock("../../../workbench/presence/usePresence", () => ({ clearPresence: () 
 jest.mock("../../../models/fleet/useAgents", () => ({ desyncAgents: () => undefined }));
 jest.mock("../live/systemEvents", () => ({ applySystemEvent: () => undefined }));
 jest.mock("../live/systemEventRouting", () => ({ sandboxQueryPredicate: () => () => false }));
-jest.mock("../diagnosis/useDiagnosis", () => ({ sandboxSeemsAlive: () => false, startDiagnosis: () => undefined, stopDiagnosis: () => undefined }));
+jest.mock("../diagnosis/useDiagnosis", () => ({ sandboxSeemsAlive: () => seemsAlive, startDiagnosis: () => undefined, stopDiagnosis: () => undefined }));
 
 const { useSandboxLiveness } = await import("./useSandboxLiveness");
+const { closeAllWakeWindows, openWakeWindow } = await import("../../../client/sandbox/wake/wakeWindow");
 const { start, stop } = useSandboxLiveness();
 
 // A connect that never answers, failing only once its signal aborts, as a cancelled fetch does.
@@ -81,6 +85,8 @@ beforeEach(async () => {
     activeSandboxId.value = `sb-1`;
     daemonBase.value = `https://daemon.test`;
     usingLocal.value = false;
+    seemsAlive = false;
+    refresh.mockReset();
     refresh.mockImplementation(async () => {});
     demoteIfUnreachable.mockImplementation(async () => false);
     events.mockReset();
@@ -91,6 +97,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
     stop();
+    closeAllWakeWindows();
     jest.useRealTimers();
     // Lets the stopped loop unwind before the next case scripts the mocks it would otherwise read.
     await new Promise((resolve) => setTimeout(resolve));
@@ -188,4 +195,54 @@ test.each([`throws`, `ends`] as const)(`a stream silent past the watchdog is cut
     await advanceTimersByTimeAsync(10_000);
 
     await waitFor(() => expect({ failures: failures(), cut: cut?.aborted }).toEqual({ failures: [`timeout`], cut: true }));
+});
+
+// A wake this browser asked for puts the sandbox back within seconds, and until then every attempt is answered at once
+// (the edge's 502, netd's 503), so the loop redials each second instead of waiting out its rung, busy or not, and asks
+// the platform for the list at most every five seconds. Outside a wake, the rung (here the 5 s ceiling, stretched to
+// 10 s for a sandbox that seems alive) and a list on every break, as before. Each case dials its own sandbox, so the
+// list one case asked for is not the one the next measures from.
+test.each([
+    [`a pending wake`, true, false, { dials: 10, lists: 2 }],
+    [`a pending wake on a sandbox that seems alive`, true, true, { dials: 10, lists: 2 }],
+    [`no wake`, false, false, { dials: 2, lists: 2 }],
+    [`no wake on a sandbox that seems alive`, false, true, { dials: 1, lists: 1 }],
+] as const)(`over 9.5 s of failures with %s, the loop dials and lists as the wake allows`, async (_name, waking, alive, expected) => {
+    jest.useFakeTimers();
+    const sandboxId = `sb-waking-${String(waking)}-${String(alive)}`;
+    activeSandboxId.value = sandboxId;
+    await nextTick();
+    connection.value = { phase: `retrying`, retryDelayMs: 5_000 };
+    seemsAlive = alive;
+    if (waking) {
+        openWakeWindow(sandboxId, Date.now());
+    }
+    events.mockImplementation(async () => {
+        throw new Error(`fetch failed`);
+    });
+    start();
+    await waitFor(() => expect(events).toHaveBeenCalledTimes(1));
+
+    await advanceTimersByTimeAsync(9_500);
+
+    expect({ dials: events.mock.calls.length, lists: refresh.mock.calls.length }).toEqual(expected);
+});
+
+test(`the loop goes back to its rung once the waking window has passed`, async () => {
+    jest.useFakeTimers();
+    activeSandboxId.value = `sb-waking-lapses`;
+    await nextTick();
+    connection.value = { phase: `retrying`, retryDelayMs: 5_000 };
+    // Asked long enough ago that the window has two seconds left.
+    openWakeWindow(`sb-waking-lapses`, Date.now() - (3 * 60_000 - 2_000));
+    events.mockImplementation(async () => {
+        throw new Error(`fetch failed`);
+    });
+    start();
+    await waitFor(() => expect(events).toHaveBeenCalledTimes(1));
+
+    await advanceTimersByTimeAsync(9_500);
+
+    // At 0, 1 and 2 s inside the window; the wait after the third is the rung's 5 s, so the fourth is at 7 s.
+    expect(events).toHaveBeenCalledTimes(4);
 });

@@ -4,7 +4,7 @@ import { desyncAgents } from "../../../models/fleet/useAgents";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { queryClient } from "../../../lib/queryPersistence";
 import { clearPresence, presenceStreamOpened } from "../../../workbench/presence/usePresence";
-import { classifyFailure, type ConnectionFailure, watchdogRecoveryDelay } from "../../../client/sandbox/connection";
+import { classifyFailure, type ConnectionFailure, nextAttemptDelayMs, watchdogRecoveryDelay } from "../../../client/sandbox/connection";
 import { forgetEdgeVerdict, lastEdgeVerdict } from "../../../client/sandbox/edgeVerdict";
 import { SandboxUnaddressedError } from "../../../client/sandbox/sandboxAuthFetch";
 import { daemonErrorMessage, daemonErrorStatus, sandboxRpc } from "../../../client/sandbox/sandboxRpc";
@@ -16,6 +16,7 @@ import { applySystemEvent } from "../live/systemEvents";
 import { sandboxQueryPredicate } from "../live/systemEventRouting";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
 import { signalConnection, useSandbox } from "../../../client/sandbox/useSandbox";
+import { wakePendingFor } from "../../../client/sandbox/wake/wakeWindow";
 import { uuid } from "../../../lib/uuid";
 import { sandboxSeemsAlive, startDiagnosis, stopDiagnosis } from "../diagnosis/useDiagnosis";
 import { t } from "@intentic/ui/i18n";
@@ -29,9 +30,14 @@ import { t } from "@intentic/ui/i18n";
 const WATCHDOG_MS = 10_000;
 // The daemon's heartbeat is produced on its own event loop, so a sandbox the diagnosis saw alive but slow (its netd
 // answering for it, diagnosis/) would trip the ordinary watchdog on every attempt, and each reconnect adds load it has
-// to work through before its first frame. While that holds, a stream is given this long, and a retry waits this long.
+// to work through before its first frame. While that holds, a stream is given this long, and a retry waits at least
+// BUSY_RETRY_MS (connection.ts).
 const BUSY_WATCHDOG_MS = 30_000;
-const BUSY_RETRY_MS = 10_000;
+// While a wake is pending (wakeWindow.ts) the loop redials every second, and a platform `sandbox.list` round trip in
+// front of each of those would be most of the wait, so a break asks for the list at most this often. Nothing the list
+// says changes that fast during a wake, and the diagnosis reads it on its own cadence for the notice (useDiagnosis.ts
+// PROBE_EVERY_MS, MIRROR_EVERY_MS) (2026-10-19).
+const WAKING_REFRESH_EVERY_MS = 5_000;
 
 const watchdogMs = (): number => (sandboxSeemsAlive() ? BUSY_WATCHDOG_MS : WATCHDOG_MS);
 
@@ -144,6 +150,14 @@ const stream = async (sandboxId: string, signal: AbortSignal): Promise<void> => 
     }
 };
 
+// The sandbox and time of the last list a break asked for, which the waking throttle measures from.
+let lastBreakRefresh: { readonly sandboxId: string; readonly at: number } | undefined;
+
+// Every break outside a wake; inside one, only once the last list a break asked for this sandbox is
+// WAKING_REFRESH_EVERY_MS old.
+const breakRefreshDue = (sandboxId: string, now: number): boolean =>
+    !wakePendingFor(sandboxId, now) || lastBreakRefresh?.sandboxId !== sandboxId || now - lastBreakRefresh.at >= WAKING_REFRESH_EVERY_MS;
+
 // A break that is this attempt's own to report: classified, and what it leaves stale cleared before the next attempt.
 const reportBreak = async (failure: ConnectionFailure, sandboxId: string): Promise<void> => {
     signalConnection({ kind: `failed`, failure, at: Date.now() });
@@ -160,9 +174,13 @@ const reportBreak = async (failure: ConnectionFailure, sandboxId: string): Promi
     // resets), so the painted list stays until the reconnect's snapshot overwrites it.
     clearPresence();
     desyncAgents();
-    // Picks up a re-registered daemonUrl before retrying; swallowed since the next attempt handles a failure here
-    // too.
-    await refresh().catch(() => undefined);
+    // Picks up a re-registered daemonUrl before retrying (at the waking throttle's pace during a wake); swallowed since
+    // the next attempt handles a failure here too.
+    const now = Date.now();
+    if (breakRefreshDue(sandboxId, now)) {
+        lastBreakRefresh = { sandboxId, at: now };
+        await refresh().catch(() => undefined);
+    }
 };
 
 // One attempt from having an address to a settled outcome; how long to wait next is the connection machine's
@@ -247,8 +265,10 @@ const loop = async (run: AbortSignal): Promise<void> => {
         const signal = attempts.next(run);
         // a reconnect loop is sequential by definition
         await attempt(signal, run);
+        // The ladder, or a second while a wake this browser asked for is pending (connection.ts nextAttemptDelayMs).
+        const waitMs = nextAttemptDelayMs(connection.value, { busy: sandboxSeemsAlive(), waking: wakePendingFor(activeSandboxId.value, Date.now()) });
         // ditto: the backoff IS the loop
-        await sleep(sandboxSeemsAlive() ? Math.max(connection.value.retryDelayMs, BUSY_RETRY_MS) : connection.value.retryDelayMs, { signal });
+        await sleep(waitMs, { signal });
     }
 };
 

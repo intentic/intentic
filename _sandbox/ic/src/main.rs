@@ -872,12 +872,16 @@ enum SandboxCommand {
     /// machine agent while anything sleeps)
     Wakes {
         /// One line of JSON per sandbox woken on stdout, `{"slug":…,"woke":…}`, then `{"asleep":<how many still
-        /// sleep>}`; every human line goes to stderr
+        /// sleep>}`, with `"held":true` when a platform held its ask; every human line goes to stderr
         #[arg(long)]
         json: bool,
         /// Who runs this, for the reports the woken sandboxes' pages read
         #[arg(long, value_enum, default_value_t = FixSource::Command)]
         source: FixSource,
+        /// Let each platform hold its ask open up to this many seconds while nobody has asked for a wake yet, and
+        /// answer the moment somebody does (cut short by an alarm due sooner); 0 asks and answers at once
+        #[arg(long, value_name = "SECONDS", default_value_t = 0, value_parser = clap::value_parser!(u64).range(0..=25))]
+        wait: u64,
     },
     /// Print the tail of a sandbox's own log, both streams (read-only)
     Logs {
@@ -1297,10 +1301,11 @@ fn main() {
                     source: source.source(),
                 })
             }),
-            SandboxCommand::Wakes { json, source } => {
+            SandboxCommand::Wakes { json, source, wait } => {
                 sandbox::sleep::wakes(sandbox::sleep::WakesArgs {
                     json,
                     source: source.source(),
+                    wait_ms: wait * 1_000,
                 })
             }
             SandboxCommand::Logs { slug, tail } => sandbox::logs::run(slug, tail),
@@ -2697,6 +2702,7 @@ mod tests {
                 command: Command::Sandbox(SandboxCommand::Wakes {
                     json: true,
                     source: FixSource::Agent,
+                    wait: 0,
                 })
             })
         ));
@@ -2706,6 +2712,7 @@ mod tests {
                 command: Command::Sandbox(SandboxCommand::Wakes {
                     json: false,
                     source: FixSource::Command,
+                    wait: 0,
                 })
             })
         ));
@@ -2713,6 +2720,30 @@ mod tests {
             parse(&["sandbox", "wakes", "abc123"]).is_err(),
             "wakes takes no slug"
         );
+        // The machine agent's held ask.
+        assert!(matches!(
+            parse(&["sandbox", "wakes", "--json", "--source", "agent", "--wait", "25"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Wakes {
+                    json: true,
+                    source: FixSource::Agent,
+                    wait: 25,
+                })
+            })
+        ));
+        assert!(matches!(
+            parse(&["sandbox", "wakes", "--wait", "0"]),
+            Ok(Cli {
+                command: Command::Sandbox(SandboxCommand::Wakes { wait: 0, .. })
+            })
+        ));
+        for wait in ["26", "-1", "soon", "1.5"] {
+            assert!(
+                parse(&["sandbox", "wakes", "--wait", wait]).is_err(),
+                "--wait {wait}"
+            );
+        }
+        assert!(parse(&["sandbox", "wakes", "--wait"]).is_err());
     }
 
     #[test]

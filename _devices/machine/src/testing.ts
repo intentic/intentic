@@ -191,6 +191,8 @@ export interface FakeKeeper {
     watching: boolean;
     readonly busy: Set<string>;
     readonly loopback: Set<string>;
+    // Every slug whose links the keeper asked to have dialled at once, in order.
+    readonly poked: string[];
     // How the fake ic answers a run; by default every sandbox it was asked about (every record, for the sweep) is healthy.
     answer: (slug: string | undefined) => Promise<IcRun>;
 }
@@ -219,6 +221,7 @@ export const fakeKeeper = (start: number): FakeKeeper => {
         watching: false,
         busy,
         loopback,
+        poked: [],
         answer: async (slug) => await Promise.resolve(fixRun((slug === undefined ? fake.records : [slug]).map((each) => ({ slug: each, outcome: "healthy" })))),
         seams: {
             enabled: async () => (fake.on instanceof Error ? await Promise.reject(fake.on) : fake.on),
@@ -248,6 +251,7 @@ export const fakeKeeper = (start: number): FakeKeeper => {
                 return () => void held.delete(slug);
             },
             now: () => fake.clock,
+            poke: (slug) => void fake.poked.push(slug),
         },
     };
     return fake;

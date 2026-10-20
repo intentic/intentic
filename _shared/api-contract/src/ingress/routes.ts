@@ -94,7 +94,8 @@ export const PLATFORM_INGRESS = {
     // What `ic sandbox fix` found on the machine; 204 whether stored or throttled, so `ic` never retries.
     hostReport: { method: "POST", path: "/host-report", auth: "report-key", body: "json", answer: "empty", input: HostReportPostSchema },
     // Which of the machine's sleeping sandboxes somebody wants back (`ic sandbox wakes`); each ask carries its own report
-    // key in the body, so the route itself takes no credential.
+    // key in the body, so the route itself takes no credential. An ask naming `waitMs` may be held open until somebody
+    // asks for one of them (2026-10-19), so a caller's timeout must outlast it.
     hostWakes: {
         method: "POST",
         path: "/host-report/wakes",

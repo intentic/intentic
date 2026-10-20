@@ -102,28 +102,9 @@ export const reachedOverLoopback: ReadonlySet<string> = loopbackUrls;
 // What a revoked link is dropped with; the resident's next pass then closes nothing more, since the loop already ended.
 const forgetLink = async (sandboxUrl: string): Promise<void> => void (await removeLinks(sandboxUrl));
 
-export const connect = (
-    config: HostLink,
-    version: string,
-    log: Log,
-    dial: Dial = realDial,
-    forget = forgetLink,
-    indicator: Indicator = machineIndicator(),
-    goneStore: LinkGoneStore = fileGoneStore,
-    now: () => number = Date.now,
-): PeerLink => {
-    // Every line this link writes names the sandbox it is about. One agent holds a link per sandbox and the dial
-    // agent's own complaints carry no address, so a machine with five links wrote "disconnected (1002); 7172 failed
-    // attempts" for two days without ever saying whose — and nothing in the log could tell the dead ones apart.
-    const linkLog: Log = (message) => log(`${config.sandboxUrl}: ${message}`);
-    // The live grant, replaced by the sandbox's `setScopes` on every connect, so a scope turned off is enforced
-    // from the new session's first call.
-    let scopes: DeviceScopes = config.scopes;
-    // The socket this link is on now, and the daemon address it dialled (what a tunnel back to the sandbox dials).
-    let held: WebSocket | undefined;
-    let linkBase: string | undefined;
-    // Attempts since the socket last opened, and since when the sandbox has been said to be gone (from device.json at
-    // start, so an agent restarted mid-way keeps the clock).
+/* WHAT A LINK KNOWS OF ITS SANDBOX BEING GONE (above): the dials that failed since its socket last opened, and since
+   when the edge has said so (from device.json at start, so an agent restarted mid-way keeps the clock). */
+const goneWatch = (config: HostLink, dial: Dial, forget: (sandboxUrl: string) => Promise<void>, goneStore: LinkGoneStore, now: () => number, linkLog: Log) => {
     let attempts = 0;
     // SAFETY: the resident hands over the link as device.json holds it, which carries this mark when the store wrote one.
     let goneSince = (config as MarkedLink).goneSince;
@@ -168,6 +149,40 @@ export const connect = (
         );
         await goneStore.mark(config, goneSince).catch((error: unknown) => linkLog(`could not record that it is gone (${errorMessage(error)})`));
     };
+    return {
+        // Before each dial: whether to dial at all.
+        beforeDial: async (signal: AbortSignal): Promise<boolean> => {
+            await askEdgeFirst();
+            return await whileGone(signal);
+        },
+        // The failures behind the link no longer count toward asking the edge: it opened, or it is known to be starting.
+        forgive: (): void => {
+            attempts = 0;
+        },
+    };
+};
+
+export const connect = (
+    config: HostLink,
+    version: string,
+    log: Log,
+    dial: Dial = realDial,
+    forget = forgetLink,
+    indicator: Indicator = machineIndicator(),
+    goneStore: LinkGoneStore = fileGoneStore,
+    now: () => number = Date.now,
+): PeerLink => {
+    // Every line this link writes names the sandbox it is about. One agent holds a link per sandbox and the dial
+    // agent's own complaints carry no address, so a machine with five links wrote "disconnected (1002); 7172 failed
+    // attempts" for two days without ever saying whose — and nothing in the log could tell the dead ones apart.
+    const linkLog: Log = (message) => log(`${config.sandboxUrl}: ${message}`);
+    // The live grant, replaced by the sandbox's `setScopes` on every connect, so a scope turned off is enforced
+    // from the new session's first call.
+    let scopes: DeviceScopes = config.scopes;
+    // The socket this link is on now, and the daemon address it dialled (what a tunnel back to the sandbox dials).
+    let held: WebSocket | undefined;
+    let linkBase: string | undefined;
+    const gone = goneWatch(config, dial, forget, goneStore, now, linkLog);
     const handler = new RPCHandler(
         createHostRouter({
             sandboxUrl: config.sandboxUrl,
@@ -185,10 +200,9 @@ export const connect = (
         }),
     );
 
-    return dialPeer<WebSocket>({
+    const link = dialPeer<WebSocket>({
         open: async (signal) => {
-            await askEdgeFirst();
-            if (!(await whileGone(signal))) {
+            if (!(await gone.beforeDial(signal))) {
                 return undefined;
             }
             const { base, local } = await dial.resolveBase(config.sandboxUrl);
@@ -209,8 +223,7 @@ export const connect = (
         hello: () => ({ type: "hello", token: config.token, version }),
         attach: (ws) => {
             held = ws;
-            // Open: the failures behind it no longer count toward asking the edge.
-            attempts = 0;
+            gone.forgive();
             // A link that is gone drives nothing; only its latest socket speaks for it, as one abandoned may close late.
             ws.addEventListener("close", () => {
                 if (held === ws) {
@@ -231,4 +244,13 @@ export const connect = (
             void forget(config.sandboxUrl).catch((error: unknown) => linkLog(`could not drop the revoked link (${String(error)})`));
         },
     });
+    return {
+        ...link,
+        // A sandbox the keeper knows is starting (it woke it) is booting, not gone (2026-10-19): the dials that fail while
+        // it boots go straight out rather than asking the edge first, as the dials of its sleep had come to.
+        retryNow: () => {
+            gone.forgive();
+            link.retryNow();
+        },
+    };
 };

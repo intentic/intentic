@@ -3,6 +3,7 @@ import type { Auth } from "./auth.js";
 import type { Config } from "./config.js";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
+import { localWakeSignals, type WakeSignals } from "./sandbox/local-wake/wake-signals.js";
 
 // Per-request context handed to every oRPC handler: the shared PrismaClient client, the loaded config, the resolved
 // session user (null when unauthenticated), and the request-scoped logger (correlated by requestId).
@@ -23,6 +24,8 @@ export interface OrpcContext {
     auth: Auth;
     headers: Headers;
     sessionHeaders: Headers;
+    // What `sandbox.wake` tells a machine's held wakes ask through (sandbox/local-wake/wake-signals.ts).
+    wakeSignals: WakeSignals;
 }
 
 // When the account was made, for the app's sign-up milestone (User.createdAt); left out when the session does not carry
@@ -32,8 +35,10 @@ const createdAtOf = (value: Date | string | undefined): { createdAt?: string } =
     return Number.isNaN(at) ? {} : { createdAt: new Date(at).toISOString() };
 };
 
+// A lane that builds a context only to learn who is calling (Repair, the upstream reads) hands no `wakeSignals`: none of
+// its work wakes a sandbox, and the hub it gets reaches nobody but itself.
 export const buildOrpcContext = async (
-    deps: { auth: Auth; prisma: PrismaClient; config: Config; logger: Logger },
+    deps: { auth: Auth; prisma: PrismaClient; config: Config; logger: Logger; wakeSignals?: WakeSignals },
     headers: Headers,
 ): Promise<OrpcContext> => {
     const { response: session, headers: sessionHeaders } = await deps.auth.api.getSession({ headers, returnHeaders: true });
@@ -47,5 +52,14 @@ export const buildOrpcContext = async (
               emailVerified: session.user.emailVerified,
           }
         : null;
-    return { prisma: deps.prisma, config: deps.config, user, logger: deps.logger, auth: deps.auth, headers, sessionHeaders };
+    return {
+        prisma: deps.prisma,
+        config: deps.config,
+        user,
+        logger: deps.logger,
+        auth: deps.auth,
+        headers,
+        sessionHeaders,
+        wakeSignals: deps.wakeSignals ?? localWakeSignals(),
+    };
 };

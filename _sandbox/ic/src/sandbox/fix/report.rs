@@ -217,20 +217,29 @@ sandbox wakes`, every few seconds while anything here sleeps): `POST /host-repor
 report key, which proves the asker is the host that runs it, answered with the ones somebody asked to wake. The platform
 clears each request as it answers it, so an answer is acted on once. Anything but a 200 with a body that reads is
 "nothing to wake": a wake missed now is asked for again at the next poll, and a sandbox started that nobody asked for is
-not. */
+not.
+
+A HELD ASK (2026-10-19). An ask may carry `waitMs`: the platform then keeps the request open until somebody asks for one
+of its sandboxes or that time has passed, and says `held` in its answer, so a wake no longer waits out the pause between
+two polls. A platform from before ignores the field and answers at once, without `held`. The ask's deadline is the wait
+plus the usual limit, so a held answer is never cut off as a platform that did not answer. */
 
 /// How many sandboxes one ask may carry (the platform's cap).
 pub const WAKES_MAX: usize = 64;
-/// How long one ask may take: the poll comes round again in seconds.
+/// How long one ask may take past the wait it offers: the poll comes round again in seconds.
 const WAKES_LIMIT: Duration = Duration::from_secs(10);
 
-/// The ask's body. Pure.
-pub fn wakes_body(asks: &[Target]) -> serde_json::Value {
+/// The ask's body, with `waitMs` when the ask may be held. Pure.
+pub fn wakes_body(asks: &[Target], wait_ms: u64) -> serde_json::Value {
     let asks: Vec<serde_json::Value> = asks
         .iter()
         .map(|ask| serde_json::json!({ "sandbox": ask.sandbox, "key": ask.key }))
         .collect();
-    serde_json::json!({ "asks": asks })
+    let mut body = serde_json::json!({ "asks": asks });
+    if wait_ms > 0 {
+        body["waitMs"] = serde_json::json!(wait_ms);
+    }
+    body
 }
 
 /// The tunnel ids an answer names, among the ones asked about, each once: an answer is never a licence to start a
@@ -250,24 +259,44 @@ pub fn woken_of(answer: &serde_json::Value, asked: &[Target]) -> Vec<String> {
     woken
 }
 
-/// Ask one platform which of `asks` (all reporting to it) somebody asked to wake, at most [`WAKES_MAX`] to an ask.
-pub fn wakes(platform: &str, asks: &[Target]) -> Vec<String> {
-    let mut woken = Vec::new();
+/// What one platform answered: the tunnel ids somebody asked to wake, and whether it held the ask (`held`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Answer {
+    pub woken: Vec<String>,
+    pub held: bool,
+}
+
+/// One answer's body read: `held` only when it says `true`, as a platform from before never does. Pure.
+pub fn answer_of(answer: &serde_json::Value, asked: &[Target]) -> Answer {
+    Answer {
+        woken: woken_of(answer, asked),
+        held: answer["held"].as_bool() == Some(true),
+    }
+}
+
+/// Ask one platform which of `asks` (all reporting to it) somebody asked to wake, at most [`WAKES_MAX`] to an ask, each
+/// willing to be held `wait_ms`. A platform with more sleepers here than one ask carries is asked without a wait, so no
+/// ask queues behind another's hold.
+pub fn wakes(platform: &str, asks: &[Target], wait_ms: u64) -> Answer {
+    let wait_ms = if asks.len() > WAKES_MAX { 0 } else { wait_ms };
+    let mut answered = Answer::default();
     for chunk in asks.chunks(WAKES_MAX) {
-        let Ok(mut response) = agent(platform, WAKES_LIMIT)
+        let Ok(mut response) = agent(platform, WAKES_LIMIT + Duration::from_millis(wait_ms))
             .post(format!("{platform}/host-report/wakes"))
-            .send_json(wakes_body(chunk))
+            .send_json(wakes_body(chunk, wait_ms))
         else {
             continue;
         };
         if response.status().as_u16() != 200 {
             continue;
         }
-        if let Ok(answer) = response.body_mut().read_json::<serde_json::Value>() {
-            woken.extend(woken_of(&answer, chunk));
+        if let Ok(body) = response.body_mut().read_json::<serde_json::Value>() {
+            let answer = answer_of(&body, chunk);
+            answered.woken.extend(answer.woken);
+            answered.held |= answer.held;
         }
     }
-    woken
+    answered
 }
 
 struct Pending {
@@ -508,11 +537,19 @@ mod tests {
         };
         let asked = vec![ask("0123456789ab"), ask("ba9876543210")];
         assert_eq!(
-            wakes_body(&asked),
+            wakes_body(&asked, 0),
             serde_json::json!({ "asks": [
                 { "sandbox": "0123456789ab", "key": "key-0123456789ab" },
                 { "sandbox": "ba9876543210", "key": "key-ba9876543210" },
-            ] })
+            ] }),
+            "no wait: the ask as it always was"
+        );
+        assert_eq!(
+            wakes_body(&asked, 25_000),
+            serde_json::json!({ "asks": [
+                { "sandbox": "0123456789ab", "key": "key-0123456789ab" },
+                { "sandbox": "ba9876543210", "key": "key-ba9876543210" },
+            ], "waitMs": 25_000 })
         );
         assert_eq!(
             woken_of(
@@ -525,6 +562,37 @@ mod tests {
         assert!(woken_of(&serde_json::json!({ "wake": [] }), &asked).is_empty());
         assert!(woken_of(&serde_json::json!({ "error": "nope" }), &asked).is_empty());
         assert!(woken_of(&serde_json::json!(["0123456789ab"]), &asked).is_empty());
+    }
+
+    #[test]
+    fn an_answer_is_held_only_when_the_platform_says_so() {
+        let asked = vec![Target {
+            platform: "https://p".to_string(),
+            key: "k".to_string(),
+            sandbox: "0123456789ab".to_string(),
+        }];
+        assert_eq!(
+            answer_of(
+                &serde_json::json!({ "wake": ["0123456789ab"], "held": true }),
+                &asked
+            ),
+            Answer {
+                woken: vec!["0123456789ab".to_string()],
+                held: true
+            }
+        );
+        assert_eq!(
+            answer_of(&serde_json::json!({ "wake": [] }), &asked),
+            Answer::default(),
+            "a platform from before says nothing of a hold"
+        );
+        for said in [
+            serde_json::json!({ "wake": [], "held": false }),
+            serde_json::json!({ "wake": [], "held": "true" }),
+            serde_json::json!({ "wake": [], "held": 1 }),
+        ] {
+            assert!(!answer_of(&said, &asked).held, "{said}");
+        }
     }
 
     #[test]

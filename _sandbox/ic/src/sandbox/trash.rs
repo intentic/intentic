@@ -254,7 +254,10 @@ pub fn stash(slug: &str) -> std::result::Result<(), String> {
         .collect();
     match stash_plan(!present.is_empty(), !markers_for(slug).is_empty()) {
         Stash::AlreadyTrashed => return Ok(()),
-        Stash::MarkOnly if mark(slug) => return Ok(()),
+        Stash::MarkOnly if mark(slug) => {
+            crate::sandbox::power::forget_sleep(slug);
+            return Ok(());
+        }
         Stash::MarkOnly => {
             return Err(format!(
                 "docker would not create the marker that keeps {slug}'s data restorable, so its volumes were left as they are"
@@ -262,6 +265,14 @@ pub fn stash(slug: &str) -> std::result::Result<(), String> {
         }
         Stash::Move => {}
     }
+    /* NOT ASLEEP IN THE TRASH (2026-10-19). A record that still said asleep kept `ic sandbox wakes` asking the platform
+    about a sandbox nothing could start, and the machine agent polling for it every fifteen seconds for good (rog: two
+    trashed sandboxes, one naming a dev platform that was not running, cost every wake two seconds). Once it is in the
+    trash its record stops saying so (power.rs forget_sleep); a restore starts it anyway. The record is first made
+    current from the sandbox's own volume, while a live name still reaches it (mirror.rs), so the home copy written
+    after the move is never an older one stamped as the newest. */
+    let asleep = crate::record::read(slug).is_ok_and(|record| record.asleep)
+        && crate::sandbox::mirror::reconcile(slug).asleep;
     clear_trash_names(slug);
     let mut moved: Vec<(String, String)> = Vec::new();
     for (live, trashed) in present {
@@ -279,6 +290,9 @@ pub fn stash(slug: &str) -> std::result::Result<(), String> {
         return Err(format!(
             "docker would not create the marker that keeps it restorable, so {slug} was put back under its own name, stopped (ic sandbox start {slug} starts it again)"
         ));
+    }
+    if asleep {
+        crate::sandbox::power::forget_sleep(slug);
     }
     Ok(())
 }

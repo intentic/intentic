@@ -9,6 +9,8 @@ import {
     BootReportBodySchema,
     FarewellBodySchema,
     FleetProvisionBodySchema,
+    HostWakesAnswerSchema,
+    HostWakesAskSchema,
     ingressRefusalOf,
     LocalDnsBodySchema,
     OrgPolicyAnswerSchema,
@@ -76,6 +78,26 @@ describe("bodies an older machine sends still parse", () => {
         expect(OrgPolicyFetchBodySchema.parse({})).toEqual({});
         expect(OrgPolicyFetchBodySchema.parse({ applied: "three" })).toEqual({});
         expect(OrgPolicyFetchBodySchema.parse({ applied: 3 })).toEqual({ applied: 3 });
+    });
+});
+
+// (2026-10-19) A wakes ask may name how long the platform may hold it, and the answer says whether it did. Both sides
+// of every release keep talking: an `ic` from before names no wait, and a platform from before answers with no `held`.
+describe("a wakes ask", () => {
+    const asks = [{ sandbox: "abc123def456", key: "k".repeat(64) }];
+
+    it("from an ic that names no wait is the ask it always was, and an older platform's answer has no `held`", () => {
+        expect(HostWakesAskSchema.parse({ asks })).toEqual({ asks });
+        expect(HostWakesAnswerSchema.parse({ wake: ["abc123def456"] })).toEqual({ wake: ["abc123def456"] });
+    });
+
+    it("may ask to be held for up to thirty seconds, in whole milliseconds", () => {
+        expect(HostWakesAskSchema.parse({ asks, waitMs: 25_000 })).toEqual({ asks, waitMs: 25_000 });
+        expect(HostWakesAskSchema.parse({ asks, waitMs: 0 })).toEqual({ asks, waitMs: 0 });
+        expect(HostWakesAskSchema.safeParse({ asks, waitMs: 30_001 }).success).toBe(false);
+        expect(HostWakesAskSchema.safeParse({ asks, waitMs: -1 }).success).toBe(false);
+        expect(HostWakesAskSchema.safeParse({ asks, waitMs: 1.5 }).success).toBe(false);
+        expect(HostWakesAnswerSchema.parse({ wake: [], held: true })).toEqual({ wake: [], held: true });
     });
 });
 

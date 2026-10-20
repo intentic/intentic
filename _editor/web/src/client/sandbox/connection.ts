@@ -162,6 +162,31 @@ export const applyConnectionSignal = (state: ConnectionState, signal: Connection
     }
 };
 
+// The daemon's heartbeat is produced on its own event loop, so a sandbox the diagnosis saw alive but slow (its netd
+// answering for it, diagnosis/) gets a longer watchdog (useSandboxLiveness.ts), and a retry waits at least this long:
+// each reconnect adds load it has to work through before its first frame.
+const BUSY_RETRY_MS = 10_000;
+
+// The wait between attempts while a wake this browser asked for is pending (wake/wakeWindow.ts). The sandbox is due back
+// any second, and until it is, every attempt is cheap to answer: the edge's 502 with no tunnel, netd's 503 while Node
+// boots. On the ladder, a sandbox already serving again waited on average 2.5 s (up to 5 s, 10 s with the busy rule)
+// for the next attempt, a large share of a wake once its machine starts it in a few seconds (2026-10-19).
+const WAKING_RETRY_MS = 1_000;
+
+// How long the loop waits after an attempt before the next. Outside a wake, the machine's ladder, stretched to
+// BUSY_RETRY_MS while the sandbox seems alive. Inside one, at most WAKING_RETRY_MS for every transient failure, the busy
+// stretch included, since a booting sandbox is what the wake is waiting for; a blocked one (403, no address, no such
+// sandbox) keeps its ceiling, as no wake changes those (2026-10-19).
+export const nextAttemptDelayMs = (
+    state: Pick<ConnectionState, "phase" | "retryDelayMs">,
+    context: { readonly busy: boolean; readonly waking: boolean },
+): number => {
+    if (context.waking) {
+        return state.phase === `blocked` ? state.retryDelayMs : Math.min(state.retryDelayMs, WAKING_RETRY_MS);
+    }
+    return context.busy ? Math.max(state.retryDelayMs, BUSY_RETRY_MS) : state.retryDelayMs;
+};
+
 // A late watchdog callback means the scheduler was paused, not that the stream is dead; aborting immediately would
 // fake an outage, so queued network tasks get one second to drain before tripping for real.
 const WATCHDOG_SCHEDULER_LATE_MS = 1_000;

@@ -119,8 +119,13 @@ flowchart LR
   daemon cannot answer, rather than refusing. (2026-10-18: the minute-old `work.json` heartbeat alone was rejected
   because a booking saved after it could lose its alarm.) Each sleep posts a host report with `asleep: true`. `ic sandbox wakes` (polled by the agent while anything
   sleeps, run by the desktop app the moment its page asks, and asking docker nothing when nothing does) sends the asleep sandboxes' report keys to the platform's
-  `POST /host-report/wakes` and starts each one somebody has opened, as a person's start, reporting `fixing` then
-  `done` around it; `--json` ends on `{"asleep": n}`. **The alarm** (2026-10-18): a sleep stores the signal's
+  `POST /host-report/wakes`, every platform at once, and starts each one somebody has opened as soon as its own
+  platform answers, as a person's start, reporting `fixing` then `done` around it; `--json` ends on `{"asleep": n}`,
+  with `"held": true` beside it when a platform held the ask. `--wait <seconds>` (2026-10-19, up to 25) lets each
+  platform hold the ask open until somebody asks for a wake, cut to the soonest alarm and dropped while one is due. A
+  record left saying asleep for a sandbox that is gone stops saying so: the trash clears it, and a run that still finds
+  sleepers lists the engine's sandbox containers once, after its starts, and clears every one with neither its
+  container nor a parked one. **The alarm** (2026-10-18): a sleep stores the signal's
   `nextWakeAt` (the soonest moment the daemon promised, crons included) as the record's `wake_at`, and `wakes`, before
   asking the platform anything, starts each sleeper whose `wake_at` is within its lead (`"for":"alarm"` on its line):
   twice the record's `wake_cost` (what its plain starts from sleep took, the slower of the newest and three quarters

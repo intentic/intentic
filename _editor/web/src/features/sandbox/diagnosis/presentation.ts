@@ -34,9 +34,10 @@ export const USUAL_MS = {
     // A hosted machine from the warm pool wakes in about twenty seconds; one built to order pulls its image first.
     wakingWarm: 20_000,
     wakingCold: 2 * 60_000,
-    // Asleep on its own machine: the keeper there asks for wakes every fifteen seconds, and a start and a boot take
-    // under a minute.
-    asleep: 60_000,
+    // Asleep on its own machine (2026-10-19): the machine holds its ask open on the platform and hears a wake within a
+    // second; the start, the tunnel and the boot took about five seconds on rog, and a machine whose ic or platform cannot
+    // hold the ask yet polls every fifteen seconds, so twenty seconds covers both without calling either one late.
+    asleep: 20_000,
     // A machine mending it: `ic`'s checks, and a fix such as starting Docker Desktop.
     mending: 2 * 60_000,
     // A machine that says it fixed it: the sandbox dials in within seconds of its container being up.

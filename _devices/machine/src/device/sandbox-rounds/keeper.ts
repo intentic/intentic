@@ -22,7 +22,6 @@ import {
     type Sleepers,
     sleepMinutesOf,
     startWakeRound,
-    WAKES_ARGS,
     WAKES_DEADLINE_MS,
 } from "./sleep.js";
 
@@ -241,6 +240,8 @@ export interface ListedSandbox {
     readonly keptElsewhere?: string | undefined;
     // Put to sleep for want of use (sleep.ts): its link is down on purpose, and the keeper leaves it be.
     readonly asleep?: boolean | undefined;
+    // Its container is running; absent from a fake listing.
+    readonly running?: boolean | undefined;
 }
 
 /* WHOSE SANDBOXES THE KEEPER LOOKS AFTER (2026-10-05). On Windows, ic on Windows and ic in each WSL distro list every
@@ -335,6 +336,8 @@ export interface KeeperSeams {
     readonly hold: (slug: string) => () => void;
     // The clock, read after a run as well as before it: a wait is measured from when the run ended.
     readonly now: () => number;
+    // Dials at once every link to a sandbox this agent has just learnt is awake again (sleep.ts says why).
+    readonly poke: (slug: string) => void;
     // How long an unneeded sandbox stays up, and `ic sandbox sleep --idle` for that long (sleep.ts); absent, nothing
     // is put to sleep.
     readonly sleepMinutes?: () => Promise<number>;
@@ -648,11 +651,16 @@ const relist = async (state: KeeperState, seams: KeeperSeams, records: readonly 
         return;
     }
     state.listed = listed;
-    // The listing is the truth about who sleeps on this side: a sandbox woken by hand is listed awake.
+    // The listing is the truth about who sleeps on this side: a sandbox woken by hand is listed awake. One this agent
+    // took for asleep that now runs was woken by somebody else (a person's `ic sandbox start`, the desktop app's own
+    // `ic sandbox wakes`), and its links are dialled at once rather than when their ladder comes round (2026-10-19).
+    const wasAsleep = new Set(state.sleepers.slugs);
     state.sleepers.slugs.clear();
-    for (const row of listed) {
-        if (row.asleep === true && row.keptElsewhere === undefined) {
+    for (const row of listed.filter((each) => each.keptElsewhere === undefined)) {
+        if (row.asleep === true) {
             state.sleepers.slugs.add(row.slug);
+        } else if (row.running === true && wasAsleep.has(row.slug)) {
+            seams.poke(row.slug);
         }
     }
     state.sleepers.counted = state.sleepers.slugs.size;
@@ -760,11 +768,13 @@ export const runKeeperRound = async (state: KeeperState, seams: KeeperSeams, log
     }
 };
 
-// The seams as the resident agent has them: its links and what it reached over loopback, the probation watch's round.
+// The seams as the resident agent has them: its links and what it reached over loopback, the probation watch's round,
+// and how it redials the links to a sandbox that has just woken.
 export interface KeeperWiring {
     readonly links: () => readonly LinkView[];
     readonly loopback: ReadonlySet<string>;
     readonly watching: () => boolean;
+    readonly poke: (slug: string) => void;
 }
 
 // How the keeper holds a sandbox its run acts on: as a flow that does not move a container (machineKeeperSeams says why).
@@ -772,10 +782,10 @@ export const KEEPER_HOLD = { moves: false } as const;
 
 export const keeperOn = async (): Promise<boolean> => (await readMachineConfig()).sandboxKeeper !== false;
 
-export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring): KeeperSeams => ({
+export const machineKeeperSeams = ({ links, loopback, watching, poke }: KeeperWiring): KeeperSeams => ({
     enabled: keeperOn,
     fix: async (slug, onLine) => await runIc(keeperFixArgs(slug), onLine, {}, { deadlineMs: FIX_DEADLINE_MS }),
-    listing: async () => (await fleet()).map(({ slug, container, keptElsewhere, asleep }) => ({ slug, container, keptElsewhere, asleep })),
+    listing: async () => (await fleet()).map(({ slug, container, keptElsewhere, asleep, running }) => ({ slug, container, keptElsewhere, asleep, running })),
     records: async () => await readChannelSlugs(),
     trashed: readTrashed,
     swapping: async () => swapsUnderway(await readSwaps()),
@@ -792,6 +802,7 @@ export const machineKeeperSeams = ({ links, loopback, watching }: KeeperWiring):
        every restart waits for (ic-swaps.ts); one whose ic died is finished by the next fix or watch sweep. */
     hold: (slug) => holdIcFlow(slug, KEEPER_HOLD),
     now: Date.now,
+    poke,
     sleepMinutes: async () => sleepMinutesOf(await readMachineConfig()),
     sleep: async (idleMinutes) => await runIc(sleepArgs(idleMinutes), () => undefined, {}, { deadlineMs: SLEEP_DEADLINE_MS }),
     side: sideOf,
@@ -806,7 +817,8 @@ export const startKeeper = (log: Log, wiring: KeeperWiring): Rounds => {
     const seams = machineKeeperSeams(wiring);
     const keeper = startRounds("keeper", log, FIRST_SWEEP_MS, () => LOOK_EVERY_MS, async () => await runKeeperRound(state, seams, log));
     const wakes = startWakeRound(log, sleepers, {
-        wakes: async () => await runIc(WAKES_ARGS, () => undefined, {}, { deadlineMs: WAKES_DEADLINE_MS }),
+        wakes: async (args, onLine) => await runIc(args, onLine, {}, { deadlineMs: WAKES_DEADLINE_MS }),
+        poke: wiring.poke,
         now: Date.now,
     });
     return {

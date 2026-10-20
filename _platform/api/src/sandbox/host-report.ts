@@ -6,9 +6,10 @@ import type { Logger } from "pino";
 import { z } from "zod";
 import type { Config } from "../config.js";
 import { decryptSecret } from "../crypto.js";
-import { ingressServer } from "../ingress.js";
+import { type IngressHandler, ingressServer } from "../ingress.js";
 import { bearerOf } from "../tokens/api-tokens.js";
 import { mintSetupCode } from "./mint-sandbox.js";
+import type { WakeSignals } from "./local-wake/wake-signals.js";
 
 /* WHAT THE MACHINE A SANDBOX RUNS ON FOUND, for the moments the browser cannot ask the sandbox itself. `ic sandbox fix`
  * diagnoses the machine and posts what it found here; the editor reads the latest off the owner's sandbox summary. The
@@ -110,6 +111,23 @@ export const skipsWrite = (held: HostReport | null, next: HostReportInput, nowMs
  * sleep undone for nothing. */
 export const WAKE_REQUEST_TTL_MS = 10 * 60 * 1000;
 
+/* A HELD ASK (2026-10-19). A machine asked every 15 seconds while anything of its slept, so every wake waited for the
+ * next ask before anything started, 7.5 seconds on average and up to 15: the largest part of waking a sandbox on its
+ * owner's computer that bought nothing. An ask naming `waitMs` is now held, up to WAKE_HOLD_MAX_MS, and answered as soon
+ * as `sandbox.wake` stamps a request for one of its sandboxes: that route says so through the wake signals
+ * (local-wake/wake-signals.ts), to this replica directly and to the others through Postgres, since the browser's wake and the
+ * machine's ask may reach different replicas. A signal only says "look now". A held ask also looks again every
+ * WAKE_RECHECK_MS by itself, so a lost notification or a listener that is down costs at most that. A held machine costs
+ * three reads a hold (at 0, 10 and 20 seconds of 25), one read every eight seconds against the one every 15 its asks
+ * cost, and only the first decrypts its tokens. Rejected: looking every second while held (a
+ * thousand held machines would be a thousand reads a second, for wakes that come a few times a day), and signals in
+ * each process only (a wake on another replica would wait for the re-check as often as not). */
+const WAKE_HOLD_MAX_MS = 25_000;
+const WAKE_RECHECK_MS = 10_000;
+// Bun closes a request that has sent nothing for its idle timeout (10 s by default), which a hold outlasts; a held ask
+// lifts it for itself to the hold plus this, the reads before and after the hold with room to spare.
+const WAKE_HOLD_IDLE_MARGIN_S = 10;
+
 // Whether a stored request is still one to hand out. Pure.
 export const wakeIsLive = (requestedAt: Date | null, nowMs: number): boolean =>
     requestedAt !== null && nowMs - requestedAt.getTime() <= WAKE_REQUEST_TTL_MS && requestedAt.getTime() - nowMs <= WAKE_REQUEST_TTL_MS;
@@ -125,13 +143,125 @@ export const mintFixCode = async (prisma: PrismaClient, sandboxId: string): Prom
 export interface HostReportDeps {
     readonly config: Config;
     readonly prisma: PrismaClient;
+    // What `sandbox.wake` says a request through, which a held wakes ask waits on.
+    readonly wakeSignals: WakeSignals;
 }
+
+// Bun's server as Hono hands it to a handler (app.ts's AppEnv): only its per-request idle timeout is used, and it is
+// absent where the app is not served by Bun (the suites' app.request).
+type HostReportEnv = {
+    Bindings: { readonly timeout?: (request: Request, seconds: number) => void } | undefined;
+    Variables: { logger: Logger };
+};
+
+// A sleeping sandbox's request as the wakes route reads it: the stamp it clears is the one it read.
+interface WakeRow {
+    readonly id: string;
+    readonly tunnelId: string;
+    readonly wakeRequestedAt: Date | null;
+}
+
+// Hands out the live requests among `rows`, each cleared pinned to the stamp read, so a request made since survives for
+// the next ask; a stale one is cleared unanswered. Nothing for an asker that has gone: a request handed to nobody would
+// be cleared and lost, where left alone it is the next ask's.
+const claimWakes = async (prisma: PrismaClient, rows: readonly WakeRow[], gone: AbortSignal): Promise<string[]> => {
+    const now = Date.now();
+    const wake: string[] = [];
+    for (const row of rows) {
+        if (gone.aborted) {
+            return [];
+        }
+        if (row.wakeRequestedAt === null) {
+            continue;
+        }
+        // a machine's few sleepers, each its own conditional clear
+        const cleared = await prisma.sandbox.updateMany({ where: { id: row.id, wakeRequestedAt: row.wakeRequestedAt }, data: { wakeRequestedAt: null } });
+        if (wakeIsLive(row.wakeRequestedAt, now) && cleared.count > 0) {
+            wake.push(row.tunnelId);
+        }
+    }
+    return wake;
+};
+
+/* `POST /host-report/wakes`: which of a machine's sleeping sandboxes somebody wants back. Every ask is checked against
+ * its own sandbox's key, once, and one that fails is left out of the answer as one nobody asked for, so the answer says
+ * nothing about a sandbox the caller cannot prove it keeps; an ask none of whose keys match is answered at once, never
+ * held. A request is handed out once (claimWakes). An ask naming `waitMs` is held while nothing is asked for (A HELD
+ * ASK, above), and its answer says `held`. */
+const hostWakes =
+    ({ config, prisma, wakeSignals }: HostReportDeps): IngressHandler<HostReportEnv, `hostWakes`> =>
+    async (c, kit) => {
+        const body = await kit.body();
+        if (body === undefined) {
+            return kit.refuse(400, `malformed wake ask`);
+        }
+        const hold = Math.min(body.waitMs ?? 0, WAKE_HOLD_MAX_MS);
+        const deadline = Date.now() + hold;
+        const gone = c.req.raw.signal;
+        const keyOf = new Map(body.asks.map((ask) => [ask.sandbox, ask.key]));
+        // Each look listens before it reads: a wake stamped after the read has its signal heard, and one stamped before
+        // it is in what the read returns. The first look listens on every sandbox asked for, since the keys are checked
+        // only once the rows are read; a signal for one whose key fails ends the wait into a look at the others alone.
+        const listen = (tunnelIds: readonly string[]) => {
+            const pass = new AbortController();
+            const left = deadline - Date.now();
+            return {
+                ended: wakeSignals.wait(tunnelIds, Math.min(WAKE_RECHECK_MS, left), AbortSignal.any([gone, pass.signal])),
+                last: left <= WAKE_RECHECK_MS,
+                drop: () => pass.abort(),
+            };
+        };
+        let look = hold > 0 ? listen([...keyOf.keys()]) : undefined;
+        try {
+            const rows = await prisma.sandbox.findMany({
+                where: {
+                    tunnelId: { in: [...keyOf.keys()] },
+                    // An ask that is not held reads only the sandboxes with a request, as it always has; a held one reads
+                    // every sleeper it names, whose keys it needs checked to know what it waits on.
+                    wakeRequestedAt: hold > 0 ? undefined : { not: null },
+                    hosted: null,
+                    removedAt: null,
+                },
+                select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
+            });
+            const verified = rows.filter((row) => {
+                const presented = keyOf.get(row.tunnelId);
+                const expected = reportKeyOf(config, row.token);
+                return presented !== undefined && expected !== undefined && keysMatch(presented, expected);
+            });
+            if (look === undefined || verified.length === 0) {
+                return kit.answer({ wake: await claimWakes(prisma, verified, gone) });
+            }
+            c.env?.timeout?.(c.req.raw, Math.ceil(hold / 1000) + WAKE_HOLD_IDLE_MARGIN_S);
+            const ids = verified.map((row) => row.id);
+            const tunnelIds = verified.map((row) => row.tunnelId);
+            let pending: readonly WakeRow[] = verified;
+            for (;;) {
+                const wake = await claimWakes(prisma, pending, gone);
+                if (wake.length > 0) {
+                    return kit.answer({ wake, held: true });
+                }
+                const ended = await look.ended;
+                // At the deadline the answer is nothing, without a last read: the machine's next ask reads at once.
+                if (ended === `abort` || (ended === `timeout` && look.last)) {
+                    return kit.answer({ wake: [], held: true });
+                }
+                look = listen(tunnelIds);
+                pending = await prisma.sandbox.findMany({
+                    where: { id: { in: ids }, wakeRequestedAt: { not: null }, hosted: null, removedAt: null },
+                    select: { id: true, tunnelId: true, wakeRequestedAt: true },
+                });
+            }
+        } finally {
+            look?.drop();
+        }
+    };
 
 /* `POST /host-report/claim` and `POST /host-report`, mounted by app.ts beside the other routes machines call. Neither
  * is rate-limited: no route of this app is (the setup claim included), and a fix code carries the setup code's 65 bits
  * for half an hour. */
-export const hostReportHttpRoutes = ({ config, prisma }: HostReportDeps) => {
-    const app = new Hono<{ Variables: { logger: Logger } }>();
+export const hostReportHttpRoutes = ({ config, prisma, wakeSignals }: HostReportDeps) => {
+    const app = new Hono<HostReportEnv>();
     const ingress = ingressServer(app, `/host-report`);
 
     // A live fix code buys its sandbox's tunnel id and report key. Re-claimable until it expires, since the owner may
@@ -192,37 +322,8 @@ export const hostReportHttpRoutes = ({ config, prisma }: HostReportDeps) => {
         return written.count === 0 ? kit.refuse(401, `that report key is not this sandbox's`) : c.body(null, 204);
     });
 
-    // Which of a machine's sleeping sandboxes somebody wants back. Every ask is checked against its own sandbox's key,
-    // and one that fails is left out of the answer as one nobody asked for, so the answer says nothing about a sandbox
-    // the caller cannot prove it keeps. A request is handed out once: it is cleared, pinned to the stamp that was read,
-    // so a request made in between survives for the next ask.
-    ingress(`hostWakes`, async (_c, kit) => {
-        const body = await kit.body();
-        if (body === undefined) {
-            return kit.refuse(400, `malformed wake ask`);
-        }
-        const keyOf = new Map(body.asks.map((ask) => [ask.sandbox, ask.key]));
-        const rows = await prisma.sandbox.findMany({
-            where: { tunnelId: { in: [...keyOf.keys()] }, wakeRequestedAt: { not: null }, hosted: null, removedAt: null },
-            select: { id: true, tunnelId: true, token: true, wakeRequestedAt: true },
-        });
-        const now = Date.now();
-        const wake: string[] = [];
-        for (const row of rows) {
-            const presented = keyOf.get(row.tunnelId);
-            const expected = reportKeyOf(config, row.token);
-            if (presented === undefined || expected === undefined || !keysMatch(presented, expected)) {
-                continue;
-            }
-            const live = wakeIsLive(row.wakeRequestedAt, now);
-            // a machine's few sleepers, each its own conditional clear
-            const cleared = await prisma.sandbox.updateMany({ where: { id: row.id, wakeRequestedAt: row.wakeRequestedAt }, data: { wakeRequestedAt: null } });
-            if (live && cleared.count > 0) {
-                wake.push(row.tunnelId);
-            }
-        }
-        return kit.answer({ wake });
-    });
+    // Which of a machine's sleeping sandboxes somebody wants back (hostWakes, above the routes).
+    ingress(`hostWakes`, hostWakes({ config, prisma, wakeSignals }));
 
     return app;
 };

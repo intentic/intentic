@@ -47,16 +47,22 @@ class FakeSocket implements SocketLike {
 // This door's silence deadline, named so the assertions can read it off the same number the loop is given.
 const SILENCE_MS = 30_000;
 
-// A ladder that answers with a fixed delay and records what it was told, so the test can read the held time.
+// A ladder that answers with a fixed delay and records what it was told, so the test can read the held time, and how
+// often it was put back on its floor.
 const ladder = (delay = 1_000) => {
     const held: number[] = [];
-    return {
+    const rungs = {
         held,
+        resets: 0,
         next: (heldMs: number) => {
             held.push(heldMs);
             return delay;
         },
+        reset: () => {
+            rungs.resets += 1;
+        },
     };
+    return rungs;
 };
 
 const dialling = (delay?: number) => {
@@ -64,6 +70,7 @@ const dialling = (delay?: number) => {
     const attached: FakeSocket[] = [];
     const said: string[] = [];
     const revoked = jest.fn();
+    const backoff = ladder(delay);
     const link = dialPeer<FakeSocket>({
         open: async () => {
             const socket = new FakeSocket();
@@ -72,12 +79,12 @@ const dialling = (delay?: number) => {
         },
         hello: () => ({ type: "hello", token: "iht_test", version: "1.0.0" }),
         attach: (socket) => void attached.push(socket),
-        backoff: ladder(delay),
+        backoff,
         silenceMs: SILENCE_MS,
         log: (message) => void said.push(message),
         revoked,
     });
-    return { link, sockets, attached, said, revoked };
+    return { link, sockets, attached, said, revoked, backoff };
 };
 
 test("the handler is attached before the hello goes out, and the hello is the first frame", async () => {
@@ -300,6 +307,85 @@ test("a link nobody has answered in a long time rests between tries, and is neve
 
         link.stop();
         await link.done;
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+/* A FAR END SOMEBODY KNOWS IS BACK (a sandbox the machine agent just woke) is dialled at once, whatever the ladder had
+   left to wait, and a dial that still finds it booting is back on the ladder's first rung, not on the long rest. */
+test("retryNow ends the long rest and dials at once, and the outage behind it no longer counts", async () => {
+    jest.useFakeTimers();
+    try {
+        const RUNG_MS = 30_000;
+        const { link, sockets, said, backoff } = dialling(RUNG_MS);
+        for (let attempt = 1; attempt <= LONG_OUTAGE_ATTEMPTS; attempt += 1) {
+            // one drop per attempt is serial by definition
+            await waitFor(() => expect(sockets).toHaveLength(attempt));
+            sockets.at(-1)?.drops(1006);
+            if (attempt < LONG_OUTAGE_ATTEMPTS) {
+                // ditto
+                await advanceTimersByTimeAsync(RUNG_MS);
+            }
+        }
+        // Resting now: the long outage's quarter hour on top of the rung.
+        expect(link.outage()).toEqual({ failures: LONG_OUTAGE_ATTEMPTS, since: expect.any(Number) });
+        await advanceTimersByTimeAsync(RUNG_MS);
+        expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS);
+
+        link.retryNow();
+        await waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS + 1));
+        expect(backoff.resets).toBe(1);
+        expect(link.outage()).toBeUndefined();
+        expect(link.state()).toBe("connecting");
+
+        // Still booting: the first failure of a new outage, said out loud, waits one rung and no rest.
+        sockets.at(-1)?.drops(PEER_TRY_AGAIN);
+        expect(said.at(-1)).toBe("the sandbox is not ready to admit this connection yet; reconnecting in 30s");
+        expect(link.outage()).toEqual({ failures: 1, since: expect.any(Number) });
+        await advanceTimersByTimeAsync(RUNG_MS);
+        await waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS + 2));
+
+        // Nothing of the cut wait is left to fire (the one dial it owed has been made): the open socket's watchdog is
+        // the one timer armed.
+        sockets.at(-1)?.opens();
+        expect(link.state()).toBe("open");
+        expect(jest.getTimerCount()).toBe(1);
+
+        link.stop();
+        await link.done;
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("retryNow dials nothing beside an open link or a dial in flight, and nothing once the link is stopped", async () => {
+    jest.useFakeTimers();
+    try {
+        const { link, sockets, backoff } = dialling(60_000);
+        await waitFor(() => expect(sockets).toHaveLength(1));
+        // In flight: no second dial beside it, though its ladder is reset so a failure of it retries on the floor.
+        link.retryNow();
+        await advanceTimersByTimeAsync(0);
+        expect(sockets).toHaveLength(1);
+        expect(backoff.resets).toBe(1);
+
+        sockets[0]?.opens();
+        link.retryNow();
+        await advanceTimersByTimeAsync(0);
+        expect(sockets).toHaveLength(1);
+        expect(backoff.resets).toBe(1);
+        expect(link.state()).toBe("open");
+
+        sockets[0]?.drops(1006);
+        link.stop();
+        await link.done;
+        link.retryNow();
+        await advanceTimersByTimeAsync(120_000);
+        expect(sockets).toHaveLength(1);
+        expect(backoff.resets).toBe(1);
+        expect(jest.getTimerCount()).toBe(0);
+        expect(link.state()).toBe("closed");
     } finally {
         jest.useRealTimers();
     }

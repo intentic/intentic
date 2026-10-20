@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use serde_json::Value;
+
 use crate::docker;
 use crate::record;
 use crate::sandbox::intent::{self, Action};
@@ -103,28 +105,58 @@ pub fn run(power: Power, slug: Option<String>) -> Result<()> {
 }
 
 pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
+    run_by_reading(power, slug, by, |_| {})
+}
+
+/// `run_by`, handing `read` the sandbox's env (NUL-framed, as `docker::container_env_nul` reads it; None when docker
+/// would not say) as soon as the look before the change has read it, before anything is started: what lets
+/// `ic sandbox wakes` name who is waking a sandbox without asking docker for its env again (sleep.rs). Not called when
+/// the change stops before it reads the container (docker down, the lock, no such sandbox).
+pub(crate) fn run_by_reading(
+    power: Power,
+    slug: Option<String>,
+    by: By,
+    read: impl FnOnce(Option<&str>),
+) -> Result<()> {
     docker::require_daemon()?;
     let slug = resolve_slug(slug, &format!("ic sandbox {}", power.verb()))?;
     let _held = lock::hold_for_person(&slug)?;
     let container = format!("{CONTAINER_PREFIX}{slug}");
-    if !docker::container_exists(&container) {
+    let tunnel = format!("{TUNNEL_PREFIX}{slug}");
+    let mut found = look(&container, &tunnel);
+    let exists = match &found {
+        Some(found) => found.sandbox.is_some(),
+        None => docker::container_exists(&container),
+    };
+    if !exists {
         // An interrupted swap parked the sandbox with no replacement: starting it IS putting it back.
         if power != Power::Stop && docker::container_exists(&parked_of(&slug)) {
             probation::watch_one(&slug)?;
             ui::note(&format!(
                 "{slug} was left set aside by an interrupted update. It is back under its own name."
             ));
+            // Looked at again: what is under its own name now is the container that was parked.
+            found = look(&container, &tunnel);
         } else {
             bail!("{}", crate::sandbox::missing(&slug));
         }
     }
-    remember_key(&slug, &container);
+    let inspect = found.as_ref().and_then(|found| found.sandbox.as_ref());
+    let env = match &found {
+        Some(_) => inspect.map(env_of),
+        None => env_now(&container),
+    };
+    remember_key(&slug, env.as_deref());
+    read(env.as_deref());
     if power != Power::Stop {
-        refuse_lost_key(&slug, &container)?;
+        refuse_lost_key(&slug, &container, found.as_ref())?;
     }
-    let tunnel = format!("{TUNNEL_PREFIX}{slug}");
+    let has_tunnel = match &found {
+        Some(found) => found.tunnel,
+        None => docker::container_exists(&tunnel),
+    };
     // Optional: a sandbox reached over the owner's own proxy has none.
-    let sidecar = docker::container_exists(&tunnel).then_some(tunnel.as_str());
+    let sidecar = has_tunnel.then_some(tunnel.as_str());
     desired::adopt_legacy(&slug, &container)?;
 
     /* A START OR RESTART WITH A SHAPE WAITING IS THE RECREATE THAT APPLIES IT: the same image, the saved shape, the same pre-flight as any swap. */
@@ -167,8 +199,8 @@ pub fn run_by(power: Power, slug: Option<String>, by: By) -> Result<()> {
     probation watch tells a start made through ic from a crash (probation.rs restarts_seen). A start or restart docker
     refuses still counts as one tried. */
     match power {
-        Power::Restart => ledger::note(&slug, ledger::RESTART, by == By::Keeper),
-        Power::Start => ledger::note(&slug, ledger::START, by == By::Keeper),
+        Power::Restart => note(&slug, &container, inspect, power, ledger::RESTART, by),
+        Power::Start => note(&slug, &container, inspect, power, ledger::START, by),
         Power::Stop => {}
     }
     power_all(power, &container, sidecar)?;
@@ -196,24 +228,72 @@ fn asked(power: Power, by: By) -> String {
     }
 }
 
-/// A start that would only end in docker's "not a directory" mount error, refused with what it means and the way on:
-/// the key its stores are encrypted with is gone (at_rest.rs lost_key), so neither a start nor the recreate a saved
-/// shape asks for can bring it up. An inspect that answers nothing leaves the start to say what docker says.
-fn refuse_lost_key(slug: &str, container: &str) -> Result<()> {
-    let Some(inspect) = docker::inspect(container, "{{json .}}")
-        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-    else {
-        return Ok(());
-    };
-    match crate::sandbox::at_rest::lost_key(&inspect) {
-        Some(key) => bail!("{}", crate::sandbox::at_rest::lost_key_message(slug, &key)),
-        None => Ok(()),
-    }
+/* ONE LOOK BEFORE A POWER CHANGE (2026-10-19). A start asked docker four separate questions about the same two
+containers before anything started: does the sandbox exist, its env (for the report key), its whole inspect (for a lost
+key), and does the legacy tunnel sidecar exist. ic no longer creates that sidecar, so on every machine set up since it is
+a name docker does not have. Each question is a docker CLI call, and on rog (Docker Desktop) each one cost between 90 and
+510 ms, measured. `docker inspect --type container <sandbox> <tunnel>` answers all
+four in one call: docker prints every container it found as one JSON array and names the rest on stderr (exiting 1), so
+the sandbox's own object carries its existence, its `.Config.Env` and its mounts, and the sidecar exists when it is
+among them. `--type container` asks after nothing but containers, which is all either name ever is: an untyped inspect
+of a missing name goes on to ask after an image, a network and a volume of that name too (twice the time of a typed one,
+measured on docker 29). An answer that is not a JSON array (a docker that timed out, a CLI that printed nothing) is
+asked the old way, one question at a time. */
+
+/// What the look found: the sandbox container's own inspect object, and whether the tunnel sidecar exists.
+#[derive(Clone, Debug, PartialEq)]
+struct Found {
+    sandbox: Option<Value>,
+    tunnel: bool,
 }
 
-/// The report key rides on the env a verb can read now, for a later `ic sandbox fix` that cannot.
-fn remember_key(slug: &str, container: &str) {
-    if let Some(env) = docker::ask(
+/// The look; None when docker's answer does not read, so the caller asks the old way.
+fn look(container: &str, tunnel: &str) -> Option<Found> {
+    let ran = docker::capture_bounded(
+        &["inspect", "--type", "container", container, tunnel],
+        docker::READ_LIMIT,
+    )
+    .ok()?;
+    if ran.timed_out {
+        return None;
+    }
+    found_of(&ran.stdout, container, tunnel)
+}
+
+/// The look's stdout read, whatever docker exited with (it exits 1 for a name it did not find, after printing the
+/// rest). None for anything but a JSON array. Pure.
+fn found_of(stdout: &str, container: &str, tunnel: &str) -> Option<Found> {
+    let objects: Vec<Value> = serde_json::from_str(stdout.trim()).ok()?;
+    let named = |name: &str| {
+        objects
+            .iter()
+            .find(|object| {
+                object["Name"]
+                    .as_str()
+                    .is_some_and(|named| named.trim_start_matches('/') == name)
+            })
+            .cloned()
+    };
+    Some(Found {
+        sandbox: named(container),
+        tunnel: named(tunnel).is_some(),
+    })
+}
+
+/// A container's env out of its inspect object, NUL-framed the way `docker::container_env_nul` reads it. Pure.
+fn env_of(inspect: &Value) -> String {
+    inspect["Config"]["Env"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(|pair| format!("{pair}\0"))
+        .collect()
+}
+
+/// The env asked on its own, for a look that did not read.
+fn env_now(container: &str) -> Option<String> {
+    docker::ask(
         &[
             "inspect",
             "--format",
@@ -223,8 +303,48 @@ fn remember_key(slug: &str, container: &str) {
         docker::READ_LIMIT,
     )
     .said()
-    {
+}
+
+/// A start that would only end in docker's "not a directory" mount error, refused with what it means and the way on:
+/// the key its stores are encrypted with is gone (at_rest.rs lost_key), so neither a start nor the recreate a saved
+/// shape asks for can bring it up. Read off the look where there was one, else asked. An inspect that answers nothing
+/// leaves the start to say what docker says.
+fn refuse_lost_key(slug: &str, container: &str, found: Option<&Found>) -> Result<()> {
+    let inspect = match found {
+        Some(found) => found.sandbox.clone(),
+        None => docker::inspect(container, "{{json .}}")
+            .and_then(|text| serde_json::from_str::<Value>(&text).ok()),
+    };
+    let Some(inspect) = inspect else {
+        return Ok(());
+    };
+    match crate::sandbox::at_rest::lost_key(&inspect) {
+        Some(key) => bail!("{}", crate::sandbox::at_rest::lost_key_message(slug, &key)),
+        None => Ok(()),
+    }
+}
+
+/// The report key rides on the env a verb can read now, for a later `ic sandbox fix` that cannot.
+fn remember_key(slug: &str, env: Option<&str>) {
+    if let Some(env) = env {
         crate::sandbox::fix::report::remember_from_env(slug, env.as_bytes());
+    }
+}
+
+/// A start's or restart's note in the ledger, on the container the look found, so the ledger need not ask again which
+/// container holds the volume (ledger.rs `note_on`). A start also takes whether it runs from the look, a moment ago under
+/// the lock with nothing in between; a restart, which tells the sandbox why and asks it to resume its turns first, asks
+/// again. Without a look, the note asks everything itself, as it always did.
+fn note(slug: &str, container: &str, inspect: Option<&Value>, power: Power, kind: &str, by: By) {
+    let auto = by == By::Keeper;
+    match inspect {
+        Some(inspect) => {
+            let running = (power == Power::Start)
+                .then(|| inspect["State"]["Running"].as_bool())
+                .flatten();
+            ledger::note_on(container, running, kind, auto);
+        }
+        None => ledger::note(slug, kind, auto),
     }
 }
 
@@ -248,7 +368,7 @@ the keeper's restart limit counts (ledger.rs SLEEP). The caller holds the sandbo
 Answers whether a tunnel sidecar went down with it. */
 pub(crate) fn sleep(slug: &str, alarm: Option<u64>) -> Result<bool> {
     let container = container_of(slug);
-    remember_key(slug, &container);
+    remember_key(slug, env_now(&container).as_deref());
     let tunnel = format!("{TUNNEL_PREFIX}{slug}");
     let sidecar = docker::container_exists(&tunnel).then_some(tunnel.as_str());
     // Noted while it still runs, so the moment is the container's own clock (inside.rs).
@@ -295,26 +415,48 @@ pub(crate) fn rest(slug: &str, rest: Rest) {
 /// `rest`, with the alarm a sleep sets (sleep.rs). Any other change of rest clears the alarm, and the mark of a start
 /// made for one: a sandbox started, stopped or put to sleep again is past that alarm.
 fn settle(slug: &str, rest: Rest, alarm: Option<u64>) {
-    let saved = mirror::reconcile(slug);
+    let Some(next) = settled(&mirror::reconcile(slug), rest, alarm) else {
+        return;
+    };
+    if record::write(slug, &next).is_ok() {
+        mirror::push(slug);
+    }
+}
+
+/// The record a change of rest leaves, None when it leaves the record as it is. Pure.
+fn settled(
+    saved: &record::ChannelRecord,
+    rest: Rest,
+    alarm: Option<u64>,
+) -> Option<record::ChannelRecord> {
     let (held, asleep) = rest.flags();
     let alarm = alarm.filter(|_| asleep);
     if saved.held == held && saved.asleep == asleep && saved.wake_at == alarm {
-        return;
+        return None;
     }
-    if record::write(
-        slug,
-        &record::ChannelRecord {
-            held,
-            asleep,
-            wake_at: alarm,
-            alarm_woke_at: None,
-            ..saved
-        },
-    )
-    .is_ok()
-    {
-        mirror::push(slug);
+    Some(record::ChannelRecord {
+        held,
+        asleep,
+        wake_at: alarm,
+        alarm_woke_at: None,
+        ..saved.clone()
+    })
+}
+
+/* NO LONGER ASLEEP, WITH NOTHING TO WAKE (2026-10-19). A record that says asleep keeps `ic sandbox wakes` asking the
+platform about its sandbox, and the machine agent polling, for as long as it says so. A sandbox that went to the trash
+(trash.rs stash) or is gone from the engine altogether (sleep.rs, records an older ic left) can be woken by nothing, so
+its record stops saying asleep: the write a start's `rest` makes, on the record in this home. Nothing is pushed to the
+sandbox's volume, which no live container holds any more (the trash reconciles while one still does). A restore starts
+the sandbox anyway. The caller holds the sandbox's lock. Answers whether the record changed. */
+pub(crate) fn forget_sleep(slug: &str) -> bool {
+    let Ok(saved) = record::read(slug) else {
+        return false;
+    };
+    if !saved.asleep {
+        return false;
     }
+    settled(&saved, Rest::Awake, None).is_some_and(|next| record::write(slug, &next).is_ok())
 }
 
 fn power_one(verb: &str, name: &str) -> Result<()> {
@@ -347,6 +489,94 @@ mod tests {
         assert_eq!(Rest::Awake.flags(), (false, false));
         assert_eq!(Rest::Held.flags(), (true, false));
         assert_eq!(Rest::Asleep.flags(), (false, true));
+    }
+
+    #[test]
+    fn a_change_of_rest_rewrites_the_record_only_when_it_changes_it() {
+        let asleep = record::ChannelRecord {
+            asleep: true,
+            wake_at: Some(9),
+            alarm_woke_at: Some(3),
+            wake_cost: Some(2_176),
+            report_key: Some("k".to_string()),
+            ..record::ChannelRecord::default()
+        };
+        let woken = settled(&asleep, Rest::Awake, None).expect("a sleeper woken changes");
+        assert_eq!(
+            (woken.held, woken.asleep, woken.wake_at, woken.alarm_woke_at),
+            (false, false, None, None)
+        );
+        assert_eq!(
+            (woken.wake_cost, woken.report_key.as_deref()),
+            (Some(2_176), Some("k")),
+            "everything else stays"
+        );
+        assert_eq!(settled(&woken, Rest::Awake, None), None);
+        let slept = settled(&woken, Rest::Asleep, Some(42)).expect("a sleep changes");
+        assert_eq!((slept.asleep, slept.wake_at), (true, Some(42)));
+        assert_eq!(
+            settled(&woken, Rest::Held, Some(42)).map(|held| (held.held, held.wake_at)),
+            Some((true, None)),
+            "only a sleep keeps an alarm"
+        );
+    }
+
+    #[test]
+    fn one_look_answers_whether_the_sandbox_and_its_tunnel_exist_with_the_sandboxs_own_inspect() {
+        let container = "intentic-sandbox-sandbox-0123456789ab";
+        let tunnel = "intentic-sandbox-tunnel-sandbox-0123456789ab";
+        // What docker prints for `inspect --type container <sandbox> <tunnel>` when only the sandbox exists (exit 1,
+        // "No such container" on stderr).
+        let sandbox = serde_json::json!({
+            "Name": format!("/{container}"),
+            "State": { "Running": false },
+            "Config": { "Env": ["CONNECT_TOKEN=t", "HOST_LABEL=rog", "PATH=/bin"] },
+            "Mounts": [],
+        });
+        let alone = serde_json::to_string_pretty(&serde_json::json!([sandbox])).unwrap();
+        let found = found_of(&alone, container, tunnel).expect("an array reads");
+        assert_eq!(found.sandbox.as_ref(), Some(&sandbox));
+        assert!(!found.tunnel);
+        assert_eq!(
+            env_of(found.sandbox.as_ref().unwrap()),
+            "CONNECT_TOKEN=t\0HOST_LABEL=rog\0PATH=/bin\0",
+            "framed as container_env_nul frames it"
+        );
+        assert_eq!(
+            crate::sandbox::fix::chain::Env::parse(&env_of(&sandbox))
+                .host_label
+                .as_deref(),
+            Some("rog")
+        );
+        let both =
+            serde_json::json!([sandbox, { "Name": format!("/{tunnel}"), "Config": { "Env": [] } }]);
+        let found = found_of(&both.to_string(), container, tunnel).expect("an array reads");
+        assert!(found.sandbox.is_some() && found.tunnel);
+        // Only the tunnel: the sandbox is missing, whatever else docker found.
+        let found = found_of(
+            &serde_json::json!([{ "Name": format!("/{tunnel}") }]).to_string(),
+            container,
+            tunnel,
+        )
+        .expect("an array reads");
+        assert_eq!((found.sandbox, found.tunnel), (None, true));
+        assert_eq!(
+            found_of("[]\n", container, tunnel),
+            Some(Found {
+                sandbox: None,
+                tunnel: false
+            }),
+            "neither exists"
+        );
+        // Nothing that reads: the old questions are asked instead.
+        for said in [
+            "",
+            "Cannot connect to the Docker daemon",
+            "{\"Name\":\"x\"}",
+        ] {
+            assert_eq!(found_of(said, container, tunnel), None, "{said}");
+        }
+        assert_eq!(env_of(&serde_json::json!({})), "");
     }
 
     #[test]

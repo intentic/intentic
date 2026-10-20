@@ -580,9 +580,12 @@ export const sandboxRoutes = {
         }
         // On somebody's own machine the platform cannot start anything: the request waits here for that machine's keeper,
         // which asks while a sandbox of its sleeps (host-report.ts, POST /host-report/wakes). Restamped on every ask, so the
-        // newest browser's request is the one that lives.
+        // newest browser's request is the one that lives. (2026-10-19) Then said to whichever replica holds the keeper's
+        // ask, which answers it at once; saying it never fails the wake, since the stamp is what that ask reads, and it
+        // reads it again on its own.
         if (sandbox.hosted === null) {
             await context.prisma.sandbox.update({ where: { id: sandbox.id }, data: { wakeRequestedAt: new Date() } });
+            await context.wakeSignals.notify(sandbox.tunnelId);
             return { ok: true };
         }
         const { hosted } = sandbox;

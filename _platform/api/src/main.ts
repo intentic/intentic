@@ -17,6 +17,7 @@ import { startHostedProbation } from "./sandbox/hosted/hosted-probation.js";
 import { checkHostedPlanPrices, hostedPlanEnabled } from "./sandbox/hosted/plan/hosted-plan.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
 import { startSetupFailureMail } from "./sandbox/setup-failure-email.js";
+import { startWakeSignals } from "./sandbox/local-wake/wake-signals.js";
 import { bootIdentityOf, watchPlatformIdentity } from "./sandbox/recovery.js";
 import { startRetention } from "./retention.js";
 import { emailSignInEnabled } from "./sign-in.js";
@@ -101,7 +102,9 @@ startHostedCanary(prisma, config, logger);
 startEdgeCertificate(prisma, config, logger);
 // Mails the owner once when a setup run on their own computer failed and nobody was watching (setup-failure-email.ts).
 startSetupFailureMail(prisma, config, logger);
-const { app } = createApp(config, prisma, logger);
+// Tells a machine's held wakes ask that its sandbox was asked for, whichever replica either landed on (wake-signals.ts).
+const wakeSignals = startWakeSignals({ config, prisma, logger });
+const { app } = createApp(config, prisma, logger, wakeSignals);
 
 // Falls back to the pair pnpm install mints for this user (their own data directory) when the config knobs are unset.
 const devPair = (): { key: Buffer; cert: Buffer } | undefined => {
@@ -125,6 +128,7 @@ logger.info({ url: `${tls ? `https` : `http`}://localhost:${server.port}` }, `ap
 
 const shutdown = async () => {
     logger.info(`shutting down`);
+    await wakeSignals.stop();
     await prisma.$disconnect();
     await server.stop();
     await tracing?.shutdown();
