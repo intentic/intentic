@@ -64,7 +64,7 @@ import {
 import { commit, discard, gitChanges, indexRunState, stage, startIndexRun, unstage } from "./gitIndex";
 import { demoMode, demoQuiet, deskEdition, freshEdition } from "../mode";
 import { HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "../fixture/document";
-import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS } from "./accounts";
+import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS, demoRefusals } from "./accounts";
 import { archiveAgents, assignAgent, keepWarmAgent, land, reactToAgent, searchAgents, searchSessions, setBreakPolicy, stopJob } from "./cards";
 import { agentFlow, sandboxFlow } from "./deviceFlows";
 import { events } from "./events";
@@ -226,7 +226,7 @@ export const procedures = {
         steer: () => ({ delivered: `steered` as const }),
         stop: stopTurn,
         commands: () => ({ commands: DEMO_COMMANDS }),
-        refusals: () => ({ refusals: {} }),
+        refusals: demoRefusals,
     },
     sessions: {
         list: ({ query = ``, caseSensitive }) => ({ sessions: searchSessions(query, caseSensitive === true) }),

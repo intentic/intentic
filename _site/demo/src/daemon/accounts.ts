@@ -1,5 +1,5 @@
 import type { Model, OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
-import type { TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { ProviderRefusals, TranslatorAccounts } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { STARTED_AT } from "./roster";
 
 // The connected accounts and model catalogs the Agent tab reads: two Claude subscriptions, the translator's rows in
@@ -20,7 +20,6 @@ export const DEMO_CLAUDE_ACCOUNT: OauthAccount = {
             { kind: `seven_day_opus`, utilization: 64, resetsAt: Math.round(STARTED_AT / 1000) + 3 * 24 * 3600, gates: { models: [`Opus`] } },
         ],
     },
-    state: { kind: `ready`, room: 36 },
 };
 
 export const DEMO_CLAUDE_ACCOUNT_SECOND: OauthAccount = {
@@ -37,11 +36,10 @@ export const DEMO_CLAUDE_ACCOUNT_SECOND: OauthAccount = {
             { kind: `five_hour`, utilization: 8, resetsAt: Math.round(STARTED_AT / 1000) + 4 * 3600, gates: `all` },
         ],
     },
-    state: { kind: `spent`, reopensAt: Math.round(STARTED_AT / 1000) + 26 * 3600 },
 };
 
 export const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {
-    codex: [{ name: `chatgpt-ada`, label: `ada@acme.dev`, state: { kind: `unknown` } }],
+    codex: [{ name: `chatgpt-ada`, label: `ada@acme.dev` }],
     grok: [],
     kimi: [],
     // One of every state a Google row can be in, so the Agent tab shows what each says: serving, waiting on its owner
@@ -57,27 +55,49 @@ export const DEMO_TRANSLATOR_ACCOUNTS: TranslatorAccounts = {
                     { kind: `five_hour`, utilization: 36, resetsAt: Math.round(STARTED_AT / 1000) + 2 * 3600, gates: `all` },
                 ],
             },
-            state: { kind: `ready`, room: 64 },
         },
         {
             name: `antigravity-lin.json`,
             label: `lin@acme.dev`,
             cooling: { reason: `Verify your account to continue.`, verify: `https://accounts.google.com/signin/continue` },
-            state: { kind: `blocked`, fix: `verify`, reason: `Verify your account to continue.`, url: `https://accounts.google.com/signin/continue` },
         },
         {
             name: `antigravity-grace.json`,
             label: `grace@acme.dev`,
-            state: { kind: `spent`, reopensAt: Math.round(STARTED_AT / 1000) + 3 * 24 * 3600 },
         },
         {
             name: `antigravity-alan.json`,
             label: `alan@acme.dev`,
             cooling: { until: Math.round(STARTED_AT / 1000) + 40 * 60, reason: `Resource has been exhausted.` },
-            state: { kind: `blocked`, fix: `wait`, reason: `Resource has been exhausted.`, until: Math.round(STARTED_AT / 1000) + 40 * 60 },
         },
     ],
 };
+
+// The refusals on file, which the editor judges every row by (serviceStates) beside its usage: grace's allowance spent
+// until the week turns, and one model cooling, every credential the translator holds refused for it until then.
+// Relative to load, since an absolute instant in a fixture is a state that reads as expired the next time anyone opens it.
+export const demoRefusals = (): ProviderRefusals => ({
+    refusals: {
+        gemini: [
+            {
+                at: STARTED_AT - 20 * 60_000,
+                kind: `limit`,
+                message: `You have exhausted your capacity on this model. Your quota will reset after 72h0m0s.`,
+                account: `antigravity-grace.json`,
+                resetsAt: Math.round(STARTED_AT / 1000) + 3 * 24 * 3600,
+            },
+        ],
+        codex: [
+            {
+                at: Date.now() - 5 * 60_000,
+                kind: `limit`,
+                message: `You've hit your usage limit for GPT-5.2. Try again in 45 minutes.`,
+                model: `gpt-5.2`,
+                resetsAt: Math.floor(Date.now() / 1000) + 45 * 60,
+            },
+        ],
+    },
+});
 
 const CLAUDE_MODELS: Model[] = [
     { id: `claude-opus-5`, label: `Claude Opus 5`, efforts: [`low`, `medium`, `high`, `max`], badges: [`reasoning`] },
@@ -85,11 +105,9 @@ const CLAUDE_MODELS: Model[] = [
     { id: `claude-haiku-4-5-20251001`, label: `Claude Haiku 4.5`, badges: [`fast`] },
 ];
 
-// One model cooling: every credential the translator holds is refused for it until then. Relative to load, since an
-// absolute instant in a fixture is a state that reads as expired by the next time anyone opens this.
 const CODEX_MODELS: Model[] = [
     { id: `gpt-5.2-codex`, label: `GPT-5.2 Codex`, efforts: [`low`, `medium`, `high`], badges: [`reasoning`] },
-    { id: `gpt-5.2`, label: `GPT-5.2`, efforts: [`low`, `medium`, `high`], availableAt: Math.floor(Date.now() / 1000) + 45 * 60 },
+    { id: `gpt-5.2`, label: `GPT-5.2`, efforts: [`low`, `medium`, `high`] },
 ];
 
 // Google's routed lane serves other makers' models, so its catalog is mixed rather than Gemini-only.
