@@ -1,5 +1,5 @@
 import { grantNonce } from "@intentic/sandbox-contract/keyring-seal";
-import { rulesServe } from "@intentic/sandbox-contract/policy/keyring-origins";
+import { originKey, rulesServe } from "@intentic/sandbox-contract/policy/keyring-origins";
 import type { KeyringNeedResult, KeyringOrigin } from "@intentic/sandbox-contract/schemas/keyring";
 import { type SandboxNeed, SandboxNeedSchema, type SecretWantResult } from "@intentic/sandbox-contract/schemas/sandbox-passwords";
 import { defineDocument } from "../../store/evolution/documents.js";
@@ -70,14 +70,22 @@ export interface KeyringNeedsDeps {
     readonly now?: () => number;
 }
 
+// A parked need that turned allowed, said to the conversation that asked (needs/password-wake.ts delivers it).
+export interface PasswordWake {
+    readonly conversationId: string;
+    readonly need: SandboxNeed;
+    readonly name: string;
+}
+
 export interface KeyringNeeds {
     readonly request: (need: NeedRequest) => Promise<SecretWantResult>;
     readonly all: () => Promise<readonly SandboxNeed[]>;
     readonly pending: () => Promise<readonly SandboxNeed[]>;
     // Looks again at the pending needs that wait on `machine`, against what its keyring shares now.
     readonly recheck: (machine: string) => Promise<void>;
-    // Hears every shares read; answers its stop.
-    readonly start: () => () => void;
+    // Hears every shares read, and tells a need's conversation through `wake` when one turns allowed (2026-10-20);
+    // answers its stop.
+    readonly start: (wake?: (wake: PasswordWake) => Promise<void>) => () => void;
 }
 
 // A pointer's rules as the origin test reads them. A pointer carries no askpass matchers, so an ssh, sudo or prompt need
@@ -99,7 +107,7 @@ const settle = (need: SandboxNeed, machine: string, answer: KeyringNeedResult): 
     if (answer.code === "pending") {
         return {
             need: { ...need, machine, state: "pending" },
-            result: { state: "pending", id: need.id, machine, message: `waiting for the owner's answer in Passwords on ${machine}` },
+            result: { state: "pending", id: need.id, machine, message: pendingWords(machine) },
         };
     }
     if (answer.code === "declined") {
@@ -110,6 +118,11 @@ const settle = (need: SandboxNeed, machine: string, answer: KeyringNeedResult): 
     }
     return undefined;
 };
+
+// What an agent hears while a person has yet to answer: the answer wakes its conversation (password-wake.ts), so it
+// carries on rather than asks again (2026-10-20).
+const pendingWords = (machine: string): string =>
+    `waiting for the owner's answer in Passwords on ${machine}; this conversation is woken when they answer, so do not ask again`;
 
 const ask = async (deps: KeyringNeedsDeps, request: NeedRequest, machine: string, typeOnce: boolean): Promise<KeyringNeedResult> =>
     deps.link.passwords.need(
@@ -149,8 +162,18 @@ const round = async (deps: KeyringNeedsDeps, request: NeedRequest, need: Sandbox
     return settle(need, first.machine, answer) ?? { unsettled: answer.ok ? last : answer.refusal };
 };
 
+const pendingFor = (rows: readonly SandboxNeed[], request: NeedRequest): SandboxNeed | undefined =>
+    rows.find(
+        (row) =>
+            row.state === "pending" &&
+            row.conversation === request.conversationId &&
+            row.username === request.username &&
+            originKey(row.origin) === originKey(request.origin),
+    );
+
 export const createKeyringNeeds = (deps: KeyringNeedsDeps): KeyringNeeds => {
     const now = deps.now ?? Date.now;
+    let wake: ((wake: PasswordWake) => Promise<void>) | undefined;
     const recheck = async (machine: string): Promise<void> => {
         const waiting = (await deps.store.all()).filter((need) => need.state === "pending" && need.machine === machine);
         if (waiting.length === 0) {
@@ -160,12 +183,27 @@ export const createKeyringNeeds = (deps: KeyringNeedsDeps): KeyringNeeds => {
         for (const need of waiting) {
             const found = shared.find((entry) => pointerServes(entry, need.origin));
             if (found !== undefined) {
-                await deps.store.put({ ...need, state: "allowed", name: found.pointer.name });
+                const allowed = { ...need, state: "allowed" as const, name: found.pointer.name };
+                await deps.store.put(allowed);
+                if (need.conversation !== undefined) {
+                    await wake?.({ conversationId: need.conversation, need: allowed, name: found.pointer.name }).catch((error: Error) =>
+                        deps.logger.warn({ err: error, machine, secret: found.pointer.name }, "keyring: the conversation that asked could not be woken"),
+                    );
+                }
             }
         }
     };
     return {
         request: async (request) => {
+            const earlier = pendingFor(await deps.store.all(), request);
+            if (earlier !== undefined && earlier.machine !== undefined) {
+                return {
+                    state: "pending",
+                    id: earlier.id,
+                    machine: earlier.machine,
+                    message: pendingWords(earlier.machine),
+                };
+            }
             const need: SandboxNeed = {
                 id: grantNonce(),
                 origin: request.origin,
@@ -194,9 +232,11 @@ export const createKeyringNeeds = (deps: KeyringNeedsDeps): KeyringNeeds => {
         all: () => deps.store.all(),
         pending: async () => (await deps.store.all()).filter((need) => need.state === "pending"),
         recheck,
-        start: () =>
-            deps.link.onRefreshed((machine) => {
+        start: (wakeWith) => {
+            wake = wakeWith;
+            return deps.link.onRefreshed((machine) => {
                 void recheck(machine).catch((error: Error) => deps.logger.warn({ err: error, machine }, "keyring: the needs waiting on this computer could not be checked again"));
-            }),
+            });
+        },
     };
 };

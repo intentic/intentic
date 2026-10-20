@@ -56,9 +56,35 @@ describe(`a turn that outgrew the model's window`, () => {
         failures.armRenewalProbe();
         await advanceTimersByTimeAsync(2_000);
         expect(host.reattach).toHaveBeenCalledTimes(1);
-        await advanceTimersByTimeAsync(3_000);
+        await advanceTimersByTimeAsync(10_000);
         expect(host.reattach).toHaveBeenCalledTimes(2);
         failures.cancelProbe();
+    });
+
+    // The roster frame that says the re-run started is the push: the window follows it then, not at the probe's next
+    // look, and each frame after it while the turn runs asks nothing more (2026-10-20).
+    it(`follows the re-run the moment the roster says it runs, and once`, async () => {
+        const host = hostOf();
+        const failures = new TurnFailures(host);
+        failures.apply({ kind: `error`, code: `context-overflow`, message: `Prompt is too long.`, autoResume: `scheduled`, held: { ran: true } });
+        failures.armRenewalProbe();
+        failures.heardRunning();
+        await advanceTimersByTimeAsync(0);
+        expect(host.reattach).toHaveBeenCalledTimes(1);
+        failures.heardRunning();
+        await advanceTimersByTimeAsync(0);
+        expect(host.reattach).toHaveBeenCalledTimes(1);
+        // The fallback probe keeps its own beat after it.
+        await advanceTimersByTimeAsync(10_000);
+        expect(host.reattach).toHaveBeenCalledTimes(2);
+        failures.cancelProbe();
+    });
+
+    it(`asks nothing of a roster frame when it waits on no re-run`, async () => {
+        const host = hostOf();
+        new TurnFailures(host).heardRunning();
+        await advanceTimersByTimeAsync(0);
+        expect(host.reattach).toHaveBeenCalledTimes(0);
     });
 
     // The fresh session overflowing too is the end of it: nothing is coming back, and nothing here would fix it.
@@ -164,10 +190,10 @@ describe(`a resume the sandbox promised`, () => {
         const failures = new TurnFailures(host);
         failures.apply(REFUSED);
         failures.armRenewalProbe();
-        // 1 s, then 25 probes 3 s apart: the whole budget, with nothing found.
-        await advanceTimersByTimeAsync(1_000 + 25 * 3_000);
+        // 1 s, then 8 probes 10 s apart: the whole budget, past the daemon's minute, with nothing found.
+        await advanceTimersByTimeAsync(1_000 + 8 * 10_000);
 
-        expect(host.reattach).toHaveBeenCalledTimes(25);
+        expect(host.reattach).toHaveBeenCalledTimes(8);
         expect(failures.credentialRenewal.value).toBeUndefined();
         expect(notices).toEqual([
             `This turn didn't continue by itself after its sign-in was refused, so it stopped where it was. Sending again picks the conversation back up.`,

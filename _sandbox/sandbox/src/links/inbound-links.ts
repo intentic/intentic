@@ -13,6 +13,7 @@ import { tokenEquals } from "../auth/auth.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { opt } from "../opt.js";
+import { wakeLinkTaskStatus } from "./link-task-status-wait.js";
 
 // INBOUND LINKS: another of the owner's sandboxes allowed to hand this one tasks. The owner mints one (from their editor,
 // usually while pairing the two sandboxes), the asking sandbox keeps its token on a `link` card, and every task it hands
@@ -262,13 +263,16 @@ export const fileInboundLinks = (path: string): InboundLinks => {
             return link === undefined ? undefined : summaryOf(link);
         },
         revoke: async (id) => {
-            let revoked = false;
+            let gone: StoredLink | undefined;
             await file.update((stored) => {
-                const links = stored.links.filter((link) => link.id !== id);
-                revoked = links.length !== stored.links.length;
-                return revoked ? { links } : stored;
+                gone = stored.links.find((link) => link.id === id);
+                return gone === undefined ? stored : { links: stored.links.filter((link) => link.id !== id) };
             });
-            return revoked;
+            // A status read held on one of its tasks answers now that the task is gone, not on its next timed look.
+            for (const task of gone?.tasks ?? []) {
+                wakeLinkTaskStatus(task.conversationId);
+            }
+            return gone !== undefined;
         },
         task: async (linkId, key) => {
             const link = (await file.read()).links.find((candidate) => candidate.id === linkId);
@@ -314,6 +318,9 @@ export const fileInboundLinks = (path: string): InboundLinks => {
                     return moved;
                 }),
             }));
+            if (moved !== undefined) {
+                wakeLinkTaskStatus(conversationId);
+            }
             return moved;
         },
         unstarted: async () => unstartedOf(await file.read()),

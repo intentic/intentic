@@ -1,4 +1,5 @@
 import type { Services } from "../../../composition.js";
+import { readSettledUsage } from "../frames/settled-usage.js";
 import type { TurnActivity } from "../frames/frame-effects.js";
 import type { ReachFrames } from "../../verification/agent-reach.js";
 import type { SettlementPlan } from "./turn-settlement.js";
@@ -17,7 +18,7 @@ const recordResumes = (deps: Pick<Services, "conversations">, { hold }: Settleme
 };
 
 export const performSettlement = (
-    deps: Pick<Services, "usage" | "headroom" | "events" | "logger" | "conversations">,
+    deps: Pick<Services, "usage" | "headroom" | "events" | "logger" | "conversations" | "cliProxy">,
     plan: SettlementPlan,
     turn: {
         // Appends one of the turn's own rows to the activity log.
@@ -42,6 +43,10 @@ export const performSettlement = (
     }
     void deps.usage.record(plan.usage).catch((error: unknown) => deps.logger.warn({ err: error }, "usage: ledger append failed"));
     turn.flush();
+    // Last and never awaited: the allowance reading must not hold what waits on the turn's settle (frames/settled-usage.ts).
+    if (plan.settledUsage !== undefined) {
+        void readSettledUsage(deps, plan.settledUsage);
+    }
     if (plan.snapshot !== undefined) {
         deps.events.publish("tree.changed", { label: plan.snapshot });
     }

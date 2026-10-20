@@ -3,6 +3,7 @@ import { settleRestartPauses } from "../agent/subagents/paused-children.js";
 import { restoreSpawnedChildren, settleRestoredChildren } from "../agent/subagents/child-restore.js";
 import { resumeScriptRuns } from "../agent/subagents/workflows/script-runs.js";
 import { createTurnResumeScheduler, resumeInterruptedTurns } from "../agent/run/turn/turn-resume.js";
+import { nudgeResumesOn } from "../agent/run/turn/holds/resume-nudges.js";
 import { type RestartResume, restartResume } from "../agent/run/turn/restart-resume-policy.js";
 import { restoreLimitHolds } from "../conversations/actor/limit-hold.js";
 import { adoptBackgroundJobs } from "../agent/tools/jobs/background-adoption.js";
@@ -29,7 +30,14 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
     const turnResume = createTurnResumeScheduler(services);
     shutdown.push(() => turnResume.stop());
     if (role.roots) {
-        void restoredChildren.then(() => turnResume.start());
+        // Woken by the events that make a hold due, at the instants it knows, and on a slow backstop (resume-nudges.ts).
+        void restoredChildren.then(() => {
+            turnResume.start();
+            shutdown.push(nudgeResumesOn(services, turnResume));
+            // The holds restored above were recorded before the pass could hear them, and the backstop is 30 s where the
+            // old interval's first beat was 5 s: one pass now, so a hold already due after a restart is not left waiting.
+            turnResume.nudge();
+        });
     }
 
     // Detached: an interrupted turn is a whole turn, an interrupted automation fire a whole fire, and a stranded loop or

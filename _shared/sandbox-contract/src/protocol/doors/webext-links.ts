@@ -22,6 +22,9 @@ export const webextLendUrl = (sandboxUrl: string): string => `${sandboxUrl.repla
 // are: a tool answer over the socket lands in the model's context, and this value must never reach one.
 export const webextSecretUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/secret`;
 
+// Where the extension tells its sandbox that site access changed outside the popup (2026-10-20), bearer-authenticated.
+export const webextGrantsChangedUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/webext/grants-changed`;
+
 // The tool the daemon calls on a browser to type a secret into its focused field, taking only a ticket the daemon
 // minted for that one call. The agent's own mount of the browser never lists it (webext-peer.ts): a model holding the
 // tool would hold nothing it could use, so it is not offered.

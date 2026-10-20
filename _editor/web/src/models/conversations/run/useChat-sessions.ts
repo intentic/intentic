@@ -563,10 +563,15 @@ watch(
 );
 
 // Attaches a tab to a turn this browser didn't start (e.g. a workflow step whose turn begins before the tab
-// hydrates). Driven by the roster stream; touches only a tab with nothing painted yet.
+// hydrates). Driven by the roster stream: a tab with nothing painted yet hydrates, and one waiting on the daemon's own
+// re-run (a renewed sign-in, an outage's retry, a fresh session) follows it at once (TurnFailures.heardRunning).
 export const attachStarted = (ids: ReadonlySet<string>): void => {
     for (const conversation of conversations.value) {
-        if (!ids.has(conversation.conversationId) || conversation.turn.streaming.value || conversation.transcript.messages.value.length > 0) {
+        if (!ids.has(conversation.conversationId) || conversation.turn.streaming.value) {
+            continue;
+        }
+        if (conversation.transcript.messages.value.length > 0) {
+            conversation.failures.heardRunning();
             continue;
         }
         hydrateOnce(conversation);

@@ -1431,7 +1431,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts": {
-        "count": 1078,
+        "count": 1069,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cognitive": {
@@ -1467,7 +1467,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/sdk-stream.ts": {
-        "count": 1070,
+        "count": 1068,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onResult#cyclomatic": {
@@ -1496,7 +1496,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts": {
-        "count": 1056,
+        "count": 1053,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#rehydrateParkedTurn#lines": {
@@ -1548,7 +1548,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/tools/jobs/background-jobs.ts": {
-        "count": 848,
+        "count": 847,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/tools/turn-mounts.ts#createTurnMounts#lines": {
@@ -1608,7 +1608,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts": {
-        "count": 1190,
+        "count": 1178,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/automations/scheduler.ts#runFire#cognitive": {
@@ -1853,7 +1853,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/land/project-delivery.ts": {
-        "count": 741,
+        "count": 735,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/conversations/land/project-delivery.ts#createProjectDelivery#lines": {

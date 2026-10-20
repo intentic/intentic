@@ -52,6 +52,10 @@ export interface Delivered<R> {
 
 export interface ConversationActors {
     readonly send: <E extends ConversationEvent>(conversationId: string, event: E, now?: number) => Delivered<ReplyOf<E>>;
+    // Hears every event applied, with the state before and after it, once the new state stands and before its effects
+    // run; answers the unsubscribe. What a pass that waits on a conversation reacts to instead of polling it (the resume
+    // pass, a paused child's look, 2026-10-20). A listener must only note or schedule: it runs inside `send`.
+    readonly observe: (listener: ConversationObserver) => () => void;
     // The actor's state, or undefined for a conversation this daemon has not heard from.
     readonly state: (conversationId: string) => ConversationState | undefined;
     // What waits for the conversation's next turn, read back from its entry by the first ask after a restart.
@@ -101,6 +105,8 @@ export interface ConversationActors {
     // Every piece of these conversations' in-memory state, then their entries: the one way a conversation leaves.
     readonly dispose: (conversationIds: readonly string[]) => Promise<void>;
 }
+
+export type ConversationObserver = (conversationId: string, event: ConversationEvent, before: ConversationState, after: ConversationState) => void;
 
 export interface Booked {
     readonly conversationId: string;
@@ -185,6 +191,49 @@ const refusedIn =
             })
             .sort((a, b) => a.since - b.since);
 
+// Turns in flight per runner (ConversationActors.inFlightByRunner), read off the running actors' entries.
+const inFlightIn =
+    (actors: ReadonlyMap<string, Actor>, books: Pick<ConversationBooks, "entry">, running: (id: string) => boolean) =>
+    (): Map<string, number> => {
+        const counts = new Map<string, number>();
+        for (const id of [...actors.keys()].filter(running)) {
+            const placement = books.entry(id)?.placement;
+            const runner = placement?.kind === "worktree" ? placement.runner : undefined;
+            if (runner !== undefined) {
+                counts.set(runner, (counts.get(runner) ?? 0) + 1);
+            }
+        }
+        return counts;
+    };
+
+// The listeners `observe` adds, and the telling of one applied event to each.
+interface Observing {
+    readonly observe: ConversationActors["observe"];
+    readonly told: ConversationObserver;
+}
+
+const observersOf = (): Observing => {
+    const observers = new Set<ConversationObserver>();
+    return {
+        observe: (listener) => {
+            observers.add(listener);
+            return () => {
+                observers.delete(listener);
+            };
+        },
+        // A listener that throws is its own fault and must not cost the sender its event, which already stands.
+        told: (id, event, before, after) => {
+            for (const observer of observers) {
+                try {
+                    observer(id, event, before, after);
+                } catch {
+                    // allow(silent-catch): the event is applied whatever a listener does with it.
+                }
+            }
+        },
+    };
+};
+
 export const createConversationActors = (books: ConversationBooks): ConversationActors => {
     const actors = new Map<string, Actor>();
     // Lands queued per conversation, each behind the last however it ended.
@@ -228,11 +277,15 @@ export const createConversationActors = (books: ConversationBooks): Conversation
         return tail === undefined ? Promise.resolve() : tail.then(() => undefined);
     };
 
+    const observing = observersOf();
+
     const send = <E extends ConversationEvent>(id: string, event: E, now: number = Date.now()): Delivered<ReplyOf<E>> => {
         const actor = actorOf(id);
-        const decision = decide(actor.state, event, now, books.entry(id));
+        const before = actor.state;
+        const decision = decide(before, event, now, books.entry(id));
         actor.state = decision.state;
         indexStranded(id, decision.state);
+        observing.told(id, event, before, decision.state);
         return { reply: decision.reply, settled: run(id, decision.effects, now).then(() => decision.reply) };
     };
 
@@ -242,6 +295,7 @@ export const createConversationActors = (books: ConversationBooks): Conversation
 
     return {
         send,
+        observe: observing.observe,
         state: (id) => actors.get(id)?.state,
         // An actor is made only for a conversation whose entry kept something waiting: asking must not leave a trace.
         queued: (id) => {
@@ -263,17 +317,7 @@ export const createConversationActors = (books: ConversationBooks): Conversation
                 const sessionId = sessionIdOf(id);
                 return sessionId === undefined ? [] : [sessionId];
             }),
-        inFlightByRunner: () => {
-            const counts = new Map<string, number>();
-            for (const id of [...actors.keys()].filter(running)) {
-                const placement = books.entry(id)?.placement;
-                const runner = placement?.kind === "worktree" ? placement.runner : undefined;
-                if (runner !== undefined) {
-                    counts.set(runner, (counts.get(runner) ?? 0) + 1);
-                }
-            }
-            return counts;
-        },
+        inFlightByRunner: inFlightIn(actors, books, running),
         withLandLease: async (id, fn) => {
             send(id, { kind: "land-leased" });
             try {

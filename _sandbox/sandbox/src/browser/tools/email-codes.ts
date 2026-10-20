@@ -1,9 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { sleep } from "@intentic/base/async";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 
 // Narrow mailbox key: the newest code or link a site sent; read over the curl imaps:// the IMAP skill teaches.
-// Bound code lookup to a half-hour day-granular search window.
+// Bound code lookup to a half-hour day-granular search window. A call holds until a mail from the site arrives after
+// it, so a model asking right after "send me a code" is answered when the code lands, not told to try again
+// (2026-10-20); the newest mail from before the call is the answer only when nothing newer comes, said as such, since
+// it can be an earlier attempt's code.
 
 const run = promisify(execFile);
 
@@ -130,33 +134,93 @@ const curl = async (mailbox: Mailbox, path: string, command?: string): Promise<s
     return stdout;
 };
 
-// Searches the window, reads the newest few, returns the first mail from the site or undefined if none match.
-// Throws on transport failure (bad credentials, unreachable host), surfaced as the tool's error text.
-export const fetchEmailCode = async (mailbox: Mailbox, site: string, now: Date): Promise<MailMatch | undefined> => {
-    const token = siteToken(site);
-    const uids = parseSearch(await curl(mailbox, mailbox.mailbox, `UID SEARCH SINCE ${imapSince(now)}`));
-    const newest = uids.toSorted((a, b) => b - a).slice(0, FETCH_LIMIT);
-    for (const uid of newest) {
-        const headers = await curl(mailbox, `${mailbox.mailbox};UID=${uid};SECTION=HEADER`);
+// One IMAP read over curl: a mailbox path, and a command when it is not a plain fetch. A seam, so the waiting can be
+// tested without a server.
+export type ImapRead = (path: string, command?: string) => Promise<string>;
+
+const curlRead =
+    (mailbox: Mailbox): ImapRead =>
+    (path, command) =>
+        curl(mailbox, path, command);
+
+// The newest of `uids` from the site, read newest first; past the window (when one is given) means none is. Throws on
+// transport failure (bad credentials, unreachable host), surfaced as the tool's error text.
+const newestFromSite = async (read: ImapRead, mailbox: Mailbox, uids: readonly number[], token: string, windowFrom: number | undefined): Promise<MailMatch | undefined> => {
+    for (const uid of uids.toSorted((a, b) => b - a).slice(0, FETCH_LIMIT)) {
+        const headers = await read(`${mailbox.mailbox};UID=${uid};SECTION=HEADER`);
         const from = headerValue(headers, "From");
         const subject = headerValue(headers, "Subject");
         if (!matchesSite(from, subject, token)) {
             continue;
         }
         const dateHeader = headerValue(headers, "Date");
-        const date = dateHeader === "" ? undefined : new Date(dateHeader);
-        if (date !== undefined && !Number.isNaN(date.getTime()) && now.getTime() - date.getTime() > WINDOW_MS) {
+        const parsed = dateHeader === "" ? undefined : new Date(dateHeader);
+        const date = parsed !== undefined && Number.isNaN(parsed.getTime()) ? undefined : parsed;
+        if (windowFrom !== undefined && date !== undefined && date.getTime() < windowFrom) {
             // UIDs are allocation-ordered: the first match outside the window means every older one is too.
             return undefined;
         }
-        const body = decodeQuotedPrintable(await curl(mailbox, `${mailbox.mailbox};UID=${uid};SECTION=TEXT;PARTIAL=0-${BODY_BYTES}`));
-        return {
-            from,
-            subject,
-            date: date !== undefined && Number.isNaN(date.getTime()) ? undefined : date,
-            codes: extractCodes(subject, body),
-            links: extractLinks(body, token),
-        };
+        const body = decodeQuotedPrintable(await read(`${mailbox.mailbox};UID=${uid};SECTION=TEXT;PARTIAL=0-${BODY_BYTES}`));
+        return { from, subject, date, codes: extractCodes(subject, body), links: extractLinks(body, token) };
     }
     return undefined;
+};
+
+// A mail the site sent this long before the call still counts as the one asked for: the model clicks "send code",
+// looks at the page, then calls, and the mail can land in between.
+const JUST_BEFORE_MS = 45_000;
+// How often a waiting call searches again. No IMAP IDLE: curl cannot hold one, and the IMAP extension's client lives
+// in the editor's extension, not the daemon; a search for UIDs past the last seen is one small round trip.
+const POLL_MS = 3_000;
+
+export interface CodeAsk {
+    readonly now: Date;
+    // How long to hold for a mail arriving after the call; 0 answers from what is there.
+    readonly waitMs: number;
+    readonly signal?: AbortSignal | undefined;
+    readonly pollMs?: number;
+    readonly read?: ImapRead;
+}
+
+// `after-call`: arrived while the call waited. `just-before`: dated within JUST_BEFORE_MS before the call. `earlier`:
+// the newest from before that, answered only when nothing newer came, and possibly an earlier attempt's.
+export interface FoundCode extends MailMatch {
+    readonly arrived: "after-call" | "just-before" | "earlier";
+}
+
+/**
+ * The code or link a site sent: a mail from it arriving after the call (waited for up to `waitMs`, abortable), one
+ * dated just before the call, or failing both the newest in the half-hour window, said as older; undefined for none.
+ */
+export const fetchEmailCode = async (mailbox: Mailbox, site: string, ask: CodeAsk): Promise<FoundCode | undefined> => {
+    const read = ask.read ?? curlRead(mailbox);
+    const now = ask.now.getTime();
+    const token = siteToken(site);
+    const uids = parseSearch(await read(mailbox.mailbox, `UID SEARCH SINCE ${imapSince(ask.now)}`));
+    const before = await newestFromSite(read, mailbox, uids, token, now - WINDOW_MS);
+    if (before?.date !== undefined && now - before.date.getTime() <= JUST_BEFORE_MS) {
+        return { ...before, arrived: "just-before" };
+    }
+    // Anything with a higher UID than this arrived after the call.
+    let seen = Math.max(0, ...uids);
+    const deadline = now + ask.waitMs;
+    // Read fresh each time: the turn can stop while a search or a sleep is under way.
+    const stopped = (): boolean => ask.signal?.aborted === true;
+    while (Date.now() < deadline && !stopped()) {
+        await sleep(Math.min(ask.pollMs ?? POLL_MS, deadline - Date.now()), { signal: ask.signal, unref: true });
+        if (stopped()) {
+            break;
+        }
+        // `n:*` always names the newest message even when it is below n, so the UIDs are filtered here too.
+        const fresh = parseSearch(await read(mailbox.mailbox, `UID SEARCH UID ${seen + 1}:*`)).filter((uid) => uid > seen);
+        if (fresh.length === 0) {
+            continue;
+        }
+        seen = Math.max(seen, ...fresh);
+        const arrived = await newestFromSite(read, mailbox, fresh, token, undefined);
+        if (arrived !== undefined) {
+            return { ...arrived, arrived: "after-call" };
+        }
+    }
+    return before === undefined ? undefined : { ...before, arrived: "earlier" };
 };

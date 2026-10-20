@@ -1,4 +1,4 @@
-import { nextBookedSendAt } from "../agent/run/turn/turn-resume.js";
+import { nextBookedSendAt } from "../agent/run/turn/booked-release.js";
 import { nextApprovedAt } from "../approvals/approvals-executor.js";
 import { nextCountdownWakeAt, nextCronWakeAt, nextOneTimeWakeAt } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";

@@ -16,6 +16,7 @@ import { liveRunOf } from "../conversations/actor/conversation-holdings.js";
 import { turnStandingOf } from "../conversations/actor/turn-standing.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { approveDraft, composeEnvironment, proposeDraft, rejectDraft, toolStanding } from "../environment/environment.js";
+import { onRuntimeChange } from "../seams/runtime-feed.js";
 import { deliverWake } from "../seams/wake-delivery.js";
 import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
 import { needRaised, needResolved } from "../push/notifications.js";
@@ -104,9 +105,68 @@ const withdrawNeedPush =
     (need) =>
         void whole().pushSender.withdraw(needResolved(need));
 
+// Whether any of the person's browsers allows `site`, by the facts the hub holds (a sleeping one answers what it said
+// last). `fresh` asks each one again first, each within the site-check timeout.
+const browsersAllow = async (services: Services, site: string, fresh: boolean): Promise<boolean> => {
+    const browsers = (await services.capabilities.list()).filter((capability) => capability.kind === "webext");
+    if (fresh) {
+        await Promise.all(browsers.map((browser) => services.webextHub.refresh(browser.id, SITE_CHECK_TIMEOUT_MS)));
+    }
+    return browsers.some((browser) => services.webextHub.state(browser.id).facts?.grants.some((grant) => grantSite(grant.origin) === site) === true);
+};
+
+// The runtime domains whose change can meet an open need: a connection, a grant, a browser's sites, a machine.
+const WORLD_DOMAINS: ReadonlySet<string> = new Set(["capabilities", "grants", "webext", "hosts"]);
+
+// One pass's site answers (2026-10-20). Only the boot and fallback passes ask the browsers again, once per pass: a pass
+// a change started reads the facts that change brought (a browser's grants-changed push refreshes first).
+const passSiteChecks = (whole: NeedsSliceDeps["whole"]) => {
+    let answers = new Map<string, boolean>();
+    let fresh = false;
+    return {
+        begin: (passIsFresh: boolean): void => {
+            answers = new Map();
+            fresh = passIsFresh;
+        },
+        siteAllowed: async (site: string): Promise<boolean> => {
+            const cached = answers.get(site);
+            if (cached !== undefined) {
+                return cached;
+            }
+            const allowed = await browsersAllow(whole(), site, fresh);
+            fresh = false;
+            answers.set(site, allowed);
+            return allowed;
+        },
+    };
+};
+
+// What makes a needs pass run now rather than on the fallback timer (2026-10-20): the runtime domains above, a secret
+// stored anywhere, and a keyring read that may list a new entry.
+const worldChangesOf =
+    (whole: NeedsSliceDeps["whole"], logger: NeedsSliceDeps["logger"]): NonNullable<NeedsDeps["subscribeWorldChanges"]> =>
+    (recheck) => {
+        const services = whole();
+        const stops = [
+            onRuntimeChange((domains) => {
+                if (domains.some((domain) => WORLD_DOMAINS.has(domain))) {
+                    recheck();
+                }
+            }, logger),
+            services.onSecretsChanged(recheck),
+            services.keyringLink.onRefreshed(() => recheck()),
+        ];
+        return () => {
+            for (const stop of stops) {
+                stop();
+            }
+        };
+    };
+
 const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): NeedsSlice => {
     const capabilities = (): Promise<readonly Capability[]> => whole().capabilities.list();
     const secret = secretNeedOf(whole);
+    const sites = passSiteChecks(whole);
     const needs = createNeeds({
         store: fileNeedsStore(join(workspaceRoot, needsDocument.path)),
         kinds: {
@@ -123,18 +183,7 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
                 personas: { get: (id) => whole().personas.get(id), upsert: (persona) => whole().personas.upsert(persona) },
                 grants: () => whole().conversationGrants,
                 personaIdByName: async (name) => (await whole().personas.list()).find((persona) => (persona.label ?? persona.id) === name)?.id,
-                // Every one of the person's browsers, asked fresh (a sleeping one answers what it said last).
-                siteAllowed: async (site) => {
-                    const services = whole();
-                    const browsers = (await services.capabilities.list()).filter((capability) => capability.kind === "webext");
-                    for (const browser of browsers) {
-                        await services.webextHub.refresh(browser.id, SITE_CHECK_TIMEOUT_MS);
-                        if (services.webextHub.state(browser.id).facts?.grants.some((grant) => grantSite(grant.origin) === site) === true) {
-                            return true;
-                        }
-                    }
-                    return false;
-                },
+                siteAllowed: sites.siteAllowed,
             }),
             release: releaseNeed({
                 gates: () => whole().credentialGates.list(),
@@ -210,6 +259,8 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
         continueWhenMet: async () => (await whole().sandboxSettings.get()).continueWhenNeedMet,
         provideSecret: (need, value, keepOn) => secret.provide(need, value, keepOn),
         onTurnEnded: (listener) => whole().events.subscribe("run.settled", ({ conversationId }) => listener(conversationId)),
+        beginCheckPass: sites.begin,
+        subscribeWorldChanges: worldChangesOf(whole, logger),
     });
     return { needs };
 };

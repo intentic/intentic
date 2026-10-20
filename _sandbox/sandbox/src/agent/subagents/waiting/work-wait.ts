@@ -138,7 +138,7 @@ const HEARD_GRACE_MS = 1_500;
 
 // Settles `message` once words are said into the waiting conversation's live turn; never, until then. The signal ends the
 // listening with the wait.
-const wordsSaid = (actors: Actors, conversationId: string, signal: AbortSignal): Promise<WorkWaitOutcome> =>
+export const wordsSaid = (actors: Actors, conversationId: string, signal: AbortSignal): Promise<WorkWaitOutcome> =>
     new Promise((resolve) => {
         let grace: ReturnType<typeof setTimeout> | undefined;
         const stop = whenSteered(actors, conversationId, () => {
@@ -286,7 +286,7 @@ const AT_A_PROMPT = (id: string): string =>
     `This command is waiting for input: the process named in waitingForInput is blocked reading its terminal and nothing has moved, and nothing in your turn can type into it, so waiting again will not end it. Stop it with TaskStop (task_id "${id}") and run it so it cannot ask: a flag that answers for it (--yes, --no-input), its answer piped in, or prompting turned off (npm_config_yes, GIT_TERMINAL_PROMPT=0). If only a person can answer (a password, a one-time code), hand them its terminal with request_help.`;
 
 // What a wait handed back for words said into its turn tells the model, since the words themselves come after it.
-const WORDS_SAID =
+export const WORDS_SAID =
     "Something was said into your turn while you waited (the owner, a watch that fired, a child's report or the sandbox): it follows this result. Read it, then wait again if you still need to; nothing you were waiting on has moved.";
 
 // What a wait on "any" tells the model when no child is left but commands still run, which it no longer waits on.

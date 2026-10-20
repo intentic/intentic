@@ -6,6 +6,7 @@ import type { PopupCommand, PopupState } from "./messages.js";
 import { store } from "./store.js";
 import { currentGrants, fileUnmodedGrants } from "./tools/tab-access.js";
 import { openPanel, refreshBadge } from "./tools/access.js";
+import { notifySandboxGrantsChanged } from "./tools/grants-changed.js";
 import {
     addNeverSaveHost,
     enablePasswordsInBrowser,
@@ -57,9 +58,10 @@ chrome.permissions.onRemoved.addListener((removed) => {
 });
 
 // A site Chrome just granted, from its own dialog (the popup that asked is closed by then) or its own site-access menu:
-// filed with the mode the person picked, or as read only when it answers the agent's request (site-grants.ts).
+// filed with the mode the person picked, or as read only when it answers the agent's request (site-grants.ts). Once
+// filed, the paired sandbox is told, so an agent waiting on `ask_access` goes on now (grants-changed.ts, 2026-10-20).
 chrome.permissions.onAdded.addListener((added) => {
-    void granted(added.origins ?? []);
+    void granted(added.origins ?? []).then(notifySandboxGrantsChanged);
 });
 
 const readState = async (): Promise<PopupState> => {

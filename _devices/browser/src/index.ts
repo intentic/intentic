@@ -1,7 +1,7 @@
-import { sleep } from "@intentic/base/async";
 import { attach, type CdpSession, listTargets, newTab } from "./cdp.js";
 import { ensureBrowser, ownEndpoint } from "./launch.js";
 import { type PageState, type RawSnapshot, refIndex, toPageState } from "./page.js";
+import { type PageAnswer, type RunInPage, settleAfterAction, settleAfterOpen } from "./settle.js";
 import { SNAPSHOT_SCRIPT } from "./snapshot.js";
 import { type Browser, BrowserError } from "./types.js";
 
@@ -17,6 +17,14 @@ export { BrowserError, type Browser } from "./types.js";
 // The most of a page's text `text()` answers with; beyond it the answer says how much it left out.
 const MAX_TEXT = 20_000;
 
+// The keys `press` names that are not a letter.
+const NAMED_KEYS = new Map<string, { key: string; code: string; keyCode: number }>([
+    ["Return", { key: "Enter", code: "Enter", keyCode: 13 }],
+    ["Enter", { key: "Enter", code: "Enter", keyCode: 13 }],
+    ["Escape", { key: "Escape", code: "Escape", keyCode: 27 }],
+    ["Tab", { key: "Tab", code: "Tab", keyCode: 9 }],
+]);
+
 const evaluate = async <T>(session: CdpSession, expression: string): Promise<T> => {
     const result = await session.send<{ result?: { value?: T }; exceptionDetails?: { text?: string } }>("Runtime.evaluate", {
         expression,
@@ -28,6 +36,12 @@ const evaluate = async <T>(session: CdpSession, expression: string): Promise<T> 
     }
     return result.result?.value as T;
 };
+
+// What settle.ts runs its waits through.
+const inPage =
+    (session: CdpSession): RunInPage =>
+    async (script) =>
+        await evaluate<PageAnswer>(session, script);
 
 // Acting on a ref is always "find it again, then do the thing"; the not-found case is written once, here.
 const withElement = (ref: string, body: string): string => {
@@ -83,8 +97,8 @@ export const browser = (): Browser => {
                 targetId = target.id;
                 session?.close();
                 session = undefined;
-                // Give the navigation a moment to produce a document worth snapshotting.
-                await sleep(600);
+                // Until the new document has parsed, within the beat this used to sleep (settle.ts).
+                await settleAfterOpen(inPage(await connect(targetId)));
             }
             return await snapshot();
         },
@@ -117,13 +131,7 @@ export const browser = (): Browser => {
         press: async (combo) => {
             const live = await connect(targetId);
             const key = combo.split("+").pop() ?? combo;
-            const named: Record<string, { key: string; code: string; keyCode: number }> = {
-                Return: { key: "Enter", code: "Enter", keyCode: 13 },
-                Enter: { key: "Enter", code: "Enter", keyCode: 13 },
-                Escape: { key: "Escape", code: "Escape", keyCode: 27 },
-                Tab: { key: "Tab", code: "Tab", keyCode: 9 },
-            };
-            const descriptor = named[key] ?? { key, code: `Key${key.toUpperCase()}`, keyCode: key.toUpperCase().charCodeAt(0) };
+            const descriptor = NAMED_KEYS.get(key) ?? { key, code: `Key${key.toUpperCase()}`, keyCode: key.toUpperCase().charCodeAt(0) };
             const modifiers = (combo.includes("ctrl") ? 2 : 0) | (combo.includes("shift") ? 8 : 0) | (combo.includes("alt") ? 1 : 0);
             for (const type of ["keyDown", "keyUp"] as const) {
                 await live.send("Input.dispatchKeyEvent", { type, ...descriptor, windowsVirtualKeyCode: descriptor.keyCode, modifiers });
@@ -150,6 +158,8 @@ export const browser = (): Browser => {
             await session?.send("Page.bringToFront").catch(() => undefined);
             return await snapshot();
         },
+
+        settleAfterAction: async () => await settleAfterAction(inPage(await connect(targetId))),
 
         disconnect: async () => {
             session?.close();

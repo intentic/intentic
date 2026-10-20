@@ -9,8 +9,11 @@ import { host } from "../host";
 // fixer outright (`fixer`), an id no later run derives, so the roster is handed on whole and every reader looks up only
 // the ids it owns (fixesByRun, mainFailuresOf). Queries only when there is a failed run or a failing main line to ask about.
 
-// Poll pace while a fix is moving; faster than the board's own CI poll since this can change in seconds.
-const LIVE_POLL_MS = 5_000;
+// The shell writes every roster frame from its event stream into this same `agents.list` entry (useAgents-registry.ts),
+// so a fix starting, moving or ending shows the moment the daemon says so. The polls are the fallback for a frame missed
+// across a reconnect (2026-10-20, the live pace was every 5 s as the only feed).
+// Poll pace while a fix is moving.
+const LIVE_POLL_MS = 15_000;
 // Matches the board's CI poll; a fix can start elsewhere (another tab, phone), so this must still catch up.
 const RESTING_POLL_MS = 30_000;
 

@@ -51,7 +51,8 @@ import {
 import { osTools } from "./tools/os/os.js";
 import { osSettingsTools } from "./tools/os/settings.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
-import { appLogs, appStatus, appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs/programs.js";
+import { appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs/programs.js";
+import { appLogsAfterWait, appStatusAfterWait, DEFAULT_APP_WAIT_MS, MAX_APP_WAIT_MS } from "./tools/programs/app-wait-tools.js";
 import { calling } from "./indicator.js";
 import { MACHINE_VERSION } from "../version.js";
 
@@ -92,7 +93,7 @@ const confirmingLook = async (said: string, scopes: DeviceScopes): Promise<Recor
     if (scopes.screen !== "on") {
         return textResult(`${said} (No screenshot: "See the screen" is off for this device.)`);
     }
-    await settle();
+    await settle(screenOf(), frames);
     const shot = await reshoot(screenOf(), frames);
     if (shot.unchanged && frames.unchangedStreak() <= MAX_UNCHANGED) {
         return textResult(
@@ -137,6 +138,21 @@ const phoneSerial = required
 
 // The tool list. Descriptions carry the judgement calls the schema cannot: writes are off by default, there is
 // no delete, one big command beats ten small ones over a link like this.
+// What app_status and app_logs take to wait rather than be called in a loop (2026-10-20): each ends on its event, a
+// line landing in the log or the program's exit, and at timeoutMs at the latest.
+const appWaitInput = {
+    waitFor: required
+        .optional()
+        .describe("A regular expression (case-insensitive): answer once the program's output has a line matching it, or it ends without one."),
+    untilExit: z.boolean().optional().describe("Answer once the program has ended. Takes the place of waitFor when both are given."),
+    timeoutMs: z
+        .int()
+        .positive()
+        .max(MAX_APP_WAIT_MS)
+        .optional()
+        .describe(`How long waitFor or untilExit may wait, in ms. Default ${DEFAULT_APP_WAIT_MS}, maximum ${MAX_APP_WAIT_MS}; the answer says when it ran out.`),
+};
+
 const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "describe",
@@ -579,14 +595,19 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     tool({
         name: "app_status",
         description:
-            "The programs this sandbox started on this device, running and ended, and the builds it pushed here. With an id: that run's state, how it ended (exit code in words), the windows it and the processes it started have open (ids for screenshot, ui_elements, focus_window), and its last output.",
+            "The programs this sandbox started on this device, running and ended, and the builds it pushed here. With an id: that run's state, how it ended (exit code in words), the windows it and the processes it started have open (ids for screenshot, ui_elements, focus_window), and its last output. With an id, it can wait instead of being called again and again: waitFor answers once the program prints a line matching it, untilExit once the program ends, each within timeoutMs.",
         effect: "read",
-        input: z.object({ id: required.optional().describe("A run id from app_start. Omit for the list.") }),
-        run: async ({ id }, scopes) => textResult(await appStatus(id, scopes, callerSandbox(), desktop)),
+        input: z.object({
+            id: required.optional().describe("A run id from app_start. Omit for the list."),
+            ...appWaitInput,
+        }),
+        run: async ({ id, waitFor, untilExit, timeoutMs }, scopes) =>
+            textResult(await appStatusAfterWait(id, scopes, callerSandbox(), desktop, { waitFor, untilExit, timeoutMs })),
     }),
     tool({
         name: "app_logs",
-        description: "What a program started with app_start printed (stdout and stderr together), from its end. A GUI program often prints nothing; its exit code is in app_status.",
+        description:
+            "What a program started with app_start printed (stdout and stderr together), from its end. A GUI program often prints nothing; its exit code is in app_status. To wait for a line (listening on, ready) rather than calling this again and again, pass waitFor; to wait for the program to end, untilExit; each within timeoutMs.",
         effect: "read",
         input: z.object({
             id: required.describe("The run id from app_start."),
@@ -597,8 +618,10 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
                 .default(DEFAULT_APP_LOG_LINES)
                 .describe(`How many lines from the end. Default ${DEFAULT_APP_LOG_LINES}, maximum ${MAX_APP_LOG_LINES}.`),
             grep: required.optional().describe("Only lines matching this regular expression (case-insensitive)."),
+            ...appWaitInput,
         }),
-        run: async ({ id, lines, grep }, scopes) => textResult(await appLogs(id, lines, grep, scopes, callerSandbox())),
+        run: async ({ id, lines, grep, waitFor, untilExit, timeoutMs }, scopes) =>
+            textResult(await appLogsAfterWait(id, lines, grep, scopes, callerSandbox(), { waitFor, untilExit, timeoutMs })),
     }),
     tool({
         name: "app_stop",

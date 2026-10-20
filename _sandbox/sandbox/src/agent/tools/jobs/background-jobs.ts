@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pollUntil, sleep } from "@intentic/base/async";
 import { oneLine } from "@intentic/base/one-line";
 import type { AgentJob } from "@intentic/sandbox-contract/schemas/agents";
 import { profileOf, type TurnProfile, TurnProfileSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import type { Holding } from "../../../conversations/actor/conversation-holdings.js";
-import { whenFileAppears } from "../file-appears.js";
+import { untilFileAppears, whenFileAppears } from "../file-appears.js";
+import { tellJobEnded } from "./job-ended.js";
 import { publishRuntimeChange } from "../../../seams/runtime-feed.js";
 import { endSession } from "../../../seams/session-processes.js";
 import { opt } from "../../../opt.js";
@@ -231,6 +231,7 @@ const noteEnded = (actors: Actors, record: JobRecord): boolean => {
     for (const stale of endings.of(job.conversationId).slice(0, -ENDINGS_KEPT)) {
         endings.drop(stale.id);
     }
+    tellJobEnded();
     return true;
 };
 
@@ -725,9 +726,7 @@ export const portJobOf = (actors: Holders, port: number): { readonly conversatio
 };
 
 // The runner publishes the status once its command is gone; this gives it the moment that takes.
-const untilFinished = async (job: BackgroundJob, ms: number): Promise<void> => {
-    await pollUntil(() => jobFinished(job), { intervalMs: 50, timeoutMs: ms, wait: (wait) => sleep(wait, { unref: true }) });
-};
+const untilFinished = (job: BackgroundJob, ms: number): Promise<void> => untilFileAppears(jobStatusPath(job), ms);
 
 /**
  * Ends a job, whoever asks: its watch is disarmed first through `disarm` (the watch engine is not importable from

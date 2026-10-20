@@ -26,11 +26,14 @@ export interface OutageResume {
 // The daemon refused the pinned model (not served, or not on this plan); the reloaded catalog repoints the picker.
 const MODEL_REFUSED: ReadonlySet<TurnError["code"]> = new Set([`grok-model-invalid`, `codex-model-invalid`, `model-unavailable`]);
 
-// Renewal probe (1s+25x3s) must outlast the daemon's AUTH_RESUME_DEADLINE_MS (1 minute) re-mint window.
-const RENEWAL_PROBE = { delayMs: 1_000, intervalMs: 3_000, tries: 25 } as const;
+// Each probe is the fallback since 2026-10-20: the roster frame that says the daemon's re-run started is followed at
+// once (heardRunning), so a probe only catches a frame this window missed, and looks on a slow beat. Each still outlasts
+// what it waits on. Renewal (1s+8x10s) outlasts the daemon's AUTH_RESUME_DEADLINE_MS (1 minute) re-mint window.
+const RENEWAL_PROBE = { delayMs: 1_000, intervalMs: 10_000, tries: 8 } as const;
 const OUTAGE_PROBE = { delayMs: 10_000, intervalMs: 15_000, tries: 20 } as const;
-// The daemon's held pass opens the fresh session on its next beat (every 5s); 2s+10x3s outlasts several beats.
-const FRESH_SESSION_PROBE = { delayMs: 2_000, intervalMs: 3_000, tries: 10 } as const;
+// The daemon's held pass opens the fresh session as the hold is recorded, or on its 30s backstop if that nudge was
+// missed; 2s+5x10s outlasts the backstop.
+const FRESH_SESSION_PROBE = { delayMs: 2_000, intervalMs: 10_000, tries: 5 } as const;
 
 // The subset of a conversation a failure can touch or act on.
 export type FailureHost = Pick<Conversation, "session" | "error" | "pickUp"> & {
@@ -78,6 +81,13 @@ export class TurnFailures {
 
     // Timer for the pending reattach probe; a fresh failure's schedule replaces whatever was armed before.
     private timer: ReturnType<typeof setTimeout> | undefined;
+
+    // The armed probe's look, while one waits for the daemon's re-run: what a roster frame saying it runs calls at once.
+    private probe: (() => void) | undefined;
+
+    // Whether a roster frame already set the armed probe off: every frame while the turn runs repeats it, and a re-run
+    // this window could not attach to is left to the probe's own beat rather than asked again on each one.
+    private heard = false;
 
     constructor(private readonly host: FailureHost) {}
 
@@ -342,22 +352,37 @@ export class TurnFailures {
         clearTimeout(this.timer);
         let attempts = 0;
         const probe = (): void => {
+            clearTimeout(this.timer);
             if (this.host.turn.streaming.value) {
+                this.probe = undefined;
                 return;
             }
             attempts += 1;
             void this.host.turn.reattach().then((attached) => {
                 if (attached || this.host.turn.streaming.value) {
+                    this.probe = undefined;
                     return;
                 }
                 if (attempts < profile.tries) {
                     this.timer = setTimeout(probe, profile.intervalMs);
                     return;
                 }
+                this.probe = undefined;
                 exhausted?.();
             });
         };
+        this.probe = probe;
+        this.heard = false;
         this.timer = setTimeout(probe, Math.max(0, dueAt + profile.delayMs - Date.now()));
+    }
+
+    // The roster says this conversation's turn runs: the re-run this window waits for has started, so it is followed now
+    // rather than at the probe's next look (2026-10-20). Nothing for a window that waits on no re-run.
+    heardRunning(): void {
+        if (this.probe !== undefined && !this.heard && !this.host.turn.streaming.value) {
+            this.heard = true;
+            this.probe();
+        }
     }
 
     // How the last turn ended, as the daemon has it (AgentTranscriptSchema.ending), for a tab that never watched it
@@ -375,6 +400,7 @@ export class TurnFailures {
     // replays on reopen.
     cancelProbe(): void {
         clearTimeout(this.timer);
+        this.probe = undefined;
     }
 
     // Probe budget exhausted with nothing to attach to: the spinner stops and the turn is said to have stopped. Whether the

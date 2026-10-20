@@ -6,6 +6,7 @@ import type { Desktop } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../../policy.js";
 import { listArtifacts, sandboxRunsDir, stageArtifact } from "./artifacts.js";
+import { appLogsAfterWait, appStatusAfterWait } from "./app-wait-tools.js";
 import { appLogs, appStatus, appStop, descendantsOf, describeExit, parseRows, startApp } from "./programs.js";
 
 // Pushing a build and running it, on a real temp home as the POSIX user running the suite: the bytes go through the
@@ -97,6 +98,26 @@ test("a started program keeps running, its output is logged, and a stop ends it 
     expect(await appStop(id, false, programs, SANDBOX)).toContain(`Stopped ${id}`);
     expect(await appStatus(id, programs, SANDBOX, noScreen)).toContain("stopped by the agent");
 });
+
+// waitFor and untilExit answer on the line and on the exit, so an agent asks once rather than calling in a loop
+// (2026-10-20); the old app_logs gave whatever was there when it was called.
+test("app_logs waits for the line it is told to, and app_status for the end", async () => {
+    const path = await push(Buffer.from('#!/bin/sh\nsleep 2\necho "listening on 8080"\nsleep 1\nexit 4\n'), "slow", "slow.sh");
+    Bun.spawnSync(["chmod", "+x", path ?? ""]);
+    const started = await startApp({ program: path ?? "" }, programs, SANDBOX);
+    const id = /as (slow-[0-9a-f]{6})/.exec(started)?.[1] ?? "";
+    expect(id).not.toBe("");
+    const asked = Date.now();
+    expect(await appLogsAfterWait(id, 50, undefined, programs, SANDBOX, { waitFor: "listening on \\d+", timeoutMs: 10_000 })).toContain("listening on 8080");
+    expect(Date.now() - asked).toBeLessThan(5_000);
+    expect(await appStatusAfterWait(id, programs, SANDBOX, noScreen, { untilExit: true, timeoutMs: 10_000 })).toContain("exited with code 4");
+    // Asked of a run that has ended, a line that never came says so at once rather than at the timeout.
+    const late = Date.now();
+    expect(await appLogsAfterWait(id, 50, undefined, programs, SANDBOX, { waitFor: "never printed", timeoutMs: 10_000 })).toContain(
+        "(waitFor: the program ended without printing a line matching /never printed/i.)",
+    );
+    expect(Date.now() - late).toBeLessThan(1_000);
+}, 30_000);
 
 test("a program that falls over at once is answered with how it ended and what it said", async () => {
     const path = await push(Buffer.from('#!/bin/sh\necho "missing config" >&2\nexit 3\n'), "crashes", "crashes.sh");

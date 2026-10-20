@@ -441,6 +441,40 @@ describe("roster frames the board can skip", () => {
     });
 });
 
+// An extension reading the fleet by its contract (the pipelines board's fix agents) shares this box's `agents.list` entry;
+// a roster frame lands in it, so the view moves with the stream instead of its own poll.
+describe("a roster frame and the agents.list read", () => {
+    const summary = (id: string): AgentSummary => ({
+        id,
+        status: `running`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 1_000,
+        seenAt: 2_000,
+        attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+    });
+    const KEY = [`agents.list`, `sbx-1`];
+    type Read = { readonly agents: AgentSummary[]; readonly held?: AutomationApproval[]; readonly rev: number } | undefined;
+    const read = (): Read => queryClient.getQueryData<Read>(KEY);
+
+    beforeEach(() => {
+        resetSandboxScope();
+        queryClient.removeQueries({ queryKey: KEY });
+    });
+
+    it("writes the frame's roster into a read already held, keeping the held wakes the frame does not carry", () => {
+        const held: AutomationApproval[] = [{ id: `w1`, automationId: `nightly`, createdAt: 1_000 }];
+        queryClient.setQueryData(KEY, { agents: [], held, rev: 0 });
+        setAgents([summary(`a1`)], 100);
+        expect(read()).toEqual({ agents: [summary(`a1`)], held, rev: 100 });
+    });
+
+    it("files nothing when no one has read it", () => {
+        setAgents([summary(`a1`)], 101);
+        expect(read()).toBeUndefined();
+    });
+});
+
 // A frame restamping a conversation is a reading of the sandbox's clock only as it happens: the first snapshot after a
 // reconnect, or a read, compares against a roster that stood still while the stream was gone, and a card restamped
 // three minutes before the wake would skew every countdown by three minutes.

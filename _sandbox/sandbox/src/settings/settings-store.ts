@@ -20,6 +20,9 @@ export interface SandboxSettingsStore {
     // `get` plus whether the value stands in for a file this build could not read; boot acts on nothing it did not read.
     readonly load: () => Promise<{ readonly settings: SandboxSettings; readonly unreadable: boolean }>;
     readonly set: (settings: SandboxSettings) => Promise<void>;
+    // Hears every write once it is down; answers the unsubscribe. What a pass that acts by a setting (the resume pass's
+    // answers to a wall) re-reads on, instead of on its next beat (2026-10-20).
+    readonly onSet: (listener: () => void) => () => void;
 }
 
 // `pin` is the organisation's (compliance/org-pins.ts): with it, every read is the file with the organisation's pinned values
@@ -50,6 +53,7 @@ export const fileSandboxSettingsStore = (path: string, pin?: Pin<SandboxSettings
         }
         return outcome.value;
     };
+    const written = new Set<() => void>();
     return {
         get: async () => {
             const { value, unreadable } = await file.state();
@@ -62,6 +66,15 @@ export const fileSandboxSettingsStore = (path: string, pin?: Pin<SandboxSettings
         set: async (settings) => {
             const stored = pin === undefined ? settings : (await pin(settings)).value;
             await file.update(() => stored);
+            for (const listener of written) {
+                listener();
+            }
+        },
+        onSet: (listener) => {
+            written.add(listener);
+            return () => {
+                written.delete(listener);
+            };
         },
     };
 };

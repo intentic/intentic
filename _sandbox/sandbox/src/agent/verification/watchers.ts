@@ -12,6 +12,7 @@ import { turnCliEnv } from "../run/harness/turn-env.js";
 import type { Services } from "../../composition.js";
 import { whenFileAppears } from "../tools/file-appears.js";
 import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
+import { isCiWatchCommand, onCiDeliveries } from "./ci-rechecks.js";
 import { type CheckOptions, type CheckResult, type RunCheck, watchCheck, type WatchPlacement } from "./watch-check.js";
 import type { JournalledWatch, WatchJournal } from "../../store/journals/watch-journal.js";
 
@@ -378,6 +379,16 @@ const follow = (live: WatcherRuntime, record: WatcherRecord): void => {
     }
 };
 
+// Rechecks every CI-shaped watch on a `ci` runtime change (ci-rechecks.ts). Answers its stop.
+const recheckOnCi = (live: WatcherRuntime): (() => void) =>
+    onCiDeliveries(() => {
+        for (const [, record] of live.conversations.holdings(WATCHES).entries()) {
+            if (isCiWatchCommand(record.spec.command)) {
+                recheck(live, record);
+            }
+        }
+    }, live.logger);
+
 export type ArmOutcome =
     // The condition already held when asked, nothing armed, no wake coming.
     | { readonly kind: "already-met"; readonly firstCheck: CheckResult }
@@ -540,7 +551,9 @@ const restoreOne = async (live: WatcherRuntime, entry: JournalledWatch, env: Rec
 // the next one must pick up.
 export const startWatcherRuntime = (live: WatcherRuntime): (() => void) => {
     runtime = live;
+    const stopCi = recheckOnCi(live);
     return () => {
+        stopCi();
         for (const [, record] of live.conversations.holdings(WATCHES).entries()) {
             forget(live, record);
         }

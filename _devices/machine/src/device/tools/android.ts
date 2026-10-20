@@ -1,10 +1,21 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
-import { sleep } from "@intentic/base/async";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { clipText, runBoundedBytes } from "@intentic/base/process";
-import { decodePng, downscale, encodePng, fitSize, type Frame, FrameLog, type Point, toDesktop, toImage } from "@intentic/desktop-automation";
+import {
+    decodePng,
+    downscale,
+    encodePng,
+    fitSize,
+    type Frame,
+    FrameLog,
+    type Point,
+    type SettleTiming,
+    toDesktop,
+    toImage,
+    waitForScreenToSettle,
+} from "@intentic/desktop-automation";
 import { homeDir } from "@intentic/local-agent";
 import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract/policy/command-classes";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -89,12 +100,15 @@ export interface AndroidDeps {
     readonly adb: () => AdbRunner | undefined;
     readonly platform: NodeJS.Platform;
     readonly indicator: () => Indicator;
-    // The beat a phone is given to draw an action's result before the confirming screenshot.
-    readonly settle: () => Promise<void>;
+    // Waits for the phone to show an action's result before the confirming screenshot: `read` is a digest of its screen
+    // now, `baseline` the newest screenshot's (2026-10-20).
+    readonly settle: (read: () => Promise<string>, baseline: string | undefined) => Promise<void>;
 }
 
-// Android's own transitions run about 300ms; an app opening takes longer than a desktop menu.
-const PHONE_SETTLE_MS = 700;
+// A phone's wait for its screen to change and hold still (settle.ts in desktop-automation). The cap is the old fixed beat:
+// Android's own transitions run about 300 ms and an app opening takes longer. A screencap over adb takes a few hundred
+// ms itself, so two equal reads in a row are the quiet window (2026-10-20).
+const PHONE_SETTLE: SettleTiming = { maxMs: 700, quietMs: 0, pollMs: 0 };
 
 export const machineAndroidDeps = (): AndroidDeps => ({
     adb: () => {
@@ -103,7 +117,7 @@ export const machineAndroidDeps = (): AndroidDeps => ({
     },
     platform: process.platform,
     indicator: machineIndicator,
-    settle: async () => await sleep(PHONE_SETTLE_MS),
+    settle: async (read, baseline) => void (await waitForScreenToSettle(read, baseline, PHONE_SETTLE)),
 });
 
 // Deadlines per kind of call: listing and reading props are instant, a dump waits for the screen to be idle, an
@@ -239,13 +253,27 @@ const screencap = async ({ run, device }: Phone): Promise<Buffer> => {
     return output.stdout;
 };
 
-// The screen as it is now, shrunk as the desktop's are and recorded as the phone's newest frame, unless it is
-// pixel-for-pixel the frame before.
-const capture = async (phone: Phone): Promise<PhoneShot> => {
+// The screen shrunk as the desktop's are, with the digest that tells two screenshots apart.
+const shrunkScreencap = async (phone: Phone) => {
     const pixels = decodePng(await screencap(phone));
     const size = fitSize(pixels.width, pixels.height);
     const shown = downscale(pixels, size.width, size.height);
-    const digest = createHash("sha256").update(shown.data).digest("hex");
+    return { pixels, shown, digest: createHash("sha256").update(shown.data).digest("hex") };
+};
+
+// Waits for the phone's screen to move off the newest screenshot and hold still, through deps.settle.
+const settleScreen = async (context: AndroidContext, phone: Phone): Promise<void> => {
+    try {
+        await context.deps.settle(async () => (await shrunkScreencap(phone)).digest, phone.view.frames.latest()?.digest);
+    } catch {
+        // allow(silent-catch): a screencap that fails while waiting fails again in the confirming screenshot, which says so.
+    }
+};
+
+// The screen as it is now, shrunk as the desktop's are and recorded as the phone's newest frame, unless it is
+// pixel-for-pixel the frame before.
+const capture = async (phone: Phone): Promise<PhoneShot> => {
+    const { pixels, shown, digest } = await shrunkScreencap(phone);
     const { frame, unchanged } = phone.view.frames.record(
         { x: 0, y: 0, width: pixels.width, height: pixels.height },
         shown.width,
@@ -307,7 +335,7 @@ const confirmingLook = async (context: AndroidContext, said: string, phone: Phon
     if (scopes.screen !== "on") {
         return textResult(`${said} (No screenshot: "See the screen" is off for this device.)`);
     }
-    await context.deps.settle();
+    await settleScreen(context, phone);
     try {
         const shot = await capture(phone);
         if (shot.unchanged && phone.view.frames.unchangedStreak() <= MAX_UNCHANGED) {
@@ -583,7 +611,7 @@ const watchInput = (input: AndroidActInput): PhoneInput | undefined => {
 // Home on a watch goes back and forth between the watch face and its app list; pressed again on the list, it lands on
 // the face whichever it started from.
 const homeToWatchFace = async (context: AndroidContext, phone: Phone): Promise<void> => {
-    await context.deps.settle();
+    await settleScreen(context, phone);
     // allow(silent-catch): a focus that cannot be read leaves the watch where the one press put it, which the confirming screenshot shows.
     const focused = focusedWindow(await shellOn(phone, "dumpsys window | grep mCurrentFocus=").catch(() => ""));
     if (isWatchAppList(focused)) {

@@ -170,7 +170,40 @@ export interface AutomationsStore {
     // automation no longer runs); dropped for an automation no longer there. The value is cut to WATCH_VALUE_MAX here,
     // so no caller can grow the file, and the state is stamped with the check it belongs to.
     readonly recordWatch: (id: string, next: (previous: WatchState | undefined) => WatchState) => Promise<void>;
+    // Hears every save (an upsert, a switch that moved) once it is written; answers the unsubscribe. The scheduler's pass
+    // runs on it, so a schedule saved due within the current window is armed now, not at the next beat (2026-10-20).
+    readonly onSaved: (listener: () => void) => () => void;
 }
+
+/** A store's saves told to whoever listens (AutomationsStore.onSaved), for a store that has none of its own. */
+export const announcingSaves = (store: Omit<AutomationsStore, "onSaved">): AutomationsStore => {
+    const listeners = new Set<() => void>();
+    const saved = (): void => {
+        for (const listener of listeners) {
+            listener();
+        }
+    };
+    return {
+        ...store,
+        upsert: async (automation) => {
+            await store.upsert(automation);
+            saved();
+        },
+        setEnabled: async (id, enabled) => {
+            const outcome = await store.setEnabled(id, enabled);
+            if (outcome === "changed") {
+                saved();
+            }
+            return outcome;
+        },
+        onSaved: (listener) => {
+            listeners.add(listener);
+            return () => {
+                listeners.delete(listener);
+            };
+        },
+    };
+};
 
 export type SwitchOutcome = "missing" | "unchanged" | "changed";
 
@@ -203,7 +236,9 @@ export const fileAutomationsStore = (
     path: string,
     runsPath: string,
     watchPath = join(dirname(runsPath), "automation-watch.json"),
-): AutomationsStore => {
+): AutomationsStore => announcingSaves(automationFiles(path, runsPath, watchPath));
+
+const automationFiles = (path: string, runsPath: string, watchPath: string): Omit<AutomationsStore, "onSaved"> => {
     // One entry at a time: a single automation this build cannot read is skipped and kept, never the whole manifest.
     const file = openEntries(automationsDocument, path);
     // Unreadable runs fall back to no history rather than reading as an absent manifest, which would silently stop

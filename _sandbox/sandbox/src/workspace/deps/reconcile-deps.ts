@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { sleep } from "@intentic/base/async";
+import { sleep, within } from "@intentic/base/async";
 import { isManifest } from "@intentic/workspace-setup";
 import type { Logger } from "pino";
 import { z } from "zod";
@@ -21,7 +21,9 @@ const execFileAsync = promisify(execFile);
 // blocking a turn. Drift's in-memory origin outlives a later watcher event, so credit doesn't shift.
 
 const DEFAULT_SETTLE_MS = 2_000;
-const DEFAULT_POLL_MS = 2_000;
+// An install's end is awaited off its pane's own end (managed-processes' whenEnded); this is only the floor under that,
+// for an end no event reports (2026-10-20: was a 2 s poll of `running`).
+const DEFAULT_POLL_MS = 30_000;
 const DEFAULT_INSTALL_MAX_MS = 30 * 60_000;
 
 const RequestOriginSchema = z.object({
@@ -85,6 +87,10 @@ export interface DependencyCoordinator {
     readonly watch: (subscribe: (listener: (paths: string[]) => void) => () => void) => () => void;
     readonly subscribe: (listener: (event: DependencyInstallStarted) => void) => () => void;
     readonly subscribeFailures: (listener: (event: DependencyInstallStartFailed) => void) => () => void;
+    // Resolves once the daemon's install of `dir` has ended and its outcome is written down (true), or a maintenance pass
+    // went by without starting it (false: not due, or it would not start). An install pane this coordinator did not
+    // start resolves true when the pane ends. What `mcp__deps__install` waits on instead of re-scanning (2026-10-20).
+    readonly installEnded: (dir: string) => Promise<boolean>;
 }
 
 export interface DependencyCoordinatorDeps {
@@ -138,6 +144,71 @@ const landedManifests = async (origin: Extract<DependencyOrigin, { kind: "land" 
     return dirs;
 };
 
+// Who waits on each project's install (installEnded), and which installs a pass of this coordinator is running now.
+const createInstallEndings = () => {
+    const waiting = new Map<string, Array<(ran: boolean) => void>>();
+    const own = new Set<string>();
+    const end = (dir: string, ran: boolean): void => {
+        const resolvers = waiting.get(dir) ?? [];
+        waiting.delete(dir);
+        own.delete(dir);
+        for (const resolve of resolvers) {
+            resolve(ran);
+        }
+    };
+    return {
+        wait: (dir: string): Promise<boolean> => new Promise((resolve) => waiting.set(dir, [...(waiting.get(dir) ?? []), resolve])),
+        started: (dir: string): void => void own.add(dir),
+        ownInstall: (dir: string): boolean => own.has(dir),
+        end,
+        endAll: (ran: boolean): void => {
+            for (const dir of waiting.keys()) {
+                end(dir, ran);
+            }
+            own.clear();
+        },
+    };
+};
+
+type InstallEndings = ReturnType<typeof createInstallEndings>;
+
+// A pane this coordinator is not waiting on (started from the editor) ends by itself; one it is waiting on is reported
+// after its outcome is written down, so a caller reading status then never sees it half-settled.
+const installEndedOf = (processes: ManagedProcesses, endings: InstallEndings, dir: string): Promise<boolean> => {
+    const ending = endings.wait(dir);
+    const key = installPanelKey(dir);
+    if (processes.running(key) && !endings.ownInstall(dir)) {
+        return Promise.race([ending, processes.whenEnded(key).then(() => true)]);
+    }
+    return ending;
+};
+
+// Waits out the install panes `keys`, woken by their own ends (2026-10-20); the poll under that is only a floor, and the
+// deadline stays: a pane still running past it is stopped.
+const waitForInstalls = async (deps: DependencyCoordinatorDeps, keys: readonly string[]): Promise<void> => {
+    const deadline = Date.now() + (deps.installMaxMs ?? DEFAULT_INSTALL_MAX_MS);
+    const running = (): boolean => keys.some((key) => deps.processes.running(key));
+    const allEnded = running() ? Promise.all(keys.map((key) => deps.processes.whenEnded(key))) : Promise.resolve([]);
+    while (running() && Date.now() < deadline) {
+        await within(allEnded, Math.min(deps.pollMs ?? DEFAULT_POLL_MS, Math.max(0, deadline - Date.now())), undefined, { unref: true });
+    }
+    for (const key of keys.filter((each) => deps.processes.running(each))) {
+        deps.logger.warn({ key }, "dependency install exceeded its watch window: stopping it");
+        await deps.processes.stop(key);
+    }
+};
+
+// Tells every listener, one that throws logged and the rest still told.
+const tell = <E extends { readonly dir: string }>(listeners: ReadonlySet<(event: E) => void>, event: E, logger: Logger, what: string): void => {
+    for (const listener of listeners) {
+        try {
+            listener(event);
+        } catch (error) {
+            logger.warn({ err: error, dir: event.dir }, `dependency coordinator: ${what} threw`);
+        }
+    }
+};
+
 export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): DependencyCoordinator => {
     const requests = openDocument(dependencyRequestsDocument, deps.requestsPath, { read: requestState, fallback: () => ({ projects: {} }) });
     const causes = new Map<string, DependencyOrigin>();
@@ -152,6 +223,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
     let dirty = false;
     let scheduled = false;
     let stopped = false;
+    const endings = createInstallEndings();
 
     const remember = (dir: string, origin: DependencyOrigin): void => {
         const current = causes.get(dir);
@@ -178,18 +250,6 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             await sleep(quietAfter - Date.now());
         }
         settlingWorkspaceBurst = false;
-    };
-
-    const waitForInstalls = async (keys: readonly string[]): Promise<void> => {
-        const deadline = Date.now() + (deps.installMaxMs ?? DEFAULT_INSTALL_MAX_MS);
-        while (keys.some((key) => deps.processes.running(key)) && Date.now() < deadline) {
-            await sleep(deps.pollMs ?? DEFAULT_POLL_MS);
-        }
-        const timedOut = keys.filter((key) => deps.processes.running(key));
-        for (const key of timedOut) {
-            deps.logger.warn({ key }, "dependency install exceeded its watch window: stopping it");
-            await deps.processes.stop(key);
-        }
     };
 
     const removeRequests = async (dirs: readonly string[]): Promise<void> => {
@@ -243,27 +303,16 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
                 await startInstall(deps.workspace.root, project, deps.processes, await installLine(project));
             } catch (error) {
                 deps.logger.warn({ err: error, dir: project.dir }, "dependency coordinator: install would not start");
-                for (const listener of failureListeners) {
-                    try {
-                        listener({ dir: project.dir, origin });
-                    } catch (listenerError) {
-                        deps.logger.warn({ err: listenerError, dir: project.dir }, "dependency coordinator: failure listener threw");
-                    }
-                }
+                tell(failureListeners, { dir: project.dir, origin }, deps.logger, "failure listener");
                 continue;
             }
             started.push({ dir: project.dir, key: installPanelKey(project.dir), requested: requestedOrigin !== undefined });
-            for (const listener of listeners) {
-                try {
-                    listener({ dir: project.dir, origin });
-                } catch (error) {
-                    deps.logger.warn({ err: error, dir: project.dir }, "dependency coordinator: install listener threw");
-                }
-            }
+            endings.started(project.dir);
+            tell(listeners, { dir: project.dir, origin }, deps.logger, "install listener");
         }
         if (started.length > 0) {
             deps.logger.info({ projects: started.map(({ dir }) => dir) }, "dependency coordinator: installs started");
-            await waitForInstalls(started.map(({ key }) => key));
+            await waitForInstalls(deps, started.map(({ key }) => key));
             const settled = new Map((await workspaceSetup(deps.workspace.root, deps.processes)).map((project) => [project.dir, project]));
             const fulfilled = started
                 .filter(({ dir, requested: explicitlyRequested }) => explicitlyRequested && settled.get(dir)?.state === "ready")
@@ -280,6 +329,9 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
                     { dir: dir === "" ? "the workspace root" : dir },
                     "dependency coordinator: the install finished but the project is still behind; not retrying until a manifest or lockfile changes",
                 );
+            }
+            for (const { dir } of started) {
+                endings.end(dir, true);
             }
         }
     };
@@ -301,7 +353,8 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
                 }
                 dirty = false;
                 await waitForQuiet();
-                await pass();
+                // Whoever waited on a project this pass did not install looks again (installEnded).
+                await pass().finally(() => endings.endAll(false));
             }
         })()
             .catch((error: unknown) => deps.logger.warn({ err: error }, "dependency coordinator: maintenance pass failed"))
@@ -430,5 +483,6 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             failureListeners.add(listener);
             return () => failureListeners.delete(listener);
         },
+        installEnded: (dir) => installEndedOf(deps.processes, endings, dir),
     };
 };

@@ -114,6 +114,9 @@ export const secretsSliceFake = (devices: KeyringDevices & KeyringSyncDevices = 
         hostGuards: async () => effectiveHostGuards(stored, new Map()),
         // Lets everything through; the real check is tested where it lives (host-guard-gate.test.ts).
         hostGuardGate: { check: async () => ({ allow: true as const }), widen: async () => ({}) },
+        // Nobody listens unless a suite subscribes; the announcing store is tested where it lives (sandbox-secrets.test.ts).
+        onSecretsChanged: () => () => undefined,
+        secretsChanged: () => undefined,
         // The sandbox's own store, in memory: what a need's card and a DevOps-less Secrets view write.
         sandboxSecrets: {
             all: async () => kept,

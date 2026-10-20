@@ -10,7 +10,7 @@ import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { SubagentKind, SubagentSession, SubagentStatus, SubagentVerification } from "@intentic/sandbox-contract/schemas/terminal";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import type { Holding } from "../../conversations/actor/conversation-holdings.js";
-import { publishRuntimeChange } from "../../seams/runtime-feed.js";
+import { publishRuntimeChange, publishRuntimeMilestone } from "../../seams/runtime-feed.js";
 import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
 import { LIVE, ROSTER, subagentRunning } from "../../conversations/actor/subagent-roster.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
@@ -225,7 +225,7 @@ export const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields:
     // A spawned child's record is about the child as well, whose own dispose takes it from its parent's roster.
     actors.holdings(ROSTER).hold(turn.conversationId, id, record, kind === "spawned" ? id : undefined);
     // Tells surfaces not watching this conversation, the board's trays and other chats' cards, that a child was born.
-    publishRuntimeChange("subagents");
+    publishRuntimeMilestone("subagents");
     notifyChanged(actors);
     return record;
 };
@@ -261,8 +261,8 @@ const patch = (actors: Actors, id: string, fields: Partial<SubagentRecord>): Age
         record.endedAt = record.activityAt;
         record.verification = childVerification(actors, record.id);
     }
-    // Fires only on real change; a no-op patch already returned above.
-    publishRuntimeChange("subagents");
+    // Only on real change; a status move skips the window progress ticks fold under (2026-10-20).
+    (changed.some(([key]) => key === "status") ? publishRuntimeMilestone : publishRuntimeChange)("subagents");
     notifyChanged(actors);
     const update: Extract<AgentEvent, { kind: "subagent_update" }> = { kind: "subagent_update", id };
     return {

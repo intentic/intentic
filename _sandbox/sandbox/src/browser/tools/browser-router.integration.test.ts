@@ -72,6 +72,7 @@ const marker = process.argv[2];
 fs.writeFileSync(marker, String(process.pid));
 process.on("SIGTERM", () => { fs.unlinkSync(marker); process.exit(0); });
 let buffer = "";
+let waits = 0;
 process.stdin.on("data", (chunk) => {
     buffer += chunk.toString();
     let at;
@@ -88,6 +89,14 @@ process.stdin.on("data", (chunk) => {
         else if (msg.method === "tools/call" && msg.params?.name === "browser_network_request") reply({ content: [{ type: "text", text: NETWORK[msg.params.arguments?.part ?? "details"] ?? "### Result\\n" + JSON.stringify(msg.params.arguments) }] });
         else if (msg.method === "tools/call" && msg.params?.name === "webmcp_unregistered") reply({ content: [{ type: "text", text: '### Error\\nTool "webmcp_unregistered" not found' }], isError: true });
         else if (msg.method === "tools/call" && msg.params?.name.startsWith("webmcp_")) reply({ content: [{ type: "text", text: "page:" + msg.params.name + ":" + JSON.stringify(msg.params.arguments ?? {}) }] });
+        else if (msg.method === "tools/call" && msg.params?.name === "browser_wait_for") {
+            // Text that shows on the third look; a wait still carrying \`time\` would have slept it first, upstream.
+            waits += 1;
+            const args = msg.params.arguments ?? {};
+            if (args.time !== undefined) reply({ content: [{ type: "text", text: "slept " + args.time + "s first" }] });
+            else if (args.text === "Saved" && waits >= 3) reply({ content: [{ type: "text", text: "### Result\\nWaited for Saved (look " + waits + ")" }] });
+            else reply({ content: [{ type: "text", text: "### Error\\nTimeoutError: locator.waitFor: Timeout 5000ms exceeded." }], isError: true });
+        }
         else if (msg.method === "tools/call") reply({ content: [{ type: "text", text: "echo:" + marker + ":" + JSON.stringify(msg.params?.arguments ?? {}) }] });
         else if (msg.id !== undefined) reply({});
     }
@@ -465,4 +474,32 @@ test("a WebMCP tool the page never registered says to snapshot, and a malformed 
     expect(missing.isError).toBe(true);
     expect(missing.content[0]?.text).toContain('no WebMCP tool "unregistered"');
     expect(missing.content[0]?.text).toContain("snapshot");
+});
+
+// Upstream sleeps all of `time` before it starts waiting for the text; the router sends the text wait alone, again
+// while the time lasts, so it answers the moment the text is there (bounded-wait.ts, 2026-10-20).
+test("a wait for text with a time goes as the text wait alone, sent again until the text shows or the time runs out", async () => {
+    const harness = await startRouter("web");
+    await handshake(harness);
+    // SAFETY: every tools/call answer the router relays carries the backend's `result`, a ToolResult here.
+    const resultOf = (answer: Record<string, unknown>): ToolResult => answer["result"] as ToolResult;
+    const saved = await rpc(harness.router, {
+        jsonrpc: "2.0",
+        id: 40,
+        method: "tools/call",
+        params: { name: "browser_wait_for", arguments: { time: 30, text: "Saved" } },
+    });
+    expect(resultOf(saved).content[0]?.text).toContain("Waited for Saved (look 3)");
+    // A time already spent: one look, and its timeout is the answer.
+    const never = await rpc(harness.router, {
+        jsonrpc: "2.0",
+        id: 41,
+        method: "tools/call",
+        params: { name: "browser_wait_for", arguments: { time: 0.001, text: "Never" } },
+    });
+    expect(resultOf(never).isError).toBe(true);
+    expect(resultOf(never).content[0]?.text).toContain("Timeout 5000ms exceeded");
+    // A time alone is a pause, and goes on as asked.
+    const pause = await rpc(harness.router, { jsonrpc: "2.0", id: 42, method: "tools/call", params: { name: "browser_wait_for", arguments: { time: 2 } } });
+    expect(resultOf(pause).content[0]?.text).toBe("slept 2s first");
 });

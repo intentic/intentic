@@ -9,7 +9,6 @@ import type { FastModeState } from "@intentic/sandbox-contract/schemas/providers
 import { type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract/schemas/agent";
 import type { PromptFingerprint } from "@intentic/sandbox-contract/schemas/keep-warm";
 import type { TodoItem } from "@intentic/sandbox-contract/events/requests";
-import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../providers/agent-commands.js";
@@ -363,8 +362,6 @@ export interface StreamSdkArgs {
     readonly steering: SteeringQueue | undefined;
     // The swallowed-prompt recovery sdkTurns fires (see its result branch); absent on an unsteerable turn.
     readonly redeliver: (() => boolean) | undefined;
-    // Reads the credential's plan-limit pools at turn settle; absent when the credential has no pools to read.
-    readonly readUsage: (() => Promise<UsageWindow[]>) | undefined;
     // Whose allowance this turn spends and when it reopens; absent on a native Claude turn (see TurnAllowance).
     readonly allowance: TurnAllowance | undefined;
     // The translator endpoint on a routed turn only, so a retry storm can ask what it is (routed-refusal.ts).
@@ -1048,11 +1045,7 @@ class TurnFold {
         if (ending !== undefined) {
             yield ending;
         }
-        // The account's headroom, re-read now the turn has settled; an empty read yields no frame, not an empty list.
-        const windows = this.args.readUsage === undefined ? [] : await this.args.readUsage();
-        if (windows.length > 0) {
-            yield { kind: "account_usage", windows };
-        }
+        // The account's headroom is re-read after the turn has settled, off this stream (run/frames/settled-usage.ts).
         // Not the end of the stream; sdkTurns owns the boundary, and a steered stream may carry a follow-up turn next.
     }
 }

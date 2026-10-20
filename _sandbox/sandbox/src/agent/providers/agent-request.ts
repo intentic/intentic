@@ -227,8 +227,15 @@ export type TurnCredential =
     // The platform's free trial: the translator's endpoint, with bounded retries and the trial's own failure frames.
     | ({ readonly kind: "trial"; readonly baseUrl: string; readonly authToken: string } & ShieldedRoute)
     // A Codex turn on a URL the daemon names: the ChatGPT subscription via the translator, or another provider's route
-    // (`hosted`); absent, Codex falls back to the container's key.
-    | { readonly kind: "codex-endpoint"; readonly baseUrl: string; readonly authToken: string; readonly hosted?: CodexHostedProvider }
+    // (`hosted`); absent, Codex falls back to the container's key. `allowance` reads when the account it spends reopens,
+    // so a rate limit Codex would wait out for hours is handed over at once (runtimes/codex/turn/limit-wait.ts).
+    | {
+          readonly kind: "codex-endpoint";
+          readonly baseUrl: string;
+          readonly authToken: string;
+          readonly hosted?: CodexHostedProvider;
+          readonly allowance?: TurnAllowance;
+      }
     // An OpenCode turn on one of the providers the daemon writes into the shared server's config from a route
     // (runtimes/opencode/hosted/opencode-routes.ts), named by its id there; the key is in that config, not here.
     | { readonly kind: "opencode-route"; readonly providerID: string }

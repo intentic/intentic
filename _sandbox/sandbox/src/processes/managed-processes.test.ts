@@ -163,6 +163,46 @@ test("a oneShot job completes on the first prompt signal once the job was seen, 
     expect(killed).toEqual([]);
 });
 
+// 2026-10-20: an install's waiter awaits this rather than asking `running` every two seconds.
+test("whenEnded resolves the moment a one-shot's prompt signal ends it, and at once for a key not running", async () => {
+    let onPrompt: (() => void) | undefined;
+    const { runner, cmd } = fakeRunner();
+    const panels = createManagedProcesses(runner, {
+        onPromptWatch: (signal) => {
+            onPrompt = signal;
+            return () => undefined;
+        },
+    });
+    await panels.whenEnded("never-started");
+    await panels.start("job", { ...SPEC, oneShot: true });
+    let ended = false;
+    const waiting = panels.whenEnded("job").then(() => {
+        ended = true;
+    });
+    onPrompt?.();
+    await Promise.resolve();
+    expect(ended).toBe(false);
+    cmd.set("panel-job", "zsh");
+    onPrompt?.();
+    await waiting;
+    expect(panels.running("job")).toBe(false);
+});
+
+test("whenEnded resolves on a stop and on stopAll", async () => {
+    const { runner } = fakeRunner();
+    const panels = createManagedProcesses(runner);
+    await panels.start("app", SPEC);
+    await panels.start("site", SPEC);
+    const app = panels.whenEnded("app");
+    const site = panels.whenEnded("site");
+    await panels.stop("app");
+    await app;
+    expect(panels.running("site")).toBe(true);
+    panels.stopAll();
+    await site;
+    expect(panels.running("site")).toBe(false);
+});
+
 test("a oneShot job completes after two consecutive prompt sightings on the poll tick: the session lingers unkilled", async () => {
     jest.useFakeTimers();
     const { runner, cmd, killed } = fakeRunner();

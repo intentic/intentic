@@ -1,4 +1,5 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import type { SettledTurn } from "../frames/settled-usage.js";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { TurnProof } from "@intentic/sandbox-contract/schemas/agents";
@@ -57,6 +58,8 @@ export interface SettlementPlan {
     readonly reach: ReachFrames | undefined;
     // The label of the main tree's turn-end snapshot; undefined for an isolated turn, which never touches it.
     readonly snapshot: string | undefined;
+    // What the account's allowance is re-read from once the turn has settled, never awaited (frames/settled-usage.ts).
+    readonly settledUsage?: SettledTurn;
 }
 
 // How the turn ended, as far as settling it goes.
@@ -67,6 +70,8 @@ export interface TurnEnd {
     readonly turnId?: string | undefined;
     readonly run?: string | undefined;
     readonly provider: AgentProvider;
+    // The stored account that served it, where one did.
+    readonly account?: string | undefined;
     readonly attribution: Attribution;
     // The request the runtime was handed: its resolved model.
     readonly request: AgentRequest;
@@ -247,5 +252,6 @@ export const settleTurn = (end: TurnEnd, now: number = Date.now()): SettlementPl
         // Every turn's, a spawned child's too: unlike its proof, where its work went is its own card's to say.
         reach: end.input.conversationId === undefined ? undefined : end.frames.reach.reading(),
         snapshot: end.isolated ? undefined : end.input.prompt,
+        settledUsage: { provider: end.provider, account: end.account, request: end.request, aborted: end.aborted },
     };
 };

@@ -152,6 +152,34 @@ test("wait_for's injected function still works with nothing of its module around
     expect((await alone("never", false, 250)).ok).toBe(false);
 });
 
+// Looks are made when the page changes (a MutationObserver), not on a timer, so a page that changes nothing is never
+// read again until the deadline (2026-10-20).
+test("wait_for looks again only when the page changed, and a vanishing text is heard as it goes", async () => {
+    document.body.innerHTML = `<p>Saving…</p>`;
+    const reads = { count: 0 };
+    const body = document.body;
+    const real = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(body), "innerText") ?? Object.getOwnPropertyDescriptor(HTMLElement.prototype, "innerText");
+    Object.defineProperty(body, "innerText", {
+        configurable: true,
+        get() {
+            reads.count += 1;
+            return real?.get?.call(body) ?? body.textContent;
+        },
+    });
+    try {
+        const idle = await waitForText("Saved", false, 300);
+        expect(idle.ok).toBe(false);
+        // The look at the start and the last one at the deadline; none in between, the page being still.
+        expect(reads.count).toBe(2);
+        setTimeout(() => {
+            body.innerHTML = `<p>Done</p>`;
+        }, 50);
+        expect(await waitForText("Saving", true, 5_000)).toEqual({ ok: true, message: `"Saving" is gone` });
+    } finally {
+        Reflect.deleteProperty(body, "innerText");
+    }
+});
+
 // jsdom lays nothing out and has no hit test: `elementFromPoint` answers with what a pointer would land on here.
 const pointingAt = (selector: string, run: () => void): void => {
     Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => document.querySelector(selector) });

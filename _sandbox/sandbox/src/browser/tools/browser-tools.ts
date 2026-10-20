@@ -150,6 +150,15 @@ export const writeBrowserConfig = async (
                 extraHTTPHeaders: { "Accept-Language": acceptLanguage(fingerprint.languages) },
             },
         },
+        // The pause @playwright/mcp takes after every click, type, key, evaluate, drag, upload and dialog (its
+        // waitForCompletion), and again after any requests the action set off have answered; upstream's 500ms
+        // default was a third of a second per action spent waiting on nothing (2026-10-20). Measured on 0.0.83: a
+        // click went from ~525ms to ~175ms (~1030ms to ~580ms with a request), and a change made synchronously, on the
+        // next frame, 100ms later on a timer, or once a fetch answered was still in the click's own snapshot; at 150 a
+        // change made on a bare 300ms timer was not. 350, not 150: a 250-300ms debounce (a search box, a menu) is
+        // common, and an agent that acts on the snapshot from before it costs a round trip of its own, far more than
+        // the 200ms saved. A change a page makes on a bare timer past ~330ms is for browser_wait_for on its text.
+        timeouts: { settle: 350 },
     };
     await writeFile(path, JSON.stringify(config), { flag: "wx", mode: 0o600 });
     return path;

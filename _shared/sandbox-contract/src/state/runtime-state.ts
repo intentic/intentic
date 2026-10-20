@@ -53,10 +53,11 @@ const RUNTIME_DOMAINS = [
     // Commit subject drafted after landing; arrives too late for the turn-end refresh, needs its own push.
     { domain: "landings", invalidates: [["git", "changes"]] },
 
-    // A pipeline run reached its end (webhook delivery, or the REST poll for a repo with no hook). The board's own
-    // poll is the freshness floor, not the answer: somebody watching a run finish must not wait out a poll interval.
-    // Runs only: the frame doesn't name which run moved, and re-reading every open row's job graph would cost a
-    // vendor call per row. The row re-reads its own graph off the status this invalidation lands (useRunJobs.ts).
+    // A pipeline run or one of its jobs moved: every webhook delivery, in flight or ended (2026-10-20), or the REST poll
+    // for a repo with no hook. The board's own poll is the freshness floor, not the answer: somebody watching a run
+    // must not wait out a poll interval. Runs only: the frame doesn't name which run moved, and re-reading every open
+    // row's job graph would cost a vendor call per row. An open in-flight row re-reads its own graph when the board's
+    // runs land (useRunJobs.ts); the daemon's CI-shaped watches recheck on it too (watchers.ts).
     { domain: "ci", invalidates: [["ci-runs"]] },
 
     // An engine install starting or ending, whoever started it; the card's only feed, since a read costs registry calls.

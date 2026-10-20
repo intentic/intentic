@@ -42,7 +42,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
     tool({
         name: "open",
         description:
-            "Point a tab at a URL and answer with the page. Anyone may open a tab; READING what lands there needs the site to be allowed, and the answer says so plainly when it is not.",
+            "Point a tab at a URL and answer with the page once it has loaded (read as it stands after 10s if it is still loading). Anyone may open a tab; READING what lands there needs the site to be allowed, and the answer says so plainly when it is not.",
         effect: "write",
         input: object({
             url: required.describe("The page to open. A bare host like example.com is fine."),

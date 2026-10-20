@@ -1,7 +1,8 @@
 import type { AccountState, ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { type ServiceFacts, serviceStates } from "@intentic/sandbox-contract/models/plan-pools";
 import { recordingLogger } from "../../harness/route-fakes.testing.js";
-import { type AccountReopened, createAccountStateLog, onAccountReopened } from "./state-log.js";
+import { type AccountReopened, createAccountStateLog, onAccountReopened, onReopenDue } from "./state-log.js";
+import { waitFor } from "@intentic/testing/bun";
 
 // The verdict on an account was computed on every read and logged nowhere; an agent had to call the provider's usage API
 // by hand to learn a weekly pool sat at 100. One line per change, with the reading that decided it.
@@ -71,4 +72,23 @@ test("an account coming back to ready from spent is announced, once, to whoever 
     log.note("claude", ready, judge(ready), undefined);
     stop();
     expect(heard).toEqual([{ provider: "claude", account: "uuid-1", label: "work", from: "spent" }]);
+});
+
+// A spent pool that names its reopen is judged again at it, rather than at whichever page load or refresh comes next
+// (2026-10-20); a judgement that finds nothing ahead any more takes the timer back.
+test("a provider is asked to be judged again at the soonest reopen its accounts name, and not once nothing is ahead", async () => {
+    const { logger } = recordingLogger();
+    const log = createAccountStateLog(logger);
+    const due: string[] = [];
+    const unhear = onReopenDue((provider) => due.push(provider));
+    try {
+        const facts = [{ account: "a" }, { account: "b" }];
+        const soon = Math.ceil(Date.now() / 1000) + 1;
+        log.note("claude", facts, new Map<string, AccountState>([["a", { kind: "spent", reopensAt: soon }], ["b", { kind: "spent", reopensAt: soon + 3_600 }]]), undefined);
+        log.note("codex", facts, new Map<string, AccountState>([["a", { kind: "blocked", fix: "wait", reason: "cooling", until: soon }]]), undefined);
+        log.note("codex", facts, new Map<string, AccountState>([["a", { kind: "ready", room: 50 }]]), undefined);
+        await waitFor(() => expect(due).toEqual(["claude"]), { timeout: 4_000, interval: 20 });
+    } finally {
+        unhear();
+    }
 });

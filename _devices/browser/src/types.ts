@@ -19,6 +19,9 @@ export interface Browser {
     readonly screenshot: () => Promise<Buffer>;
     readonly tabs: () => Promise<{ readonly id: string; readonly title: string; readonly url: string; readonly active: boolean }[]>;
     readonly selectTab: (id: string) => Promise<PageState>;
+    // After a click, fill or key: until the DOM goes quiet, or the next document parses when the action navigated,
+    // within the 500 ms this used to sleep (settle.ts, 2026-10-20).
+    readonly settleAfterAction: () => Promise<void>;
     // Lets go of the connection; does not close the user's browser, which may predate this agent attaching to it.
     readonly disconnect: () => Promise<void>;
 }

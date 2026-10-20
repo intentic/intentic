@@ -18,7 +18,11 @@ const setup = async (keyrings: Readonly<Record<string, FakeKeyring>>) => {
     const slice = secretsSliceFake(fakeDevices(keyrings));
     await slice.keyringLink.refresh();
     const store = memoryKeyringNeeds();
-    return { slice, store, needs: createKeyringNeeds({ link: slice.keyringLink, store, logger: quiet, now: () => 5_000 }) };
+    return {
+        slice,
+        store,
+        needs: createKeyringNeeds({ link: slice.keyringLink, store, logger: quiet, now: () => 5_000 }),
+    };
 };
 
 test("the first computer that says yes wins, and its new pointer is read at once", async () => {
@@ -43,6 +47,8 @@ test("a parked question ends the round and is remembered with its computer", asy
     const result = await needs.request({ origin: GITHUB, detail: "sign in" });
     expect(result).toMatchObject({ state: "pending", machine: "rog" });
     expect(result.state === "pending" ? result.message : "").toContain("Passwords on rog");
+    // The answer comes back by itself (password-wake.ts), so the agent is told not to ask again.
+    expect(result.state === "pending" ? result.message : "").toContain("woken when they answer");
     expect(await needs.pending()).toMatchObject([{ state: "pending", machine: "rog" }]);
 });
 
@@ -69,6 +75,34 @@ test("a person's no is final and nobody else is asked", async () => {
 test("no computer to ask answers unknown without calling anything", async () => {
     const { needs } = await setup({});
     expect((await needs.request({ origin: GITHUB, detail: "sign in" })).state).toBe("unknown");
+});
+
+test("a second ask for the same place and conversation reuses the pending need", async () => {
+    const rog = fakeKeyring();
+    rog.need = async () => ({ ok: false, code: "pending", refusal: "waits" });
+    const { needs } = await setup({ rog });
+    const first = await needs.request({ origin: GITHUB, detail: "sign in", conversationId: "c-1" });
+    const second = await needs.request({ origin: GITHUB, detail: "sign in again", conversationId: "c-1" });
+    expect(first.state).toBe("pending");
+    expect(second.state).toBe("pending");
+    expect(second.state === "pending" ? second.id : "").toBe(first.state === "pending" ? first.id : "");
+    expect(needsOf(rog)).toHaveLength(1);
+});
+
+test("a parked need turning allowed wakes its conversation", async () => {
+    const rog = fakeKeyring();
+    rog.need = async () => ({ ok: false, code: "pending", refusal: "waits" });
+    const woken: { conversationId: string; name: string }[] = [];
+    const { needs, slice } = await setup({ rog });
+    const stop = needs.start(async ({ conversationId, name }) => {
+        woken.push({ conversationId, name });
+    });
+    await needs.request({ origin: GITHUB, detail: "sign in", conversationId: "c-wake" });
+    rog.shares = (keys) => ({ keyring: { version: "1", locked: false, unlock: ["hello"], keys, pendingInbox: 0 }, pointers: [pointerOf("GH", { hosts: ["github.com"] })] });
+    await slice.keyringLink.refresh("rog");
+    await needs.recheck("rog");
+    stop();
+    expect(woken).toEqual([{ conversationId: "c-wake", name: "GH" }]);
 });
 
 test("a parked need turns allowed when a later read of its computer lists an entry for its place", async () => {

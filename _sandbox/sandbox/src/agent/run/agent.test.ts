@@ -56,9 +56,9 @@ const proseBlock = (text: string, sessionId?: string): SDKMessage[] => [
     } as SDKMessage,
 ];
 
-const collect = async (request: Parameters<typeof runAgent>[1], queryFn: QueryFn, usageFetch?: typeof fetch): Promise<AgentEvent[]> => {
+const collect = async (request: Parameters<typeof runAgent>[1], queryFn: QueryFn): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
-    for await (const event of runAgent(actors, request, queryFn, usageFetch)) {
+    for await (const event of runAgent(actors, request, queryFn)) {
         events.push(event);
     }
     return events;
@@ -1624,54 +1624,12 @@ test("a rate_limit_event with only a status omits the optional usage fields", as
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "rate_limit_info", status: "allowed" }, { kind: "done" }]);
 });
 
-// The turn ran on a stored account's OAuth token, so plan limits are readable at settle.
+// The turn ran on a stored account's OAuth token. Its pools are re-read after the turn settles, off this stream
+// (run/frames/settled-usage.ts), so the stream itself never asks the usage endpoint.
 const oauthRequest: HarnessRequest = { ...request, credential: { kind: "claude-oauth", token: "oat-1" } };
-// Fakes the OAuth usage endpoint; the daemon reads it directly since the CLI reports rate limits only for a profile it
-// signed in itself. A real Response, so the reader can take the body however it reads it (claude-usage.ts reads text).
-const usageEndpoint = (body: unknown, ok = true): typeof fetch =>
-    (() => Promise.resolve(new Response(JSON.stringify(body), { status: ok ? 200 : 401 }))) as unknown as typeof fetch;
 
-test("a settled turn re-reads EVERY plan-limit pool, not just whichever one was binding", async () => {
-    const events = await collect(
-        oauthRequest,
-        fakeQuery({ type: "result", subtype: "success", result: "done" }),
-        usageEndpoint({
-            five_hour: { utilization: 12.4, resets_at: "2026-07-27T18:00:00.000Z" },
-            seven_day: { utilization: 98, resets_at: "2026-07-29T09:00:00.000Z" },
-            // A pool the plan has but the provider has no reading for: dropped, not shown at 0%.
-            seven_day_opus: { utilization: null, resets_at: null },
-        }),
-    );
-    // Pools are reported separately so a 1% pool never stands in for a 98% one; resets convert to epoch seconds, and
-    // each is marked rounded, since Anthropic reports whole percents.
-    expect(events).toEqual([
-        {
-            kind: "account_usage",
-            windows: [
-                { kind: "five_hour", utilization: 12.4, resetsAt: Date.parse("2026-07-27T18:00:00.000Z") / 1000, gates: "all", rounded: true },
-                { kind: "seven_day", utilization: 98, resetsAt: Date.parse("2026-07-29T09:00:00.000Z") / 1000, gates: "all", rounded: true },
-            ],
-        },
-        { kind: "done" },
-    ]);
-});
-
-test("a turn with no plan limits to read yields no account_usage frame at all", async () => {
-    // An empty list would misread as 'no limits'; here the endpoint refuses the credential (no plan).
-    const refused = await collect(oauthRequest, fakeQuery({ type: "result", subtype: "success" }), usageEndpoint({}, false));
-    expect(refused).toEqual([{ kind: "done" }]);
-
-    // No OAuth token at all (endpoint/container-env turn): the endpoint is never even asked.
-    const unattributed = await collect(request, fakeQuery({ type: "result", subtype: "success" }), (() => {
-        throw new Error("no credential to read usage with");
-    }) as unknown as typeof fetch);
-    expect(unattributed).toEqual([{ kind: "done" }]);
-});
-
-test("a failed usage read cannot fail the turn it was measuring", async () => {
-    const events = await collect(oauthRequest, fakeQuery({ type: "result", subtype: "success", total_cost_usd: 0.42 }), (() =>
-        Promise.reject(new Error("usage endpoint timed out"))) as unknown as typeof fetch);
-    // The answer the user was waiting for is already accounted for; the headroom read is strictly a bonus.
+test("a settled OAuth turn ends on its own frames, without waiting on a plan-limit read", async () => {
+    const events = await collect(oauthRequest, fakeQuery({ type: "result", subtype: "success", total_cost_usd: 0.42 }));
     expect(events).toEqual([{ kind: "usage", costUsd: 0.42 }, { kind: "done" }]);
 });
 

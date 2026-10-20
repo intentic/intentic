@@ -139,6 +139,24 @@ test("a delivery announces the ci domain, so an open board re-reads without wait
     await waitFor(() => expect(published).toContain("ci"), SETTLES);
 });
 
+// An open board and a CI-shaped watch learn of a run moving from every phase, not only its end (2026-10-20); what a run
+// in flight must not do is reach an automation or record a conclusion.
+test("an in-flight run's delivery freshens the cache and announces ci, and wakes nothing", async () => {
+    const { app, services, prompts } = await harness("wh-in-flight");
+    published.length = 0;
+    const running = workflowRun("failure");
+    const delivery = { ...running, action: "in_progress", workflow_run: { ...running.workflow_run, status: "in_progress", conclusion: null } };
+    const response = await deliver(app, await services.ciStore.secret(), delivery);
+    expect(((await response.json()) as { ignored?: boolean }).ignored).toBeUndefined();
+    await waitFor(() => expect(published).toContain("ci"), SETTLES);
+    expect(services.ciRuns.sweep() ?? []).toEqual([]);
+    services.ciRuns.replace([]);
+    await deliver(app, await services.ciStore.secret(), delivery);
+    await waitFor(() => expect(services.ciRuns.sweep()?.map((run) => run.status)).toEqual(["running"]), SETTLES);
+    expect(await services.ciStore.lastConclusion("web", "main")).toBeUndefined();
+    expect(prompts).toEqual([]);
+});
+
 test("a failed run freshens the cache with failed jobs and wakes the ci automation", async () => {
     const { app, services, prompts } = await harness("wh-failed");
     // A fresh (empty) sweep, so the delivery's upsert is visible through sweep() below.
@@ -231,11 +249,9 @@ test("a branch-narrowed trigger ignores a run on another branch", async () => {
     expect(prompts).toEqual([]);
 });
 
-test("phases, foreign events and unmapped projects are acknowledged and dropped", async () => {
+test("foreign events and unmapped projects are acknowledged and dropped", async () => {
     const { app, services, prompts } = await harness("wh-ignored");
     const secret = await services.ciStore.secret();
-    const inFlight = await deliver(app, secret, { ...workflowRun("failure"), action: "in_progress" });
-    expect(((await inFlight.json()) as { ignored?: boolean }).ignored).toBe(true);
     const foreign = await deliver(app, secret, workflowRun("failure"), { "x-github-event": "push" });
     expect(((await foreign.json()) as { ignored?: boolean }).ignored).toBe(true);
     const unmapped = await deliver(app, secret, { ...workflowRun("failure"), repository: { full_name: "acme/other" } });
@@ -348,15 +364,18 @@ test("a failed job's own delivery reaches main's fix agent at once, with the ste
     expect(await services.ciStore.lastConclusion("web", "main")).toBeUndefined();
 });
 
-test("a job that passed, was cancelled, or is still going is acknowledged and dropped", async () => {
+test("a job that passed, was cancelled, or is still going reaches no fix agent, but announces ci", async () => {
     const { app, services } = await harness("wh-job-ignored");
     heardJobs.length = 0;
+    published.length = 0;
     const secret = await services.ciStore.secret();
     for (const payload of [workflowJob("success"), workflowJob("cancelled"), workflowJob(null, "in_progress")]) {
         const response = await deliver(app, secret, payload, { "x-github-event": "workflow_job" });
         expect(((await response.json()) as { ignored?: boolean }).ignored).toBe(true);
     }
     expect(heardJobs).toEqual([]);
+    // Its run's job graph is open somewhere, or a watch reads it: each phase is news to them.
+    expect(published.filter((domain) => domain === "ci")).toHaveLength(3);
 });
 
 test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason; a job allowed to fail is none", async () => {

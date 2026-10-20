@@ -7,6 +7,7 @@ import {
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import { bearerPeer } from "../peers/peer-store.js";
+import { DESCRIBE_TIMEOUT_MS } from "./webext-peer.js";
 import { ticketTag } from "./secret-tickets.js";
 import { exportBrowserSession } from "./session-export.js";
 import { importBrowserSession } from "./session-import.js";
@@ -19,7 +20,7 @@ import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Authenticated by the extension's own enrollment token as a bearer, so only an extension the owner paired can post
 // here; the payload is never logged and the answer never quotes it.
-export type WebExtRoutesDeps = Pick<Services, "webexts" | "workspace" | "capabilities" | "logger">;
+export type WebExtRoutesDeps = Pick<Services, "webexts" | "workspace" | "capabilities" | "logger" | "webextHub" | "needs">;
 
 const createWebExtSessionRoute =
     (services: WebExtRoutesDeps) =>
@@ -96,10 +97,25 @@ export const createWebExtSecretRoute =
             : c.json({ ok: false, message: redeemed.refusal } satisfies WebExtSecretAnswer, redeemed.status);
     };
 
+// A site allowed in this browser (its popup or the browser's own site-access menu, 2026-10-20): read its facts now and
+// check open needs, so an `ask_access` the person just answered goes on at once rather than on the needs fallback timer.
+const createWebExtGrantsChangedRoute =
+    (services: Pick<WebExtRoutesDeps, "webexts" | "webextHub" | "needs" | "logger">) =>
+    async (c: Context): Promise<Response> => {
+        const id = await bearerPeer(services.webexts, c);
+        if (typeof id !== "string") {
+            return id;
+        }
+        await services.webextHub.refresh(id, DESCRIBE_TIMEOUT_MS);
+        void services.needs.recheck().catch((error: Error) => services.logger.warn({ err: error, browser: id }, "needs: the check after a browser's sites moved failed"));
+        return c.json({ ok: true });
+    };
+
 // A browser's credential doors: `session` moves a site sign-in in, `lend` moves one back out, `secret` hands it one stored
-// secret to type for a ticket the daemon gave it (secret-tickets.ts).
+// secret to type for a ticket the daemon gave it (secret-tickets.ts); and `grants-changed`, its allowed sites moving.
 export const webextRawRoutes = defineRawRoutes((services: WebExtRoutesDeps & Pick<Services, "secretTickets">) => ({
     "POST /system/webext/session": createWebExtSessionRoute(services),
     "POST /system/webext/lend": createWebExtLendRoute(services),
     "POST /system/webext/secret": createWebExtSecretRoute(services),
+    "POST /system/webext/grants-changed": createWebExtGrantsChangedRoute(services),
 }));

@@ -67,3 +67,15 @@ test("an older manifest missing a flag keeps its picks and defaults the new one"
     await writeFile(path, JSON.stringify({ iqSearch: true }));
     expect(await store.get()).toEqual({ ...DEFAULTS, iqSearch: true });
 });
+
+// What acts by a setting re-reads on its write rather than on its next beat (the resume pass's answers, 2026-10-20).
+test("a write is heard once it is down, and not after the listener leaves", async () => {
+    const { store } = tempStore();
+    const read: SandboxSettings[] = [];
+    const unhear = store.onSet(() => void store.get().then((settings) => read.push(settings)));
+    await store.set({ ...DEFAULTS, iqSearch: true });
+    unhear();
+    await store.set(DEFAULTS);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read.map((settings) => settings.iqSearch)).toEqual([true]);
+});

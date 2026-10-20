@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentProvider, AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
+import { PROVIDER_VENDOR } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Config } from "../../env.config.js";
 import { releasingMounts } from "../../agent/tools/turn-mounts.js";
@@ -147,6 +148,7 @@ const hostedCodexRoute = async (services: CodexPlanDeps, input: AgentTurn, provi
             kind: "codex-endpoint",
             baseUrl: gateway ?? route.endpoint.base,
             authToken: route.endpoint.token,
+            ...opt("allowance", route.allowance),
             hosted: {
                 id: `intentic-${routeSlug(provider)}`,
                 path: route.endpoint.path,
@@ -156,6 +158,14 @@ const hostedCodexRoute = async (services: CodexPlanDeps, input: AgentTurn, provi
         },
     };
 };
+
+// The ChatGPT subscription's allowance, read off the translator for the model the turn runs: the proxy benches a
+// credential a 429 refused until the Retry-After it was quoted, so this is that wait, which Codex itself never tells this
+// client (limit-wait.ts). A hosted route brought its own; the container's key has none to read.
+const withCodexAllowance = (services: CodexPlanDeps, credential: CodexCredential, model: string): CodexCredential =>
+    credential.kind !== "codex-endpoint" || credential.hosted !== undefined || credential.allowance !== undefined
+        ? credential
+        : { ...credential, allowance: { vendor: PROVIDER_VENDOR.codex, limit: () => services.cliProxy.turnLimit("codex", model) } };
 
 // Native Codex turns ride app-server behind the translator, with the turn's remote MCP servers (browsers, machines,
 // extension cards, mcp cards) and the daemon's own (ui, accounts, secrets, subagents, watch, deps, diagnostics, code, and
@@ -214,7 +224,7 @@ export const planCodexTurn = async (
             // The `file.edited` moment, as the Claude loop's harness runs it, asked after each patch (codex-hooks.ts).
             ...editReviewersOf(services, context, standing(settings.rules, "file.edited")),
         },
-        credential: route.credential,
+        credential: withCodexAllowance(services, route.credential, model),
     };
     // Attribution key: the shared subscription serving every ChatGPT turn, a hosted route's account where it picked one,
     // else undefined (the api-key fallback, the translator's pool for another provider).

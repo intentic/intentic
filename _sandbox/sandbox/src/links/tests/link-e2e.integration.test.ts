@@ -85,7 +85,11 @@ interface Dev {
 // The asking sandbox: one link card pointing at ops, and a turn port that records what wakes its conversations.
 // `restart` puts it on an earlier daemon's history volume, and `ask` stands in for the wire's ask (a daemon that dies
 // around handing a task over).
-const devSandbox = (card: Capability, hops?: number, restart: { readonly history?: string; readonly ask?: LinkWire["ask"] } = {}): Dev => {
+const devSandbox = (
+    card: Capability,
+    hops?: number,
+    restart: { readonly history?: string; readonly ask?: LinkWire["ask"]; readonly status?: LinkWire["status"] } = {},
+): Dev => {
     const { conversations } = memoryFleet();
     const wakes: Said[] = [];
     const linked = createLinkedChildren({
@@ -105,7 +109,7 @@ const devSandbox = (card: Capability, hops?: number, restart: { readonly history
         },
         logger: quiet,
         historyPath: join(restart.history ?? mkdtempSync(join(tmpdir(), "dev-")), linkedChildrenDocument.path),
-        wire: { hello: linkHello, ask: restart.ask ?? linkAsk, status: linkStatus, message: linkMessage, answer: linkAnswer, stop: linkStop },
+        wire: { hello: linkHello, ask: restart.ask ?? linkAsk, status: restart.status ?? linkStatus, message: linkMessage, answer: linkAnswer, stop: linkStop },
     });
     return { linked, wakes, roster: () => listSubagentSessions(conversations) };
 };
@@ -181,6 +185,27 @@ test("a task handed over runs there, its report comes back as the parent's wake,
     expect(await dev.linked.cancel(PARENT, handed.id)).toMatchObject({ ok: true });
     expect(ops.stopped).toEqual([remote]);
     await until("the child ends killed", () => dev?.roster()[0]?.status === "killed");
+});
+
+test("a follower backing off from a far side that stopped answering asks again the moment another call on the link is answered", async () => {
+    let down = false;
+    const status: LinkWire["status"] = async (...args) =>
+        down ? { ok: false, status: 0, message: "it is not online" } : await linkStatus(...args);
+    dev = devSandbox(await cardFor(), undefined, { status });
+    down = true;
+    const handed = await dev.linked.delegate(PARENT, { to: "ops", task: "Count the open incidents." });
+    if (!handed.ok) {
+        throw new Error(handed.message);
+    }
+    await until("the follower misses", () => dev?.roster()[0]?.summary?.includes("did not answer") === true);
+    const remote = ops.said[0]?.turn.conversationId ?? "";
+    await noteLinkTurnSettled({ links: ops.links, logger: quiet }, { conversationId: remote, actor: undefined, speaker: undefined, failure: undefined, closing: "Seven." });
+    down = false;
+    // The agent listing its links is an answered call on this one: the follower's five-second backoff ends there.
+    const started = Date.now();
+    expect(await dev.linked.links(PARENT.conversationId)).toEqual([expect.objectContaining({ to: "ops", online: true })]);
+    await until("the child settles", () => dev?.roster()[0]?.status === "completed", 4_000);
+    expect(Date.now() - started).toBeLessThan(3_000);
 });
 
 test("a task the owner over there must allow waits as pending; their yes starts it there", async () => {

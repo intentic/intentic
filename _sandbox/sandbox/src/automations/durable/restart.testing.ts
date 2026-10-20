@@ -54,6 +54,7 @@ export const daemonOn = (root: string, wake: TurnStarter["stream"], crashAt: Cra
         remove: (id) => alive("remove", () => store.remove(id)),
         recordRun: (id, run) => alive("recordRun", () => store.recordRun(id, run)),
         recordWatch: (id, next) => alive("recordWatch", () => store.recordWatch(id, next)),
+        onSaved: (listener) => store.onSaved(listener),
     };
     const webchatOutbox = fileWebchatOutbox(join(root, "history", "webchat-outbox.json"));
     const logger = unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} });

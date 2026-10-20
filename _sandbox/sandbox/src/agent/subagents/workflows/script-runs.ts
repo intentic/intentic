@@ -2,8 +2,12 @@ import { randomUUID } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { isInside } from "@intentic/base/contained";
+import { whenAborted } from "@intentic/base/async";
+import { DisposableStore } from "@intentic/base/lifecycle";
 import { errorMessage } from "@intentic/base/errors";
 import type { Services } from "../../../composition.js";
+import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
+import { WORDS_SAID, wordsSaid } from "../waiting/work-wait.js";
 import { conversationProfile } from "../../../conversations/registry/agents-store.js";
 import { deliverWake } from "../../../seams/wake-delivery.js";
 import { opt } from "../../../opt.js";
@@ -281,6 +285,9 @@ export interface ScriptRunStatus {
     readonly phases?: readonly string[];
     readonly result?: ResultValue;
     readonly error?: string;
+    // Present when `waitSeconds` was asked: why the wait ended before the run did.
+    readonly waitOutcome?: "message" | "timeout" | "ended" | "aborted";
+    readonly note?: string;
 }
 
 /** A move on a run this conversation does not have, or not in a state to take it. */
@@ -320,20 +327,59 @@ const scriptRunStatus = async (services: Services, parent: string, run: string):
     };
 };
 
-/** Waits up to `ms` for a run of this parent's to end, then says where it stands. */
-export const awaitScriptRun = async (services: Services, parent: string, run: string, ms: number, signal: AbortSignal): Promise<ScriptRunStatus | ScriptRunRefusal> => {
+type WaitOutcome = NonNullable<ScriptRunStatus["waitOutcome"]>;
+
+// The park under `waitSeconds`: the run ending, the timeout, the turn's stop, or words said into the turn (as the wait
+// tool does, so an owner's message or a watch's wake is not left unread for up to half an hour) (2026-10-20). Every
+// listener goes with the park, the turn's abort listener included.
+const parkOnRun = (ended: Promise<unknown>, ms: number, signal: AbortSignal, heard: { readonly actors: Pick<ConversationActors, "holdings">; readonly parent: string } | undefined): Promise<WaitOutcome> =>
+    new Promise<WaitOutcome>((resolve) => {
+        const held = new DisposableStore();
+        const done = new AbortController();
+        let settled = false;
+        const finish = (outcome: WaitOutcome): void => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            done.abort();
+            held.dispose();
+            resolve(outcome);
+        };
+        const timer = setTimeout(() => finish("timeout"), ms);
+        timer.unref();
+        held.push(() => clearTimeout(timer));
+        held.push(whenAborted(signal, () => finish("aborted")));
+        void ended.then(() => finish("ended"));
+        if (heard !== undefined) {
+            // Its own signal ends with the park, so the steer listener does not outlive it to the turn's end.
+            void wordsSaid(heard.actors, heard.parent, done.signal).then((said) => {
+                if (said.outcome === "message") {
+                    finish("message");
+                }
+            });
+        }
+    });
+
+/** Waits up to `ms` for a run of this parent's to end, then says where it stands, and why the wait ended. */
+export const awaitScriptRun = async (
+    services: Services,
+    parent: string,
+    run: string,
+    ms: number,
+    signal: AbortSignal,
+    actors?: Pick<ConversationActors, "holdings">,
+): Promise<ScriptRunStatus | ScriptRunRefusal> => {
     const live = LIVE.get(run);
-    if (live !== undefined && live.record.parent === parent && ms > 0) {
-        await Promise.race([
-            live.ended.promise,
-            new Promise((done) => {
-                const timer = setTimeout(done, ms);
-                timer.unref();
-                signal.addEventListener("abort", () => done(undefined), { once: true });
-            }),
-        ]);
+    const waitOutcome =
+        live !== undefined && live.record.parent === parent && ms > 0
+            ? await parkOnRun(live.ended.promise, ms, signal, actors === undefined ? undefined : { actors, parent })
+            : undefined;
+    const status = await scriptRunStatus(services, parent, run);
+    if ("ok" in status && status.ok === false) {
+        return status;
     }
-    return scriptRunStatus(services, parent, run);
+    return { ...status, ...opt("waitOutcome", waitOutcome), ...opt("note", waitOutcome === "message" ? WORDS_SAID : undefined) };
 };
 
 /** Stops a run of this parent's: its script ends, its workers still working are stopped; their work stays. */
@@ -355,7 +401,7 @@ export interface ScriptRunDoor {
 
 export const scriptRunDoor = (services: Services, parent: ChildParent): ScriptRunDoor => ({
     start: (request) => startScriptRun(services, parent, request),
-    status: (run, waitMs, signal) => awaitScriptRun(services, parent.conversationId, run, waitMs, signal),
+    status: (run, waitMs, signal) => awaitScriptRun(services, parent.conversationId, run, waitMs, signal, services.conversations),
     stop: (run) => stopScriptRun(parent.conversationId, run),
 });
 

@@ -1716,7 +1716,12 @@ describe("a rate limit Codex waits out inside the turn", () => {
         const runner: CodexRunner = async function* (turn) {
             yield { type: "thread.started", thread_id: "thr-limit" };
             yield LIMITED;
+            // A stop sent before Codex next reads its signal (a hand-over decided at once) is still a stop.
             await new Promise<void>((resolve) => {
+                if (turn.signal.aborted) {
+                    resolve();
+                    return;
+                }
                 turn.signal.addEventListener("abort", () => resolve(), { once: true });
             });
             stopped = true;
@@ -1744,6 +1749,31 @@ describe("a rate limit Codex waits out inside the turn", () => {
                 { kind: "done" },
             ]);
             expect(stopped()).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    // (2026-10-20) The translator benched the account until the Retry-After it was quoted, four hours off: the turn is
+    // handed over as soon as that is read, not after two minutes shown as working.
+    it("hands the wait over at once when the allowance's reopening is past patience", async () => {
+        const { runner, stopped } = sleepingRunner("interrupted");
+        const spent: AgentRequest<CodexCredential> = {
+            ...request,
+            credential: {
+                kind: "codex-endpoint",
+                baseUrl: "http://127.0.0.1:8317",
+                authToken: "local",
+                allowance: { vendor: "openai", limit: async () => ({ spent: 1, withHeadroom: 0, reopensAt: Math.floor(Date.now() / 1000) + 4 * 3600 }) },
+            },
+        };
+        jest.useFakeTimers();
+        try {
+            const events = collect(createTestAgent(runner), spent);
+            // A second of the clock, against the two minutes patience would have waited.
+            await advanceTimersByTimeAsync(1_000);
+            expect(stopped()).toBe(true);
+            expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", code: "rate_limit", message: LIMIT_WAIT_HANDED_OVER }]);
         } finally {
             jest.useRealTimers();
         }

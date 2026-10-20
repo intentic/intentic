@@ -22,8 +22,9 @@ import type { NeedsStore } from "./needs-store.js";
 
 // Short, since the agent types it back into `needs cancel`; random, so a restart never reissues an id an old row names.
 const ID_SPAN = 36 ** 5;
-// How often open needs are checked against the world: a connection coming live, a secret appearing, a rebuild landing.
-const POLL_MS = 5_000;
+// Fallback only (2026-10-20): open needs are rechecked on capability, grant, browser and host changes; this interval
+// catches anything those events miss.
+const POLL_MS = 45_000;
 
 // Where a raising call's conversation lives and what a person's answer reaches, by the seams composition hands over.
 export interface NeedsDeps {
@@ -54,6 +55,12 @@ export interface NeedsDeps {
     readonly provideSecret: (need: Need, value: string, keepOn?: SecretKeepOn) => Promise<Met>;
     // Subscribes to a conversation's turn ending; answers the unsubscribe.
     readonly onTurnEnded: (listener: (conversationId: string) => void) => () => void;
+    // Runtime domains that mean the world moved (capabilities, grants, a browser's sites): check open needs now.
+    readonly subscribeWorldChanges?: (recheck: () => void) => () => void;
+    // Called as each open-needs pass begins. `fresh` is true for the boot pass and the fallback timer's, which ask the
+    // world again (a browser's sites over its 3 s describe); a pass an event started reads what that event already
+    // brought, so it costs no round-trip (2026-10-20).
+    readonly beginCheckPass?: (fresh: boolean) => void;
     readonly now?: () => number;
     readonly pollMs?: number;
     readonly newId?: () => string;
@@ -135,12 +142,57 @@ export const onePassAtATime = (pass: () => Promise<void>): (() => Promise<void>)
     return run;
 };
 
+// Open-needs passes, one at a time: the boot pass and the fallback timer's ask the world afresh; a pass a world change
+// started reads what that change brought (2026-10-20). `watch` starts both triggers and answers their stop, which also
+// runs `alsoStop`.
+const openNeedsPasses = (
+    deps: Pick<NeedsDeps, "subscribeWorldChanges" | "pollMs">,
+    pass: (fresh: boolean, heldOut: ReadonlySet<string>) => Promise<void>,
+) => {
+    let freshDue = true;
+    // Needs being answered right now: the store's own change event starts a pass, which must not settle one first and
+    // lose who answered it (2026-10-20).
+    const heldOut = new Set<string>();
+    const checkOpen = onePassAtATime(() => {
+        const fresh = freshDue;
+        freshDue = false;
+        return pass(fresh, heldOut);
+    });
+    return {
+        checkOpen,
+        // Runs `work` with need `id` kept out of every pass meanwhile.
+        holdOut: async <T>(id: string, work: () => Promise<T>): Promise<T> => {
+            heldOut.add(id);
+            try {
+                return await work();
+            } finally {
+                heldOut.delete(id);
+            }
+        },
+        watch: (alsoStop: () => void) => {
+            const unsubscribeWorld = deps.subscribeWorldChanges?.(() => void checkOpen()) ?? ((): void => undefined);
+            // Only the fallback now: events drive rechecks, and this catches whatever none of them announced.
+            const timer = setInterval(() => {
+                freshDue = true;
+                void checkOpen();
+            }, deps.pollMs ?? POLL_MS);
+            timer.unref();
+            return () => {
+                clearInterval(timer);
+                unsubscribeWorld();
+                alsoStop();
+            };
+        },
+    };
+};
+
 export const createNeeds = (deps: NeedsDeps): Needs => {
     const now = deps.now ?? Date.now;
     const newId = deps.newId ?? ((): string => `need-${randomInt(ID_SPAN).toString(36).padStart(5, "0")}`);
     // Raising calls holding for their need's answer, by need id; settling one hands each the need (and, when met, what
     // the agent can do with it) and tells nobody else.
     const holding = new Map<string, Set<(need: Need, met: Met | undefined) => void>>();
+
     // Met needs that reach the agent only on a next turn, by conversation, delivered when its current turn ends.
     const afterTurn = new Map<string, Set<string>>();
 
@@ -239,8 +291,9 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
         return checked === undefined || isGone(checked) ? { result: need.outcome ?? "It is done.", use: [] } : checked;
     };
 
-    const checkPass = async (): Promise<void> => {
-        for (const need of (await deps.store.all()).filter(isOpenNeed)) {
+    const checkPass = async (fresh: boolean, heldOut: ReadonlySet<string>): Promise<void> => {
+        deps.beginCheckPass?.(fresh);
+        for (const need of (await deps.store.all()).filter((entry) => isOpenNeed(entry) && !heldOut.has(entry.id))) {
             const checked = await deps.kinds[need.subject.kind].check(need).catch((error: unknown) => {
                 deps.logger.warn({ err: error, need: need.id }, "needs: a check failed; it stays open");
                 return undefined;
@@ -253,7 +306,8 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
         }
     };
 
-    const checkOpen = onePassAtATime(checkPass);
+    const passes = openNeedsPasses(deps, checkPass);
+    const { checkOpen } = passes;
 
     // Holds a raising call up to `seconds` for the need to settle; answers the need as it then stands, with what a met
     // one's answer said the agent can do with it.
@@ -431,8 +485,10 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
             if (need.subject.kind !== "secret") {
                 throw new NeedRefusal("invalid", "Only a secret need takes a value.");
             }
-            const met = await deps.provideSecret(need, value, keepOn);
-            return settle(id, "met", met.result, by, met);
+            return passes.holdOut(id, async () => {
+                const met = await deps.provideSecret(need, value, keepOn);
+                return settle(id, "met", met.result, by, met);
+            });
         },
         recheck: checkOpen,
         observe: async (conversationId, subject, title, why) => {
@@ -489,12 +545,7 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
                 }
                 await checkOpen();
             })().catch((error: unknown) => deps.logger.error({ err: error }, "needs: the boot pass failed"));
-            const timer = setInterval(() => void checkOpen(), deps.pollMs ?? POLL_MS);
-            timer.unref();
-            return () => {
-                clearInterval(timer);
-                unsubscribe();
-            };
+            return passes.watch(unsubscribe);
         },
     };
 };

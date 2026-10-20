@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdir, open, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { pollFor, within } from "@intentic/base/async";
+import { within } from "@intentic/base/async";
 import { readTextIfExists, writeFileAtomic } from "@intentic/base/fs";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
@@ -12,6 +12,7 @@ import { commandLineOf } from "@intentic/sandbox-contract/policy/device-programs
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { assertPath, assertScope, ScopeError } from "../../policy.js";
 import { assertNoSandboxPower, destructiveClasses, destructiveRefusal, markedAsAgentCommand } from "../shell.js";
+import { waitForEnd } from "./app-wait.js";
 import { inRuns, listArtifacts, sandboxRunsDir } from "./artifacts.js";
 import { isolatedExit, startScript, stopWindowsSandbox, windowsSandboxExe, windowsSandboxMissing, windowsSandboxRunning, wsbConfig } from "./isolated.js";
 
@@ -68,11 +69,15 @@ const logsDir = (sandboxUrl: string): string => join(sandboxRunsDir(sandboxUrl),
 
 // The process handles this agent holds, by run id: an exit is heard directly while the agent that started it lives.
 const children = new Map<string, ChildProcess>();
+// Their ends, settled once `exit` fired and is on record, so a waiter reads the exit code (2026-10-20).
+const endings = new Map<string, Promise<void>>();
+// allow(silent-catch): a record that failed to write still means the program ended; a waiter re-reads its state.
+const holdEnding = (id: string, exited: Promise<void>): void => void endings.set(id, exited.finally(() => endings.delete(id)).catch(() => undefined));
 // One write at a time per registry, so two exits in one tick do not undo each other.
 let writing: Promise<void> = Promise.resolve();
 
 // No record yet, or one torn by a crash: nothing is known to be running.
-const readRuns = async (sandboxUrl: string): Promise<AppRun[]> => {
+export const readRuns = async (sandboxUrl: string): Promise<AppRun[]> => {
     const parsed: unknown = parseJsonOr((await readTextIfExists(registryPath(sandboxUrl))) ?? "", undefined);
     return Array.isArray(parsed) ? (parsed as AppRun[]) : [];
 };
@@ -340,6 +345,7 @@ export const startApp = async (request: StartRequest, scopes: DeviceScopes, sand
         children.delete(id);
         await ended(sandboxUrl, id, code, signal);
     });
+    holdEnding(id, exited);
     child.unref();
     // A program that falls over at once is answered as such, with what it said, rather than as started.
     const early = await within(exited.then(() => true), EARLY_EXIT_MS, false);
@@ -395,7 +401,7 @@ const startIsolated = async (program: string, request: StartRequest, sandboxUrl:
 };
 
 // An isolated run ends when its Windows Sandbox closes, which nothing here hears: it is read when someone asks.
-const refreshIsolated = async (sandboxUrl: string): Promise<void> => {
+export const refreshIsolated = async (sandboxUrl: string): Promise<void> => {
     const running = (await readRuns(sandboxUrl)).filter((run) => run.isolated === true && run.endedAt === undefined);
     // allow(silent-catch): a process list that cannot be read proves nothing closed, so the runs stay open until it can.
     if (running.length === 0 || (await windowsSandboxRunning().catch(() => true))) {
@@ -410,7 +416,7 @@ const insideExit = async (run: AppRun): Promise<string | undefined> =>
     run.isolated === true ? isolatedExit(await readFile(join(dirname(run.log), "exit-code"), "utf8").catch(undefinedIfMissing)) : undefined;
 
 // An isolated run's output is two files (Start-Process cannot merge them); the error one follows, marked.
-const runOutput = async (run: AppRun, lines: number): Promise<{ text: string; total: number }> => {
+export const runOutput = async (run: AppRun, lines: number): Promise<{ text: string; total: number }> => {
     const out = await tailLines(run.log, lines);
     if (run.isolated !== true) {
         return out;
@@ -462,7 +468,7 @@ const windowsOf = async (run: AppRun, screen: Desktop): Promise<WindowInfo[]> =>
     return (await screen.windows()).filter((window) => window.pid !== undefined && tree.has(window.pid));
 };
 
-const findRun = async (id: string, sandboxUrl: string): Promise<AppRun> => {
+export const findRun = async (id: string, sandboxUrl: string): Promise<AppRun> => {
     const runs = await readRuns(sandboxUrl);
     const run = runs.find((entry) => entry.id === id);
     if (run === undefined) {
@@ -473,7 +479,7 @@ const findRun = async (id: string, sandboxUrl: string): Promise<AppRun> => {
 };
 
 // A run is this sandbox's to look at when it could have started it: either switch covers looking.
-const assertEither = (scopes: DeviceScopes): void => {
+export const assertEither = (scopes: DeviceScopes): void => {
     if (scopes.programs !== "on" && scopes.shell !== "on") {
         assertScope(scopes, "programs");
     }
@@ -564,10 +570,9 @@ export const appLogs = async (id: string, lines: number, grep: string | undefine
     return shown === "" ? `${head}\n(nothing${grep === undefined ? " printed yet" : " matches"}; a GUI program often prints nothing at all)` : `${head}\n${shown}`;
 };
 
-export const waitGone = async (run: AppRun, ms: number): Promise<boolean> => {
-    const gone = await pollFor(async () => ((await runState(run)) === "ended" ? true : undefined), { intervalMs: 200, until: Date.now() + ms });
-    return gone.kind === "found" || (await runState(run)) === "ended";
-};
+// Whether a stopped run ended within `ms`: on its exit event when this agent holds it, else looked at (app-wait.ts).
+export const waitGone = async (run: AppRun, ms: number, signal?: AbortSignal): Promise<boolean> =>
+    await waitForEnd({ timeoutMs: ms, exit: endings.get(run.id), isEnded: async () => (await runState(run)) === "ended", signal });
 
 export const signalTree = async (pid: number, force: boolean): Promise<void> => {
     if (process.platform === "win32") {

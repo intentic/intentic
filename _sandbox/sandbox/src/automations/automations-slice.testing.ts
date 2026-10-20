@@ -1,13 +1,13 @@
 import { type ArchivedConversation, liveThread, type ThreadSession, type ThreadSessionsStore } from "../sessions/thread-sessions.js";
 import type { AutomationsSlice } from "./automations-slice.js";
-import type { AutomationRecord, AutomationsStore } from "./automations-store.js";
+import { announcingSaves, type AutomationRecord, type AutomationsStore } from "./automations-store.js";
 
 // The automations slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
 
 // An in-memory automations store so the fire route is testable without the fs.
 export const memoryAutomationsStore = (initial: AutomationRecord[] = []): AutomationsStore => {
     let automations = [...initial];
-    return {
+    return announcingSaves({
         list: async () => automations,
         get: async (id) => automations.find((automation) => automation.id === id),
         upsert: async (automation) => {
@@ -43,7 +43,7 @@ export const memoryAutomationsStore = (initial: AutomationRecord[] = []): Automa
                 record.watch = next(record.watch);
             }
         },
-    };
+    });
 };
 
 // In-memory thread-session store, so routes turning an inbound message into a conversation are testable without the fs.

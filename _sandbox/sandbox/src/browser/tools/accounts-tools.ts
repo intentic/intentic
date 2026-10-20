@@ -9,7 +9,7 @@ import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import type { OpenAccountInput } from "../../capabilities/open-account.js";
 import { browserAccountPage, clearBrowserHelp, raiseBrowserHelp } from "../sessions/browser-sessions.js";
-import { type fetchEmailCode, type Mailbox, mailboxOf, siteToken } from "./email-codes.js";
+import { type FoundCode, type fetchEmailCode, type Mailbox, mailboxOf, siteToken } from "./email-codes.js";
 import { hasSession, markConnected, profileOwner } from "../sessions/session-store.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 
@@ -56,8 +56,8 @@ export interface AccountsDeps {
     readonly attended: boolean;
     // Files a new browser account under an identity; the switch gate lives in capabilities/open-account.ts.
     readonly openAccount: (input: OpenAccountInput) => Promise<string>;
-    // Newest code or link a site sent to a mailbox (email-codes.ts).
-    readonly fetchCode: (mailbox: Mailbox, site: string, now: Date) => ReturnType<typeof fetchEmailCode>;
+    // The code or link a site sent to a mailbox, waited for when asked (email-codes.ts).
+    readonly fetchCode: typeof fetchEmailCode;
     // Second gate check though a gated account is usually unmounted: mount filter and grants can change mid-turn.
     readonly release: (account: string, lane: "session" | "otp", detail: string) => Promise<{ readonly ok: true } | { readonly refusal: string }>;
     // Where an account signs in (capabilities/account-sign-in.ts): the site type_credential holds the live page to.
@@ -257,6 +257,41 @@ export const typeCredential = async (
     return ok(field === "username" ? `typed the stored username on ${where.host}: ${value}` : `typed the stored password on ${where.host} (not shown)`);
 };
 
+// How long fetch_email_code holds for the mail by default, and at most: a site's code mail lands within seconds to a
+// minute, and the turn can stop the call sooner (2026-10-20).
+const DEFAULT_CODE_WAIT_S = 60;
+const MAX_CODE_WAIT_S = 180;
+
+// What fetch_email_code says of a mail it found, its arrival first: an older one can be an earlier attempt's code.
+const foundCodeText = (match: FoundCode, site: string, now: Date, waitedS: number): string => {
+    const codes = match.codes.length === 0 ? "" : `\ncodes: ${match.codes.slice(0, 5).join(", ")}`;
+    const links = match.links.length === 0 ? "" : `\nlinks:\n${match.links.slice(0, 3).join("\n")}`;
+    const ago = match.date === undefined ? "" : `, ${Math.max(0, Math.round((now.getTime() - match.date.getTime()) / 60_000))} min before this call`;
+    const lead =
+        match.arrived === "after-call"
+            ? `mail from ${site} that arrived while this call waited`
+            : match.arrived === "just-before"
+              ? `mail from ${site} that arrived just before this call`
+              : `no new mail from ${site} came in ${waitedS}s; the newest before this call${ago}, which may be an earlier attempt's (re-request the code if the page rejects it)`;
+    return `${lead}: "${match.subject}" (${match.from})${codes}${links}`;
+};
+
+// The mailbox asked, held up to `waitedS` for the site's mail, and the answer put into words.
+const askMailbox = async (deps: AccountsDeps, mailbox: Mailbox, site: string, waitedS: number, signal: AbortSignal) => {
+    try {
+        const now = new Date();
+        const match = await deps.fetchCode(mailbox, site, { now, waitMs: waitedS * 1000, signal });
+        if (match === undefined) {
+            return fail(
+                `no mail from ${siteToken(site)} in the last half hour, and none arrived in the ${waitedS}s this call waited: re-request the code on the page, then call again`,
+            );
+        }
+        return ok(foundCodeText(match, siteToken(site), now, waitedS));
+    } catch (error) {
+        return fail(`could not read the mailbox: ${errorMessage(error)}, check the mailbox entry on the identity's card`);
+    }
+};
+
 export type AccountsServerFactory = (push: (event: AgentEvent) => void, signal: AbortSignal) => McpSdkServerConfigWithInstance;
 
 export const accountsServer =
@@ -330,9 +365,17 @@ export const accountsServer =
                 ),
                 sdk().tool(
                     "fetch_email_code",
-                    "The newest verification code or confirmation link a site emailed to this account's identity, and nothing else; you never see the inbox. Reads the mailbox linked on the identity's card, looks at the last half hour, and answers with the sender, subject, codes and links of the newest mail from the site you are signing into. Open confirmation links in the identity's own browser.",
-                    { account: z.string().describe("The account (capability id) whose identity's mailbox to ask") },
-                    async ({ account }) => {
+                    "The verification code or confirmation link a site emailed to this account's identity, and nothing else; you never see the inbox. Call it right after asking the site to send one: it holds until a mail from the site you are signing into arrives (up to waitSeconds) and answers with its sender, subject, codes and links, so there is no need to wait or retry yourself. A mail that came just before the call counts. If none arrives in time it answers with the newest from the last half hour, said as older: that may be an earlier attempt's code. Open confirmation links in the identity's own browser.",
+                    {
+                        account: z.string().describe("The account (capability id) whose identity's mailbox to ask"),
+                        waitSeconds: z
+                            .number()
+                            .min(0)
+                            .max(MAX_CODE_WAIT_S)
+                            .optional()
+                            .describe(`How long to hold for the mail to arrive; default ${DEFAULT_CODE_WAIT_S}, at most ${MAX_CODE_WAIT_S}, 0 answers from what is there now.`),
+                    },
+                    async ({ account, waitSeconds }) => {
                         const capability = await turnEntry(deps, account);
                         if (capability === undefined) {
                             return fail(NO_ACCOUNT(account));
@@ -359,20 +402,7 @@ export const accountsServer =
                                 : capability.kind === "browser"
                                   ? (capability.config as BrowserConfig).platform
                                   : ((identity.config as IdentityConfig).email.split("@")[1] ?? "");
-                        try {
-                            const match = await deps.fetchCode(mailbox, site, new Date());
-                            if (match === undefined) {
-                                return fail(
-                                    `no mail from ${siteToken(site)} in the last half hour: wait a moment and try again, or re-request the code on the page`,
-                                );
-                            }
-                            const codes = match.codes.length === 0 ? "" : `\ncodes: ${match.codes.slice(0, 5).join(", ")}`;
-                            const links = match.links.length === 0 ? "" : `\nlinks:\n${match.links.slice(0, 3).join("\n")}`;
-                            return ok(`newest mail from ${siteToken(site)}: "${match.subject}" (${match.from})${codes}${links}`);
-                        } catch (error) {
-                            const message = errorMessage(error);
-                            return fail(`could not read the mailbox: ${message}, check the mailbox entry on the identity's card`);
-                        }
+                        return askMailbox(deps, mailbox, site, waitSeconds ?? DEFAULT_CODE_WAIT_S, signal);
                     },
                     // curl fetches BODY[], not BODY.PEEK[], so every mail it opens is marked seen.
                     { annotations: toolAnnotations("write") },

@@ -294,3 +294,58 @@ test.each([
     expect(fallback.source).toBe("formula");
     expect(fallback.verdict).toBe(daemon.verdict);
 });
+
+// Held work is woken by events, not only by its interval (2026-10-20): each of these would otherwise wait a minute.
+describe("held work wakes on events", () => {
+    const quiet = { sampleMs: 0, waitIntervalMs: 60_000, waitDeadlineMs: 600_000, holderCheckMs: 0 };
+
+    test("`changed` lets held work look again at once", async () => {
+        let reading = box(16, 15.5);
+        const budget = createResourceBudget({ ...quiet, read: async () => reading });
+        const started = Date.now();
+        const admitted = budget.admit({ ...background("a"), wait: {} });
+        await Bun.sleep(5);
+        reading = box(16, 4);
+        budget.changed();
+        expect((await admitted).verdict).toBe("run");
+        expect(Date.now() - started).toBeLessThan(1_000);
+        budget.stop();
+    });
+
+    test("a reservation whose process died frees its room within a holder check, with no event", async () => {
+        const running = new Set([4242]);
+        const budget = createResourceBudget({ ...quiet, holderCheckMs: 10, read: async () => box(16, 13.5), alive: (pid) => running.has(pid) });
+        expect((await budget.admit({ ...background("holder"), pid: 4242 })).verdict).toBe("run");
+        const admitted = budget.admit({ ...background("next"), wait: {} });
+        await Bun.sleep(5);
+        running.delete(4242);
+        expect((await admitted).verdict).toBe("run");
+        budget.stop();
+    });
+
+    test("each sampler reading is a look for held work", async () => {
+        let reading = box(16, 15.5);
+        const budget = createResourceBudget({ ...quiet, sampleMs: 10, read: async () => reading });
+        const admitted = budget.admit({ ...background("a"), wait: {} });
+        await Bun.sleep(5);
+        reading = box(16, 4);
+        expect((await admitted).verdict).toBe("run");
+        budget.stop();
+    });
+
+    test("room for one goes to the work that waited longest, whichever waiter looks first", async () => {
+        let reading = box(16, 15.5);
+        const budget = createResourceBudget({ ...quiet, read: async () => reading });
+        const later = new AbortController();
+        // The first asks with a minute between looks; the second looks every millisecond and would win a race of timers.
+        const first = budget.admit({ ...background("first"), wait: {} });
+        await Bun.sleep(2);
+        const second = budget.admit({ ...background("second"), wait: { intervalMs: 1, signal: later.signal } });
+        await Bun.sleep(5);
+        reading = box(16, 13.5);
+        expect((await first).verdict).toBe("run");
+        later.abort();
+        expect((await second).verdict).toBe("refuse");
+        budget.stop();
+    });
+});

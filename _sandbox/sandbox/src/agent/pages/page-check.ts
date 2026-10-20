@@ -24,11 +24,17 @@ const MIN_WIDTH = 240;
 const MAX_WIDTH = 1600;
 // The tallest stretch the picture shows; a longer page is measured whole and pictured from the top.
 const MAX_CAPTURE = 1600;
-// How long a page's scripts get after load before it is measured: enough for a chart's first animation frame.
+// The most a page's scripts get after its first height before it is measured. The check moves on sooner, once the
+// height the page reports has held still for QUIET_MS (2026-10-20): the bridge reports every change, so a page whose
+// height stopped moving has laid itself out, and a fixed 600ms wait plus two fixed 250ms probes made every check
+// ~1.1s slower than the page needed. The caps stay as the fallback for a page whose height never stops moving.
 const SETTLE_MS = 600;
+// How long the reported height must hold still to count as settled: six frames at 60Hz, and the polling is per frame.
+const QUIET_MS = 100;
 // The frame's height before the page says its own, as the chat's frame holds it (ChatPageFrame's placeholder).
 const PLACEHOLDER = 200;
-// How much taller the frame is made to see whether the page's height follows it rather than its content.
+// How much taller the frame is made to see whether the page's height follows it rather than its content, and the most
+// the page gets to answer the resize; it moves on once QUIET_MS pass with no new height after it.
 const PROBE_PX = 240;
 const PROBE_MS = 250;
 const LOAD_TIMEOUT_MS = 15_000;
@@ -136,14 +142,18 @@ const levelOf = (type: string): PageMessage["level"] | undefined => {
     }
 };
 
-// What the frame reports, kept on the host page for the check to read: the height the page last said, and what it threw.
+// What the frame reports, kept on the host page for the check to read: the height the page last said, when it said it
+// (the host page's performance.now), and what it threw.
 interface Reported {
     readonly height: number;
     readonly errors: readonly string[];
+    readonly changedAt?: number;
 }
 declare global {
     interface Window {
         __page?: Reported;
+        // How long, on the host page's clock, since the later of `from` and the page's last new height.
+        quietSince?: (from: number) => number;
     }
 }
 
@@ -152,14 +162,34 @@ declare global {
 const hostDocument = (page: string, theme: PageTheme, cap: number): string =>
     `<!DOCTYPE html><html><head><style>html{color-scheme:${theme.appearance};background:${theme.variables["--background"]}}body{margin:0}` +
     `iframe{display:block;width:100%;height:${PLACEHOLDER}px;border:0;color-scheme:${theme.appearance}}</style>` +
-    `<script>window.__page={height:0,errors:[]};addEventListener("message",function(e){var f=document.querySelector("iframe"),d=e.data;` +
+    `<script>window.__page={height:0,errors:[]};window.quietSince=function(from){return performance.now()-Math.max(from,window.__page.changedAt||0)};addEventListener("message",function(e){var f=document.querySelector("iframe"),d=e.data;` +
     `if(!f||e.source!==f.contentWindow||!d||d.jsonrpc!=="2.0"||!d.params)return;` +
     `if(d.method===${JSON.stringify(PAGE_BRIDGE.sizeChanged)}&&d.params.height>0){var h=Math.ceil(d.params.height);` +
-    `window.__page={height:h,errors:window.__page.errors};f.style.height=Math.min(${cap},Math.max(32,h))+"px";}` +
+    `window.__page={height:h,errors:window.__page.errors,changedAt:performance.now()};f.style.height=Math.min(${cap},Math.max(32,h))+"px";}` +
     `else if(d.method===${JSON.stringify(PAGE_BRIDGE.error)}&&typeof d.params.message==="string")window.__page.errors.push(d.params.message);});</script>` +
     `</head><body><iframe sandbox="allow-scripts allow-forms" srcdoc="${page.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"></iframe></body></html>`;
 
 const reportedOf = (page: Page): Promise<Reported> => page.evaluate(() => window.__page ?? { height: 0, errors: [] });
+
+// Waits, at most `capMs`, until the page has said no new height for QUIET_MS since `since` (the host page's clock), then
+// answers what it last said. A cap reached is not an error: the page is measured as it stands.
+const settledReport = async (page: Page, since: number, capMs: number): Promise<Reported> => {
+    await page
+        .waitForFunction(([quiet, from]) => (window.quietSince?.(from) ?? quiet) >= quiet, [QUIET_MS, since] as const, {
+            timeout: capMs,
+            polling: "raf",
+        })
+        // allow(silent-catch): a height still moving at the cap is measured as it stands, as the fixed wait always did.
+        .catch(() => undefined);
+    return reportedOf(page);
+};
+
+// Sets the frame's height and answers when it was set, on the clock the bridge's reports are stamped with.
+const resizeFrame = (page: Page, px: number): Promise<number> =>
+    page.locator("iframe").evaluate((element, height) => {
+        (element as HTMLElement).style.height = `${height}px`;
+        return performance.now();
+    }, px);
 
 // The page's own box inside its frame, not the frame's: a short page in a tall frame is still short.
 const measuredInFrame = async (page: Page): Promise<number> => {
@@ -220,18 +250,14 @@ export const checkPage = async (
                 .waitForFunction(() => (window.__page?.height ?? 0) > 0, undefined, { timeout: HEIGHT_WAIT_MS })
                 // allow(silent-catch): a page that never says its height is measured in its frame below instead.
                 .catch(() => undefined);
-            await page.waitForTimeout(SETTLE_MS);
-            const settled = await reportedOf(page);
+            const settled = await settledReport(page, 0, SETTLE_MS);
             // A page that never said its height is measured in its frame directly.
             const contentHeight = settled.height > 0 ? settled.height : await measuredInFrame(page);
             // Made taller for a moment: a page whose height follows its frame's grows with it, and the chat cannot fit it.
-            const frame = page.locator("iframe");
             const held = Math.min(cap, Math.max(32, contentHeight));
-            await frame.evaluate((element, px) => ((element as HTMLElement).style.height = `${px}px`), held + PROBE_PX);
-            await page.waitForTimeout(PROBE_MS);
-            const followsFrame = (await reportedOf(page)).height >= contentHeight + PROBE_PX - 8;
-            await frame.evaluate((element, px) => ((element as HTMLElement).style.height = `${px}px`), held);
-            await page.waitForTimeout(PROBE_MS);
+            const grown = await settledReport(page, await resizeFrame(page, held + PROBE_PX), PROBE_MS);
+            const followsFrame = grown.height >= contentHeight + PROBE_PX - 8;
+            await settledReport(page, await resizeFrame(page, held), PROBE_MS);
             const capturedHeight = Math.max(1, Math.min(held, MAX_CAPTURE));
             const png = await page.screenshot({ type: "png", fullPage: true, clip: { x: 0, y: 0, width, height: capturedHeight } });
             // What the page's own bridge caught, beside what the browser saw thrown; each said once.

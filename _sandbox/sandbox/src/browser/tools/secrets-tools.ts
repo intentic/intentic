@@ -200,7 +200,7 @@ const nameFor = async (deps: SecretsToolsDeps, input: TypeInput, where: string):
     return {
         refusal:
             wanted.state === "pending"
-                ? `Not typed: ${wanted.message}. Carry on with what does not need it, and call this again once they have answered.`
+                ? `Not typed: ${wanted.message}. Carry on with what does not need it, and call this again once the answer wakes this conversation.`
                 : `Not typed: ${wanted.message}`,
     };
 };

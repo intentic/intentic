@@ -29,7 +29,8 @@ import { useSyncStatus } from "./useSyncStatus";
 // Devices the daemon can see, merging both report paths (see hosts/device-reports.ts). Pushed on the `hosts` domain
 // when a machine's reading actually moves. The poll stays beside the push because the reading is a snapshot the daemon
 // caches between polls and the rows age it against `readAt`, so it is also what re-reads a machine that went quiet
-// without a socket event.
+// without a socket event: the daemon pulls a machine's reading on read, so the timer is what starts a refresh, not a
+// stand-in for a push that exists (2026-10-20).
 
 const POLL_MS = 10_000;
 

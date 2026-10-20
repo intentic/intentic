@@ -11,7 +11,6 @@ import {
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { RESUME_NOTES, type ResumeReason, resumeNoteWith, withoutResumeNote, withResumeNote } from "@intentic/sandbox-contract/events/resume";
 import type { HandoffMode, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
-import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { replaceRejectedToken } from "../../providers/claude/claude-credentials.js";
 import { planRevision } from "../../prompt/plan-revision.js";
@@ -22,7 +21,7 @@ import { offerAnswerWords, restoreParkedCard } from "./recovery/restored-offers.
 import type { Caller } from "../../../auth/auth.js";
 import { POST_PLAN_MODE } from "../agent.js";
 import { formatAnswers } from "../../../sessions/vocabulary/question-answers.js";
-import { outageRetryDue, outageRetryFired } from "../../providers/provider-health.js";
+import { OUTAGE_MAX_ATTEMPTS, outageRetryDue, outageRetryFired, providerOutage } from "../../providers/provider-health.js";
 import { type Routing, routingFor, sameLoop, sessionFor } from "../../../conversations/registry/routing.js";
 import { consumeEntry, type JournalEntry, type JournalledTurn, parkedRestoreSpent, resumeBars, spendAttempt } from "../../../store/journals/turn-journal.js";
 import type { StartedRun, StartOptions, TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
@@ -39,13 +38,13 @@ import { previousRun } from "../../../system/boot/restarts/boot-marker.js";
 import { restartCost } from "../../../system/boot/restarts/restart-record.js";
 import { notResumedReason, type RestartResume, restartResume } from "./restart-resume-policy.js";
 import { spentUntil } from "./holds/allowance-gate.js";
-import { type RoomHold, roomHolds, waitsOnAllowance } from "./holds/room-holds.js";
-import { limitBooking } from "../../../conversations/actor/limit-booking.js";
+import { releaseRoomHolds } from "./holds/room-holds.js";
 import { limitDue } from "./holds/limit-due.js";
 import type { HeldReason, HeldTurn } from "./holds/held-turn.js";
 import { breakPolicyFor } from "./break-policy.js";
 import { keepStandingTrue } from "./holds/held-standing.js";
 import { releaseBooked } from "./booked-release.js";
+import { type DueAt, nudgedPass } from "../../../workload/nudged-pass.js";
 
 // Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
 // (a rotated token, a restart, a session past its window), which needs nobody's permission, and the three walls the
@@ -302,8 +301,14 @@ export const startConversationTurn = async (
 export interface TurnResumeScheduler {
     readonly start: () => void;
     readonly stop: () => void;
-    // One poll pass; `start` runs it on an interval. A call while a pass still runs joins that pass. Exposed for tests.
+    // One pass; `start` arms the timers that run it. A call while a pass still runs joins that pass. Exposed for tests.
     readonly tick: (now?: number) => Promise<void>;
+    // Something a hold waits on may have changed (a hold recorded, a turn settled, a land, a setting, an account): a
+    // pass soon, merged with any other nudge before it runs (workload/nudged-pass.ts).
+    readonly nudge: () => void;
+    // The records may now know when a pool reopens (a new usage reading): every hold refused with no instant asks again
+    // at the next pass rather than at its next minute, and that pass runs now.
+    readonly retime: () => void;
 }
 
 // The attempt budget spends in under an hour; past this a resume is worse than staying dead.
@@ -311,6 +316,10 @@ const OUTAGE_STALE_AFTER_MS = 60 * 60_000;
 
 // How long a request may promise a re-mint before the pass says none is coming.
 const AUTH_RESUME_DEADLINE_MS = 60_000;
+
+// How soon a re-mint the pass could not finish (a throw, a turn still unwinding) is tried again: nothing announces that
+// it may now succeed, so it is asked on this beat, the pass's old one, until the deadline above gives it up.
+const AUTH_RETRY_MS = 5_000;
 
 // Both name the fix (reconnect) rather than the mechanism.
 const AUTH_GAVE_UP = "The Claude sign-in this turn ran on could not be renewed in time: reconnect the account, then send again.";
@@ -340,6 +349,8 @@ type Verdict = { readonly armedBy?: TurnBreak; readonly gaveUp?: string; readonl
 // When a hold is due or given up, what a landed give-up leaves (dropped, or the ladder stood down), and how it fires.
 interface Rung {
     readonly verdict: (held: HeldRecord, now: number) => Verdict;
+    // The next instant this hold's verdict may change by the clock alone (epoch ms), for the pass to be woken at it.
+    readonly nextAt?: (held: HeldRecord, now: number) => number | undefined;
     readonly spent: "resume-dropped" | "ladder-spent";
     readonly fire: (services: Services, held: HeldRecord, routing: ResumeRouting | undefined, now: number) => Promise<void>;
 }
@@ -428,6 +439,7 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
     // On no policy; the deadline comes before the in-flight gate, since a wedged attempt is exactly what it must catch.
     auth: {
         verdict: (held, now) => (now - held.recordedAt > AUTH_RESUME_DEADLINE_MS ? { gaveUp: AUTH_GAVE_UP } : {}),
+        nextAt: (held, now) => Math.min(now + AUTH_RETRY_MS, held.recordedAt + AUTH_RESUME_DEADLINE_MS + 1),
         spent: "resume-dropped",
         fire: fireAuthResume,
     },
@@ -440,6 +452,12 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
                 };
             }
             return outageRetryDue(providerOf(held), now) ? { armedBy: "outage" } : undefined;
+        },
+        // The breaker's next window, while it has attempts left; past them only the hour's give-up is still to come.
+        nextAt: (held) => {
+            const outage = providerOutage(providerOf(held));
+            const staleAt = held.recordedAt + OUTAGE_STALE_AFTER_MS + 1;
+            return outage === undefined || outage.attempt >= OUTAGE_MAX_ATTEMPTS ? staleAt : Math.min(outage.retryAt, staleAt);
         },
         spent: "resume-dropped",
         // Counted and dropped at dispatch, so the breaker's window closes even if starting conflicts.
@@ -461,10 +479,13 @@ const RUNGS: { readonly [R in HeldReason]?: Rung } = {
             }
             return dueAt <= now ? { armedBy: "stopped" } : undefined;
         },
+        nextAt: (held) => stopRungAt(held.recordedAt, held.tries),
         spent: "ladder-spent",
         fire: dispatch(true),
     },
     // The daemon's own remedy, fired at once and on no policy: a press or a clock would only resume the overflowed session.
+    // At once for real since the pass is nudged by the hold being recorded (createTurnResumeScheduler, 2026-10-20); it
+    // used to wait for the next five-second beat.
     overflow: { verdict: () => ({}), spent: "resume-dropped", fire: dispatch(false) },
     // A spent allowance's has no rung here: it goes by the rule its card states (runLimitHold).
 };
@@ -491,18 +512,27 @@ const heldBehind = (services: Services, told: WeakSet<HeldRecord>, conversationI
 };
 
 // A spent allowance's hold: fired once its booking, read with the wall in front of where it goes, is due (limit-due.ts).
-const runLimitHold = async (services: Services, conversationId: string, held: HeldRecord, now: number, told: WeakSet<HeldRecord>): Promise<void> => {
+const runLimitHold = async (services: Services, conversationId: string, held: HeldRecord, now: number, pass: PassNotes): Promise<void> => {
     const due = held.fired ? undefined : await limitDue(services, conversationId, held, now);
     if (due === undefined) {
         return;
     }
     if (due.walledUntil !== undefined) {
-        heldBehind(services, told, conversationId, held, due.walledUntil);
+        heldBehind(services, pass.told, conversationId, held, due.walledUntil);
     }
     if (due.booking.at <= now) {
         await dispatch(false)(services, held, due.routing, now);
+        return;
     }
+    pass.due(due.booking.at);
 };
+
+// What one pass carries from hold to hold: the holds already said to wait behind a wall, and where it reports the
+// instants it knows something falls due, which arm its next run.
+interface PassNotes {
+    readonly told: WeakSet<HeldRecord>;
+    readonly due: DueAt;
+}
 
 // When the allowance in front of where a rung would send its hold reopens (ms), where the records call it spent with
 // that still ahead; undefined to send it.
@@ -512,14 +542,21 @@ const wallAhead = (services: Services, held: HeldRecord, routing: ResumeRouting 
 };
 
 // A given-up hold tells the card first; what it leaves waits until that lands, for a turn still unwinding.
-const runRung = async (services: Services, conversationId: string, held: HeldRecord, now: number, told: WeakSet<HeldRecord>): Promise<void> => {
+const runRung = async (services: Services, conversationId: string, held: HeldRecord, now: number, pass: PassNotes): Promise<void> => {
     if (held.reason === "limit") {
-        await runLimitHold(services, conversationId, held, now, told);
+        await runLimitHold(services, conversationId, held, now, pass);
         return;
     }
     const rung = RUNGS[held.reason];
-    const verdict = held.fired || rung === undefined ? undefined : rung.verdict(held, now);
-    if (verdict === undefined || rung === undefined) {
+    if (held.fired || rung === undefined) {
+        return;
+    }
+    const nextAt = rung.nextAt?.(held, now);
+    if (nextAt !== undefined && nextAt > now) {
+        pass.due(nextAt);
+    }
+    const verdict = rung.verdict(held, now);
+    if (verdict === undefined) {
         return;
     }
     if (verdict.armedBy !== undefined && !breakArmed(await breakPolicyFor(services, conversationId, verdict.armedBy))) {
@@ -528,7 +565,8 @@ const runRung = async (services: Services, conversationId: string, held: HeldRec
     if (verdict.gaveUp === undefined) {
         const until = held.reason === "auth" ? undefined : await wallAhead(services, held, verdict.routing, now);
         if (until !== undefined) {
-            heldBehind(services, told, conversationId, held, until);
+            heldBehind(services, pass.told, conversationId, held, until);
+            pass.due(until);
             return;
         }
         await rung.fire(services, held, verdict.routing, now);
@@ -548,88 +586,41 @@ const runRung = async (services: Services, conversationId: string, held: HeldRec
 
 // Whether the sandbox's own words wait on a window that has now reopened: admission held them while it was shut
 // (turn-admission.ts), and nothing else would send them where the answer to the limit is to wait for a press.
-const wakesReopened = (services: Services, conversationId: string, held: HeldRecord, now: number): boolean =>
-    held.reason === "limit" &&
-    held.reopensAt !== undefined &&
-    !windowShut(held, now) &&
-    waitingOf(services.conversations.queued(conversationId)).some((item) => item.voice !== "person");
-
-// How long memory must stay free before a hold waiting for room lets anything go: one good reading between two short ones
-// is not memory calming down, and a turn let go into it is refused again, with a second notice in its chat.
-export const ROOM_SETTLE_MS = 30_000;
-
-// Lets one low-memory hold go, once memory has stayed free for ROOM_SETTLE_MS, and only where the conversation's answer to
-// the memory wall is to send it then. One a pass, longest waiting first: the next is judged on a reading that counts the
-// room the first one took (resource-budget.ts reservations), where letting them all go into one good reading would have
-// every one of them refused again at once. Its words go out as the ordinary turn they would have been; the sandbox's
-// kept turn runs as itself, as its press would run it.
-const releaseRoomHolds = async (services: Services, now: number): Promise<void> => {
-    const holds = roomHolds(services);
-    if (holds.length === 0) {
-        return;
+// Reports the reopen of a window still shut, where such words wait for it, so the pass is woken at that instant.
+const wakesReopened = (services: Services, conversationId: string, held: HeldRecord, now: number, due: DueAt): boolean => {
+    if (held.reason !== "limit" || held.reopensAt === undefined || !waitingOf(services.conversations.queued(conversationId)).some((item) => item.voice !== "person")) {
+        return false;
     }
-    let next: RoomHold | undefined;
-    for (const hold of holds) {
-        // Room is not all it may wait for: on a spent account it waits for the reopen too, and the next hold gets the room.
-        if (breakArmed(await breakPolicyFor(services, hold.conversationId, "memory")) && !(await waitsOnAllowance(services, hold, now))) {
-            next = hold;
-            break;
-        }
+    if (windowShut(held, now)) {
+        due(held.reopensAt * 1000);
+        return false;
     }
-    if (next === undefined) {
-        return;
-    }
-    const since = await services.resources.roomSince();
-    if (since === undefined || now - since < ROOM_SETTLE_MS) {
-        return;
-    }
-    const { conversationId } = next;
-    services.logger.info({ conversationId, kind: next.kind, waitedMs: now - next.since }, "resume pass: memory freed up, a held message goes out");
-    if (next.kind === "door") {
-        await dispatch(false)(services, next.held, undefined, now);
-        return;
-    }
-    const ids = waitingOf(services.conversations.queued(conversationId)).map((item) => item.id);
-    services.conversations.send(conversationId, { kind: "queue-released", ids }, now);
-    await services.turns.drain(conversationId);
+    return true;
 };
 
-// When a spent allowance's unfired hold goes by itself, by the one rule the pass fires by (limit-booking.ts). Undefined
-// for a hold only a press sends.
-const heldSendAt = async (services: Pick<Services, "agents" | "sandboxSettings">, conversationId: string, held: HeldRecord): Promise<number | undefined> =>
-    held.reason !== "limit" || held.fired ? undefined : limitBooking(held, await breakPolicyFor(services, conversationId, "limit"))?.at;
-
-/**
- * The soonest instant the sandbox's own clock sends something a conversation is waiting on (ms), or 0 for none: a
- * person's scheduled send, and a spent allowance's held turn booked to go again at its reset. A wake the machine must not
- * sleep through, since nothing outside restarts it for either.
- */
-export const nextBookedSendAt = async (services: Pick<Services, "agents" | "conversations" | "sandboxSettings">): Promise<number> => {
-    const scheduled = services.conversations.booked().flatMap(({ booking }) => (booking.until === undefined ? [] : [booking.until]));
-    const held = await Promise.all(services.conversations.stranded().map(({ conversationId, record }) => heldSendAt(services, conversationId, record)));
-    const instants = [...scheduled, ...held.filter((at): at is number => at !== undefined)];
-    return instants.length === 0 ? 0 : Math.min(...instants);
-};
+// The backstop between passes no event or known instant woke (2026-10-20): every hold the pass fires is now woken by the
+// event that made it due (a hold recorded, a turn settled, a land, a setting or an account changed) or by a timer at the
+// instant it falls due, so this beat only catches what both missed.
+const RESUME_BACKSTOP_MS = 30_000;
 
 // One pass over every held turn, oldest first; snapshotted, since every rung stamps or drops the records it walks.
-export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000): TurnResumeScheduler => {
-    let timer: NodeJS.Timeout | undefined;
-    // One pass at a time: an interval that comes round while the last pass still runs joins it instead of walking the
-    // same records underneath it. A rung reads a policy before it stamps its record, and a second pass walking a stale
-    // snapshot could fire the same hold twice; a send let go waits on a version commit, and must not be let go again.
-    const passes = new SingleFlight<"pass", void>();
+// One pass at a time (nudgedPass): a nudge or a timer that comes round while the last pass still runs joins it instead of
+// walking the same records underneath it. A rung reads a policy before it stamps its record, and a second pass walking a
+// stale snapshot could fire the same hold twice; a send let go waits on a version commit, and must not be let go again.
+export const createTurnResumeScheduler = (services: Services, backstopMs = RESUME_BACKSTOP_MS): TurnResumeScheduler => {
     // When each instant-less limit hold last asked the records for its reopen (retimeLimitHold).
     const retimeAsked = new Map<string, number>();
     // The holds already said to be waiting behind a spent allowance (heldBehind), each said once.
     const toldBehind = new WeakSet<HeldRecord>();
 
-    const pass = async (now: number): Promise<void> => {
+    const pass = async (now: number, due: DueAt): Promise<void> => {
+        const notes: PassNotes = { told: toldBehind, due };
         for (const { conversationId, record } of services.conversations.stranded()) {
             // Per conversation, so one record that throws leaves the rest of the pass to run.
             try {
-                await runRung(services, conversationId, record, now, toldBehind);
+                await runRung(services, conversationId, record, now, notes);
                 // After the rung, so a resend it just fired goes first and hears them as it runs.
-                if (wakesReopened(services, conversationId, record, now)) {
+                if (wakesReopened(services, conversationId, record, now, due)) {
                     await services.turns.drain(conversationId);
                 }
                 await keepStandingTrue(services, conversationId, now, retimeAsked);
@@ -637,21 +628,27 @@ export const createTurnResumeScheduler = (services: Services, intervalMs = 5_000
                 services.logger.error({ err: error, conversationId, reason: record.reason }, "resume pass: a held turn could not be resumed, the pass goes on to the next");
             }
         }
-        await releaseBooked(services, now);
+        await releaseBooked(services, now, due);
         try {
-            await releaseRoomHolds(services, now);
+            await releaseRoomHolds(services, now, due, (held) => dispatch(false)(services, held, undefined, now));
         } catch (error) {
             services.logger.error({ err: error }, "resume pass: a low-memory hold could not be let go, the next pass tries again");
         }
     };
-    const tick = (now: number = Date.now()): Promise<void> => passes.run("pass", () => pass(now));
+    const passes = nudgedPass(pass, {
+        backstopMs,
+        failed: (error) => services.logger.error({ err: error }, "resume pass failed, the next one tries again"),
+    });
 
     return {
-        tick,
-        start: () => {
-            timer = setInterval(() => void tick(), intervalMs);
+        tick: passes.run,
+        nudge: passes.nudge,
+        retime: () => {
+            retimeAsked.clear();
+            passes.nudge();
         },
-        stop: () => clearInterval(timer),
+        start: passes.start,
+        stop: passes.stop,
     };
 };
 

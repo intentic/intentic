@@ -19,3 +19,6 @@ export type HostHello = z.infer<typeof HostHelloSchema>;
 // The URL the machine's agent dials, given the sandbox's public URL. Carries no credential (the token rides the hello
 // frame); one place builds it, so the agent and the daemon route can't disagree.
 export const hostConnectUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/^http/, "ws").replace(/\/$/, "")}/system/hosts/connect`;
+
+// Where a connected machine tells its sandbox that Passwords shares changed (2026-10-20), bearer-authenticated.
+export const hostKeyringChangedUrl = (sandboxUrl: string): string => `${sandboxUrl.replace(/\/$/, "")}/system/hosts/keyring-changed`;

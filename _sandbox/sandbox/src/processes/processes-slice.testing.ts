@@ -50,6 +50,8 @@ export const fakeProcesses = (
                 stopped.push(repo);
             },
             running: (repo) => repo in ports,
+            // Ends nothing it never ran: a seeded port is a panel no test waits out.
+            whenEnded: async () => {},
             portOf: (repo) => ports[repo],
             ports: () => Object.values(ports),
             // A stubbed panel is never mid-start; routes drop the field, which is also the common case.

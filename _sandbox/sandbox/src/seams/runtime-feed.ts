@@ -13,7 +13,11 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     browsers: 1000,
     // A window opening or closing is one change, and a program that opens three at once is still one piece of news.
     desktop: 250,
-    subagents: 2000,
+    // Every SDK task_progress tick (a token count, a tool use) patches a child and publishes here, and each frame makes
+    // every open board re-read the roster; a second folds that chatter. A child being born or ending is not chatter: it
+    // goes out at once through publishRuntimeMilestone (2026-10-20, down from 2000 so a transcript pane refetching on
+    // this domain sees a running child's progress within a second).
+    subagents: 1000,
     // An executor pass writes a batch in a burst; one frame at the end of it is the whole news.
     approvals: 250,
     // A landing is minutes of work; this window only coalesces the multi-repo burst writing one sentence.
@@ -109,6 +113,24 @@ export const publishRuntimeChange = (...domains: readonly RuntimeDomain[]): void
         pending.add(domain);
     }
     arm(Date.now());
+};
+
+// The shortest gap a milestone keeps after the frame before it, so a fleet of children ending together still folds.
+const MILESTONE_MS = 250;
+
+/**
+ * Reports a move a reader is waiting on (a child ending, one being born), which goes out within MILESTONE_MS even inside
+ * the domain's window: the window is there to fold chatter, not to hold back the change the chatter led up to
+ * (2026-10-20). The full window restarts from the frame it goes out in.
+ */
+export const publishRuntimeMilestone = (...domains: readonly RuntimeDomain[]): void => {
+    for (const domain of domains) {
+        const allowedAt = nextAllowedAt.get(domain);
+        if (allowedAt !== undefined) {
+            nextAllowedAt.set(domain, Math.min(allowedAt, allowedAt - THROTTLE_MS[domain] + MILESTONE_MS));
+        }
+    }
+    publishRuntimeChange(...domains);
 };
 
 // The last unsubscribe drops what was pending and every rate-limit stamp: with nobody listening nothing is stale, and a

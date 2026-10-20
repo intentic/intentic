@@ -1,14 +1,17 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
-import { linkTaskDepsOf, noteLinkTurnSettled, noteLinkTurnStarted, startUnstartedTasks } from "../links/link-tasks.js";
+import { onChildSettled,childTurnResult,isWorker,resultWords } from "../agent/subagents/child-records.js";
+import { onJobEnded } from "../agent/tools/jobs/job-ended.js";
+import { linkTaskDepsOf, noteLinkTurnAwaiting, noteLinkTurnSettled, noteLinkTurnStarted, startUnstartedTasks } from "../links/link-tasks.js";
 import { childLandingWords, reportChildLanded } from "../conversations/land/child-lands.js";
 import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
 import { onAccountReopened } from "../usage/serviceability/state-log.js";
+import { watchCapacity } from "../usage/serviceability/capacity-watch.js";
 import { adoptChildTurn, childKillNote, childMovingOn } from "../agent/subagents/children.js";
-import { childTurnResult, isWorker, resultWords } from "../agent/subagents/child-records.js";
 import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";
 import { landHeldForWake } from "../conversations/land/wake-held-land.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
+import { passwordWakeOf } from "../needs/password-wake.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
@@ -21,6 +24,7 @@ import { publicAddressOf } from "../env.config.js";
 import { reportedPairings } from "../hosts/device-reports.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
+import { onRuntimeChange } from "../seams/runtime-feed.js";
 
 // What a child's report reads off the daemon: the doors a wake goes through, the child's and parent's entries, how a
 // killed runtime reads, and where the child's work went.
@@ -74,6 +78,12 @@ const projectDeliveryDeps = (services: BootPhase["services"]): ProjectDeliveryDe
     publicUrl: services.config.sandbox.publicUrl,
     platformId: publicAddressOf(services.config).sandboxId,
     pairingsOf: async (host) => await reportedPairings(services, host),
+    hostsChanged: (listener) =>
+        onRuntimeChange((domains) => {
+            if (domains.includes("hosts")) {
+                listener();
+            }
+        }),
 });
 
 // Work landing in a folder attached to this computer's own sandbox goes to the folder on the computer as well
@@ -91,6 +101,7 @@ const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role"
     const deps = { links: services.inboundLinks, logger };
     shutdown.push(services.events.subscribe("run.settled", (settled) => noteLinkTurnSettled(deps, settled)));
     shutdown.push(services.events.subscribe("run.started", (started) => noteLinkTurnStarted(deps, started)));
+    shutdown.push(services.events.subscribe("turn.awaiting", noteLinkTurnAwaiting));
     shutdown.push(() => services.linkedChildren.close());
     if (role.container) {
         void services.linkedChildren.resume().catch((error: Error) => logger.warn({ err: error }, "linked tasks: not followed again"));
@@ -104,17 +115,36 @@ const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role"
 const startKeyrings = ({ role, services, shutdown }: Pick<BootPhase, "role" | "services" | "shutdown">): void => {
     if (role.roots) {
         shutdown.push(services.deviceSecrets.start());
-        shutdown.push(services.keyringNeeds.start());
+        shutdown.push(services.keyringNeeds.start(passwordWakeOf(() => services, services.logger)));
+    }
+};
+
+// The automations pass: on its interval, at each moment it knows is due, and at once when a turn settles (a held wake
+// waits for no live turn) or an automation is saved (a moment may fall inside this window).
+const startAutomations = ({ role, services, shutdown }: Pick<BootPhase, "role" | "services" | "shutdown">): void => {
+    const scheduler = createAutomationsScheduler(services);
+    shutdown.push(() => scheduler.stop());
+    if (role.container) {
+        scheduler.start();
+        shutdown.push(services.events.subscribe("run.settled", scheduler.nudge));
+        shutdown.push(services.automations.onSaved(scheduler.nudge));
+    }
+};
+
+// Work held for memory looks again the moment a turn, a background job or a spawned child lets memory go, rather than
+// at its next interval: measured before, a held heavy command waited ~2.5 s past the room being there (2026-10-20).
+// Wired here, above both the workload budget and the agent layer, which the budget may not import.
+const wireRoomWakes = ({ events, resources }: BootPhase["services"], shutdown: BootPhase["shutdown"]): void => {
+    const roomFreed = (): void => resources.changed();
+    for (const stop of [events.subscribe("run.settled", roomFreed), onJobEnded(roomFreed), onChildSettled(roomFreed)]) {
+        shutdown.push(stop);
     }
 };
 
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
-    const scheduler = createAutomationsScheduler(services);
-    shutdown.push(() => scheduler.stop());
-    if (role.container) {
-        scheduler.start();
-    }
+    startAutomations({ role, services, shutdown });
+    wireRoomWakes(services, shutdown);
 
     // Open needs outlive every turn and every restart (docs/architecture/needs.md): their cards are told what they wait
     // on, answers a restart interrupted are delivered, and the checks against the world start.
@@ -136,6 +166,8 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
             capacityNoticer({ conversations: services.conversations, doors: childReports.doors, profileOf: childReports.profileOf, logger }),
         ),
     );
+    // Which is judged at the reopen a judgement saw ahead and on each new reading, not only when somebody asks.
+    shutdown.push(watchCapacity(services));
     // So is its work reaching the main tree, while the parent still supervises (child-lands.ts), and a turn that starts on
     // it without the parent, which the parent supervises like its own (children.ts adoptChildTurn).
     shutdown.push(services.events.subscribe("workspace", (event) => reportChildLanded(services, event)));

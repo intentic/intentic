@@ -56,7 +56,7 @@ const shotContent = (shot: Shot, what: string, desk: AgentDesktop): unknown[] =>
 // An action's answer: what it did, then the same part of the screen as the latest screenshot, or a sentence when not
 // one pixel of it changed.
 const confirmingLook = async (said: string, desk: AgentDesktop): Promise<ToolAnswer> => {
-    await settle();
+    await settle(desk.screen, frames);
     const shot = await reshoot(desk.screen, frames);
     if (shot.unchanged && frames.unchangedStreak() <= MAX_UNCHANGED) {
         return textResult(

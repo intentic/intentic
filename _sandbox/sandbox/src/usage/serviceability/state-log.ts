@@ -88,6 +88,66 @@ const announceReopened = (provider: string, entry: ServiceFacts, previous: strin
     }
 };
 
+/* A KNOWN REOPEN IS JUDGED AT ITS INSTANT. A verdict is judged only when something asks (a page load, a spawn, the
+   resume pass), and the idle usage refresh comes every fifteen minutes, so an account whose spent pool reopened at a
+   known instant was said to be back only at whichever came next (2026-10-20). Every judgement now arms one timer per
+   provider for the soonest reopen it saw ahead (a spent pool's reset, a block's end), and at it the listeners below judge
+   that provider again, which writes the change and tells whoever waits on it (onAccountReopened). */
+
+const reopenDueListeners = new Set<(provider: string) => void>();
+
+/** Hears a provider whose soonest known reopen has come, to judge its accounts again; answers its own unsubscribe. */
+export const onReopenDue = (listener: (provider: string) => void): (() => void) => {
+    reopenDueListeners.add(listener);
+    return () => reopenDueListeners.delete(listener);
+};
+
+// A moment past the instant itself, so the judgement it wakes reads the pool reopened rather than a second short of it.
+const REOPEN_GRACE_MS = 1_000;
+
+// When an account that cannot serve says it can again (epoch ms); undefined where its verdict names no instant.
+const reopenOf = (state: AccountState): number | undefined => {
+    if (state.kind === "spent" && state.reopensAt !== undefined) {
+        return state.reopensAt * 1000;
+    }
+    return state.kind === "blocked" && state.until !== undefined ? state.until * 1000 : undefined;
+};
+
+// One timer per provider and question (a model's pools, or none), armed for the soonest reopen still ahead among its
+// accounts as last judged on that question: a judgement for one model must not move the timer another's set.
+const reopenTimers = (now: () => number): ((provider: string, model: ModelRef | undefined, states: ReadonlyMap<string, AccountState>) => void) => {
+    const armed = new Map<string, { readonly at: number; readonly timer: NodeJS.Timeout }>();
+    return (provider, model, states) => {
+        const key = `${provider}\u0000${model?.id ?? ""}`;
+        const ahead = [...states.values()].flatMap((state) => {
+            const at = reopenOf(state);
+            return at !== undefined && at > now() ? [at] : [];
+        });
+        const at = ahead.length === 0 ? undefined : Math.min(...ahead);
+        const current = armed.get(key);
+        if (current?.at === at) {
+            return;
+        }
+        clearTimeout(current?.timer);
+        armed.delete(key);
+        if (at === undefined) {
+            return;
+        }
+        const timer = setTimeout(
+            () => {
+                armed.delete(key);
+                for (const listener of reopenDueListeners) {
+                    listener(provider);
+                }
+            },
+            // setTimeout's ceiling: a reopen further out fires early, and the judgement it wakes arms the rest.
+            Math.min(2_147_483_647, at - now() + REOPEN_GRACE_MS),
+        );
+        timer.unref();
+        armed.set(key, { at, timer });
+    };
+};
+
 export interface AccountStateLog {
     // Every account of one provider as just judged together; writes a line for each whose verdict changed since the last
     // judgement on the same question (the same model, or none).
@@ -102,8 +162,10 @@ export interface AccountStateLog {
 
 export const createAccountStateLog = (logger: Pick<Logger, "info">, now: () => number = Date.now): AccountStateLog => {
     const last = new Map<string, string>();
+    const armReopen = reopenTimers(now);
     return {
         note: (provider, facts, states, refusals, model) => {
+            armReopen(provider, model, states);
             const standing = refusalList(refusals)
                 .filter((refusal) => refusalVerdict(refusal, facts, now()) === "standing")
                 .toSorted((left, right) => right.at - left.at);

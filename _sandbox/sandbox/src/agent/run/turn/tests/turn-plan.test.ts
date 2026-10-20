@@ -292,6 +292,32 @@ test("Codex resolves the catalog default when the turn pins no model", async () 
     expect((plan as { request: AgentRequest }).request.spec.model).toBe("gpt-5.6-codex");
 });
 
+// (2026-10-20) The translator's bench is how long a Codex rate limit lasts, which Codex never tells its client; the
+// subscription turn carries it, read for the model it runs, so a wait known to be hours long is handed over at once.
+test("a Codex subscription turn carries its allowance, read for the model it runs", async () => {
+    const asked: string[] = [];
+    const services = servicesWith({
+        codexThreadExists: async () => true,
+        config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
+        cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
+            accounts: async () => ({ codex: [{ name: "sub", label: "sub" }], grok: [], kimi: [], gemini: [] }),
+            turnLimit: async (provider, model) => {
+                asked.push(`${provider}/${model}`);
+                return { spent: 1, withHeadroom: 0, reopensAt: 1_800_000_000 };
+            },
+        }),
+        codexModels: unstubbed<Services["codexModels"]>("codexModels", {
+            models: async () => ({ models: [{ id: "gpt-5.6-codex", label: "GPT 5.6 Codex" }], default: "gpt-5.6-codex" }),
+        }),
+    });
+
+    const plan = await planTurn(services, turn({ agent: "codex" }), context);
+
+    const credential = (plan as { request: AgentRequest }).request.credential;
+    expect(credential.kind === "codex-endpoint" ? await credential.allowance?.limit?.() : undefined).toEqual({ spent: 1, withHeadroom: 0, reopensAt: 1_800_000_000 });
+    expect(asked).toEqual(["codex/gpt-5.6-codex"]);
+});
+
 // A turn nobody started acts as no one, so it reaches none of the sandbox's signed-in accounts. Denying the skills is
 // half the answer: the skill files stay on disk still naming the account, and the one diagnostic the sandbox points at
 // a withheld credential speaks only for approver gates, so an unexplained denial reads as a broken login and sends the

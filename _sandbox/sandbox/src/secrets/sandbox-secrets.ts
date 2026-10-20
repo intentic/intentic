@@ -10,6 +10,23 @@ import { openDocument } from "../store/open-document.js";
 // name -> value, one entry per secret, each parsed on its own.
 export const sandboxSecretsDocument = defineDocument({ root: "auth", path: "sandbox-secrets.json", schema: z.string(), granularity: "record" });
 
+// The store, telling `changed` after each write that moved something: what a need waiting on a secret reacts to, so it
+// settles when the value is stored here by any door, not on the needs fallback timer (2026-10-20).
+export const notifyingSandboxSecrets = (store: SandboxSecrets, changed: () => void): SandboxSecrets => ({
+    ...store,
+    set: async (name, value) => {
+        await store.set(name, value);
+        changed();
+    },
+    remove: async (name) => {
+        const removed = await store.remove(name);
+        if (removed) {
+            changed();
+        }
+        return removed;
+    },
+});
+
 export interface SandboxSecrets {
     readonly all: () => Promise<Readonly<Record<string, string>>>;
     readonly get: (name: string) => Promise<string | undefined>;

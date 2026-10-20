@@ -39,6 +39,7 @@ import { createDomainEvents } from "../../../../seams/domain-events.js";
 import type { Said, StartedRun, TurnInput, TurnStarter } from "../../../../seams/turn-starter.js";
 import type { BeginRefusal } from "../../../../conversations/actor/conversation-decide.js";
 import { createTurnResumeScheduler, fireHeldResume, resumeInterruptedTurns, startConversationTurn } from "../turn-resume.js";
+import { nudgeResumesOn } from "../holds/resume-nudges.js";
 import type { HeldOf, HeldTurn } from "../holds/held-turn.js";
 import { TurnRun } from "../turn-runs.js";
 import { openRunLog, readRunLog, unrecordedRuns } from "../../../../sessions/run-log.js";
@@ -2417,6 +2418,28 @@ test("an overflow is re-run fresh on the next pass, on no policy, and only once"
     expect(turns[0]!.sessionId).toBeUndefined();
     expect(turns[0]!.prompt).toBe(withResumeNote("ship the parser", RESUME_NOTES.overflow));
     clearPendingResume(services, "over-2");
+});
+
+// "Fired at once" is now true: recording the hold nudges a started pass, so the re-run goes out without waiting for a
+// beat; the scheduler's backstop here is an hour, so only the nudge could have sent it (2026-10-20).
+test("an overflow is re-run the moment it is held, with no pass's beat to wait for", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    const driven = drivenBy(services, heldWake(turns));
+    const scheduler = createTurnResumeScheduler(driven, 60 * 60_000);
+    scheduler.start();
+    const headroom = unstubbed<Services["headroom"]>("headroom", { onChange: () => () => undefined });
+    const unhear = nudgeResumesOn({ conversations: driven.conversations, events: driven.events, sandboxSettings: driven.sandboxSettings, headroom }, scheduler);
+    try {
+        recordHeldTurn(services, { reason: "overflow", input: { prompt: "ship the parser", conversationId: "over-now", isolated: true }, sessionId: "s-full", ran: true });
+        await waitFor(() => expect(turns).toHaveLength(1), { timeout: 3_000, interval: 10 });
+        await settle(services, "over-now");
+        expect(turns[0]!.prompt).toBe(withResumeNote("ship the parser", RESUME_NOTES.overflow));
+    } finally {
+        unhear();
+        scheduler.stop();
+    }
+    clearPendingResume(services, "over-now");
 });
 
 // Only a person reopens an archived conversation: the pass spends the hold's one dispatch and runs nothing, the card stays

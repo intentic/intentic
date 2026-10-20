@@ -99,6 +99,7 @@ const harness = (
     let entry: PersistedAgent = isolatedAgent([{ repo: PROJECT, base: "0".repeat(40) }]);
     const recorded: { id: string; delivery: LandingDelivery }[] = [];
     const treeChanged: string[] = [];
+    const hostListeners = new Set<() => void>();
     const client: DeliveryClient = {
         deliverProject: async (input) => {
             machine.asked.push(input);
@@ -133,6 +134,10 @@ const harness = (
         publicUrl: URL,
         platformId: undefined,
         pairingsOf: async () => machine.pairings,
+        hostsChanged: (listener) => {
+            hostListeners.add(listener);
+            return () => hostListeners.delete(listener);
+        },
     };
     const delivery = createProjectDelivery(deps, maxBytes === undefined ? {} : { maxBytes });
     const land = async (from: string, tip: string): Promise<void> => {
@@ -153,7 +158,13 @@ const harness = (
         // SAFETY: the file is the delivery's own, written through its document's schema.
         return (JSON.parse(raw) as { queue: OwedDelivery[] }).queue;
     };
-    return { delivery, land, recorded, treeChanged, queue };
+    // What the hub announcing a change to the connected machines does.
+    const hostsChanged = (): void => {
+        for (const listener of hostListeners) {
+            listener();
+        }
+    };
+    return { delivery, land, recorded, treeChanged, queue, hostsChanged, hostListeners };
 };
 
 const machineAt = (overrides: Partial<Machine> = {}): Machine => ({
@@ -313,6 +324,36 @@ test("a computer that is away gets the land when it connects; until then the car
     expect(machine.asked).toHaveLength(1);
     expect(recorded.map(({ delivery: kept }) => kept.state)).toEqual(["waiting", "partial"]);
     expect(await queue()).toEqual([]);
+});
+
+test("a waiting land goes the moment its machine connects, on the hub's announcement rather than the timed look", async () => {
+    const repo = await repository();
+    const { promise: asked, resolve: wasAsked } = Promise.withResolvers<void>();
+    const machine = machineAt({
+        online: false,
+        answer: async () => {
+            wasAsked();
+            return delivered();
+        },
+    });
+    const { delivery, land, recorded, queue, hostsChanged, hostListeners } = harness(repo, machine);
+    const stop = delivery.start();
+    try {
+        await land(repo.from, repo.tip);
+        expect(recorded.map(({ delivery: kept }) => kept.state)).toEqual(["waiting"]);
+
+        machine.online = true;
+        hostsChanged();
+        // The timed look is a minute away; only the announcement can have asked the machine this soon.
+        await asked;
+        await delivery.settled();
+        expect(machine.asked).toHaveLength(1);
+        expect(recorded.map(({ delivery: kept }) => kept.state)).toEqual(["waiting", "partial"]);
+        expect(await queue()).toEqual([]);
+    } finally {
+        stop();
+    }
+    expect(hostListeners.size).toBe(0);
 });
 
 test("a later land of the same conversation carries the one still waiting: one delivery from the first start", async () => {

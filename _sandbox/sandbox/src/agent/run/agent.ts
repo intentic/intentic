@@ -22,7 +22,6 @@ import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract/policy/safety-
 import { documentOf, isPlanDocumentPath } from "@intentic/sandbox-contract/text/documents";
 import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import { sendableEffort, sendableThinking } from "@intentic/sandbox-contract/models/agent-catalog";
-import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { join, normalize } from "node:path";
 import { claudeStatePath } from "../../sessions/session-store.js";
 import { daemonMountNs, handoffDirOf, type IsolationAnchor, ownWorktree, TMUX_NS_ENV } from "../../conversations/worktrees/isolation.js";
@@ -58,7 +57,6 @@ import type { AgentRequest, HarnessCredential } from "../providers/agent-request
 import { harnessEnv } from "../providers/harness-credentials.js";
 import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { opt } from "../../opt.js";
-import { readClaudeUsage } from "../providers/claude/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
@@ -885,7 +883,6 @@ export async function* runAgent(
     conversations: Pick<ConversationActors, "holdings" | "send">,
     request: HarnessRequest,
     queryFn: QueryFn = defaultQuery,
-    usageFetch: typeof fetch = fetch,
 ): AsyncGenerator<AgentEvent> {
     // The SDK's own, not the turn's signal: it takes a controller and aborts it itself when its query closes, which must
     // not stop the turn. The turn's signal is linked into it where the SDK starts, below.
@@ -977,13 +974,7 @@ export async function* runAgent(
         ...profileOptions(request),
     };
 
-    // Only a stored-account token reads usage pools at settle; other turns have no pool or account to file under. A sealed
-    // request is waited on by its caller to the last frame, so it does not pay for the read either.
     const credential = request.credential;
-    const readUsage =
-        credential.kind !== "claude-oauth" || request.policy.sealed === true
-            ? undefined
-            : (): Promise<UsageWindow[]> => readClaudeUsage(credential.token, usageFetch).then((reading) => reading.windows);
 
     // Swallowed-prompt recovery: pushes the turn's own prompt back through the steering queue once.
     const steering = request.spec.steering;
@@ -1018,7 +1009,6 @@ export async function* runAgent(
                 browserOutputDir: request.tools.browserOutputDir,
                 steering: request.spec.steering,
                 redeliver,
-                readUsage,
                 ...streamCredentialOf(credential, request.spec.model),
                 subagents,
                 checklistSeed,

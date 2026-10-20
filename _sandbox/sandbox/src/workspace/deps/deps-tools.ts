@@ -1,5 +1,5 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sleep } from "@intentic/base/async";
+import { anySignal, sleep } from "@intentic/base/async";
 import { sdk } from "../../engines/claude-sdk.js";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
@@ -17,10 +17,12 @@ const ok = (text: string) => ({ content: [{ type: "text" as const, text }] });
 // How long `install` waits for the daemon before answering "still installing": long enough for an ordinary install,
 // short of any tool-call ceiling.
 const DEFAULT_WAIT_MS = 10 * 60_000;
-const DEFAULT_POLL_MS = 2_000;
+// The wait looks again when the coordinator says an install ended (installEnded); this is only the floor under that,
+// for an end nothing reports (2026-10-20: was a full workspace scan every 2 s).
+const DEFAULT_POLL_MS = 30_000;
 
 export interface DepsToolDeps {
-    readonly dependencies: Pick<DependencyCoordinator, "status" | "requestInstall">;
+    readonly dependencies: Pick<DependencyCoordinator, "status" | "requestInstall" | "installEnded">;
     readonly canInstall: boolean;
     readonly origin: DependencyRequestOrigin;
     // The conversation's own root worktree, daemon-side, when the turn is isolated: an install run there is private, and
@@ -96,33 +98,48 @@ const branchOnlyLine = (project: WorkspaceProject): string =>
 
 type Settled = { readonly dir: string; readonly outcome: "ready" | "behind" | "waiting"; readonly status?: ProjectSetupStatus };
 
-// Waits for the daemon's installs of `dirs`: each settles when it reads ready, or when it was seen installing and no
-// longer is. One that never started by the deadline, or is still running, is `waiting`.
+// Classifies one look at `dirs`: ready, or ended while not ready after it was seen installing (or reported ended).
+const note = (projects: readonly ProjectSetupStatus[], pending: readonly string[], seenInstalling: Set<string>, done: Map<string, Settled>): void => {
+    for (const dir of pending) {
+        const status = projects.find((project) => project.dir === dir);
+        if (status === undefined) {
+            continue;
+        }
+        if (status.state === "ready") {
+            done.set(dir, { dir, outcome: "ready", status });
+        } else if (status.state === "installing") {
+            seenInstalling.add(dir);
+        } else if (seenInstalling.has(dir)) {
+            done.set(dir, { dir, outcome: "behind", status });
+        }
+    }
+};
+
+// Until the first of `pending`'s installs ends (as the coordinator reports it), the floor interval, or the turn's end;
+// answers the dirs reported ended after running.
+const nextEnd = async (pending: readonly string[], deps: DepsToolDeps, ms: number): Promise<string[]> => {
+    const stop = new AbortController();
+    const ended = pending.map((dir) => deps.dependencies.installEnded(dir).then((ran) => (ran ? [dir] : [])));
+    const floor = sleep(ms, { signal: anySignal(deps.signal, stop.signal) }).then(() => []);
+    const first = await Promise.race([...ended, floor]);
+    stop.abort();
+    return first;
+};
+
+// Waits for the daemon's installs of `dirs`: each settles when it reads ready, or when it was seen installing (or its
+// install was reported ended) and no longer is. One that never started by the deadline, or is still running, is
+// `waiting`. Each look is woken by an install's end rather than taken on a timer (2026-10-20).
 const settle = async (dirs: readonly string[], deps: DepsToolDeps): Promise<Settled[]> => {
     const deadline = Date.now() + (deps.waitMs ?? DEFAULT_WAIT_MS);
     const seenInstalling = new Set<string>();
     const done = new Map<string, Settled>();
-    while (done.size < dirs.length && Date.now() < deadline && deps.signal?.aborted !== true) {
-        const projects = await deps.dependencies.status();
-        for (const dir of dirs.filter((each) => !done.has(each))) {
-            const status = projects.find((project) => project.dir === dir);
-            if (status === undefined) {
-                continue;
-            }
-            if (status.state === "ready") {
-                done.set(dir, { dir, outcome: "ready", status });
-            } else if (status.state === "installing") {
-                seenInstalling.add(dir);
-            } else if (seenInstalling.has(dir)) {
-                done.set(dir, { dir, outcome: "behind", status });
-            }
-        }
-        if (done.size < dirs.length) {
-            await sleep(deps.pollMs ?? DEFAULT_POLL_MS, { signal: deps.signal }).catch((cause: unknown) => {
-                if (deps.signal?.aborted !== true) {
-                    throw cause;
-                }
-            });
+    const pending = (): string[] => dirs.filter((dir) => !done.has(dir));
+    while (pending().length > 0 && Date.now() < deadline && deps.signal?.aborted !== true) {
+        // Listening before the scan, so an install that ends while it runs is heard rather than missed.
+        const next = nextEnd(pending(), deps, Math.min(deps.pollMs ?? DEFAULT_POLL_MS, Math.max(0, deadline - Date.now())));
+        note(await deps.dependencies.status(), pending(), seenInstalling, done);
+        for (const dir of pending().length > 0 ? await next : []) {
+            seenInstalling.add(dir);
         }
     }
     return dirs.map((dir) => done.get(dir) ?? { dir, outcome: "waiting" });

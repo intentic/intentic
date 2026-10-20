@@ -55,8 +55,9 @@ const claimsOf = async (services: Services, id: string, repos: readonly string[]
 
 // Commits one landing's claimed paths in each repo it spans, under the repo lock so a land or a discard queues behind
 // it. Returns the repos it committed in. Every land reaches the main tree's history here (a turn's, one by hand, a
-// conflict's re-land, a fix-up's), so this is where its subject is judged: whichever path drafted or stored it.
-const commitClaim = async (services: Services, id: string): Promise<string[]> => {
+// conflict's re-land, a fix-up's), so this is where its subject is judged: whichever path drafted or stored it. With
+// `drafted` false the draft was not waited for, so the record's message is not this land's and the title heads it.
+const commitClaim = async (services: Services, id: string, drafted = true): Promise<string[]> => {
     const entry = services.agents.entry(id);
     if (entry === undefined) {
         return [];
@@ -71,7 +72,7 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
     }
     // The drafted message with its trailers; a land nobody drafted keeps the conversation's Test-Note and Allow lines all
     // the same.
-    const landed = entry.landing.message;
+    const landed = drafted ? entry.landing.message : undefined;
     const trailers = landed === undefined ? await conversationTrailers(services, entry) : {};
     const title = entry.social.title?.text;
     // The title stands in only when it could head a commit itself; the prefix would hide a narrated one from the check.
@@ -116,12 +117,43 @@ const answerVersionMark = async (services: Pick<Services, "agents" | "logger">, 
     }
 };
 
+// The land's subject drafted, unless something comes to wait on its commit first (`hurried`): answers whether the draft
+// finished. An ordinary draft failure is already told on its report and falls back to the title; an execution-domain
+// refusal is not permission to continue. A draft outrun by a waiter keeps going and still writes the land's report and
+// its subject on the record; only the commit no longer waits for it, and a commit already made is never rewritten.
+const draftUnlessHurried = async (services: Services, id: string, hurried: Promise<void> | undefined): Promise<boolean> => {
+    const draft = describeLanding(services, id).then(
+        () => true,
+        (error: unknown) => {
+            if (error instanceof AgentDomainRefusedError) { throw error; }
+            services.logger.debug({ err: error, agent: id }, "landed subject: draft failed");
+            return true;
+        },
+    );
+    if (hurried === undefined) {
+        return draft;
+    }
+    // The draft keeps running past a hurry; a refusal it meets then is only its own line, the commit having gone ahead.
+    void draft.catch((error: unknown) => services.logger.warn({ err: error, agent: id }, "landed subject: draft refused after its commit went ahead"));
+    return Promise.race([draft, hurried.then(() => false)]);
+};
+
 // What happens to a landing once it is in the tree: the subject is drafted first, then, with the rule standing, the
-// claim is committed under it. An ordinary draft failure is already told on its report and falls back to the title;
-// an execution-domain refusal is not permission to continue. `unhold` is called the moment no commit is coming: at once when the rule does not stand,
+// claim is committed under it. `unhold` is called the moment no commit is coming: at once when the rule does not stand,
 // otherwise once the claim is committed (or failed to be). The land's version-pending mark is cleared as it ends, so only
 // a daemon that died meanwhile leaves it for the boot (settlePendingVersions).
-export const settleLanding = async (services: Services, id: string, unhold: () => void = () => undefined): Promise<void> => {
+//
+// (2026-10-20) `hurried` settles when a land or a turn opening comes to wait on this commit (versionCommitsSettled). The
+// draft is a model call (perf `landing.subject`: 15 s mean, 18 s max), and every later land into the repo and every
+// isolated turn start used to wait it out. Hurried, the claim is committed at once under the title, as a failed draft's
+// is, so the waiter still reads this work committed under its own conversation's trailer, but waits only for git.
+// Nothing waiting, the draft is waited for as before and heads the commit.
+export const settleLanding = async (
+    services: Services,
+    id: string,
+    unhold: () => void = () => undefined,
+    hurried?: Promise<void>,
+): Promise<void> => {
     const since = landMarksOf(services.agents.entry(id)).versionPending;
     try {
         const { rules } = await services.sandboxSettings.get();
@@ -129,14 +161,11 @@ export const settleLanding = async (services: Services, id: string, unhold: () =
         if (rule === undefined) {
             unhold();
         }
-        await describeLanding(services, id).catch((error: unknown) => {
-            if (error instanceof AgentDomainRefusedError) { throw error; }
-            services.logger.debug({ err: error, agent: id }, "landed subject: draft failed");
-        });
+        const drafted = await draftUnlessHurried(services, id, rule === undefined ? undefined : hurried);
         if (rule === undefined) {
             return;
         }
-        const committed = await commitClaim(services, id);
+        const committed = await commitClaim(services, id, drafted);
         if (committed.length === 0) {
             return;
         }
@@ -154,24 +183,30 @@ export const settleLanding = async (services: Services, id: string, unhold: () =
 // commit, the landed paths are uncommitted edits in the main tree like any of the owner's, so a second land judged in
 // that window would read another agent's work as the owner's and be refused on it: a card asking the owner to commit
 // edits the version commit takes a moment later, and a rebase that never saw the work it has to merge with.
-const versioning = new Map<string, Set<Promise<void>>>();
+// Each is the settle's end and the hurry that tells it someone is waiting (settleLanding).
+interface Versioning {
+    readonly settled: Promise<void>;
+    readonly hurry: () => void;
+}
+const versioning = new Map<string, Set<Versioning>>();
 
-// Longest a land waits on another's version commit. The subject is drafted by a model first, and one that hangs must
-// not hold every later land in the repo; past this the land judges the tree as it stands, as it always did.
+// Longest a land waits on another's version commit. A waiter hurries the commit past its draft, so this is only the
+// fallback for a commit that itself hangs (a repo lock held long, a git that stalls): past it the land judges the tree as
+// it stands, as it always did.
 export const VERSION_WAIT_MS = 60_000;
 
-// Holds each named main checkout until `until` settles.
-const holdVersioning = (dirs: readonly string[], until: Promise<void>): void => {
+// Holds each named main checkout until the settle ends.
+const holdVersioning = (dirs: readonly string[], held: Versioning): void => {
     for (const dir of dirs) {
-        const held = versioning.get(dir) ?? new Set<Promise<void>>();
-        held.add(until);
-        versioning.set(dir, held);
+        const holds = versioning.get(dir) ?? new Set<Versioning>();
+        holds.add(held);
+        versioning.set(dir, holds);
     }
-    void until.finally(() => {
+    void held.settled.finally(() => {
         for (const dir of dirs) {
-            const held = versioning.get(dir);
-            held?.delete(until);
-            if (held?.size === 0) {
+            const holds = versioning.get(dir);
+            holds?.delete(held);
+            if (holds?.size === 0) {
                 versioning.delete(dir);
             }
         }
@@ -179,7 +214,8 @@ const holdVersioning = (dirs: readonly string[], until: Promise<void>): void => 
 };
 
 // Resolves once no land into these repos is waiting on its version commit, or after `capMs`; never rejects. Awaited
-// before a land's pre-land rebase, so the branch is rebased onto the commit and the land judged against it.
+// before a land's pre-land rebase, so the branch is rebased onto the commit and the land judged against it, and before
+// an isolated turn commits the owner's remainder. Hurries each commit it waits on, so it waits for git, not the draft.
 export const versionCommitsSettled = async (
     services: Pick<Services, "agentWorktrees">,
     repos: readonly string[],
@@ -192,8 +228,11 @@ export const versionCommitsSettled = async (
     if (pending.length === 0) {
         return;
     }
+    for (const held of pending) {
+        held.hurry();
+    }
     const cap = new AbortController();
-    await Promise.race([Promise.allSettled(pending), sleep(capMs, { signal: cap.signal, unref: true })]);
+    await Promise.race([Promise.allSettled(pending.map((held) => held.settled)), sleep(capMs, { signal: cap.signal, unref: true })]);
     cap.abort();
 };
 
@@ -202,13 +241,22 @@ export const versionCommitsSettled = async (
 export const settleLandingInBackground = (services: Services, id: string): void => {
     const entry = services.agents.entry(id);
     const { promise: settled, resolve: unhold } = Promise.withResolvers<void>();
+    const { promise: hurried, resolve: hurry } = Promise.withResolvers<void>();
     if (entry !== undefined) {
         holdVersioning(
             reposOf(entry).map((composed) => services.agentWorktrees.mainDir(composed.repo)),
-            settled,
+            { settled, hurry: () => hurry() },
         );
     }
-    void settleLanding(services, id, unhold).catch((error: unknown) => services.logger.warn({ err: error, agent: id }, "landed: settling failed"));
+    void settleQuietly(services, id, unhold, hurried);
+};
+
+const settleQuietly = async (services: Services, id: string, unhold: () => void, hurried: Promise<void>): Promise<void> => {
+    try {
+        await settleLanding(services, id, unhold, hurried);
+    } catch (error) {
+        services.logger.warn({ err: error, agent: id }, "landed: settling failed");
+    }
 };
 
 // THE VERSION COMMITS A RESTART CUT. A land's version commit runs off the land's own clock (the subject is drafted by a

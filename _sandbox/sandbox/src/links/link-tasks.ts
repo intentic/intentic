@@ -22,6 +22,7 @@ import type { DomainEventMap } from "../seams/domain-events.js";
 import type { TurnInput, TurnStarter } from "../seams/turn-starter.js";
 import { spokenBy } from "../seams/turn-speaker.js";
 import type { InboundLinks, ResolvedLink, StoredLinkTask } from "./inbound-links.js";
+import { linkTaskStatusMark, waitForLinkTaskStatus, wakeLinkTaskStatus } from "./link-task-status-wait.js";
 
 // THE TAKING SIDE OF A LINK: a task another of the owner's sandboxes handed over becomes a conversation here, run the way
 // this sandbox's owner wrote on the link. The task is somebody else's words, never the owner's: it runs unattended (no
@@ -35,10 +36,11 @@ export const LINK_CONVERSATION_PREFIX = "link-";
 // What a link's turns are drawn as: a program holding a credential the owner minted, which is what a link is.
 const speakerToken = (label: string): string => `${label} (linked sandbox)`;
 
-// How long a status read may be held waiting for the task to move, and how often it looks meanwhile: a look is a file read
-// and a glance at the live run, both cheap.
+// How long a status read may be held waiting for the task to move. It is woken by what moves the task (link-task-status-
+// wait.ts); the look every few seconds is only the fallback for a move nothing nudges, an owner's card answered here
+// unparking the run (2026-10-20, was a look every second).
 export const STATUS_WAIT_MAX_S = 30;
-const STATUS_LOOK_MS = 1_000;
+const STATUS_LOOK_MS = 5_000;
 
 export interface LinkTaskDeps {
     readonly links: InboundLinks;
@@ -296,6 +298,8 @@ export const answerTask = async (deps: LinkTaskDeps, task: StoredLinkTask, answe
     const reply: AgentReply = { kind: "question", requestId: answer.requestId, answers: answer.answers };
     const settled = await deps.turns.reply(reply);
     if (settled === "settled") {
+        // The run unparks without a stored move; a status read held on the question hears it now (2026-10-20).
+        wakeLinkTaskStatus(task.conversationId);
         return undefined;
     }
     return refusal(409, settled === "missing" ? "That question already settled." : `That question is not yours to answer: ${settled.refused}`);
@@ -323,6 +327,7 @@ export const statusAfter = async (
 ): Promise<LinkTaskStatus | undefined> => {
     const deadline = nowOf(deps) + Math.min(Math.max(waitS, 0), STATUS_WAIT_MAX_S) * 1_000;
     for (;;) {
+        const mark = linkTaskStatusMark(conversationId);
         const task = await deps.links.task(link.id, { conversationId });
         if (task === undefined) {
             return undefined;
@@ -331,17 +336,7 @@ export const statusAfter = async (
         if (after === undefined || status.version !== after || nowOf(deps) >= deadline || signal.aborted) {
             return status;
         }
-        await new Promise<void>((resolve) => {
-            const timer = setTimeout(resolve, STATUS_LOOK_MS);
-            signal.addEventListener(
-                "abort",
-                () => {
-                    clearTimeout(timer);
-                    resolve();
-                },
-                { once: true },
-            );
-        });
+        await waitForLinkTaskStatus(conversationId, mark, signal, Math.min(deadline, nowOf(deps) + STATUS_LOOK_MS));
     }
 };
 
@@ -360,6 +355,13 @@ export const startUnstartedTasks = async (deps: LinkTaskDeps): Promise<number> =
         deps.logger.info({ tasks: unstarted.length }, "link: tasks filed before a restart were started");
     }
     return unstarted.length;
+};
+
+/** A linked conversation's run parked on a card: its status turns `blocked` without a stored move, so held reads are nudged. */
+export const noteLinkTurnAwaiting = ({ conversationId }: DomainEventMap["turn.awaiting"]): void => {
+    if (conversationId.startsWith(LINK_CONVERSATION_PREFIX)) {
+        wakeLinkTaskStatus(conversationId);
+    }
 };
 
 /** A linked conversation's turn ended: its closing message becomes the report the asking sandbox reads. */

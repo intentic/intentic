@@ -22,7 +22,7 @@ import { type CredentialGrants, credentialReleasesDocument, fileCredentialGrants
 import { createHostGuardGate, type HostGuardGate } from "./gates/host-guard-gate.js";
 import { effectiveHostGuards, fileSecretHostGuards, type SecretHostGuardsStore, secretHostGuardsDocument } from "./guards/host-guards.js";
 import { type NamedSecret, secretRegistryOf } from "./secret-registry.js";
-import { fileSandboxSecrets, type SandboxSecrets, sandboxSecretsDocument } from "./sandbox-secrets.js";
+import { fileSandboxSecrets, notifyingSandboxSecrets, type SandboxSecrets, sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { fileSecretUses, secretUsesDocument, type SecretUsesStore } from "./secret-uses.js";
 
 // Secret references, their uses, the named-approver gates on spending them, and the hosts each may be sent to.
@@ -41,6 +41,10 @@ export interface SecretsSlice {
     readonly credentialReach: ConversationReachOf;
     // Secrets a person keeps without DevOps: pasted into a need's card, or added on the Secrets view.
     readonly sandboxSecrets: SandboxSecrets;
+    // A secret was stored or removed here, by any door (the sandbox store, or desired-state/.env through the Secrets
+    // routes, which call `secretsChanged`): open needs check now (2026-10-20). Answers the unsubscribe.
+    readonly onSecretsChanged: (listener: () => void) => () => void;
+    readonly secretsChanged: () => void;
     // Each secret's host guard, the second half of its approval beside the named approvers: the owner's settings,
     // stored beside the gate policy, and the guards in force once a connector's own hosts are laid under them.
     readonly secretHostGuards: SecretHostGuardsStore;
@@ -116,7 +120,13 @@ export const createSecretsSlice = ({
         warn("credential releases: the stored releases could not be read or written", error),
     );
     const credentialGrants = releasesChanged === undefined ? keptReleases : notifyingCredentialGrants(keptReleases, releasesChanged);
-    const sandboxSecrets = fileSandboxSecrets(join(authRoot, sandboxSecretsDocument.path));
+    const secretsListeners = new Set<() => void>();
+    const secretsChanged = (): void => {
+        for (const listener of secretsListeners) {
+            listener();
+        }
+    };
+    const sandboxSecrets = notifyingSandboxSecrets(fileSandboxSecrets(join(authRoot, sandboxSecretsDocument.path)), secretsChanged);
     const credentialReach = createConversationReach({ members, ownerEmail, entry: conversationEntry });
     const secretHostGuards = fileSecretHostGuards(join(authRoot, secretHostGuardsDocument.path));
     // Read fresh each call, like the registry: a guard the owner tightens mid-turn holds from the very next use.
@@ -165,6 +175,11 @@ export const createSecretsSlice = ({
             hold,
         }),
         sandboxSecrets,
+        onSecretsChanged: (listener) => {
+            secretsListeners.add(listener);
+            return () => void secretsListeners.delete(listener);
+        },
+        secretsChanged,
         secretRegistry,
         secretUses: fileSecretUses(join(workspace.root, secretUsesDocument.path)),
         credentialGates,

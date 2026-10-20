@@ -495,27 +495,49 @@ export const scrollPage = (direction: string, amount: number): { ok: boolean; me
     return { ok: true, message: `scrolled ${direction}` };
 };
 
-// Polls for text rather than using MutationObserver, since the condition would be re-derived on every mutation
-// anyway. Deadline is passed in by the caller, which owns the tool-call timeout.
-// The pause between looks is spelled out here rather than imported: an imported `sleep` is a name of this module, and
-// the page has no such name, so the first look that missed threw there and the tool read the empty answer as a crash
-// ("Cannot read properties of null").
-export const waitForText = async (needle: string, gone: boolean, deadlineMs: number): Promise<{ ok: boolean; message: string }> => {
-    const pause = async (ms: number): Promise<void> => await new Promise((resolve) => setTimeout(resolve, ms));
-    const started = Date.now();
-    const present = (): boolean => (document.body.innerText ?? document.body.textContent ?? "").includes(needle);
-    for (;;) {
+// Looks again only when the page changed (a MutationObserver), not on a timer (2026-10-20): reading innerText forces a
+// layout, and a look every 200 ms paid that on a page doing nothing. Looks after a burst of mutations are coalesced to
+// one per LOOK_GAP_MS, so a page that never stops changing (a ticker, an animation) costs at most that rate. The
+// deadline is passed in by the caller, which owns the tool-call timeout; the one timer left is that cap.
+// Everything it uses is spelled out inside it: it is injected and re-parsed in the page, where no name of this module
+// exists (an imported `sleep` once threw there on the first look that missed, and the tool read the empty answer as a
+// crash: "Cannot read properties of null").
+export const waitForText = async (needle: string, gone: boolean, deadlineMs: number): Promise<{ ok: boolean; message: string }> =>
+    await new Promise((resolve) => {
+        const LOOK_GAP_MS = 50;
+        const present = (): boolean => (document.body?.innerText ?? document.body?.textContent ?? "").includes(needle);
+        const met = { ok: true, message: gone ? `"${needle}" is gone` : `"${needle}" appeared` };
         if (present() !== gone) {
-            return { ok: true, message: gone ? `"${needle}" is gone` : `"${needle}" appeared` };
+            resolve(met);
+            return;
         }
-        if (Date.now() - started > deadlineMs) {
-            return {
-                ok: false,
-                message: gone
-                    ? `"${needle}" is still on the page after ${Math.round(deadlineMs / 1000)}s.`
-                    : `"${needle}" never appeared (waited ${Math.round(deadlineMs / 1000)}s).`,
-            };
-        }
-        await pause(200);
-    }
-};
+        let pending: ReturnType<typeof setTimeout> | undefined;
+        const finish = (answer: { ok: boolean; message: string }): void => {
+            observer.disconnect();
+            clearTimeout(pending);
+            clearTimeout(cap);
+            resolve(answer);
+        };
+        const look = (): void => {
+            pending = undefined;
+            if (present() !== gone) {
+                finish(met);
+            }
+        };
+        const observer = new MutationObserver(() => {
+            pending ??= setTimeout(look, LOOK_GAP_MS);
+        });
+        observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true });
+        const cap = setTimeout(() => {
+            finish(
+                present() !== gone
+                    ? met
+                    : {
+                          ok: false,
+                          message: gone
+                              ? `"${needle}" is still on the page after ${Math.round(deadlineMs / 1000)}s.`
+                              : `"${needle}" never appeared (waited ${Math.round(deadlineMs / 1000)}s).`,
+                      },
+            );
+        }, deadlineMs);
+    });

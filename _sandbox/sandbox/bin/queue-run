@@ -46,7 +46,8 @@ max_hold=0
 label="command"
 on_deadline="run"
 size=""
-poll_seconds="${INTENTIC_QUEUE_POLL:-2}"
+# Only where the wait cannot be woken by the kernel (a bash before 5.1, see `next_slot`); fractions allowed.
+poll_seconds="${INTENTIC_QUEUE_POLL:-0.25}"
 
 # Grace between the ceiling's TERM and the KILL behind it: long enough for a build to flush its output, short
 # enough that a process ignoring TERM cannot go on holding the slot.
@@ -125,9 +126,10 @@ limit=$(number "$limit" 2)
 wait_seconds=$(number "$wait_seconds" 900)
 memory_gate=$(number "$memory_gate" 0)
 max_hold=$(number "$max_hold" 0)
-poll_seconds=$(number "$poll_seconds" 2)
+# A poll interval may be a fraction of a second (`sleep` takes one); anything else, or zero, is the default.
+case "$poll_seconds" in '' | *[!0-9.]* | *.*.* | .) poll_seconds=0.25 ;; esac
+case "$poll_seconds" in *[1-9]*) ;; *) poll_seconds=0.25 ;; esac
 [ "$limit" -lt 1 ] && limit=1
-[ "$poll_seconds" -lt 1 ] && poll_seconds=1
 # Two words only; anything else is "run", since an unknown mode must not become the reason a command did not run.
 case "$on_deadline" in run | skip) ;; *) on_deadline="run" ;; esac
 # One word, or none: a size the gate does not know is priced as the whole class.
@@ -266,13 +268,93 @@ write_state() {
     put state.json "{\"pool\":$(json_string "$pool"),\"limit\":$limit,\"updatedAt\":$(date +%s),\"holders\":[$holders_json],\"waiters\":[$waiters_json]}"
 }
 stop_waiting() {
+    stop_flocks
     rm -f "$dir/wait.$$"
     write_state leaving
 }
 
+# THE WAIT IS WOKEN BY THE KERNEL, NOT A POLL (2026-10-20). A slot frees the instant its holder's last process exits,
+# and nothing told a waiter: it found out at its next poll, a second on average after the slot was already free. Now
+# each slot gets a `flock -w` of its own in the background, blocked in the kernel on that slot's lock, and the first one
+# granted wins. Each `flock` locks the open file description it inherited from this shell (fd WAIT_FD+i, opened here),
+# so the lock it was granted stays this shell's after it exits; the winner's description is then moved to fd 9 (see
+# FD 9 SPECIFICALLY above) and the rest are closed. A loser granted its lock in the same instant held it only through
+# descriptors closed here and in the killed `flock`, so that slot goes straight back to the pool. A round lasts no
+# longer than the next notice is due, so the pane still hears from the wait every SAY_EVERY seconds.
+wait_fd=20
+flock_pids=()
+stop_flocks() {
+    [ "${#flock_pids[@]}" -gt 0 ] || return 0
+    kill "${flock_pids[@]}" 2>/dev/null
+    wait "${flock_pids[@]}" 2>/dev/null
+    flock_pids=()
+}
+# Waits on the `flock`s until one is granted (its slot number left in `won`) or none is left waiting.
+first_granted() {
+    local done_pid status pid left
+    won=""
+    while [ "${#flock_pids[@]}" -gt 0 ]; do
+        done_pid=""
+        wait -n -p done_pid "${flock_pids[@]}"
+        status=$?
+        [ -n "$done_pid" ] || return 1
+        left=()
+        for pid in "${flock_pids[@]}"; do [ "$pid" = "$done_pid" ] || left+=("$pid"); done
+        flock_pids=(${left[@]+"${left[@]}"})
+        if [ "$status" = 0 ]; then
+            won=${slot_of[$done_pid]}
+            return 0
+        fi
+    done
+    return 1
+}
+# One round: true with fd 9 holding a slot, false once `$1` seconds pass with none granted.
+await_slot() {
+    local seconds=$1 i fd opened=()
+    won=""
+    declare -gA slot_of=()
+    for ((i = 1; i <= limit; i++)); do
+        [ -L "$dir/slot.$i" ] && continue
+        fd=$((wait_fd + i))
+        eval "exec $fd>>\"\$dir/slot.\$i\"" || continue
+        opened+=("$fd")
+        flock -w "$seconds" "$fd" &
+        slot_of[$!]=$i
+        flock_pids+=("$!")
+    done
+    if [ "${#opened[@]}" -gt 0 ]; then
+        # Never in a $(…): the `flock`s are this shell's children, and only this shell may wait on them.
+        first_granted
+    else
+        # Not one slot could be opened: nothing can wake this round, so it sleeps rather than spins.
+        sleep "$poll_seconds"
+    fi
+    stop_flocks
+    [ -n "$won" ] && eval "exec 9>&$((wait_fd + won))" && slot="$dir/slot.$won"
+    for fd in ${opened[@]+"${opened[@]}"}; do eval "exec $fd>&-"; done
+    [ -n "$won" ] && [ -n "${slot:-}" ]
+}
+# `wait -n -p` came in bash 5.1; an older bash polls, every INTENTIC_QUEUE_POLL seconds.
+kernel_wait=0
+if [ "${BASH_VERSINFO[0]}" -gt 5 ] || { [ "${BASH_VERSINFO[0]}" -eq 5 ] && [ "${BASH_VERSINFO[1]}" -ge 1 ]; }; then
+    kernel_wait=1
+fi
+next_slot() {
+    local until=$((SECONDS + $1))
+    if [ "$kernel_wait" = 1 ] && command -v flock >/dev/null 2>&1; then
+        await_slot "$1"
+        return
+    fi
+    while [ "$SECONDS" -lt "$until" ]; do
+        sleep "$poll_seconds"
+        acquire && return 0
+    done
+    return 1
+}
+
 # Every slot was busy. Say so, with who holds them — the pane is where the person wondering why nothing is happening is
 # looking — and again every SAY_EVERY seconds, so a log redirected to a file shows the wait going on rather than staying
-# empty for the minutes it lasts. Then poll until the deadline.
+# empty for the minutes it lasts. Then wait for a slot (next_slot) until the deadline.
 say_every=$(number "${INTENTIC_QUEUE_SAY_EVERY:-30}" 30)
 [ "$say_every" -lt 1 ] && say_every=30
 put "wait.$$" "{\"pid\":$$,\"label\":$(json_string "$label"),\"conversation\":$(json_string "$owner_here"),\"since\":$waiting_since,\"command\":$(json_string "$(printf '%s ' "$@" | cut -c1-120)")}"
@@ -283,17 +365,20 @@ write_state
 printf '[queue-run] %s: waiting for a free slot in pool "%s" (limit %s), held by:\n' "$label" "$pool" "$limit" >&2
 holders | say_holders
 printf '[queue-run]   (holders and waiters: %s)\n' "$dir/state.json" >&2
+started_waiting=$SECONDS
 waited=0
 said_at=0
 while [ "$waited" -lt "$wait_seconds" ]; do
-    sleep "$poll_seconds"
-    waited=$((waited + poll_seconds))
-    if acquire; then
+    round=$((say_every - (waited - said_at)))
+    [ "$round" -gt $((wait_seconds - waited)) ] && round=$((wait_seconds - waited))
+    [ "$round" -lt 1 ] && round=1
+    if next_slot "$round"; then
         trap - EXIT INT TERM
         stop_waiting
-        printf '[queue-run] %s: slot free after %ss — starting.\n' "$label" "$waited" >&2
+        printf '[queue-run] %s: slot free after %ss — starting.\n' "$label" "$((SECONDS - started_waiting))" >&2
         held_run "$@"
     fi
+    waited=$((SECONDS - started_waiting))
     if [ $((waited - said_at)) -ge "$say_every" ]; then
         said_at=$waited
         write_state

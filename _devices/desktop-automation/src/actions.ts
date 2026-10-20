@@ -22,8 +22,8 @@ export interface InputCall {
     readonly ms?: number | undefined;
 }
 
-// How long the screen is given to catch up before the confirming screenshot. A click that opens a menu needs a
-// beat; without it the agent sees the frame before its own action.
+// What `wait` waits when given no ms. It was also the fixed beat before every confirming screenshot, until that became
+// a wait for the screen itself (settle.ts, 2026-10-20).
 export const SETTLE_MS = 400;
 // A cap on `wait`, so a mis-typed 600000 cannot hold the machine (and the call) for ten minutes.
 export const MAX_WAIT_MS = 10_000;
@@ -31,8 +31,6 @@ export const MAX_WAIT_MS = 10_000;
 // A cap on `scroll`, for the same reason: xdotool clicks the wheel once per notch and is stopped after 15 s, so a model's
 // 100000000 held the call that long and then failed.
 export const MAX_SCROLL_NOTCHES = 50;
-
-export const settle = async (): Promise<void> => await sleep(SETTLE_MS);
 
 const point = (value: readonly [number, number] | undefined, name: string): Point => {
     if (value === undefined || value.length !== 2 || !Number.isFinite(value[0]) || !Number.isFinite(value[1])) {

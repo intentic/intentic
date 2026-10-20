@@ -55,9 +55,9 @@ playbook, in order of preference:
   \`mcp__accounts__create_password\` (generates and STORES it on the account's card), then type it with
   \`type_credential\`: twice for a confirm field. Prefer passkey enrollment when offered (the profile holds
   its own security key: "add a security key" just works).
-- Confirmation codes and links: for an identity-born account call \`mcp__accounts__fetch_email_code\`, it
-  returns the newest code or confirmation link the identity's mailbox received for this site, and nothing
-  else. For a standalone account, search whatever inbox is connected (the IMAP skill). Open confirmation links
+- Confirmation codes and links: for an identity-born account call \`mcp__accounts__fetch_email_code\` right
+  after the site says it sent one: it waits for that mail to land in the identity's mailbox and returns its code
+  or confirmation link for this site, and nothing else. For a standalone account, search whatever inbox is connected (the IMAP skill). Open confirmation links
   in the ACCOUNT'S OWN browser (the same \`account\` value), so they land in the right profile.${STUCK_AND_DONE}`;
 
 // Roster line data for one identity or account, rendered into `${accounts}` (capabilities/account-skills.ts).

@@ -11,7 +11,9 @@ import { agentReturnsPending, settleAgentRuns } from "./runners/deviceWork";
 // with nothing in flight pays for nothing.
 
 // Tighter than the tab's own ten seconds: a restarted loop redials within a second or two, and the row's turning mark
-// should stop close to when it does. Bounded by the ledger's deadline, after which nothing waits.
+// should stop close to when it does. Bounded by the ledger's deadline, after which nothing waits. The `hosts` push already
+// re-reads this list the moment a fresh reading lands (it invalidates `devices`); the timer stays because the daemon pulls
+// a machine's reading on read, behind a cache, so a read is what starts the pull the push then announces (2026-10-20).
 const RETURN_POLL_MS = 5_000;
 
 export const watchDeviceReturns = (): void => {

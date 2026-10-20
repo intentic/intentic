@@ -1,4 +1,4 @@
-import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 
 // The Pipelines view's read model: a REST backfill sweep fills it (GET /ci/runs finding it stale), webhook
 // deliveries freshen single runs in place between sweeps. An upsert deliberately does NOT extend the sweep
@@ -31,6 +31,13 @@ export const createRunsCache = (ttlMs = TTL_MS): RunsCache => {
             return runs;
         },
         upsert: (run) => {
+            // In-flight deliveries freshen the board too now (2026-10-20), and a forge may deliver a run's `in_progress`
+            // after its `completed`: a phase never takes back an ending already kept. A re-run under the same id shows
+            // in flight from the next sweep instead, and its own ending lands here as usual.
+            const held = runs.find((entry) => keyOf(entry) === keyOf(run));
+            if (held !== undefined && isPipelineInFlight(run.status) && !isPipelineInFlight(held.status)) {
+                return;
+            }
             runs = newestFirst([run, ...runs.filter((kept) => keyOf(kept) !== keyOf(run))]);
         },
     };

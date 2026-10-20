@@ -27,7 +27,9 @@ const coordinator = (dir: string, initial: SetupState, states: readonly SetupSta
             queued: dirs.filter((each) => each === dir && (initial === "needs-setup" || initial === "stale")),
         }),
         // The last state repeats once the list runs out, which is how an install that never finishes reads.
-    status: async () => [project(dir, states[Math.min(read++, states.length - 1)] ?? initial)],
+        status: async () => [project(dir, states[Math.min(read++, states.length - 1)] ?? initial)],
+        // No end is ever reported here: these scripted states are read on the wait's floor interval.
+        installEnded: () => new Promise(() => undefined),
     });
 };
 
@@ -43,6 +45,48 @@ const deps = (dependencies: DepsToolDeps["dependencies"], over: Partial<DepsTool
 test("install waits for the daemon's install and answers with how it went", async () => {
     const text = await install(deps(coordinator("app", "needs-setup", ["needs-setup", "installing", "installing", "ready"])), ["app"]);
     expect(text).toBe("app: installed. Its checks mean what they say now.");
+});
+
+// 2026-10-20: the wait is woken by the coordinator's report that the install ended, not by a scan every two seconds.
+describe("woken by the install's end", () => {
+    // A coordinator whose install ends when the test says, leaving `after` behind it.
+    const ending = (after: SetupState) => {
+        let state: SetupState = "needs-setup";
+        let reads = 0;
+        const waiting: Array<(ran: boolean) => void> = [];
+        const dependencies = unstubbed<DepsToolDeps["dependencies"]>("dependencies", {
+            requestInstall: async (dirs) => ({ projects: [project("app", "needs-setup")], queued: dirs }),
+            status: async () => {
+                reads += 1;
+                return [project("app", state)];
+            },
+            installEnded: () => new Promise((resolve) => waiting.push(resolve)),
+        });
+        const end = (): void => {
+            state = after;
+            for (const resolve of waiting.splice(0)) {
+                resolve(true);
+            }
+        };
+        return { dependencies, end, reads: () => reads };
+    };
+
+    test("answers the moment the install ends, with one scan before and one after", async () => {
+        const daemon = ending("ready");
+        const started = Date.now();
+        const answer = install(deps(daemon.dependencies, { pollMs: 60_000, waitMs: 120_000 }), ["app"]);
+        setTimeout(daemon.end, 20);
+        expect(await answer).toBe("app: installed. Its checks mean what they say now.");
+        expect(Date.now() - started).toBeLessThan(1_000);
+        expect(daemon.reads()).toBe(2);
+    });
+
+    test("an install reported ended that left the project behind says so, though it was never seen installing", async () => {
+        const daemon = ending("stale");
+        const answer = install(deps(daemon.dependencies, { pollMs: 60_000, waitMs: 120_000 }), ["app"]);
+        setTimeout(daemon.end, 20);
+        expect(await answer).toContain("app: the daemon's install finished, but");
+    });
 });
 
 test("an install that finished with the project still behind says so, and that it is not retried on its own", async () => {

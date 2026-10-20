@@ -19,6 +19,8 @@ import { awaitScriptRun, resetScriptRunsForTest, resumeScriptRuns, type ScriptRu
 import { callKey } from "../script-run-calls.js";
 import { scriptRunsDocument } from "../script-run-store.js";
 import { openDirectory } from "../../../../store/open-document.js";
+import { SteeringQueue } from "../../../checkpoints/agent-steering.js";
+import { STEER_HEARD } from "../../../../conversations/actor/conversation-holdings.js";
 
 // A workflow run end to end over the real child engine: its workers are spawned children, its calls are kept, and its
 // ending reaches its parent once.
@@ -335,5 +337,36 @@ describe("stopping a run", () => {
 
         expect(await finished(services, run)).toMatchObject({ state: "stopped", error: "The workflow was stopped." });
         expect(told[0]).toContain("was stopped");
+    });
+});
+
+describe("waiting on a run", () => {
+    // workflow_status with waitSeconds parks up to half an hour; words said into the turn meanwhile must not sit unread.
+    it("hands the turn back with waitOutcome `message` when words are said into it, and stops listening with the wait", async () => {
+        const turns: TurnInput[] = [];
+        const body = async function* (input: TurnInput, ...rest: unknown[]): AsyncGenerator<AgentEvent> {
+            void rest;
+            turns.push(input);
+            await new Promise(() => {});
+            yield { kind: "done" };
+        };
+        const { services } = await daemon(body);
+        const unregister = actors.registerTurn(parent.conversationId, { abort: () => {}, steering: new SteeringQueue() });
+        try {
+            const run = await started(services, `export const meta = { name: "endless" };\nreturn await agent("forever");`);
+            await waitFor(() => expect(turns).toHaveLength(1), SETTLES);
+            const turn = new AbortController();
+            const waiting = awaitScriptRun(services, parent.conversationId, run, 600_000, turn.signal, actors);
+            await waitFor(() => expect(actors.holdings(STEER_HEARD).of(parent.conversationId)).toHaveLength(1), SETTLES);
+            expect(actors.steer(parent.conversationId, "Stop after this phase.")).toBe(true);
+            const status = await waiting;
+            expect(status).toMatchObject({ state: "running", waitOutcome: "message" });
+            expect("note" in status ? status.note : undefined).toContain("Something was said into your turn");
+            expect(actors.holdings(STEER_HEARD).of(parent.conversationId)).toHaveLength(0);
+            stopScriptRun(parent.conversationId, run);
+            expect(await finished(services, run)).toMatchObject({ state: "stopped", waitOutcome: "ended" });
+        } finally {
+            unregister();
+        }
     });
 });

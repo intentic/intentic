@@ -16,7 +16,9 @@ import { limitDue } from "./limit-due.js";
    this pass fires by (limit-booking.ts), times a hold refused with no instant once the records know one, and withdraws a
    "resuming" whose answer no longer resumes anything. A card can be wrong for one beat, not for good (2026-10-19). */
 
-// How often a hold refused with no instant asks the records again for when its pool reopens.
+// How often a hold refused with no instant asks the records again for when its pool reopens, at most. Since 2026-10-20
+// a new usage reading clears the pacing and wakes the pass (resume-nudges.ts, TurnResumeScheduler.retime), so a reading
+// that names the reopen times the hold at once; this minute is only the pace between readings.
 const RETIME_EVERY_MS = 60_000;
 
 /**

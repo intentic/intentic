@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
@@ -23,6 +23,7 @@ import {
     sweepJobEnds,
 } from "./background-jobs.js";
 import { requires } from "@intentic/testing/requires";
+import { onJobEnded } from "./job-ended.js";
 import { INPUT_WAIT_MS } from "./input-wait.js";
 import { lookAtRuns } from "./input-wait-follow.js";
 import { jobFate, resolveTurnJobs, stopJob } from "./job-fates.js";
@@ -213,6 +214,31 @@ describe("keeping a job for the person", () => {
         expect(keepBackgroundJob(actors, "conv-other", "bkeep1", "dev server")).toBe("unknown");
         expect(await stopBackgroundJob(actors, job, "agent")).toBe(true);
         expect(keepBackgroundJob(actors, "conv-keep", "bkeep1", "dev server")).toBe("ended");
+    });
+});
+
+// 2026-10-20: the stop waited for the status file on a 50 ms poll; it is woken by the file's own appearance now, and the
+// end is told to whoever listens (the memory budget, which looks again for work held for room).
+describe("stopping a job", () => {
+    it("returns the moment its status lands rather than at the two-second cap, and tells who listens for job ends", async () => {
+        const { job } = await running("conv-stop-status");
+        let heard = 0;
+        const stopHearing = onJobEnded(() => {
+            heard += 1;
+        });
+        // The runner's own publish, standing in for one that outlives the SIGTERM a moment (the runner here may publish
+        // its own 143 first).
+        const publish = setTimeout(() => {
+            writeFileSync(`${jobStatusPath(job)}.part`, "7\n");
+            renameSync(`${jobStatusPath(job)}.part`, jobStatusPath(job));
+        }, 300);
+        const started = Date.now();
+        expect(await stopBackgroundJob(actors, job, "agent")).toBe(true);
+        clearTimeout(publish);
+        stopHearing();
+        expect(Date.now() - started).toBeLessThan(1_500);
+        expect([7, 143]).toContain(card("conv-stop-status", job.id)?.exitCode ?? -1);
+        expect(heard).toBe(1);
     });
 });
 

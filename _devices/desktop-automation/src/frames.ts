@@ -127,15 +127,26 @@ export interface Shot {
     readonly unchanged: boolean;
 }
 
-// Captures `region` (the whole desktop by default), fits it to `limits`, and records it as a frame.
-export const shoot = async (desktop: Desktop, log: FrameLog, region?: Rect, limits: ImageLimits = MODEL_IMAGE_LIMITS): Promise<Shot> => {
+// A capture of `region` (the whole desktop by default), cut and shrunk as the model is shown it, with the digest that
+// tells two such captures apart.
+const shrunkCapture = async (desktop: Desktop, region: Rect | undefined, limits: ImageLimits) => {
     const captured = decodePng(await desktop.capture(region));
     const area: Rect = region ?? { x: 0, y: 0, width: captured.width, height: captured.height };
     // A backend that could not cut the region out itself hands back the whole screen; cut it here.
     const pixels = captured.width === area.width && captured.height === area.height ? captured : crop(captured, area);
     const size = fitSize(pixels.width, pixels.height, limits);
     const shown = downscale(pixels, size.width, size.height);
-    const digest = createHash("sha256").update(shown.data).digest("hex");
+    return { area, pixels, shown, digest: createHash("sha256").update(shown.data).digest("hex") };
+};
+
+// The digest a screenshot of `region` would have, recording nothing: what settle.ts compares while an action's redraw
+// runs (2026-10-20).
+export const captureDigest = async (desktop: Desktop, region: Rect | undefined, limits: ImageLimits = MODEL_IMAGE_LIMITS): Promise<string> =>
+    (await shrunkCapture(desktop, region, limits)).digest;
+
+// Captures `region` (the whole desktop by default), fits it to `limits`, and records it as a frame.
+export const shoot = async (desktop: Desktop, log: FrameLog, region?: Rect, limits: ImageLimits = MODEL_IMAGE_LIMITS): Promise<Shot> => {
+    const { area, pixels, shown, digest } = await shrunkCapture(desktop, region, limits);
     const { frame, unchanged } = log.record({ ...area, width: pixels.width, height: pixels.height }, shown.width, shown.height, digest);
     return { frame, png: encodePng(shown), unchanged };
 };

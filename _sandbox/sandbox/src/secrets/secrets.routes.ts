@@ -97,7 +97,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
     // since a raw throw here reads as a server fault the user cannot act on.
     const writeEnv = async (change: (current: string) => string): Promise<void> => {
         try {
-            await envFile().update(change);
+            await envFile().update(change).then(() => services.secretsChanged());
         } catch (error) {
             if (error instanceof UnquotableValueError) {
                 throw new ORPCError("BAD_REQUEST", { message: error.message });

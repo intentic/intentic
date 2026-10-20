@@ -1851,6 +1851,31 @@ describe("a turn the child did not get from its parent", () => {
         expect(await settled(result.id)).toMatchObject({ outcome: "finished", matched: { status: "completed", summary: "Done on the re-run." } });
     });
 
+    // The hold dropped with nothing left to fire it is said at once, not at the slow look's second miss 30 to 45 seconds
+    // on: two looks a few seconds after the event both find no run and no hold (paused-children.ts, 2026-10-20).
+    it("a paused child whose re-run is dropped ends as failed within seconds, and its parent is told", async () => {
+        const body = async function* (): AsyncGenerator<AgentEvent> {
+            yield { kind: "error", message: "You're out of usage.", autoResume: "scheduled" };
+            yield { kind: "done" };
+        };
+        const services = parentHears(body);
+        const result = await spawnChild(services, parent, { prompt: "go", description: "Port the parser", provider: "claude", model: "claude-sonnet-4-6" });
+        if (!result.ok) {
+            throw new Error(result.message);
+        }
+        expect(await waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({
+            matched: { status: "paused" },
+        });
+        const dropped = Date.now();
+        actors.send(result.id, { kind: "resume-dropped" });
+        expect(await waitForSubagent(actors, parent.conversationId, { target: result.id, until: ["finished"], timeoutMs: 10_000 })).toMatchObject({
+            outcome: "finished",
+            matched: { status: "failed" },
+        });
+        expect(Date.now() - dropped).toBeLessThan(10_000);
+        expect(told.some((said) => said.startsWith(`Your subagent \`${result.id}\` ("Port the parser") stays stopped:`))).toBe(true);
+    });
+
     it("a message to a paused child is the turn it waits on from then, taking over the row", async () => {
         const turns: AgentTurn[] = [];
         const body = async function* (input: AgentTurn): AsyncGenerator<AgentEvent> {

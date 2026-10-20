@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { sleep } from "@intentic/base/async";
 import type { Capability, LinkConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
 import { LINK_MAX_HOPS, type LinkHello, type LinkTask, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
@@ -26,6 +25,7 @@ import { opt } from "../opt.js";
 import { type LinkAnswerOf, linkAnswer, linkAsk, linkHello, linkMessage, linkStatus, linkStop, type LinkTarget } from "../sandboxes/link-client.js";
 import { askedOf, type AskedChild, childrenFile, type ChildrenFile, type StoredChild } from "./linked-children-store.js";
 import { LINK_CONVERSATION_PREFIX } from "./link-tasks.js";
+import { answeringWire, createLinkBackoff, type LinkBackoff, nextRetry } from "./link-backoff.js";
 
 // THE ASKING SIDE OF A LINK: a task this sandbox's agent handed to another of the owner's sandboxes (`delegate`), kept on
 // the parent's roster as a `linked` subagent so `wait`, `send`, `answer` and `cancel` reach it the way they reach a child
@@ -38,7 +38,7 @@ import { LINK_CONVERSATION_PREFIX } from "./link-tasks.js";
 
 // Every roster id a link task gets, which also tells a supervisor's call which engine it is for.
 export const LINKED_PREFIX = "linked-";
-// How long a follower waits before asking again when the far side did not answer, growing to the ceiling.
+// How long a follower waits before asking again when the far side did not answer, growing to the ceiling (link-backoff.ts).
 const RETRY_FIRST_MS = 5_000;
 const RETRY_MAX_MS = 60_000;
 // Characters of a report a wake says inline; the rest stays over there, and a wait hands it whole.
@@ -125,6 +125,7 @@ type LinkCard = Extract<Capability, { kind: "link" }>;
 interface Engine extends ChildrenFile {
     readonly deps: LinkedChildrenDeps;
     readonly wire: LinkWire;
+    readonly backoff: LinkBackoff;
     readonly live: Map<string, Live>;
     readonly state: { closed: boolean };
 }
@@ -326,8 +327,7 @@ const follow = (engine: Engine, child: Live): void => {
                 retryMs = RETRY_FIRST_MS;
                 continue;
             }
-            await sleep(retryMs, { signal: following.signal, unref: true });
-            retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
+            retryMs = await nextRetry(engine.backoff, child.stored.link, { ms: retryMs, first: RETRY_FIRST_MS, max: RETRY_MAX_MS }, following.signal);
         }
     };
     void loop().catch((error: Error) => engine.deps.logger.warn({ err: error, child: child.stored.id }, "linked task: the follower stopped"));
@@ -531,8 +531,7 @@ const reask = async (engine: Engine, pending: StoredChild & { asking: LinkTask }
             engine.deps.logger.warn({ child: pending.id, why: asked?.message ?? "its link card was removed" }, "linked task: not taken over there after a restart");
             return;
         }
-        await sleep(retryMs, { unref: true });
-        retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
+        retryMs = await nextRetry(engine.backoff, pending.link, { ms: retryMs, first: RETRY_FIRST_MS, max: RETRY_MAX_MS });
     }
 };
 
@@ -560,7 +559,8 @@ const resume = async (engine: Engine): Promise<void> => {
 };
 
 export const createLinkedChildren = (deps: LinkedChildrenDeps): LinkedChildren => {
-    const engine: Engine = { deps, wire: deps.wire ?? WIRE, live: new Map(), ...childrenFile(deps.historyPath), state: { closed: false } };
+    const backoff = createLinkBackoff();
+    const engine: Engine = { deps, wire: answeringWire(deps.wire ?? WIRE, backoff), backoff, live: new Map(), ...childrenFile(deps.historyPath), state: { closed: false } };
     // The parent's own task, or nothing: a task is reached only from the conversation that handed it over.
     const mine = (parent: ChildParent, childId: string): Live | undefined => {
         const child = engine.live.get(childId);

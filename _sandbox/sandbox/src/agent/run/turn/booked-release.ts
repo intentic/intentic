@@ -4,6 +4,10 @@ import { type Booking, bookingOfItem } from "../../../conversations/actor/conver
 import { versionCommitsSettled } from "../../../conversations/land/version-landed.js";
 import { landingRepos, workLanded } from "../../../conversations/land/work-landed.js";
 import { rebookedForReopen } from "./holds/allowance-gate.js";
+import type { HeldRecord } from "../../../conversations/actor/conversation-state.js";
+import { limitBooking } from "../../../conversations/actor/limit-booking.js";
+import { breakPolicyFor } from "./break-policy.js";
+import type { DueAt } from "../../../workload/nudged-pass.js";
 
 // A person's scheduled sends let go when what each waits for comes: its instant, or another conversation's work landing.
 // One step of the resume pass (turn-resume.ts, createTurnResumeScheduler), apart from it since nothing here touches a held
@@ -54,12 +58,15 @@ const letGo = async (services: Services, conversationId: string, due: readonly B
 // A person's scheduled sends whose time has come (turn-admission.ts, bookingFor): their bookings are let go and they go
 // out as the ordinary turn they would have been, together where they fall due together. Onto an account the records
 // still call spent they are booked again for its reopen (letGo); should the provider refuse them all the same, that
-// turn is refused like any other, and the conversation's limit answer takes it from there.
-export const releaseBooked = async (services: Services, now: number): Promise<void> => {
+// turn is refused like any other, and the conversation's limit answer takes it from there. A booking's instant still to
+// come is reported to `dueAt`, which wakes the pass at it; one waiting on a land is woken by the land itself.
+export const releaseBooked = async (services: Services, now: number, dueAt?: DueAt): Promise<void> => {
     const due = new Map<string, Booked[]>();
     for (const booked of services.conversations.booked()) {
         if (bookingDue(services, booked.booking, now)) {
             due.set(booked.conversationId, [...(due.get(booked.conversationId) ?? []), booked]);
+        } else if (booked.booking.after === undefined) {
+            dueAt?.(booked.booking.until);
         }
     }
     for (const [conversationId, messages] of due) {
@@ -69,4 +76,21 @@ export const releaseBooked = async (services: Services, now: number): Promise<vo
             services.logger.error({ err: error, conversationId }, "resume pass: a scheduled send could not be let go, the pass goes on to the next");
         }
     }
+};
+
+// When a spent allowance's unfired hold goes by itself, by the one rule the pass fires by (limit-booking.ts). Undefined
+// for a hold only a press sends.
+const heldSendAt = async (services: Pick<Services, "agents" | "sandboxSettings">, conversationId: string, held: HeldRecord): Promise<number | undefined> =>
+    held.reason !== "limit" || held.fired ? undefined : limitBooking(held, await breakPolicyFor(services, conversationId, "limit"))?.at;
+
+/**
+ * The soonest instant the sandbox's own clock sends something a conversation is waiting on (ms), or 0 for none: a
+ * person's scheduled send, and a spent allowance's held turn booked to go again at its reset. A wake the machine must not
+ * sleep through, since nothing outside restarts it for either.
+ */
+export const nextBookedSendAt = async (services: Pick<Services, "agents" | "conversations" | "sandboxSettings">): Promise<number> => {
+    const scheduled = services.conversations.booked().flatMap(({ booking }) => (booking.until === undefined ? [] : [booking.until]));
+    const held = await Promise.all(services.conversations.stranded().map(({ conversationId, record }) => heldSendAt(services, conversationId, record)));
+    const instants = [...scheduled, ...held.filter((at): at is number => at !== undefined)];
+    return instants.length === 0 ? 0 : Math.min(...instants);
 };

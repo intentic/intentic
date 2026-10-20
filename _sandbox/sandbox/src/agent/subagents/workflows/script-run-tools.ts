@@ -91,7 +91,8 @@ export const workflowTools = (door: ScriptRunDoor, signal: AbortSignal) => [
         "workflow_status",
         "Where a workflow run of yours stands: its phase, how many of its calls are running, done, failed or handed back from " +
             "an earlier run, each worker's subagent id (wait, send or cancel it like any you spawned), its log, and once it " +
-            "ends, what it returned or the error it ended on. `waitSeconds` waits that long for it to end first.",
+            "ends, what it returned or the error it ended on. `waitSeconds` waits that long for it to end first, and returns " +
+            "early, with waitOutcome `message`, when something is said into your turn (as the wait tool does): read it, then call again.",
         {
             run: z.string().min(1).describe("The run's id, from workflow."),
             waitSeconds: z.number().min(0).max(MAX_WAIT_S).optional().describe(`How long to wait for it to end first; default 0, at most ${MAX_WAIT_S}.`),

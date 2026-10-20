@@ -11,7 +11,7 @@ import { opt } from "../../opt.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, planMode } from "../decorators/plan-mode.js";
 import { POST_PLAN_MODE } from "../../agent/run/agent.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
-import { LIMIT_WAIT_HANDED_OVER, type LimitWait, limitWait } from "./turn/limit-wait.js";
+import { LIMIT_WAIT_HANDED_OVER, type LimitWait, limitWait, limitWaitOptions } from "./turn/limit-wait.js";
 import { isContextOverflowText } from "../../engines/failure-sentences.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
 import { toolCategoryOf } from "@intentic/agent-context/tool-calls";
@@ -1016,7 +1016,7 @@ const codexPhase = (
         const steering = channel?.();
         // Stops this phase alone when a rate limit is waited out past patience: the turn goes on to say so and is held.
         const handover = new AbortController();
-        const waiting = limitWait(() => handover.abort());
+        const waiting = limitWait(() => handover.abort(), limitWaitOptions(request.credential));
         const stops = [request.signal, handover.signal, ...(gated === undefined ? [] : [gated.halted])];
         try {
             return yield* streamTurn(

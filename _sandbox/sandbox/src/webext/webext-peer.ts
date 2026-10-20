@@ -29,7 +29,7 @@ export type WebExtHub = PeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebE
 export type WebExtStore = PeerStore<Record<string, never>>;
 
 // How long `describe` may run before falling back to the last answer, so a sleeping laptop can't stall a card.
-const DESCRIBE_TIMEOUT_MS = 3_000;
+export const DESCRIBE_TIMEOUT_MS = 3_000;
 
 export const WEBEXT_PEER: PeerDoor<WebExtHello, WebExtAnnounced, Record<never, never>> = {
     slug: PEER_BRIDGES.webext,

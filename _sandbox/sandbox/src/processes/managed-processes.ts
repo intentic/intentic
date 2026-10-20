@@ -165,6 +165,9 @@ export interface ManagedProcesses {
     // Kills the session (including a finished oneShot's lingering shell).
     readonly stop: (repo: string) => void | Promise<void>;
     readonly running: (repo: string) => boolean;
+    // Resolves once the key is no longer running, however it ends (a one-shot back at its prompt, a session gone, a
+    // stop); at once for a key not running. What an install's waiter awaits instead of asking `running` on a timer.
+    readonly whenEnded: (repo: string) => Promise<void>;
     // A one-shot run's state, the only thing that tells an install or a check from a dev server once its shell is back
     // at a prompt; undefined for a dev-server panel and for a key this manager never ran.
     readonly runOf: (repo: string) => { readonly running: boolean; readonly finishedAt?: number } | undefined;
@@ -178,28 +181,51 @@ export interface ManagedProcesses {
     readonly stopAll: () => void;
 }
 
+// One key the manager is running.
+interface TrackedRun {
+    port: number;
+    oneShot: true | undefined;
+    startedAt: number;
+    sawJob: boolean;
+    promptStreak: number;
+    // For launch state: where the command runs, whether deps existed at start, last-seen foreground command.
+    cwd: string;
+    installed: boolean;
+    lastCommand: string | undefined;
+}
+
+// Who waits on each running key's end (whenEnded), told the moment `untrack` lets it go rather than by a waiter asking
+// `running` on a timer (2026-10-20).
+const createEndings = () => {
+    const waiting = new Map<string, Array<() => void>>();
+    const end = (key: string): void => {
+        const resolvers = waiting.get(key) ?? [];
+        waiting.delete(key);
+        for (const resolve of resolvers) {
+            resolve();
+        }
+    };
+    return {
+        wait: (key: string): Promise<void> => new Promise((resolve) => waiting.set(key, [...(waiting.get(key) ?? []), resolve])),
+        end,
+        endAll: (): void => {
+            for (const key of waiting.keys()) {
+                end(key);
+            }
+        },
+    };
+};
+
 // Manages long-running tmux sessions (panels, dev servers, dockerd, one-shot jobs) by key. `running` means
 // session-alive, not process-alive; a oneShot also completes once its shell returns to prompt.
 export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, options: ManagedProcessesOptions = {}): ManagedProcesses => {
     const watchPrompts = options.onPromptWatch ?? watchPromptSignals;
-    const current = new Map<
-        string,
-        {
-            port: number;
-            oneShot: true | undefined;
-            startedAt: number;
-            sawJob: boolean;
-            promptStreak: number;
-            // For launch state: where the command runs, whether deps existed at start, last-seen foreground command.
-            cwd: string;
-            installed: boolean;
-            lastCommand: string | undefined;
-        }
-    >();
+    const current = new Map<string, TrackedRun>();
     // When each one-shot run completed, keyed like `current`: a finished run's shell sits at a prompt, so tmux alone
     // cannot tell it from a dev server nobody typed in. Bounded by the number of distinct one-shot keys a workspace
     // has (one per project per check), and a re-run replaces its own entry.
     const finishedRuns = new Map<string, number>();
+    const endings = createEndings();
     let timer: NodeJS.Timeout | undefined;
     let unwatchPrompts: (() => void) | undefined;
 
@@ -216,6 +242,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             finishedRuns.delete(key);
         }
         current.delete(key);
+        endings.end(key);
         publishRuntimeChange("panels", "terminals");
     };
 
@@ -338,6 +365,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             await stopped;
         },
         running: (key) => current.has(key),
+        whenEnded: (key) => (current.has(key) ? endings.wait(key) : Promise.resolve()),
         runOf: (key) => {
             const entry = current.get(key);
             if (entry !== undefined) {
@@ -367,6 +395,7 @@ export const createManagedProcesses = (runner: ProcessRunner = defaultRunner, op
             }
             const stopped = current.size > 0;
             current.clear();
+            endings.endAll();
             finishedRuns.clear();
             if (stopped) {
                 publishRuntimeChange("panels", "terminals");

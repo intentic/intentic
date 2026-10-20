@@ -155,16 +155,29 @@ describe(`a land into a repo whose last land is still being versioned`, () => {
         });
     });
 
-    test(`waits for that commit before it rebases and is judged`, async () => {
+    test(`waits for that commit before it rebases and is judged, but not for the draft of its subject`, async () => {
         const services = servicesWith([version(`auto-version`)], `fix: cascading markers`);
         const finish = drafting();
         settleLandingInBackground(services, `c1`);
-        const next = versionCommitsSettled(services, [`root`]).then(() => order.push(`judged`));
+        // (2026-10-20) The waiter hurries the commit: made at once under the title, with the draft still running.
+        await versionCommitsSettled(services, [`root`]).then(() => order.push(`judged`));
+        expect(order).toEqual([`committed`, `judged`]);
+        // The record's message is not this land's until its draft ends, so the title heads the commit.
+        expect(commitOnly.mock.calls[0]?.[2]).toStartWith(`Agent: Recent commits`);
+        finish();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(commitOnly).toHaveBeenCalledTimes(1);
+    });
+
+    test(`with nothing waiting, the commit waits for its draft and is written under it`, async () => {
+        const services = servicesWith([version(`auto-version`)], `fix: cascading markers`);
+        const finish = drafting();
+        settleLandingInBackground(services, `c1`);
         await new Promise((resolve) => setTimeout(resolve, 10));
         expect(order).toEqual([]);
         finish();
-        await next;
-        expect(order).toEqual([`committed`, `judged`]);
+        await versionCommitsSettled(services, [`root`]);
+        expect(commitOnly.mock.calls[0]?.[2]).toStartWith(`fix: cascading markers`);
     });
 
     test(`does not wait on a draft when no commit is coming`, async () => {
@@ -177,15 +190,15 @@ describe(`a land into a repo whose last land is still being versioned`, () => {
         expect(commitOnly).not.toHaveBeenCalled();
     });
 
-    test(`judges the tree as it stands once the draft outlasts the wait`, async () => {
+    test(`judges the tree as it stands once the commit itself outlasts the wait`, async () => {
         const services = servicesWith([version(`auto-version`)], `fix: cascading markers`);
-        const finish = drafting();
+        const { promise: gitDone, resolve: unstall } = Promise.withResolvers<boolean>();
+        commitOnly.mockImplementation(async () => gitDone);
         settleLandingInBackground(services, `c1`);
         await versionCommitsSettled(services, [`root`], 5);
-        expect(commitOnly).not.toHaveBeenCalled();
-        finish();
-        await versionCommitsSettled(services, [`root`]);
         expect(commitOnly).toHaveBeenCalledTimes(1);
+        unstall(true);
+        await versionCommitsSettled(services, [`root`]);
     });
 });
 

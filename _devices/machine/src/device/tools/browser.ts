@@ -1,4 +1,3 @@
-import { sleep } from "@intentic/base/async";
 import { type Browser, BrowserError, renderPage } from "@intentic/browser";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { assertScope } from "../policy.js";
@@ -39,7 +38,7 @@ export const clickElement = async (web: Browser, ref: string, scopes: DeviceScop
         throw new BrowserError(`"ref" is required: take a snapshot and use one of the [e…] references from it.`);
     }
     await web.click(ref);
-    await settle();
+    await web.settleAfterAction();
     return `Clicked ${ref}.\n\n${renderPage(await web.snapshot())}`;
 };
 
@@ -49,7 +48,7 @@ export const fillElement = async (web: Browser, ref: string, text: string, submi
         throw new BrowserError(`"ref" is required: take a snapshot and use one of the [e…] references from it.`);
     }
     await web.fill(ref, text, submit);
-    await settle();
+    await web.settleAfterAction();
     // Counted, never echoed: a filled field is as likely to hold a password as anything typed on the keyboard.
     return `Typed ${text.length} characters into ${ref}${submit ? " and submitted" : ""}.\n\n${renderPage(await web.snapshot())}`;
 };
@@ -57,7 +56,7 @@ export const fillElement = async (web: Browser, ref: string, text: string, submi
 export const pressKey = async (web: Browser, combo: string, scopes: DeviceScopes): Promise<string> => {
     assertScope(scopes, "control");
     await web.press(combo === "" ? "Return" : combo);
-    await settle();
+    await web.settleAfterAction();
     return `Pressed ${combo === "" ? "Return" : combo}.\n\n${renderPage(await web.snapshot())}`;
 };
 
@@ -80,7 +79,3 @@ export const selectTab = async (web: Browser, id: string, scopes: DeviceScopes):
     }
     return renderPage(await web.selectTab(id));
 };
-
-// A page needs a beat after an action before its next state is worth reading, a click that triggers a fetch, a
-// re-render on the next tick.
-const settle = (): Promise<void> => sleep(500);

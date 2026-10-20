@@ -1,4 +1,3 @@
-import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { renderPage, toPageState } from "@intentic/browser/page";
 import {
@@ -18,6 +17,7 @@ import { APPROVAL_HOLD_MS, assertRunning, assertScope, needsConfirm, RefusedErro
 import { store } from "../store.js";
 import { type TargetTab, targetTab } from "./tab-access.js";
 import { fitCapture } from "./fit-capture.js";
+import { untilTabLoaded } from "./tab-loaded.js";
 
 // Each page tool: get a permitted tab, run something in it, return the fresh page state so the model never has to
 // guess whether an action landed. Every action also flashes a banner in the tab; a failed banner must never fail
@@ -86,8 +86,7 @@ export const openUrl = async (url: string, where: "current" | "new"): Promise<st
     if (tab.id === undefined) {
         return `Opened ${target}.`;
     }
-    // Give the navigation a moment to commit before reading the tab back.
-    await sleep(600);
+    await untilTabLoaded(tab.id);
     try {
         const permitted = await targetTab("read", tab.id);
         announce(permitted.id, `The agent opened this page`);

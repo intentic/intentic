@@ -21,6 +21,7 @@ import { showRecord, subagentRecord } from "./subagentRecord";
 import { closeSubagent } from "../../../../models/conversations/panel/subagentView";
 import { conversationView, PANE_VIEW } from "../../../../models/conversations/panel/useChat-view";
 import { onScreen } from "../../../../workbench/window/onScreen";
+import { onSubagentActivity } from "./subagentActivity";
 
 // A SUBAGENT ITS PARENT'S RUNTIME RAN IN-PROCESS, SHOWN IN THE PARENT'S COLUMN (subagentView.ts): its own transcript,
 // read from the daemon and drawn by the chat's own turns, with the subagent bar where the composer stands. Nothing here
@@ -111,7 +112,9 @@ const { pin, realizing } = usePaneScroll({
 // The first read failed, which is not the same as nothing recorded; a later failed poll keeps what is drawn.
 const failed = ref(false);
 const drawn: { last: string | undefined } = { last: undefined };
-const POLL_MS = 3000;
+// The fallback for growth no roster move announced (an SDK that reports progress rarely): the read itself rides the
+// roster's own push below (2026-10-20, was every 3 s as the only feed).
+const POLL_MS = 15_000;
 let mounted = true;
 const read = async (): Promise<void> => {
     const first = drawn.last === undefined;
@@ -134,7 +137,14 @@ const read = async (): Promise<void> => {
 };
 record.transcript.loading.value = true;
 void read();
-// Read again while it works. Out of sight the reads wait, and the window coming back reads at once.
+// Read again whenever its roster record moves (the `subagents` push).
+onSubagentActivity(
+    () => session.value.activityAt,
+    () => live.value,
+    () => onScreen.value,
+    () => void read(),
+);
+// Read again while it works, as a slow fallback. Out of sight the reads wait, and the window coming back reads at once.
 usePollWhile(live, { everyMs: POLL_MS, check: read, immediate: false, visible: onScreen });
 // Settling reads the last of it once.
 watch(live, (now, before) => {

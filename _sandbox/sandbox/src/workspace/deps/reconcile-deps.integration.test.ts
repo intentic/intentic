@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { advanceTimersByTimeAsync, realSleep, SETTLES, waitFor } from "@intentic/testing/bun";
+import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { createDependencyCoordinator, type DependencyCoordinator } from "./reconcile-deps.js";
@@ -178,6 +179,54 @@ test("a manifest burst installs only once the writes around it have gone quiet",
     }
 });
 
+// 2026-10-20: the coordinator waited out an install by asking `running` every two seconds, and `mcp__deps__install` by
+// re-scanning the workspace every two; both are woken by the install pane's own end now.
+test("an install pane's end wakes the coordinator at once, and installEnded reports it once its outcome is written down", async () => {
+    const root = await workspace();
+    await drifted(root);
+    let running = false;
+    const enders: Array<() => void> = [];
+    const managed = unstubbed<ManagedProcesses>("processes", {
+        start: async () => {
+            running = true;
+        },
+        running: () => running,
+        whenEnded: () => (running ? new Promise<void>((resolve) => enders.push(resolve)) : Promise.resolve()),
+        stop: () => undefined,
+    });
+    const deps = createDependencyCoordinator({
+        workspace: { root },
+        processes: managed,
+        logger: silent,
+        requestsPath: join(root, "requests.json"),
+        settleMs: 1,
+        // Neither floor fires inside this test: only the pane's end can move it.
+        pollMs: 60_000,
+        installMaxMs: 120_000,
+    });
+    await deps.status();
+    await waitFor(() => expect(enders.length).toBeGreaterThan(0));
+    const reported = deps.installEnded("app");
+    const started = Date.now();
+    await mkdir(join(root, "app", "node_modules", "left-pad"), { recursive: true });
+    running = false;
+    for (const resolve of enders.splice(0)) {
+        resolve();
+    }
+    expect(await reported).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect((await deps.status()).find((project) => project.dir === "app")?.state).toBe("ready");
+});
+
+test("a pass that does not install a project tells whoever waits on it to look again", async () => {
+    const root = await workspace();
+    await write(root, "app/package.json", "{}");
+    const deps = coordinator(root, []);
+    const reported = deps.installEnded("app");
+    deps.watch(watch().subscribe)();
+    expect(await reported).toBe(false);
+});
+
 test("an install that outruns its watch window is stopped rather than left going", async () => {
     const root = await workspace();
     await drifted(root);
@@ -188,6 +237,8 @@ test("an install that outruns its watch window is stopped rather than left going
             running = true;
         },
         running: () => running,
+        // It never ends by itself: only the watch window ends it.
+        whenEnded: () => new Promise(() => undefined),
         stop: async () => {
             await new Promise((resolve) => setTimeout(resolve, 30));
             running = false;

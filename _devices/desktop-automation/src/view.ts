@@ -170,9 +170,12 @@ export const describeShot = (shot: Shot, what: string): string => {
 };
 
 // A screenshot of the same part of the screen the newest frame showed, as an action's confirming look.
-export const reshoot = async (screen: Desktop, log: FrameLog): Promise<Shot> => {
+export const reshoot = async (screen: Desktop, log: FrameLog): Promise<Shot> => await shoot(screen, log, await reshootRegion(screen, log));
+
+// What reshoot captures: the newest frame's region, or the whole desktop (undefined) when that is what it showed.
+export const reshootRegion = async (screen: Desktop, log: FrameLog): Promise<Rect | undefined> => {
     const latest = log.latest();
-    return await shoot(screen, log, latest === undefined || isWholeDesktop(latest, await screen.frame()) ? undefined : latest.region);
+    return latest === undefined || isWholeDesktop(latest, await screen.frame()) ? undefined : latest.region;
 };
 
 const isWholeDesktop = (frame: Frame, size: { width: number; height: number }): boolean =>

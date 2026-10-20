@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
-import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { Context } from "hono";
 import { tokenEquals } from "../auth/auth.js";
 import type { Services } from "../composition.js";
@@ -17,7 +17,6 @@ import {
     githubStatus,
     type GitlabPipelineHook,
     gitlabHookRun,
-    gitlabStatus,
 } from "./providers.js";
 import { forgeOf } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
@@ -139,17 +138,18 @@ const gitlabFailedJob = (hook: GitlabJobHook): FailedJob | undefined =>
               reason: hook.build_failure_reason,
           };
 
-// A finished run as the board and the automations hear of it: what failed in it read first, so the wake payload and
-// the view name what broke (a failure of that read degrades to names-less), then cached, announced and dispatched.
+// A run as the board and the automations hear of it, at every phase: what failed in it read first, so the wake payload
+// and the view name what broke (a failure of that read degrades to names-less), then cached, announced and, once it has
+// a result, dispatched.
 const announceRun = async (
     services: Services,
     host: "github" | "gitlab",
     project: CiProject,
-    finished: PipelineRun,
+    delivered: PipelineRun,
     author: { id: string; name: string },
     fetchFn: FetchFn,
 ): Promise<void> => {
-    let run = finished;
+    let run = delivered;
     if (run.status === "failed") {
         const failedJobs = await ciClientFor(host, fetchFn)
             .failedJobs(project, run.runId)
@@ -157,10 +157,73 @@ const announceRun = async (
         run = failedJobs.length > 0 ? { ...run, failedJobs } : run;
     }
     services.ciRuns.upsert(run);
-    // The delivery is the only moment the daemon knows a run ended; without this an open board waits out its poll.
+    // Every delivery, in-flight or finished, is when the board and CI-shaped watches learn a run moved (2026-10-20).
     publishRuntimeChange("ci");
-    // Main's fix agent reads the run on its own clock: `fixed` is left to settle by itself.
+    // Main's fix agent reads the run on its own clock: `fixed` is left to settle by itself. A run still in flight
+    // dispatches nothing: automations and the fix agent hear a result only (ciResultOf).
     await dispatchCiRun(services, project, run, author, fetchFn);
+};
+
+// What a delivery says: who sent it, and a run normalizer or a job that moved (failed, perhaps); undefined for a ping or an
+// unconsumed event. Every phase counts (2026-10-20): an open board and a CI-shaped watch learn of a run moving from
+// these, where they once heard only of runs that ended.
+interface Understood {
+    readonly sender: Sender;
+    readonly author: { readonly id: string; readonly name: string };
+    readonly toRun?: (project: { repo: string; project: string }) => PipelineRun;
+    readonly jobMoved: boolean;
+    readonly failedJob?: FailedJob | undefined;
+}
+
+const githubDeliveryOf = (event: string | undefined, delivery: GithubDelivery): Understood | undefined => {
+    const sender = githubSender(delivery.repository);
+    if (sender === undefined) {
+        return undefined;
+    }
+    if (event === "workflow_job" && delivery.workflow_job !== undefined) {
+        const job = delivery.workflow_job;
+        return {
+            sender,
+            author: { id: "github", name: "github" },
+            jobMoved: true,
+            failedJob: delivery.action === "completed" ? githubFailedJob(job) : undefined,
+        };
+    }
+    if (event === "workflow_run" && delivery.workflow_run !== undefined) {
+        const run = delivery.workflow_run;
+        const login = run.actor?.login;
+        return {
+            sender,
+            author: login === undefined ? { id: "github", name: "github" } : { id: login, name: login },
+            toRun: (project) => githubRun(project, run),
+            jobMoved: false,
+        };
+    }
+    return undefined;
+};
+
+const gitlabDeliveryOf = (event: string | undefined, payload: Partial<GitlabJobHook> | Partial<GitlabPipelineHook>): Understood | undefined => {
+    if (event === "Job Hook") {
+        const delivery = payload as Partial<GitlabJobHook>;
+        if (delivery.project === undefined || typeof delivery.build_id !== "number" || typeof delivery.pipeline_id !== "number") {
+            return undefined;
+        }
+        return { sender: gitlabSender(delivery.project), author: { id: "gitlab", name: "gitlab" }, jobMoved: true, failedJob: gitlabFailedJob(delivery as GitlabJobHook) };
+    }
+    const delivery = payload as Partial<GitlabPipelineHook>;
+    if (event !== "Pipeline Hook" || delivery.object_attributes === undefined || delivery.project === undefined) {
+        return undefined;
+    }
+    const user = delivery.user;
+    return {
+        sender: gitlabSender(delivery.project),
+        author:
+            user?.name !== undefined || user?.username !== undefined
+                ? { id: user.username ?? user.name ?? "gitlab", name: user.name ?? user.username ?? "gitlab" }
+                : { id: "gitlab", name: "gitlab" },
+        toRun: (project) => gitlabHookRun(project, delivery as GitlabPipelineHook),
+        jobMoved: false,
+    };
 };
 
 export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetch) => {
@@ -189,50 +252,16 @@ export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetc
             return c.json({ error: "invalid payload" }, 400);
         }
 
-        // The sender plus a run normalizer or a failed job; undefined for a ping, an in-progress phase, or an unconsumed
-        // event.
-        let sender: Sender | undefined;
-        let author = { id: host, name: host };
-        let toRun: ((project: { repo: string; project: string }) => PipelineRun) | undefined;
-        let failedJob: FailedJob | undefined;
-        if (host === "github") {
-            const delivery = payload as GithubDelivery;
-            if (c.req.header("x-github-event") === "workflow_job" && delivery.action === "completed" && delivery.workflow_job !== undefined) {
-                sender = githubSender(delivery.repository);
-                failedJob = githubFailedJob(delivery.workflow_job);
-            } else if (c.req.header("x-github-event") === "workflow_run" && delivery.action === "completed" && delivery.workflow_run !== undefined) {
-                const run = delivery.workflow_run;
-                sender = githubSender(delivery.repository);
-                author = run.actor?.login !== undefined ? { id: run.actor.login, name: run.actor.login } : author;
-                toRun = (project) => githubRun(project, run);
-            }
-        } else if (c.req.header("x-gitlab-event") === "Job Hook") {
-            const delivery = payload as Partial<GitlabJobHook>;
-            if (delivery.project !== undefined && typeof delivery.build_id === "number" && typeof delivery.pipeline_id === "number") {
-                sender = gitlabSender(delivery.project);
-                failedJob = gitlabFailedJob(delivery as GitlabJobHook);
-            }
-        } else {
-            const delivery = payload as Partial<GitlabPipelineHook>;
-            if (
-                c.req.header("x-gitlab-event") === "Pipeline Hook" &&
-                delivery.object_attributes !== undefined &&
-                delivery.project !== undefined &&
-                // Fires at every phase; gates on "not in flight", not "not running" since queued is neither.
-                !isPipelineInFlight(gitlabStatus(delivery.object_attributes.status))
-            ) {
-                sender = gitlabSender(delivery.project);
-                const user = delivery.user;
-                author =
-                    user?.name !== undefined || user?.username !== undefined
-                        ? { id: user.username ?? user.name ?? host, name: user.name ?? user.username ?? host }
-                        : author;
-                toRun = (project) => gitlabHookRun(project, delivery as GitlabPipelineHook);
-            }
-        }
-        if (sender === undefined || (toRun === undefined && failedJob === undefined)) {
+        // SAFETY: the body is the forge's signed or token-gated delivery; every field the readers use is checked for
+        // presence before use, so a partial shape is all the cast claims.
+        const understood =
+            host === "github"
+                ? githubDeliveryOf(c.req.header("x-github-event"), payload as GithubDelivery)
+                : gitlabDeliveryOf(c.req.header("x-gitlab-event"), payload as Partial<GitlabJobHook> | Partial<GitlabPipelineHook>);
+        if (understood === undefined) {
             return c.json({ ok: true, ignored: true });
         }
+        const { sender, author, toRun, failedJob, jobMoved } = understood;
 
         const project = await projectOf(services, host, sender);
         if (project === undefined) {
@@ -244,6 +273,10 @@ export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetc
             await services.ciStore.learnForge(project.repo, project.project, { id: sender.id, path: sender.path, defaultBranch: sender.defaultBranch });
         } catch (error) {
             services.logger.warn({ err: error, repo: project.repo }, "ci: what the delivery said of its repository was not kept");
+        }
+        if (jobMoved) {
+            // A job's phase is not in the runs cache, but an open run's job graph and a watch on it read it fresh.
+            publishRuntimeChange("ci");
         }
         if (failedJob !== undefined) {
             // Off the delivery's clock: reading the job's log and starting or telling the fix agent takes a while.

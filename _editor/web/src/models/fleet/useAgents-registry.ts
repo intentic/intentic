@@ -277,6 +277,14 @@ const invalidateStaleWork = (agents: readonly AgentSummary[]): void => {
 
 // Applies a roster snapshot from the stream or an explicit read; dropped if it predates what's already held,
 // since an out-of-order answer is a regression, not news. `live`: a frame of the events stream, as it happened.
+// The roster a frame carries, written into this box's `agents.list` read where one is already held: an extension's view
+// that reads the fleet by its contract (the pipelines board's fix agents) then moves with the stream instead of waiting
+// for its own poll (2026-10-20). Only an entry someone already read is touched, and only its roster: the held wakes it
+// also carries are not in the frame.
+const mirrorRosterRead = (agents: AgentSummary[], rev: number): void => {
+    queryClient.setQueryData<ProcedureOutput<`agents.list`>>(rpcKey(`agents.list`), (held) => (held === undefined ? undefined : { ...held, agents, rev }));
+};
+
 export const setAgents = (agents: AgentSummary[], rev: number, live = false): void => {
     if (rev < appliedRev.value) {
         return;
@@ -320,6 +328,7 @@ export const setAgents = (agents: AgentSummary[], rev: number, live = false): vo
         observeRoster(registry.value, agents);
     }
     applySnapshot(agents, rev);
+    mirrorRosterRead(agents, rev);
     // Attaches a tab opened before its turn existed to the turn now running (workflow step, wake, another device).
     useChat().attachStarted(new Set(agents.filter((agent) => agent.status === `running`).map((agent) => agent.id)));
 };

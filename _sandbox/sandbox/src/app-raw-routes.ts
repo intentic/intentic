@@ -40,6 +40,7 @@ import { runnerCredentialRawRoutes } from "./runners/runner-credentials.routes.j
 import { runnerGitRawRoutes } from "./runners/runner-git.routes.js";
 import { runnerDefinitionRawRoutes } from "./runners/runner.routes.js";
 import { sandboxesRawRoutes } from "./sandboxes/sandboxes.routes.js";
+import { hostKeyringRawRoutes } from "./secrets/device/host-keyring.routes.js";
 import { keyringKeysRawRoutes } from "./secrets/device/keyring-keys.routes.js";
 import { speechRawRoutes } from "./speech/speech.routes.js";
 import { voiceRawRoutes } from "./speech/voice/voice.routes.js";
@@ -88,6 +89,7 @@ export const appRawRoutes = (services: Services) =>
         runnerGitRawRoutes(services),
         runnerDefinitionRawRoutes(services),
         sandboxesRawRoutes(services),
+        hostKeyringRawRoutes(services),
         keyringKeysRawRoutes(services),
         speechRawRoutes(services),
         voiceRawRoutes(services),

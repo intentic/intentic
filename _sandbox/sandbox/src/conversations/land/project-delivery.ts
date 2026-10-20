@@ -24,6 +24,7 @@ import { opt } from "../../opt.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
 import { worktreeOf } from "../registry/agents-store.js";
+import { watchArrivals } from "../delivery-arrivals.js";
 
 // LANDED WORK DELIVERED TO THE OWNER'S FOLDER. A folder on the owner's computer attached to that computer's own sandbox
 // is copied one way into `/work/<name>`. When a conversation's work lands there, the same change goes to the machine
@@ -36,9 +37,8 @@ import { worktreeOf } from "../registry/agents-store.js";
 // computer may be asleep: then the land waits in /history/project-deliveries.json and goes when it next connects.
 
 // How often waiting lands are tried again whatever happened, and how often the connected machines are looked at for one
-// that just arrived: a connection is the moment a waiting land can go, and reading the hub costs nothing.
+// that just arrived (../delivery-arrivals.ts): a connection is the moment a waiting land can go, and the hub announces it.
 const RETRY_EVERY_MS = 5 * 60_000;
-const ARRIVALS_EVERY_MS = 15_000;
 
 // The machine writes under a restore point and may merge many files; this bounds only a socket gone quiet.
 const DELIVERY_TIMEOUT_MS = 120_000;
@@ -98,6 +98,8 @@ export interface ProjectDeliveryDeps {
     readonly platformId: string | undefined;
     // What one machine reports of its folders (device-reports.ts reportedPairings).
     readonly pairingsOf: (host: string) => Promise<readonly DevicePairing[] | undefined>;
+    // Called whenever the machines connected here change (the runtime feed's `hosts` domain); answers the unsubscribe.
+    readonly hostsChanged?: (listener: () => void) => () => void;
 }
 
 export interface DeliveryClient {
@@ -718,13 +720,10 @@ export const createProjectDelivery = (
         start: () => {
             const unsubscribe = deps.events.subscribe("workspace", landed);
             void book.read().catch((cause: unknown) => deps.logger.warn({ err: cause }, "project delivery: the waiting lands could not be read"));
-            const timer = setInterval(() => {
-                void check().catch((cause: unknown) => deps.logger.warn({ err: cause }, "project delivery: waiting lands were not tried again"));
-            }, ARRIVALS_EVERY_MS);
-            timer.unref();
+            const unwatch = watchArrivals(deps, check);
             return () => {
                 unsubscribe();
-                clearInterval(timer);
+                unwatch();
             };
         },
         landed,

@@ -13,10 +13,10 @@ import { reconcileListenerProcesses } from "../extensions/extension-processes.js
 import { automationCatalog } from "./catalog.js";
 import { doorOf, refuseInvalidAutomation, refusePastEnd, refusePastMoment, saveAutomation } from "./automation-save.js";
 import type { AutomationRecord } from "./automations-store.js";
-import { sandboxZone } from "./schedule-zone.js";
+import { nextRunOf, sandboxZone } from "./schedule-zone.js";
 import { declineHeldWake, withdrawApprovalPush } from "./held-wake-answers.js";
 import { HeldWakeNotApproved } from "./held-wakes-store.js";
-import { fireAutomation, nextRunOf, recordHeldWake, runHeldWake } from "./scheduler.js";
+import { fireAutomation, recordHeldWake, runHeldWake } from "./scheduler.js";
 import { forgetHeldWake } from "./durable/fire-admission.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { guardStateFile, sourceEnv } from "./watch/watch-condition.js";

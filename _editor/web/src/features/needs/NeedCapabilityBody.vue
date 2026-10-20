@@ -18,6 +18,7 @@ import { catalogEntries, suggestName } from "../../models/capabilities/tiles";
 import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
 import { useExtensions } from "../../models/extensions/useExtensions";
 import { dismissOperation, operationsUnder } from "../../workbench/operations/operations";
+import { applyNow } from "./applyNow";
 import { useNeedAnswer } from "./needAnswer";
 import { useNeeds } from "../../models/needs/useNeeds";
 
@@ -89,6 +90,14 @@ const heard =
     };
 const lastLine = computed(() => lines.value.at(-1));
 
+// What `applyNow` reads and sends for one need.
+const applyDeps = (id: string) => ({
+    current: () => needs.byId(id),
+    apply: async () => {
+        await needs.answer.mutateAsync({ id, answer: { kind: `apply` } });
+    },
+});
+
 // Saved through the same route as the Capabilities page; the need is met when the daemon sees it come live.
 const connect = async (): Promise<void> => {
     const tile = entry.value;
@@ -105,6 +114,8 @@ const connect = async (): Promise<void> => {
         task: async (report) => {
             await needs.answer.mutateAsync({ id, answer: { kind: `accept` } });
             await add(input, heard(report));
+            // Settled now (2026-10-20): `accept` only marks it working, and nothing else sends `apply` for a connect.
+            await applyNow(applyDeps(id), true);
             // A key made on this card (the same one the full form would show) is spent once the connection holds it.
             for (const made of operationsUnder(sshKeyScope(tile.id))) {
                 dismissOperation(made.key);
@@ -129,11 +140,7 @@ const change = async (): Promise<void> => {
         failed: t(`needs.capability.couldNotApply`),
         task: async (report) => {
             await add(input, heard(report));
-            // Settled now, not on the daemon's next poll: the card closes with this press instead of offering it again.
-            // The poll may have closed it first, which is the same outcome.
-            if (needs.byId(id)?.status !== `met`) {
-                await needs.answer.mutateAsync({ id, answer: { kind: `apply` } });
-            }
+            await applyNow(applyDeps(id));
         },
     });
 };
@@ -163,9 +170,7 @@ const removeIt = async (): Promise<void> => {
         failed: t(`needs.capability.couldNotRemove`),
         task: async () => {
             await remove.mutateAsync(connection.id);
-            if (needs.byId(id)?.status !== `met`) {
-                await needs.answer.mutateAsync({ id, answer: { kind: `apply` } });
-            }
+            await applyNow(applyDeps(id));
         },
     });
 };

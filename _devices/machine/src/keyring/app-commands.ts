@@ -11,6 +11,7 @@ import { askpassStatus, installAskpass } from "./askpass.js";
 import { KeyringCliError } from "./flags.js";
 import { gitHelperStatus, installGitHelper } from "./git-helper.js";
 import { installNativeHost, nativeHostStatus } from "./native-host-install.js";
+import { pushKeyringChanged } from "./sandbox-push.js";
 
 /* `intentic-machine keyring app <op> --json`: the Passwords app's verbs, as the desktop app calls them. Each reads ONE
    JSON object on stdin, never a value on its command line, and prints one JSON line (answer.ts). A value the app sends
@@ -166,6 +167,7 @@ const activity = verb("What Passwords did, newest first: for one entry or all", 
 const needs = verb("Agents' requests waiting for an answer", "The requests were not read.", Empty, async () => await ask({ op: "needs" }));
 
 const answerNeed = verb("Answer an agent's request (asks you)", "The request was not answered.", z.object({ id: z.string(), answer: KeyringNeedAnswerSchema, name: KeyringSecretNameSchema.optional(), value: value.optional() }).strict(), async (request) => {
+    const waiting = await ask({ op: "needs" });
     const asked: Extract<KeyringRequest, { op: "answer-need" }> = { op: "answer-need", id: request.id, answer: request.answer };
     if (request.name !== undefined) {
         asked.name = request.name;
@@ -175,7 +177,13 @@ const answerNeed = verb("Answer an agent's request (asks you)", "The request was
         asked.sealed = sealedCapture(await inboxKey(), request.value, at);
         asked.at = at;
     }
-    return await ask(asked);
+    const result = await ask(asked);
+    // The sandbox that asked hears it now, and wakes the conversation waiting on it (sandbox-push.ts).
+    const sandbox = waiting.ok && "pending" in waiting ? waiting.pending.find((need) => need.id === request.id)?.sandbox : undefined;
+    if (result.ok && sandbox !== undefined) {
+        await pushKeyringChanged(sandbox);
+    }
+    return result;
 });
 
 const SaveSchema = z.object({ title: z.string().min(1).max(200), username: z.string().max(256).optional(), value, kind: kind.default("password"), origins, note: z.string().max(500).optional() }).strict();
@@ -203,6 +211,8 @@ const save = verb("Save a password by hand", "The password was not saved.", Save
             return edited;
         }
     }
+    // A new entry can be the one a waiting request needs: every sandbox reads this keyring now.
+    await pushKeyringChanged();
     return { ok: true as const, outcome: saved.outcome, name: saved.name };
 });
 
@@ -223,7 +233,12 @@ const editPatchOf = (patch: z.infer<typeof EditSchema>["patch"]): EntryPatch => 
 
 const edit = verb("Change an entry: its title, user, places, note, or value (asks you when it widens anything)", "The entry was not changed.", EditSchema, async (request) => {
     const patch = editPatchOf(request.patch);
-    return await ask(request.value === undefined ? { op: "edit", name: request.name, patch } : { op: "edit", name: request.name, patch, sealed: sealForKeyring(await inboxKey(), request.name, request.value) });
+    const edited = await ask(request.value === undefined ? { op: "edit", name: request.name, patch } : { op: "edit", name: request.name, patch, sealed: sealForKeyring(await inboxKey(), request.name, request.value) });
+    // A place added can be what a waiting request needs: every sandbox reads this keyring now.
+    if (edited.ok) {
+        await pushKeyringChanged();
+    }
+    return edited;
 });
 
 const ImportSchema = z
@@ -248,7 +263,11 @@ const importRows = verb("Import passwords from another manager's export (asks yo
         }
         return item;
     });
-    return await ask({ op: "capture-batch", items, from: request.from });
+    const imported = await ask({ op: "capture-batch", items, from: request.from });
+    if (imported.ok) {
+        await pushKeyringChanged();
+    }
+    return imported;
 });
 
 const sources = verb("Where Passwords remembers from: each source's switch and whether it is set up here", "The sources were not read.", Empty, async () => {

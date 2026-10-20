@@ -187,8 +187,8 @@ export interface ChildRecord {
     // run that ended is not told to the parent as the end (child-report.ts), and cleared once the move is made or fails.
     movingOn: { readonly failure: string } | undefined;
     // Its turn ended on a wall the sandbox re-runs it past by itself: what stopped it, the run that ended so, the look
-    // that ends the pause as failed if the re-run never comes, and what strikes the pause off the record a restart reads
-    // (paused-children.ts).
+    // that ends the pause as failed if the re-run never comes, and what stops hearing for that and strikes the pause off
+    // the record a restart reads (paused-children.ts).
     paused:
         | {
               readonly failure: string;

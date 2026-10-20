@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Exercises real processes and a real flock, not the pure policy (tested elsewhere): what happens to a slot when a
-// process doesn't exit politely. Timings are coarse; assertions are on order and count, never on latency.
+// process doesn't exit politely. Timings are coarse; assertions are on order and count, never on latency, but for the
+// one about how soon a waiter is woken, whose bound is generous.
 
 const QUEUE_RUN = join(import.meta.dirname, "../../../bin/queue-run");
 
@@ -221,6 +222,36 @@ test("runs anyway once the deadline passes, rather than blocking forever", async
     } finally {
         holder.kill("SIGKILL");
     }
+});
+
+// 2026-10-20: a waiter learned of a free slot at its next poll; it is woken by the kernel now, the instant the holder's
+// lock goes. The poll interval is set long here so a wait that still polled could not pass; the bound is generous.
+test("a waiter starts the moment the holder exits, not at its next poll, and holds the slot it was granted", async () => {
+    const queue = await dir();
+    const ended = join(queue, "ended");
+    // Both slots taken, by commands that end a second apart; the waiter must take the first to free.
+    const first = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--", "bash", "-c", `sleep 1; date +%s%N > ${ended}`], {
+        env: { ...process.env, INTENTIC_QUEUE_DIR: queue },
+    });
+    const second = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--", "bash", "-c", "sleep 4"], { env: { ...process.env, INTENTIC_QUEUE_DIR: queue } });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const waiter = await new Promise<Run>((resolve) => {
+        const child = spawn("bash", [QUEUE_RUN, "--pool", "p", "--limit", "2", "--wait", "30", "--", "bash", "-c", "date +%s%N; readlink /proc/$$/fd/9"], {
+            env: { ...process.env, INTENTIC_QUEUE_DIR: queue, INTENTIC_QUEUE_POLL: "10" },
+        });
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+        child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+        child.on("close", (code) => resolve({ code, stdout, stderr }));
+    });
+    const [startedAt, slot] = waiter.stdout.trim().split("\n");
+    const freedAt = Number((await readFile(ended, "utf8")).trim());
+    expect(waiter.stderr).toContain("slot free after");
+    expect((Number(startedAt) - freedAt) / 1e6).toBeLessThan(1_500);
+    expect(slot).toMatch(/\/p\/slot\.[12]$/);
+    first.kill("SIGKILL");
+    second.kill("SIGKILL");
 });
 
 test("says in the pane that it is waiting, then that it started", async () => {

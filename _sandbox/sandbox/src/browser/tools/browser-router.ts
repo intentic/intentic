@@ -8,6 +8,7 @@ import { cacheFile } from "../../store/open-document.js";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 import { networkCallOf, networkCallRefusal, redactNetworkAnswer } from "./network-redaction.js";
 import { SCREENSHOT_VERB } from "../cast/browser-artifacts.js";
+import { describeBoundedWait, sendBoundingWait } from "./bounded-wait.js";
 
 // One MCP server standing in for every browser a turn may drive, hosted in this daemon and reached over HTTP, so a
 // session costs no router process of its own. Each tool takes an `account`, resolved through the turn's manifest to an
@@ -238,6 +239,32 @@ const webmcpNotFound = (answer: RpcMessage, backendName: string): boolean => {
     return result?.isError === true && (result.content ?? []).some((block) => block.text?.includes(`Tool "${backendName}" not found`) === true);
 };
 
+// What forward needs of its router: its line to a backend, and the client ids mapped to the backend calls they became.
+interface Wire {
+    readonly request: (backend: Backend, method: string, params: RpcMessage["params"]) => { readonly id: number; readonly answer: Promise<RpcMessage> };
+    readonly send: (backend: Backend, message: RpcMessage) => void;
+    readonly inflight: Map<string | number, { readonly backend: Backend; readonly id: number }>;
+}
+
+// One tools/call sent to a backend and its answer awaited, with the client's id mapped to it so a cancellation chases
+// it, and a client that hangs up cancelling it.
+const forward = async (wire: Wire, backend: Backend, params: NonNullable<RpcMessage["params"]>, clientId: RpcMessage["id"], signal: AbortSignal | undefined): Promise<RpcMessage> => {
+    const sent = wire.request(backend, "tools/call", params);
+    if (clientId !== undefined && clientId !== null) {
+        wire.inflight.set(clientId, { backend, id: sent.id });
+    }
+    const hangUp = (): void => wire.send(backend, { jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: sent.id, reason: "client went away" } });
+    signal?.addEventListener("abort", hangUp, { once: true });
+    try {
+        return await sent.answer;
+    } finally {
+        signal?.removeEventListener("abort", hangUp);
+        if (clientId !== undefined && clientId !== null) {
+            wire.inflight.delete(clientId);
+        }
+    }
+};
+
 export interface BrowserRouter {
     // Answers one client message; undefined for a notification, which expects none. `signal` is the HTTP request's
     // own: a client that hung up takes its in-flight call with it.
@@ -420,33 +447,19 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
             return toolRefusal(message.id, ready.refusal);
         }
         await ready.backend.ready;
-        const sent = request(ready.backend, "tools/call", params);
-        const clientId = message.id ?? undefined;
-        if (clientId !== undefined && clientId !== null) {
-            inflight.set(clientId, { backend: ready.backend, id: sent.id });
+        // A timed text wait goes as the text wait it means, answering the moment the text is there (bounded-wait.ts).
+        const answer = await sendBoundingWait(params, signal, (sent) => forward({ request, send, inflight }, ready.backend, sent, message.id, signal));
+        if (webmcp !== undefined && webmcpNotFound(answer, webmcp.backendName)) {
+            return toolRefusal(
+                message.id,
+                `no WebMCP tool "${webmcp.name}" on this page as of its last snapshot. Take a snapshot: it lists the page's ` +
+                    `tools under "webmcp tools", and lists none when the page registers none or this browser has no WebMCP.`,
+            );
         }
-        const hangUp = (): void =>
-            send(ready.backend, { jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: sent.id, reason: "client went away" } });
-        signal?.addEventListener("abort", hangUp, { once: true });
-        try {
-            const answer = await sent.answer;
-            if (webmcp !== undefined && webmcpNotFound(answer, webmcp.backendName)) {
-                return toolRefusal(
-                    message.id,
-                    `no WebMCP tool "${webmcp.name}" on this page as of its last snapshot. Take a snapshot: it lists the page's ` +
-                        `tools under "webmcp tools", and lists none when the page registers none or this browser has no WebMCP.`,
-                );
-            }
-            if (webmcp === undefined && message.params?.["name"] === SCREENSHOT_VERB && answer.error === undefined) {
-                deps.screenshotTaken?.({ owner, conversationId: manifest.conversationId, params: message.params, answer });
-            }
-            return { ...(network === undefined ? answer : redactNetworkAnswer(network, answer)), id: message.id ?? null };
-        } finally {
-            signal?.removeEventListener("abort", hangUp);
-            if (clientId !== undefined && clientId !== null) {
-                inflight.delete(clientId);
-            }
+        if (webmcp === undefined && message.params?.["name"] === SCREENSHOT_VERB && answer.error === undefined) {
+            deps.screenshotTaken?.({ owner, conversationId: manifest.conversationId, params: message.params, answer });
         }
+        return { ...(network === undefined ? answer : redactNetworkAnswer(network, answer)), id: message.id ?? null };
     };
 
     const handle = async (message: RpcMessage, signal?: AbortSignal): Promise<RpcMessage | undefined> => {
@@ -469,7 +482,8 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
             case "tools/list":
                 try {
                     const probed = await deps.toolSchemas();
-                    const tools = probed.some((tool) => tool.name === WEBMCP_CALL_TOOL) ? probed : [...probed, WEBMCP_CALL_SCHEMA];
+                    const listed = describeBoundedWait(probed);
+                    const tools = listed.some((tool) => tool.name === WEBMCP_CALL_TOOL) ? listed : [...listed, WEBMCP_CALL_SCHEMA];
                     return {
                         jsonrpc: "2.0",
                         id: message.id ?? null,

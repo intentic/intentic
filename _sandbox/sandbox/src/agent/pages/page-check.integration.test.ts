@@ -42,4 +42,35 @@ describe("checkPage", () => {
         expect(result.check.followsFrame).toBe(true);
         expect(result.check.errors.some((error) => error.includes("nope"))).toBe(true);
     }, 60_000);
+
+    // The check waits for the reported height to hold still rather than a fixed 600ms (2026-10-20): a page still
+    // growing is measured once it stops, and one that is done does not wait out the old fixed beats.
+    // Each step inside the quiet window of the last; a page that sits still longer than that and then grows is measured
+    // before it grows, which the cap would not have caught either past 600ms.
+    it("measures a page that grows in steps after load at the height it settles on", async () => {
+        const result = await checkPage(
+            `<div id="g" style="height:100px"></div><script>[60, 130, 200].forEach((ms, i) => setTimeout(() => (document.getElementById("g").style.height = (200 + i * 100) + "px"), ms))</script>`,
+        );
+        if (!result.ok) {
+            expect(result.reason).toContain("browser");
+            return;
+        }
+        expect(result.check.contentHeight).toBeGreaterThanOrEqual(400);
+        expect(result.check.contentHeight).toBeLessThan(500);
+    }, 60_000);
+
+    it("answers a settled page well inside the old fixed 1.1s of waiting, once its browser is warm", async () => {
+        const page = `<div style="height:240px">still</div>`;
+        const warm = await checkPage(page);
+        if (!warm.ok) {
+            expect(warm.reason).toContain("browser");
+            return;
+        }
+        const started = performance.now();
+        const result = await checkPage(page);
+        const took = performance.now() - started;
+        expect(result.ok && result.check.contentHeight).toBeGreaterThanOrEqual(240);
+        // ~0.47s measured against ~1.25s before; the bound leaves a loaded machine room.
+        expect(took).toBeLessThan(1_100);
+    }, 60_000);
 });

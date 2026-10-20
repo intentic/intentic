@@ -1,5 +1,6 @@
 import { existsSync, watch } from "node:fs";
 import { basename, dirname } from "node:path";
+import { pollUntil, sleep } from "@intentic/base/async";
 
 // inotify is per inode, so a write from a turn's own mount namespace still reaches a daemon watching the same /tmp.
 
@@ -40,4 +41,19 @@ export const whenFileAppears = (path: string, onAppear: () => void): (() => void
         done = true;
         stop();
     };
+};
+
+/**
+ * Resolves once `path` exists or `ms` pass, woken by the watch above rather than a poll (2026-10-20); the 50 ms poll is
+ * left only for a directory that cannot be watched.
+ */
+export const untilFileAppears = async (path: string, ms: number): Promise<void> => {
+    const appeared = new AbortController();
+    const unwatch = whenFileAppears(path, () => appeared.abort());
+    if (unwatch === undefined) {
+        await pollUntil(() => existsSync(path), { intervalMs: 50, timeoutMs: ms, wait: (wait) => sleep(wait, { unref: true }) });
+        return;
+    }
+    await sleep(ms, { signal: appeared.signal, unref: true });
+    unwatch();
 };

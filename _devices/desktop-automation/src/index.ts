@@ -37,8 +37,8 @@ export {
     MAX_WAIT_MS,
     perform,
     SETTLE_MS,
-    settle,
 } from "./actions.js";
+export { DESKTOP_SETTLE, settle, type SettleDeps, type SettleOutcome, type SettleTiming, waitForScreenToSettle } from "./settle.js";
 export {
     describeDisplays,
     describeShot,
@@ -50,6 +50,7 @@ export {
     pointingFor,
     regionFor,
     reshoot,
+    reshootRegion,
     type ScreenshotTarget,
     viewFrame,
 } from "./view.js";

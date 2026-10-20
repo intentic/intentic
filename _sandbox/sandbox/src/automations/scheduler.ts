@@ -12,7 +12,6 @@ import type { Services } from "../composition.js";
 import { reposOf } from "../conversations/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
-import { type Periodic, SingleFlight, startPeriodic } from "@intentic/base/async";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending, turnFinished } from "../push/notifications.js";
 import { pinnedRunModel } from "../agent/models/run-role-model.js";
@@ -20,7 +19,8 @@ import { sessionFor } from "../conversations/registry/routing.js";
 import type { OutboxSink } from "../webchat/webchat-outbox.js";
 import { type AutomationRecord, consecutiveFailures } from "./automations-store.js";
 import type { ScheduleMark } from "./schedule-coverage.js";
-import { momentTimer, nextDueAfter, sandboxZone, zoneOf } from "./schedule-zone.js";
+import { nextDueAfter, nextRunOf, sandboxZone, zoneOf } from "./schedule-zone.js";
+import { type DueAt, nudgedPass } from "../workload/nudged-pass.js";
 import type { SenderLane } from "./senders.js";
 import type { JournalledFire } from "../store/journals/turn-journal.js";
 import { opt } from "../opt.js";
@@ -770,6 +770,9 @@ export interface AutomationsScheduler {
     // One poll pass over the manifest; `start` runs it on an interval. A call while a pass still runs joins that pass.
     // Exposed for tests.
     readonly tick: (now?: number) => Promise<void>;
+    // A pass soon, or once more after the one running: what a turn settling or an automation saved asks for, since
+    // either may have made something due now (a countdown hold waiting for quiet, a schedule saved inside this window).
+    readonly nudge: () => void;
 }
 
 // Where a fire's conversation comes from when it may belong to a thread (sessions/thread-sessions.ts), the key of which
@@ -853,31 +856,6 @@ export const recordHeldWake = async (services: Services, held: ReleasedWake): Pr
         ...heldWakeOptions(held, undefined), ...opt("conversationId", held.conversationId),
         ...opt("sessionId", held.sessionId), ...opt("thread", held.thread),
     }));
-};
-
-// When this automation is next due, or undefined for one no clock drives (a webhook, a listener, a workspace event)
-// and one switched off. An invalid cron can only come from a hand-edited manifest — upsert rejects it — and reads as
-// no next run rather than failing whatever asked.
-// A one-time wake answers its own moment even once that moment is past: the tick fires an overdue one rather than
-// dropping it, so "due" stays the truth right up until it fires.
-// `sandbox` is the zone of record the automation's own `tz` overrides; it is a parameter rather than a read, so this
-// stays pure and every caller has to have decided which clock it means.
-export const nextRunOf = (automation: AutomationRecord, sandbox: Zone): number | undefined => {
-    if (!automation.enabled) {
-        return undefined;
-    }
-    if (automation.trigger.kind === "once") {
-        return automation.trigger.at;
-    }
-    if (automation.trigger.kind !== "schedule") {
-        return undefined;
-    }
-    try {
-        return new Cron(automation.trigger.cron, cronOptions(zoneOf(automation.trigger, sandbox))).nextRun()?.getTime();
-    } catch {
-        // allow(silent-catch): a cron that doesn't parse has no next run.
-        return undefined;
-    }
 };
 
 // The soonest one-time wake, 0 when none is armed: one of the promised wakes every sleep keeps
@@ -1075,10 +1053,16 @@ const fleetFor = (services: Services, trigger: Trigger["kind"] | undefined, auto
 
 // Releases countdown holds past deadline once quiet (heldWakeQuiet); removed before running so it can't re-fire. A
 // retired one-time wake still releases: it was switched off by the very fire now waiting in the queue.
-const releaseCountdownHolds = async (services: Services, now: number): Promise<void> => {
+// A countdown still running reports its end to `due`, so the pass is woken on it rather than up to a poll late; one past
+// it that waits for quiet is woken by the turn settling or the land that brings it (createAutomationsScheduler.nudge).
+const releaseCountdownHolds = async (services: Services, now: number, due: DueAt): Promise<void> => {
     // `list` shows a countdown only on a hold the daemon minted, and the release checks it again as it takes the hold out.
     for (const held of await services.heldWakes.list()) {
-        if (held.autoRunAt === undefined || held.autoRunAt > now) {
+        if (held.autoRunAt === undefined) {
+            continue;
+        }
+        if (held.autoRunAt > now) {
+            due(held.autoRunAt);
             continue;
         }
         const automation = await services.automations.get(held.automationId);
@@ -1101,8 +1085,11 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
 
 // Polls the manifest and fires whatever came due since the last pass; fires run detached, since a turn can outlast many
 // polls. Event automations fire from the fire route instead.
-// Every pass of a started scheduler also sets one timer for the soonest moment due within a poll (schedule-zone.ts),
-// so a schedule fires on its minute rather than up to a poll late.
+// Every pass of a started scheduler also sets one timer for the soonest moment due within a poll (schedule-zone.ts) or
+// countdown ending, so a schedule fires on its minute rather than up to a poll late. A turn settling, a land and an
+// automation saved nudge a pass at once (boot-schedulers.ts, 2026-10-20): a held wake waiting for no live turn went on
+// the next thirty-second pass after the last turn ended, and a schedule saved due inside the current window was armed
+// only at the next pass. The interval stays as the backstop for anything those miss.
 // What happened while nothing was running is the start's to settle (`catchUp`): a host or platform outage can miss even
 // a promised alarm. Each schedule that missed a moment fires ONCE, however many it missed, late and saying so, through
 // the same gates as any fire: the sessions bar, the guard, an approval hold. A
@@ -1110,13 +1097,11 @@ const releaseCountdownHolds = async (services: Services, now: number): Promise<v
 export const createAutomationsScheduler = (services: Services, intervalMs = 30_000): AutomationsScheduler => {
     // Where the first poll's window opens, and so where the catch-up's ends: a moment is one pass's or the other's.
     let since = Date.now();
-    let loop: Periodic | undefined;
-    // One pass at a time: an interval that comes round while the last pass still runs joins it. A second pass would
-    // read the manifest before the first had switched a fired one-time wake off, and fire it again; skipping loses
-    // nothing, since the next pass's window opens where the last one's closed.
-    const passes = new SingleFlight<"pass", void>();
-
-    const pass = async (now: number): Promise<void> => {
+    let started = false;
+    // One pass at a time (nudgedPass): an interval, a timer or a nudge that comes round while the last pass still runs
+    // joins it. A second pass would read the manifest before the first had switched a fired one-time wake off, and fire
+    // it again; joining loses nothing, since the next pass's window opens where the last one's closed.
+    const pass = async (now: number, due: DueAt): Promise<void> => {
         const windowStart = since;
         since = now;
         // Read once per poll, not per automation: the owner's zone cannot change between two rows of the same pass,
@@ -1142,11 +1127,13 @@ export const createAutomationsScheduler = (services: Services, intervalMs = 30_0
             }
         }
         await services.scheduleCoverage.mark(changes);
-        await releaseCountdownHolds(services, now);
-        exact.arm(loop === undefined ? undefined : nextDueAfter(automations, now, sandbox));
+        await releaseCountdownHolds(services, now, due);
+        const next = nextDueAfter(automations, now, sandbox);
+        if (next !== undefined) {
+            due(next);
+        }
     };
-    const tick = (now = Date.now()): Promise<void> => passes.run("pass", () => pass(now));
-    const exact = momentTimer(intervalMs, () => tick(), loggedAs(services, "automations pass on a due moment failed"));
+    const passes = nudgedPass(pass, { backstopMs: intervalMs, failed: loggedAs(services, "automations pass failed") });
 
     const catchUp = async (): Promise<void> => {
         const horizon = since;
@@ -1172,19 +1159,20 @@ export const createAutomationsScheduler = (services: Services, intervalMs = 30_0
     };
 
     return {
-        tick,
+        tick: passes.run,
+        nudge: passes.nudge,
         start: () => {
-            // A second start would settle the same catch-up twice and leave the first loop running unstoppable.
-            if (loop !== undefined) {
+            // A second start would settle the same catch-up twice.
+            if (started) {
                 return;
             }
+            started = true;
             void catchUp().catch(loggedAs(services, "automations catch-up failed"));
-            loop = startPeriodic({ everyMs: intervalMs, run: () => tick() });
+            passes.start();
         },
         stop: () => {
-            loop?.dispose();
-            loop = undefined;
-            exact.clear();
+            started = false;
+            passes.stop();
         },
     };
 };

@@ -1,9 +1,9 @@
 import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { runsPollMs } from "./usePipelines";
-import { jobsPollMs } from "./useRunJobs";
+import { boardLanded, jobsPollMs } from "./useRunJobs";
 
 // What the board and a row ask the daemon for, and how often: the push (runtime-state's `ci`) only reaches a repo
-// whose hook delivers, so these intervals are what a reader watching a run land actually waits out.
+// whose hook delivers, so these intervals are what a reader watching a run land waits out where it does not.
 
 const run = (status: PipelineRun[`status`]): PipelineRun => ({
     repo: `web`,
@@ -38,5 +38,18 @@ describe(`the Pipelines poll`, () => {
             expect(jobsPollMs(run(status))).toBe(false);
         }
         expect(jobsPollMs(undefined)).toBe(false);
+    });
+});
+
+// An open in-flight row re-reads its graph when the board's runs land (each `ci` push re-reads them), not on its beat.
+describe(`an open row following the board`, () => {
+    const event = (type: string, action: string, queryHash: string) => ({ type, action: { type: action }, query: { queryHash } });
+
+    it(`re-reads on the board's runs landing fresh, and on nothing else`, () => {
+        expect(boardLanded(event(`updated`, `success`, `runs`), `runs`)).toBe(true);
+        expect(boardLanded(event(`updated`, `fetch`, `runs`), `runs`)).toBe(false);
+        expect(boardLanded(event(`updated`, `error`, `runs`), `runs`)).toBe(false);
+        expect(boardLanded(event(`updated`, `success`, `jobs`), `runs`)).toBe(false);
+        expect(boardLanded(event(`added`, `success`, `runs`), `runs`)).toBe(false);
     });
 });

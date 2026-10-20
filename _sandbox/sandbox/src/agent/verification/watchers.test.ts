@@ -5,6 +5,8 @@ import type { ConversationActors } from "../../conversations/actor/conversation-
 import { type FakeTurns, fakeTurns } from "../../seams/turn-starter.testing.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { memoryWatchJournal, type WatchJournal } from "../../store/journals/watch-journal.js";
+import { publishRuntimeChange } from "../../seams/runtime-feed.js";
+import { CI_RECHECK_GAP_MS, isCiWatchCommand } from "./ci-rechecks.js";
 import {
     armWatcher,
     armedWatcherCount,
@@ -553,5 +555,65 @@ describe("watchers", () => {
             expect(armedWatcherCount()).toBe(0);
             expect(harness.checks).toHaveLength(0);
         });
+    });
+});
+
+// A CI webhook delivery publishes `ci`; a watch on CI state rechecks then instead of sleeping out its interval (2026-10-20).
+describe("watches on CI", () => {
+    let harness: Harness;
+    beforeEach(() => {
+        jest.useFakeTimers();
+        harness = harnessOf();
+    });
+    afterEach(() => {
+        harness.stop();
+        jest.useRealTimers();
+    });
+
+    it("knows a CI-shaped check from any other", () => {
+        expect(isCiWatchCommand("gh run view 123 --exit-status")).toBe(true);
+        expect(isCiWatchCommand("gh pr checks 42 --required")).toBe(true);
+        expect(isCiWatchCommand("gh pr view 42 --json statusCheckRollup -q '.statusCheckRollup[].conclusion'")).toBe(true);
+        expect(isCiWatchCommand("gh api repos/o/r/actions/runs/9 --jq .status")).toBe(true);
+        expect(isCiWatchCommand("curl -s https://gitlab.com/api/v4/projects/1/pipelines/7 | jq -e '.status==\"success\"'")).toBe(true);
+        expect(isCiWatchCommand("glab ci status")).toBe(true);
+        expect(isCiWatchCommand("curl -sf https://example.com/health")).toBe(false);
+        expect(isCiWatchCommand("gh release view v1.2.0")).toBe(false);
+    });
+
+    it("rechecks CI-shaped watches at once on a ci change, folding a burst into one more round at the gap's end", async () => {
+        await armWatcher(specOf({ command: "gh run view 123 --exit-status", intervalSeconds: 60, timeoutSeconds: 3_600 }));
+        await armWatcher(specOf({ command: "curl -sf https://example.com/health", intervalSeconds: 60, timeoutSeconds: 3_600 }));
+        expect(harness.checks).toHaveLength(2);
+
+        publishRuntimeChange("ci");
+        // The feed's flush is a zero-delay timer, which these fake timers run on the first millisecond.
+        await advanceTimersByTimeAsync(1);
+        expect(harness.checks.slice(2)).toEqual(["gh run view 123 --exit-status"]);
+
+        // Three more deliveries inside the gap: one round at its end, not three.
+        for (let i = 0; i < 3; i += 1) {
+            await advanceTimersByTimeAsync(300);
+            publishRuntimeChange("ci");
+        }
+        await advanceTimersByTimeAsync(300);
+        expect(harness.checks).toHaveLength(3);
+        await advanceTimersByTimeAsync(CI_RECHECK_GAP_MS);
+        expect(harness.checks.slice(3)).toEqual(["gh run view 123 --exit-status"]);
+
+        // A delivery that says the run passed wakes the conversation without waiting out the minute.
+        harness.check = { exitCode: 0, output: "completed success" };
+        await advanceTimersByTimeAsync(CI_RECHECK_GAP_MS);
+        publishRuntimeChange("ci");
+        await advanceTimersByTimeAsync(1);
+        expect(harness.doors.started).toHaveLength(1);
+        expect(harness.checks.filter((command) => command.startsWith("curl"))).toHaveLength(1);
+    });
+
+    it("leaves other domains' changes alone", async () => {
+        await armWatcher(specOf({ command: "gh pr checks 42", intervalSeconds: 60, timeoutSeconds: 3_600 }));
+        publishRuntimeChange("terminals", "subagents");
+        await advanceTimersByTimeAsync(1_000);
+        expect(harness.checks).toHaveLength(1);
     });
 });

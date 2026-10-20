@@ -47,6 +47,7 @@ const fakeBrowser = () => {
             calls.push(`select ${id}`);
             return current;
         },
+        settleAfterAction: async () => void calls.push("settle"),
         disconnect: async () => void calls.push("disconnect"),
     };
     return { web, calls };
@@ -79,7 +80,7 @@ test("acting on a page needs the control grant, not the screen one", async () =>
     await expect(clickElement(web, "e0", scopes({ control: "off" }))).rejects.toThrow(/mouse and keyboard/);
     expect(calls).toEqual([]);
     await clickElement(web, "e0", scopes({ screen: "off" }));
-    expect(calls).toEqual(["click e0"]);
+    expect(calls).toEqual(["click e0", "settle"]);
 });
 
 // The page after a click is a different page. Answering with it stops the agent either forgetting to look or
@@ -103,7 +104,7 @@ test("filling reports a length, never the text", async () => {
 test("submitting is stated, because it is the step that sends the form", async () => {
     const { web, calls } = fakeBrowser();
     const said = await fillElement(web, "e0", "invoice", true, scopes());
-    expect(calls).toEqual(["fill e0 invoice submit"]);
+    expect(calls).toEqual(["fill e0 invoice submit", "settle"]);
     expect(said).toContain("and submitted");
 });
 

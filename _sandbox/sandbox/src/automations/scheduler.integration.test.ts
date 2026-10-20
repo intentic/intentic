@@ -172,6 +172,27 @@ test("a started scheduler fires a moment due within a poll on the moment, not at
     }
 });
 
+// A save is a nudge (boot-schedulers.ts): the pass it runs arms the new moment, which used to wait for the next poll to be
+// seen at all. The poll here is a minute, so only the save could have armed it in time (2026-10-20).
+test("a wake saved due within the current poll fires on its moment, not a poll later", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
+    const prompts: string[] = [];
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)), 60_000);
+    scheduler.start();
+    const unhear = services.automations.onSaved(scheduler.nudge);
+    try {
+        const at = Date.now() + 1_500;
+        await services.automations.upsert(automationConfig("soon", { trigger: { kind: "once", at } }));
+        await waitFor(() => expect(prompts).toEqual(["wake:soon"]), { timeout: 5_000, interval: 20 });
+        expect(Date.now() - at).toBeGreaterThanOrEqual(0);
+        expect(Date.now() - at).toBeLessThan(600);
+        await automationIdle("soon");
+    } finally {
+        unhear();
+        scheduler.stop();
+    }
+});
+
 test("the soonest moment a clock drives is a cron's next run or a one-time wake still ahead, and nothing else", () => {
     const after = Date.UTC(2026, 9, 18, 2, 30);
     const nightly = automationRecord("nightly", { trigger: { kind: "schedule", cron: "0 3 * * *" } });

@@ -15,7 +15,8 @@ import { clientFor, collect, errorCode } from "../../harness/route-client.testin
 import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
 import { attachedRows, runAgentTurn, startedRun } from "../../harness/route-turns.testing.js";
-import { createTurnResumeScheduler, ROOM_SETTLE_MS } from "../run/turn/turn-resume.js";
+import { createTurnResumeScheduler } from "../run/turn/turn-resume.js";
+import { ROOM_SETTLE_MS } from "../run/turn/holds/room-holds.js";
 import { FIRST_RECHECK_MS, type SeatProbe } from "../providers/claude/claude-seat-check.js";
 import { BACK_ON, memorySeats, scriptedSeatCheck, STILL_OFF } from "../providers/claude/claude-seat-check.testing.js";
 

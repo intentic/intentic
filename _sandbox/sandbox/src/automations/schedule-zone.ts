@@ -27,12 +27,8 @@ export const zoneOf = (trigger: { readonly tz?: string | undefined }, sandbox: Z
    So every pass of a started scheduler also sets one timer for the soonest moment due within a poll, which runs a pass
    the moment it comes; one due further out is left to a later pass, which sets it closer. The first pass comes a poll
    after the start, well inside the alarm's lead of two minutes or more, so a woken sandbox has its timer set in time.
-   The timer is only ever early by the clock's own jitter, and then waits out the rest. */
-
-export interface MomentTimer {
-    readonly arm: (at: number | undefined) => void;
-    readonly clear: () => void;
-}
+   The timer is only ever early by the clock's own jitter, and then waits out the rest. The timer itself is now the
+   scheduler's pass's own (workload/nudged-pass.ts, 2026-10-20), which a turn settling or a save also wakes. */
 
 // The soonest moment after `after` that an enabled automation's own clock comes due (a cron's next run, a one-time wake
 // not yet passed), for the timer that fires it on the moment rather than at the next poll; undefined for none. An
@@ -59,29 +55,27 @@ export const nextDueAfter = (automations: readonly AutomationRecord[], after: nu
     return moments.length === 0 ? undefined : Math.min(...moments);
 };
 
-// One timer for the soonest due moment, set again by every `arm`: `run` is a pass, `failed` hears one that threw. A moment further out than `withinMs` sets nothing, since a later pass will set it closer.
-export const momentTimer = (withinMs: number, run: () => Promise<void>, failed: (error: Error) => void): MomentTimer => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const clear = (): void => {
-        clearTimeout(timer);
-        timer = undefined;
-    };
-    const arm = (at: number | undefined): void => {
-        clear();
-        if (at === undefined || at - Date.now() > withinMs) {
-            return;
-        }
-        const ring = (): void => {
-            const left = at - Date.now();
-            timer = left > 0 ? setTimeout(ring, left) : undefined;
-            if (timer === undefined) {
-                void run().catch(failed);
-            } else {
-                timer.unref();
-            }
-        };
-        timer = setTimeout(ring, Math.max(0, at - Date.now()));
-        timer.unref();
-    };
-    return { arm, clear };
+// When this automation is next due, or undefined for one no clock drives (a webhook, a listener, a workspace event)
+// and one switched off. An invalid cron can only come from a hand-edited manifest — upsert rejects it — and reads as
+// no next run rather than failing whatever asked.
+// A one-time wake answers its own moment even once that moment is past: the tick fires an overdue one rather than
+// dropping it, so "due" stays the truth right up until it fires.
+// `sandbox` is the zone of record the automation's own `tz` overrides; it is a parameter rather than a read, so this
+// stays pure and every caller has to have decided which clock it means.
+export const nextRunOf = (automation: AutomationRecord, sandbox: Zone): number | undefined => {
+    if (!automation.enabled) {
+        return undefined;
+    }
+    if (automation.trigger.kind === "once") {
+        return automation.trigger.at;
+    }
+    if (automation.trigger.kind !== "schedule") {
+        return undefined;
+    }
+    try {
+        return new Cron(automation.trigger.cron, cronOptions(zoneOf(automation.trigger, sandbox))).nextRun()?.getTime();
+    } catch {
+        // allow(silent-catch): a cron that doesn't parse has no next run.
+        return undefined;
+    }
 };

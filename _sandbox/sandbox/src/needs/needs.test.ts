@@ -393,6 +393,84 @@ test("a need the harness saw asked is drawn like any other and never held, and t
     expect(woken.map((wake) => wake.conversationId)).toEqual(["conv-web"]);
 });
 
+// Polls `done` on short ticks until it holds; the passes under test run on the event loop, not on a clock.
+const until = async (done: () => Promise<boolean>): Promise<void> => {
+    for (let tick = 0; tick < 200; tick += 1) {
+        if (await done()) {
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    throw new Error("never held");
+};
+
+test("a world change checks open needs at once, reading what it brought rather than asking afresh", async () => {
+    const h = harness();
+    const passes: boolean[] = [];
+    let worldMoved: (() => void) | undefined;
+    const needs = createNeeds({
+        ...h.deps,
+        beginCheckPass: (fresh) => void passes.push(fresh),
+        subscribeWorldChanges: (recheck) => {
+            worldMoved = recheck;
+            return () => undefined;
+        },
+    });
+    const stop = needs.start();
+    await needs.ask({ raise: raise(), conversationId: "conv-1", signal: signal() });
+    await until(async () => passes.length >= 2);
+    // The first pass asks the world afresh; the timer (a minute here) has not fired.
+    expect(passes[0]).toBe(true);
+    const before = passes.length;
+    h.kind.met = { result: "Done.", use: [] };
+    worldMoved?.();
+    await until(async () => (await h.deps.store.get("need-1"))?.status === "met");
+    expect(passes.slice(before)).toEqual([false]);
+    stop();
+});
+
+test("the fallback timer's pass asks the world afresh", async () => {
+    const h = harness();
+    const passes: boolean[] = [];
+    const needs = createNeeds({ ...h.deps, pollMs: 10, beginCheckPass: (fresh) => void passes.push(fresh) });
+    const stop = needs.start();
+    await until(async () => passes.length >= 3);
+    stop();
+    expect(passes.every(Boolean)).toBe(true);
+});
+
+test("a pass a stored value starts never settles the need being provided, so who answered it is kept", async () => {
+    const h = harness();
+    let worldMoved: (() => void) | undefined;
+    let storing: (() => void) | undefined;
+    const stored = new Promise<void>((resolve) => {
+        storing = resolve;
+    });
+    const needs = createNeeds({
+        ...h.deps,
+        subscribeWorldChanges: (recheck) => {
+            worldMoved = recheck;
+            return () => undefined;
+        },
+        // The store's change event fires mid-provide, as the real store's does on its write.
+        provideSecret: async (need) => {
+            h.kind.met = { result: "Stored.", use: [] };
+            worldMoved?.();
+            await stored;
+            return { result: `${need.title} is stored.`, use: [] };
+        },
+    });
+    const stop = needs.start();
+    await needs.ask({ raise: raise(), conversationId: "conv-1", signal: signal() });
+    const provided = needs.provide("need-1", "***", { email: "owner@example.com" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect((await h.deps.store.get("need-1"))?.status).toBe("open");
+    storing?.();
+    await provided;
+    expect((await h.deps.store.get("need-1"))?.answeredBy).toBe("owner@example.com");
+    stop();
+});
+
 test("a need answered is withdrawn from the owner's devices once, as it stops waiting", async () => {
     const { deps, withdrawn } = harness();
     const needs = createNeeds(deps);

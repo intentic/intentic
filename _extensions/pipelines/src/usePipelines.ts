@@ -10,10 +10,10 @@ import { host } from "./host";
 // CI runs across the workspace's github/gitlab remotes, via the daemon's /ci routes (webhook-freshened, backfilled from
 // vendors when stale). Runs are addressed by repo + vendor id; the daemon re-resolves the project and token per call.
 
-const POLL_MS = 30_000;
-// While anything is in flight somebody is watching it land, and a run that ended is pushed only where its repo's hook
-// reaches the daemon (runtime-state's `ci`); this is the floor under a board whose hook is silent.
-const POLL_IN_FLIGHT_MS = 10_000;
+const POLL_MS = 60_000;
+// In-flight runs push on every webhook phase (`runtime-state`'s `ci`); this interval is only the fallback when hooks are
+// silent or the editor missed a frame (2026-10-20).
+const POLL_IN_FLIGHT_MS = 45_000;
 
 /** The board's beat: what is on it decides it, since a board with nothing moving has nothing to be late about. */
 export const runsPollMs = (runs: readonly PipelineRun[] | undefined): number =>

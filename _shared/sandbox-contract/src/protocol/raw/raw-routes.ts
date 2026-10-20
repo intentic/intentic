@@ -194,6 +194,7 @@ export const RAW_ROUTES = {
     "DELETE /system/hosts/{id}": { control: "never" },
     // A peer's socket reconnects on its own backoff, so it answers before boot.
     "GET /system/hosts/connect": { auth: "door", beforeBoot: true, control: "never" },
+    "POST /system/hosts/keyring-changed": { auth: "door", control: "never" },
     "POST /system/webext/pair": { control: "never" },
     "POST /system/webext/enroll": { auth: "door", control: "never" },
     "GET /system/webext": { control: "never" },
@@ -226,6 +227,7 @@ export const RAW_ROUTES = {
     // A secret the browser types for the agent (`type_secret` aimed at it): one value for one ticket the daemon minted
     // for this browser and one host, handed back on the browser's own request rather than over the tool socket.
     "POST /system/webext/secret": { auth: "door", control: "never" },
+    "POST /system/webext/grants-changed": { auth: "door", control: "never" },
     // This sandbox's keyring keys (schemas/keyring.ts), public halves only: a keyring fetches them here over TLS, from the
     // sandbox's own address, before it shares anything with it, rather than take them from whoever relays the share.
     "GET /keyring/keys": { auth: "door", control: "never" },

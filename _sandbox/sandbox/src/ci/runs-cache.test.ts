@@ -41,3 +41,19 @@ test("an upsert replaces the same run in place and does NOT extend sweep freshne
     // The upsert 100ms ago says nothing about the whole picture: the sweep is stale regardless.
     expect(cache.sweep()).toBeUndefined();
 });
+
+// A forge may deliver a phase after the ending it preceded; the board must not show a finished run running again.
+test("an in-flight delivery never takes back an ending already kept, but freshens a run still in flight", () => {
+    const cache = createRunsCache(1000);
+    cache.replace([run({ status: "queued" })]);
+    cache.upsert(run({ status: "running" }));
+    expect(cache.sweep()?.map((entry) => entry.status)).toEqual(["running"]);
+    cache.upsert(run({ status: "success" }));
+    cache.upsert(run({ status: "running" }));
+    expect(cache.sweep()?.map((entry) => entry.status)).toEqual(["success"]);
+    cache.upsert(run({ runId: 4, createdAt: 4000, status: "queued" }));
+    expect(cache.sweep()?.map((entry) => [entry.runId, entry.status])).toEqual([
+        [4, "queued"],
+        [1, "success"],
+    ]);
+});
