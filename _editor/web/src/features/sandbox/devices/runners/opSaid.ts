@@ -29,7 +29,7 @@ const NARRATION = /^intentic:\s*/;
 const withDetail = (message: string, raw: string): OpSaid => (raw === `` || raw === message ? { message } : { message, detail: raw });
 
 /** A line already chosen by its caller (setup's, syncSetup.ts), with the machine's whole output behind it. */
-export const saidOver = (message: string, output: string): OpSaid => withDetail(message, output.trim());
+const saidOver = (message: string, output: string): OpSaid => withDetail(message, output.trim());
 
 /**
  * A switch's answer: `headline` (the app's sentence for the switch having worked) unless the machine's verdict, its

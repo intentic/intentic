@@ -20,6 +20,8 @@ import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../seams/domain-events.js";
 
 /* The fallback path: a repo whose webhook could NOT be registered still wakes its `ci` automations. */
 
@@ -73,6 +75,10 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         enabled: true,
     });
     const services = unstubbed<Services>("services", {
+        // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
+        // Real actors under a wake's detached run (turn-runs.ts): the archived check, and the run it holds while live.
+        conversations: memoryFleet().conversations,
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
@@ -91,7 +97,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
     const prompts: string[] = [];
     const wake: TurnStarter["stream"] = async function* (input) {

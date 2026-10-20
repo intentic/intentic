@@ -14,6 +14,8 @@ import { fileAutomationsStore } from "./automations-store.js";
 import { mintConversationId } from "./fire/fire-sessions.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../seams/domain-events.js";
 
 // Chore queues and the turn chain are process-wide singletons; each test gets a fresh module so one test's unfinished
 // pump can't swallow the next test's event.
@@ -23,6 +25,10 @@ const freshDispatch = (): Promise<typeof import("./workspace-events.js")> =>
 // Same shape as scheduler.test's fake: reaches only automations/heldWakes/activity/workspace/logger.
 const fakeServices = (root: string): Services =>
     unstubbed<Services>("services", {
+        // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
+        // Real actors under a wake's detached run (turn-runs.ts): the archived check, and the run it holds while live.
+        conversations: memoryFleet().conversations,
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         heldWakes: fileHeldWakesStore(join(root, "history")),
@@ -32,7 +38,7 @@ const fakeServices = (root: string): Services =>
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
 
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>

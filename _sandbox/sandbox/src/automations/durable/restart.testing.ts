@@ -17,6 +17,8 @@ import { resumeAutomationInboxes, resumeInterruptedFires } from "../fire-resume.
 import { fileHeldWakesStore } from "../held-wakes-store.js";
 import { fileScheduleCoverageStore } from "../schedule-coverage.js";
 import { fileSendersStore } from "../senders-store.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../../seams/domain-events.js";
 
 // One daemon over a sandbox's state, for a restart test: every store opened fresh on `root`, so a second call over the
 // same root is the daemon after a restart, with nothing of the first one's memory (durable/daemon-memory.ts keys
@@ -59,8 +61,11 @@ export const daemonOn = (root: string, wake: TurnStarter["stream"], crashAt: Cra
     const webchatOutbox = fileWebchatOutbox(join(root, "history", "webchat-outbox.json"));
     const logger = unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} });
     const services = unstubbed<Services>("services", {
+        // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined, ids: () => [] }),
-        conversations: unstubbed<Services["conversations"]>("conversations", { liveSessionIds: () => [], sessionIdOf: () => undefined }),
+        // Real actors under a wake's detached run (turn-runs.ts): the archived check, and the run it holds while live.
+        conversations: unstubbed<Services["conversations"]>("conversations", { ...memoryFleet().conversations, liveSessionIds: () => [], sessionIdOf: () => undefined }),
         automations,
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ automationThreadsAtOnce: 4 }) }),
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),

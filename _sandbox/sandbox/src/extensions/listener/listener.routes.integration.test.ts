@@ -28,6 +28,8 @@ import { drivenBy } from "../../seams/turn-starter.testing.js";
 import { testConfig } from "../../env.config.testing.js";
 import { readWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { ExtensionGrant } from "../../auth/grants.js";
+import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../../seams/domain-events.js";
 
 // The per-extension tokens the fake backend resolves: the shipped discord extension's own gateway, the slack one, and a
 // stranger naming discord as its listener without contributing the discord card.
@@ -43,6 +45,10 @@ const GRANTS: Readonly<Record<string, ExtensionGrant>> = {
 // The shipped _extensions tree (testConfig) is what says which extension contributes the discord card.
 const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
     unstubbed<Services>("services", {
+        // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
+        // Real actors under a wake's detached run (turn-runs.ts): the archived check, and the run it holds while live.
+        conversations: memoryFleet().conversations,
         config: testConfig,
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
         extensionBackend: unstubbed<Services["extensionBackend"]>("extensionBackend", { verifyExtensionToken: (presented) => GRANTS[presented] }),
@@ -57,7 +63,7 @@ const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
     });
 
 const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>

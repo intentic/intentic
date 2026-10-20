@@ -413,7 +413,7 @@ const findAndXargsDeletes = (command: string): CommandSpan[] => [
 const POWERSHELL_RECURSE = String.raw`\s-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?::\$true)?(?![\w-])`;
 const WINDOWS_RECURSIVE_DELETES = [
     new RegExp(String.raw`(?<![\w-])(?:Remove-Item|ri|rd|rmdir|del|erase)\b[^|;&\n]*?${POWERSHELL_RECURSE}`, "i"),
-    new RegExp(String.raw`(?<![\w-])rm\b[^|;&\n]*?\s-recurse(?![\w-])`, "i"),
+    /(?<![\w-])rm\b[^|;&\n]*?\s-recurse(?![\w-])/i,
     /(?<![\w-])(?:rd|rmdir|del|erase)\b[^|;&\n]*?\s\/s\b/i,
     /\[(?:System\.)?IO\.Directory\]::Delete\s*\([^)]*,\s*\$true\s*\)/i,
 ];

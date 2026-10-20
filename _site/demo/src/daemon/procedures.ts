@@ -74,9 +74,6 @@ import { agentAnswer, amendAgent, boardAgents, broadcastRoster, heldApprovals, p
 import { DEMO_REPO_CHECKS, DEMO_RUN_TARGETS, DEMO_SAFETY_POLICY, DEMO_SAVINGS, DEMO_SETTINGS, DEMO_SYSTEM_PROMPT } from "./settings";
 import { attach, reply, stopTurn } from "./turns";
 
-// Every procedure the fixture serves, one answer per contract route; an empty-but-real area answers its contract's
-// empty shape, not a 404.
-
 /** A mutation with nothing to report: do it, then answer the daemon's own `{ ok: true }`. */
 const okAfter = (write: () => void): { ok: true } => {
     write();

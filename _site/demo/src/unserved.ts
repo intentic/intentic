@@ -152,6 +152,7 @@ export const UNSERVED = {
     // The owner mints a server-connect code for a machine of their own; the install script on that machine redeems it.
     "POST /system/enroll/code": REAL_MACHINE,
     "POST /system/hosts/enroll": NOT_THE_EDITORS,
+    "POST /system/hosts/keyring-changed": NOT_THE_EDITORS,
     "POST /system/hosts/pair": NOT_THE_EDITORS,
     // Minting, re-terming and revoking a link, and the owner's answer to a task one holds: the Access tab sends them.
     "POST /system/links": UNSIMULATED_WRITE,
@@ -181,6 +182,7 @@ export const UNSERVED = {
     "POST /system/sync/pair": REAL_MACHINE,
     "POST /system/sync/report": NOT_THE_EDITORS,
     "POST /system/webext/enroll": NOT_THE_EDITORS,
+    "POST /system/webext/grants-changed": NOT_THE_EDITORS,
     "POST /system/webext/lend": NOT_THE_EDITORS,
     "POST /system/webext/pair": NOT_THE_EDITORS,
     "POST /system/webext/secret": NOT_THE_EDITORS,

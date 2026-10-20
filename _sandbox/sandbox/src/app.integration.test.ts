@@ -777,8 +777,14 @@ test("agent.run serves a Codex turn on the translator subscription over the loca
     );
     const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
     expect(facts.some((fact) => fact.kind === "error")).toBe(false);
-    // Served over the translator's endpoint on the fixed local bearer; codexHome falls back to the adapter default.
-    expect(seen?.credential).toEqual({ kind: "codex-endpoint", baseUrl: "http://127.0.0.1:8788", authToken: "local-bearer" });
+    // Served over the translator's endpoint on the fixed local bearer; codexHome falls back to the adapter default. The
+    // allowance it spends is named, so a refusal reads as ChatGPT's rather than the harness's own guess.
+    expect(seen?.credential).toEqual({
+        kind: "codex-endpoint",
+        baseUrl: "http://127.0.0.1:8788",
+        authToken: "local-bearer",
+        allowance: { vendor: "ChatGPT", limit: expect.any(Function) },
+    });
 });
 
 test("agent.run gates a Codex turn with no subscription and no api key as subscription-required", async () => {
@@ -1052,6 +1058,7 @@ test("agent.run serves Kimi on Codex through its own provider block on the trans
         baseUrl: "http://127.0.0.1:8788",
         authToken: "local-bearer",
         hosted: { id: "intentic-kimi", path: "/v1" },
+        allowance: { vendor: "Kimi Code", limit: expect.any(Function) },
     });
 });
 

@@ -391,7 +391,7 @@
         "count": 186,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/agents/review/AgentDetail.vue": 827,
+    "_editor/web/src/features/agents/review/AgentDetail.vue": 816,
     "_editor/web/src/features/agents/review/AgentReviewPanel.vue": 1068,
     "_editor/web/src/features/agents/review/pager/swipePager.ts#useSwipePager#lines": {
         "count": 256,
@@ -517,7 +517,7 @@
         "count": 221,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/chat/transcript/ChatMessageView.vue": 658,
+    "_editor/web/src/features/chat/transcript/ChatMessageView.vue": 657,
     "_editor/web/src/features/chat/transcript/pages/ChatPageFrame.vue#act#cognitive": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"

@@ -19,6 +19,9 @@ flowchart LR
 - The box carries Node, pnpm and Git. The job installs only the smoke tier's subtree, so no Python or MSVC toolchain is needed, and there is no `/ci-cache` here.
 - The repository variable `WINDOWS_AGENT_AUTH_VOLUME` names a Docker volume holding an AI account connected once by hand. Without it tier 3 stands down and says why.
 - The same machine hosts the Linux fleet in WSL2 ([ci-runner.md](ci-runner.md)), whose reconciler also runs windowless so it never steals a window from these tiers.
+- The fleet's six workers share one WSL2 VM with Docker Desktop and the engine tier's distro. A deep or engine run therefore pauses them for its length with [`wsl-workers.sh`](../../_tools/scripts/ci/wsl-workers.sh): each worker stops once its current job ends, and the job's last step starts them again whatever the tiers did. On 2026-10-20 a move ran beside six typechecks, the VM could no longer open a vsock channel, and every `docker` call from Windows to the engine hung.
+- A paused fleet always comes back. The pause arms a systemd timer that resumes the workers 15 minutes after the job's own timeout, so a cancelled job or a lost runner cannot strand them. Everything the pause writes is under `/run`, which a VM restart empties. By hand, from an elevated PowerShell in a checkout: `wsl -d archlinux -u root -- bash _tools/scripts/ci/wsl-workers.sh resume`.
+- While paused, the fleet watchdog's three-minute pass logs `starting N runner unit(s)` and the units stay down: a runtime drop-in (`ConditionPathExists=!/run/intentic-ci/workers-paused`) turns each start into a no-op.
 
 ## Provisioning
 

@@ -1,6 +1,7 @@
 import { inject, type InjectionKey, provide, type Ref, shallowRef } from "vue";
 import { formatElapsed } from "@intentic/ui/format";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
+import { SAY_ELAPSED_AFTER_MS } from "../../components/useWaitClock";
 import { t } from "@intentic/ui/i18n";
 
 // WORK IN FLIGHT BEHIND A HUB ROW. A hub mounts one section at a time, so the rebuild started on Environment leaves
@@ -23,10 +24,10 @@ interface HubRun {
 const runs = shallowRef<readonly HubRun[]>([]);
 let last = 0;
 
-// HOW LONG IT HAS BEEN GOING, in the row's sentence once it outlasts a glance: "Cloning acme" read the same after ten
-// seconds as after ten minutes, and the second is the one worth opening the section for. The clock ticks once a second
-// while the ledger holds a run and stands still otherwise, so an idle hub is never woken by it.
-const SAY_ELAPSED_AFTER_MS = 5_000;
+// HOW LONG IT HAS BEEN GOING, in the row's sentence once it outlasts a glance (the same blip a wait line waits out,
+// useWaitClock.ts): "Cloning acme" read the same after ten seconds as after ten minutes, and the second is the one worth
+// opening the section for. The clock ticks once a second while the ledger holds a run and stands still otherwise, so an
+// idle hub is never woken by it.
 // allow(module-state): the ledger's own clock, ticking only while it holds a run
 const clock = shallowRef(Date.now());
 let ticker: ReturnType<typeof setInterval> | undefined;

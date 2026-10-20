@@ -24,14 +24,14 @@ import { agentWork, assignAgent, landRequestWork, requestLandAgent, startAgent }
 import { useOperation } from "../../../workbench/operations/operations";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
-import { AGENT_VIEW, CHANGES_VIEW, mobileChatPath } from "../../../lib/routes/phoneScreens";
+import { keepOtherBoxesWhile, useAgentView, usePhoneChatSwitcher } from "./agentPhone";
 import { embedded } from "../../../app/environments/nativeApp";
 import { afterPaint } from "../../../lib/afterPaint";
 import { whenIdle } from "../../../lib/whenIdle";
 import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";
 import { QUIET_TRANSCRIPT_WAIT } from "../../../models/conversations/transcript/transcriptWait";
 import { boxNameOf, openInSandbox, otherFleet } from "../../../models/fleet/fleetScope";
-import { otherBoxes, refreshAcross, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
+import { otherBoxes, refreshAcross } from "../../../models/sandbox/live/fleetAcross";
 import { useAgentChanges } from "./useAgentChanges";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -67,20 +67,9 @@ const router = useRouter();
 const { mobile } = useDevice();
 const inApp = embedded();
 const { fleet, refresh, open, agentById, archived, loadArchived, rename, markSeen } = useAgents();
-const { conversations, setActive, closeTabs, openConversation, active: activeChat } = useChat();
+const { conversations, setActive, closeTabs, active: activeChat } = useChat();
 
-// The phone's chat switcher hangs off this screen's title: this is the only chat surface a phone has, so the open
-// chats and the stored sessions have to be reachable from it. A pick is a navigation, since here a chat is a route.
-const switcherOpen = ref(false);
-const switchTo = (id: string): void => {
-    setActive(id);
-    void router.push(mobileChatPath(id));
-};
-// openConversation mints the tab and focuses it; the route follows whatever it made active.
-const openPast = (sessionId: string): void => {
-    openConversation(sessionId);
-    void router.push(mobileChatPath(activeChat.value.conversationId));
-};
+const { switcherOpen, switchTo, openPast } = usePhoneChatSwitcher();
 const { activeSandboxId } = useSandbox();
 
 const agentId = computed(() => (typeof route.params[`id`] === `string` ? route.params[`id`] : ``));
@@ -102,26 +91,8 @@ const fleetAgent = computed(() =>
         : otherFleet.value.find((agent) => agent.id === agentId.value && agent.sandboxId === remoteBox.value),
 );
 
-// Keeps the cross-sandbox store alive for as long as a remote review is open, since this page can be reached
-// without the board (bookmark, reload, new tab); disposed with the page, so a local review costs nothing.
-let releaseBoxes: (() => void) | undefined;
-watch(
-    remote,
-    (isRemote) => {
-        if (isRemote) {
-            releaseBoxes ??= watchOtherBoxes();
-            return;
-        }
-        releaseBoxes?.();
-        releaseBoxes = undefined;
-    },
-    { immediate: true },
-);
-onUnmounted(() => {
-    releaseBoxes?.();
-    releaseBoxes = undefined;
-    sweepPeek();
-});
+keepOtherBoxesWhile(remote);
+onUnmounted(() => sweepPeek());
 
 // Neither half of the fleet is guaranteed loaded when the page opens (the roster streams in, the archive is read
 // on demand), so an absent id is not necessarily a nonexistent one. Both halves are asked once per id before the
@@ -231,18 +202,7 @@ onMounted(() => {
     }
 });
 
-// Mode switch only exists on mobile; desktop always renders the review. `?view=changes` opens a phone on the Changes
-// page instead of the chat: a link's way to name the review, and the Android app's to show it alone.
-const askedView = (): `chat` | `changes` => (route.query[AGENT_VIEW] === CHANGES_VIEW ? `changes` : `chat`);
-const view = ref<`chat` | `changes`>(mobile.value ? askedView() : `changes`);
-watch(
-    () => route.query[AGENT_VIEW],
-    () => {
-        if (mobile.value) {
-            view.value = askedView();
-        }
-    },
-);
+const view = useAgentView(mobile, inApp, agentId);
 
 // The name this page can honestly print: the roster's, or the open conversation's. Absent while the id is still a
 // question, which the header draws as a bar rather than filling with the word "Agent".
@@ -386,15 +346,6 @@ watch(
 watch(view, (shown) => {
     if (shown === `changes`) {
         drawReview();
-    }
-});
-// INSIDE THE ANDROID APP this screen is only ever an agent's Changes (app/environments/nativeApp.ts): its conversation is
-// the app's own screen, so turning to the chat page, by a finger or the switch or the review asking for it, goes there
-// (the router hands `/agents/<id>` to the app) and this page stays on the changes it was opened for.
-watch(view, (shown) => {
-    if (inApp && shown === `chat`) {
-        view.value = `changes`;
-        void router.push(mobileChatPath(agentId.value));
     }
 });
 

@@ -21,6 +21,8 @@ import { createIntakeRoutes } from "./intake.routes.js";
 import { fileIssuesStore, type IssuesStore } from "./issues-store.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
+import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
+import { createDomainEvents } from "../seams/domain-events.js";
 
 // Public ingest end to end: one of two doors a stranger can reach. What matters is the refusals and the arithmetic of
 // waking, a crash loop must cost file writes, not agent turns.
@@ -29,6 +31,10 @@ const ORIGIN = "https://shop.example";
 
 const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
     unstubbed<Services>("services", {
+        // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
+        // Real actors under a wake's detached run (turn-runs.ts): the archived check, and the run it holds while live.
+        conversations: memoryFleet().conversations,
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         doorTokens: memoryDoorTokens(),
         heldWakes: fileHeldWakesStore(join(root, "history")),
@@ -39,7 +45,7 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async (event) => void appends.push(event as ActivityEvent), list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
         members: { list: async () => [], add: async () => {}, remove: async () => {} },
         // Fire-and-forget notify; a missing stub would surface as an unhandled rejection in a later test.
         pushSender: unstubbed<Services["pushSender"]>("pushSender", {

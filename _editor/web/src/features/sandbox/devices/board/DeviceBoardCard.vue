@@ -136,11 +136,11 @@ const runningTip = computed(() =>
                     </template>
                 </dd>
             </div>
-            <div v-tooltip.top="t(`sandbox.deviceBoardCard.syncedTip`)" class="flex flex-col-reverse gap-0.5 border-l border-line-subtle px-4 py-2.5">
+            <div v-tooltip.top="{ title: t(`sandbox.deviceBoardCard.syncedTitle`), note: t(`sandbox.deviceBoardCard.syncedTip`) }" class="flex flex-col-reverse gap-0.5 border-l border-line-subtle px-4 py-2.5">
                 <dt class="text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.synced`) }}</dt>
                 <dd class="text-lg font-semibold leading-6 tabular-nums" :class="figures.synced === 0 ? `text-subtle` : `text-content`">{{ figures.synced }}</dd>
             </div>
-            <div v-tooltip.top="t(`sandbox.deviceBoardCard.portsTip`)" class="flex flex-col-reverse gap-0.5 border-l border-line-subtle px-4 py-2.5">
+            <div v-tooltip.top="{ title: t(`sandbox.deviceBoardCard.portsTitle`), note: t(`sandbox.deviceBoardCard.portsTip`) }" class="flex flex-col-reverse gap-0.5 border-l border-line-subtle px-4 py-2.5">
                 <dt class="text-2xs text-muted">{{ t(`sandbox.deviceBoardCard.ports`) }}</dt>
                 <dd class="text-lg font-semibold leading-6 tabular-nums" :class="figures.ports === 0 ? `text-subtle` : `text-content`">{{ figures.ports }}</dd>
             </div>

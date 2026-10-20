@@ -32,6 +32,7 @@ import ChatPlanCard from "./cards/ChatPlanCard.vue";
 import ChatQuestionCard from "./cards/ChatQuestionCard.vue";
 import ChatTerminalHelpCard from "./cards/ChatTerminalHelpCard.vue";
 import ChatJobRow from "./ChatJobRow.vue";
+import ChatUnsentLine from "./ChatUnsentLine.vue";
 import ChatAsideLane from "./asides/ChatAsideLane.vue";
 import ChatNotes from "./asides/ChatNotes.vue";
 import ChatTodoList from "./ChatTodoList.vue";
@@ -253,20 +254,6 @@ const editable = computed(
         !conversationStreaming.value &&
         editing.value?.id !== props.message.id,
 );
-
-const startEdit = (): void => {
-    conversation.value.transcript.beginEdit(props.message);
-};
-
-// Words waiting to send (ChatMessage.unsent): sent now rather than on the next try, or taken back into the composer.
-const sendUnsentNow = (): void => {
-    void conversation.value.turn.outbox.flush();
-};
-const cancelUnsent = (): void => {
-    if (props.message.messageId !== undefined) {
-        conversation.value.turn.outbox.cancel(props.message.messageId);
-    }
-};
 
 // Clamp overflow (.chat-prompt-text) depends on wrap width, so it's measured via ResizeObserver, not guessed from text.
 const bubble = useTemplateRef<HTMLElement>(`bubble`);
@@ -537,21 +524,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
             </div>
             <!-- Words the sandbox has not taken yet (ChatMessage.unsent): said under them, with what a person can do about it. -->
-            <div
-                v-if="message.unsent"
-                v-tooltip.left="{ title: t(`chat.chatMessageView.waitingToSend`), note: t(`chat.chatMessageView.waitingToSendHint`) }"
-                class="flex items-center gap-2 text-2xs text-subtle"
-                data-testid="chat-unsent"
-            >
-                <Icon name="clock" class="text-2xs" />
-                <span>{{ t(`chat.chatMessageView.waitingToSend`) }}</span>
-                <button type="button" class="touch-target cursor-pointer text-content hover:underline" @click.stop="sendUnsentNow">
-                    {{ t(`chat.chatMessageView.sendNow`) }}
-                </button>
-                <button type="button" class="touch-target cursor-pointer hover:text-content hover:underline" @click.stop="cancelUnsent">
-                    {{ t(`chat.chatMessageView.cancelSend`) }}
-                </button>
-            </div>
+            <ChatUnsentLine v-if="message.unsent" :message-id="message.messageId" />
             <!-- Sent-time label sits in the margin beside the bubble, visible only on hover, so it costs no row height. -->
             <span
                 v-if="sentClock"
@@ -568,7 +541,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :class="mobile ? `opacity-40` : `opacity-0 focus-visible:opacity-100 group-hover:opacity-100`"
                 v-tooltip.right="{ title: t(`chat.chatMessageView.editMessageShort`), note: t(`chat.chatMessageView.replacesWhatFollows`) }"
                 :aria-label="t(`chat.words.editMessage`)"
-                @click.stop="startEdit"
+                @click.stop="conversation.transcript.beginEdit(message)"
             >
                 <Icon name="pencil" class="text-2xs" />
             </button>

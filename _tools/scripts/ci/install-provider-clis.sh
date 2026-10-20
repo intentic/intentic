@@ -34,13 +34,25 @@ pin_from() {
     printf '%s' "${found}"
 }
 
+# Three tries, because a download that fails is not always a failure npm reports as one. OpenCode 2 ships each build as
+# an OPTIONAL dependency of about 200 MB, and npm drops an optional one whose download fails without saying why; its
+# postinstall then finds no build for this runner and fails the step (verify-providers on radarsu-worker-1, 2026-10-20:
+# three of the four linux-x64 tarballs never arrived, and the musl one that did does not run on glibc). Another try
+# fetches what is missing; a real refusal (a pin that does not exist) fails all three the same way.
 install_npm() {
-    local name="$1" spec="$2"
+    local name="$1" spec="$2" try
     if [ "${latest}" = "1" ]; then
         spec="${name}@latest"
     fi
-    echo "==> ${spec}"
-    npm install -g "${spec}"
+    for try in 1 2 3; do
+        echo "==> ${spec}$([ "${try}" -gt 1 ] && echo " (try ${try} of 3)")"
+        if npm install -g "${spec}"; then
+            return 0
+        fi
+        [ "${try}" -lt 3 ] && sleep $((try * 15))
+    done
+    echo "install-provider-clis: ${spec} did not install in three tries" >&2
+    return 1
 }
 
 install_npm "@openai/codex" "$(pin_from "${packs}/codex.Dockerfile" '@openai/codex@[0-9][0-9.]*')"

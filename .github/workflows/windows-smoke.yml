@@ -195,6 +195,31 @@ jobs:
         env:
           KEEP_INSTALLED: ${{ inputs.deep }}
 
+      # THE MACHINE TO ITSELF for the tiers that run containers. This box also hosts the Linux fleet's six worker runners,
+      # in the same WSL2 VM as Docker Desktop and the engine tier's distro, and a nightly that ran beside six typechecks
+      # starved that VM until it could not open the vsock channel Windows reaches the engine through: `docker stop` hung
+      # mid-move and the tier failed on the fleet's load rather than on the product (2026-10-20). wsl-workers.sh stops each
+      # worker once its current job ends, so nothing is cut, and arms a timer that gives them back by itself after this
+      # job's own timeout, for a run that is cancelled or loses its runner before the resume below gets to run. Tier 1 is
+      # left out: it runs no container, and it gates every push, which must not wait on the fleet.
+      - name: Pause the fleet's workers on this machine
+        if: ${{ inputs.deep || inputs.engine-only || inputs.engine-move }}
+        # A pause that could not happen pauses nothing (the script arms its timer first and stops nothing without it), so
+        # the tiers still run, on a busy machine, rather than being skipped.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          if (-not ((wsl.exe -l -q) -replace "`0", "" | Where-Object { $_.Trim() -eq $env:FLEET_DISTRO })) {
+            Write-Output "no $env:FLEET_DISTRO distro on this machine: no fleet workers to pause"
+            exit 0
+          }
+          # Past this job's own timeout, so the timer never gives the workers back while the tiers still run.
+          $failsafe = [int]$env:JOB_TIMEOUT_MINUTES + 15
+          wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh pause $failsafe
+        env:
+          FLEET_DISTRO: ${{ vars.WSL_FLEET_DISTRO || 'archlinux' }}
+          JOB_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+
       # TIER 2 — runs the connect.ps1 the INSTALLER put on this machine, with the direct-token path that needs
       # no Cloudflare and no platform, and waits for the sandbox daemon to answer. Reading those scripts from
       # the source tree would test a file no user ever runs. It pulls the sandbox image, which is why this is
@@ -229,3 +254,15 @@ jobs:
       # run collects anything an older one left.
       - run: node _tools/desktop-smoke-windows/dist/main.js teardown
         if: ${{ always() && steps.build.outcome == 'success' }}
+
+      # The fleet back, WHATEVER HAPPENED ABOVE: a failed tier, a failed teardown, a cancelled run. `always()` and nothing
+      # else, so it runs even when the build never did; resume is a no-op on a fleet that was never paused, and the timer
+      # the pause armed covers the one case this step cannot, a runner that is gone before it runs.
+      - name: Give the fleet's workers back
+        if: ${{ always() && (inputs.deep || inputs.engine-only || inputs.engine-move) }}
+        shell: pwsh
+        run: |
+          if (-not ((wsl.exe -l -q) -replace "`0", "" | Where-Object { $_.Trim() -eq $env:FLEET_DISTRO })) { exit 0 }
+          wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh resume
+        env:
+          FLEET_DISTRO: ${{ vars.WSL_FLEET_DISTRO || 'archlinux' }}
