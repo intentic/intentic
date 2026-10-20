@@ -1277,6 +1277,15 @@ mod tests {
         // File locks are per open file description, so a second open in the same process stands in for a second process.
         assert!(try_lock(dir.path()).unwrap().is_none());
         drop(first);
-        assert!(try_lock(dir.path()).unwrap().is_some());
+        // A child another test forks while `first` is open carries a copy of its descriptor, and with it the lock, until
+        // it execs: on a loaded runner that window is long enough to see. So the release is waited on, not looked at once.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while try_lock(dir.path()).unwrap().is_none() {
+            assert!(
+                Instant::now() < deadline,
+                "the lock is released when its file is dropped"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 }
