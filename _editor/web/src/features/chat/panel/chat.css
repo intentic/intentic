@@ -114,6 +114,10 @@
     max-height: 45dvh;
     overflow-y: auto;
     overscroll-behavior: contain;
+    /* THE CHEVRON STAYS ON THE OPEN BOX, opaque over its bottom-right corner, so the words keep out of its column: the
+       toggle's own 0.75rem inset plus its width. Without it, a prompt that opens to one full line (one that only
+       overflowed as a pinned title, under the 34rem cap) ends under the chevron, and opening it shows less than shut. */
+    padding-right: 2.25rem;
 }
 .chat-surface {
     background: color-mix(in srgb, var(--color-overlay) 55%, transparent);
