@@ -2,6 +2,7 @@ package dev.intentic.app.auth
 
 import android.app.Activity
 import android.os.CancellationSignal
+import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.CredentialManagerCallback
 import androidx.credentials.CustomCredential
@@ -42,9 +43,11 @@ class GoogleSignIn(private val activity: Activity) {
             }
 
             override fun onError(e: GetCredentialException) {
+                Log.w("GoogleSignIn", "${e.type}: ${e.message}")
                 when (e) {
-                    // Closed by the person: nothing to say.
-                    is GetCredentialCancellationException -> failed(null)
+                    // Google answers an app it does not know (no Android OAuth client for this package and certificate)
+                    // with a cancel too, after the person picked an account: say Google's words, so it is never silent.
+                    is GetCredentialCancellationException -> failed(e.message)
                     // No Google account here, or none this app may use (its OAuth client is not registered): Google's words.
                     is NoCredentialException -> failed(e.message ?: e.type)
                     else -> failed(e.message ?: e.type)
