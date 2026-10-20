@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { Icon } from "@intentic/ui";
 import { termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { modelLabelFor } from "../../../models/providers/providerCatalog";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { AUTO_KEY, autoEntry, type PickerEntry } from "../../../models/conversations/accounts/modelPickerState";
 import { usePickerAccounts } from "../accounts/pickerAccounts";
@@ -24,17 +26,19 @@ const { conversation } = defineProps<{ conversation: Conversation }>();
 
 // Destructured once; every host remounts this component (v-if) rather than swapping the prop in place.
 const { provider, harness, model, thinking, fast, effort, account, accountNamed, auto } = conversation.selection;
-const { fastMode, box } = conversation;
+const { fastMode, box, activeModel } = conversation;
 const { streaming, generating } = conversation.turn;
-const { messages } = conversation.transcript;
+const { messages, pendingPlanMessage } = conversation.transcript;
+const { autoOpen } = conversation.selection;
 
 // Gated by no setting: which model a chat runs on is a per-chat question, and a mode that only appears once you have
 // found a switch on a settings page is a mode nobody finds. Which model does the reading IS a setting (the
 // New chat routing job under Models), and that is the only part a sandbox configures.
 // Offered exactly where the reading can happen, which is chatRoute.ts's own rule: a chat of this sandbox's with
 // nothing sent yet. A chat already under way has a model, and it is running — an Auto row there would disarm itself at
-// the next send, which is a control that lies.
-const autoOffered = computed(() => messages.value.length === 0 && box.value === undefined);
+// the next send, which is a control that lies. So would one on a chat whose first message is already booked or held:
+// that message went to the sandbox with its model, and no reading reaches it (autoOpen).
+const autoOffered = computed(() => messages.value.length === 0 && box.value === undefined && autoOpen.value);
 const leadRows = computed(() => (autoOffered.value ? [autoEntry(t(`chat.words.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : []));
 const leadSelected = computed(() => (auto.value ? AUTO_KEY : undefined));
 
@@ -63,8 +67,26 @@ const applyRun = (patch: RunSettingsPatch): void => {
 // would be a control over a decision not yet made.
 const accountsShown = computed(() => hasContent.value && box.value === undefined && !auto.value);
 
-// Mid-stream, only a same-provider model swap is allowed (a provider switch retires the session).
-const unpickable = (entry: PickerEntry): boolean => streaming.value && entry.provider !== provider.value;
+// Mid-stream, only a same-provider model swap is allowed (a provider switch retires the session). Refused with its reason,
+// said where the row's description would be: a greyed provider with no reason read as one that was not connected.
+const unpickable = (entry: PickerEntry): string | false =>
+    streaming.value && entry.provider !== provider.value ? t(`chat.chatModelPicker.otherProviderAfterTurn`) : false;
+
+// A pick made while a turn is live is for the next one: the sandbox has no way to move a running turn to another model,
+// and a turn parked on a card (a plan's Approve included) carries on where it is. Said before the press, since nothing
+// on screen changes after it: the logo is the same for every model of a provider. Named by what this window sent the
+// turn on, else what the turn reported.
+const liveTurnNote = computed<string | undefined>(() => {
+    if (!streaming.value) {
+        return undefined;
+    }
+    const running = conversation.selection.state.value.sentModel ?? activeModel.value ?? undefined;
+    const label = running === undefined || running === `` ? undefined : modelLabelFor(provider.value, running);
+    if (pendingPlanMessage.value !== undefined) {
+        return label === undefined ? t(`chat.chatModelPicker.planKeepsItsModel`) : t(`chat.chatModelPicker.planKeepsModel`, { model: label });
+    }
+    return label === undefined ? t(`chat.chatModelPicker.turnKeepsItsModel`) : t(`chat.chatModelPicker.turnKeepsModel`, { model: label });
+});
 
 const pick = (entry: PickerEntry): void => {
     conversation.selection.apply({ kind: `selectModel`, pick: entry });
@@ -115,7 +137,9 @@ const fastSpeedNotice = computed<string | undefined>(() => {
 // Under Auto everything below the explanation describes the model the chat would fall back to, not the one it will
 // run: drawing accounts, effort and this runtime's limits there would be answering questions about the wrong model.
 const footerVisible = computed(() =>
-    auto.value ? true : accountsShown.value || runSettingsShown.value || limitations.value.length > 0 || terms.value !== undefined,
+    auto.value || liveTurnNote.value !== undefined
+        ? true
+        : accountsShown.value || runSettingsShown.value || limitations.value.length > 0 || terms.value !== undefined,
 );
 </script>
 
@@ -135,6 +159,11 @@ const footerVisible = computed(() =>
             <!-- Shrinks and scrolls instead of holding natural height, paired with the list's own floor. -->
             <!-- bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read unclearly on a tall picker. -->
             <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
+                <!-- A live turn keeps the model it runs on; what is picked here is for the next message (liveTurnNote). -->
+                <p v-if="liveTurnNote !== undefined" class="flex items-start gap-1.5 text-2xs text-subtle" role="note">
+                    <Icon name="clock" class="mt-px shrink-0 text-2xs" aria-hidden="true" />
+                    <span>{{ liveTurnNote }}</span>
+                </p>
                 <!-- What Auto is about to do, said where it was switched on: a mode that changes the model owes an explanation before it does, not after. -->
                 <div v-if="auto" class="flex flex-col gap-1">
                     <span class="text-2xs text-subtle">{{ t(`chat.chatModelPicker.autoArmed`) }}</span>

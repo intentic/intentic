@@ -2,11 +2,13 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import type { AccountState } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { ContextUsage } from "@intentic/sandbox-contract/events/requests";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { ConversationQueue } from "@intentic/sandbox-contract/schemas/agent";
 import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
 import { unstubbed } from "@intentic/testing";
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, shallowRef } from "vue";
 import { providerAccounts } from "../../providers/providerAccounts";
-import { modelLabelFor, providerTabs } from "../../providers/providerCatalog";
+import { modelLabelFor } from "../../providers/providerCatalog";
 import { AUTO_PROVIDER } from "../accounts/modelPickerState";
 import { turnDefaults } from "../run/turnDefaults";
 import type { SessionRef } from "../run/turnRequest";
@@ -16,9 +18,11 @@ import { type TranscriptHost, TranscriptView } from "./transcriptView";
 // Pins what the next turn runs on and the one divider a change of it owes: which picks wait out a live turn, what a
 // switch retires, what the app moves and gives back, and the words, against a conversation that is only its refs.
 
-const providerName = (provider: string): string | undefined => providerTabs.find((tab) => tab.value === provider)?.label;
-const FRESH = (name: string | undefined): string =>
-    `Switched to ${name}: your next message starts a fresh session with the conversation so far carried over.`;
+// The provider as the picker heads it and the placeholder says it ("Ask Codex…"), never the account tab's "ChatGPT".
+const providerName = providerLabel;
+const CARRIED = `your next message starts a fresh session with the conversation so far carried over.`;
+const FRESH = (name: string | undefined): string => `Switched to ${name}: ${CARRIED}`;
+const WAITING_ONE = `The message already waiting goes on the model it was written for when it goes by itself; sending it now sends it on the new pick.`;
 
 // The session a first turn on Claude minted, on account `a1`.
 const CLAUDE_SESSION: SessionRef = { id: `s-1`, provider: `claude`, account: `a1`, harness: `native` };
@@ -38,6 +42,7 @@ const selectionOf = () => {
         fastMode: ref<Extract<TurnFact, { kind: `fast_mode` }> | undefined>({ kind: `fast_mode`, state: `on` }),
         transcript,
         box: ref<string | undefined>(),
+        queue: shallowRef<ConversationQueue | undefined>(),
         turn: { streaming: computed(() => live.streaming), generating: computed(() => live.generating), moveAccount: (account: string) => void moved.push(account) },
         peek: ref(true),
     };
@@ -67,11 +72,15 @@ describe(`the words a switch owes`, () => {
     const MOVED: SwitchPoint = {
         started: true,
         resumes: false,
+        segment: `provider`,
         providerLabel: `Codex`,
+        accountLabel: undefined,
+        loopLabel: `Codex`,
         sentModel: `opus`,
         model: `haiku`,
         modelLabel: `Haiku`,
         allowance: ``,
+        waiting: 0,
     };
 
     it(`a segment switch says the session starts fresh, once anything has happened and only if it no longer resumes`, () => {
@@ -90,6 +99,23 @@ describe(`the words a switch owes`, () => {
         expect(switchNoticeText(MOVED)).toBe(FRESH(`Codex`));
         expect(switchNoticeText({ ...MOVED, resumes: true })).toBe(`Switched to Haiku`);
         expect(switchNoticeText({ ...MOVED, resumes: true, sentModel: `haiku` })).toBeUndefined();
+    });
+
+    // The reported bug: an account switch on Claude read "Switched to Claude", the provider the chat was already on.
+    it(`names the part that retired the session: the account by its row's name, the loop, else the provider`, () => {
+        expect(segmentSwitchText({ ...MOVED, segment: `account`, accountLabel: `Claude Pro` })).toBe(`Switched to the Claude Pro account: ${CARRIED}`);
+        // An account the picker has no row for is said as its provider, rather than as an opaque id.
+        expect(segmentSwitchText({ ...MOVED, segment: `account` })).toBe(FRESH(`Codex`));
+        expect(segmentSwitchText({ ...MOVED, segment: `loop`, loopLabel: `OpenCode` })).toBe(`Switched to running through OpenCode: ${CARRIED}`);
+    });
+
+    // The divider sits right above messages already waiting, which go on the pick they were queued with by themselves.
+    it(`says that waiting messages keep their model under a provider or model switch, never under an account move`, () => {
+        expect(segmentSwitchText({ ...MOVED, waiting: 1 })).toBe(`${FRESH(`Codex`)} ${WAITING_ONE}`);
+        expect(modelSwitchText({ ...MOVED, waiting: 1 })).toBe(`Switched to Haiku ${WAITING_ONE}`);
+        expect(segmentSwitchText({ ...MOVED, waiting: 2, segment: `account`, accountLabel: `Claude Pro` })).toBe(
+            `Switched to the Claude Pro account: ${CARRIED}`,
+        );
     });
 
     it(`a settle speaks for a segment switch only when one was made during the turn`, () => {
@@ -287,5 +313,110 @@ describe(`the account the next turn runs on`, () => {
         expect(selection.accountNamed.value).toBe(true);
         expect(selection.servingAccount.value).toEqual({ id: `spare`, byAllowance: false });
         expect(selection.turnSettings()).toMatchObject({ account: `spare`, accountPicked: true });
+    });
+});
+
+// Auto asks one question, on a chat's first send (chatRoute.ts). A chat that already has its model is not on Auto, whatever
+// the next new chat's default says: the reported bug opened a 44-minute-old chat from its card on "Auto", with its
+// account and effort hidden, over a turn that ran on its own model.
+describe(`Auto on a chat that already has its model`, () => {
+    beforeEach(() => {
+        turnDefaults.auto.value = true;
+    });
+
+    it(`is armed on a fresh chat, the one place its reading can happen`, () => {
+        const { selection } = selectionOf();
+
+        expect(selection.autoOpen.value).toBe(true);
+        expect(selection.auto.value).toBe(true);
+    });
+
+    it(`is off on a chat the sandbox holds, one with a session, and one whose first message already waits`, () => {
+        const registered = selectionOf();
+        registered.host.registered.value = true;
+        expect(registered.selection.auto.value).toBe(false);
+
+        const resumed = selectionOf();
+        resumed.host.session.value = CLAUDE_SESSION;
+        expect(resumed.selection.auto.value).toBe(false);
+
+        const booked = selectionOf();
+        booked.host.queue.value = {
+            revision: 1,
+            items: [{ id: `m1`, text: `document it`, voice: `person`, queuedAt: 0, revision: 1, until: 1_900_000_000_000 }],
+        };
+        expect(booked.selection.autoOpen.value).toBe(false);
+        expect(booked.selection.auto.value).toBe(false);
+    });
+
+    it(`goes into the tab as off, so a chat stored while it showed Auto does not bring it back`, () => {
+        const { selection, host } = selectionOf();
+        host.registered.value = true;
+
+        expect(selection.state.value.auto).toBe(true);
+        expect(selection.auto.value).toBe(false);
+    });
+});
+
+// A reopened chat keeps its pick with its tab; the divider that said what the pick does was a row of the transcript.
+describe(`the divider a reopened chat is owed`, () => {
+    it(`comes back once the transcript has rows, when the pick no longer resumes the session the chat holds`, () => {
+        const { selection, host, notices } = selectionOf();
+        host.session.value = CLAUDE_SESSION;
+        selection.apply({ kind: `set`, picks: { provider: `codex`, model: `gpt-5-codex` } });
+        host.transcript.write((state) => ({ ...state, messages: [{ id: 9_001, role: `user`, text: `soft-delete the users table` }] }));
+
+        selection.reassertSwitchNotice();
+
+        expect(notices()).toEqual([FRESH(providerName(`codex`))]);
+        // Asked again (another read painted), the line is there, so nothing is added.
+        selection.reassertSwitchNotice();
+        expect(notices()).toHaveLength(1);
+    });
+
+    it(`says nothing where the pick resumes the session, or where there is no session to measure against`, () => {
+        const resumes = selectionOf();
+        resumes.host.session.value = { ...CLAUDE_SESSION, account: undefined };
+        resumes.host.transcript.write((state) => ({ ...state, messages: [{ id: 9_001, role: `user`, text: `hi` }] }));
+        resumes.selection.reassertSwitchNotice();
+        expect(resumes.notices()).toEqual([]);
+
+        const sessionless = selectionOf();
+        sessionless.selection.apply({ kind: `set`, picks: { provider: `codex`, model: `gpt-5-codex` } });
+        sessionless.host.transcript.write((state) => ({ ...state, messages: [{ id: 9_001, role: `user`, text: `hi` }] }));
+        sessionless.selection.reassertSwitchNotice();
+        expect(sessionless.notices()).toEqual([]);
+    });
+
+    it(`puts back a pending divider a read dropped from the rows`, () => {
+        const { selection, host, notices } = selectionOf();
+        host.session.value = CLAUDE_SESSION;
+        host.transcript.write((state) => ({ ...state, messages: [{ id: 9_001, role: `user`, text: `hi` }] }));
+        selection.apply({ kind: `selectProvider`, provider: `codex` });
+        expect(notices()).toHaveLength(1);
+
+        // The sandbox's read replaces the rows, without this window's notice among them.
+        host.transcript.write((state) => ({ ...state, messages: [{ id: 9_001, role: `user`, text: `hi` }] }));
+        selection.reassertSwitchNotice();
+
+        expect(notices()).toEqual([FRESH(providerName(`codex`))]);
+    });
+});
+
+describe(`a booking made for a spent allowance's reopen`, () => {
+    const REOPENS = 1_900_000_000;
+    const row = (id: string, state: AccountState): OauthAccount => ({ id, label: id, connectedAt: 0, state });
+
+    it(`is read back off its instant, to the account whose allowance reopens then`, () => {
+        providerAccounts.value = {
+            ...providerAccounts.value,
+            claude: [row(`pro`, { kind: `spent`, reopensAt: REOPENS }), row(`max`, { kind: `ready`, room: 50 })],
+        };
+        const { selection } = selectionOf();
+
+        expect(selection.spentReopeningAt(REOPENS * 1_000)).toBe(`pro`);
+        expect(selection.spentReopeningAt(REOPENS * 1_000 + 30_000)).toBe(`pro`);
+        // A time the reader chose is nobody's reopen.
+        expect(selection.spentReopeningAt(REOPENS * 1_000 + 10 * 60_000)).toBeUndefined();
     });
 });

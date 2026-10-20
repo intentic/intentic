@@ -2957,7 +2957,9 @@
             "continuesAtClock": "continues {clock}, in {wait}",
             "continuesIn": "continues in {wait}",
             "continuesShortly": "continues in a moment",
-            "takeBack": "Take back"
+            "takeBack": "Take back",
+            "bookedForSpentRoomNow": "Booked for when {waited} reopens, but the account this chat runs on now has room: Send now sends it there.",
+            "bookedForSpentRoomOn": "Booked for when {waited} reopens, but {serving}, which this chat runs on now, has room: Send now sends it there."
         },
         "sandboxNotice": {
             "compacted": "Context compacted to free up space.",
@@ -3197,8 +3199,13 @@
             "fastNotFirstParty": "Fast speed isn't available on a routed endpoint.",
             "fastPending": "Still confirming fast speed.",
             "fastSwitchedOff": "Fast speed is switched off in this account's Claude settings.",
+            "otherProviderAfterTurn": "Pick another provider once this turn ends",
+            "planKeepsItsModel": "Approving the plan carries on with the model it was written on. What you pick here applies from your next message.",
+            "planKeepsModel": "Approving the plan carries on with {model}. What you pick here applies from your next message.",
             "ranStandard": "The last turn ran at standard speed.",
-            "ranStandardBecause": "The last turn ran at standard speed ({reason})."
+            "ranStandardBecause": "The last turn ran at standard speed ({reason}).",
+            "turnKeepsItsModel": "This turn finishes on the model it started on. What you pick here applies from your next message.",
+            "turnKeepsModel": "This turn finishes on {model}. What you pick here applies from your next message."
         },
         "chatNotes": {
             "addedContext": "Added context",
@@ -3325,7 +3332,8 @@
             "promptCache": "Prompt cache",
             "stoppedAt": "Stopped",
             "until": "Until",
-            "warmFor": "Warm for"
+            "warmFor": "Warm for",
+            "keptUnread": "Your next message starts a fresh session or runs on another model, so it won't read this cache. Open to stop keeping it warm."
         },
         "chatPanel": {
             "backToRunsDiagram": "Back to the run's diagram",
@@ -4213,8 +4221,11 @@
         },
         "composerSelection": {
             "resets": "resets {when}",
+            "switchedAccount": "Switched to the {account} account: your next message starts a fresh session with the conversation so far carried over.",
+            "switchedLoop": "Switched to running through {loop}: your next message starts a fresh session with the conversation so far carried over.",
             "switchedModel": "Switched to {model}",
-            "switchedProvider": "Switched to {provider}: your next message starts a fresh session with the conversation so far carried over."
+            "switchedProvider": "Switched to {provider}: your next message starts a fresh session with the conversation so far carried over.",
+            "waitingKeepTheirs": "The message already waiting goes on the model it was written for when it goes by itself; sending it now sends it on the new pick. | The {count} messages already waiting go on the model they were written for when they go by themselves; sending them now sends them on the new pick."
         },
         "transcriptView": {
             "editedDropped": "Edited this message, {count} message dropped and the files restored to this point. | Edited this message, {count} messages dropped and the files restored to this point.",

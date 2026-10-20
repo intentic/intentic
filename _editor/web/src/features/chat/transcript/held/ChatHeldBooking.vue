@@ -22,7 +22,7 @@ const props = defineProps<{
 }>();
 
 const t = useT();
-const { conversation, resumeQueue, spentReopensAt, unqueue } = usePaneView();
+const { conversation, resumeQueue, spentReopensAt, unqueue, accounts, servingAccount } = usePaneView();
 const { agentById } = useAgents();
 
 const until = computed(() => (props.group.booking.kind === `at` ? props.group.booking.at : undefined));
@@ -48,6 +48,23 @@ const hint = computed((): Tip => {
         title: t(`chat.chatHeld.sendNowTitle`),
         note: spentReopensAt.value === undefined ? t(`chat.chatHeld.sendNowTimeNote`) : t(`chat.chatHeld.sendNowSpent`),
     };
+});
+
+// A booking that waits out an allowance this chat no longer runs on: its instant is when a spent account of this
+// provider reopens, and the account the next turn runs on has room now (the reader switched to it, or the sandbox moved
+// the chat). Said under the line with both names, since nothing else on screen ties "sends Wed 00:10" to the account
+// that was spent: left alone the message waited out a day for an allowance nobody needed any more.
+const outgrown = computed((): { readonly waited: string; readonly serving: string | undefined } | undefined => {
+    const at = until.value;
+    if (at === undefined || spentReopensAt.value !== undefined) {
+        return undefined;
+    }
+    const waited = conversation.value.selection.spentReopeningAt(at);
+    if (waited === undefined || waited === servingAccount.value) {
+        return undefined;
+    }
+    const named = (id: string): string => accounts.value.find((account) => account.id === id)?.label ?? id;
+    return { waited: named(waited), serving: servingAccount.value === undefined ? undefined : named(servingAccount.value) };
 });
 
 // Re-timing these: the panel that booked them, opened over its own press. Offered by a sandbox that can re-time.
@@ -87,6 +104,13 @@ const takeBack = (): void => {
             <Button size="small" thumb v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
         </span>
     </ChatHeldStatus>
+    <p v-if="outgrown" class="text-2xs text-subtle" :class="compact ? `` : `text-right`" role="note">
+        {{
+            outgrown.serving === undefined
+                ? t(`chat.chatHeld.bookedForSpentRoomNow`, { waited: outgrown.waited })
+                : t(`chat.chatHeld.bookedForSpentRoomOn`, { waited: outgrown.waited, serving: outgrown.serving })
+        }}
+    </p>
     <ResponsiveOverlay v-model="changing" :anchor="changeAnchor" cross="end" :header="t(`chat.sendLater.reschedule`)" panel-class="w-80 p-1">
         <ComposerSendLater
             :conversation="conversation"

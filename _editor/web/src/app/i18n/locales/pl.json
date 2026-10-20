@@ -2957,7 +2957,9 @@
             "continuesAtClock": "wznowi {clock}, za {wait}",
             "continuesIn": "wznowi za {wait}",
             "continuesShortly": "wznowi za chwilę",
-            "takeBack": "Cofnij"
+            "takeBack": "Cofnij",
+            "bookedForSpentRoomNow": "Zaplanowano na odnowienie {waited}, ale konto, na którym działa teraz ten czat, ma zapas: Wyślij teraz wyśle ją tam.",
+            "bookedForSpentRoomOn": "Zaplanowano na odnowienie {waited}, ale {serving}, na którym działa teraz ten czat, ma zapas: Wyślij teraz wyśle ją tam."
         },
         "sandboxNotice": {
             "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
@@ -3197,8 +3199,13 @@
             "fastNotFirstParty": "Wysokie tempo nie jest dostępne na przekierowanym endpoincie.",
             "fastPending": "Wciąż potwierdzam wysokie tempo.",
             "fastSwitchedOff": "Wysokie tempo jest wyłączone w ustawieniach Claude tego konta.",
+            "otherProviderAfterTurn": "Innego dostawcę wybierzesz po zakończeniu tej tury",
+            "planKeepsItsModel": "Po zatwierdzeniu plan będzie kontynuowany na modelu, na którym powstał. To, co wybierzesz tutaj, obowiązuje od następnej wiadomości.",
+            "planKeepsModel": "Po zatwierdzeniu plan będzie kontynuowany na {model}. To, co wybierzesz tutaj, obowiązuje od następnej wiadomości.",
             "ranStandard": "Ostatnia tura poszła w standardowym tempie.",
-            "ranStandardBecause": "Ostatnia tura poszła w standardowym tempie ({reason})."
+            "ranStandardBecause": "Ostatnia tura poszła w standardowym tempie ({reason}).",
+            "turnKeepsItsModel": "Ta tura zakończy się na modelu, na którym się zaczęła. To, co wybierzesz tutaj, obowiązuje od następnej wiadomości.",
+            "turnKeepsModel": "Ta tura zakończy się na {model}. To, co wybierzesz tutaj, obowiązuje od następnej wiadomości."
         },
         "chatNotes": {
             "addedContext": "Dodany kontekst",
@@ -3325,7 +3332,8 @@
             "promptCache": "Pamięć promptu",
             "stoppedAt": "Zatrzymano",
             "until": "Do",
-            "warmFor": "Ciepła przez"
+            "warmFor": "Ciepła przez",
+            "keptUnread": "Twoja następna wiadomość rozpocznie nową sesję albo pójdzie na innym modelu, więc nie odczyta tej pamięci podręcznej. Otwórz, aby przestać ją podtrzymywać."
         },
         "chatPanel": {
             "backToRunsDiagram": "Wróć do diagramu przebiegu",
@@ -4213,8 +4221,11 @@
         },
         "composerSelection": {
             "resets": "odnowienie {when}",
+            "switchedAccount": "Przełączono na konto {account}: Twoja następna wiadomość rozpocznie nową sesję, do której przejdzie dotychczasowa rozmowa.",
+            "switchedLoop": "Przełączono na działanie przez {loop}: Twoja następna wiadomość rozpocznie nową sesję, do której przejdzie dotychczasowa rozmowa.",
             "switchedModel": "Przełączono na {model}",
-            "switchedProvider": "Przełączono na {provider}: Twoja następna wiadomość rozpocznie nową sesję, do której przejdzie dotychczasowa rozmowa."
+            "switchedProvider": "Przełączono na {provider}: Twoja następna wiadomość rozpocznie nową sesję, do której przejdzie dotychczasowa rozmowa.",
+            "waitingKeepTheirs": "Czekająca wiadomość, gdy pójdzie sama, trafi do modelu, dla którego ją napisano; wysłana teraz pójdzie na nowym wyborze. | {count} czekające wiadomości, gdy pójdą same, trafią do modelu, dla którego je napisano; wysłane teraz pójdą na nowym wyborze. | {count} czekających wiadomości, gdy pójdą same, trafi do modelu, dla którego je napisano; wysłane teraz pójdą na nowym wyborze."
         },
         "transcriptView": {
             "editedDropped": "Zmieniono tę wiadomość: usunięto {count} wiadomość, a pliki przywrócono do tego punktu. | Zmieniono tę wiadomość: usunięto {count} wiadomości, a pliki przywrócono do tego punktu. | Zmieniono tę wiadomość: usunięto {count} wiadomości, a pliki przywrócono do tego punktu.",

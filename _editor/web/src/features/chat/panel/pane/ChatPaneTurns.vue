@@ -47,6 +47,9 @@ const { showToolCalls } = useToolCalls();
 const { agentById } = useAgents();
 // How the last read of this chat went, when it has not answered yet (TranscriptView.refresh).
 const refresh = computed(() => conversation.value.transcript.refresh.value);
+// Something already waits in this chat's queue (a first message booked for later, one held for memory): drawn below by
+// ChatHeldMessages, so the empty invitation to start a conversation would sit right on top of the message that started it.
+const queued = computed(() => (conversation.value.queue.value?.items.length ?? 0) > 0);
 const {
     turns,
     turnShots,
@@ -234,7 +237,7 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
             </template>
         </EmptyState>
         <!-- What an empty chat says, which is the composer's to word; not while it loads, whose outline is only held back a moment. -->
-        <slot v-else-if="!waiting" name="empty" />
+        <slot v-else-if="!waiting && !queued" name="empty" />
         <!-- Pages the live turn is still writing, drawn as their markup streams in, just above where the turn says it is working. -->
         <ChatPageDrafts v-if="drafting" />
         <!-- The live turn before it's written anything, or with rows under its bubble (showTurnStatus); outside the turn sections so it is always the last thing the transcript says. -->

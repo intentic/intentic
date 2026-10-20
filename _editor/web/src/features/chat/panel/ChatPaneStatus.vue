@@ -13,6 +13,7 @@ import { cacheAlive, cacheCooling, keptWarm } from "../../../models/fleet/prompt
 import { useAgents } from "../../../models/fleet/useAgents";
 import { formatRemaining, formatReset, planHeadroom, remainingFigure, usageStatusFor } from "../../../models/providers/usageStatus";
 import { usePaneView } from "../../../models/conversations/panel/useChat-view";
+import { readsAsContinuing } from "../../../models/conversations/run/turnRequest";
 import { useRole } from "../../../client/sandbox/useRole";
 import { useAudience } from "../../../app/useAudience";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
@@ -65,6 +66,18 @@ const { agentById } = useAgents();
 const card = computed(() => agentById(conversation.value.conversationId));
 const settled = computed(() => card.value !== undefined && !turnInFlight(card.value));
 const now = useNow(() => settled.value && (card.value?.promptCache !== undefined || card.value?.keepWarm !== undefined));
+// Whether the next message would read the cache this countdown is about: the held session's, on the model its last turn
+// ran. A pick that starts a fresh session (another provider, account or loop) or moves to another model re-reads the
+// whole conversation uncached, so "Warm · 04:12" under it was a reason to hurry that no longer held. A chat with no
+// session on record is not judged.
+const cacheReused = computed(() => {
+    const session = conversation.value.session.value;
+    const sameSession =
+        session === undefined ||
+        readsAsContinuing(session, { agent: provider.value, account: account.value, harness: conversation.value.selection.harness.value });
+    const ranOn = card.value?.model;
+    return sameSession && (ranOn === undefined || ranOn === `` || ranOn === model.value);
+});
 // Why a hold stopped early, as the cold chip's headline; the full line, with the daemon's specifics, is in the panel a press opens.
 const coldWhy = (reason: Exclude<KeepWarmEnd, `elapsed`>): string => {
     switch (reason) {
@@ -86,12 +99,17 @@ const cacheChip = computed((): { icon: `sun` | `moon` | `bolt`; text: string; hi
     const kept = keptWarm(agent);
     if (kept !== undefined) {
         const time = formatClock(kept.until);
-        return {
-            icon: `sun`,
-            text: t(`chat.chatPaneStatus.cacheKept`, { time }),
-            hint: { title: t(`chat.chatPaneStatus.keptWarm`), rows: [{ label: t(`chat.chatPaneStatus.until`), value: time }] },
-            tone: `text-link`,
-        };
+        const rows = [{ label: t(`chat.chatPaneStatus.until`), value: time }];
+        // Still drawn when the next message would not read it, since the hold is spending until it is stopped, and the
+        // press on this chip is where it is stopped: toned and said, rather than shown as the reason to reply soon.
+        return cacheReused.value
+            ? { icon: `sun`, text: t(`chat.chatPaneStatus.cacheKept`, { time }), hint: { title: t(`chat.chatPaneStatus.keptWarm`), rows }, tone: `text-link` }
+            : {
+                  icon: `sun`,
+                  text: t(`chat.chatPaneStatus.cacheKept`, { time }),
+                  hint: { title: t(`chat.chatPaneStatus.keptWarm`), tone: `warning`, rows, note: t(`chat.chatPaneStatus.keptUnread`) },
+                  tone: `text-warning`,
+              };
     }
     const ended = agent.keepWarm?.ended;
     if (ended !== undefined && ended.reason !== `elapsed`) {
@@ -107,7 +125,7 @@ const cacheChip = computed((): { icon: `sun` | `moon` | `bolt`; text: string; hi
         };
     }
     const cache = agent.promptCache;
-    if (cache === undefined || !cacheAlive(agent, now.value)) {
+    if (cache === undefined || !cacheAlive(agent, now.value) || !cacheReused.value) {
         return undefined;
     }
     const countdown = formatElapsed((cache.at + cache.ttlMs - now.value) / 1000);

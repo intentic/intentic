@@ -48,8 +48,8 @@ const {
     // The pair the list checkmarks; both, since a model id is only meaningful under the provider that vends it.
     provider: AgentProvider;
     model: string;
-    // Rows this caller can't switch to (mid-stream rule); undefined for a caller only picking a future run's model.
-    unpickable?: (entry: PickerEntry) => boolean;
+    // Rows this caller can't switch to (mid-stream rule): true, or the reason, said where the row's description would be.
+    unpickable?: (entry: PickerEntry) => boolean | string;
     // Rows pinned above every provider lane: a MODE rather than a model (Auto). They belong to no lane and no rail.
     leadRows?: readonly PickerEntry[];
     // Which lead row is the current selection, by key. Set, it is the only checkmark in the list: a mode and a model
@@ -193,16 +193,15 @@ const { activeIndex, activeRow, move, setRowEl } = useListNavigation(flat, (entr
 // it would fall back to would claim a decision nobody has made yet.
 const isSelected = (entry: PickerEntry): boolean =>
     leadSelected === undefined ? entry.provider === provider && entry.value === model : entry.key === leadSelected;
-// A model that can only write one-shot jobs, on a list picking for a turn: listed, so a connected model does not seem to
-// vanish, and refused with its reason where its description would be (the daemon refuses a turn on it too).
+// A model that can only write one-shot jobs on a list picking for a turn is listed, not vanished, and refused with its
+// reason where its description would be (the daemon refuses it too); so is a row the caller refuses in words.
 const isHelperOnly = (entry: PickerEntry): boolean => !helperJobs && entry.helperOnly !== undefined;
-const helperOnlyWhy = (entry: PickerEntry): string | undefined => {
-    if (!isHelperOnly(entry)) {
-        return undefined;
-    }
-    return entry.helperOnly === `no-tool-calls` ? t(`chat.modelPicker.helperOnlyNoTools`) : t(`chat.modelPicker.helperOnlyQuickJobs`);
+const refusedWhy = (entry: PickerEntry): string | undefined => {
+    const refused = unpickable?.(entry) ?? false;
+    const helper = entry.helperOnly === `no-tool-calls` ? t(`chat.modelPicker.helperOnlyNoTools`) : t(`chat.modelPicker.helperOnlyQuickJobs`);
+    return refused === true || refused === false ? (isHelperOnly(entry) ? helper : undefined) : refused;
 };
-const isDisabled = (entry: PickerEntry): boolean => unpickable?.(entry) === true || isHelperOnly(entry);
+const isDisabled = (entry: PickerEntry): boolean => (unpickable?.(entry) ?? false) !== false || isHelperOnly(entry);
 // A row whose provider has no credential yet; dimmed and lock-marked, never disabled. A lead row has no provider to
 // hold a credential, so asking would lock a mode that is always available and make it read as refused.
 const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && !providerReady(entry.provider);
@@ -272,7 +271,7 @@ const olderWords = (entry: PickerEntry): readonly string[] => {
 
 const rowAriaLabel = (entry: PickerEntry): string => {
     const cooling = coolingBadge(entry);
-    const helperOnly = helperOnlyWhy(entry);
+    const helperOnly = refusedWhy(entry);
     return [
         entry.label,
         ...(isSelected(entry) ? [t(`chat.modelPicker.currentModel`)] : []),
@@ -530,7 +529,7 @@ onMounted(() => {
                                 v-tooltip.top="olderWords(row.entry)[0]"
                                 >{{ t(`chat.modelPicker.older`) }}</span
                             >
-                            <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ helperOnlyWhy(row.entry) ?? row.entry.description }}</span>
+                            <span class="min-w-0 flex-1 truncate text-2xs text-subtle">{{ refusedWhy(row.entry) ?? row.entry.description }}</span>
                             <!-- Every credential for this model is refused until then; the instant, not a dot, since the wait is the decision. -->
                             <span v-if="isCooling(row.entry)" class="shrink-0 whitespace-nowrap text-2xs text-warning">
                                 {{ coolingBadge(row.entry) }}

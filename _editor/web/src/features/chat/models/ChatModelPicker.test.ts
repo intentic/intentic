@@ -41,9 +41,21 @@ const limitsOf = (pair: { provider: AgentProvider; harness: AgentHarness }): str
 const MODEL = `a-model`;
 
 // The conversation as this panel reads it: just the refs it binds and the writes it makes, no transcript machinery.
-const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }, auto = false, sent = 0): Conversation =>
+// `live` is a turn running (or parked on a card, `plan`); `open` is whether Auto's question is still open on the chat
+// (ComposerSelection.autoOpen): off once its first message waits in the queue.
+interface Standing {
+    readonly auto?: boolean;
+    readonly sent?: number;
+    readonly open?: boolean;
+    readonly live?: boolean;
+    readonly plan?: boolean;
+    readonly ran?: string;
+}
+const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }, { auto = false, sent = 0, open = true, live = false, plan = false, ran }: Standing = {}): Conversation =>
     ({
         selection: {
+            autoOpen: ref(open),
+            state: ref({ sentModel: ran }),
             provider: ref(pair.provider),
             harness: ref(pair.harness),
             model: ref(MODEL),
@@ -57,19 +69,20 @@ const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }
         },
         fastMode: ref(undefined),
         box: ref(undefined),
-        transcript: { messages: ref(Array.from({ length: sent }, () => ({}))) },
-        turn: { streaming: ref(false), generating: computed(() => false) },
+        activeModel: ref(null),
+        transcript: { messages: ref(Array.from({ length: sent }, () => ({}))), pendingPlanMessage: ref(plan ? {} : undefined) },
+        turn: { streaming: ref(live), generating: computed(() => live && !plan) },
     }) as unknown as Conversation;
 
 let app: App | undefined;
 // The conversation goes back with the element: the run-settings rows are asserted by the writes they make on it.
 const mount = (
     pair: { provider: AgentProvider; harness: AgentHarness } = ROUTED,
-    { auto = false, sent = 0 }: { auto?: boolean; sent?: number } = {},
+    standing: Standing = {},
 ): { element: HTMLElement; conversation: Conversation } => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    const held = conversationOf(pair, auto, sent);
+    const held = conversationOf(pair, standing);
     app = createApp({ render: () => h(ChatModelPicker, { conversation: held }) });
     app.component(`Icon`, IconStub);
     // The Auto footer links to the settings job; no router is mounted here, so the link renders as its words.
@@ -240,6 +253,45 @@ it(`withdraws Auto once the chat has a turn behind it`, () => {
     mount(CEILING, { sent: 1 });
 
     expect(leadLabels()).toEqual([]);
+});
+
+// A first message booked for later went to the sandbox with its model: a reading armed now would read nothing.
+it(`withdraws Auto from a chat whose first message already waits in its queue`, () => {
+    mount(CEILING, { open: false });
+
+    expect(leadLabels()).toEqual([]);
+});
+
+/* A PICK MADE WHILE A TURN IS LIVE IS FOR THE NEXT ONE, AND THE PANEL SAYS SO BEFORE THE PRESS. */
+
+it(`says the running turn finishes on its own model, by name`, () => {
+    const { element } = mount(CEILING, { live: true, sent: 1, ran: MODEL });
+
+    expect(element.textContent).toContain(`This turn finishes on`);
+    expect(element.textContent).toContain(`applies from your next message`);
+});
+
+// The trap reported: Opus picked over a plan waiting for approval, the approval carried on with the planning model.
+it(`says an approval carries on with the model the plan was written on`, () => {
+    const { element } = mount(CEILING, { live: true, plan: true, sent: 1, ran: MODEL });
+
+    expect(element.textContent).toContain(`Approving the plan carries on with`);
+});
+
+it(`says nothing about the next message while nothing runs`, () => {
+    const { element } = mount(CEILING, { sent: 1, ran: MODEL });
+
+    expect(element.textContent).not.toContain(`applies from your next message`);
+});
+
+// Another provider is refused mid-turn; the row says why where its description would be, rather than greying out.
+it(`gives the list the reason another provider is refused mid-turn`, () => {
+    mount(CEILING, { live: true, sent: 1 });
+    // SAFETY: the stub keeps the attrs ChatModelPicker bound, and this one is the function its `unpickable` declares.
+    const refused = pickerProps.value[`unpickable`] as (entry: { provider: AgentProvider }) => string | false;
+
+    expect(refused({ provider: `codex` })).toBe(`Pick another provider once this turn ends`);
+    expect(refused({ provider: `claude` })).toBe(false);
 });
 
 it(`ticks Auto rather than a model row while it is armed`, () => {

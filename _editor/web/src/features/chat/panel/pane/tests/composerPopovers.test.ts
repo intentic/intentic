@@ -118,15 +118,19 @@ describe(`the @ list`, () => {
                 .map(([kind]) => kind);
         expect(offered()).toEqual([`persona`, `sandbox`, `model`, `effort`, `send`, `land`]);
 
-        // Placement latches with the branch once the board has seen the chat; Auto owns the effort question.
-        chat.registered.value = true;
+        // Auto owns the effort question, on the fresh chat whose first send it reads.
         chat.selection.apply({ kind: `set`, picks: { auto: true } });
-        expect(offered()).toEqual([`persona`, `model`, `send`, `land`]);
+        expect(offered()).toEqual([`persona`, `sandbox`, `model`, `send`, `land`]);
+
+        // Placement latches with the branch once the board has seen the chat, and by then the chat has its model: Auto
+        // has nothing left to answer, so effort is the reader's again (ComposerSelection.autoOpen).
+        chat.registered.value = true;
+        expect(offered()).toEqual([`persona`, `model`, `effort`, `send`, `land`]);
 
         // Booking and landing are offered where their pills are.
         host.later.offered.value = false;
         host.landing.offered.value = false;
-        expect(offered()).toEqual([`persona`, `model`]);
+        expect(offered()).toEqual([`persona`, `model`, `effort`]);
         host.later.offered.value = true;
         host.landing.offered.value = true;
 
@@ -138,7 +142,7 @@ describe(`the @ list`, () => {
         // Another box's chat: its files and personas are that box's.
         host.steered.value = false;
         host.placement.remote.value = true;
-        expect(offered()).toEqual([`model`]);
+        expect(offered()).toEqual([`model`, `effort`]);
         expect(lists.filesOffered.value).toBe(false);
     });
 

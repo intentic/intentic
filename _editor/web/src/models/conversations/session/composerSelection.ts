@@ -1,14 +1,14 @@
-import { capabilitiesOf, clampMode, fastAllowed, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
-import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import { capabilitiesOf, clampMode, fastAllowed, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import type { AgentProvider, PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import { SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
 import { t } from "@intentic/ui/i18n";
 import { computed, shallowRef } from "vue";
 import { providerAccounts } from "../../providers/providerAccounts";
-import { modelLabelFor, providerModels, providerTabs } from "../../providers/providerCatalog";
+import { modelLabelFor, providerModels } from "../../providers/providerCatalog";
 import { servingAccount } from "../accounts/servingAccount";
 import { clampEffort } from "../../providers/effortScale";
 import { rememberedHarnessFor, rememberedModelFor, rememberedProviderFor, rememberHarness, rememberPick, turnDefaults } from "../run/turnDefaults";
-import { accountIntent, readsAsContinuing, type TurnSettings } from "../run/turnRequest";
+import { accountIntent, readsAsContinuing, type SessionRef, type TurnSettings } from "../run/turnRequest";
 import type { Conversation } from "./conversation";
 import { type PickAction, type PickEffects, type PickWorld, reduceSelection, type Selection, UNPICKED } from "./selectionReducer";
 import type { TranscriptView } from "./transcriptView";
@@ -19,6 +19,10 @@ import { accountFacts, accountState, formatRemaining, formatReset, isStale, mode
 // the one "switched" divider a change of it owes the transcript. Which picks a switch retires is the reducer's rule;
 // what the divider says is the pure functions below; this class only carries out what a pick asks of the world.
 
+// Which part of a switch retires the session, named as the reader picked it: another provider, another account on the
+// same one, or another loop for the same account.
+export type SegmentSwitch = `provider` | `account` | `loop`;
+
 // Where a switch is measured from: what the chat has done so far and what the selection now is.
 export interface SwitchPoint {
     // Anything has happened on this chat: a row on screen, or a session held.
@@ -26,27 +30,62 @@ export interface SwitchPoint {
     // The held session still reads as matching the selection, so the next turn should resume it: the divider's words
     // only, since which session a turn goes on in is the daemon's to say.
     readonly resumes: boolean;
-    // The provider as the picker names it.
+    // What the selection changed that the held session cannot carry; read only once it no longer resumes.
+    readonly segment: SegmentSwitch;
+    // The provider as the picker heads its list (Claude Code, Codex): the name the placeholder and the list both use.
     readonly providerLabel: string;
+    // The account the next turn runs on, by its row's name in the picker; undefined when no row names it.
+    readonly accountLabel: string | undefined;
+    // The loop the next turn runs through, as the Run through menu names it.
+    readonly loopLabel: string;
     // The model the last sent turn went out under; undefined before any, or once the segment was cut.
     readonly sentModel: string | undefined;
     readonly model: string;
     readonly modelLabel: string;
     // Whose allowance the model spends, when the plan meters it separately (` · 5h 87% used`), else empty.
     readonly allowance: string;
+    // Messages already waiting in the queue (held, or booked for later). Each carries the provider and model it was
+    // written under and goes out on them by itself; only a press that sends it now sends it on the new pick.
+    readonly waiting: number;
 }
 
+// Said under a provider, loop or model switch while messages wait, since the divider sits right above them and its
+// "your next message" would otherwise read as covering them. Not under an account switch: the daemon moves the
+// conversation to the new account, and waiting messages go there with it.
+const waitingNote = (point: SwitchPoint): string =>
+    point.waiting === 0 ? `` : ` ${t(`chat.composerSelection.waitingKeepTheirs`, { count: point.waiting }, point.waiting)}`;
+
+// The words for what retired the session. An account the picker has no row for is said as its provider, as before.
+const segmentWords = (point: SwitchPoint): string => {
+    if (point.segment === `account` && point.accountLabel !== undefined) {
+        return t(`chat.composerSelection.switchedAccount`, { account: point.accountLabel });
+    }
+    if (point.segment === `loop`) {
+        return `${t(`chat.composerSelection.switchedLoop`, { loop: point.loopLabel })}${waitingNote(point)}`;
+    }
+    return `${t(`chat.composerSelection.switchedProvider`, { provider: point.providerLabel })}${waitingNote(point)}`;
+};
+
 // A provider, account or harness switch retires the session; unconditional about what carries over, since that is the
-// daemon's own record, not what this window happens to have painted.
-export const segmentSwitchText = (point: SwitchPoint): string | undefined =>
-    !point.started || point.resumes ? undefined : t(`chat.composerSelection.switchedProvider`, { provider: point.providerLabel });
+// daemon's own record, not what this window happens to have painted. It names the part that changed: an account switch
+// said as "Switched to Claude" named the provider the chat was already on.
+export const segmentSwitchText = (point: SwitchPoint): string | undefined => (!point.started || point.resumes ? undefined : segmentWords(point));
 
 // A model swap keeps the session and still costs something: it re-reads the whole conversation on a cold cache.
 // Nothing sent yet on this segment, or the pick back where the last turn left it, says nothing.
 export const modelSwitchText = (point: SwitchPoint): string | undefined =>
     point.sentModel === undefined || point.sentModel === point.model
         ? undefined
-        : `${t(`chat.composerSelection.switchedModel`, { model: point.modelLabel })}${point.allowance}`;
+        : `${t(`chat.composerSelection.switchedModel`, { model: point.modelLabel })}${point.allowance}${waitingNote(point)}`;
+
+// What the selection moved off the held session: its provider first, then its account, else the loop, which is the only
+// other thing readsAsContinuing weighs. No session at all is a provider's first segment, said as the provider.
+const segmentOf = (session: SessionRef | undefined, next: { readonly provider: AgentProvider; readonly account: string | undefined }): SegmentSwitch => {
+    if (session === undefined || session.provider !== next.provider) {
+        return `provider`;
+    }
+    return next.account !== undefined && next.account !== session.account ? `account` : `loop`;
+};
 
 // The pending divider's words while settings change; undefined retracts it.
 export const switchNoticeText = (point: SwitchPoint): string | undefined => segmentSwitchText(point) ?? modelSwitchText(point);
@@ -56,8 +95,11 @@ export const switchNoticeText = (point: SwitchPoint): string | undefined => segm
 export const midTurnSwitchText = (point: SwitchPoint, switchedMidTurn: boolean): string | undefined =>
     (switchedMidTurn ? segmentSwitchText(point) : undefined) ?? modelSwitchText(point);
 
+// How far a booking's instant may sit from an allowance's reopen and still be the booking made for it.
+const REOPEN_MATCH_MS = 60_000;
+
 // What a selection reads and writes of the conversation around it.
-type SelectionHost = Pick<Conversation, "session" | "registered" | "activeModel" | "contextUsage" | "fastMode" | "box" | "peek"> & {
+type SelectionHost = Pick<Conversation, "session" | "registered" | "activeModel" | "contextUsage" | "fastMode" | "box" | "peek" | "queue"> & {
     readonly transcript: Pick<TranscriptView, "messages" | "notice" | "rewordNotice" | "write">;
     readonly turn: Pick<TurnClient, "streaming" | "generating" | "moveAccount">;
 };
@@ -75,7 +117,16 @@ export class ComposerSelection {
     readonly displacedModel = computed(() => this.state.value.displacedModel);
     readonly thinking = computed(() => this.state.value.thinking);
     readonly fast = computed(() => this.state.value.fast);
-    readonly auto = computed(() => this.state.value.auto);
+    // Whether Auto's question is still open on this chat: nothing has gone to the sandbox under it yet. A chat it holds
+    // (registered), one with a session, and one whose first message already waits in its queue (booked for later, held)
+    // each already has the model it runs on; the reading only ever happens on a chat's first send (chatRoute.ts).
+    readonly autoOpen = computed(
+        () => !this.host.registered.value && this.host.session.value === undefined && (this.host.queue.value?.items.length ?? 0) === 0,
+    );
+    // Auto as this chat stands, not as the pick was stored. The pick is seeded from the next new chat's default, so a
+    // chat opened from its card after Auto was armed anywhere was drawn on Auto, with its accounts and effort hidden, over
+    // a turn that ran (and would run again) on the model it already had.
+    readonly auto = computed(() => this.state.value.auto && this.autoOpen.value);
     readonly autoPicked = computed(() => this.state.value.autoPicked);
     readonly actsAs = computed(() => this.state.value.actsAs);
     readonly startIn = computed(() => this.state.value.startIn);
@@ -123,6 +174,15 @@ export class ComposerSelection {
     // That account's verdict for this selection's model, off the same rows: what the composer reads to know a press would
     // only meet a spent allowance (composerIntent's `scheduled`).
     readonly servingState = computed(() => this.accountRows.value.find((row) => row.id === this.servingAccount.value?.id)?.state);
+
+    // The account on this chat's provider whose spent allowance reopens at `at` (ms), if one does: what a message booked
+    // for a reopen waits on, read back off its instant, since the queue keeps no reason for a booking. The composer books
+    // at the reopen itself (composerIntent's `scheduled`), so a minute either side is the same booking.
+    spentReopeningAt(at: number): string | undefined {
+        return this.accountRows.value.find(
+            (row) => row.state.kind === `spent` && row.state.reopensAt !== undefined && Math.abs(row.state.reopensAt * 1_000 - at) <= REOPEN_MATCH_MS,
+        )?.id;
+    }
 
     private readonly accountRows = computed(() => {
         const provider = this.provider.value;
@@ -252,16 +312,25 @@ export class ComposerSelection {
     // Where the selection stands against what the chat has done, for the divider's words.
     private switchPoint(): SwitchPoint {
         const session = this.host.session.value;
-        const model = { id: this.model.value, label: modelLabelFor(this.provider.value, this.model.value) };
+        const provider = this.provider.value;
+        const account = this.account.value;
+        const model = { id: this.model.value, label: modelLabelFor(provider, this.model.value) };
         return {
             started: this.host.transcript.messages.value.length > 0 || session !== undefined,
-            resumes: readsAsContinuing(session, { agent: this.provider.value, account: this.account.value, harness: this.harness.value }),
-            // ACP providers have no tab entry; falls back to the capability name or the raw provider id.
-            providerLabel: providerTabs.find((tab) => tab.value === this.provider.value)?.label ?? providerLabel(this.provider.value),
+            resumes: readsAsContinuing(session, { agent: provider, account, harness: this.harness.value }),
+            segment: segmentOf(session, { provider, account }),
+            // The picker's own heading for the provider, which is also what the composer's placeholder says ("Ask Codex…"):
+            // the account-tab name ("ChatGPT") here made one switch read as three different products.
+            providerLabel: providerLabel(provider),
+            accountLabel: account === undefined ? undefined : (providerAccounts.value[provider] ?? []).find((entry) => entry.id === account)?.label,
+            loopLabel: loopLabel(provider, loopOf(provider, this.harness.value)),
             sentModel: this.state.value.sentModel,
             model: model.id,
             modelLabel: model.label,
             allowance: this.allowanceNote(model),
+            // A person's words only: the daemon runs those on the routing they were queued with, where the sandbox's and
+            // an agent's own messages take the conversation's current one (turn-admission.ts turnOf).
+            waiting: (this.host.queue.value?.items ?? []).filter((item) => item.voice === `person` && item.continues !== true).length,
         };
     }
 
@@ -277,6 +346,21 @@ export class ComposerSelection {
         return ` · ${allowance.name} ${formatRemaining(allowance.percent, isStale(usage))}${
             resetsAt === undefined ? `` : `, ${t(`chat.composerSelection.resets`, { when: formatReset(resetsAt) })}`
         }`;
+    }
+
+    // The pending divider again, once a read of the transcript has painted its rows: a chat closed and opened again keeps
+    // its pick with its tab, but the divider was only ever a row in this window's transcript, so the chat came back on
+    // another provider with nothing saying its next message starts a fresh session. Measured only against a session the
+    // chat holds: without one every chat on a sessionless provider would read as switched.
+    reassertSwitchNotice(): void {
+        const noticeId = this.pendingSwitchNoticeId;
+        if (noticeId !== undefined && this.host.transcript.messages.value.some((message) => message.id === noticeId)) {
+            return;
+        }
+        this.pendingSwitchNoticeId = undefined;
+        if (this.host.session.value !== undefined) {
+            this.refreshSwitchNotice();
+        }
     }
 
     // Retract the pending "switched" divider: the change it announced is no longer what the next send does.

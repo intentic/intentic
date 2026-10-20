@@ -177,6 +177,18 @@ export class Conversation {
                     }
                 },
             );
+            // The pick a reopened chat kept is owed its "switched" divider whenever its rows are painted again: the divider
+            // is a row only this window holds, and a read of the conversation (rebuild, adopt) swaps in the sandbox's
+            // rows without it, while the pick stays (reassertSwitchNotice). Between turns only; a streamed frame is the
+            // live turn's, and its settle owes its own divider.
+            watch(
+                () => [this.transcript.messages.value, this.turn.streaming.value] as const,
+                ([messages, streaming]) => {
+                    if (messages.length > 0 && !streaming) {
+                        this.selection.reassertSwitchNotice();
+                    }
+                },
+            );
         });
     }
 }

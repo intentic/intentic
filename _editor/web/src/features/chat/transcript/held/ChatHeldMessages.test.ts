@@ -9,6 +9,7 @@ import { conversationView, PANE_VIEW } from "../../../../models/conversations/pa
 import { Conversation } from "../../../../models/conversations/session/conversation";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import * as useSandboxOriginal from "../../../../client/sandbox/useSandbox";
+import { providerAccounts } from "../../../../models/providers/providerAccounts";
 
 // A message the sandbox held is drawn where the reader looks for what they just sent: their own prompt, with its
 // picture, over ONE line that says it did not go out, why, and the one press that sends it. The notice, the bar and
@@ -393,6 +394,45 @@ describe(`the other holds, drawn the same way`, () => {
 // whole, the queue's `until` or `after` and none on the message, as a sandbox older than per-message bookings keeps them:
 // drawn exactly as before, every message under the queue's one booking.
 describe(`a scheduled send`, () => {
+    // Booked for a spent account's reopen, then the chat moved to an account with room: nothing else on screen ties
+    // "sends Wed 00:10" to the account that was spent, so the message sat out a day for an allowance nobody needed.
+    describe(`booked for an allowance the chat no longer runs on`, () => {
+        const reopens = Math.round(Date.now() / 1_000) + 26 * 3_600;
+        const kept = providerAccounts.value;
+        beforeEach(() => {
+            providerAccounts.value = {
+                ...kept,
+                claude: [
+                    { id: `pro`, label: `Claude Pro`, connectedAt: 0, state: { kind: `spent`, reopensAt: reopens } },
+                    { id: `max`, label: `Claude Max`, connectedAt: 0, state: { kind: `ready`, room: 50 } },
+                ],
+            };
+        });
+        afterEach(() => {
+            providerAccounts.value = kept;
+        });
+        const bookedOn = (account: string): Conversation => {
+            const chat = chatHolding({ items: [held({ attachments: [], until: reopens * 1_000 })], paused: `scheduled`, until: reopens * 1_000 }, SENT);
+            chat.selection.apply({ kind: `set`, picks: { provider: `claude`, model: `claude-sonnet-5`, account } });
+            return chat;
+        };
+
+        it(`says so with both names, beside its Send now`, async () => {
+            const element = mount(bookedOn(`max`));
+            await nextTick();
+
+            expect(element.textContent).toContain(`Booked for when Claude Pro reopens, but Claude Max, which this chat runs on now, has room`);
+            expect(pressNamed(element, `Send now`)).toHaveLength(1);
+        });
+
+        it(`says nothing while the chat still runs on the spent account`, async () => {
+            const element = mount(bookedOn(`pro`));
+            await nextTick();
+
+            expect(element.textContent).not.toContain(`has room`);
+        });
+    });
+
     it(`reads as scheduled with the time it goes, with no warning and nothing about a refusal`, async () => {
         const until = Date.now() + 40 * 60 * 1_000 + 30_000;
         const element = mount(chatHolding({ items: [held({ attachments: [] })], paused: `scheduled`, until }, SENT));
