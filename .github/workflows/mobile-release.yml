@@ -1,4 +1,4 @@
-# Mobile shells — the store releases. mobile.yml proves the shells build; this ships them.
+# Mobile apps — the store releases. mobile.yml proves the apps build; this ships them.
 #
 # `workflow_dispatch` ONLY, and deliberately so twice over: a tag trigger is a trigger this repository can
 # never fire (the workflow-policy check — semantic-release pushes tags with GITHUB_TOKEN, which starts no
@@ -14,16 +14,16 @@
 #            Submitting to App Review stays a console action — the one step of an iOS release that has
 #            questions (export compliance, review notes) no pipeline should answer on someone's behalf.
 #
-# Signing holds no local state to rot: Android signs with the uploaded keystore (Play App Signing holds the
-# certificate that actually matters — assetlinks.json names ITS fingerprint, not this key's), and iOS uses
-# xcodebuild cloud signing — the App Store Connect API key mints certificates and profiles on demand, so
-# there is no .p12 to expire in a secret nobody remembers setting.
+# Signing holds no local state to rot: Android signs with the upload keystore through AGP's injected signing
+# properties (Play App Signing holds the certificate that actually matters — assetlinks.json names ITS
+# fingerprint, not this key's), and iOS uses xcodebuild cloud signing — the App Store Connect API key mints
+# certificates and profiles on demand, so there is no .p12 to expire in a secret nobody remembers setting.
 #
 # The six secrets, all repository-level (README pointers: _editor/android-app, _editor/ios-app):
 #   ANDROID_KEYSTORE_BASE64    the upload keystore, base64 — mint once: keytool -genkeypair -keystore
 #                              android.keystore -alias android -keyalg RSA -keysize 4096 -validity 9125
-#   ANDROID_KEYSTORE_PASSWORD  its store password        (BUBBLEWRAP_KEYSTORE_PASSWORD)
-#   ANDROID_KEY_PASSWORD       its key password          (BUBBLEWRAP_KEY_PASSWORD)
+#   ANDROID_KEYSTORE_PASSWORD  its store password
+#   ANDROID_KEY_PASSWORD       its key password (the key's alias is `android`)
 #   PLAY_SERVICE_ACCOUNT_JSON  a Google Cloud service account with the Play "release manager" role, as JSON
 #   ASC_API_KEY_P8             an App Store Connect API key (.p8 contents), role App Manager
 #   ASC_KEY_ID / ASC_ISSUER_ID / APPLE_TEAM_ID   the key's id, its issuer id, and the developer team id
@@ -59,10 +59,10 @@ jobs:
   android:
     if: inputs.platform != 'ios'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: _editor/android-app
+    timeout-minutes: 45
+    env:
+      # The NDK _editor/android-app/app/build.gradle.kts names as ndkVersion.
+      NDK_VERSION: "29.0.14206865"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,43 +71,62 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Point Bubblewrap at the runner's toolchains
-        working-directory: .
-        run: bash _tools/scripts/ci/mobile-android-sdk.sh
+      # The licences are fed from a process substitution, not `yes |`, which dies 141 under pipefail.
+      - name: Rust, the Android targets, cargo-ndk and the NDK
+        run: |
+          rustup toolchain install stable --profile minimal --target aarch64-linux-android,x86_64-linux-android
+          rustup default stable
+          cargo install --locked cargo-ndk --version 4.1.2
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" < <(yes) > /dev/null
+      # Checked here, by keytool, rather than left to AGP's signing step, which reports an unreadable key without
+      # naming the secret it came from.
       - name: Restore the upload keystore
-        run: printf '%s' "$KEYSTORE_BASE64" | base64 -d > ./android.keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      # The manifest in git keeps placeholder numbers; the truth for a shipped build is stamped here — the
-      # dispatched marketing version, and the run number as versionCode (Play refuses a repeat or a decrease).
-      - name: Stamp the release version
-        env:
-          VERSION: ${{ inputs.version }}
-          BUILD_NUMBER: ${{ github.run_number }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          jq --arg name "$VERSION" --argjson code "$BUILD_NUMBER" \
-            '.appVersionName = $name | .appVersionCode = $code' twa-manifest.json > stamped.json
-          mv stamped.json twa-manifest.json
-      - name: Generate the Android project from the manifest
-        run: npx @bubblewrap/cli@1.25.0 update --skipVersionUpgrade
+          if ! printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not base64"
+            exit 1
+          fi
+          if ! keytool -list -keystore "$RUNNER_TEMP/upload.keystore" -storepass "$STORE_PASSWORD" -alias android > /dev/null 2>&1; then
+            echo "::error::the keystore in ANDROID_KEYSTORE_BASE64 cannot be opened with ANDROID_KEYSTORE_PASSWORD, or holds no key named android"
+            exit 1
+          fi
+      # The dispatched marketing version, and the run number as versionCode (Play refuses a repeat or a decrease).
+      # The run number is the counter the Trusted Web Activity this app replaced was uploaded with, so it is already
+      # above every build Play has seen. The injected properties win over the build's own debug signing, so no key
+      # path is ever committed.
       - name: Build and sign the bundle
         env:
-          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: npx @bubblewrap/cli@1.25.0 build --skipPwaValidation
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VERSION: ${{ inputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: >-
+          bash _editor/android-app/scripts/gradle.sh --no-daemon :app:bundleRelease :app:assembleRelease
+          -Pintentic.versionName="$VERSION"
+          -Pintentic.versionCode="$BUILD_NUMBER"
+          -Pandroid.injected.signing.store.file="$RUNNER_TEMP/upload.keystore"
+          -Pandroid.injected.signing.store.password="$STORE_PASSWORD"
+          -Pandroid.injected.signing.key.alias=android
+          -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+      # The bundle carries R8's mapping and the core's symbol table in its own metadata, so Play deobfuscates and
+      # symbolicates crashes with no upload of its own; mapping.txt is kept here for retracing a stack by hand.
       - uses: ./.github/actions/upload-artifact-retry
         with:
           name: android-release-${{ inputs.version }}
           path: |
-            _editor/android-app/app-release-bundle.aab
-            _editor/android-app/app-release-signed.apk
+            _editor/android-app/app/build/outputs/bundle/release/app-release.aab
+            _editor/android-app/app/build/outputs/apk/release/app-release.apk
+            _editor/android-app/app/build/outputs/mapping/release/mapping.txt
           retention-days: 90
       - name: Upload to the Play ${{ inputs.android_track }} track
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: dev.intentic.app
-          releaseFiles: _editor/android-app/app-release-bundle.aab
+          releaseFiles: _editor/android-app/app/build/outputs/bundle/release/app-release.aab
           track: ${{ inputs.android_track }}
           status: completed
 

@@ -1,4 +1,4 @@
-import { computed, watch, type ComputedRef, type Ref } from "vue";
+import { computed, ref, watch, type ComputedRef, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 import { useTheme } from "@intentic/ui/theme";
 
@@ -32,9 +32,16 @@ const choice: Ref<SkinChoice> = definePreference<SkinChoice>({
 
 const { scheme, set: setScheme } = useTheme();
 
+// A skin the window is handed, worn over the setting and never stored: the Android app's look, beside the scheme it
+// hands useTheme (app/environments/nativeApp.ts). Undefined while the setting decides.
+const given = ref<SkinChoice | undefined>(undefined);
+
 // THE APP'S OWN LOOK, IN EACH LIGHT: sanctum is the dark one and there is no light one, so daylight is the app
 // undressed. Derived rather than stored, so an OS that flips at dusk carries the whole look with it.
-const skin: ComputedRef<Skin> = computed(() => (choice.value === `system` ? (scheme.value === `dark` ? `sanctum` : `none`) : choice.value));
+const skin: ComputedRef<Skin> = computed(() => {
+    const asked = given.value ?? choice.value;
+    return asked === `system` ? (scheme.value === `dark` ? `sanctum` : `none`) : asked;
+});
 
 watch(skin, apply, { immediate: true, flush: `sync` });
 
@@ -47,6 +54,13 @@ const setSkin = (value: SkinChoice): void => {
     }
 };
 
+const handed: ComputedRef<SkinChoice | undefined> = computed(() => given.value);
+
+/** Wears `value` over the setting without storing it; undefined hands the skin back to the setting. */
+const hand = (value: SkinChoice | undefined): void => {
+    given.value = value;
+};
+
 export function useSkin() {
-    return { skin, choice, setSkin };
+    return { skin, choice, handed, setSkin, hand };
 }

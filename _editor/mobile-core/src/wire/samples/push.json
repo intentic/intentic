@@ -1,0 +1,43 @@
+{
+    "PushChannelSchema": {
+        "this phone through the relay": {
+            "kind": "relay",
+            "url": "https://api.intentic.dev/rpc/push/send",
+            "deviceId": "dev_88",
+            "secret": "c2VjcmV0"
+        }
+    },
+    "PushChannelIdSchema": {
+        "this phone": {
+            "id": "dev_88"
+        }
+    },
+    "PushConfigSchema": {
+        "registered": {
+            "publicKey": "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U",
+            "subscribed": true
+        }
+    },
+    "PushSentNotificationSchema": {
+        "a waiting question": {
+            "title": "Fix the login redirect: a question for you",
+            "body": "Which redirect should win, the old or the new?",
+            "url": "/?conversation=cnv_login",
+            "tag": "awaiting-req_1",
+            "requireInteraction": true,
+            "sentAt": "2026-10-20T08:00:00.000Z"
+        },
+        "the ask stopped waiting": {
+            "title": "No longer waiting",
+            "body": "It was answered elsewhere.",
+            "tag": "awaiting-req_1",
+            "silent": true,
+            "sentAt": "2026-10-20T08:01:00.000Z"
+        }
+    },
+    "PushSentQuerySchema": {
+        "a tag": {
+            "tag": "awaiting-req_1"
+        }
+    }
+}

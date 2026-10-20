@@ -129,3 +129,44 @@ describe(`a scheme the desktop app announced`, () => {
         expect(root().getAttribute(`data-mode`)).toBe(`dark`);
     });
 });
+
+// The Android app hands its WebView the look it wears (web's app/environments/nativeApp.ts). Worn, never stored: the
+// reader's own choice is still underneath once it is handed back.
+describe(`a scheme the Android app handed over`, () => {
+    it(`outranks the setting and the system, and writes nothing`, async () => {
+        systemIs(`light`);
+        localStorage.setItem(`ui-color-scheme`, `light`);
+        const { useTheme } = await load();
+
+        useTheme().hand(`dark`);
+
+        expect(useTheme().scheme.value).toBe(`dark`);
+        expect(useTheme().handed.value).toBe(`dark`);
+        expect(root().getAttribute(`data-mode`)).toBe(`dark`);
+        expect(useTheme().choice.value).toBe(`light`);
+        expect(localStorage.getItem(`ui-color-scheme`)).toBe(`light`);
+    });
+
+    it(`follows the system when the app hands over \`system\`, whatever the setting says`, async () => {
+        const os = systemIs(`light`);
+        localStorage.setItem(`ui-color-scheme`, `light`);
+        const { useTheme } = await load();
+
+        useTheme().hand(`system`);
+        os.flip(`dark`);
+
+        expect(useTheme().scheme.value).toBe(`dark`);
+    });
+
+    it(`gives the screen back to the setting when the app takes it back`, async () => {
+        systemIs(`light`);
+        localStorage.setItem(`ui-color-scheme`, `light`);
+        const { useTheme } = await load();
+
+        useTheme().hand(`dark`);
+        useTheme().hand(undefined);
+
+        expect(useTheme().scheme.value).toBe(`light`);
+        expect(root().hasAttribute(`data-mode`)).toBe(false);
+    });
+});

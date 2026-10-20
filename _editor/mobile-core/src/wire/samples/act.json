@@ -1,0 +1,70 @@
+{
+    "AgentRunSchema": {
+        "a message to a running conversation": {
+            "prompt": "Also cover the restore path.",
+            "conversationId": "cnv_soft_deletes",
+            "messageId": "msg_01J9ZM"
+        },
+        "a new conversation with every pick": {
+            "prompt": "Profile the invoice export",
+            "conversationId": "cnv_01J9ZN",
+            "messageId": "msg_01J9ZN",
+            "attachments": ["uploads/profile.json"],
+            "mentions": ["src/invoices/export.ts"],
+            "agent": "codex",
+            "model": "gpt-6.1",
+            "effort": "high",
+            "thinking": true,
+            "fast": false,
+            "harness": "codex",
+            "account": "codex-pro",
+            "actsAs": "perf-reviewer",
+            "permissionMode": "default",
+            "isolated": true
+        }
+    },
+    "MessageReceiptSchema": {
+        "started": { "delivered": "started", "run": "run_a1" },
+        "queued": { "delivered": "queued" },
+        "sent twice": { "delivered": "steered", "run": "run_9f2c", "duplicate": true }
+    },
+    "SteerSchema": {
+        "words mid-turn": { "conversationId": "cnv_soft_deletes", "text": "Use a partial index.", "messageId": "msg_01J9ZP" },
+        "a screenshot alone": { "conversationId": "cnv_soft_deletes", "text": "", "attachments": ["uploads/bug.png"] }
+    },
+    "AgentReplySchema": {
+        "plan approved": { "kind": "plan", "requestId": "req_plan_1", "approve": true },
+        "plan refused": { "kind": "plan", "requestId": "req_plan_1", "approve": false, "feedback": "Keep the old column." },
+        "question answered": {
+            "kind": "question",
+            "requestId": "req_q_1",
+            "answers": { "Should restoring an invoice also restore its payments?": ["Yes"] },
+            "attachments": { "Should restoring an invoice also restore its payments?": ["uploads/sketch.png"] }
+        },
+        "question waved away": { "kind": "question", "requestId": "req_q_2", "cancelled": true },
+        "permission for the conversation": { "kind": "permission", "requestId": "req_perm_1", "decision": "always" },
+        "permission denied": { "kind": "permission", "requestId": "req_perm_2", "decision": "deny", "feedback": "Not on production." },
+        "a subagent started on another model": {
+            "kind": "permission",
+            "requestId": "req_perm_3",
+            "decision": "once",
+            "child": { "provider": "claude", "model": "claude-opus-5-5", "effort": "medium" }
+        },
+        "browser cleared": { "kind": "browser_help", "requestId": "req_b_1", "helped": true, "note": "Solved the captcha." },
+        "terminal declined": { "kind": "terminal_help", "requestId": "req_t_1", "helped": false },
+        "capability yes": { "kind": "capability_offer", "requestId": "req_c_1", "connect": true },
+        "payment no": { "kind": "payment_offer", "requestId": "req_p_1", "approve": false },
+        "page answered": { "kind": "page_ask", "requestId": "req_pa_1", "value": "{\"layout\":\"cards\"}" },
+        "credential released": { "kind": "credential_offer", "requestId": "req_cr_1", "approve": true }
+    },
+    "OkSchema": { "accepted": { "ok": true } },
+    "StopTurnSchema": {
+        "a named run": { "conversationId": "cnv_soft_deletes", "run": "run_9f2c" },
+        "a send not answered yet": { "conversationId": "cnv_soft_deletes", "messageId": "msg_01J9ZM" },
+        "whatever runs": { "conversationId": "cnv_digest", "live": true }
+    },
+    "StopResultSchema": {
+        "stopped": { "stopped": true },
+        "another turn runs": { "stopped": false, "running": "run_b2" }
+    }
+}

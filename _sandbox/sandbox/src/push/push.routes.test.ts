@@ -44,3 +44,29 @@ test("a caller with no member identity files a device under nobody, which keeps 
     await call(push.subscribe, laptop, { context: anonymous });
     expect(filed).toEqual([{ channel: laptop, member: undefined }]);
 });
+
+// The words of a notification are the caller's to read back only when it was sent to their own devices; every other
+// asking (someone else's, never sent, no longer kept, no member identity) is the same not-found, so asking reveals nothing.
+test("a notification's words are read back only by a member it was sent to", async () => {
+    const sentToAda = { title: "Turn finished", body: "Fix the login redirect", url: "/?conversation=c1", tag: "turn-c1", sentAt: "2026-10-19T12:00:00.000Z" };
+    const asked: { readonly tag: string; readonly member: string }[] = [];
+    const push = createPushRoutes({
+        push: unstubbed<Services["push"]>("push", {}),
+        pushSender: unstubbed<Services["pushSender"]>("pushSender", {
+            sent: (tag, member) => {
+                asked.push({ tag, member });
+                return tag === "turn-c1" && member === "ada@example.com" ? sentToAda : undefined;
+            },
+        }),
+    });
+    await expect(call(push.notification, { tag: "turn-c1" }, { context: signedIn("ada@example.com") })).resolves.toEqual(sentToAda);
+    await expect(call(push.notification, { tag: "turn-c1" }, { context: signedIn("bob@example.com") })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(call(push.notification, { tag: "turn-c2" }, { context: signedIn("ada@example.com") })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(call(push.notification, { tag: "turn-c1" }, { context: anonymous })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    // A caller with no member identity is never even looked up.
+    expect(asked).toEqual([
+        { tag: "turn-c1", member: "ada@example.com" },
+        { tag: "turn-c1", member: "bob@example.com" },
+        { tag: "turn-c2", member: "ada@example.com" },
+    ]);
+});

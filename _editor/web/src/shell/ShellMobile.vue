@@ -10,24 +10,29 @@ import { ownsWayBack, PHONE_HOME } from "../lib/routes/phoneScreens";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
 import { useEdgeBack } from "./edgeBack";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
+import { embedded } from "../app/environments/nativeApp";
 
 // Mobile chrome: two screens and the places between them. The board (/agents) is home, with the rail down its left
 // (MobileRail.vue) holding every other place; a conversation (/agents/:id) is the board's drill-down, back by its own
 // arrow. Everything else is a full-screen page the rail opened, with the way back drawn at its top. h-dvh tracks the
 // browser's UI chrome. No tab bar, chat column, or docked terminal: chat and terminal are full-screen routes.
+// Inside the Android app's WebView (app/environments/nativeApp.ts) the board, a conversation and the menu are the app's
+// own screens, and its toolbar and system back are the way between them: this shell draws no rail, no back arrow and no
+// edge swipe there, only the page.
 
 const t = useT();
 const { keyboardOpen } = useDevice();
 
 const route = useRoute();
 const router = useRouter();
+const inApp = embedded();
 // The board itself, where the rail is drawn. Not its drill-downs: a conversation keeps the whole width of the screen.
 const onBoard = computed(() => route.path === PHONE_HOME);
 
 // Undefined on the board and a conversation under it: the board is home, and a conversation's screen carries its own
 // arrow. Otherwise steps back when history.state.back shows one exists, else falls back to the board.
 const back = computed<PageBack | undefined>(() => {
-    if (ownsWayBack(route.path)) {
+    if (inApp || ownsWayBack(route.path)) {
         return undefined;
     }
     const stepped = typeof router.options.history.state[`back`] === `string`;
@@ -55,7 +60,7 @@ useEdgeBack({
     page,
     scrim,
     chip,
-    back: () => back.value?.go ?? (route.path.startsWith(`/agents/`) ? () => router.push(`/agents`) : undefined),
+    back: () => (inApp ? undefined : (back.value?.go ?? (route.path.startsWith(`/agents/`) ? () => router.push(`/agents`) : undefined))),
     route: () => route.fullPath,
 });
 // The extension pages a wallpaper shows behind; painted on the scroller so the picture stays put as the page scrolls.
@@ -88,7 +93,7 @@ useKeybindings();
             </div>
             <div ref="page" class="relative flex min-h-0 min-w-0 flex-1 bg-canvas">
                 <!-- Outside the gate, as the desktop's rail is: a sandbox that stopped answering still has a way to another. -->
-                <MobileRail v-if="onBoard" />
+                <MobileRail v-if="onBoard && !inApp" />
                 <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
                     <SandboxGate>
                         <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }" style="overscroll-behavior: contain">

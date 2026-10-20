@@ -1,0 +1,173 @@
+{
+    "me.get:output": {
+        "signed in by email and Google": {
+            "id": "usr_01J9Z",
+            "email": "ada@example.com",
+            "name": "Ada",
+            "image": null,
+            "signInMethods": [
+                "google",
+                "email"
+            ],
+            "createdAt": "2026-10-15T09:12:44.000Z"
+        },
+        "no session": null
+    },
+    "me.signInOptions:output": {
+        "both ways in": {
+            "google": true,
+            "email": true
+        }
+    },
+    "sandbox.list:output": {
+        "an own machine and a shared hosted one": {
+            "sandboxes": [
+                {
+                    "id": "sbx_row_1",
+                    "name": "Workstation",
+                    "image": null,
+                    "daemonUrl": "https://sandbox-3f9c2a7d1e04.sbx.intentic.dev",
+                    "lastSeenAt": "2026-10-19T16:40:02.118Z",
+                    "setupCodeClaimedAt": "2026-10-01T08:00:00.000Z",
+                    "setupReport": null,
+                    "bootReport": null,
+                    "announceRefusal": null,
+                    "removedAt": null,
+                    "removedBy": null,
+                    "token": "ict_3f9c2a7d1e04_c29tZS1jb25uZWN0LXRva2Vu",
+                    "role": "owner",
+                    "providedAddress": false,
+                    "localHostname": "local-3f9c2a7d1e04.sbx.intentic.dev",
+                    "hosted": null,
+                    "daemonVersion": "1.318.2",
+                    "edgeTransports": [
+                        "h3",
+                        "webtransport"
+                    ]
+                },
+                {
+                    "id": "sbx_row_2",
+                    "name": "Team box",
+                    "image": "data:image/png;base64,iVBORw0KGgo=",
+                    "daemonUrl": "https://sandbox-a1b2c3d4e5f6.sbx.intentic.dev",
+                    "lastSeenAt": null,
+                    "setupCodeClaimedAt": null,
+                    "setupReport": null,
+                    "bootReport": null,
+                    "announceRefusal": null,
+                    "removedAt": null,
+                    "removedBy": null,
+                    "token": null,
+                    "role": "collaborator",
+                    "providedAddress": false,
+                    "localHostname": null,
+                    "hosted": {
+                        "state": "asleep",
+                        "region": "fra",
+                        "warm": true,
+                        "canRollBack": false
+                    },
+                    "daemonVersion": null
+                }
+            ]
+        }
+    },
+    "sandbox.identityAssertion:input": {
+        "a sandbox by its row id": {
+            "sandboxId": "sbx_row_2"
+        }
+    },
+    "sandbox.identityAssertion:output": {
+        "minted": {
+            "assertion": "ia1.eyJzYW5kYm94SWQiOiJhMWIyYzNkNGU1ZjYifQ.c2ln",
+            "expiresAt": "2026-10-19T16:45:00.000Z"
+        }
+    },
+    "sandbox.ownerTicket:input": {
+        "a hosted sandbox": {
+            "sandboxId": "sbx_row_2"
+        }
+    },
+    "sandbox.ownerTicket:output": {
+        "minted": {
+            "ticket": "ot1.eyJzYW5kYm94SWQiOiJhMWIyIn0.c2ln",
+            "expiresAt": "2026-10-19T16:45:00.000Z"
+        }
+    },
+    "sandbox.wake:input": {
+        "an asleep machine": {
+            "sandboxId": "sbx_row_2"
+        }
+    },
+    "sandbox.wake:output": {
+        "woken": {
+            "ok": true
+        }
+    },
+    "desktop.handoff:input": {
+        "a Google account": {
+            "idToken": "eyJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJ3ZWIifQ.c2ln",
+            "challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        },
+        "an email account": {
+            "challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        }
+    },
+    "desktop.handoff:output": {
+        "handed": {
+            "handoff": "hnd_5kT1"
+        }
+    },
+    "desktop.redeem:input": {
+        "redeemed": {
+            "handoff": "hnd_5kT1",
+            "verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        }
+    },
+    "desktop.redeem:output": {
+        "with a Google proof": {
+            "ott": "ott_Yx81",
+            "idToken": "eyJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJ3ZWIifQ.c2ln"
+        },
+        "for an email account": {
+            "ott": "ott_Yx82"
+        }
+    },
+    "push.register:input": {
+        "this phone": {
+            "platform": "android",
+            "token": "fcm:APA91bH-registration-token"
+        },
+        "the editor app on one sandbox": {
+            "platform": "android",
+            "token": "fcm-token-123",
+            "app": "editor",
+            "sandbox": "sbx_row_1"
+        }
+    },
+    "push.register:output": {
+        "granted": {
+            "deviceId": "dev_88",
+            "secret": "c2VjcmV0",
+            "url": "https://api.intentic.dev/rpc/push/send"
+        }
+    },
+    "push.unregister:input": {
+        "this phone": {
+            "deviceId": "dev_88"
+        }
+    },
+    "push.unregister:output": {
+        "gone": {
+            "ok": true
+        }
+    },
+    "unschemed:RpcError": {
+        "no such sandbox": {
+            "defined": false,
+            "code": "NOT_FOUND",
+            "status": 404,
+            "message": "sandbox not found"
+        }
+    }
+}

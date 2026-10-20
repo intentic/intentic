@@ -24,7 +24,8 @@ import { agentWork, assignAgent, landRequestWork, requestLandAgent, startAgent }
 import { useOperation } from "../../../workbench/operations/operations";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
-import { mobileChatPath } from "../../../lib/routes/phoneScreens";
+import { AGENT_VIEW, CHANGES_VIEW, mobileChatPath } from "../../../lib/routes/phoneScreens";
+import { embedded } from "../../../app/environments/nativeApp";
 import { afterPaint } from "../../../lib/afterPaint";
 import { whenIdle } from "../../../lib/whenIdle";
 import ChatSwitcherSheet from "../../chat/tabs/ChatSwitcherSheet.vue";
@@ -64,6 +65,7 @@ provide(QUIET_TRANSCRIPT_WAIT, true);
 const route = useRoute();
 const router = useRouter();
 const { mobile } = useDevice();
+const inApp = embedded();
 const { fleet, refresh, open, agentById, archived, loadArchived, rename, markSeen } = useAgents();
 const { conversations, setActive, closeTabs, openConversation, active: activeChat } = useChat();
 
@@ -161,6 +163,17 @@ const bindLocalConversation = (id: string, previousId: string | undefined): void
     if (id === `` || (id === previousId && conversation.value !== undefined && (mobile.value || reviewable.value))) {
         return;
     }
+    // Inside the Android app this page shows the agent's Changes and nothing of its chat, so no chat tab is opened for
+    // it: the roster is asked about the id, and an id it does not know goes back to the board, the app's.
+    if (inApp) {
+        if (fleetAgent.value === undefined) {
+            settleLookup(id);
+            if (!settling.value) {
+                void router.replace(`/agents`);
+            }
+        }
+        return;
+    }
     // The tab is already in front (a phone's board opened it as it walked here, cardSelection.ts, or /chat pointed at
     // the chat that was): re-revealing it is a second pass over the tab list and the pane layout, inside the
     // navigation the reader is waiting on. Arriving still stamps the read marker, which is all that open() adds.
@@ -218,8 +231,18 @@ onMounted(() => {
     }
 });
 
-// Mode switch only exists on mobile; desktop always renders the review.
-const view = ref<`chat` | `changes`>(mobile.value ? `chat` : `changes`);
+// Mode switch only exists on mobile; desktop always renders the review. `?view=changes` opens a phone on the Changes
+// page instead of the chat: a link's way to name the review, and the Android app's to show it alone.
+const askedView = (): `chat` | `changes` => (route.query[AGENT_VIEW] === CHANGES_VIEW ? `changes` : `chat`);
+const view = ref<`chat` | `changes`>(mobile.value ? askedView() : `changes`);
+watch(
+    () => route.query[AGENT_VIEW],
+    () => {
+        if (mobile.value) {
+            view.value = askedView();
+        }
+    },
+);
 
 // The name this page can honestly print: the roster's, or the open conversation's. Absent while the id is still a
 // question, which the header draws as a bar rather than filling with the word "Agent".
@@ -365,6 +388,15 @@ watch(view, (shown) => {
         drawReview();
     }
 });
+// INSIDE THE ANDROID APP this screen is only ever an agent's Changes (app/environments/nativeApp.ts): its conversation is
+// the app's own screen, so turning to the chat page, by a finger or the switch or the review asking for it, goes there
+// (the router hands `/agents/<id>` to the app) and this page stays on the changes it was opened for.
+watch(view, (shown) => {
+    if (inApp && shown === `chat`) {
+        view.value = `changes`;
+        void router.push(mobileChatPath(agentId.value));
+    }
+});
 
 // `heardFrom` tells "not told yet" apart from "told, and this agent isn't in it" (fleetAcross's `readAt`), so a
 // box that answered but lacks this id gets a sentence saying so, not a false "hasn't answered".
@@ -473,8 +505,10 @@ const confirmHandOver = async (): Promise<void> => {
         <!-- A @container: the header thins against its own width (the workspace pane's), not the window's. On a phone it is
              the screen's whole chrome, sized for a thumb: 56px tall, every press in it a 40-44px target you can see. -->
         <div class="view-header @container flex items-center border-b border-line" :class="mobile ? `h-14 gap-1 pl-1 pr-2` : `gap-2.5 px-3.5 py-1`">
-            <!-- The board is a place, so the way back is a link: hoverable, copyable, openable in its own tab. -->
+            <!-- The board is a place, so the way back is a link: hoverable, copyable, openable in its own tab. The Android
+                 app draws its own way back, in its toolbar. -->
             <RouterLink
+                v-if="!inApp"
                 to="/agents"
                 class="touch-target flex shrink-0 items-center justify-center text-muted transition-colors hover:bg-overlay hover:text-content active:bg-overlay"
                 :class="mobile ? `h-11 w-11 rounded-full` : `h-7 w-7 rounded-md`"
@@ -631,7 +665,11 @@ const confirmHandOver = async (): Promise<void> => {
         >
             <!-- `:tabs="false"`: this screen's header names the conversation, as does the panel's own mobile header. -->
             <template #chat>
-                <ChatPanel v-if="chatMounted" :tabs="false" class="min-h-0 flex-1" />
+                <ChatPanel v-if="chatMounted && !inApp" :tabs="false" class="min-h-0 flex-1" />
+                <!-- In the app this page is only the agent's Changes; one with nothing to review says so where they would be. -->
+                <p v-else-if="inApp && !reviewable && !looking" class="px-3.5 py-3 text-xs text-muted">
+                    {{ t(`agents.agentDetail.noBranchToReview`) }}
+                </p>
             </template>
             <template #changes>
                 <!-- `chat` is the review asking to swap for the conversation, raised when it hands a land conflict back to the agent. -->

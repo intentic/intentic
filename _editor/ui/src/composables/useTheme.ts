@@ -33,13 +33,15 @@ darkQuery?.addEventListener(`change`, (event) => {
     system.value = event.matches ? `dark` : `light`;
 });
 
-// The desktop app's own faces (its setup card, its close question) are handed the workspace's scheme by the
-// binary before they paint (`face_init_script` in windows.rs). That is a fact about the window they stand in, not
-// a preference this page may hold, so it wins over both the setting and the OS. The app leaves it unset when it
-// has nothing to announce, and the page falls back to the rule above. Read as a KEY rather than a property: the
-// name belongs to the binary that writes it, not to this file.
+// A SCHEME THE WINDOW IS HANDED rather than one this page keeps. The desktop app's own faces (its setup card, its close
+// question) are handed the workspace's scheme by the binary before they paint (`face_init_script` in windows.rs), and
+// the Android app hands its WebView the look it wears (web's app/environments/nativeApp.ts, through `hand`). That is a
+// fact about the window they stand in, not a preference this page may hold, so it wins over both the setting and the
+// OS, and it is never stored: the reader's own choice is still there underneath once nothing is handed. `system`
+// handed follows the OS whatever the setting says. The desktop app leaves its key unset when it has nothing to
+// announce. Read as a KEY rather than a property: the name belongs to the binary that writes it, not to this file.
 const announced = (globalThis as unknown as Record<string, unknown>)[`__INTENTIC_MODE__`];
-const PINNED: ColorScheme | undefined = announced === `light` || announced === `dark` ? announced : undefined;
+const given = ref<SchemeChoice | undefined>(announced === `light` || announced === `dark` ? announced : undefined);
 
 const choice: Ref<SchemeChoice> = definePreference<SchemeChoice>({
     key: STORAGE_KEY,
@@ -48,7 +50,13 @@ const choice: Ref<SchemeChoice> = definePreference<SchemeChoice>({
 });
 
 /** The scheme actually on screen; `system` resolved, and read-only because the way to change it is `set`. */
-const scheme: ComputedRef<ColorScheme> = computed(() => PINNED ?? (choice.value === `system` ? system.value : choice.value));
+const scheme: ComputedRef<ColorScheme> = computed(() => {
+    const asked = given.value ?? choice.value;
+    return asked === `system` ? system.value : asked;
+});
+
+/** The scheme the window was handed, undefined while the setting decides. */
+const handed: ComputedRef<SchemeChoice | undefined> = computed(() => given.value);
 
 // The DOM side hangs off the RESOLVED scheme, not off the setting, or an OS flip under `system` would repaint
 // nothing. `sync` for the reason definePreference applies synchronously: a frame in the old look is the bug.
@@ -56,6 +64,11 @@ watch(scheme, apply, { immediate: true, flush: `sync` });
 
 const set = (value: SchemeChoice): void => {
     choice.value = value;
+};
+
+/** Wears `value` over the setting without storing it; undefined hands the scheme back to the setting. */
+const hand = (value: SchemeChoice | undefined): void => {
+    given.value = value;
 };
 
 /** Pins the scheme opposite to what is on screen: a toggle is a choice, so it never leaves the setting on `system`. */
@@ -91,5 +104,5 @@ const setAccent = (hex: string): void => {
 };
 
 export function useTheme() {
-    return { scheme, choice, set, toggle, accent, setAccent };
+    return { scheme, choice, handed, set, hand, toggle, accent, setAccent };
 }

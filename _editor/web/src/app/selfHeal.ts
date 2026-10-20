@@ -17,6 +17,7 @@ import { describeError, flushClientDiagnostics, reportClient } from "./clientDia
 import { noteReload } from "@intentic/ui/reload-reason";
 import { storedValue, storeValue } from "@intentic/ui/storage";
 import { TURN_DEFAULT_KEYS } from "./turnDefaultKeys";
+import { EMBED_TAB_KEYS } from "./environments/nativeApp";
 
 // How long after boot an error still counts as a failed start rather than an ordinary bug; generous, since a false
 // positive only costs one wipe and reload.
@@ -35,6 +36,9 @@ const KNOWN_DATABASES = [`keyval-store`, `intentic.chat`, `intentic.skeletons`];
 // What a new chat runs on outlives the wipe (turnDefaultKeys.ts says why): one heal on 2026-10-13 reset the model
 // map, and the next four new chats all opened on an older Claude model without anyone choosing it.
 const KEPT_KEYS: readonly string[] = Object.values(TURN_DEFAULT_KEYS);
+// And from this tab's session storage, that it is the Android app's WebView (environments/nativeApp.ts): a healed page
+// that forgot would open inside the app as a browser tab, rail, back arrow and all.
+const KEPT_TAB_KEYS: readonly string[] = EMBED_TAB_KEYS;
 
 const startedAt = performance.now();
 let healing = false;
@@ -43,6 +47,12 @@ let healing = false;
 const keptValues = (): readonly (readonly [string, string])[] =>
     KEPT_KEYS.flatMap((key) => {
         const value = storedValue(key);
+        return value === undefined ? [] : [[key, value] as const];
+    });
+
+const keptTabValues = (): readonly (readonly [string, string])[] =>
+    KEPT_TAB_KEYS.flatMap((key) => {
+        const value = storedValue(key, `session`);
         return value === undefined ? [] : [[key, value] as const];
     });
 
@@ -65,10 +75,14 @@ const heal = (error: unknown): void => {
     flushClientDiagnostics();
     try {
         const kept = keptValues();
+        const keptTab = keptTabValues();
         localStorage.clear();
         sessionStorage.clear();
         for (const [key, value] of kept) {
             storeValue(key, value);
+        }
+        for (const [key, value] of keptTab) {
+            storeValue(key, value, `session`);
         }
         sessionStorage.setItem(HEALED_MARKER, `1`);
         localStorage.setItem(WIPE_KEY, `1`);

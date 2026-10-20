@@ -18,7 +18,7 @@ flowchart LR
   start into a 2,000-row conversation, a fling through it, and a turn streamed under it, on the same phone, with the
   same text, read off the same counters.
 - **The arms.** The baseline is today's web editor (the production build of `_site/demo`) in a WebView, the engine of
-  the Trusted Web Activity the store app is (`../android-app`). Arm A draws rows the Rust core parsed and highlighted
+  the Trusted Web Activity the store app was before `../android-app` went native. Arm A draws rows the Rust core parsed and highlighted
   as `StaticLayout`s built off the main thread, in a RecyclerView of plain `View`s (`Rows.kt`, `RowView.kt`). Arm C
   draws the same rows with wgpu from Rust onto a `SurfaceView` (`core/src/surface`). Arm B is Flutter and arm D is plain
   Kotlin (Compose and a Kotlin markdown library, no Rust), each written as a typical team would write it
@@ -84,6 +84,57 @@ rotation so no arm always ran last on a warmer phone (battery 32.8 → 34.6 °C,
   a team would first ship it. A hand-tuned Compose, which builds styled text off the main thread, would close part of
   its CPU gap by moving toward arm A's design.
 
+## The app itself, as an arm
+
+2026-10-20: `../android-app`'s bench build (`dev.intentic.app.bench`, its `PreviewConversation` over the same fixture,
+which `../mobile-core` opens and streams) is the bench's `app` arm. On the S10, on battery, medians of 5 starts and 3
+runs, beside the two arms it was chosen between:
+
+| | A: views + Rust | D: plain Kotlin | the app |
+| --- | --- | --- | --- |
+| Cold start, `TotalTime` / rows on screen ms | 163 / 100 | 189 / 167 | 183 / 121 |
+| Fling: late frames, CPU ms, PSS MB, battery mA | 0.4%, 1,916, 48, 307 | 0.8%, 4,766, 62, 338 | 0.6%, 2,159, 61, 338 |
+| Stream: late frames, CPU ms, PSS MB, battery mA | 0%, 5,967, 54, 247 | 0%, 8,378, 62, 294 | 0.9%, 7,000, 70, 270 |
+
+- **The app keeps arm A's lead over plain Kotlin** in starting and scrolling, and streams on less CPU and current.
+- **It pays for being a whole client.** A session store, an async runtime and an HTTP stack sit beside the renderer,
+  which is most of the 13 to 16 MB it holds above arm A. The core kept every drawn row until 2026-10-20; it now keeps a
+  few screens' worth.
+- **Its stream is 1,000ms of CPU above arm A on battery.** On USB power it measured 6,308ms, level with arm A. Two
+  changes got it there: a streamed row rebuilt once per frame on the main thread, and the conversation requested the
+  moment the core starts.
+- **The Baseline Profile changed nothing measurable.** Macrobenchmark on the S10 gave the same start (271 vs 272ms to
+  rows) and the same frame times with and without it. The framework is compiled ahead of time already, and the
+  core is native, so the app's own Kotlin is a small part of each path.
+
+## Bridge: JNI or JNA
+
+Galaxy S10 (Android 12), 2026-10-19, measured by [bridge-bench](bridge-bench/README.md): one Rust library called from
+Kotlin four ways. `uniffi` is JNA direct mapping with the structs UniFFI 0.32's generated Kotlin passes (a status struct
+per call, strings in buffers allocated and freed through Rust), written out by hand. Ten cold starts and five runs of
+100,000 calls per mode, in rotation, compiled ahead of time; medians.
+
+| | JNI | JNA direct | JNA interface | UniFFI's convention |
+| --- | --- | --- | --- | --- |
+| Cold start: library load, ms | 1.6 | 7.8 | 6.0 | 8.6 |
+| Cold start: first call, µs | 126 | 55 | 1,171 | 410 |
+| Call, no arguments, µs | 0.08 | 0.13 | 1.2 | 23 |
+| Call, 200 bytes of JSON in, a new string out, µs | 1.1 | 4.8 | 12 | 131 |
+| Call, 200 bytes in, new bytes out, µs | 0.8 | 2.0 | 16 | 129 |
+
+- **JNA costs the cold start 6–7ms.** That is loading JNA's own library and binding the functions; the system's
+  `TotalTime` medians (153–164ms) differ by less than their spread.
+- **UniFFI's convention costs every call.** A string call takes 115 times as long as with JNI, and 2,000 rows crossing
+  once each would take a quarter of a second. Most of it is JNA building structs by reflection on every call
+  ([uniffi-rs#3011](https://github.com/mozilla/uniffi-rs/issues/3011) traces it on a desktop JVM, 3.5–4µs there), and
+  sustained calls keep the garbage collector and JNA's cleaner thread busy. JNA direct mapping alone costs 1.8–4.2
+  times JNI.
+- **The `jni` crate's `get_string` adds 0.85µs a call** (2.0 against 1.1µs) by looking up `java.lang.String` every
+  time. `_editor/mobile-core`'s bridge uses it; a hot function should use `get_string_unchecked`.
+- **JNA adds 405KB to an APK with both ABIs**, 267KB of it for arm64 (`libjnidispatch.so` and its classes).
+- **Keep one JSON function over JNI plus hand-written hot functions.** UniFFI everywhere would cost little at start but
+  23–131µs a call, too much for anything per row or per frame; only a wide, rarely called API could afford it.
+
 ## Key files
 
 - [fixture/make-fixture.ts](fixture/make-fixture.ts) — the conversation, its inflation and its streamed turn, from the demo.
@@ -114,4 +165,6 @@ node _editor/android-native/bench/bench.ts --serial <serial> --runs 5           
 The release APKs are signed with the machine's debug key, which a rebuilt sandbox makes anew. A phone holding an
 install signed with the old key refuses the update (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`), and an install that fails
 quietly leaves the bench timing the old build: `adb uninstall` the three packages first. Wireless debugging also
-trusts the sandbox's adb key, so after a rebuild the phone needs pairing again (`adb pair <ip>:<port> <code>`).
+trusts the sandbox's adb key, so after a rebuild the phone needs pairing again (`adb pair <ip>:<port> <code>`),
+unless the key was kept: in an Intentic sandbox, a copy in `/work/.intentic/local/adb/` (outside git) goes back into
+`~/.android/` before `adb connect`.

@@ -2,13 +2,14 @@ packages:
   - "_devices/*"
   - "_deploy/*"
   - "_editor/*"
-  # The store shells are deliberately NOT workspace packages: their dependencies are consumed by Xcode/
-  # CocoaPods on a Mac (ios-app) and by Bubblewrap's own JDK toolchain (android-app), never by this
-  # monorepo's node toolchain — each is installed standalone (`npm install` in its folder) on the machine
-  # that actually builds it, so the shared lockfile and turbo graph stay free of mobile toolchains.
+  # The iOS store shell is deliberately NOT a workspace package: its dependencies are consumed by Xcode/
+  # CocoaPods on a Mac, never by this monorepo's node toolchain — it is installed standalone (`npm install`
+  # in its folder) on the machine that actually builds it, so the shared lockfile and turbo graph stay free
+  # of mobile toolchains.
   - "!_editor/ios-app"
+  # The Android apps (the editor's and Intentic Device) are Gradle projects with no node dependencies: the
+  # editor app's generators are plain node scripts.
   - "!_editor/android-app"
-  # The Intentic Device phone app is a Gradle project with no node toolchain at all.
   - "!_devices/android"
   - "_extensions/*"
   - "_os/*"

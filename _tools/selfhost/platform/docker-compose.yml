@@ -221,6 +221,9 @@ services:
             APNS_TEAM_ID: ${APNS_TEAM_ID:-}
             APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
             APNS_URL: ${APNS_URL:-}
+            # The Android push relay: the Firebase project's service account key, the whole JSON file on one line. Empty
+            # → Android registrations 404: the Intentic Device app cannot be woken and the editor app is not notified.
+            FCM_SERVICE_ACCOUNT: ${FCM_SERVICE_ACCOUNT:-}
             # Transactional email via Resend: sign-in codes, invites, hosted notices. Required for email sign-in.
             # Unset, only Google sign-in is offered and invite links are logged server-side.
             EMAIL_API_KEY: ${EMAIL_API_KEY:-}
@@ -261,6 +264,11 @@ services:
             # blockers can't strip session replay). Override the pair only for a non-US project.
             POSTHOG_API_HOST: ${POSTHOG_API_HOST:-us.i.posthog.com}
             POSTHOG_ASSETS_HOST: ${POSTHOG_ASSETS_HOST:-us-assets.i.posthog.com}
+            # The Android editor app's signing certificates (SHA-256, AA:BB:… as the Play console prints them,
+            # comma-separated: the Play app-signing key, then any upload or debug key). Published at
+            # /.well-known/assetlinks.json for App Links and the editor's passkeys, and read from there by every
+            # sandbox to admit the app's passkey sign-in. Empty → no file, and the app cannot use passkeys.
+            ANDROID_APP_FINGERPRINTS: ${ANDROID_APP_FINGERPRINTS:-}
         networks: [intentic-platform]
 
     # THE EDGE EVERY SANDBOX IS REACHED THROUGH (@intentic/ingress). Sandboxes dial it outbound and prove who

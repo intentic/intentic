@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The mark of store-icon-512.png, traced in its own 512px coordinates (two slabs cut by one 45-degree gap) and in its
+     orange, then scaled to 60dp of the 108dp layer: inside the 66dp circle every launcher mask keeps. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.56"
+        android:scaleY="0.56">
+        <path
+            android:fillColor="#FFFE6A00"
+            android:pathData="M201,2H310V52L201,161Z M310,127V510H201V236Z" />
+    </group>
+</vector>

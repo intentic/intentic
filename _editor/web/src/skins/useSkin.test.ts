@@ -125,3 +125,25 @@ describe(`useSkin`, () => {
         expect(localStorage.getItem(`ui-color-scheme`)).toBeNull();
     });
 });
+
+// The Android app hands its WebView the look it wears (app/environments/nativeApp.ts): the skin half of it is worn over
+// the setting, writes nothing, and leaves the setting where it was once handed back.
+describe(`a skin the Android app handed over`, () => {
+    it(`is worn over the setting without storing it or pinning the scheme`, async () => {
+        systemIs(`dark`);
+        localStorage.setItem(`ui-skin`, `sanctum`);
+        const { useSkin } = await load();
+
+        useSkin().hand(`none`);
+
+        expect(useSkin().skin.value).toBe(`none`);
+        expect(useSkin().handed.value).toBe(`none`);
+        expect(root().hasAttribute(`data-skin`)).toBe(false);
+        expect(localStorage.getItem(`ui-skin`)).toBe(`sanctum`);
+        expect(localStorage.getItem(`ui-color-scheme`)).toBeNull();
+
+        useSkin().hand(undefined);
+
+        expect(useSkin().skin.value).toBe(`sanctum`);
+    });
+});

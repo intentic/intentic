@@ -46,4 +46,34 @@ ENV_JS="$(cat /tmp/env.js)" awk '
 ' /usr/share/nginx/html/index.html > /tmp/index.html
 cat /tmp/index.html > /usr/share/nginx/html/index.html
 
+# Digital Asset Links for the native Android editor app (dev.intentic.app), at /.well-known/assetlinks.json: App Links
+# (handle_all_urls) and the editor's passkeys (get_login_creds), which Android's Credential Manager checks before it lets
+# the app use them. Every sandbox reads this same file to admit the app's passkey sign-in
+# (_sandbox/sandbox/src/auth/passkeys/app-origins.ts), so this variable is the one place the app's signing certificates
+# are named. ANDROID_APP_FINGERPRINTS: comma-separated SHA-256 certificate fingerprints as keytool and the Play console
+# print them (32 colon-separated hex pairs): the Play app-signing key, then any upload or debug key to admit. Unset, no
+# file is written, nginx answers 404 and no app is admitted. A malformed entry is skipped and said, never left to stop
+# the editor starting.
+WELL_KNOWN=/usr/share/nginx/html/.well-known
+fingerprints=""
+for fingerprint in $(printf '%s' "${ANDROID_APP_FINGERPRINTS:-}" | tr ',' ' '); do
+    if printf '%s' "$fingerprint" | grep -Eq '^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){31}$'; then
+        fingerprints="${fingerprints:+$fingerprints, }\"$(printf '%s' "$fingerprint" | tr 'a-f' 'A-F')\""
+    else
+        echo "entrypoint: skipping ANDROID_APP_FINGERPRINTS entry '$fingerprint': not a SHA-256 fingerprint (32 colon-separated hex pairs)" >&2
+    fi
+done
+if [ -n "$fingerprints" ]; then
+    mkdir -p "$WELL_KNOWN"
+    cat > "$WELL_KNOWN/assetlinks.json" <<JSON
+[
+    {
+        "relation": ["delegate_permission/common.handle_all_urls", "delegate_permission/common.get_login_creds"],
+        "target": { "namespace": "android_app", "package_name": "dev.intentic.app", "sha256_cert_fingerprints": [$fingerprints] }
+    }
+]
+JSON
+    chmod a+rX "$WELL_KNOWN" "$WELL_KNOWN/assetlinks.json"
+fi
+
 exec nginx -g 'daemon off;'

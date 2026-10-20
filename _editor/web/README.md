@@ -15,8 +15,25 @@ flowchart LR
 
 - **Where it runs.** A static SPA served by the nginx image in `Dockerfile`. `entrypoint.sh` fills `API_URL` and
   `POSTHOG_KEY` into `assets/js/env.js` at container start, so one build serves any environment, and inlines that
-  script into `index.html` so the first page load does not wait on a second, uncached request for it. The desktop app,
+  script into `index.html` so the first page load does not wait on a second, uncached request for it. It also writes
+  `/.well-known/assetlinks.json` from `ANDROID_APP_FINGERPRINTS` (the native app's signing certificates): Android
+  checks it for the app's links and its passkeys, and every daemon reads it to admit the app's passkey origin. The desktop app,
   the iOS shell and the Android shell all open this same app, and `_site/demo` builds it through `vite.shared.ts`.
+- **Inside the Android app.** The native app (`_editor/android-app`) draws sign-in, the board, a conversation and the
+  menu itself, and shows every other screen of this app in one WebView it keeps warm. It loads a route with
+  `?embed=native` (and `&look=`, the look it wears), which the tab remembers for its life (`app/environments/nativeApp.ts`).
+  There the phone shell draws no rail, no back arrow and no edge swipe; one router guard hands the app every navigation
+  to a screen it draws, whoever started it, and a sign-out goes to it too (`router/nativeHandoff.ts`); the app's back asks
+  `window.intenticEmbed.back()`, which steps back through the page's own history and answers whether it could; and the
+  app's look is worn over the reader's own choice, never stored. The app can hand over a daemon session it already holds,
+  so the page needs no sign-in of its own there. Two addresses under an agent stay in the page for the app to show: its
+  Changes alone (`/agents/<id>?view=changes`, where turning to the chat goes to the app's conversation) and one page the
+  agent showed, full screen (`/agents/<id>/pages/<pageId>`, below). Without the flag none of it runs.
+- **A page full screen.** `/agents/<id>/pages/<pageId>` draws one page an agent showed (`show_page`, `ask_page`) alone,
+  in the chat's own sealed frame and theme (`features/chat/transcript/pages/ChatPageScreen.vue`), from any browser. A
+  page's id is the daemon's and a redraw keeps it, so the address names the drawing that stands, the last one, read from
+  the conversation's record however far back it is (`pageLookup.ts`). A page that asks is answered there through the
+  conversation's one reply, as on its card in the chat.
 - **Two backends, two credentials.** The platform api (`src/lib/useApi.ts`) rides the Better Auth cookie and
   answers sign-in, the sandbox list, invites and the hosted plan. Every workspace call goes directly to the daemon
   through `sandboxRpc`, with a daemon-minted session that a proof establishes (`sandboxSession.ts`). The platform is not

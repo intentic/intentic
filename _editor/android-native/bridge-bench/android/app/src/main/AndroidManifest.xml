@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- No launcher: the bench starts each activity with `am start -S -W` and a `mode` extra. Both show over the lock
+         screen, so a locked test phone still runs them in the foreground without its settings being touched, and
+         neither is recreated when the screen's configuration changes: a second onCreate would time a second set of
+         calls beside the first. -->
+    <application
+        android:allowBackup="false"
+        android:label="Bridge bench"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <!-- A cold start: load the library, make the first call, log BENCH_FIRST. -->
+        <activity
+            android:name=".FirstActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|keyboard|keyboardHidden|navigation"
+            android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+
+        <!-- The same start, then every operation timed in a loop: BENCH_CALL lines, then BENCH_DONE. -->
+        <activity
+            android:name=".CallsActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|keyboard|keyboardHidden|navigation"
+            android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+    </application>
+</manifest>

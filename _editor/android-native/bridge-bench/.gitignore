@@ -1,0 +1,7 @@
+# Rust and Gradle build output, Gradle's and Kotlin's state, and the machine's own SDK path.
+target/
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties

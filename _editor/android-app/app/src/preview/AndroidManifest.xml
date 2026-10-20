@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Debug builds only: screens filled from fixtures, and the app's own light or dark, for looking at layouts and
+         timing them without signing in to anything. -->
+    <application android:networkSecurityConfig="@xml/network_security_config">
+        <!-- A bench build is not debuggable, so Macrobenchmark (:benchmark) needs leave to trace it. -->
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
+        <activity
+            android:name=".PreviewBoard"
+            android:exported="true"
+            android:theme="@style/Theme.Intentic" />
+        <activity
+            android:name=".PreviewConversation"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".PreviewWeb"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name=".PreviewLook"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
+</manifest>

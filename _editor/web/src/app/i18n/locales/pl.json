@@ -4381,7 +4381,12 @@
             "threw": "Skrypt strony rzucił błąd | Skrypty strony rzuciły {count} błędy | Skrypty strony rzuciły {count} błędów",
             "agentTold": "agent o tym wie",
             "askFix": "Poproś o poprawkę",
-            "fixRequest": "Strona \"{title}\" (id \"{id}\") rzuciła błędy w moim czacie:\n{errors}\n\nPopraw ją i pokaż ponownie z replaces: \"{id}\"."
+            "fixRequest": "Strona \"{title}\" (id \"{id}\") rzuciła błędy w moim czacie:\n{errors}\n\nPopraw ją i pokaż ponownie z replaces: \"{id}\".",
+            "screenTitle": "Strona",
+            "opening": "Otwieranie strony…",
+            "notFound": "Tej strony nie ma już w tym czacie.",
+            "conversationGone": "Tego czatu nie ma już w tym sandboxie.",
+            "readFailed": "Nie udało się odczytać tego czatu."
         },
         "chatReview": {
             "title": "Przegląd kodu",

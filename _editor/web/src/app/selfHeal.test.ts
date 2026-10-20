@@ -58,6 +58,19 @@ it(`keeps what a new chat runs on across the wipe: a reset model map opened ever
     expect(reload).toHaveBeenCalledTimes(1);
 });
 
+// A healed page that forgot it is the Android app's WebView would open inside the app as a browser tab, rail and all.
+it(`keeps the tab's being the Android app's WebView across the wipe, and nothing else of the tab`, async () => {
+    const { reportStartupError } = await load();
+    sessionStorage.setItem(`intentic.embed`, `native`);
+    sessionStorage.setItem(`intentic.embed.look`, `sanctum`);
+    sessionStorage.setItem(`intentic.chatTabs.window`, `poisoned`);
+    reportStartupError(new Error(`boom`));
+    expect(sessionStorage.getItem(`intentic.embed`)).toBe(`native`);
+    expect(sessionStorage.getItem(`intentic.embed.look`)).toBe(`sanctum`);
+    expect(sessionStorage.getItem(`intentic.chatTabs.window`)).toBeNull();
+    expect(reload).toHaveBeenCalledTimes(1);
+});
+
 it(`does not wipe twice: a crash that survives the clean slate surfaces instead of looping`, async () => {
     const { reportStartupError } = await load();
     reportStartupError(new Error(`boom`));

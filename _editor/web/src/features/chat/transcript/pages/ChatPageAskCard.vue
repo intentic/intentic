@@ -7,6 +7,7 @@ import ChatCard from "../../../../components/ChatCard.vue";
 import ChatDecisionButton from "../../../../components/ChatDecisionButton.vue";
 import { pageAskStatus } from "../cards/cardStatus";
 import ChatPageFrame from "./ChatPageFrame.vue";
+import { answerOnPage } from "./pageAnswer";
 import { usePageActions } from "./usePageActions";
 
 // A page the agent asked to be answered on (`ask_page`): the page itself is the card's body, and what it sends back
@@ -20,16 +21,11 @@ const card = computed(() => props.message.pageAsk!);
 const actions = usePageActions(() => card.value.page);
 
 // The page's answer, or why it was not taken; a card no longer waiting tells the page so rather than staying silent.
-const submit = async (value: string): Promise<string | undefined> => {
-    if (card.value.status !== `pending`) {
-        return t(`chat.chatPages.alreadyAnswered`);
-    }
-    if (props.settling) {
-        return t(`chat.chatPages.answering`);
-    }
-    await props.reply({ kind: `page_ask`, value });
-    return props.message.pageAsk?.status === `pending` ? t(`chat.cardReplies.answersNotSubmitted`) : undefined;
-};
+const submit = answerOnPage(
+    () => props.message.pageAsk,
+    () => props.settling,
+    (answer) => props.reply(answer),
+);
 
 // What was sent, on one line: the reader's own answer, as the agent read it.
 const sent = computed(() => {

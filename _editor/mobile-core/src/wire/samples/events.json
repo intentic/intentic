@@ -1,0 +1,79 @@
+{
+    "SystemEventSchema": {
+        "hello": {
+            "kind": "hello",
+            "workspaceId": "ws_3f9c2a7d1e",
+            "build": "1.318.2:1760870312",
+            "routes": ["agents.list", "agent.attach", "agent.run", "system.session"],
+            "shapes": { "agents.list": "a1f3c9", "agent.attach": "77d0e2" },
+            "rawRoutes": ["POST /workspace/upload"],
+            "rawFingerprints": { "POST /workspace/upload": "5be1aa" },
+            "uploadEncodings": ["gzip"],
+            "boot": {
+                "ready": true,
+                "startedAt": 1760870300112,
+                "steps": [
+                    { "key": "state", "label": "Reading saved state", "state": "done", "ms": 412 },
+                    { "key": "agents", "label": "Restoring conversations", "state": "done", "ms": 1290 }
+                ]
+            },
+            "surface": "sandbox"
+        },
+        "hello from a folder sidecar": { "kind": "hello", "workspaceId": "folder-docs", "routes": ["system.session"], "surface": "folder" },
+        "heartbeat": { "kind": "heartbeat", "rev": 482 },
+        "boot, still converging": {
+            "kind": "boot",
+            "ready": false,
+            "startedAt": 1760870300112,
+            "steps": [
+                { "key": "state", "label": "Reading saved state", "state": "done", "ms": 412 },
+                { "key": "agents", "label": "Restoring conversations", "state": "running" },
+                { "key": "capabilities", "label": "Connecting capabilities", "state": "pending" }
+            ]
+        },
+        "presence": {
+            "kind": "presence",
+            "users": [
+                {
+                    "clientId": "c_8b1e",
+                    "email": "ada@example.com",
+                    "name": "Ada",
+                    "picture": "https://lh3.googleusercontent.com/a/ada",
+                    "role": "owner",
+                    "idle": false,
+                    "view": "agents",
+                    "sessionId": "cnv_soft_deletes"
+                },
+                { "clientId": "c_22f0", "email": "grace@example.com", "role": "collaborator", "idle": true, "away": true }
+            ]
+        },
+        "agents": {
+            "kind": "agents",
+            "rev": 483,
+            "agents": [
+                {
+                    "id": "cnv_soft_deletes",
+                    "title": "Add soft deletes to the invoices table",
+                    "titleAction": "feature",
+                    "status": "running",
+                    "provider": "claude",
+                    "harness": "native",
+                    "model": "claude-opus-5-5",
+                    "branch": "agent/cnv_soft_deletes",
+                    "startedAt": 1760870400000,
+                    "run": "run_9f2c",
+                    "activity": { "tool": "Edit", "target": "src/invoices/repository.ts", "todo": "Filter deleted rows" },
+                    "checklist": { "done": 2, "total": 5 },
+                    "updatedAt": 1760870461000,
+                    "seenAt": 1760870400000,
+                    "attention": { "plan": false, "question": false, "permission": false, "capability": false, "credential": false, "conflict": false }
+                }
+            ]
+        },
+        "a workspace change this build ignores": { "kind": "workspaceChanged", "paths": ["src/invoices/repository.ts"] },
+        "a runtime change this build ignores": { "kind": "runtimeChanged", "domains": ["ports"] }
+    },
+    "unschemed:SystemEvent": {
+        "a frame from a newer daemon": { "kind": "weather", "sky": "clear" }
+    }
+}

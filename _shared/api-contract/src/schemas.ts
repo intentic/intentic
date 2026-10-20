@@ -587,17 +587,29 @@ export type Deployment = z.infer<typeof DeploymentSchema>;
 // Push relay: Apple and Firebase only accept pushes from the app's own vendor, so a native install can't be posted to
 // directly. The daemon posts sessionless, proven by its per-device secret; each side holds only the half it needs.
 
-// ios: the editor's iPhone app, notified through APNs. android: the Intentic Device app on a phone, WOKEN through FCM
-// (a wake channel only: the relay sends it a data-only message and drops the title and body). The editor's Android app
-// is a TWA and uses the daemon's own web push instead.
+// ios: the editor's iPhone app, notified through APNs. android: an app on a phone, reached through FCM with a data-only
+// message that never carries the title or the body; which app says what that message is (PushAppSchema).
 export const PushPlatformSchema = z.enum(["ios", "android"]);
 export type PushPlatform = z.infer<typeof PushPlatformSchema>;
+
+// Which Android app holds the token. device: the Intentic Device app, WOKEN (`kind: "wake"`, it dials its sandbox and
+// shows nothing). editor: the native editor app (dev.intentic.app), told `kind: "notify"` with only the tag, the in-app
+// path and the sandbox, and it fetches the words from the daemon itself. iOS has one app, the editor, and ignores this.
+export const PushAppSchema = z.enum(["device", "editor"]);
+export type PushApp = z.infer<typeof PushAppSchema>;
 
 export const PushDeviceInputSchema = z.object({
     platform: PushPlatformSchema,
     // The APNs device token as the shell reports it (hex), or the phone app's FCM registration token; opaque here, only
     // the forwarder interprets it.
     token: z.string().min(1).max(400),
+    // Absent is `device`, what every Android registration meant before the editor app existed.
+    app: PushAppSchema.optional(),
+    // Which sandbox this registration is for, handed back in every notify so the app knows which daemon to ask; the relay
+    // stores it and never interprets it. One row per (token, sandbox), so re-registering for one sandbox rotates only that
+    // sandbox's secret. Absent, the token has a single row that every sandbox it is subscribed on shares, as iOS and the
+    // Device app have.
+    sandbox: z.string().min(1).max(200).optional(),
 });
 
 // What a registration answers: the relay channel the web app stores on the daemon.
@@ -616,7 +628,7 @@ export const PushSendSchema = z.object({
     notification: PushNotificationSchema,
 });
 
-// Whether APNs took the send; lets the settings page's test button prove the chain end-to-end.
+// Whether APNs or FCM took the send; lets the settings page's test button prove the chain end-to-end.
 export const PushSentSchema = z.object({ delivered: z.boolean() });
 
 // Operator's read of the platform (ADMIN_EMAILS-gated); an aggregate or directory row, never a credential.

@@ -61,7 +61,12 @@
                 // fixture writer are scripts run by hand with node and bun.
                 "_editor/android-native/bench/bench.ts",
                 "_editor/android-native/bench/*.test.ts",
-                "_editor/android-native/fixture/make-fixture.ts"
+                "_editor/android-native/bridge-bench/bench.ts",
+                "_editor/android-native/fixture/make-fixture.ts",
+                // The native app's Rust core has no package.json either: its schema writer and live-frame recorder
+                // are scripts run by hand.
+                "_editor/mobile-core/scripts/*.mjs",
+                "_editor/mobile-core/fixtures/*.mjs"
             ],
             "ignore": [
                 "desired-state/**",
@@ -69,7 +74,8 @@
                 "_tools/extension-example/seed/**",
                 "_editor/ios-app/**",
                 "_editor/android-app/**",
-                "_editor/android-native/**/build/**"
+                "_editor/android-native/**/build/**",
+                "_editor/mobile-core/target/**"
             ]
         },
         "_editor/web": {

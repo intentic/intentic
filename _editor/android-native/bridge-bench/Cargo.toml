@@ -1,0 +1,20 @@
+[package]
+name = "intentic-bridge-bench"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Three operations Kotlin calls in Rust, exported as JNI functions, as C functions for JNA, and in UniFFI's calling convention."
+
+[lib]
+name = "bridgebench"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jni = "0.21"
+
+# The spike core's and the app core's release profile, so the library is built as the real one is.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+opt-level = 3

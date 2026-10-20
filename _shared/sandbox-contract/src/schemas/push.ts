@@ -3,8 +3,9 @@ import { z } from "zod";
 // The daemon is the only tier that knows what the agent is doing, so it is the sender. A registration is per-device, in
 // two kinds:
 // webpush: a browser (including the Android TWA); the daemon sends to its push service directly, end-to-end encrypted.
-// relay: a native app (iOS); its OS push service only accepts sends from the vendor, so the daemon posts through a
-// relay, which can read the payload.
+// relay: a native app (the iPhone app, the Android editor app, the Intentic Device app); its OS push service only accepts
+// sends from the vendor, so the daemon posts through a relay, which can read the payload. Only Apple is handed the words:
+// an Android app gets a data-only message and fetches them from the daemon itself.
 
 // Exact shape `web-push` consumes, from `PushManager.subscribe()`; posted back verbatim.
 export const WebPushChannelSchema = z.object({
@@ -26,7 +27,12 @@ export const RelayChannelSchema = z.object({
         ),
     url: z.url().describe("Where to post a send. Recorded rather than assumed, so the sandbox need not know any platform by name."),
     deviceId: z.string().min(1).describe("The device's id, which also identifies this registration everywhere else in this group."),
-    secret: z.string().min(1).describe("Proof that this sandbox may notify this device. The relay never learns which sandbox is calling."),
+    secret: z
+        .string()
+        .min(1)
+        .describe(
+            "Proof that this sandbox may notify this device. A send names no sandbox; the relay knows which sandbox a device belongs to only when the editor app registered it for that one sandbox, so the app can be told which sandbox to ask.",
+        ),
 });
 export type RelayChannel = z.infer<typeof RelayChannelSchema>;
 export const PushChannelSchema = z.discriminatedUnion("kind", [WebPushChannelSchema, RelayChannelSchema]);
@@ -61,6 +67,16 @@ export const PushNotificationSchema = z.object({
         ),
 });
 export type PushNotification = z.infer<typeof PushNotificationSchema>;
+export const PushSentQuerySchema = z.object({
+    tag: z.string().min(1).describe("The tag the push carried, which is all a native app's push says about what it was."),
+});
+// What a native app's data-only push leaves out, read back over the app's own session so the words never pass through
+// the push service or the relay.
+export const PushSentNotificationSchema = PushNotificationSchema.extend({
+    tag: z.string().min(1).describe("The tag it was sent under, the one asked for."),
+    sentAt: z.string().describe("When the sandbox sent it (ISO)."),
+});
+export type PushSentNotification = z.infer<typeof PushSentNotificationSchema>;
 export const PushConfigSchema = z.object({
     publicKey: z.string().describe("The key a browser needs in order to subscribe. Native apps ignore it."),
     subscribed: z

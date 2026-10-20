@@ -1,0 +1,3 @@
+target/
+# Recordings of this sandbox's own daemon (fixtures/record-live.mjs): the owner's private conversations.
+fixtures/live/

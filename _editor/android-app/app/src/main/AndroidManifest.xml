@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Backed up: the core's store (drafts, the cached board) restores onto a new phone. The key that seals its
+         sessions is wrapped by this phone's Keystore and kept in noBackupFilesDir, so a restored store reads as
+         signed out rather than failing. -->
+    <application
+        android:name=".IntenticApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Intentic">
+
+        <!-- singleTask: the browser's sign-in link lands on this one instance, and closes the tab it came from. -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- The desktop app's handoff link, which the web's /desktop-auth sends once the browser has signed in. Any
+                 app could claim the scheme; the PKCE verifier only this app holds is what makes the link worth nothing
+                 to one that did. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="intentic" android:host="auth" />
+            </intent-filter>
+            <!-- App Links: a link to an agent on the web app opens its conversation here instead. Verified against the
+                 web app's /.well-known/assetlinks.json, which the web container renders from ANDROID_APP_FINGERPRINTS;
+                 a build whose certificate is not listed there still offers to open them, unverified. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${webHost}" android:pathPrefix="/agents/" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".conversation.ConversationActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".web.WebActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
+</manifest>

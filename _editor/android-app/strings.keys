@@ -1,0 +1,82 @@
+# The web catalog messages the app shows, one dotted key per line: the app's own (_editor/web/src/app/i18n/locales)
+# and the UI kit's under `ui.` (_editor/ui/src/i18n/locales). The app reads each as R.string.<key in snake_case>, a
+# plural as R.plurals.<…>. Run scripts/strings.mjs after editing this.
+
+# Sign-in.
+auth.login.welcomeToIntentic
+auth.login.workspaceCodingAgents
+auth.words.continueGoogle
+auth.login.or
+auth.emailSignIn.addressLabel
+auth.emailSignIn.addressPlaceholder
+auth.emailSignIn.emailMeCode
+auth.emailSignIn.sentTo
+auth.emailSignIn.typeItHereInApp
+auth.emailSignIn.codeLabel
+ui.action.signIn
+auth.emailSignIn.useDifferentAddress
+auth.emailSignIn.sendAgain
+auth.emailSignIn.sendAgainIn
+sandbox.signInWall.continueInBrowser
+auth.words.finishInBrowser
+auth.words.openBrowserAgain
+auth.desktopAuthComplete.signingIn
+auth.emailCode.invalid
+auth.emailCode.expired
+auth.emailCode.tooManyAttempts
+auth.emailCode.rateLimited
+
+# The board.
+shared.attention
+shared.active
+shared.finished
+agents.agentStatus.untitledAgent
+agents.agentsView.noAgentsWorkingStart
+sandbox.useSandboxLiveness.noSandboxSelected
+sandbox.sandboxSwitcher.sandboxes
+settings.settingsBilling.machineAsleep
+shared.menu
+shell.words.signOut
+sandbox.connectionNotice.connectingTo
+desktop.desktop.reconnecting
+chat.chatTurnStatus.retryingIn
+shell.notificationSources.signInAgain
+sandbox.signInWall.usePasskey
+sandbox.signInWall.addPasskeyToContinue
+sandbox.signInWall.passkeySignInIncomplete
+sandbox.signInWall.passkeyNotAdded
+
+
+# The conversation.
+ui.action.back
+chat.words.askAnything
+ui.action.send
+chat.composerIntent.hintSteer
+chat.composerIntent.stopTurn
+chat.words.newAgent
+ui.action.approve
+sandbox.environmentCard.reject
+chat.chatMessageView.allowOnce
+sandbox.spawnPosture.alwaysAllow
+ui.action.no
+chat.chatQuestionCard.typeAnswer
+chat.chatQuestionCard.submit
+ui.action.done
+chat.chatMessageView.notNow
+views.vocabulary.accept
+auth.desktopAuth.openInBrowser
+
+# The web's screens, in the shared WebView.
+shared.workspace
+shared.sandboxHub
+shared.settings
+shared.capabilities
+sandbox.words.devicesSection
+shared.browsers
+shared.changes
+browsers.browsers.more
+connect.localModelLane.factDownloaded
+ui.action.open
+
+# Phase 4's notification summary, here now so the plural path ships exercised in every language.
+shell.desktopSignal.manyAsks

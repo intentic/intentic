@@ -1,7 +1,8 @@
-import { channelId, type PushNotification } from "@intentic/sandbox-contract/schemas/push";
+import { channelId, type PushNotification, type PushSentNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { Logger } from "pino";
 import { idleEverywhere, presentMembers } from "../system/presence.js";
 import type { PushStore, StoredChannel } from "./push-store.js";
+import { createSentNotifications } from "./sent-notifications.js";
 import { sendRelay } from "./senders/relay.js";
 import type { SendOutcome } from "./senders/send.js";
 import { sendWebPush } from "./senders/webpush.js";
@@ -11,6 +12,8 @@ import { sendWebPush } from "./senders/webpush.js";
 // 1. Never notifies someone already watching (presence.ts tracks idle tabs via the /events stream): a device is skipped
 //    while the member who registered it has a tab in use, and one that names no member while anybody does.
 // 2. A push failure never touches the caller: every send is fire-and-forget.
+// 3. What each tagged notification said is kept for the members it was sent to (sent-notifications.ts), for a native app
+//    whose push carried only the tag.
 
 // How many devices a send reached; the turn lifecycle ignores it, but the test button needs it to catch a silent zero.
 export interface PushDelivery {
@@ -28,6 +31,9 @@ export interface PushSender {
     // Replaces an ask that stopped waiting (answered here or elsewhere, stopped) under its tag, on exactly the devices
     // its persistent notification reached: none at all when it never showed, so a settled ask never pushes on its own.
     readonly withdraw: (replacement: PushNotification & { readonly tag: string }) => Promise<PushDelivery>;
+    // The last notification under this tag that was sent to this member's devices, while it is kept: the words a native
+    // app's push left out. Undefined for any tag none of their devices was sent.
+    readonly sent: (tag: string, member: string) => PushSentNotification | undefined;
 }
 
 const NOTHING_SENT: PushDelivery = { delivered: 0, failed: 0 };
@@ -62,12 +68,20 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
     // screen until tapped, so the only ones a withdrawal has to replace. Kept in memory: an ask pushed before a restart
     // stays until it is tapped, which is how every ask behaved before withdrawal existed.
     const shown = new Map<string, Set<string>>();
+    const sentWords = createSentNotifications();
     // Sends to every registered device `wanted` keeps.
     const send = async (notification: PushNotification, wanted: (channel: StoredChannel) => boolean): Promise<PushDelivery> => {
         const [keys, registered] = await Promise.all([store.keys(), store.list()]);
         const channels = registered.filter(wanted);
         if (channels.length === 0) {
             return { ...NOTHING_SENT, skipped: registered.length === 0 ? "no device registered" : "everyone is watching" };
+        }
+        if (notification.tag !== undefined) {
+            // The words as written, never the relay's redacted copy: they are read back over the member's own session.
+            sentWords.remember(
+                { ...notification, tag: notification.tag },
+                channels.flatMap((channel) => (channel.member === undefined ? [] : [channel.member])),
+            );
         }
         const webPush = sendWebPush(keys);
         const relayed = channels.some((channel) => channel.kind !== "webpush") ? await forRelay(notification) : notification;
@@ -113,5 +127,6 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
             // ask again, and one that sounded would call someone back to a phone for news that needs nothing of them.
             return send({ ...replacement, requireInteraction: false, silent: true }, (channel) => reached.has(channelId(channel)));
         },
+        sent: sentWords.read,
     };
 };

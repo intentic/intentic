@@ -1,5 +1,13 @@
 import { procedure } from "../protocol/route-meta.js";
-import { PushChannelIdSchema, PushChannelSchema, PushConfigQuerySchema, PushConfigSchema, PushTestSchema } from "../schemas/push.js";
+import {
+    PushChannelIdSchema,
+    PushChannelSchema,
+    PushConfigQuerySchema,
+    PushConfigSchema,
+    PushSentNotificationSchema,
+    PushSentQuerySchema,
+    PushTestSchema,
+} from "../schemas/push.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // A member's own devices, which no control token reaches.
@@ -10,6 +18,8 @@ const pushRoute = procedure.meta({ control: "never" });
 // operator's attention is genuinely wanted: a turn finished, the agent is blocked on an answer, and an
 // automation is waiting for approval. A channel is either a browser's web-push subscription or a native
 // install reached through the platform's push relay, see PushChannelSchema for the split and why.
+//
+// `notification` is the words of one the caller's devices were sent, for a native app whose push carried only its tag.
 //
 // `test` exists because a notification pipeline has four independent failure points the user cannot inspect
 // (device permission, service-worker or shell registration, the daemon's key, the push service itself), a
@@ -56,4 +66,16 @@ export const pushContract = {
         })
         .meta({ floor: "collaborator" })
         .output(PushTestSchema),
+    // A read at the default viewer floor: the gate is the recipient check in the handler, which answers only what was sent
+    // to the caller's own devices, and answers not found for everything else.
+    notification: pushRoute
+        .route({
+            method: "GET",
+            path: "/push/notification",
+            summary: "What a notification said",
+            description:
+                "The notification this sandbox last sent to your devices under a tag: its words, where it points, and when it went. For a native app whose push carries only the tag, so the words never pass through the push service. Not found once it is no longer kept (the newest 200 tags for a day, never across a restart) and for a tag none of your devices was sent.",
+        })
+        .input(PushSentQuerySchema)
+        .output(PushSentNotificationSchema),
 };

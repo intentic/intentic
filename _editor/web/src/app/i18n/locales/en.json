@@ -4381,7 +4381,12 @@
             "threw": "Its script threw an error | Its scripts threw {count} errors",
             "agentTold": "the agent heard it",
             "askFix": "Ask to fix",
-            "fixRequest": "The page \"{title}\" (id \"{id}\") threw in my chat:\n{errors}\n\nFix it and show it again with replaces: \"{id}\"."
+            "fixRequest": "The page \"{title}\" (id \"{id}\") threw in my chat:\n{errors}\n\nFix it and show it again with replaces: \"{id}\".",
+            "screenTitle": "Page",
+            "opening": "Opening the page…",
+            "notFound": "This page is no longer in this conversation.",
+            "conversationGone": "This conversation is no longer in this sandbox.",
+            "readFailed": "This conversation could not be read."
         },
         "chatReview": {
             "title": "Code review",

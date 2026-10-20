@@ -16,6 +16,7 @@ import HubSearchResults from "./HubSearchResults.vue";
 import { seekSetting } from "./settingAnchor";
 import type { HubSearchPanel } from "./useHubSearchPanel";
 import { useT } from "@intentic/ui/i18n";
+import { embedded } from "../../app/environments/nativeApp";
 
 const t = useT();
 
@@ -112,8 +113,13 @@ const backToIndex = (): void => {
     void router.replace(indexLink);
 };
 const shellBack = usePageBack();
+// Inside the Android app its own toolbar and back gesture are the way back (app/environments/nativeApp.ts), and they step
+// back through this page's history, from a section to the index it was opened from.
+const inApp = embedded();
 providePageBack(
-    computed(() => (drill.value && !onIndex.value ? { label: t(`shell.hubLayout.backTo`, { title }), go: backToIndex } : shellBack.value)),
+    computed(() =>
+        drill.value && !onIndex.value && !inApp ? { label: t(`shell.hubLayout.backTo`, { title }), go: backToIndex } : shellBack.value,
+    ),
 );
 
 // The address the section on screen reports its long-running work under, so no view has to be told which row it

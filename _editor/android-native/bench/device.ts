@@ -61,7 +61,7 @@ export class Device {
         if (this.log !== undefined) {
             return;
         }
-        const child = spawn(this.adbPath, [`-s`, this.serial, `logcat`, `-v`, `epoch`, `-T`, `1`, `-s`, `Spike:I`, `ActivityTaskManager:I`], {
+        const child = spawn(this.adbPath, [`-s`, this.serial, `logcat`, `-v`, `epoch`, `-T`, `1`, `-s`, `Spike:I`, `IntenticCore:I`, `ActivityTaskManager:I`], {
             stdio: [`ignore`, `pipe`, `ignore`],
         });
         const lines: string[] = [];
@@ -162,6 +162,45 @@ export class Device {
         }
         await pollAll();
         return polls;
+    }
+
+    /**
+     * The battery's current every half second until `stop` resolves, mA drawn; nothing while the phone is plugged in.
+     * Phones disagree on the sysfs unit and sign: this one (a Galaxy S10) reports mA, positive while charging, and
+     * drawing reads negative, so the magnitude is taken.
+     */
+    async pollCurrent(stop: Promise<unknown>): Promise<number[]> {
+        const powered = /(AC|USB|Wireless) powered: true/u.test(await this.shellAsync(`dumpsys battery`));
+        if (powered) {
+            return [];
+        }
+        const readings: number[] = [];
+        const state = { stopped: false };
+        void stop.then(() => {
+            state.stopped = true;
+        });
+        while (!state.stopped) {
+            const now = Number((await this.shellAsync(`cat /sys/class/power_supply/battery/current_now`)).trim());
+            if (Number.isFinite(now)) {
+                readings.push(Math.abs(now));
+            }
+            await sleep(500);
+        }
+        return readings;
+    }
+
+    /** The package's total PSS in MB, its sandboxed renderer's added for a WebView (`sandboxed`). */
+    pssMb(pkg: string, sandboxed = false): number {
+        const total = (name: string): number => Number(this.shell(`dumpsys meminfo ${name}`).match(/TOTAL PSS:\s+(\d+)/u)?.[1] ?? 0) / 1024;
+        // The WebView's renderer is a process of its own, named after the WebView package rather than the app.
+        const renderer = sandboxed
+            ? this.shell(`ps -A -o PID,NAME`)
+                  .split(/\r?\n/u)
+                  .filter((line) => line.includes(`sandboxed_process`))
+                  .map((line) => total(line.trim().split(/\s+/u)[0] ?? ``))
+                  .reduce((sum, mb) => sum + mb, 0)
+            : 0;
+        return total(pkg) + renderer;
     }
 
     /** Records a Perfetto trace of `config` (text proto) for its own duration and pulls it into `outDir`. */

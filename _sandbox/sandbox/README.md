@@ -617,6 +617,13 @@ flowchart LR
   they cannot be read, and published under numbers rather than their file names. The policy lives off the workspace and only the owner changes it; the agent's `privacy` CLI can only teach
   it a dataset's values.
 
+- Push (`push/`) tells a member's registered devices when the agent wants them: a browser over web push, encrypted to
+  it end to end, and a native app through the platform's relay. Apple is handed the words, after the privacy shield's
+  redaction. An Android app is handed only the tag, the in-app path and which sandbox, and reads the words back over its
+  own session from `GET /push/notification?tag=`, which answers only a member the notification was sent to. They are
+  kept in memory (`push/sent-notifications.ts`), the newest 200 tags for a day, so after a restart the route answers
+  not found and the app draws its own words.
+
 - Speech runs on this machine in both directions ([`@intentic/speech`](../speech), its routes in `speech/`), each in a
   child process of its own over `sherpa-onnx-node`, so a model's memory goes back to the box when it idles and a native
   crash takes down only that process. Dictation (`transcribe.ts`) hears the composer's microphone and Discord's calls: Parakeet for 25

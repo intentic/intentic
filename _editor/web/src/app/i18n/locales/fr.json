@@ -2173,7 +2173,12 @@
             "threw": "Son script a levé une erreur | Ses scripts ont levé {count} erreurs",
             "agentTold": "l'agent est prévenu",
             "askFix": "Demander une correction",
-            "fixRequest": "La page \"{title}\" (id \"{id}\") a levé des erreurs dans mon chat :\n{errors}\n\nCorrige-la et affiche-la de nouveau avec replaces: \"{id}\"."
+            "fixRequest": "La page \"{title}\" (id \"{id}\") a levé des erreurs dans mon chat :\n{errors}\n\nCorrige-la et affiche-la de nouveau avec replaces: \"{id}\".",
+            "screenTitle": "Page",
+            "opening": "Ouverture de la page…",
+            "notFound": "Cette page n'est plus dans ce chat.",
+            "conversationGone": "Ce chat n'est plus dans ce sandbox.",
+            "readFailed": "Impossible de lire ce chat."
         },
         "sendLater": {
             "sendAt": "Envoyer à",

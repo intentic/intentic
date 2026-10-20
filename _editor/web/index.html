@@ -118,19 +118,39 @@
                     }
                 }
                 document.documentElement.setAttribute("lang", uiLocale);
+                // INSIDE THE ANDROID APP'S WEBVIEW the look is the app's, worn over the one stored here and never
+                // written over it: what its object says now, else what its address or this tab last said
+                // (src/app/environments/nativeApp.ts reads the same, and src/bootProfile.test.ts runs this against it).
+                // Each look is the pair of choices the Theme row stores for it (src/features/settings/themeRow.ts).
+                var EMBED_LOOKS = { system: ["system", "system"], light: ["light", "none"], dark: ["dark", "none"], sanctum: ["dark", "sanctum"] };
+                var embedLook = null;
+                try {
+                    var tab = window.sessionStorage;
+                    var embedAsked = url.searchParams.get("embed");
+                    if (embedAsked === "native" || (embedAsked === null && tab && tab.getItem("intentic.embed") === "native")) {
+                        var nativeApp = window.intenticNative;
+                        var lookOffers = [
+                            nativeApp && typeof nativeApp.look === "function" ? String(nativeApp.look()) : null,
+                            url.searchParams.get("look"),
+                            tab ? tab.getItem("intentic.embed.look") : null,
+                        ];
+                        for (var o = 0; o < lookOffers.length && embedLook === null; o++) if (owns.call(EMBED_LOOKS, lookOffers[o])) embedLook = lookOffers[o];
+                    }
+                } catch (e) {}
+                var handed = embedLook === null ? null : EMBED_LOOKS[embedLook];
                 // THE LIGHT THIS PAGE PAINTS IN, decided before it paints. Anything but a pinned "light"/"dark"
                 // means nobody has chosen, so the OS answers — and `no-preference` matches neither query, so a
                 // browser that will not say reads as light. useTheme runs this same rule a module later, which is
                 // why the two can never disagree; without it here, useTheme arrives after the stylesheet has
                 // already painted one canvas under a reader who is owed the other.
-                var uiScheme = localStorage.getItem("ui-color-scheme");
+                var uiScheme = handed ? handed[0] : localStorage.getItem("ui-color-scheme");
                 var dark = uiScheme === "dark" || (uiScheme !== "light" && !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
                 if (dark) document.documentElement.setAttribute("data-mode", "dark");
                 else document.documentElement.removeAttribute("data-mode");
                 // A skin repaints every surface in the app, so arriving late means a white flash of the normal
                 // look before the deep one lands — the worst flash of the three. Sanctum is the app's DARK look
                 // and has no daylight dress, so an unpinned skin follows the scheme. See src/skins/README.md.
-                var uiSkin = localStorage.getItem("ui-skin");
+                var uiSkin = handed ? handed[1] : localStorage.getItem("ui-skin");
                 if (uiSkin === "sanctum" || (uiSkin !== "none" && dark)) document.documentElement.setAttribute("data-skin", "sanctum");
                 else document.documentElement.removeAttribute("data-skin");
                 // Browser chrome, last because it is the only line here that reads the document it writes to.

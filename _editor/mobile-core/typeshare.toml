@@ -1,0 +1,4 @@
+# The app's types for the bridge's messages, written by scripts/messages.sh from src/bridge/messages.rs.
+[kotlin]
+package = "dev.intentic.app.core"
+module_name = ""

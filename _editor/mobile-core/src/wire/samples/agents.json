@@ -1,0 +1,143 @@
+{
+    "AgentSummarySchema": {
+        "running, read since it started": {
+            "id": "cnv_soft_deletes",
+            "sessionId": "8f1d2c4e-1b7a-4b39-9a51-2c7c1e0a9d55",
+            "title": "Add soft deletes to the invoices table",
+            "titleAction": "feature",
+            "status": "running",
+            "provider": "claude",
+            "harness": "native",
+            "model": "claude-opus-5-5",
+            "effort": "high",
+            "thinking": true,
+            "account": "claude-max",
+            "branch": "agent/cnv_soft_deletes",
+            "base": "d6069bb",
+            "startedBy": "ada@example.com",
+            "owner": { "email": "ada@example.com", "name": "Ada", "since": 1760870000000 },
+            "costUsd": 0.4213,
+            "inputTokens": 12044,
+            "outputTokens": 3311,
+            "contextTokens": 81234,
+            "contextWindow": 200000,
+            "activity": { "tool": "Edit", "target": "src/invoices/repository.ts", "todo": "Filter deleted rows" },
+            "checklist": { "done": 2, "total": 5 },
+            "startedAt": 1760870400000,
+            "run": "run_9f2c",
+            "updatedAt": 1760870461000,
+            "seenAt": 1760870400000,
+            "attention": { "plan": false, "question": false, "permission": false, "capability": false, "credential": false, "conflict": false, "need": false },
+            "turns": 3,
+            "toolUses": 41,
+            "subagents": { "running": 1, "total": 2 },
+            "diff": { "files": 4, "insertions": 120, "deletions": 18 }
+        },
+        "waiting on a permission": {
+            "id": "cnv_deploy",
+            "title": "Deploy the preview",
+            "status": "running",
+            "provider": "codex",
+            "harness": "codex",
+            "model": "gpt-6.1",
+            "run": "run_11aa",
+            "startedAt": 1760869000000,
+            "updatedAt": 1760869100000,
+            "attention": { "plan": false, "question": false, "permission": true, "capability": false, "credential": false, "conflict": false },
+            "permissionAsk": {
+                "requestId": "req_4410",
+                "ask": "Run fly deploy --app invoices-preview",
+                "program": { "text": "fly deploy --app invoices-preview", "language": "bash", "truncated": false, "spans": [{ "start": 0, "end": 3 }] }
+            }
+        },
+        "a spent allowance booked to go again": {
+            "id": "cnv_audit",
+            "title": "Audit the billing webhooks",
+            "titleAction": "audit",
+            "status": "error",
+            "failure": "You have hit your usage limit.",
+            "failureCode": "rate_limit",
+            "limitResetsAt": 1760885000,
+            "limitHeld": true,
+            "limitScheduled": true,
+            "limitNextAt": 1760885060,
+            "provider": "claude",
+            "harness": "claude-code",
+            "updatedAt": 1760866000000,
+            "seenAt": 1760866100000,
+            "attention": { "plan": false, "question": false, "permission": false, "capability": false, "credential": false, "conflict": false }
+        },
+        "a child that stopped, with words queued for later": {
+            "id": "cnv_tests",
+            "title": "Write tests for the soft deletes",
+            "status": "stopped",
+            "provider": "claude",
+            "harness": "native",
+            "startedBy": "agent:cnv_soft_deletes",
+            "queue": {
+                "items": [{ "id": "msg_7", "text": "Pick this up after the land", "voice": "person", "queuedAt": 1760866500000, "revision": 2, "after": "cnv_soft_deletes" }],
+                "revision": 2
+            },
+            "updatedAt": 1760866600000,
+            "attention": { "plan": false, "question": false, "permission": false, "capability": false, "credential": false, "conflict": false }
+        },
+        "watching a CI run with a job at a prompt": {
+            "id": "cnv_ci",
+            "title": "Make the CI checks pass",
+            "status": "idle",
+            "provider": "claude",
+            "harness": "native",
+            "awaitingWake": true,
+            "watches": [{ "id": "w_1", "note": "CI run 316", "intervalSeconds": 60, "deadlineAt": 1760873000000 }],
+            "jobs": [
+                { "id": "job_1", "label": "npm login", "session": "agent-cnv_ci-1", "startedAt": 1760866000000, "inputWait": { "since": 1760866010000, "program": "npm" }, "watch": "w_1" }
+            ],
+            "updatedAt": 1760866700000,
+            "attention": { "plan": false, "question": false, "permission": false, "capability": false, "credential": false, "conflict": false }
+        },
+        "landed, from an automation, marked by two people": {
+            "id": "cnv_digest",
+            "title": "Weekly dependency digest",
+            "status": "landed",
+            "provider": "claude",
+            "harness": "native",
+            "origin": { "automationId": "weekly-digest", "provider": "schedule" },
+            "loop": { "state": "done", "iteration": 3, "maxIterations": 5, "goal": "No outdated majors" },
+            "workflow": { "runId": "wf_12", "name": "digest", "step": "summarise", "index": 2, "total": 3 },
+            "needs": [{ "id": "need_1", "kind": "secret", "title": "An npm token", "status": "met" }],
+            "reactions": [{ "emoji": "🎉", "by": [{ "email": "ada@example.com", "at": 1760860000000 }, { "email": "grace@example.com", "name": "Grace", "at": 1760860100000 }] }],
+            "unsentAt": 1760861000000,
+            "archivedAt": 1760862000000,
+            "updatedAt": 1760859500000,
+            "attention": { "plan": false, "question": false, "permission": false, "capability": false, "credential": false, "conflict": false }
+        },
+        "a land your own edits block": {
+            "id": "cnv_rename",
+            "title": "Rename the invoice states",
+            "status": "conflict",
+            "provider": "claude",
+            "harness": "native",
+            "branch": "agent/cnv_rename",
+            "conflictCauses": ["workspace"],
+            "landFailure": { "reason": "your uncommitted edits touch the same lines", "at": 1760859000000 },
+            "updatedAt": 1760859000000,
+            "attention": { "plan": false, "question": false, "permission": false, "capability": false, "credential": false, "conflict": true }
+        }
+    },
+    "AgentsListSchema": {
+        "a fleet with a held wake": {
+            "agents": [
+                {
+                    "id": "cnv_soft_deletes",
+                    "status": "idle",
+                    "provider": "claude",
+                    "harness": "native",
+                    "updatedAt": 1760870461000,
+                    "attention": { "plan": false, "question": false, "permission": false, "capability": false, "credential": false, "conflict": false }
+                }
+            ],
+            "rev": 484,
+            "held": [{ "id": "held_1", "automationId": "inbox-triage", "createdAt": 1760870000000, "title": "A new support mail" }]
+        }
+    }
+}

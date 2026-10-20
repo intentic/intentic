@@ -165,3 +165,69 @@ test("a withdrawn ask is replaced on exactly the devices it reached, once, and n
     expect(await push.withdraw({ ...replacement, tag: "awaiting-never-pushed" })).toEqual({ delivered: 0, failed: 0, skipped: "it never showed" });
     expect(reached).toHaveLength(1);
 });
+
+// A native app's push carries only the tag, and the app reads the words back over its own session: each member is
+// answered with what was sent to their own devices, which a send that skipped them leaves as the one before.
+test("the words of a tagged notification are kept for the members it was sent to, and only for them", async () => {
+    const reached = stubSends();
+    const push = sender(storeOf(device("https://push.example/ada", "Ada@Example.com"), device("https://push.example/bob", "bob@example.com")));
+    const first = turnAwaiting("conv-1", "question", { requestId: "q1", detail: "Which branch?" }, "Fix the login redirect");
+    const tag = first.tag ?? "";
+
+    // Kept before any send leaves, so a phone woken at once by its push never asks ahead of the record.
+    const keptAsItWent: unknown[] = [];
+    jest.spyOn(webpush, "sendNotification").mockImplementation(async () => {
+        keptAsItWent.push(push.sent(tag, "bob@example.com")?.body);
+        return { statusCode: 201, body: "", headers: {} };
+    });
+    tab("ada-tab", "ada@example.com");
+    await push.notifyIfAway(first);
+    expect(keptAsItWent).toEqual(["Which branch?"]);
+    expect(push.sent(tag, "bob@example.com")).toMatchObject({ ...first, tag, sentAt: expect.any(String) });
+    // Ada was looking, so nothing under this tag reached her devices; nor anyone's who has no device here.
+    expect(push.sent(tag, "ada@example.com")).toBeUndefined();
+    expect(push.sent(tag, "carol@example.com")).toBeUndefined();
+    expect(push.sent("turn-conv-1", "bob@example.com")).toBeUndefined();
+
+    // The next one under the tag reaches only Ada, whatever the case of her address; Bob's phone still shows the first.
+    for (const leave of leaving.splice(0)) {
+        leave();
+    }
+    tab("bob-tab", "bob@example.com");
+    const second = { ...first, body: "Which branch, main or next?" };
+    await push.notifyIfAway(second);
+    expect(push.sent(tag, "ADA@example.com")?.body).toBe("Which branch, main or next?");
+    expect(push.sent(tag, "bob@example.com")?.body).toBe("Which branch?");
+    expect(reached).toEqual([]);
+});
+
+test("a withdrawal replaces the kept words of the members it reached, silent", async () => {
+    stubSends();
+    const push = sender(storeOf(device("https://push.example/bob", "bob@example.com")));
+    await push.notifyIfAway(waiting);
+    const tag = waiting.tag ?? "";
+    await push.withdraw({ title: "No longer waiting", body: "The agent is not waiting on you anymore.", tag });
+    expect(push.sent(tag, "bob@example.com")).toMatchObject({ title: "No longer waiting", tag, requireInteraction: false, silent: true });
+});
+
+// The relay is handed redacted words; the member reading them back over their own session is not the relay.
+test("the words are kept as written, not as the privacy shield redacted them for the relay", async () => {
+    jest.spyOn(globalThis, "fetch").mockImplementation(
+        Object.assign(async () => new Response(null, { status: 200 }), { preconnect: globalThis.fetch.preconnect }),
+    );
+    const native: StoredChannel = { kind: "relay", url: "https://platform.example/push", deviceId: "phone", secret: "s", member: "bob@example.com" };
+    const push = createPushSender(storeOf(native), pino({ level: "silent" }), async (text) => text.replace("Jan Kowalski", "‹person›"));
+    await push.notify({ title: "Jan Kowalski wrote", body: "about the invoice", tag: "turn-c1" });
+    expect(push.sent("turn-c1", "bob@example.com")?.title).toBe("Jan Kowalski wrote");
+});
+
+test("kept words are forgotten after a day, and nothing untagged or sent to no member is kept", async () => {
+    stubSends();
+    const push = sender(storeOf(device("https://push.example/bob", "bob@example.com"), device("https://push.example/unnamed")));
+    await push.notify({ title: "intentic", body: "no tag" });
+    await push.notify({ title: "Turn finished", body: "done", tag: "turn-c1" });
+    expect(push.sent("turn-c1", "bob@example.com")?.body).toBe("done");
+    jest.setSystemTime(Date.now() + 24 * 60 * 60_000 + 1);
+    expect(push.sent("turn-c1", "bob@example.com")).toBeUndefined();
+    jest.useRealTimers();
+});

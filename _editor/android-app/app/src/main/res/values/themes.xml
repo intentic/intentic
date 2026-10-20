@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The platform's Material theme, light here and dark in values-night: the app draws its own chrome, so it needs no
+         AppCompat. Every colour is a generated role (colors.xml), which flips with the night qualifier by itself. -->
+    <style name="Base.Intentic" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.Intentic" parent="Base.Intentic">
+        <item name="android:windowBackground">@color/canvas</item>
+        <item name="android:colorBackground">@color/canvas</item>
+        <item name="android:textColorPrimary">@color/content</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="android:textColorLink">@color/link</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorPrimary">@color/primary_fill</item>
+        <item name="android:colorControlActivated">@color/primary_fill</item>
+        <item name="android:fontFamily">@font/public_sans</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

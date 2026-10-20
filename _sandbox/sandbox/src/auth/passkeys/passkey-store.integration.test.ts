@@ -318,6 +318,72 @@ describe("refusals", () => {
     });
 });
 
+// The native Android app signs with `android:apk-key-hash:<its certificate>` for the editor's rpId (app-origins.ts says
+// which apps the editor admits): one passkey answers the web editor and the app alike, and an app the editor does not
+// admit, or a response signed by another app than the one that asked, is refused like a foreign origin.
+describe("a native app's origin", () => {
+    const APP = "android:apk-key-hash:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8";
+    const STRANGER = "android:apk-key-hash:7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u4";
+    const appHarness = (): Harness => {
+        const store = memoryPasskeyStore();
+        const clock = { now: Date.parse("2026-10-20T12:00:00Z") };
+        const ceremonies = createPasskeyCeremonies({
+            store,
+            originAllowed: (origin) => origin === ORIGIN,
+            appRelyingParty: async (origin) => (origin === APP ? RP_ID : undefined),
+            sandboxId: "sandbox-a",
+            sandboxName: "work",
+            now: () => clock.now,
+        });
+        return { store, ceremonies, clock };
+    };
+
+    test("a passkey made in the web editor signs in from the app, and one made in the app signs in on the web", async () => {
+        const h = appHarness();
+        const webMade = softwareAuthenticator();
+        await register(h, webMade);
+        const options = await h.ceremonies.authenticationOptions(APP);
+        expect(options).toMatchObject({ rpId: RP_ID, available: true, allowCredentials: [{ id: webMade.credentialId }] });
+        const signed = await h.ceremonies.authenticate({ origin: APP, response: webMade.get({ challenge: options.challenge, origin: APP, rpId: RP_ID }) });
+        expect(signed).toMatchObject({ id: webMade.credentialId, email: ADA.email });
+
+        const appMade = softwareAuthenticator();
+        const creation = await h.ceremonies.registrationOptions({ identity: ADA, origin: APP });
+        expect(creation.rp.id).toBe(RP_ID);
+        const stored = await h.ceremonies.register({ identity: ADA, origin: APP, response: appMade.create({ challenge: creation.challenge, origin: APP, rpId: RP_ID }), label: undefined });
+        expect(stored.rpId).toBe(RP_ID);
+        expect((await signIn(h, appMade)).id).toBe(appMade.credentialId);
+    });
+
+    test("an app the editor does not admit is refused, and so is a response another app signed", async () => {
+        const h = appHarness();
+        const authenticator = softwareAuthenticator();
+        await register(h, authenticator);
+        expect(await refusal(h.ceremonies.authenticationOptions(STRANGER))).toEqual({ status: 400, message: `passkeys cannot be bound to ${STRANGER}` });
+
+        // Asked for by the admitted app, signed with another app's origin: the client data names who really asked.
+        const options = await h.ceremonies.authenticationOptions(APP);
+        const forged = authenticator.get({ challenge: options.challenge, origin: STRANGER, rpId: RP_ID });
+        expect(await refusal(h.ceremonies.authenticate({ origin: APP, response: forged }))).toEqual({
+            status: 400,
+            message: `ceremony ran on ${STRANGER}, expected ${APP}`,
+        });
+
+        // Begun by the app and finished as the web editor: the challenge stays with the origin that asked for it.
+        const begun = await h.ceremonies.authenticationOptions(APP);
+        const finished = authenticator.get({ challenge: begun.challenge, origin: ORIGIN, rpId: RP_ID });
+        expect(await refusal(h.ceremonies.authenticate({ origin: ORIGIN, response: finished }))).toEqual({
+            status: 400,
+            message: "this sign-in was started from another origin",
+        });
+    });
+
+    test("with no app relying party at all, an app origin is a foreign origin", async () => {
+        const h = harness();
+        expect(await refusal(h.ceremonies.authenticationOptions(APP))).toEqual({ status: 400, message: `passkeys cannot be bound to ${APP}` });
+    });
+});
+
 describe("recovery codes", () => {
     test("mints eight codes a person can read back, and keeps only their hashes", () => {
         const { codes, hashes } = mintRecoveryCodes();

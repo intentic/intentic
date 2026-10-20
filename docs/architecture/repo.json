@@ -8,6 +8,7 @@
             "packages": [
                 "_editor/android-app",
                 "_editor/android-native",
+                "_editor/mobile-core",
                 "_editor/desktop-app",
                 "_editor/ios-app",
                 "_editor/share-view",

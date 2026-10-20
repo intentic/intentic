@@ -33,6 +33,9 @@ const props = defineProps<{
     submit?: (value: string) => Promise<string | undefined>;
     // Words the page offers for the chat's composer (`intentic.send`).
     message?: (text: string) => void;
+    // The page alone on a screen (ChatPageScreen): the frame takes the whole of its container, and a page taller than
+    // that scrolls inside it, rather than the frame fitting the page's height as it does in the chat.
+    fill?: boolean;
 }>();
 
 // What the page's own scripts threw so far, and whether the agent that showed it heard.
@@ -306,7 +309,7 @@ onBeforeUnmount(() => {
 
 <template>
     <!-- The box holds the page's height from the first frame, loaded or not, so nothing below it moves when it arrives. -->
-    <div ref="box" class="relative w-full" :style="{ height: `${height}px` }" :data-page="page.id">
+    <div ref="box" class="relative w-full" :class="{ 'h-full': fill }" :style="fill ? undefined : { height: `${height}px` }" :data-page="page.id">
         <iframe
             v-if="srcdoc !== undefined && !failed"
             ref="frame"

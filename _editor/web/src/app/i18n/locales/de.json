@@ -2173,7 +2173,12 @@
             "threw": "Ihr Skript hat einen Fehler geworfen | Ihre Skripte haben {count} Fehler geworfen",
             "agentTold": "der Agent weiß davon",
             "askFix": "Um Korrektur bitten",
-            "fixRequest": "Die Seite \"{title}\" (id \"{id}\") hat in meinem Chat Fehler geworfen:\n{errors}\n\nBehebe sie und zeige sie erneut mit replaces: \"{id}\"."
+            "fixRequest": "Die Seite \"{title}\" (id \"{id}\") hat in meinem Chat Fehler geworfen:\n{errors}\n\nBehebe sie und zeige sie erneut mit replaces: \"{id}\".",
+            "screenTitle": "Seite",
+            "opening": "Seite wird geöffnet…",
+            "notFound": "Diese Seite ist nicht mehr in diesem Chat.",
+            "conversationGone": "Dieser Chat ist nicht mehr in dieser Sandbox.",
+            "readFailed": "Dieser Chat konnte nicht gelesen werden."
         },
         "sendLater": {
             "sendAt": "Senden um",

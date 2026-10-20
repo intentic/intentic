@@ -13,6 +13,7 @@ import {
 } from "vue-router";
 import { asyncView } from "../components/asyncView";
 import { conversationRedirect, linkedConversation } from "./conversationLink";
+import { installNativeApp } from "./nativeHandoff";
 import { mobileChatPath } from "../lib/routes/phoneScreens";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
 import { restorePersistedQueries } from "../lib/queryPersistence";
@@ -23,6 +24,7 @@ import { useGoogleIdentity } from "../client/auth/useGoogleIdentity";
 import { mintsOnArrival } from "../features/auth/handoffSpent";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import { useRole } from "../client/sandbox/useRole";
+import { useSandboxSession } from "../client/session/sandboxSession";
 import { retryOnEntry } from "../client/auth/platformRetry";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
 import { openOnProject } from "../app/projectScope";
@@ -181,15 +183,15 @@ export const openInPage = async (path: string): Promise<void> => {
 // menu's contents on the rail, so a desktop hit lands on the workspace instead.
 const mobileOnly = (): boolean | RouteLocationRaw => (useDevice().mobile.value ? true : `/workspace`);
 
-// /chat on a phone is the active conversation's own screen. The store is imported at the press, not
-// at module load, so the router does not pull the chat's whole graph into every first paint.
-const chatEntry = async (): Promise<boolean | RouteLocationRaw> => {
-    if (!useDevice().mobile.value) {
-        return true;
-    }
+// The conversation the chat has open. The store is imported when asked, not at module load, so the router does not pull
+// the chat's whole graph into every first paint.
+const activeConversation = async (): Promise<string> => {
     const { useChat } = await import(`../models/conversations/run/useChat`);
-    return mobileChatPath(useChat().active.value.conversationId);
+    return useChat().active.value.conversationId;
 };
+
+// /chat on a phone is the active conversation's own screen.
+const chatEntry = async (): Promise<boolean | RouteLocationRaw> => (useDevice().mobile.value ? mobileChatPath(await activeConversation()) : true);
 
 // In-shell routes wrap in asyncView so a click never blocks on a chunk download; only first-paint entry routes (login,
 // setup, invite, the shell) stay bare lazy imports. `mobile` ranks a view in a phone's idle prefetch: `first` where its
@@ -321,6 +323,14 @@ const routes: RouteRecordRaw[] = [
                 name: `agent`,
                 meta: { title: () => t(`shared.agent`) },
                 component: asyncView(() => import(`../features/agents/review/AgentDetail.vue`), undefined, { mobile: `first` }),
+            },
+            // One page an agent showed in its conversation, alone on the screen, by the page's own id: what a link to it
+            // opens, and what the Android app shows in its WebView (lib/routes/phoneScreens.ts `agentPagePath`).
+            {
+                path: `agents/:id/pages/:page`,
+                name: `agent-page`,
+                meta: { title: () => t(`chat.chatPages.screenTitle`) },
+                component: asyncView(() => import(`../features/chat/transcript/pages/ChatPageScreen.vue`)),
             },
             {
                 path: `menu`,
@@ -576,6 +586,10 @@ router.beforeEach(async (to) => {
     const surface = useDevice().mobile.value ? `phone` : (await import(`../models/conversations/panel/chatPanelLayout`)).chatOnRailTile.value ? `chat` : `board`;
     return conversationRedirect(to.query, surface) ?? true;
 });
+
+// INSIDE THE ANDROID APP'S WEBVIEW, after every guard above that names where a navigation goes: a screen the app draws
+// itself is handed to it from here, whoever asked for it (nativeHandoff.ts). Installs nothing anywhere else.
+installNativeApp(router, { show: openInPage, activeConversation, adoptSession: useSandboxSession().adoptSession });
 
 // Router half of stale-chunk recovery (asyncView owns the in-shell half). Covers route-level loads (login, handoffs,
 // invite, the shell); a dead chunk here reloads onto the route asked for.

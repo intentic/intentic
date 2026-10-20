@@ -278,11 +278,13 @@ export const configSchema = z.object({
             url: z.url().default(`https://api.push.apple.com`),
         })
         .prefault({}),
-    // Push relay's Firebase credential: the only way a sandbox can wake the Intentic Device app on an Android phone, since
-    // FCM only accepts sends from the app's publisher. Empty disables Android wake channels; the relay then 404s them.
+    // Push relay's Firebase credential: the only way a sandbox can reach an Android app (the Intentic Device app, woken;
+    // the editor app dev.intentic.app, told what to fetch and show), since FCM only accepts sends from the app's publisher.
+    // Both apps are registered in the one Firebase project (intentic-device), so one service account sends to either's
+    // tokens. Empty disables Android channels; the relay then 404s them.
     fcm: z
         .object({
-            // The Firebase project's service account key, the whole JSON file as one string.
+            // The Firebase project's service account key, the whole JSON file as one string (FCM_SERVICE_ACCOUNT).
             serviceAccount: z.string().default(``).meta({ secret: true }),
             // Google's FCM HTTP v1 endpoint; point elsewhere only for a test double.
             url: z.url().default(`https://fcm.googleapis.com`),

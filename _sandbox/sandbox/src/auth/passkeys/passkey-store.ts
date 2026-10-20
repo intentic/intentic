@@ -14,6 +14,7 @@ import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
 import { tokenEquals, type VerifiedIdentity } from "../auth.js";
 import { rpIdOf } from "../browser-origins.js";
+import type { AppRelyingParty } from "./app-origins.js";
 import { ACCEPTED_ALGORITHMS, base64url, verifyAuthentication, verifyRegistration } from "./webauthn.js";
 
 // Passkeys registered with this sandbox, on the daemon's JSON substrate: the roster's trust class, since a passkey
@@ -28,7 +29,7 @@ const StoredCredentialSchema = z.object({
     id: z.string(),
     email: z.string(),
     label: z.string(),
-    // The editor host it was registered from; it answers only from there.
+    // The editor host it was registered from (or the editor host a native app signed for); it answers only for that one.
     rpId: z.string(),
     publicKey: z.object({ alg: z.union([z.literal(-7), z.literal(-257), z.literal(-8)]), jwk: z.record(z.string(), z.string()) }),
     counter: z.number(),
@@ -203,6 +204,9 @@ export interface PasskeyCeremonies {
 export interface PasskeyCeremonyDeps {
     readonly store: PasskeyStore;
     readonly originAllowed: (origin: string) => boolean;
+    // A native app's origin (`android:apk-key-hash:…`, app-origins.ts): the editor's rpId when the editor's Digital Asset
+    // Links admit that app, else undefined. Absent, no app origin is admitted.
+    readonly appRelyingParty?: AppRelyingParty;
     // Salts the user handle so two sandboxes never hand one authenticator the same (rpId, handle) pair, which would
     // overwrite one's passkey with the other's.
     readonly sandboxId: string;
@@ -236,6 +240,24 @@ const verified = <T>(run: () => T): T => {
         throw new PasskeyError(400, error instanceof Error ? error.message : "the response did not verify");
     }
 };
+
+// The relying party a request is for: its browser origin, which must be one the daemon already trusts for CORS, or a
+// native app's, which signs for the editor's rpId when the editor's own Digital Asset Links admit the app.
+const relyingPartyOf =
+    (deps: Pick<PasskeyCeremonyDeps, "originAllowed" | "appRelyingParty">) =>
+    async (origin: string | undefined): Promise<{ readonly origin: string; readonly rpId: string }> => {
+        if (origin === undefined || origin === "") {
+            throw new PasskeyError(400, "passkeys need a browser origin");
+        }
+        if (deps.originAllowed(origin)) {
+            return { origin, rpId: rpIdOf(origin) };
+        }
+        const appRpId = await deps.appRelyingParty?.(origin);
+        if (appRpId === undefined) {
+            throw new PasskeyError(400, `passkeys cannot be bound to ${origin}`);
+        }
+        return { origin, rpId: appRpId };
+    };
 
 export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCeremonies => {
     const now = deps.now ?? Date.now;
@@ -275,16 +297,7 @@ export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCerem
         return { challenge, issued };
     };
 
-    // The relying party a request is for: its browser origin, which must be one the daemon already trusts for CORS.
-    const relyingParty = (origin: string | undefined): { readonly origin: string; readonly rpId: string } => {
-        if (origin === undefined || origin === "") {
-            throw new PasskeyError(400, "passkeys need a browser origin");
-        }
-        if (!deps.originAllowed(origin)) {
-            throw new PasskeyError(400, `passkeys cannot be bound to ${origin}`);
-        }
-        return { origin, rpId: rpIdOf(origin) };
-    };
+    const relyingParty = relyingPartyOf(deps);
 
     const userHandle = (email: string): string =>
         base64url.encode(createHash("sha256").update(`${deps.sandboxId}:${email.toLowerCase()}`).digest());
@@ -294,7 +307,7 @@ export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCerem
 
     return {
         registrationOptions: async ({ identity, origin }) => {
-            const rp = relyingParty(origin);
+            const rp = await relyingParty(origin);
             const own = (await deps.store.list()).filter((credential) => credential.email.toLowerCase() === identity.email.toLowerCase());
             const challenge = issue({ kind: "create", email: identity.email, ...rp });
             return {
@@ -314,7 +327,7 @@ export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCerem
             };
         },
         register: async ({ identity, origin, response, label }) => {
-            const rp = relyingParty(origin);
+            const rp = await relyingParty(origin);
             const { challenge, issued } = consume(response.response.clientDataJSON, "create");
             if (issued.email === undefined || issued.email.toLowerCase() !== identity.email.toLowerCase() || issued.origin !== rp.origin) {
                 throw new PasskeyError(400, "this registration was started by someone else, or from another origin");
@@ -342,7 +355,7 @@ export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCerem
             return credential;
         },
         authenticationOptions: async (origin) => {
-            const rp = relyingParty(origin);
+            const rp = await relyingParty(origin);
             const allowCredentials = descriptorsFor(await deps.store.list(), rp.rpId);
             return {
                 rpId: rp.rpId,
@@ -354,7 +367,7 @@ export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCerem
             };
         },
         authenticate: async ({ origin, response }) => {
-            const rp = relyingParty(origin);
+            const rp = await relyingParty(origin);
             const { challenge, issued } = consume(response.response.clientDataJSON, "get");
             if (issued.origin !== rp.origin) {
                 throw new PasskeyError(400, "this sign-in was started from another origin");

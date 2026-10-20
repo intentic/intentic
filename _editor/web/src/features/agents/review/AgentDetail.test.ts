@@ -11,10 +11,13 @@ import * as actualVueRouter from "vue-router";
 import { RouterLinkStub } from "../../../testing/routerLinkStub";
 import * as actualUi from "@intentic/ui";
 import * as actualAgentActions from "../../../models/fleet/agentActions";
+import * as actualNativeApp from "../../../app/environments/nativeApp";
 
 // What the second test turns: the form factor (a desktop page is the review, where a phone's is the chat) and whether
 // either half of the fleet has answered for this id yet. Defaults are the first test's world, restored after each.
-const { knobs } = { knobs: { mobile: true, known: true } };
+const { knobs } = { knobs: { mobile: true, known: true, query: {} as Record<string, string>, inApp: false } };
+// What the page asked the router for, read by the cases about where a press goes.
+const routerCalls = { push: jest.fn(), replace: jest.fn() };
 
 // The header's back link is a real RouterLink now, which needs a router this bare mount never installs.
 // Every factory below is synchronous: a jest.mock factory runs in place, and awaiting inside one that replaces a
@@ -22,8 +25,9 @@ const { knobs } = { knobs: { mobile: true, known: true } };
 jest.mock("vue-router", () => ({
     ...actualVueRouter,
     // `query` too: the page reads `?sandbox=`, and vue-router never produces a route object without one.
-    useRoute: () => ({ params: { id: `agent-1` }, query: {} }) as never,
-    useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) as never,
+    // SAFETY: the two fields the page reads of its route; vue-router's full route object is not what is under test.
+    useRoute: () => ({ params: { id: `agent-1` }, query: knobs.query }) as never,
+    useRouter: () => routerCalls as never,
     RouterLink: RouterLinkStub as never,
 }));
 
@@ -31,6 +35,7 @@ jest.mock("vue-router", () => ({
 // spread so a name anything in the graph imports is never missing.
 const realUi = { ...actualUi };
 const realAgentActions = { ...actualAgentActions };
+const realNativeApp = { ...actualNativeApp };
 
 jest.mock("@intentic/ui", () => {
     const empty = (name: string) => defineComponent({ name, render: () => null });
@@ -95,6 +100,8 @@ jest.mock("../../../models/conversations/run/useChat", () => {
                               conversationId: `agent-1`,
                               title: ref(`Readable mobile title`),
                               streaming: ref(true),
+                              // What the review reads of the chat beside it (AgentDetail `streaming`), drawn once it is in front.
+                              turn: { streaming: ref(true) },
                               peek: ref(false),
                               unsent: ref(false),
                           },
@@ -133,6 +140,8 @@ jest.mock("./useAgentChanges", () => {
 
 jest.mock("../../../models/fleet/agentActions", () => ({ ...realAgentActions, requestLandAgent: jest.fn(async () => {}), startAgent: jest.fn() }));
 jest.mock("../../../client/sandbox/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
+// Whether the page is the Android app's WebView, which the page reads once as it is set up.
+jest.mock("../../../app/environments/nativeApp", () => ({ ...realNativeApp, embedded: () => knobs.inApp }));
 
 const { default: AgentDetail } = await import("./AgentDetail.vue");
 
@@ -144,6 +153,10 @@ afterEach(() => {
     document.body.innerHTML = ``;
     knobs.mobile = true;
     knobs.known = true;
+    knobs.query = {};
+    knobs.inApp = false;
+    routerCalls.push.mockClear();
+    routerCalls.replace.mockClear();
     // Only the wait test fakes them; left on, they would freeze every timer after it.
     jest.useRealTimers();
 });
@@ -211,4 +224,57 @@ it(`holds the header's places and the review's shape while the fleet is still be
     expect(status.textContent).toContain(`Opening this agent's review…`);
     expect(status.closest(`aside`)).not.toBeNull();
     expect(el.querySelectorAll(`.skeleton`)).toHaveLength(2);
+});
+
+const mountDetail = async (): Promise<HTMLElement> => {
+    const el = document.createElement(`div`);
+    document.body.append(el);
+    app = createApp(AgentDetail);
+    app.component(`Icon`, IconStub);
+    app.directive(`tooltip`, {});
+    app.mount(el);
+    await nextTick();
+    return el;
+};
+
+// Which of a phone's two pages is in front: the one out of view is inert (SwipePages).
+const pageInFront = (el: HTMLElement): string | undefined =>
+    [...el.querySelectorAll<HTMLElement>(`[role="tabpanel"]`)].find((page) => !page.hasAttribute(`inert`))?.dataset[`page`];
+
+// `?view=changes` names the review: a link to an agent's changes, and the Android app's way to show them alone.
+it(`opens a phone on the agent's Changes when the address asks for them, and on its chat otherwise`, async () => {
+    knobs.query = { view: `changes` };
+    expect(pageInFront(await mountDetail())).toBe(`changes`);
+    app?.unmount();
+    knobs.query = {};
+    expect(pageInFront(await mountDetail())).toBe(`chat`);
+});
+
+// Inside the Android app the conversation is the app's own screen: turning to the chat asks the router for it, which
+// hands `/agents/<id>` to the app, and this page stays on the changes it was opened for, with no way back of its own.
+it(`inside the Android app, turns to the agent's chat by asking the router for it, staying on the changes`, async () => {
+    knobs.inApp = true;
+    knobs.query = { view: `changes` };
+    const el = await mountDetail();
+    expect(pageInFront(el)).toBe(`changes`);
+    expect(el.querySelector(`[aria-label="Back to agents"]`)).toBeNull();
+
+    const chatTab = [...el.querySelectorAll<HTMLButtonElement>(`[role="tab"]`)].find((tab) => tab.getAttribute(`aria-label`) === `Chat`)!;
+    chatTab.click();
+    await nextTick();
+
+    expect(routerCalls.push.mock.calls).toEqual([[`/agents/agent-1`]]);
+    expect(pageInFront(el)).toBe(`changes`);
+});
+
+it(`outside the app keeps its way back to the board and turns to the chat in place`, async () => {
+    knobs.query = { view: `changes` };
+    const el = await mountDetail();
+    expect(el.querySelector(`[aria-label="Back to agents"]`)).not.toBeNull();
+
+    [...el.querySelectorAll<HTMLButtonElement>(`[role="tab"]`)].find((tab) => tab.getAttribute(`aria-label`) === `Chat`)!.click();
+    await nextTick();
+
+    expect(routerCalls.push).not.toHaveBeenCalled();
+    expect(pageInFront(el)).toBe(`chat`);
 });

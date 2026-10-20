@@ -32,6 +32,9 @@ const ARMS: readonly Arm[] = [
     { name: `surface`, component: `dev.intentic.spike/.SurfaceConversationActivity`, about: `Rust draws the transcript (wgpu)` },
     { name: `flutter`, component: `dev.intentic.spike.flutter/.MainActivity`, about: `Flutter, Impeller` },
     { name: `compose`, component: `dev.intentic.spike.compose/.MainActivity`, about: `plain Kotlin: Compose and a Kotlin markdown library` },
+    // The app itself, measured as one more arm: its bench build's conversation screen over the same fixture, which
+    // mobile-core opens and streams (`_editor/android-app`, PreviewConversation).
+    { name: `app`, component: `dev.intentic.app.bench/dev.intentic.app.PreviewConversation`, about: `the native app: Kotlin views over mobile-core` },
 ];
 
 const WEB_PORT = 8790;
@@ -116,6 +119,14 @@ const launch = async (arm: Arm, extras: string): Promise<{ since: number; totalT
 interface Moving {
     readonly frames: FrameStats;
     readonly cpu: CpuUse;
+    /** The arm's processes' proportional set size once the scenario ended, MB: what of the phone's memory it holds. */
+    readonly pssMb: number;
+    /**
+     * The battery's current over the scenario, mA (median of half-second readings), or NaN on a phone that is plugged
+     * in, where the reading is the charge going in rather than what the scenario costs. The screen and the radio are
+     * in it too, alike for every arm.
+     */
+    readonly batteryMa: number;
 }
 
 interface Start {
@@ -137,8 +148,9 @@ const measureWhile = async (arm: Arm, name: string, traceMs: number, act: () => 
     }
     const trace = device.trace(schedConfig(traceMs), out, `${arm.name}-${name}`);
     const polls = device.pollLatency(layers, trace);
+    const currents = device.pollCurrent(trace);
     await act();
-    const [path, byLayer] = await Promise.all([trace, polls]);
+    const [path, byLayer, drawn] = await Promise.all([trace, polls, currents]);
     // The first poll answers what the layer presented before the scenario began (the start, the settle): left out.
     const began = (latencies: readonly Latency[]): number => Math.max(0, ...(latencies[0]?.presents ?? [])) + 1;
     const fromNs = (presents: readonly number[], latencies: readonly Latency[]): number =>
@@ -155,9 +167,12 @@ const measureWhile = async (arm: Arm, name: string, traceMs: number, act: () => 
     if (lost > 0) {
         process.stdout.write(`warning: ${arm.name} ${name}: frames may have gone unseen between ${lost} pairs of polls\n`);
     }
+    const pkg = arm.component.split(`/`)[0] ?? ``;
     return {
         frames: frameStats(measured.presents, measured.latencies[0]?.refreshNs ?? 16_666_667, { fromNs: measured.from, lateAfter: lateAfter ?? 1.5 }),
-        cpu: cpuUse(out, path, arm.component.split(`/`)[0] ?? ``, windowMs === undefined ? traceMs : windowMs + 1500, arm.name === `web`),
+        cpu: cpuUse(out, path, pkg, windowMs === undefined ? traceMs : windowMs + 1500, arm.name === `web`),
+        pssMb: device.pssMb(pkg, arm.name === `web`),
+        batteryMa: median(drawn),
     };
 };
 
@@ -213,6 +228,8 @@ const medianMoving = (moving: readonly Moving[]): Moving => {
             maxAtMs: of((one) => one.frames.maxAtMs),
         },
         cpu: { totalMs: cpuMs, corePct: of((one) => one.cpu.corePct), threads: middle?.cpu.threads ?? [] },
+        pssMb: of((one) => one.pssMb),
+        batteryMa: of((one) => one.batteryMa),
     };
 };
 
@@ -306,9 +323,22 @@ const movingRow = (moving: Moving | undefined): readonly (number | string)[] | u
         return undefined;
     }
     const { frames, cpu } = moving;
-    return [frames.frames, frames.fps, frames.p95Ms, frames.p99Ms, frames.maxMs, frames.jankPct, cpu.totalMs, cpu.corePct, cpu.threads.join(`, `)];
+    const battery = Number.isNaN(moving.batteryMa) ? `plugged in` : Math.round(moving.batteryMa);
+    return [
+        frames.frames,
+        frames.fps,
+        frames.p95Ms,
+        frames.p99Ms,
+        frames.maxMs,
+        frames.jankPct,
+        cpu.totalMs,
+        cpu.corePct,
+        Math.round(moving.pssMb),
+        battery,
+        cpu.threads.join(`, `),
+    ];
 };
-const MOVING_HEADER = [`frames`, `fps`, `p95 ms`, `p99 ms`, `max ms`, `late %`, `CPU ms`, `core %`, `busiest threads`];
+const MOVING_HEADER = [`frames`, `fps`, `p95 ms`, `p99 ms`, `max ms`, `late %`, `CPU ms`, `core %`, `PSS MB`, `battery mA`, `busiest threads`];
 process.stdout.write(`\nbattery temperature by scenario: ${temperatures.join(` → `)} °C\n`);
 table(`Fling (median of ${movingRuns}): frames presented and CPU used`, MOVING_HEADER, ({ fling }) => movingRow(fling));
 table(`Stream (median of ${movingRuns}): frames presented and CPU used`, MOVING_HEADER, ({ stream }) => movingRow(stream));

@@ -1,0 +1,48 @@
+[package]
+name = "intentic-mobile"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "The native mobile client's Rust core: sessions, the sandbox's streams, the local store, and transcripts rendered to styled text."
+
+[lib]
+name = "intentic_mobile"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+base64 = "0.22"
+jni = "0.21"
+log = "0.4"
+pulldown-cmark = { version = "0.13", default-features = false }
+# rustls on ring with Mozilla's roots: no OpenSSL to cross-compile and no cmake (aws-lc) in the NDK build. A phone's
+# user-installed CAs are not trusted, which only matters behind a TLS-inspecting proxy.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "json", "stream", "http2", "charset"] }
+# Already in the tree for rustls; its AEAD seals the secrets the store keeps.
+ring = "0.17"
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Oniguruma (built from C by cc), not the pure-Rust engine: the first fenced block of a language compiles its
+# grammar's regexes. With fancy-regex that took 32ms on the sandbox and held a Galaxy S10's cold start for about
+# 110ms; with Oniguruma it takes 2ms (_editor/android-native/README.md, Results).
+syntect = { version = "5", default-features = false, features = ["default-onig"] }
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+typeshare = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = { version = "0.15", default-features = false }
+
+[dev-dependencies]
+# Holds src/wire/'s hand-written types to the contract's JSON Schema (tests/wire/). Without its default features, which
+# fetch remote `$ref`s over HTTP: every schema it is given here is self-contained.
+jsonschema = { version = "0.59", default-features = false }
+# A fake platform and daemon for the sign-in-to-board flow (tests/flow.rs).
+wiremock = "0.6"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+opt-level = 3

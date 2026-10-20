@@ -1,24 +1,22 @@
-# Mobile shells — validation only. Proves both store shells still BUILD; shipping is mobile-release.yml.
+# Mobile apps — validation only. Proves both store apps still BUILD; shipping is mobile-release.yml.
 #
 # Cheap and fork-safe by construction: everything runs on GitHub-hosted runners (free on a public
 # repository — and the only place a macOS builder exists at all; the self-hosted fleet is Linux), no job
-# touches a secret, and signing uses a keystore minted inside the run and thrown away with it. The path
-# filter is the budget: the shells are thin configuration over the hosted web app, so almost no product
-# change should ever start these jobs.
+# touches a secret, and the Android release build signs with the debug key AGP mints on the runner and
+# throws away with it. The path filter is the budget.
 #
-# AND THE PATH FILTER IS WHY nightly.yml CALLS THIS TOO. Both jobs here prove a GENERATED project, and what
-# generates it is a pinned external tool reading a checked-in manifest. That pair drifts on its own: neither
-# defect this file has ever caught was a product change. Bubblewrap started requiring a manifest key that was
-# not there and emitted `splashScreenFadeOutDuration: ,`, a Groovy syntax error; Capacitor moved its dependency
-# wiring to a Swift package, so the App.xcworkspace both workflows opened stopped being written at all. With
-# only the path filter, nothing looks until someone touches a shell — this workflow had run four times in its
-# life, and was broken from its first run to its fourth, a full day, on a push that changed neither shell
-# (the CI failure audit's class F, in history before 2fed33289). A schedule is what makes drift arrive on
-# nobody's push.
+# AND THE PATH FILTER IS WHY nightly.yml CALLS THIS TOO. The iOS shell is a GENERATED project, and what
+# generates it is a pinned external tool reading a checked-in config: that pair drifts on its own, as
+# Capacitor did when it moved its dependency wiring to a Swift package and the App.xcworkspace this workflow
+# opened stopped being written at all. The Android app drifts a second way: its colours and strings are
+# generated from the web editor's CSS and catalogs, and a catalog changes on most web pull requests, which
+# the filter leaves out rather than start a Rust and Gradle build for each of them. The nightly call is
+# where a reworded message the app shows turns this job red, with the one command that regenerates it.
 #
-# What each job actually proves, since neither shell has tests of its own:
-#   android  the Play manifest still generates a project Bubblewrap can assemble and sign end-to-end —
-#            the same command sequence the release runs, minus the store upload.
+# What each job proves:
+#   android  the native app (_editor/android-app) over its Rust core (_editor/mobile-core): the core's
+#            fmt, clippy and tests; Messages.kt, colors.xml and strings.xml regenerated with no diff; the
+#            generators' own tests; the app's unit tests; and a minified, shrunk release APK.
 #   ios      the Capacitor config still generates a project that compiles, and prepare-native.mjs can still
 #            finish it — that script WRITES the push wiring the Capacitor template leaves out, and stops on a
 #            template whose shape moved, which is the one product invariant a successful compile would hide.
@@ -30,13 +28,17 @@ on:
     paths:
       - "_editor/ios-app/**"
       - "_editor/android-app/**"
-      - "_tools/scripts/ci/mobile-android-sdk.sh"
+      - "_editor/mobile-core/**"
+      - "_editor/ui/src/styles/primitive-colors.css"
+      - "_editor/ui/src/styles/semantic-colors.css"
       - ".github/workflows/mobile.yml"
   pull_request:
     paths:
       - "_editor/ios-app/**"
       - "_editor/android-app/**"
-      - "_tools/scripts/ci/mobile-android-sdk.sh"
+      - "_editor/mobile-core/**"
+      - "_editor/ui/src/styles/primitive-colors.css"
+      - "_editor/ui/src/styles/semantic-colors.css"
       - ".github/workflows/mobile.yml"
   workflow_dispatch:
   # Called by nightly.yml, so the same two jobs are the schedule's answer as well as the push's. A second copy
@@ -54,39 +56,77 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: _editor/android-app
+    timeout-minutes: 45
+    env:
+      # The NDK app/build.gradle.kts names as ndkVersion: cargo-ndk links the core with it, AGP strips it with it.
+      NDK_VERSION: "29.0.14206865"
+      CORE: _editor/mobile-core/Cargo.toml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+      # Seconds, and no toolchain: ahead of everything that compiles.
+      - name: Colours and strings match the web's
+        run: |
+          node _editor/android-app/scripts/theme.mjs --check
+          node _editor/android-app/scripts/strings.mjs --check
+      - name: Generator tests
+        run: node --test '_editor/android-app/scripts/**/*.test.mjs'
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "17"
-      - name: Point Bubblewrap at the runner's toolchains
-        working-directory: .
-        run: bash _tools/scripts/ci/mobile-android-sdk.sh
-      # A validation build must sign with SOMETHING (the manifest names a keystore), and it must never be the
-      # real one: a key minted inside the run proves the signing path works and can leak nothing.
-      - name: Mint a throwaway signing key
+      # The licences are fed from a process substitution, not `yes |`: under pipefail that pipe dies 141 the moment
+      # sdkmanager stops reading (_tools/scripts/ci/mobile-android-sdk.sh learned it first).
+      - name: Rust, the Android targets and the NDK
         run: |
-          keytool -genkeypair -keystore ./android.keystore -alias android \
-            -storepass ci-throwaway -keypass ci-throwaway -keyalg RSA -keysize 2048 -validity 1 \
-            -dname "CN=ci-validation"
-      - name: Generate the Android project from the manifest
-        run: npx @bubblewrap/cli@1.25.0 update --skipVersionUpgrade
-      - name: Build and sign
-        env:
-          BUBBLEWRAP_KEYSTORE_PASSWORD: ci-throwaway
-          BUBBLEWRAP_KEY_PASSWORD: ci-throwaway
-        run: npx @bubblewrap/cli@1.25.0 build --skipPwaValidation
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy --target aarch64-linux-android,x86_64-linux-android
+          rustup default stable
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" < <(yes) > /dev/null
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: cargo-tools
+        with:
+          path: |
+            ~/.cargo/bin/cargo-ndk
+            ~/.cargo/bin/typeshare
+          key: mobile-cargo-tools-${{ runner.os }}-cargo-ndk-4.1.2-typeshare-1.13.4
+      # typeshare at the version that wrote the committed Messages.kt: its output's header names it, so another
+      # version is a diff by itself.
+      - name: cargo-ndk and typeshare
+        if: steps.cargo-tools.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked cargo-ndk --version 4.1.2
+          cargo install --locked typeshare-cli --version 1.13.4
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            _editor/mobile-core/target
+          key: mobile-core-${{ runner.os }}-${{ hashFiles('_editor/mobile-core/Cargo.lock') }}
+          restore-keys: mobile-core-${{ runner.os }}-
+      - name: Core formatting
+        run: cargo fmt --manifest-path "$CORE" --all --check
+      - name: Core lints
+        run: cargo clippy --manifest-path "$CORE" --all-targets -- -D warnings
+      - name: Core tests
+        run: cargo test --manifest-path "$CORE"
+      - name: Messages.kt matches the core's messages
+        run: bash _editor/mobile-core/scripts/messages.sh --check
+      # Gradle is the version scripts/gradle.sh pins and digest-checks; there is no wrapper jar in the repository.
+      # The instrumented tests, the Baseline Profile's recorder and the benchmarks need a device, so CI only compiles
+      # them, which keeps them from drifting away from the app.
+      - name: App unit tests and release build
+        run: >-
+          bash _editor/android-app/scripts/gradle.sh --no-daemon :app:testDebugUnitTest :app:assembleRelease
+          :app:assembleDebugAndroidTest :baselineprofile:assembleNonMinifiedRelease :benchmark:assembleBench
       - uses: ./.github/actions/upload-artifact-retry
         with:
           name: android-validation-apk
-          path: _editor/android-app/app-release-signed.apk
+          path: _editor/android-app/app/build/outputs/apk/release/app-release.apk
           retention-days: 7
 
   ios:

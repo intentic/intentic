@@ -270,7 +270,7 @@ flowchart LR
   `BETTER_AUTH_SECRET` orphans every record. (2026-09-29: derived rather than a new env var, so no deployment has to
   carry one more secret. A dedicated key would survive a session-secret rotation, at the cost of one more thing to set.)
 - `src/config.ts` is the one config schema; each field is an env var in SCREAMING_SNAKE. A lane whose credential is
-  unset (Stripe, APNs, trial keys, Fly) is switched off rather than failing the boot.
+  unset (Stripe, APNs, FCM, trial keys, Fly) is switched off rather than failing the boot.
 - Bun runs the TypeScript source; there is no build. The image applies migrations and then refuses to start if the
   database differs from `schema.prisma` ([Dockerfile](Dockerfile)).
 - Before it applies a migration, the boot dumps the database (`src/migration-backup.ts`): when `prisma migrate status`
@@ -297,7 +297,7 @@ flowchart LR
 | `src/invite` | Emailed invitations to share a sandbox |
 | `src/me` | The caller's profile and GDPR data export |
 | `src/tokens` | Account-level API tokens |
-| `src/push-relay` | APNs push relay for native installs |
+| `src/push-relay` | Push relay for native installs: APNs for the iPhone app, FCM for the Android editor and Intentic Device apps, never carrying a notification's words to Android |
 | `src/trial` | Free-trial model API, OpenAI-compatible, on the platform's credential. Metered per model call (`TRIAL_DAILY_MESSAGES`, default 12 a day); a turn the daemon opens with a call left may finish on up to `TRIAL_GRACE_STEPS` more (default 25 a day, `POST /trial/turn`) |
 | `src/wallet` | Agent wallet: payments signed by a custody provider under per-member caps |
 | `src/e2e` | Suites against real Fly and Stripe, gated by `INTENTIC_E2E` |

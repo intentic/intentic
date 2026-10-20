@@ -1,0 +1,101 @@
+{
+    "AttachTurnSchema": {
+        "the run already shown": { "conversationId": "cnv_soft_deletes", "run": "run_9f2c" },
+        "a first look": { "conversationId": "cnv_soft_deletes" }
+    },
+    "AttachFrameSchema": {
+        "the head": {
+            "kind": "attached",
+            "run": "run_9f2c",
+            "startedAt": 1760870400000,
+            "seq": 41,
+            "rows": [
+                { "role": "user", "text": "Add soft deletes to the invoices table.", "run": "run_9f2c", "sentAt": 1760870400000, "messageId": "msg_01J9ZK" },
+                {
+                    "role": "assistant",
+                    "text": "Reading the schema first.",
+                    "run": "run_9f2c",
+                    "openedAt": 1760870402000,
+                    "tools": [{ "id": "toolu_01", "name": "Read", "category": "read", "status": "in_progress", "target": "db/schema.sql" }]
+                }
+            ]
+        },
+        "append": { "kind": "patch", "seq": 42, "patch": { "op": "append", "row": { "role": "assistant", "text": "", "run": "run_9f2c", "openedAt": 1760870405000 } } },
+        "replace": {
+            "kind": "patch",
+            "seq": 43,
+            "patch": { "op": "replace", "index": 2, "row": { "role": "notice", "text": "Stopped by Ada.", "run": "run_9f2c", "noticeCode": { "code": "stopped", "params": { "by": "Ada" } } } }
+        },
+        "drop": { "kind": "patch", "seq": 44, "patch": { "op": "drop", "index": 2 } },
+        "text": { "kind": "patch", "seq": 45, "patch": { "op": "text", "index": 1, "text": " The `invoices` table has no" } },
+        "thinking": { "kind": "patch", "seq": 46, "patch": { "op": "thinking", "index": 1, "text": "A partial index would keep this fast." } },
+        "toolThinking": { "kind": "patch", "seq": 47, "patch": { "op": "toolThinking", "index": 1, "id": "toolu_04", "text": "Covering restore too." } },
+        "tool": {
+            "kind": "patch",
+            "seq": 48,
+            "patch": { "op": "tool", "index": 1, "tool": { "id": "toolu_01", "name": "Read", "category": "read", "status": "completed", "target": "db/schema.sql", "endedAt": 1760870402300 } }
+        },
+        "a subagent's own tool": {
+            "kind": "patch",
+            "seq": 49,
+            "patch": { "op": "tool", "index": 1, "parent": "toolu_04", "tool": { "id": "toolu_05", "name": "Write", "category": "edit", "status": "pending" } }
+        },
+        "session fact": { "kind": "fact", "seq": 2, "fact": { "kind": "session", "sessionId": "8f1d2c4e-1b7a-4b39-9a51-2c7c1e0a9d55", "account": "claude-max" } },
+        "worktree fact": { "kind": "fact", "seq": 3, "fact": { "kind": "worktree", "branch": "agent/cnv_soft_deletes", "base": "d6069bb" } },
+        "usage fact": { "kind": "fact", "seq": 50, "fact": { "kind": "usage", "costUsd": 0.4213, "inputTokens": 12044, "outputTokens": 3311, "cacheReadTokens": 90000, "durationMs": 61000, "account": "claude-max" } },
+        "context fact": { "kind": "fact", "seq": 51, "fact": { "kind": "context_usage", "tokens": 81234, "contextWindow": 200000, "cachedAt": 1760870461000, "cacheTtlMs": 300000 } },
+        "status line set": { "kind": "fact", "seq": 52, "fact": { "kind": "agent_status", "key": "tests", "text": "3 of 12 passing", "source": "pi" } },
+        "status line cleared": { "kind": "fact", "seq": 53, "fact": { "kind": "agent_status", "key": "tests", "text": null } },
+        "provider retry": { "kind": "fact", "seq": 54, "fact": { "kind": "provider_retry", "attempt": 2, "maxAttempts": 5, "nextAttemptAt": 1760870470000, "status": 529 } },
+        "mode": { "kind": "fact", "seq": 55, "fact": { "kind": "mode", "mode": "plan" } },
+        "a spent allowance": {
+            "kind": "fact",
+            "seq": 56,
+            "fact": {
+                "kind": "error",
+                "message": "You have hit your usage limit.",
+                "code": "rate_limit",
+                "account": "claude-max",
+                "resetsAt": 1760885000,
+                "nextAt": 1760885060,
+                "autoResume": "scheduled",
+                "held": { "ran": true, "contextTokens": 81234 }
+            }
+        },
+        "a fact this build ignores": { "kind": "fact", "seq": 4, "fact": { "kind": "terminal", "session": "agent-cnv_soft_deletes-1" } },
+        "end": { "kind": "end" }
+    },
+    "TranscriptPatchSchema": {
+        "text": { "op": "text", "index": 0, "text": "Hello" }
+    },
+    "AgentTranscriptSchema": {
+        "the newest page, with older ones above": {
+            "messages": [
+                { "role": "user", "text": "Add soft deletes to the invoices table.", "sentAt": 1760870400000, "checkpointId": "ckpt_3", "rewindIndex": 12 },
+                {
+                    "role": "assistant",
+                    "text": "Done: the column, the filter, and a restore endpoint.",
+                    "openedAt": 1760870402000,
+                    "tools": [{ "id": "toolu_04", "name": "Task", "category": "other", "status": "completed", "nested": 14 }],
+                    "usage": { "costUsd": 0.4213 }
+                }
+            ],
+            "from": 12,
+            "more": true,
+            "sessionId": "8f1d2c4e-1b7a-4b39-9a51-2c7c1e0a9d55",
+            "provider": "claude",
+            "harness": "native",
+            "account": "claude-max",
+            "ending": { "reason": "stopped", "held": { "ran": true }, "scheduled": false }
+        }
+    },
+    "AgentToolChildrenSchema": {
+        "a delegation's calls": { "children": [{ "id": "toolu_05", "name": "Write", "category": "edit", "status": "completed", "target": "test/invoices.test.ts" }] }
+    },
+    "unschemed:AttachFrame": {
+        "a frame from a newer daemon": { "kind": "presence", "seq": 9 }
+    },
+    "unschemed:TranscriptPatch": {
+        "an op from a newer daemon": { "op": "move", "from": 1, "to": 3 }
+    }
+}

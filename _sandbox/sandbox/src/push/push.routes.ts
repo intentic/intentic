@@ -7,8 +7,8 @@ import type { OrpcContext } from "../app-env.js";
 export type PushRoutesDeps = Pick<Services, "push" | "pushSender">;
 
 // The device's half of push: read the VAPID public key and this device's registration state, register, unregister, send
-// a test. Every route identifies a device by channelId (a browser's endpoint or a native relay's deviceId); the daemon
-// never invents that identity.
+// a test, and read back what a notification said. Every route identifies a device by channelId (a browser's endpoint or
+// a native relay's deviceId); the daemon never invents that identity.
 export const createPushRoutes = (services: PushRoutesDeps) => {
     const i = implement(pushContract).$context<OrpcContext>();
     return {
@@ -30,6 +30,15 @@ export const createPushRoutes = (services: PushRoutesDeps) => {
         unsubscribe: i.unsubscribe.handler(async ({ input }) => {
             await services.push.remove(input.id);
             return { ok: true } as const;
+        }),
+        // Only what was sent to the caller's own devices, and the same not-found for a tag that was never sent, one sent only
+        // to someone else, one no longer kept and a caller with no member identity, so asking reveals nothing.
+        notification: i.notification.handler(({ input, context }) => {
+            const sent = context.identity === undefined ? undefined : services.pushSender.sent(input.tag, context.identity.email);
+            if (sent === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "No notification under this tag was sent to your devices, or it is no longer kept." });
+            }
+            return sent;
         }),
         // Named `notify`, not `notifyIfAway`: pressing this test always sends, so a silent no-op would prove nothing.
         // Reports the delivered count and refuses OK on zero, since "no row" and "every send refused" look identical

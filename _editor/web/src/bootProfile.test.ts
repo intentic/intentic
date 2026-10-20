@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PROFILE_COOKIE, PROFILE_KEYS, PROFILE_PARAM, PROFILE_STORAGE_KEY, PROFILES, type Profile, type ProfileLook } from "@intentic/constants";
+import { THEME_ROW, type ThemeRow, themeRowLook } from "./features/settings/themeRow";
 
 // index.html's pre-paint script adopts an arriving profile before any module loads, so it cannot import the table it
 // applies — it spells the values out. This reads them back and fails if they have parted from @intentic/constants.
@@ -87,17 +88,22 @@ type Os = "light" | "dark" | "silent";
 interface Browser {
     readonly stored?: Record<string, string>;
     readonly cookie?: string;
+    /** This tab's session storage, where the Android app's WebView is remembered (app/environments/nativeApp.ts). */
+    readonly tab?: Record<string, string>;
+    /** The Android app's own object, as it injects it before any script runs. */
+    readonly app?: { readonly look: () => string };
 }
 
 const boot = (href: string, browser: Browser = {}, os: Os = `light`): BootResult => {
     const store = { ...browser.stored };
     const attributes = tagAttributes();
     let url: string | undefined;
-    const localStorage = {
-        getItem: (key: string): string | null => store[key] ?? null,
-        setItem: (key: string, value: string): void => void (store[key] = value),
-        removeItem: (key: string): void => void delete store[key],
-    };
+    const storageOver = (held: Record<string, string>) => ({
+        getItem: (key: string): string | null => held[key] ?? null,
+        setItem: (key: string, value: string): void => void (held[key] = value),
+        removeItem: (key: string): void => void delete held[key],
+    });
+    const localStorage = storageOver(store);
     const document = {
         documentElement: {
             setAttribute: (name: string, value: string): void => void attributes.set(name, value),
@@ -110,6 +116,8 @@ const boot = (href: string, browser: Browser = {}, os: Os = `light`): BootResult
     const window = {
         location: { href },
         history: { replaceState: (_state: null, _title: string, next: string): void => void (url = next) },
+        sessionStorage: storageOver({ ...browser.tab }),
+        intenticNative: browser.app,
         // `no-preference` matches neither query, which is what `light` models here: the dark one simply misses.
         ...(os === `silent` ? {} : { matchMedia: (query: string): { matches: boolean } => ({ matches: os === `dark` && query.includes(`dark`) }) }),
     };
@@ -260,6 +268,46 @@ describe(`the light the first frame is painted in`, () => {
         expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.skin]: `sanctum` } }, `light`))).toEqual({
             mode: undefined,
             skin: `sanctum`,
+        });
+    });
+});
+
+// THE ANDROID APP'S WEBVIEW wears the app's look over the one stored here, from the first frame, and writes nothing. The
+// script spells each look as the pair the Theme row stores for it; this runs every look through both and fails if the
+// script and the row (features/settings/themeRow.ts) ever part.
+describe(`the first frame inside the Android app`, () => {
+    const looks = (result: BootResult) => ({ mode: result.attributes.get(`data-mode`), skin: result.attributes.get(`data-skin`) });
+    // What the row's pair resolves to on a screen, under an OS in `os`: useTheme's and useSkin's own rule.
+    const worn = (row: ThemeRow, os: `light` | `dark`) => {
+        const { scheme, skin } = themeRowLook(row);
+        const dark = scheme === `system` ? os === `dark` : scheme === `dark`;
+        const sanctum = skin === `system` ? dark : skin === `sanctum`;
+        return { mode: dark ? `dark` : undefined, skin: sanctum ? `sanctum` : undefined };
+    };
+    const chosen = { [PROFILE_KEYS.scheme]: `light`, [PROFILE_KEYS.skin]: `none` };
+
+    it(`wears every look the address names, over the reader's own choice`, () => {
+        for (const row of THEME_ROW) {
+            for (const os of [`light`, `dark`] as const) {
+                const result = boot(`https://app.intentic.dev/settings?embed=native&look=${row}`, { stored: chosen }, os);
+                expect({ row, os, ...looks(result) }).toEqual({ row, os, ...worn(row, os) });
+                expect(result.stored).toEqual(chosen);
+            }
+        }
+    });
+
+    it(`takes the app's object at its word over the address, and the tab's memory after a reload`, () => {
+        expect(looks(boot(`https://app.intentic.dev/settings?embed=native&look=light`, { app: { look: () => `sanctum` } }))).toEqual(worn(`sanctum`, `light`));
+        expect(looks(boot(`https://app.intentic.dev/settings`, { tab: { "intentic.embed": `native`, "intentic.embed.look": `dark` } }))).toEqual(
+            worn(`dark`, `light`),
+        );
+    });
+
+    it(`leaves a browser to its own choice, whatever look an address names`, () => {
+        expect(looks(boot(`https://app.intentic.dev/settings?look=dark`, { stored: chosen }))).toEqual({ mode: undefined, skin: undefined });
+        expect(looks(boot(`https://app.intentic.dev/settings`, { stored: chosen, tab: { "intentic.embed.look": `dark` } }))).toEqual({
+            mode: undefined,
+            skin: undefined,
         });
     });
 });

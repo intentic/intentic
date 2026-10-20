@@ -2182,7 +2182,12 @@
             "threw": "Su script lanzó un error | Sus scripts lanzaron {count} errores",
             "agentTold": "el agente ya lo sabe",
             "askFix": "Pedir que lo arregle",
-            "fixRequest": "La página \"{title}\" (id \"{id}\") lanzó errores en mi chat:\n{errors}\n\nArréglala y vuelve a mostrarla con replaces: \"{id}\"."
+            "fixRequest": "La página \"{title}\" (id \"{id}\") lanzó errores en mi chat:\n{errors}\n\nArréglala y vuelve a mostrarla con replaces: \"{id}\".",
+            "screenTitle": "Página",
+            "opening": "Abriendo la página…",
+            "notFound": "Esta página ya no está en este chat.",
+            "conversationGone": "Este chat ya no está en este sandbox.",
+            "readFailed": "No se pudo leer este chat."
         },
         "sendLater": {
             "sendAt": "Enviar a las",

@@ -995,19 +995,25 @@ model PushDevice {
     id         String   @id @default(cuid())
     userId     String
     user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    // "ios" or "android": the forwarder this token belongs to. "ios" is the editor's iPhone app (APNs); "android" is the
-    // Intentic Device app on a phone, registered by the editor so its sandbox can wake it (FCM, data-only). The editor's
-    // own Android app is a TWA riding web push, so it never registers here.
+    // "ios" or "android": the forwarder this token belongs to. "ios" is the editor's iPhone app (APNs); "android" is an
+    // app on a phone, reached through FCM with a data-only message (`app` says which).
     platform   String
-    // The APNs device token as the shell reported it. Rotates on reinstall; the unique key makes a
-    // re-registration replace the row rather than stack a second send per notification.
+    // Which app holds the token: "device" (the Intentic Device app, registered by the editor so its sandbox can wake it)
+    // or "editor" (the native editor app dev.intentic.app, told what to fetch and show). Read only for Android; an iOS
+    // row is the editor.
+    app        String   @default("device")
+    // The sandbox an editor registration named, opaque here and handed back in each notify; "" when it named none.
+    // Part of the unique key, so one token holds one row per sandbox and re-registering one rotates only its secret.
+    sandbox    String   @default("")
+    // The APNs device token as the shell reported it, or the FCM registration token. Rotates on reinstall; the unique
+    // key makes a re-registration replace the row rather than stack a second send per notification.
     token      String
     // SHA-256 of the send capability. Verified in constant time; never reversible into a working secret.
     secretHash String
     createdAt  DateTime @default(now())
     updatedAt  DateTime @updatedAt
 
-    @@unique([userId, token])
+    @@unique([userId, token, sandbox])
     @@index([userId])
     @@map("push_device")
 }

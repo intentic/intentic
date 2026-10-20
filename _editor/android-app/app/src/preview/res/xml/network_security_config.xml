@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Preview builds only: plain HTTP to this phone's own loopback, where `adb reverse` serves a local demo of the web
+     editor (PreviewWeb). Every other host stays HTTPS-only, as in the release build. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

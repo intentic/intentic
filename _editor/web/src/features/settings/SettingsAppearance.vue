@@ -28,12 +28,13 @@ import { useSkin } from "../../skins/useSkin";
 import { WALLPAPERS, useWallpaper } from "../../skins/useWallpaper";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "./themeRow";
 import { type Audience, useAudience } from "../../app/useAudience";
+import { embedded, tellNative } from "../../app/environments/nativeApp";
 
 // How the workspace looks: color scheme, accent color, file-tree treatment, and which tabs the terminal strip carries.
 // Each setting re-renders the whole UI live, so most of the app is its own preview; the Explorer gets an inline sample
 // since its tree isn't on this page.
 
-const { choice: schemeChoice, set: setScheme, accent, setAccent } = useTheme();
+const { choice: schemeChoice, handed: handedScheme, set: setScheme, hand: handScheme, accent, setAccent } = useTheme();
 const { textSize, setTextSize } = useTextSize();
 const { explorerStyle, explorerStyles } = useExplorerStyle();
 const { iconRailSize } = useIconRailSize();
@@ -85,7 +86,7 @@ const diffOpenOptions = computed(
 // A skin rides the Theme row instead of its own control, since two controls could show a light scheme under a dark skin
 // with no way back; the mapping between the row and the two preferences is themeRow.ts. To remove skins: delete this
 // block and the useSkin import, keep system/light/dark, and wire the row back to schemeChoice/setScheme.
-const { skin, choice: skinChoice, setSkin } = useSkin();
+const { skin, choice: skinChoice, handed: handedSkin, setSkin, hand: handSkin } = useSkin();
 // Only two of the four rows explain themselves; the key exists for all four so the lookup below stays a plain one.
 const THEME_TITLED: ReadonlySet<ThemeRow> = new Set([`system`, `sanctum`]);
 const themeOptions = computed(() =>
@@ -97,9 +98,21 @@ const themeOptions = computed(() =>
 );
 // Icon names the look, not the light level: what the row now chooses.
 const THEME_ICON: Record<ThemeRow, IconName> = { system: `desktop`, light: `sun`, dark: `moon`, sanctum: `star-fill` };
-const themeChoice = computed<ThemeRow>(() => themeRowValue(schemeChoice.value, skinChoice.value, skin.value));
+// A look the window was handed (the Android app's, app/environments/nativeApp.ts) is the one on screen, so it is the one
+// the row shows.
+const themeChoice = computed<ThemeRow>(() =>
+    themeRowValue(handedScheme.value ?? schemeChoice.value, handedSkin.value ?? skinChoice.value, skin.value),
+);
 const setThemeChoice = (value: ThemeRow): void => {
     const look = themeRowLook(value);
+    // INSIDE THE ANDROID APP the look is the app's: a press here is handed to it, which wears it on its own screens and
+    // keeps it, and worn on this page for as long as the app has it, never stored over this browser's own choice.
+    if (embedded()) {
+        tellNative({ kind: `setLook`, look: value });
+        handSkin(look.skin);
+        handScheme(look.scheme);
+        return;
+    }
     // The skin goes first: pinning sanctum drags the scheme dark with it, and the line below then says so outright.
     setSkin(look.skin);
     setScheme(look.scheme);

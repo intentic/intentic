@@ -1,0 +1,22 @@
+{
+    "DaemonSessionSchema": {
+        "minted from a Google proof": {
+            "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImFkYUBleGFtcGxlLmNvbSIsIm1ldGhvZHMiOlsiZ29vZ2xlIl19.c2lnbmF0dXJl",
+            "expiresAt": 1763560800000,
+            "email": "ada@example.com"
+        }
+    },
+    "PasskeyRequiredSchema": {
+        "holds a passkey": { "error": "this sandbox requires your passkey", "requires": "passkey", "enrolled": true },
+        "must add a first one": { "error": "this sandbox requires a passkey; add one to continue", "requires": "passkey", "enrolled": false }
+    },
+    "unschemed:Refusal": {
+        "dead proof": { "error": "unauthorized" },
+        "platform key not learned yet": { "error": "unauthorized", "reason": "platform-key-unknown" },
+        "email sign-in off": {
+            "error": "email sign-in is not on for you on this sandbox: ask its owner to allow it",
+            "reason": "email-sign-in-off"
+        },
+        "below the route's floor": { "error": "collaborator access required", "floor": "collaborator" }
+    }
+}

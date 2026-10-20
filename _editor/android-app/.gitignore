@@ -1,12 +1,12 @@
-# Everything but the manifest is generated (bubblewrap init/update) or a signing secret.
-# The manifest is the source of truth; `npx @bubblewrap/cli update` rebuilds the project from it.
-app/
+# Gradle and Android Studio output. The Rust core's libraries are built into app/build by Gradle, never committed.
 build/
-gradle/
-gradlew
-gradlew.bat
-*.gradle
-gradle.properties
+.gradle/
+.kotlin/
+.idea/
+*.iml
 local.properties
-store_icon.png
-android.keystore
+captures/
+
+# Signing keys: the upload key lives in the repository's secrets, never in git.
+*.keystore
+*.jks

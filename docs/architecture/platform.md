@@ -30,7 +30,7 @@ flowchart LR
 - **Organisations** ([organisations.md](organisations.md)): `Organisation` with its versioned policy, `OrgMember` by address, and `Sandbox.orgId` for the sandboxes it holds. A bound daemon fetches the policy over its connect token (`/sandbox/org-policy`) and enforces it; a personal sandbox has no `orgId` and is untouched. A bound sandbox cannot be deleted, nor its owner's account erased, until an admin of the organisation releases it.
 - **Convergence across owners' machines** ([`upkeep-convergence.ts`](../../_platform/api/src/admin/upkeep-convergence.ts)): a host report carries the machine agent's last upkeep pass, its counts and the agent's version. The daily sweep sums them by version, one machine counted once. When machines on the newest agent still hold leftovers their own pass could not clear, it puts one line in the admin digest. (2026-10-05) This is how intentic sees whether a release brought machines nobody is watching to the current shape, rather than assuming it did; see [convergence.md](convergence.md).
 - **Hosted sandboxes**: `HostedMachine` and the warm pool `HostedPoolMachine`, image builds, migrations, cleanups, awake-minute metering, the Stripe subscription mirror (`HostedPlan`, `HostedPlanItem`) and the abuse ledgers.
-- **Everything else**: the free trial's meter, the x402 wallet's custody handle and payments, APNs push devices, the desktop sign-in handoff, and admin statistics.
+- **Everything else**: the free trial's meter, the x402 wallet's custody handle and payments, native push devices (APNs for the iPhone app, FCM for the Android editor and Device apps), the desktop sign-in handoff, and admin statistics.
 
 ## How a sandbox joins
 

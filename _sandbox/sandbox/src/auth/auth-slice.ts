@@ -28,6 +28,7 @@ import { assertionsPossible, authEnabled } from "./auth-enabled.js";
 import { fileBrowserAccess } from "./browser-access.js";
 import { allowedOriginsOf, originAllowedBy } from "./browser-origins.js";
 import { type AuthConnections, createAuthConnections } from "./connections.js";
+import { createAppRelyingParty } from "./passkeys/app-origins.js";
 import { createPasskeyCeremonies, filePasskeys, type PasskeyCeremonies, passkeysDocument, type PasskeyStore } from "./passkeys/passkey-store.js";
 import { fencedMembers } from "../org/org-roster.js";
 import type { OrgPolicyHolder } from "../org/org-policy.js";
@@ -104,7 +105,7 @@ const noticedRequired = (passkeys: PasskeyStore, logger: Pick<Logger, "error">):
 // of the store the authorizer's require-passkey policy reads.
 const passkeysOf = (
     config: Config,
-    logger: Pick<Logger, "error">,
+    logger: Pick<Logger, "error" | "warn">,
 ): { readonly passkeys: PasskeyStore; readonly passkeyCeremonies: PasskeyCeremonies; readonly passkeyPolicy: PasskeyPolicy } => {
     const passkeys = filePasskeys(join(config.historyRoot, passkeysDocument.path));
     const sameEmail = (left: string, right: string): boolean => left.toLowerCase() === right.toLowerCase();
@@ -113,6 +114,7 @@ const passkeysOf = (
         passkeyCeremonies: createPasskeyCeremonies({
             store: passkeys,
             originAllowed: originAllowedBy(allowedOriginsOf(config.webOrigin)),
+            appRelyingParty: createAppRelyingParty({ webOrigin: config.webOrigin, logger }),
             sandboxId: sandboxIdFromToken(config.connectToken) ?? "",
             sandboxName: config.sandbox.name,
         }),
@@ -160,7 +162,7 @@ const noGoogle: IdTokenVerifier = () => Promise.reject(new Error("this sandbox t
 export const createAuthSlice = (
     config: Config,
     workspaceRoot: string,
-    logger: Pick<Logger, "error">,
+    logger: Pick<Logger, "error" | "warn">,
     orgPolicy?: Pick<OrgPolicyHolder, "current">,
 ): AuthSlice => {
     const rosterFile = fileMembersStore(join(config.historyRoot, membersDocument.path));

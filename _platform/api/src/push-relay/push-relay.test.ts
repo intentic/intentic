@@ -43,8 +43,11 @@ describe(`register`, () => {
         const stored = upsert.mock.calls[0]?.[0];
         expect(stored.create.secretHash).not.toBe(grant.secret);
         expect(stored.create.secretHash).toMatch(/^[0-9a-f]{64}$/);
-        // Upserting by (user, token) is what makes a reinstall replace its row, and rotate the secret.
-        expect(stored.where).toEqual({ userId_token: { userId: `u1`, token: `tok-1` } });
+        // Upserting by (user, token, sandbox) is what makes a reinstall replace its row, and rotate the secret; an iOS
+        // registration names no sandbox, so its token keeps the one row it always had.
+        expect(stored.where).toEqual({ userId_token_sandbox: { userId: `u1`, token: `tok-1`, sandbox: `` } });
+        // An iPhone's only app is the editor.
+        expect(stored.create).toMatchObject({ platform: `ios`, app: `editor`, sandbox: `` });
     });
 
     it(`refuses without a session`, async () => {
@@ -73,7 +76,7 @@ describe(`unregister`, () => {
 });
 
 describe(`send`, () => {
-    const row = (secretHash: string) => ({ id: `d1`, userId: `u1`, platform: `ios`, token: `tok-1`, secretHash });
+    const row = (secretHash: string) => ({ id: `d1`, userId: `u1`, platform: `ios`, app: `editor`, sandbox: ``, token: `tok-1`, secretHash });
 
     // A real grant's secret/hash pair, produced the same way register produces them.
     const minted = async (): Promise<{ secret: string; hash: string }> => {
@@ -90,7 +93,7 @@ describe(`send`, () => {
         await expect(call(pushRelayRoutes(() => apns).send, { deviceId: `d1`, secret, notification }, { context: ctx })).resolves.toEqual({
             delivered: true,
         });
-        expect(apns.send).toHaveBeenCalledWith(`tok-1`, notification);
+        expect(apns.send).toHaveBeenCalledWith(`tok-1`, notification, { app: `editor`, sandbox: `` });
     });
 
     // A withdrawn ask's replacement arrives silent; the relay must hand that on, or every iPhone buzzes for news that
@@ -102,7 +105,7 @@ describe(`send`, () => {
         const replacement = { ...notification, tag: `awaiting-q1`, requireInteraction: false, silent: true };
 
         await call(pushRelayRoutes(() => apns).send, { deviceId: `d1`, secret, notification: replacement }, { context: ctx });
-        expect(apns.send).toHaveBeenCalledWith(`tok-1`, replacement);
+        expect(apns.send).toHaveBeenCalledWith(`tok-1`, replacement, { app: `editor`, sandbox: `` });
     });
 
     it(`answers 404 for an unknown device: the daemon prunes and never retries`, async () => {
@@ -159,7 +162,7 @@ describe(`send`, () => {
     });
 });
 
-describe(`android wake channels`, () => {
+describe(`android channels`, () => {
     const minted = async (): Promise<{ secret: string; hash: string }> => {
         const { createHash } = await import(`node:crypto`);
         const secret = `w`.repeat(43);
@@ -178,7 +181,8 @@ describe(`android wake channels`, () => {
             { platform: `android`, token: `fcm-1` },
             { context: ctx },
         );
-        expect(upsert.mock.calls[0]?.[0].create.platform).toBe(`android`);
+        // Naming no app is the Device app, which is how it and the editor's phone-wake flow have always registered.
+        expect(upsert.mock.calls[0]?.[0].create).toMatchObject({ platform: `android`, app: `device`, sandbox: `` });
         await expect(
             call(
                 pushRelayRoutes(
@@ -195,7 +199,7 @@ describe(`android wake channels`, () => {
         const { secret, hash } = await minted();
         const apns = forwarder(`delivered`);
         const fcm = forwarder(`delivered`);
-        const row = { id: `p1`, userId: `u1`, platform: `android`, token: `fcm-1`, secretHash: hash };
+        const row = { id: `p1`, userId: `u1`, platform: `android`, app: `device`, sandbox: ``, token: `fcm-1`, secretHash: hash };
         const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row) } }) });
         await call(
             pushRelayRoutes(
@@ -205,7 +209,42 @@ describe(`android wake channels`, () => {
             { deviceId: `p1`, secret, notification },
             { context: ctx },
         );
-        expect(fcm.send).toHaveBeenCalledWith(`fcm-1`, notification);
+        expect(fcm.send).toHaveBeenCalledWith(`fcm-1`, notification, { app: `device`, sandbox: `` });
         expect(apns.send).not.toHaveBeenCalled();
+    });
+
+    // One FCM token, one row per sandbox: the app knows which daemon to ask from the row, and registering again for one
+    // sandbox rotates only that sandbox's secret, never the channel another sandbox holds.
+    it(`files an editor app's registration under its sandbox, and rotates only that sandbox's row`, async () => {
+        const upsert = jest.fn().mockImplementation(async (args: { create: { sandbox: string } }) => ({ id: `e-${args.create.sandbox}`, ...args.create }));
+        const ctx = context({ prisma: fakePrisma({ pushDevice: { upsert } }) });
+        const routes = pushRelayRoutes(
+            () => forwarder(`delivered`),
+            () => forwarder(`delivered`),
+        );
+        const first = await call(routes.register, { platform: `android`, app: `editor`, token: `fcm-e`, sandbox: `sbx-1` }, { context: ctx });
+        const second = await call(routes.register, { platform: `android`, app: `editor`, token: `fcm-e`, sandbox: `sbx-2` }, { context: ctx });
+        expect([first.deviceId, second.deviceId]).toEqual([`e-sbx-1`, `e-sbx-2`]);
+        const [one, two] = upsert.mock.calls.map((args) => args[0]);
+        expect(one.where).toEqual({ userId_token_sandbox: { userId: `u1`, token: `fcm-e`, sandbox: `sbx-1` } });
+        expect(two.where).toEqual({ userId_token_sandbox: { userId: `u1`, token: `fcm-e`, sandbox: `sbx-2` } });
+        expect(one.create).toMatchObject({ platform: `android`, app: `editor`, sandbox: `sbx-1` });
+        expect(one.update).toEqual({ secretHash: one.create.secretHash, app: `editor` });
+    });
+
+    it(`hands an editor row's app and sandbox to FCM with the send`, async () => {
+        const { secret, hash } = await minted();
+        const fcm = forwarder(`delivered`);
+        const row = { id: `e1`, userId: `u1`, platform: `android`, app: `editor`, sandbox: `sbx-1`, token: `fcm-e`, secretHash: hash };
+        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: jest.fn().mockResolvedValue(row) } }) });
+        await call(
+            pushRelayRoutes(
+                () => forwarder(`delivered`),
+                () => fcm,
+            ).send,
+            { deviceId: `e1`, secret, notification },
+            { context: ctx },
+        );
+        expect(fcm.send).toHaveBeenCalledWith(`fcm-e`, notification, { app: `editor`, sandbox: `sbx-1` });
     });
 });
