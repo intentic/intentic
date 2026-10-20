@@ -36,6 +36,7 @@ class IntenticApp : Application() {
         Looks.load(this)
         registerActivityLifecycleCallbacks(Visibility())
         forgetTheWebOnSignOut()
+        dev.intentic.app.push.PushSupport.init(this)
         // Off the main thread: loading the core's native library and unwrapping its secret through the Keystore are
         // what a cold start's first frame would otherwise wait on (the times are logged below). The first screen holds
         // the system's starting window until the core has said who is signed in, so nothing is drawn too early.

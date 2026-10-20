@@ -40,6 +40,13 @@ android {
         buildConfigField("String", "WEB_URL", "\"${property("webUrl", "https://app.intentic.dev")}\"")
         manifestPlaceholders["webHost"] = URI(property("webUrl", "https://app.intentic.dev")).host
         buildConfigField("String", "GOOGLE_CLIENT_ID", "\"$googleClientId\"")
+        // Firebase Messaging, for notifications (src/main/kotlin/.../push): the app registered in Firebase project
+        // intentic-device. These are an app's public identifiers, not secrets; the API key comes in as a Gradle
+        // property (`intentic.fcm.apiKey`) so it is not committed. Without it Firebase is not started at all.
+        buildConfigField("String", "FCM_API_KEY", "\"${property("fcm.apiKey", "").trim()}\"")
+        buildConfigField("String", "FCM_APP_ID", "\"${property("fcm.appId", "1:912688827811:android:37a02648a658388d2ede16")}\"")
+        buildConfigField("String", "FCM_PROJECT_ID", "\"${property("fcm.projectId", "intentic-device")}\"")
+        buildConfigField("String", "FCM_SENDER_ID", "\"${property("fcm.senderId", "912688827811")}\"")
 
         ndk {
             // arm64 for phones, x86_64 for the emulator. 32-bit phones are left out: Play serves them nothing.
@@ -195,6 +202,9 @@ dependencies {
     implementation("androidx.fragment:fragment:1.9.1")
     // Installs the Baseline Profile where the store does not (a sideloaded build, Play before it has compiled one).
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    // Notifications: data-only messages from the platform's relay, which wake the app to fetch the words itself.
+    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+    implementation("com.google.firebase:firebase-messaging")
     baselineProfile(project(":baselineprofile"))
 
     testImplementation("junit:junit:4.13.2")
