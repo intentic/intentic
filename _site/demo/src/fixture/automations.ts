@@ -7,6 +7,7 @@ import type {
     WatchSource,
 } from "@intentic/sandbox-contract/schemas/automations";
 import { LATENCY_AGENT_ID } from "./fleet";
+import { demoQuiet } from "../mode";
 
 // Automations acme-shop runs unattended: one of each trigger kind (schedule, once, listener, workspace, event) so the
 // page's claim that they share one machine holds, and enough on a clock (nightly, twice a weekday, every ten minutes,
@@ -396,7 +397,12 @@ export const checkDemoSource = (source: WatchSource): WatchCheckResult => {
 let automations: AutomationSummary[] | undefined;
 let approvals: AutomationApproval[] | undefined;
 
-const state = (now: number): AutomationSummary[] => (automations ??= seed(now));
+// A quiet recording (mode.ts `demoQuiet`) has no run that went wrong: the failed afternoon triage and the switched-off
+// pipeline responder's one bad turn are left out of the history, as a failing pipeline is left off the CI board.
+const quietly = (automation: AutomationSummary): AutomationSummary =>
+    demoQuiet() && automation.runs !== undefined ? { ...automation, runs: automation.runs.filter((run) => run.outcome !== `error`) } : automation;
+
+const state = (now: number): AutomationSummary[] => (automations ??= seed(now).map(quietly));
 const heldState = (_now: number): AutomationApproval[] => (approvals ??= []);
 
 export const automationsList = (now: number): AutomationSummary[] => state(now);

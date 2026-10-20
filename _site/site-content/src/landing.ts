@@ -113,7 +113,7 @@ export const landingContent: LandingContent = {
             app: [
                 {
                     name: "hero-agents",
-                    alt: "The intentic agents board over a misty forest: an Attention lane with one agent asking a question, an Active lane where two agents are adding Stripe checkout and chasing a latency spike, and a Finished lane where a soft-delete migration offers Land now above release notes already landed. Each card carries a plain-English title, the model behind it, and what it has cost.",
+                    alt: "The intentic agents board over a misty forest: one agent in Attention with a question for you; three in Active, auditing the test suite, adding Stripe checkout and chasing a latency spike; and three in Finished, where a soft-delete migration offers Land now above release notes already landed and a nightly dependency audit started from Discord. Each card carries a plain-English title, the model behind it, its branch and what it has cost.",
                     frameLabel: "acme-shop · /agents",
                 },
                 {
@@ -124,9 +124,9 @@ export const landingContent: LandingContent = {
             ],
             chat: [
                 {
-                    name: "hero-chat-agents",
-                    alt: "The chat in its own window: the team's assistants as cards across the top of its rail, the one active conversation under them, and beside it the plan the agent wrote for adding Stripe checkout, with Approve and Keep planning in the bar below.",
-                    frameLabel: "Chat · Agents",
+                    name: "hero-report",
+                    alt: "The finished agent's own chat: the task as it was asked, what it did and why, and its report: four files, +210 / −55, held on agent/soft-deletes, with one decision left for you to make when you read it.",
+                    frameLabel: "Chat · Soft-delete the users table",
                 },
             ],
         },
@@ -146,7 +146,7 @@ export const landingContent: LandingContent = {
                 line: "One board shows every agent you have running, and puts the one that needs you first.",
                 shot: {
                     name: "stage-run",
-                    alt: "The intentic workspace on the agents board, over a misty forest: an agent asking a question in Attention, two at work in Active, and in Finished a change offering Land now above one already landed. Every card carries its model, its branch, what it has cost and its diff stats. The chat docked beside the board holds the plan the Stripe checkout agent wrote, with Approve under it.",
+                    alt: "The intentic workspace on the agents board, over a misty forest: an agent asking a question in Attention, three at work in Active, and in Finished a change offering Land now above two already done. Every card carries its model, its branch, what it has cost and its diff stats. The chat docked beside the board holds the plan the Stripe checkout agent wrote, with Approve under it.",
                     label: "acme-shop · /agents",
                 },
             },
@@ -156,7 +156,7 @@ export const landingContent: LandingContent = {
                 line: "Connect an agent to GitHub, Postgres, Stripe, Discord or any MCP server. Your keys stay on your machine.",
                 shot: {
                     name: "stage-connect",
-                    alt: "The capability catalogue, twenty-one of them grouped by what each is for: Docker, GitHub, Sentry, PostgreSQL, Discord, Stripe, Outline, SSH and a VPN among them, seven marked as connected. The chat docked beside it holds an agent's plan, waiting for Approve.",
+                    alt: "The capability catalogue, grouped by what each is for: Docker, GitHub, GitLab, npm, Sentry, PostHog, PostgreSQL, MySQL, Discord, Slack, Notion and Stripe among them, the connected ones marked with a check.",
                     label: "acme-shop · /capabilities",
                 },
             },
@@ -175,8 +175,8 @@ export const landingContent: LandingContent = {
                 line: "The agent writes a plan and waits for your yes. Finished work sits on its branch until you read the diff.",
                 shot: {
                     name: "stage-review",
-                    alt: "The workspace Changes tab: six uncommitted files grouped by repo with their line counts, and CheckoutPanel.tsx open beside them as a side-by-side diff: the removed lines in red on the left, the added ones in green on the right. The chat alongside holds the plan the change came from.",
-                    label: "acme-shop · /workspace",
+                    alt: "A finished agent's work waiting for a yes: its branch, its four files grouped by repository, the users route as a diff in which the delete becomes an update, and a Land now button not yet pressed. Beside it, the agent's own report: four files, +210 / −55, held on agent/soft-deletes, and the one thing left to decide.",
+                    label: "acme-shop · /agents",
                 },
             },
             {
@@ -185,8 +185,8 @@ export const landingContent: LandingContent = {
                 line: "Move the workspace to a server so it runs without your laptop, and invite your team into the same one.",
                 shot: {
                     name: "stage-host",
-                    alt: "The acme-shop sandbox's own page: it runs on ada-pc, a machine of the owner's, with its installed version, its own address and the memory and cores it may use, and under that the disk it takes up, category by category. The list on the left is everything else the box holds: usage, environment, secrets, agent account, extensions, access, areas and personas.",
-                    label: "acme-shop · /sandbox",
+                    alt: "The Devices page: the three machines this account's sandboxes run on, a Windows desktop, an Ubuntu build server with 128 GiB and 32 cores, and a Mac, each live, with the sandboxes each one runs and the ports it mirrors to localhost.",
+                    label: "acme-shop · /sandbox/devices",
                 },
             },
         ],
@@ -361,7 +361,7 @@ export const deskLanding: DeskLandingContent = {
                 },
                 {
                     name: "desk-hero-files",
-                    alt: "The desk's files with the newsletter folder open: August's, September's and October's drafts, the template, the subscriber list and a folder of pictures, drawn as documents rather than as a code tree.",
+                    alt: "The desk's files with the newsletter folder open, and last month's newsletter, September at the studio, open beside it as a document rather than as code.",
                     frameLabel: "my-desk · Files",
                 },
             ],
@@ -371,8 +371,8 @@ export const deskLanding: DeskLandingContent = {
             },
             chat: {
                 name: "desk-hero-chat",
-                alt: "The chat in its own window: the plan the assistant wrote for rewriting the October newsletter around the sale, with Approve and No, keep planning under it.",
-                frameLabel: "Chat · Newsletter",
+                alt: "The chat about a finished draft: the September newsletter moved into the new template, then a Word copy to print for the counter and a page for the shop's website, both ready to open.",
+                frameLabel: "Chat · September newsletter",
             },
         },
         demoHref: `${DEMO_PATH}agents?mode=desk`,
@@ -396,8 +396,8 @@ export const deskLanding: DeskLandingContent = {
                 href: productHref("connect"),
                 line: "Give it your mail, your calendar, your files or your shop. Your passwords stay on your computer.",
                 shot: {
-                    name: "stage-connect",
-                    alt: "The connections catalogue, grouped by what each one is for: GitHub, a database, Discord, Stripe, Outline and a server among them, seven already connected.",
+                    name: "desk-stage-connect",
+                    alt: "The connections for mail and messages: Google Workspace, Microsoft 365, any inbox over IMAP, Telegram and WhatsApp, each with what it lets the assistant do.",
                     label: "my-desk · Connections",
                 },
             },
@@ -413,8 +413,8 @@ export const deskLanding: DeskLandingContent = {
                 line: "It writes a plan first and waits for your yes. Every change is saved as a version, so you can always go back.",
                 shot: {
                     name: "desk-stage-review",
-                    alt: "A finished draft, read as what changed: the September newsletter moved into the new template, with the assistant's own account of the work beside it.",
-                    label: "my-desk · What changed",
+                    alt: "A finished draft waiting for a yes, opened to check before accepting it: the September newsletter as a page in the shop's own style, made from the new template, over the review with its Accept button and the assistant's chat.",
+                    label: "my-desk · Ready to accept",
                 },
             },
             {
@@ -422,9 +422,9 @@ export const deskLanding: DeskLandingContent = {
                 href: productHref("host"),
                 line: "Keep it on your computer, or move it to a server so it works while your laptop is closed.",
                 shot: {
-                    name: "stage-host",
-                    alt: "The workspace's own page: the computer it runs on, its address and the memory and cores it may use, and the space it takes up on that computer.",
-                    label: "my-desk · Overview",
+                    name: "desk-stage-host",
+                    alt: "The Devices page: the computers the desk can run on, a Windows desktop, a Linux server and a Mac, each live, with what each one is running.",
+                    label: "my-desk · Devices",
                 },
             },
         ],

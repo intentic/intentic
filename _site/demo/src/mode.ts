@@ -1,4 +1,12 @@
-import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, LATENCY_AGENT_ID, RELEASE_NOTES_AGENT_ID, REVIEW_AGENT_ID } from "./fixture/fleet";
+import {
+    AUDIT_AGENT_ID,
+    AWAITING_AGENT_ID,
+    DEP_AUDIT_AGENT_ID,
+    FEATURED_AGENT_ID,
+    LATENCY_AGENT_ID,
+    RELEASE_NOTES_AGENT_ID,
+    REVIEW_AGENT_ID,
+} from "./fixture/fleet";
 
 // Three levels of how full the recording is, picked by `?mode=` (no on-screen switcher; minimal is the default). Mainly two knobs, which agents the
 // roster carries and which extensions are on, plus teammate presence and open chats. Applied where served (daemon.ts,
@@ -57,14 +65,15 @@ const FULL: DemoMode = {
     openChats: true,
 };
 
-// What the site's screenshots are taken of (_tools/e2e/shots/capture.mts), and served quiet: the curated three plus a
-// second agent at work and a second finished one, so the board reads as an ordinary afternoon with a few things moving
-// rather than as one specimen per lane. No extensions, so the rail is the core and nothing else.
+// What the site's screenshots are taken of (_tools/e2e/shots/capture.mts), and served quiet: the curated three plus two
+// more at work (one on Codex, one on Opus) and two more finished (one landed by hand, one started from Discord by the
+// nightly automation), so the board reads as an ordinary afternoon with a few things moving: one card asking for you,
+// three working, three done. No extensions, so the rail is the core and nothing else.
 const SHOWCASE: DemoMode = {
     id: `showcase`,
     label: `Showcase`,
     note: `A calm afternoon: what the site's screenshots show.`,
-    agents: [FEATURED_AGENT_ID, AWAITING_AGENT_ID, LATENCY_AGENT_ID, REVIEW_AGENT_ID, RELEASE_NOTES_AGENT_ID],
+    agents: [FEATURED_AGENT_ID, AWAITING_AGENT_ID, LATENCY_AGENT_ID, AUDIT_AGENT_ID, REVIEW_AGENT_ID, RELEASE_NOTES_AGENT_ID, DEP_AUDIT_AGENT_ID],
     extensions: [],
     teammate: true,
     openChats: true,
@@ -211,6 +220,12 @@ const resolveQuiet = (): { readonly on: boolean; readonly keeps: ReadonlySet<Qui
 };
 
 const quiet = resolveQuiet();
+
+/**
+ * Whether the screenshots harness opened this page: it writes the quiet key and nothing else does. A photographed
+ * page is the published recording even on a dev server, so the dev build's extras (the transcript specimen) stay out.
+ */
+export const photographed = window.sessionStorage.getItem(QUIET_KEY) !== null;
 
 /** Whether this page load is served quiet, and so without the disturbance named unless the session kept it. */
 export const demoQuiet = (keeping?: QuietKeep): boolean => quiet.on && (keeping === undefined || !quiet.keeps.has(keeping));

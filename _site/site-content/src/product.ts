@@ -73,9 +73,13 @@ export const productPages: ProductPage[] = [
         icon: "agents",
         heading: "Run many agents. See which one needs you.",
         sub: "A chat window works for one agent. The board shows the status, changes and cost of every agent at once.",
+        menuShot: {
+            name: "menu-run",
+            alt: "The agents board: one agent asking a question, three at work and three finished.",
+        },
         hero: {
-            name: "fleet-board",
-            alt: "The intentic agents board over a misty forest: an Attention lane with one agent asking a question, an Active lane with an agent adding Stripe checkout and another chasing a latency spike, and a Finished lane where a soft-delete migration offers Land now above release notes already landed. Every card shows model, branch, cost and diff stats.",
+            name: "hero-agents",
+            alt: "The intentic agents board over a misty forest: one agent in Attention with a question for you, three in Active, and three in Finished, where a soft-delete migration offers Land now above release notes already landed and a nightly dependency audit started from Discord. Every card shows model, branch, cost and diff stats.",
             frame: "browser",
             label: "acme-shop · /agents",
         },
@@ -127,9 +131,13 @@ export const productPages: ProductPage[] = [
         icon: "integrations",
         heading: "Connect agents to the systems they need.",
         sub: "Connect GitHub, Postgres, Stripe, Discord or any MCP server. Every key stays in your sandbox.",
+        menuShot: {
+            name: "menu-connect",
+            alt: "The capability catalog: GitHub, GitLab, npm, Sentry, PostHog and more, grouped by what each is for.",
+        },
         hero: {
-            name: "capabilities",
-            alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data, Communication, Business & docs and Servers, with Docker, GitHub, Sentry, PostgreSQL, Discord, Stripe and SSH marked as connected.",
+            name: "stage-connect",
+            alt: "The capability catalog grouped by Platform, Code & issues, Observability, Data, Communication and Business & docs: Docker, GitHub, GitLab, npm, Sentry, PostHog, PostgreSQL, MySQL, Discord, Slack, Notion and Stripe among them, the connected ones marked with a check.",
             frame: "browser",
             label: "acme-shop · /capabilities",
         },
@@ -143,10 +151,10 @@ export const productPages: ProductPage[] = [
                 title: "See what a connection adds before you save it",
                 body: "Before you paste a token, the card shows what it adds: a skill, a secret, a tool.",
                 shot: {
-                    name: "capability-github",
-                    alt: "The GitHub capability: a connected instance, a name field, a personal access token field, a Git access toggle, and a panel listing what it adds to the sandbox: a skill the agent loads next turn and a secret injected into its environment.",
+                    name: "capability-add",
+                    alt: "The GitLab capability before it is connected: a name, the instance URL, an access token and a Git access switch, and beside them what it will add to the sandbox: a skill the agent loads next turn and a secret injected into its environment, never written to disk.",
                     frame: "browser",
-                    label: "acme-shop · /capabilities/github",
+                    label: "acme-shop · /capabilities/gitlab",
                 },
             },
             {
@@ -231,8 +239,8 @@ export const productPages: ProductPage[] = [
                 title: "See every automated run on the board",
                 body: "An automatically started agent appears like any other, with its own card, diff and review.",
                 shot: {
-                    name: "fleet-board",
-                    alt: "The intentic agents board over a misty forest: an Attention lane with one agent asking a question, an Active lane with an agent adding Stripe checkout and another chasing a latency spike, and a Finished lane where a soft-delete migration offers Land now above release notes already landed. Every card shows model, branch, cost and diff stats.",
+                    name: "hero-agents",
+                    alt: "The intentic agents board over a misty forest: one agent in Attention, three in Active, and three in Finished, among them a nightly dependency audit an automation started from a Discord message. Every card shows model, branch, cost and diff stats.",
                     frame: "browser",
                     label: "acme-shop · /agents",
                 },
@@ -262,7 +270,7 @@ export const productPages: ProductPage[] = [
         sub: "Every agent plans first, then waits. Review each file before you accept the change.",
         menuShot: {
             name: "menu-review",
-            alt: "The workspace Changes tab: six uncommitted files across two repos with their added and removed line counts, nothing staged, and the largest of them open in a side-by-side diff.",
+            alt: "A finished agent's work under review: its four files grouped by repository and the users route's diff, with Land now.",
         },
         hero: {
             name: "chat-plan",
@@ -331,13 +339,13 @@ export const productPages: ProductPage[] = [
         sub: "A sandbox is a Docker container on your laptop, desktop or server. Move it to a server so agents can keep working when your laptop is off.",
         menuShot: {
             name: "menu-host",
-            alt: "The sandbox hub: the acme-shop box on ada-pc with its installed version and its own URL, beside the list of what it holds: usage, environment, secrets, agent account, extensions, access, areas and personas.",
+            alt: "The Devices page: a Windows desktop, an Ubuntu build server and a Mac, each live, with the sandboxes they run.",
         },
         hero: {
-            name: "sandbox-overview",
-            alt: "The sandbox hub: the acme-shop sandbox on ada-pc with its installed version, its own URL and the memory and cores it may use, over the disk it takes up, beside the list of everything it holds: usage, environment, secrets, agent account, extensions, access, areas and personas.",
+            name: "stage-host",
+            alt: "The Devices page: the three machines this account's sandboxes run on, a Windows desktop, an Ubuntu build server with 128 GiB and 32 cores, and a Mac, each live, with the sandboxes each one runs and the ports it mirrors to localhost.",
             frame: "browser",
-            label: "acme-shop · /sandbox",
+            label: "acme-shop · /sandbox/devices",
         },
         facts: [
             { value: "No code", label: "the platform stores no source, prompts or credentials" },
@@ -355,7 +363,7 @@ export const productPages: ProductPage[] = [
                 body: "A Dockerfile defines the sandbox's installed software. The agent can propose a change, but it waits for your approval before applying it.",
                 shot: {
                     name: "sandbox-environment",
-                    alt: "The sandbox Environment tab: an overlay Dockerfile diff awaiting review, adding an imagemagick install, with Reject and Approve buttons.",
+                    alt: "The sandbox's Environment section: an agent's change to its Dockerfile awaiting review, adding an ImageMagick install, with Approve and Reject above the diff.",
                     frame: "browser",
                     label: "acme-shop · /sandbox/environment",
                 },

@@ -43,12 +43,13 @@ const beats = content.hero.headlineLines
 
 /* Side frames hold still images. */
 const chatStillName = content.hero.screens.chat[0]!.name;
-/* Hero frames share a viewport axis, so their sizes use `vw`. */
+/* Hero frames share a viewport axis, so their sizes use `vw`: each shot is drawn at its frame's width (home.css), the
+   centre 62% of the stack's 74rem ceiling and the wings 21%, then 56% and 25% between 48rem and 64rem. */
 /* Below 48rem the frame is the column (100vw less 4rem of gutter and border) and the shot is drawn 175% / 205% of
    it, cropped (home.css), so `sizes` says the drawn width, not the viewport multiple, or a phone takes a rung too big. */
-const appSizes = "(min-width: 64rem) 70vw, (min-width: 48rem) 78vw, (min-width: 40rem) calc(175vw - 7rem), calc(205vw - 8.2rem)";
-const chatSizes = "(min-width: 64rem) 47vw, (min-width: 48rem) 56vw, 60vw";
-const planSizes = "(min-width: 64rem) 29vw, (min-width: 48rem) 35vw, 40vw";
+const appSizes = "(min-width: 64rem) min(62vw, 734px), (min-width: 48rem) 56vw, (min-width: 40rem) calc(175vw - 7rem), calc(205vw - 8.2rem)";
+const chatSizes = "(min-width: 64rem) min(21vw, 249px), 25vw";
+const planSizes = "(min-width: 64rem) min(21vw, 249px), 25vw";
 
 /* Stage screenshots size from the shell and viewport bleed. */
 const STAGE_SIZES = "(min-width: 102rem) 1440px, (min-width: 84rem) calc(50vw + 624px), (min-width: 48rem) calc(100vw - 3rem), calc(275vw - 11rem)";

@@ -23,6 +23,8 @@ export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
 export const LATENCY_AGENT_ID = `cnv_latency_p99`;
 // Work already landed, by the other person's hand: the showcase's second finished card.
 export const RELEASE_NOTES_AGENT_ID = `cnv_release_notes`;
+// The nightly automation's run, started from Discord and held for a look in the morning: the showcase's third.
+export const DEP_AUDIT_AGENT_ID = `cnv_dep_audit`;
 // A chat whose last message the sandbox turned away for low memory: the words wait in its queue, held for one press.
 export const HELD_AGENT_ID = `cnv_support_card`;
 // That message, as the queue holds it; its picture is the sweep capture the workspace carries (fixture/browserShots.ts).
@@ -572,11 +574,11 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         proof: { at: now - minutes(34), verification: `unproven`, unviewed: 1 },
     },
     {
-        id: `cnv_dep_audit`,
+        id: DEP_AUDIT_AGENT_ID,
         owner: { email: `grace@acme.dev`, name: `Grace Hopper`, since: now - minutes(95) },
         startedBy: `ada@acme.dev`,
         sessionId: `ses_01j9audit`,
-        title: `Nightly dependency audit, 3 advisories, 2 patched`,
+        title: `Nightly dependency audit`,
         status: `idle`,
         provider: `claude`,
         harness: `claude-code`,

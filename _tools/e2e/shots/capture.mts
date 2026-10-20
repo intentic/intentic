@@ -11,7 +11,7 @@ const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 // the twin set; the site pairs them by filename (see _site/site/src/lib/shots.ts). Both wear the Mist wallpaper, which
 // draws behind the board and the card pages: the dark set over Sanctum, the light set over the plain light look.
 //
-// Every shot of the code workspace is taken of the demo's `showcase` recording (_site/demo/src/mode.ts): five agents on
+// Every shot of the code workspace is taken of the demo's `showcase` recording (_site/demo/src/mode.ts): seven agents on
 // an ordinary afternoon, served QUIET, so no card carries a cooling cache, a teammate's reaction or a key it is waiting
 // for, no pipeline is failing and nothing on the rail asks for attention it does not need. The recording's every-state
 // richness is for a visitor exploring the demo; a screenshot is a picture of the workspace at rest.
@@ -19,6 +19,9 @@ const DEMO_DIR = join(repoRoot(import.meta.url), "_site/site/public/demo");
 // `--desk` is a third run over the light set: the desk recording (_site/demo/src/fixture/desk.ts, documents rather
 // than code, read as a maker) shot for the desk edition of the landing page. Those shots have no dark twin — the desk
 // edition is only ever light — so they frame themselves, and are named `desk-*` in the same directory.
+//
+// A shot that is gone from the catalogues below is gone from the site: delete its two files with it, since
+// src/lib/shots.ts globs the directories and a stale picture is a picture nobody re-shoots.
 const DESK = process.argv.includes("--desk");
 const LIGHT = process.argv.includes("--light") || DESK;
 const OUT_DIR = join(repoRoot(import.meta.url), `_site/site/src/assets/${LIGHT ? "product-light" : "product"}`);
@@ -26,19 +29,52 @@ const PORT = 47_147;
 const ORIGIN = `http://localhost:${PORT}`;
 /* Serve the demo under its configured /demo base. */
 const BASE = "/demo";
-const demoUrl = (path: string): string => `${ORIGIN}${BASE}${path}`;
+// `DEMO_URL` points the run at a demo dev server instead (`pnpm -C _site/demo dev --port 47148`, then
+// DEMO_URL=http://127.0.0.1:47148/demo): the same app with no build step, which is what iterating on a frame wants.
+const DEMO_URL = process.env["DEMO_URL"]?.replace(/\/$/u, "");
+const demoUrl = (path: string): string => `${DEMO_URL ?? `${ORIGIN}${BASE}`}${path}`;
 
-/* Capture at 1760px so desktop surfaces fit without upscaling. */
-const DESKTOP = { width: 1760, height: 1000 };
+// THE FRAMES DECIDE THE SHAPES. Every frame on the site is a fixed box the picture fills edge to edge (Landing.astro and
+// DeskLanding.astro over home.css): the hero's centre window and every tour stage are 16:9, the hero's two wings are
+// portraits (1:2 and 5:9), and the Features menu's preview is about 21rem by 19rem. A shot taken at its box's own shape
+// is drawn whole, at 100%. The set this replaced was taken at other shapes and drawn 112% to 222% wide to fill the box,
+// which cut the board's Finished lane in half and kept only the left edge of both wings. So every shot below is taken
+// in a window of its frame's shape, and the frames draw it at 100%.
+//
+// The windows are smaller than a desktop monitor on purpose, at twice the density or more. A frame on the page is up to
+// 1440px wide, so a 1440px window shows the app's own 13px text at 13px there; the 1760px windows before drew it at
+// about 10, which is why every card on the old board read as grey noise.
+const DESKTOP = { width: 1440, height: 810 } as const;
+// Two cards to a row instead of three or one-and-a-leftover: the same 16:9, drawn larger.
+const SNUG = { width: 1152, height: 648 } as const;
 const MOBILE = { width: 430, height: 932 };
-/* Narrow sources use 3× density; wide sources use 2×. */
+// The Features menu's preview window is 336x304 and the shot covers it: the window's own shape, as small as the app
+// stays a desktop app (under 768px it is the phone shell, back arrows and all).
+const MENU = { width: 840, height: 760 } as const;
+// The hero's two wings, as chat columns: the plan at 1:2 and the report at 5:9. Each is the docked chat at that width
+// (ui-chat-width) and that height, so the clip of the chat is exactly the wing's shape. The report's is the wider of
+// the two so the agent's whole account fits under the chat's header, with no row cut off at the top.
+const PLAN_WING = { chat: 400, height: 800 } as const;
+const REPORT_WING = { chat: 480, height: 864 } as const;
+// What the chat column does not own, which a wing's window adds to the column it asks for: the terminal's dock along the
+// window's foot (29px; the desk has no terminal, so no dock) and the 1px seam the column's width counts.
+const TERMINAL_DOCK = 29;
+const CHAT_SEAM = 1;
+/* Narrow sources use 3× density; wide sources use 2×; the snug pages 2.5× so they match a 1440 window's pixels. */
 const DENSE_DPR = 3;
 const DEFAULT_DPR = 2;
+const SNUG_DPR = 2.5;
 
 // Hide demo-only chrome and tooltips from screenshots. Installed on the CONTEXT rather than the page, because the
 // popped-out chat is a window the app opens for itself and a style tag added to the opener never reaches it: both
 // hero-chat shots shipped with the demo's mode switcher sitting across the bottom of the frame.
-const HIDE_DEMO_CHROME = `#demo-switcher, .ui-tooltip { display: none !important; }`;
+//
+// Also hidden: the parked chat's pill (`.chat-quick-seat`), which floats over the middle of any page the chat is not
+// docked beside and reads as a toast caught mid-flight; scrollbars, which a capture freezes at whatever length the
+// recording happened to load; and the caret.
+const HIDE_DEMO_CHROME = `#demo-switcher, .ui-tooltip, .chat-quick-seat { display: none !important; }
+* { scrollbar-width: none !important; caret-color: transparent !important; }
+*::-webkit-scrollbar { display: none !important; }`;
 
 // WHERE THE WORKSPACE ENDS AND THE CHAT BEGINS. Every desktop surface shares the shell, so one landmark decides it
 // for all of them. A stale landmark here is expensive and quiet: when the composer's textarea stopped matching, the
@@ -52,9 +88,6 @@ const HIDE_DEMO_CHROME = `#demo-switcher, .ui-tooltip { display: none !important
 const CHAT_PANEL = ".chat-panel";
 const COMPOSER = 'textarea[name="draft"]';
 
-/* Match the platform-independent start of the chat popout label. */
-const POPOUT_BUTTON = 'button[aria-label^="Move chat into new window"]';
-
 // The featured run's plan, parked for a yes. Every shot with the chat in it waits for this: each page load replays the
 // run from its start, and a frame taken before the plan lands shows the chat mid-read with a status pill and no plan.
 const PLAN_WAITING = "text=Plan waiting for your approval";
@@ -64,23 +97,28 @@ const PLAN_WAITING = "text=Plan waiting for your approval";
 // instead of its diff from the list, which is how the review shots lost their diff.
 const changesRow = (file: string): string => `div[class~="group/file"] button:has-text("${file}")`;
 
-// The connector cards (GitHub, Sentry, PostgreSQL, Stripe…) and Discord's are extensions, so a catalogue shot switches
-// on exactly those two: the tiles are the subject, and no other extension's icon joins the rail beside them.
-const CONNECTOR_EXTENSIONS = ["intentic.connectors", "intentic.discord"] as const;
+// The connector cards (GitHub, GitLab, Sentry, PostgreSQL, Stripe…), Discord's and Slack's are extensions, so a catalogue
+// shot switches on exactly those: the tiles are the subject, and no other extension's icon joins the rail beside them.
+const CONNECTOR_EXTENSIONS = ["intentic.connectors", "intentic.discord", "intentic.slack"] as const;
+// The desk's connections: where a maker's mail, calendar and messages live. Its own two extensions (the Projects home
+// and the viewers) stay on, as in every desk shot.
+const DESK_CONNECTIONS = [
+    "intentic.projects",
+    "intentic.viewers",
+    "intentic.google-workspace",
+    "intentic.microsoft-365",
+    "intentic.imap",
+    "intentic.telegram",
+    "intentic.whatsapp",
+] as const;
 
 // The desk recording's two special conversations (_site/demo/src/fixture/desk.ts): the scripted run, and the finished draft.
 const DESK_FEATURED = "cnv_desk_newsletter";
 const DESK_REVIEW = "cnv_desk_september";
 
-/* Keep popped-out chat readable within the landing frame. */
-const POPOUT_WINDOW = { width: 800, height: 660 } as const;
-
-/* Use one desktop window size for the hero's rotating surfaces. */
-const HERO_WINDOW = { width: DESKTOP.width, height: 860 } as const;
-
-/* Capture showcase surfaces in the landing page's 16:9 frame. */
-const SHOWCASE = { width: 1760, height: 990 } as const;
-const SHOWCASE_DPR = 1.5;
+// The chat docked to the rail rather than beside the page, for a shot whose subject is the page: the board gets the
+// window's whole width, and its three lanes their full card width.
+const CHAT_ON_RAIL = { "ui-chat-home": "rail" } as const;
 
 interface Shot {
     name: string;
@@ -95,6 +133,11 @@ interface Shot {
     settleMs?: number;
     /** `area` keeps the workspace left of the docked chat; `chat` keeps the chat. Absent ⇒ the whole viewport. */
     clip?: "area" | "chat";
+    /**
+     * Keep only these elements: the box around all of them (each selector's last match, so the innermost of nested
+     * ones), plus a gutter. For a feature block about one panel, where the page around it is only distance.
+     */
+    region?: readonly string[];
     /* Stop trimming at this content-specific editorial floor. */
     stopAt?: number;
     /** The demo recording; `showcase` unless a shot names another. `desk` is the documents recording. */
@@ -108,7 +151,9 @@ interface Shot {
      * switches one on: the catalogue its connector cards, Automations its own page.
      */
     extensions?: readonly string[];
-    /** Overrides the shared desktop window, for a shot whose subject is not our app. */
+    /** App preferences written before boot, on top of the look: where the chat docks, how wide, the text size. */
+    storage?: Readonly<Record<string, string>>;
+    /** Overrides the shared desktop window, for a shot whose frame has another shape. */
     viewport?: { width: number; height: number };
     /** Overrides the device scale factor. Narrow sources need the extra rungs; wide ones already overshoot. */
     dpr?: number;
@@ -118,220 +163,123 @@ interface Shot {
     raw?: true;
     /** Type into a field once the surface is up, for a shot whose story is a conversation. */
     type?: { target: string; text: string; settleMs?: number };
-    /* Capture the conversation in a separate browser window. */
-    popout?: {
-        width: number;
-        height: number;
-        /* Press these controls inside the popped-out window in order. */
-        press?: string[];
-        /** What the popped-out window shows once its own copy of the run has caught up. */
-        waitFor?: string;
-        settleMs?: number;
-    };
     /* Preserve the full window height instead of trimming content. */
     fullHeight?: true;
 }
 
+// A wing of the hero: the docked chat alone, at the wing's width and height, cut at the column's own foot.
+const wing = (column: { chat: number; height: number }, dock = TERMINAL_DOCK): Pick<Shot, "clip" | "viewport" | "storage" | "dpr"> => ({
+    clip: "chat",
+    viewport: { width: DESKTOP.width, height: column.height + dock },
+    storage: { "ui-chat-width": String(column.chat + CHAT_SEAM) },
+    dpr: DENSE_DPR,
+});
+
 const SHOTS: Shot[] = [
-    /* Capture the built Visitor chat widget in a standalone visitor page. */
+    // A CUSTOMER'S website with the Visitor chat open on it. Its own window, since the subject is not our app.
     {
         name: "visitor-chat",
         path: "/visitor-chat/",
         raw: true,
-        // Keeps the old window: this shot's subject is a CUSTOMER's website, and that page is a 54rem column.
-        // Widening it for our app's sake would only add margin either side of someone else's design.
         viewport: { width: 1440, height: 900 },
         waitFor: "intentic-visitor-chat",
         click: ["intentic-visitor-chat .launcher"],
         type: { target: "intentic-visitor-chat textarea", text: "Do these arms work outdoors?", settleMs: 2600 },
         settleMs: 900,
     },
-    // Run agents
-    {
-        name: "fleet-board",
-        path: "/agents",
-        openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: "text=ATTENTION",
-        settleMs: 1400,
-        clip: "area",
-        // The whole window tall, not trimmed to the cards. The board's lanes end a third of the way down, and the rest
-        // is the wallpaper: the Mist is half of what this picture is, and a frame cut under the last card loses it.
-        // The hero's window rather than the tall one, which left the bottom half of the frame dark canvas.
-        viewport: HERO_WINDOW,
-        fullHeight: true,
-    },
-    /* Showcase captures use whole 16:9 windows with settled curated conversations. */
-    {
-        name: "stage-run",
-        path: "/agents",
-        openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: ["text=ATTENTION", PLAN_WAITING],
-        settleMs: 1400,
-        viewport: SHOWCASE,
-        dpr: SHOWCASE_DPR,
-    },
-    {
-        name: "stage-connect",
-        path: "/capabilities",
-        openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: ["text=Connected", PLAN_WAITING],
-        settleMs: 1400,
-        viewport: SHOWCASE,
-        dpr: SHOWCASE_DPR,
-        extensions: CONNECTOR_EXTENSIONS,
-    },
-    {
-        /* Open the Changes tab and select CheckoutPanel.tsx for the review frame. */
-        name: "stage-review",
-        path: "/workspace",
-        openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: 'button:has-text("Changes")',
-        click: ['button:has-text("Changes")', changesRow("CheckoutPanel.tsx")],
-        settleMs: 1800,
-        viewport: SHOWCASE,
-        dpr: SHOWCASE_DPR,
-    },
-    {
-        // The sandbox's own page: the machine it runs on, its address, and what it may use. This frame was the Access
-        // tab, which has grown passkeys, API tokens and signed-in browsers under the team, and at 16:9 it was every one
-        // of them at once; the overview says "this runs on a machine you own" and nothing else.
-        name: "stage-host",
-        path: "/sandbox",
-        openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: ["text=Installed version", PLAN_WAITING],
-        settleMs: 1400,
-        viewport: SHOWCASE,
-        dpr: SHOWCASE_DPR,
-    },
-    /* Hero captures keep the workspace and popout chat in separate curated frames. */
+
+    // THE HERO. Its centre window rotates between the board and a review; its two wings stand either side of it: the
+    // plan an agent is waiting on (before) and the report another one left (after).
+    //
+    // The board with the chat parked on the rail, so its three lanes get the whole window: one card asking for you,
+    // three at work, three done (the showcase roster, _site/demo/src/mode.ts). Opened from a conversation first, since
+    // without one the Active lane leads with an empty "New agent" draft card. Also the Agent Workspace page's hero, and
+    // the board Automations shows its runs arriving on.
     {
         name: "hero-agents",
         path: "/agents",
-        // Same reason fleet-board does it: without a conversation already open the Active lane leads with an
-        // empty "New agent" draft card, which is a truthful screen and a confusing screenshot.
         openFirst: "/agents/cnv_checkout_stripe",
         waitFor: "text=ATTENTION",
         settleMs: 1400,
-        clip: "area",
-        viewport: HERO_WINDOW,
-        fullHeight: true,
+        storage: CHAT_ON_RAIL,
     },
-    /* Capture the hero review in the same window and crop as the hero board. */
+    // A finished run waiting for a yes, open on the route file: a whole file with three small edits in it
+    // (fixture/workspace.ts, USERS_ROUTE_*), where the schema's eleven lines left two thirds of the frame empty.
     {
         name: "hero-review",
         path: "/agents/cnv_soft_deletes",
-        waitFor: "text=Land now",
-        // The route file rather than the schema the review opens on: a whole file read with three small edits in it
-        // (fixture/workspace.ts, USERS_ROUTE_*), where the schema's eleven lines left two thirds of the frame empty.
-        click: [changesRow("users.ts")],
-        settleMs: 1600,
-        clip: "area",
-        viewport: HERO_WINDOW,
-        fullHeight: true,
-    },
-    /* Capture the popped-out chat, its rail of persona cards and conversations beside the plan. */
-    {
-        name: "hero-chat-agents",
-        path: "/agents/cnv_checkout_stripe",
-        openFirst: "/agents/cnv_checkout_stripe",
-        waitFor: POPOUT_BUTTON,
-        settleMs: 1200,
-        popout: { ...POPOUT_WINDOW, waitFor: PLAN_WAITING },
-        dpr: DENSE_DPR,
-    },
-    {
-        name: "agent-review",
-        path: "/agents/cnv_soft_deletes",
+        openFirst: "/agents/cnv_soft_deletes",
         waitFor: "text=Land now",
         click: [changesRow("users.ts")],
         settleMs: 1600,
-        clip: "area",
+        storage: CHAT_ON_RAIL,
     },
+    // The left wing: the plan the checkout agent wrote, and the bar that waits for a yes. Also the Approvals page's
+    // hero, drawn whole there.
     {
         name: "chat-plan",
         path: "/workspace",
         openFirst: "/agents/cnv_checkout_stripe",
         waitFor: PLAN_WAITING,
         settleMs: 1200,
-        clip: "chat",
-        dpr: DENSE_DPR,
-        // The plan's Approve is in the bar pinned over the composer, not on the card, so the frame runs the window's
-        // full height down to it, footer included: a trimmed cut sliced the "online" line under the composer. The
-        // hero's window, since in the tall one the plan and its bar stood a third of a frame of empty column apart.
-        viewport: HERO_WINDOW,
-        fullHeight: true,
+        ...wing(PLAN_WING),
     },
-    // The workspace
-    { name: "workspace-editor", path: "/workspace/api/src/db/schema.ts", waitFor: "text=deletedAt", settleMs: 1800, clip: "area" },
+    // The right wing: the soft-deletes agent's own account of what it did, on its branch, beside the review it opens.
     {
-        name: "workspace-changes",
-        path: "/workspace",
-        waitFor: 'button:has-text("Changes")',
-        // The panel's own change rather than the schema's: eleven lines framed the shot as a strip a quarter as tall as
-        // it was wide. Stops partway down the diff, on a line boundary, as a file with more below it.
-        click: ['button:has-text("Changes")', changesRow("CheckoutPanel.tsx")],
-        settleMs: 1800,
-        clip: "area",
-        stopAt: 620,
+        name: "hero-report",
+        path: "/agents/cnv_soft_deletes",
+        openFirst: "/agents/cnv_soft_deletes",
+        waitFor: "text=held on",
+        settleMs: 1600,
+        ...wing(REPORT_WING),
     },
-    // The connector cards are the subject, so the catalogue runs with their extensions on and nothing else.
-    // Stops under Business & docs: the catalog scrolls on, and a frame that ends a fifth of the way into the
-    // next row of tiles reads as a broken image rather than as a list with more below it.
+
+    // THE TOUR: one 16:9 stage per Features page, each a different surface. Only the first keeps the chat docked
+    // beside the page (a plan waiting in it); the others are their own page at full width, since the same chat in four
+    // frames in a row read as one picture four times.
     {
-        name: "capabilities",
+        name: "stage-run",
+        path: "/agents",
+        openFirst: "/agents/cnv_checkout_stripe",
+        waitFor: ["text=ATTENTION", PLAN_WAITING],
+        settleMs: 1400,
+        storage: { "ui-chat-width": "400" },
+    },
+    // The catalogue with the connector extensions on: the shipped catalogue (fixture/sandbox.ts reads the real
+    // manifests), so its rows are full of the services a reader recognises. Also the Integrations page's hero. A little
+    // over the shared window, 16:9 still, so the catalogue's foot (the window less 53px) falls in the 8px gap under the
+    // first row of Business & docs (Outline, Notion, Stripe) rather than through a row of tiles.
+    {
+        name: "stage-connect",
         path: "/capabilities",
         waitFor: "text=Connected",
         settleMs: 1200,
-        clip: "area",
         extensions: CONNECTOR_EXTENSIONS,
-        stopAt: 900,
+        storage: CHAT_ON_RAIL,
+        viewport: { width: 1472, height: 828 },
     },
-    /* Open GitHub from the catalog so the frame includes the connection panel. */
+    // The finished run beside its own chat: the branch, the files, the route's diff, Land now, and the agent's report.
     {
-        name: "capability-github",
-        path: "/capabilities",
-        waitFor: 'text="GitHub"',
-        click: ['text="GitHub"'],
-        settleMs: 1400,
-        clip: "area",
-        extensions: CONNECTOR_EXTENSIONS,
-    },
-    { name: "sandbox-overview", path: "/sandbox", waitFor: "text=Installed version", settleMs: 1200, clip: "area" },
-    // Stops under the four headline tiles, which is the whole of what this shot is for.
-    { name: "sandbox-usage", path: "/sandbox/usage", waitFor: "text=Cache hit rate", settleMs: 1800, clip: "area", stopAt: 340 },
-    // Scrolled to the cost chart rather than by a fixed distance: the plan limits above it change height with the
-    // accounts the recording holds. Stops above the token-savings cards on purpose: those numbers are the
-    // recording's, and a marketing page that shows them reads as a benchmark we never measured.
-    {
-        name: "sandbox-spend",
-        path: "/sandbox/usage",
-        waitFor: "text=Cost per day",
+        name: "stage-review",
+        path: "/agents/cnv_soft_deletes",
+        openFirst: "/agents/cnv_soft_deletes",
+        waitFor: ["text=Land now", "text=held on"],
+        click: [changesRow("users.ts")],
         settleMs: 1800,
-        clip: "area",
-        scrollTo: "text=Cost per day",
-        stopAt: 560,
+        storage: { "ui-chat-width": "400" },
     },
-    /* Open the environment Recipe tab and stop at its Approve button. */
+    // The machines the sandboxes run on: a Windows desktop, an Ubuntu build server and a Mac, each with what it runs
+    // (fixture/devices.ts, quiet), one row of three. Also the Self-hosting page's hero.
     {
-        name: "sandbox-environment",
-        path: "/sandbox/environment",
-        /* The tab this shot opens: waiting on it is waiting for the surface, and it cannot go stale separately. */
-        waitFor: 'button:text-is("Recipe")',
-        click: ['button:text-is("Recipe")'],
-        settleMs: 1600,
-        clip: "area",
-        stopAt: 620,
-        // The one disturbance a shot is OF: the change an agent proposed to the image, waiting for the owner's yes.
-        keep: ["proposal"],
+        name: "stage-host",
+        path: "/sandbox/devices",
+        waitFor: "text=build-box",
+        settleMs: 1400,
+        storage: CHAT_ON_RAIL,
     },
-    // Stops after the account picker: below it sit the recording's savings figures, which are not ours to quote.
-    // Waits on the account list, not on the section's heading: the heading is painted immediately and the rows
-    // under it are two skeleton bars until the daemon read lands, which is what the last run shipped. The list's
-    // last row rather than an account's name, which sits beside the address in a run of its own.
-    { name: "sandbox-agent", path: "/sandbox/agent", waitFor: "text=Add another account", settleMs: 1400, clip: "area", stopAt: 480 },
-    // Mobile — the same app, its own shell
-    // Same reason the desktop board opens a conversation first: without it the Active lane leads with an empty
-    // "New agent" draft card, which is a truthful screen and a confusing screenshot.
+
+    // THE FEATURE PAGES' BLOCKS: drawn whole in the page's column, so their shapes are their content's.
+    // The board on a phone: the same app, its own shell.
     {
         name: "mobile-fleet",
         path: "/agents",
@@ -341,110 +289,132 @@ const SHOTS: Shot[] = [
         settleMs: 1400,
         dpr: DENSE_DPR,
     },
-    /* Reopen the running fixture conversation so mobile chat shows its plan card. */
+    // A connection not made yet, so the card is the add form and what it will add, rather than a second GitHub
+    // ("github-2") under the one already connected.
     {
-        name: "mobile-chat",
-        path: "/agents/cnv_checkout_stripe",
-        openFirst: "/agents/cnv_checkout_stripe",
-        mobile: true,
-        waitFor: PLAN_WAITING,
-        settleMs: 1200,
-        dpr: DENSE_DPR,
+        name: "capability-add",
+        path: "/capabilities",
+        waitFor: 'text="GitLab"',
+        click: ['text="GitLab"'],
+        settleMs: 1400,
+        extensions: CONNECTOR_EXTENSIONS,
+        storage: CHAT_ON_RAIL,
+        // The form and the panel beside it; the box around the two takes in the card's head above the form too.
+        region: ['form:has-text("Access token")', 'aside:has-text("This will add to your sandbox")'],
     },
-    /* Capture mobile files, changes, menu, and sandbox surfaces for visual review. */
-    { name: "mobile-files", path: "/workspace", mobile: true, waitFor: "text=README.md", settleMs: 1600, dpr: DENSE_DPR },
-    { name: "mobile-changes", path: "/workspace?panel=changes", mobile: true, waitFor: "text=CheckoutPanel.tsx", settleMs: 1600, dpr: DENSE_DPR },
-    { name: "mobile-menu", path: "/menu", mobile: true, waitFor: "text=SANDBOXES", settleMs: 1400, dpr: DENSE_DPR },
-    { name: "mobile-sandbox", path: "/sandbox", mobile: true, waitFor: "text=Overview", settleMs: 1400, dpr: DENSE_DPR },
-    /* Preview captures use 16:10 frames sized for the 544px menu rail. */
+    // The Changes tab, the checkout panel's diff open beside the list, at the window's whole width.
     {
-        /* Automations is an extension, so this shot is the one that switches it on. */
-        name: "menu-automate",
-        path: "/ext/automations",
-        waitFor: "text=CODE CHORES",
-        settleMs: 1600,
-        clip: "area",
-        extensions: ["intentic.automations"],
-        viewport: { width: 1290, height: 900 },
-        stopAt: 500,
-    },
-    {
-        /* Capture the dense review surface with its file list and uncommitted diff. */
-        name: "menu-review",
+        name: "workspace-changes",
         path: "/workspace",
         waitFor: 'button:has-text("Changes")',
         click: ['button:has-text("Changes")', changesRow("CheckoutPanel.tsx")],
         settleMs: 1800,
-        clip: "area",
-        viewport: { width: 1290, height: 900 },
-        stopAt: 500,
+        storage: CHAT_ON_RAIL,
     },
+    // The change an agent proposed to the sandbox's image, waiting for the owner's yes: the one disturbance a shot is OF.
+    // The Environment section alone, without the settings column beside it.
     {
-        /* Capture the hosted sandbox hub with its identity and status. */
-        name: "menu-host",
-        path: "/sandbox",
-        waitFor: "text=Installed version",
-        settleMs: 1200,
-        clip: "area",
-        viewport: { width: 1380, height: 900 },
-        stopAt: 556,
+        name: "sandbox-environment",
+        path: "/sandbox/environment",
+        waitFor: 'button:text-is("Recipe")',
+        click: ['button:text-is("Recipe")'],
+        settleMs: 1600,
+        keep: ["proposal"],
+        storage: CHAT_ON_RAIL,
+        viewport: { width: 1440, height: 900 },
+        region: ['section:has(button:text-is("Recipe"))'],
     },
+    // A month of spend per day and who spent it, without the plan limits above it or the token-savings cards below:
+    // those numbers are the recording's, and a marketing page that shows them reads as a benchmark we never measured.
+    {
+        name: "sandbox-spend",
+        path: "/sandbox/usage",
+        waitFor: "text=Cost per day",
+        settleMs: 1800,
+        storage: CHAT_ON_RAIL,
+        viewport: { width: 1440, height: 900 },
+        scrollTo: "text=Cost per day",
+        region: ['.ui-card:has-text("Cost per day")', '.ui-card:has-text("Cost by agent")'],
+    },
+
+    // THE FEATURES MENU'S PREVIEWS: one per row, each its page's surface in the preview window's own shape.
+    { name: "menu-run", path: "/agents", openFirst: "/agents/cnv_checkout_stripe", waitFor: "text=ATTENTION", settleMs: 1400, storage: CHAT_ON_RAIL, viewport: MENU },
+    {
+        name: "menu-connect",
+        path: "/capabilities",
+        waitFor: "text=Connected",
+        settleMs: 1200,
+        extensions: CONNECTOR_EXTENSIONS,
+        storage: CHAT_ON_RAIL,
+        viewport: MENU,
+    },
+    // Automations is an extension, so this shot is the one that switches it on.
+    {
+        name: "menu-automate",
+        path: "/ext/automations",
+        waitFor: "text=CODE CHORES",
+        settleMs: 1600,
+        extensions: ["intentic.automations"],
+        storage: CHAT_ON_RAIL,
+        viewport: MENU,
+    },
+    // The review in a window half again the menu's size: under about 900px the review folds its file list and its
+    // Land now away, which are the two things this preview is of.
+    {
+        name: "menu-review",
+        path: "/agents/cnv_soft_deletes",
+        openFirst: "/agents/cnv_soft_deletes",
+        waitFor: "text=Land now",
+        click: [changesRow("users.ts")],
+        settleMs: 1600,
+        storage: CHAT_ON_RAIL,
+        viewport: { width: MENU.width * 1.5, height: MENU.height * 1.5 },
+        dpr: 1.5,
+    },
+    { name: "menu-host", path: "/sandbox/devices", waitFor: "text=build-box", settleMs: 1400, storage: CHAT_ON_RAIL, viewport: MENU },
 ];
 
-// THE DESK EDITION'S SHOTS: the same surfaces the landing page shows a developer, on the desk recording. Every one
-// runs in `desk` mode, whose own two extensions (the Projects home and the viewers) stay on: a maker's rail is those and
-// the core, and the shot should be of what they see.
+// THE DESK EDITION'S SHOTS: the same frames the developer page has, on the desk recording. Every one runs in `desk`
+// mode, whose own two extensions (the Projects home and the viewers) stay on: a maker's rail is those and the core, and
+// the shot should be of what they see.
 const DESK_SHOTS: Shot[] = [
     // The board, as the hero's first frame: one assistant working on the newsletter, one waiting on a question about a
-    // letter, one finished draft to read, one sorting job already accepted.
+    // letter, one finished draft to read, one sorting job already accepted. In the snug window, since the desk's four
+    // cards across three lanes in the wide one left the frame two thirds wallpaper.
     {
         name: "desk-hero-agents",
         path: "/agents",
         openFirst: `/agents/${DESK_FEATURED}`,
         waitFor: "text=ATTENTION",
         settleMs: 1400,
-        clip: "area",
-        viewport: HERO_WINDOW,
-        fullHeight: true,
+        storage: CHAT_ON_RAIL,
+        viewport: SNUG,
+        dpr: SNUG_DPR,
         mode: "desk",
     },
-    // The desk's files with the newsletter folder open: the drafts, the template, the list and the pictures. Exact
-    // matches, since the open chat's title carries the word "newsletter" too and a substring match lands on it first.
+    // A document open in the desk's files, drawn as a document: last month's newsletter, the one the finished draft
+    // reworked, beside the folder it lives in.
     {
         name: "desk-hero-files",
-        path: "/workspace",
+        path: "/workspace/newsletter/september.md",
         openFirst: `/agents/${DESK_FEATURED}`,
-        waitFor: 'text="newsletter"',
-        click: ['text="newsletter"'],
+        waitFor: "text=September at the studio",
         settleMs: 1400,
-        clip: "area",
-        viewport: HERO_WINDOW,
-        fullHeight: true,
+        storage: CHAT_ON_RAIL,
+        viewport: SNUG,
+        dpr: SNUG_DPR,
         mode: "desk",
     },
-    // The docked chat on the plan card, cropped to the chat: the hero's left wing.
-    {
-        name: "desk-hero-plan",
-        path: "/workspace",
-        openFirst: `/agents/${DESK_FEATURED}`,
-        waitFor: PLAN_WAITING,
-        settleMs: 1200,
-        clip: "chat",
-        dpr: DENSE_DPR,
-        viewport: HERO_WINDOW,
-        fullHeight: true,
-        mode: "desk",
-    },
-    // The chat in its own window, on the plan the assistant wrote for the newsletter, Approve in the bar below. The
-    // popped-out window starts its own copy of the run, so it waits for its own plan rather than the opener's.
+    // The left wing: the plan the assistant wrote for the October newsletter, Approve in the bar below it.
+    { name: "desk-hero-plan", path: "/workspace", openFirst: `/agents/${DESK_FEATURED}`, waitFor: PLAN_WAITING, settleMs: 1200, ...wing(PLAN_WING, 0), mode: "desk" },
+    // The right wing: the finished draft's conversation, ending on the two copies it made (a Word file and a web page).
     {
         name: "desk-hero-chat",
-        path: `/agents/${DESK_FEATURED}`,
-        openFirst: `/agents/${DESK_FEATURED}`,
-        waitFor: POPOUT_BUTTON,
-        settleMs: 1200,
-        popout: { ...POPOUT_WINDOW, waitFor: PLAN_WAITING },
-        dpr: DENSE_DPR,
+        path: `/agents/${DESK_REVIEW}`,
+        openFirst: `/agents/${DESK_REVIEW}`,
+        waitFor: "text=september.html",
+        settleMs: 1600,
+        ...wing(REPORT_WING, 0),
         mode: "desk",
     },
     {
@@ -453,21 +423,37 @@ const DESK_SHOTS: Shot[] = [
         openFirst: `/agents/${DESK_FEATURED}`,
         waitFor: ["text=ATTENTION", PLAN_WAITING],
         settleMs: 1400,
-        viewport: SHOWCASE,
-        dpr: SHOWCASE_DPR,
+        storage: { "ui-chat-width": "400" },
         mode: "desk",
     },
-    // A finished draft, read as what changed in the document: the September newsletter moved into the template.
+    // The desk's connections: mail, calendar and messages, which is what the tour's line promises. The Communication
+    // shelf of the catalogue, two to a row in a window small enough that the app draws it two to a row.
+    {
+        name: "desk-stage-connect",
+        path: "/capabilities",
+        waitFor: "text=Connected",
+        click: ['button:has-text("Communication")'],
+        settleMs: 1200,
+        extensions: DESK_CONNECTIONS,
+        storage: CHAT_ON_RAIL,
+        viewport: { width: 1024, height: 576 },
+        dpr: 2.8125,
+        mode: "desk",
+    },
+    // A finished draft, held for a yes, opened to check before accepting it: the September newsletter as a page in the
+    // shop's own style, over the review it came from. The review itself is a row of two downloads on an empty page.
     {
         name: "desk-stage-review",
         path: `/agents/${DESK_REVIEW}`,
-        openFirst: `/agents/${DESK_FEATURED}`,
-        waitFor: "text=september.md",
-        settleMs: 3200,
-        viewport: SHOWCASE,
-        dpr: SHOWCASE_DPR,
+        openFirst: `/agents/${DESK_REVIEW}`,
+        waitFor: "text=Results",
+        click: ["main >> text=september.html >> nth=0"],
+        settleMs: 2400,
+        storage: { "ui-chat-width": "400" },
         mode: "desk",
     },
+    // The computers the desk can live on, the same quiet fleet as the developer page's stage.
+    { name: "desk-stage-host", path: "/sandbox/devices", waitFor: "text=build-box", settleMs: 1400, storage: CHAT_ON_RAIL, mode: "desk" },
 ];
 
 const TYPES: Record<string, string> = {
@@ -509,30 +495,45 @@ const VISITOR_CHAT_REPLY =
     "Yes — the RX-4 is rated IP66, so rain and dust are fine. Below -10°C you'll want the cold-weather grease kit, " +
     "which is a five-minute swap.\n\nWant me to open a ticket with our hardware team for your specific setup?";
 
+// A customer's site, laid out so the widget sits in its own column: the copy and the cards keep to the left two thirds,
+// where the old single centred column ran its third card under the open chat. A bar and a row of the customer's own
+// customers below make it read as somebody's real front page rather than a test fixture with a bubble on it.
 const VISITOR_CHAT_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Northwind Robotics</title>
 <style>
-  :root{color-scheme:${LIGHT ? `light` : `dark`}}
-  body{margin:0;background:${LIGHT ? `#fbfaf9` : `#0b0d10`};color:${LIGHT ? `#1b1d20` : `#e6e8eb`};font:16px/1.65 ui-serif,Georgia,serif}
-  header,main{max-width:54rem;margin:0 auto;padding:0 2.5rem}
-  header{padding-top:5.5rem}
-  .eyebrow{font:600 12px/1 ui-sans-serif,system-ui;letter-spacing:.14em;text-transform:uppercase;color:${LIGHT ? `#1a56c4` : `#8ab4f8`}}
-  h1{font-size:3.1rem;line-height:1.08;letter-spacing:-.025em;margin:1rem 0 1rem}
-  p{color:${LIGHT ? `#5f6368` : `#9aa0a6`};max-width:36rem}
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;margin-top:3.5rem}
-  .card{border:1px solid ${LIGHT ? `#e3e5e8` : `#1e2227`};border-radius:.75rem;padding:1.25rem;background:${LIGHT ? `#fff` : `#101318`}}
-  .card h3{font:600 14px/1.3 ui-sans-serif,system-ui;margin:0 0 .4rem}
-  .card p{font:13px/1.55 ui-sans-serif,system-ui;margin:0;color:${LIGHT ? `#70757a` : `#6b7280`}}
+  :root{color-scheme:${LIGHT ? `light` : `dark`};--ink:${LIGHT ? `#1b1d20` : `#e6e8eb`};--muted:${LIGHT ? `#5f6368` : `#9aa0a6`};--quiet:${LIGHT ? `#80868b` : `#6b7280`};--line:${LIGHT ? `#e3e5e8` : `#1e2227`};--card:${LIGHT ? `#fff` : `#101318`};--accent:${LIGHT ? `#1a56c4` : `#8ab4f8`}}
+  *{box-sizing:border-box}
+  body{margin:0;background:${LIGHT ? `#fbfaf9` : `#0b0d10`};color:var(--ink);font:16px/1.65 ui-serif,Georgia,serif}
+  .bar{display:flex;align-items:center;gap:2.5rem;height:4.5rem;padding:0 6rem;border-bottom:1px solid var(--line);font:500 14px/1 ui-sans-serif,system-ui}
+  .brand{display:flex;align-items:center;gap:.6rem;font-weight:700;font-size:15px;letter-spacing:-.01em;margin-right:auto}
+  .mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),${LIGHT ? `#0d3b8c` : `#3b6fd4`})}
+  .bar a{color:var(--muted);text-decoration:none}
+  .bar .cta{color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:.55rem 1rem;background:var(--card)}
+  main{padding:7.5rem 6rem 0;max-width:62rem}
+  .eyebrow{font:600 12px/1 ui-sans-serif,system-ui;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:3.3rem;line-height:1.06;letter-spacing:-.025em;margin:1.1rem 0 1.1rem;max-width:46rem;text-wrap:balance}
+  p{color:var(--muted);max-width:34rem;margin:0}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem;margin-top:3.25rem}
+  .card{border:1px solid var(--line);border-radius:.75rem;padding:1.25rem 1.3rem;background:var(--card)}
+  .card h3{font:600 14px/1.3 ui-sans-serif,system-ui;margin:0 0 .45rem;color:var(--ink)}
+  .card p{font:13px/1.55 ui-sans-serif,system-ui;color:var(--quiet)}
+  .used{display:flex;gap:2.25rem;align-items:baseline;margin-top:3.5rem;font:600 12px/1 ui-sans-serif,system-ui;letter-spacing:.08em;text-transform:uppercase;color:var(--quiet)}
+  .used b{font-weight:600;color:var(--muted);letter-spacing:.02em;text-transform:none;font-size:14px}
 </style></head><body>
-<header>
+<nav class="bar">
+  <span class="brand"><span class="mark"></span>Northwind Robotics</span>
+  <a>Arms</a><a>Controllers</a><a>Industries</a><a>Support</a><a class="cta">Request a quote</a>
+</nav>
+<main>
   <span class="eyebrow">Industrial robotics</span>
   <h1>Arms that pick things up, in weather that would rather they didn't.</h1>
   <p>The RX series runs outdoors, on ships, and in cold stores — the same arm, the same controller, no enclosure.</p>
-</header>
-<main><div class="grid">
-  <div class="card"><h3>IP66 sealed</h3><p>Rain, dust and wash-down without an enclosure.</p></div>
-  <div class="card"><h3>-30°C to 55°C</h3><p>Cold-store rated with the winter grease kit.</p></div>
-  <div class="card"><h3>One controller</h3><p>Every arm in the range speaks the same protocol.</p></div>
-</div></main>
+  <div class="grid">
+    <div class="card"><h3>IP66 sealed</h3><p>Rain, dust and wash-down without an enclosure.</p></div>
+    <div class="card"><h3>-30°C to 55°C</h3><p>Cold-store rated with the winter grease kit.</p></div>
+    <div class="card"><h3>One controller</h3><p>Every arm in the range speaks the same protocol.</p></div>
+  </div>
+  <div class="used">In service at <b>Halden Port</b><b>Kestrel Cold Chain</b><b>Arvo Marine</b></div>
+</main>
 <script src="/webchat/widget.js" data-automation="visitor-chat" defer></script>
 </body></html>`;
 
@@ -590,6 +591,12 @@ const serveDemo = (): Server => {
         const routed = path.startsWith(`${BASE}/`) ? path.slice(BASE.length) : path;
         const asset = join(DEMO_DIR, normalize(decodeURIComponent(routed)));
         const file = existsSync(asset) && statSync(asset).isFile() ? asset : join(DEMO_DIR, "index.html");
+        // A run against DEMO_URL has no build here, and a stray request must not take the whole run down with it.
+        if (!existsSync(file)) {
+            console.warn(`  [unserved] ${path}`);
+            response.writeHead(404).end();
+            return;
+        }
         response.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": "no-store" });
         createReadStream(file).pipe(response);
     });
@@ -759,6 +766,10 @@ interface Clip {
 
 /** A light shot's frame, copied from its dark twin. `full` is a twin that filled its window, i.e. was not clipped. */
 const twinClip = (shot: Shot): Clip | "full" | undefined => {
+    // A region is found by its own elements in either look, so it needs no twin to tell it where it is.
+    if (shot.region !== undefined) {
+        return undefined;
+    }
     const twin = twinBox(shot);
     if (twin === undefined) {
         return undefined;
@@ -771,10 +782,44 @@ const twinClip = (shot: Shot): Clip | "full" | undefined => {
     return { x: shot.clip === "chat" ? paired.width - twin.width : 0, y: 0, width: twin.width, height: twin.height };
 };
 
+// A region's gutter: enough to clear a card's own shadow, short of the next column's controls (the settings list
+// stands 34px left of the section beside it).
+const REGION_PAD = 14;
+
+/** The box around every element a region names, plus its gutter, kept inside the window. */
+const regionClip = async (page: Page, shot: Shot, selectors: readonly string[]): Promise<Clip> => {
+    const window = shot.viewport ?? DESKTOP;
+    const boxes: { x: number; y: number; width: number; height: number }[] = [];
+    for (const selector of selectors) {
+        const box = await page
+            .locator(selector)
+            .last()
+            .boundingBox()
+            .catch(() => null);
+        if (box === null) {
+            // Loud for the same reason the split is: a region that lost an element frames the rest as if it were whole.
+            console.warn(`  [region ${shot.name}] nothing matches ${selector}`);
+            continue;
+        }
+        boxes.push(box);
+    }
+    if (boxes.length === 0) {
+        throw new Error(`no element of ${shot.name}'s region is on the page`);
+    }
+    const left = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.x)) - REGION_PAD));
+    const top = Math.max(0, Math.floor(Math.min(...boxes.map((box) => box.y)) - REGION_PAD));
+    const right = Math.min(window.width, Math.ceil(Math.max(...boxes.map((box) => box.x + box.width)) + REGION_PAD));
+    const bottom = Math.min(window.height, Math.ceil(Math.max(...boxes.map((box) => box.y + box.height)) + REGION_PAD));
+    return { x: left, y: top, width: right - left, height: bottom - top };
+};
+
 const clipFor = async (page: Page, shot: Shot): Promise<Clip | undefined> => {
     const paired = twinClip(shot);
     if (paired !== undefined) {
         return paired === "full" ? undefined : paired;
+    }
+    if (shot.region !== undefined) {
+        return regionClip(page, shot, shot.region);
     }
     if (shot.clip === undefined) {
         return undefined;
@@ -785,6 +830,16 @@ const clipFor = async (page: Page, shot: Shot): Promise<Clip | undefined> => {
     // — every `area` shot lost the right end of its own header (the New agent button, sliced mid-word) and every
     // `chat` shot opened on a 26px strip of the workspace behind it.
     const split = await composerLeft(page, window.width);
+    if (shot.clip === "chat") {
+        // The column alone, down to its own foot: the window's terminal dock runs under it, and a wing that kept that
+        // strip ended on a band of another colour.
+        const column = await page
+            .locator(CHAT_PANEL)
+            .first()
+            .boundingBox()
+            .catch(() => null);
+        return { x: split, y: 0, width: window.width - split, height: column === null ? window.height : Math.round(column.y + column.height) };
+    }
     const x = shot.clip === "area" ? 0 : split;
     const frame = await contentFrame(page, { left: x, floorX: shot.clip === "area" ? split : window.width, floorY: shot.stopAt ?? window.height });
     // Only the right edge of an `area` clip may come in off the split, and only to drop dead canvas: a surface whose
@@ -792,34 +847,6 @@ const clipFor = async (page: Page, shot: Shot): Promise<Clip | undefined> => {
     const width = shot.clip === "area" ? frame.right : window.width - x;
     const height = shot.fullHeight === true ? window.height : Math.min(frame.bottom, window.height);
     return { x, y: 0, width, height };
-};
-
-/* Resize and capture the browser window opened by the app. */
-const shootPopout = async (page: Page, shot: Shot, popout: NonNullable<Shot["popout"]>): Promise<void> => {
-    const [window] = await Promise.all([page.context().waitForEvent("page"), page.click(POPOUT_BUTTON, { timeout: 20_000 })]);
-    try {
-        window.on("pageerror", (error) => console.warn(`  [pageerror ${shot.name}/popout] ${error.message.split("\n")[0]}`));
-        await window.setViewportSize({ width: popout.width, height: popout.height });
-        // The popped-out window is the chat and nothing else, so the panel itself is what "it has rendered" means.
-        await window.waitForSelector(CHAT_PANEL, { timeout: 20_000 });
-        // Belt and braces over the context's init script, which demonstrably does not reach this window: both
-        // hero-chat shots came back with the demo's mode switcher across the bottom even with the script installed.
-        await window.addStyleTag({ content: HIDE_DEMO_CHROME });
-        for (const target of popout.press ?? []) {
-            await window.click(target, { timeout: 20_000 });
-            await window.waitForTimeout(600);
-        }
-        if (popout.waitFor !== undefined) {
-            await window
-                .waitForSelector(popout.waitFor, { timeout: 20_000 })
-                .catch(() => console.warn(`  [no waitFor ${shot.name}/popout] ${popout.waitFor}`));
-        }
-        await restPointer(window);
-        await window.waitForTimeout(popout.settleMs ?? 1_200);
-        await window.screenshot({ path: resolve(OUT_DIR, `${shot.name}.png`) });
-    } finally {
-        await window.close();
-    }
 };
 
 /* Scroll the tallest eligible pane inside the requested clip. */
@@ -893,6 +920,14 @@ const openContext = async (browser: Browser, shot: Shot): Promise<BrowserContext
         },
         { ...(LIGHT ? { scheme: `light`, skin: `none` } : { scheme: `dark`, skin: `sanctum` }), wallpaper: `mist` },
     );
+    // The shot's own layout preferences: where the chat docks and how wide it is, read by the app at boot like the look.
+    if (shot.storage !== undefined) {
+        await context.addInitScript((pairs: Record<string, string>) => {
+            for (const [key, value] of Object.entries(pairs)) {
+                window.localStorage.setItem(key, value);
+            }
+        }, shot.storage);
+    }
     const mode = modeOf(shot);
     // The desk is read as a maker: the third key the desk profile seeds, and the one that changes the words on screen.
     if (mode === "desk") {
@@ -967,11 +1002,6 @@ const shoot = async (browser: Browser, shot: Shot): Promise<boolean> => {
     page.on("pageerror", (error) => console.warn(`  [pageerror ${shot.name}] ${error.message.split("\n")[0]}`));
     try {
         await surface(page, shot);
-        if (shot.popout !== undefined) {
-            await shootPopout(page, shot, shot.popout);
-            console.log(`  ✓ ${shot.name} → ${shot.path} (popped out)`);
-            return true;
-        }
         const clip = await clipFor(page, shot);
         await page.screenshot({ path: resolve(OUT_DIR, `${shot.name}.png`), ...(clip === undefined ? {} : { clip }) });
         console.log(`  ✓ ${shot.name} → ${shot.path}`);
@@ -994,7 +1024,7 @@ const run = async (): Promise<void> => {
     }
     // Only the app shots need the demo build; a `raw` one brings its own world, so re-shooting just the
     // Visitor chat shouldn't cost a full SPA build.
-    if (wanted.some((shot) => shot.raw !== true) && !existsSync(join(DEMO_DIR, "index.html"))) {
+    if (DEMO_URL === undefined && wanted.some((shot) => shot.raw !== true) && !existsSync(join(DEMO_DIR, "index.html"))) {
         throw new Error(`No demo build at ${DEMO_DIR} — run: pnpm --filter @intentic/demo build`);
     }
 

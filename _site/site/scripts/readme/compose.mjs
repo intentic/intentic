@@ -118,9 +118,10 @@ const edge = async (file) => {
 
 // Every framed screenshot: the raw capture's name, its CSS size, the ledge label and how much of it to keep.
 const FEATURES = [
-    { name: "board", source: { width: 1280, height: 860 }, label: "acme-shop · /agents", area: { h: 760 }, fade: true },
-    { name: "plan", source: { width: 1280, height: 900 }, label: "acme-shop · /chat" },
-    { name: "review", source: { width: 1240, height: 780 }, label: "acme-shop · /agents/soft-deletes", area: { h: 500 } },
+    // The whole window: the board's cards end above its foot, and the wallpaper under them is the picture's air.
+    { name: "board", source: { width: 1280, height: 800 }, label: "acme-shop · /agents" },
+    { name: "plan", source: { width: 1280, height: 760 }, label: "acme-shop · /chat" },
+    { name: "review", source: { width: 1440, height: 800 }, label: "acme-shop · /agents/soft-deletes" },
     // The meters, without the settings column beside them.
     {
         name: "usage",
@@ -129,13 +130,8 @@ const FEATURES = [
         area: { x: 392, y: 62, w: 1008, h: 880 },
         fade: true,
     },
-    // The catalogue's categories and the GitHub card, down to what it adds to the sandbox.
-    {
-        name: "capabilities",
-        source: { width: 1280, height: 860 },
-        label: "acme-shop · /capabilities/github",
-        area: { x: 64, y: 118, w: 1130, h: 642 },
-    },
+    // The catalogue without the rail, down to the end of its Communication shelf: every shelf above it whole.
+    { name: "capabilities", source: { width: 1280, height: 860 }, label: "acme-shop · /capabilities", area: { x: 56, y: 0, w: 1224, h: 762 } },
     { name: "automations", source: { width: 1120, height: 700 }, label: "acme-shop · /ext/automations", area: { h: 640 }, fade: true },
 ];
 
@@ -163,7 +159,7 @@ const SCENES = [
               .hero .app { position: absolute; left: 52px; top: 70px; z-index: 1; }
               .hero .hand { position: absolute; right: 54px; top: 120px; z-index: 2; }`;
             const body = `<div class="hero"><div class="plate"></div><div class="halo"></div>
-                <div class="app">${windowFrame({ src: img(rawDir, "hero-app", look), label: "acme-shop.intentic.dev · /agents", width: 912, source: { width: 1760, height: 1000 }, finial: true })}</div>
+                <div class="app">${windowFrame({ src: img(rawDir, "hero-app", look), label: "acme-shop.intentic.dev · /agents", width: 912, source: { width: 1280, height: 800 }, finial: true })}</div>
                 <div class="hand">${await phoneShot(rawDir, "hero-phone", look, 236)}</div></div>`;
             return { html: page(look, body, css), selector: ".hero" };
         },
@@ -191,7 +187,7 @@ const SCENES = [
             const body = `<div class="card"><div class="plate"></div><div class="veil"></div>
                 <div class="words"><div class="brand"><span class="lotus">${LOTUS}</span>intentic</div><div class="line">${line}</div>
                 <div class="sub">The open-source workspace for coding agents, on your own machine.</div></div>
-                <div class="shot">${windowFrame({ src: img(rawDir, "hero-app", look), label: "acme-shop · /agents", width: 900, source: { width: 1760, height: 1000 }, finial: true })}</div></div>`;
+                <div class="shot">${windowFrame({ src: img(rawDir, "hero-app", look), label: "acme-shop · /agents", width: 900, source: { width: 1280, height: 800 }, finial: true })}</div></div>`;
             return { html: page(look, body, css), selector: ".card" };
         },
     },
@@ -199,15 +195,16 @@ const SCENES = [
     {
         name: "phones",
         build: async ({ look, rawDir }) => {
-            const css = `.row { display: inline-flex; gap: 40px; padding: 36px 48px 30px; align-items: flex-start; }
+            // One line per caption, the same length near enough, so the three stand on one baseline under phones of
+            // one height: a wrapped caption and a staggered middle phone read as a layout that slipped.
+            const css = `.row { display: inline-flex; gap: 44px; padding: 36px 48px 30px; align-items: flex-start; }
               .col { width: 256px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
-              .col:nth-child(2) { margin-top: 30px; }
-              .cap { font: 500 14px/1.35 "Public Sans"; color: var(--muted); text-align: center; display: flex; gap: 8px; align-items: baseline; }
+              .cap { font: 500 14px/1.35 "Public Sans"; color: var(--muted); text-align: center; display: flex; gap: 8px; align-items: baseline; white-space: nowrap; }
               .cap .lotus { width: 13px; height: 13px; flex: none; transform: translateY(1px); }`;
             const shots = [
-                ["phone-board", "Every agent, sorted by who needs you"],
-                ["phone-review", "An agent's report, on its own branch"],
-                ["phone-changes", "Every changed file, before it lands"],
+                ["phone-board", "Every agent, by who needs you"],
+                ["phone-review", "Its report, on its own branch"],
+                ["phone-changes", "Every change, before it lands"],
             ];
             const cols = [];
             for (const [name, cap] of shots) {

@@ -12,8 +12,7 @@ import { DESK_REPOS } from "./desk";
 import { officeCapabilities } from "./offices/office";
 
 // acme-shop's workspace furniture: what it's made of, what it's wired to, the extensions supplying that wiring, and the
-// Usage tab's spend ledger. Connector entries copy the real `_extensions/connectors` and `_extensions/discord`
-// manifests, minus credential guides.
+// Usage tab's spend ledger. Connector entries are the real manifests from `_extensions/`, minus credential guides.
 
 const day = (now: number, back: number): string => new Date(now - back * 86_400_000).toISOString().slice(0, 10);
 
@@ -182,6 +181,44 @@ export const demoLocalModelFit = (): LocalModelFitResponse => {
     };
 };
 
+// The connector extensions as they ship, read from their own manifests in `_extensions/` the way the vendored ones are
+// read below, so the catalogue the demo draws is the one the product has rather than a hand-kept subset of it. Plain
+// string literals for the same reason as there: Vite reads a glob call statically.
+const SHIPPED_MANIFESTS = import.meta.glob<ExtensionSummary["manifest"]>(
+    [
+        "../../../../_extensions/connectors/intentic-extension.json",
+        "../../../../_extensions/discord/intentic-extension.json",
+        "../../../../_extensions/slack/intentic-extension.json",
+        "../../../../_extensions/google-workspace/intentic-extension.json",
+        "../../../../_extensions/microsoft-365/intentic-extension.json",
+        "../../../../_extensions/imap/intentic-extension.json",
+        "../../../../_extensions/telegram/intentic-extension.json",
+        "../../../../_extensions/whatsapp/intentic-extension.json",
+    ],
+    { eager: true, import: "default" },
+);
+
+// One shipped manifest as the demo installs it: everything but the credential guides, since a recording has no token
+// to go and make and the add form reads better without the steps for making one.
+const shipped = (folder: string, commit: string): Omit<ExtensionSummary, "enabled">[] =>
+    Object.entries(SHIPPED_MANIFESTS)
+        .filter(([path]) => path.split(`/`).at(-2) === folder)
+        .map(([, manifest]) => ({
+            id: `${manifest.publisher}.${manifest.name}`,
+            commit,
+            source: `builtin`,
+            manifest: {
+                ...manifest,
+                contributes: {
+                    ...manifest.contributes,
+                    capabilities: manifest.contributes?.capabilities?.map(({ catalog, ...capability }) => {
+                        const { guide: _guide, ...shown } = catalog;
+                        return { ...capability, catalog: shown };
+                    }),
+                },
+            },
+        }));
+
 // No `enabled` here; `demoExtensions()` below applies demo mode's on/off once.
 const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
     // The Android phone card, copied from `_extensions/phones`, so the demo can open its pairing dialog (the fixture
@@ -214,156 +251,14 @@ const CONNECTOR_EXTENSIONS: Omit<ExtensionSummary, "enabled">[] = [
             },
         },
     },
-    {
-        id: `intentic.connectors`,
-        commit: `9f2c41d`,
-        source: `builtin`,
-        manifest: {
-            publisher: `intentic`,
-            name: `connectors`,
-            version: `1.0.0`,
-            engines: { intentic: `^1.0.0` },
-            contributes: {
-                capabilities: [
-                    {
-                        id: `github`,
-                        kind: `cli`,
-                        catalog: {
-                            name: `GitHub`,
-                            logo: `github/f5f5f5`,
-                            description: `Issues, PRs, code search and git.`,
-                            category: `code`,
-                        },
-                        fields: [
-                            { key: `token`, label: `Personal access token`, secret: true },
-                            {
-                                key: `git`,
-                                label: `Git access`,
-                                default: `on`,
-                                options: [
-                                    { value: `on`, label: `On` },
-                                    { value: `off`, label: `Off` },
-                                ],
-                            },
-                        ],
-                        env: { GITHUB_TOKEN: `\${token}` },
-                        skill: `skills/github/SKILL.md`,
-                    },
-                    {
-                        id: `postgres`,
-                        kind: `cli`,
-                        catalog: {
-                            name: `PostgreSQL`,
-                            logo: `postgresql`,
-                            description: `Query your PostgreSQL database with psql.`,
-                            category: `data`,
-                        },
-                        fields: [
-                            { key: `host`, label: `Host` },
-                            { key: `port`, label: `Port`, default: `5432` },
-                            { key: `user`, label: `User` },
-                            { key: `password`, label: `Password`, secret: true },
-                            { key: `database`, label: `Database` },
-                        ],
-                        env: { POSTGRES_URL: `postgres://\${user}:\${password:uri}@\${host}:\${port}/\${database}` },
-                        skill: `skills/postgres/SKILL.md`,
-                        fragment: `env/postgres.Dockerfile`,
-                    },
-                    {
-                        id: `sentry`,
-                        kind: `cli`,
-                        catalog: {
-                            name: `Sentry`,
-                            logo: `sentry`,
-                            description: `Query issues and traces from Sentry.`,
-                            category: `observability`,
-                        },
-                        fields: [
-                            { key: `url`, label: `Sentry URL`, default: `https://sentry.io` },
-                            { key: `org`, label: `Organization` },
-                            { key: `token`, label: `Auth token`, secret: true },
-                        ],
-                        env: { SENTRY_TOKEN: `\${token}`, SENTRY_URL: `\${url}`, SENTRY_ORG: `\${org}` },
-                        skill: `skills/sentry/SKILL.md`,
-                    },
-                    {
-                        id: `outline`,
-                        kind: `cli`,
-                        catalog: {
-                            name: `Outline`,
-                            logo: `outline/f5f5f5`,
-                            description: `Docs and knowledge base from Outline.`,
-                            category: `business`,
-                        },
-                        fields: [
-                            { key: `url`, label: `Outline URL` },
-                            { key: `apiKey`, label: `API key`, secret: true },
-                        ],
-                        env: { OUTLINE_URL: `\${url}`, OUTLINE_API_KEY: `\${apiKey}` },
-                        skill: `skills/outline/SKILL.md`,
-                    },
-                    {
-                        id: `stripe`,
-                        kind: `cli`,
-                        catalog: {
-                            name: `Stripe`,
-                            logo: `stripe`,
-                            description: `Payments, customers, invoices and subscriptions.`,
-                            category: `business`,
-                        },
-                        fields: [{ key: `apiKey`, label: `Secret key`, secret: true }],
-                        env: { STRIPE_API_KEY: `\${apiKey}` },
-                        skill: `skills/stripe/SKILL.md`,
-                    },
-                ],
-            },
-        },
-    },
-    {
-        id: `intentic.discord`,
-        commit: `4ab7e10`,
-        source: `builtin`,
-        manifest: {
-            publisher: `intentic`,
-            name: `discord`,
-            version: `1.0.0`,
-            engines: { intentic: `^1.0.0` },
-            contributes: {
-                capabilities: [
-                    {
-                        id: `discord`,
-                        kind: `cli`,
-                        catalog: {
-                            name: `Discord`,
-                            logo: `discord`,
-                            description: `Read and post in your Discord server.`,
-                            category: `communication`,
-                        },
-                        fields: [
-                            { key: `token`, label: `Bot token`, secret: true },
-                            { key: `guild`, label: `Server`, optional: true },
-                        ],
-                        env: { DISCORD_TOKEN: `\${token}` },
-                        skill: `skills/discord/SKILL.md`,
-                    },
-                ],
-                listener: {
-                    provider: `discord`,
-                    events: [
-                        { type: `message`, label: `Messages` },
-                        { type: `voice_utterance`, label: `Voice utterances` },
-                        { type: `voice_transcript`, label: `Voice transcripts` },
-                    ],
-                    automation: {
-                        label: `Discord`,
-                        mentionLabel: `Only when mentioned`,
-                        channel: { label: `Channel ID (optional)`, placeholder: `all channels` },
-                        starterPrompt: `Handle the Discord event.`,
-                    },
-                },
-            },
-        },
-    },
+    ...shipped(`connectors`, `9f2c41d`),
+    ...shipped(`discord`, `4ab7e10`),
+    ...shipped(`slack`, `c3e81f4`),
+    ...shipped(`google-workspace`, `5d20a7b`),
+    ...shipped(`microsoft-365`, `e17b9c2`),
+    ...shipped(`imap`, `0a6f3d8`),
+    ...shipped(`telegram`, `b94e215`),
+    ...shipped(`whatsapp`, `7c51e0a`),
 ];
 
 // Every first-party extension compiled into this build, read from the app's own registry so it can't drift from what's
@@ -590,9 +485,9 @@ const environmentContents = (): EnvironmentContents => ({
 
 // Spend ledger the Usage tab projects: two providers, two accounts, the models the fleet actually runs. A month of it,
 // since the tab opens on thirty days and two weeks of rows left the chart's first half bare. Each model's spend is
-// booked to the board's agent that runs it (`agentFor`), so Cost by agent names the work rather than lumping every
-// dollar into the main tree; a model no agent on the board runs stays there.
-export const demoUsageRollup = (now: number, agentFor: (model: string) => string | undefined = () => undefined): UsageRollupRow[] => {
+// shared among the board's agents that run it (`agentsFor`), the first-listed taking the biggest share, so Cost by agent
+// names the work and reads differently from Cost by model beside it; a model no agent on the board runs stays unbooked.
+export const demoUsageRollup = (now: number, agentsFor: (model: string) => readonly string[] = () => []): UsageRollupRow[] => {
     const rows: UsageRollupRow[] = [];
     const shape = [
         { provider: `claude`, account: `ada@acme.dev`, model: `claude-sonnet-5`, harness: `claude-code`, turns: 14, cost: 2.9 },
@@ -600,27 +495,34 @@ export const demoUsageRollup = (now: number, agentFor: (model: string) => string
         { provider: `claude`, account: `ada@acme.dev`, model: `claude-haiku-4-5-20251001`, harness: `claude-code`, turns: 9, cost: 0.28 },
         { provider: `codex`, account: `chatgpt-ada`, model: `gpt-5.2-codex`, harness: `native`, turns: 6, cost: 1.1 },
     ];
-    // A month with a weekend dip; rows are per day × provider × account × model.
+    // A month with a weekend dip; rows are per day × provider × account × model × agent.
     for (let back = 29; back >= 0; back -= 1) {
         const weekday = new Date(now - back * 86_400_000).getUTCDay();
         const load = weekday === 0 || weekday === 6 ? 0.2 : 0.7 + ((back * 37) % 60) / 100;
         for (const row of shape) {
-            const turns = Math.max(1, Math.round(row.turns * load));
-            const conversationId = agentFor(row.model);
-            rows.push({
-                day: day(now, back),
-                provider: row.provider,
-                account: row.account,
-                model: row.model,
-                harness: row.harness,
-                ...(conversationId === undefined ? {} : { conversationId }),
-                turns,
-                inputTokens: turns * 21_400,
-                outputTokens: turns * 2_900,
-                cacheReadTokens: turns * 96_000,
-                cacheCreationTokens: turns * 12_000,
-                costUsd: Math.round(row.cost * load * 100) / 100,
-                durationMs: turns * 42_000,
+            const agents = agentsFor(row.model);
+            // Harmonic shares (1, 1/2, 1/3…), normalised: one undivided share when no agent runs the model.
+            const weights = agents.length === 0 ? [1] : agents.map((_, index) => 1 / (index + 1));
+            const total = weights.reduce((sum, weight) => sum + weight, 0);
+            weights.forEach((weight, index) => {
+                const share = (load * weight) / total;
+                const turns = Math.max(1, Math.round(row.turns * share));
+                const conversationId = agents[index];
+                rows.push({
+                    day: day(now, back),
+                    provider: row.provider,
+                    account: row.account,
+                    model: row.model,
+                    harness: row.harness,
+                    ...(conversationId === undefined ? {} : { conversationId }),
+                    turns,
+                    inputTokens: turns * 21_400,
+                    outputTokens: turns * 2_900,
+                    cacheReadTokens: turns * 96_000,
+                    cacheCreationTokens: turns * 12_000,
+                    costUsd: Math.round(row.cost * share * 100) / 100,
+                    durationMs: turns * 42_000,
+                });
             });
         }
     }

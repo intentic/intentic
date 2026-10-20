@@ -75,7 +75,7 @@ const flow = {
     html: () => {
         const steps = [
             ["ask", "Describe it", "Pick the agent: <b>Claude Code, Codex, Cursor</b> or another."],
-            ["plan", "Approve the plan", "It reads the code and proposes. <b>Nothing changes</b> until you say yes."],
+            ["plan", "Approve the plan", "It reads, then proposes. <b>Nothing changes</b> until you say yes."],
             ["branches", "Run in parallel", "Each agent on its <b>own git worktree</b> and branch. Run ten at once."],
             ["away", "Walk away", "Close the browser. <b>Runs keep going.</b> Check in from your phone."],
             ["land", "Review, then land", "Read <b>every diff</b>. Land it on your branch, or discard it."],
@@ -194,12 +194,14 @@ const providers = {
     css: () => `${SHARED}
       .pad { padding: 16px 20px 28px; display: inline-block; }
       .panel { width: 1000px; padding: 28px 26px 24px; }
-      .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+      /* minmax(0, 1fr), not 1fr: a bare 1fr column grows to its longest unbreakable line, which drew the five columns
+         at five different widths. */
+      .tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
       .tile { display: flex; align-items: center; gap: 12px; padding: 14px 13px; background: var(--card); border: 1px solid var(--line-strong); }
-      .tile .mark { width: 30px; height: 30px; color: var(--ink); flex: none; }
+      .tile .mark { width: 28px; height: 28px; color: var(--ink); flex: none; }
       .tile .mark svg { display: block; width: 100%; height: 100%; }
       .tile .n { font: 600 16px/1.15 "Public Sans"; white-space: nowrap; }
-      .tile .s { font: 400 13.5px/1.25 "Public Sans"; white-space: nowrap; color: var(--muted); margin-top: 4px; }
+      .tile .s { font: 400 13px/1.25 "Public Sans"; white-space: nowrap; color: var(--muted); margin-top: 4px; }
       .tile.any { border-style: dashed; border-color: var(--line-bright); background: var(--ember-wash); }
       .tile.any .mark { color: var(--ember-ink); }
       .note { display: flex; justify-content: center; gap: 28px; margin-top: 20px; font: 500 14.5px/1 "Public Sans"; color: var(--muted); }

@@ -49,7 +49,10 @@ flowchart LR
 - `mobile/audit.mts` walks the hermetic demo build at a phone viewport and fails on blank routes, overflow, small
   targets and scrollers that do not move. `shots/capture.mts` photographs the same build into
   `_site/site/src/assets/product/` (and `product-light/`): the demo's quiet `showcase` recording, wearing the Mist
-  wallpaper over Sanctum and over the light look. Both need only Chromium.
+  wallpaper over Sanctum and over the light look. Each shot is taken in a window of its site frame's own shape (16:9
+  for the hero and the tour, 1:2 and 5:9 for the hero's wings, the Features menu's preview box), so the site draws it
+  whole rather than cropping it. `DEMO_URL` points it at a demo dev server instead of the build. Both need only
+  Chromium.
 - `specs/accessibility.spec.ts` uses axe-core on the seeded full stack: sign-in, sandbox home, a chat message,
   composer and settings. It reports every WCAG 2.1 A/AA finding and fails for serious or critical rule/target pairs
   absent from `accessibility/baseline.json`. Each accepted pair needs a note explaining why it remains. The baseline
@@ -94,6 +97,7 @@ pnpm -C _site/demo dev --port 47160                # separate terminal, backend-
 pnpm -C _site/site dev --port 47149                # separate terminal, public site
 node --experimental-strip-types _tools/e2e/accessibility/scan-demo.mts
 node --experimental-strip-types _tools/e2e/shots/capture.mts [--light | --desk] [shot names]
+DEMO_URL=http://127.0.0.1:47160/demo node --experimental-strip-types _tools/e2e/shots/capture.mts   # off the dev server
 pnpm --filter @intentic/e2e smoke:signin https://app.intentic.dev
 cd _tools/e2e && pnpm exec playwright test -c window-sync/window-sync.playwright.config.ts
 pnpm -C _tools/e2e exec playwright test -c accessibility/demo.playwright.config.ts

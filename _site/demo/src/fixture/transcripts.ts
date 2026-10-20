@@ -17,6 +17,7 @@ import {
 } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 import { PAYOUTS_PAGE } from "./pages";
+import { demoQuiet } from "../mode";
 
 // Transcript route body: messages plus the session id, provider, harness and account they're bound to. A reopened tab
 // needs all three to decide whether its next message resumes this session.
@@ -70,6 +71,9 @@ const jobRow = (id: string): TranscriptRow => {
     const job = SOFT_DELETES_JOBS(Date.now()).find((entry) => entry.id === id)!;
     return { role: `notice`, text: `Background job: ${job.label}`, backgroundJob: { id, label: job.label, command: job.command, startedAt: job.startedAt } };
 };
+
+// Where the soft-deletes run's second act starts: the owner asking Claude Code's reviewer over the branch.
+const CODE_REVIEW_PROMPT = `/code-review high`;
 
 const SOFT_DELETES: AgentTranscript = {
     sessionId: `ses_01j9soft`,
@@ -164,7 +168,7 @@ const SOFT_DELETES: AgentTranscript = {
             text: `Done, **4 files, +210 / −55**, held on \`agent/soft-deletes\`.\n\nOne thing to decide when you read it: the API still returns retired users to admin tokens (that's what the \`includeRetired\` flag does). If you'd rather they were invisible everywhere, say so and I'll drop the flag.`,
         },
         // Claude Code's own reviewer over the branch, its findings drawn as the chat's review card (events/review.ts).
-        { role: `user`, text: `/code-review high` },
+        { role: `user`, text: CODE_REVIEW_PROMPT },
         {
             role: `assistant`,
             text: `Reviewed the branch at high effort: two findings survived verification, and one is worth fixing before this lands.`,
@@ -563,8 +567,23 @@ const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [SPECIMEN_CHAT_ID]: SPECIMEN_TRANSCRIPT,
 };
 
+// A quiet recording (mode.ts `demoQuiet`) ends the soft-deletes run on the agent's own report, which is what a review
+// opens on: the reviewer's findings after it are a second act, and they argue against the Land now beside them. It
+// also drops the rows for the commands still running past their calls, as a quiet card drops its `jobs`.
+const quietly = (id: string, transcript: AgentTranscript): AgentTranscript => {
+    if (id !== REVIEW_AGENT_ID || !demoQuiet()) {
+        return transcript;
+    }
+    const secondAct = transcript.messages.findIndex((message) => message.role === `user` && message.text === CODE_REVIEW_PROMPT);
+    const firstAct = secondAct > 0 ? transcript.messages.slice(0, secondAct) : transcript.messages;
+    return { ...transcript, messages: firstAct.filter((message) => message.backgroundJob === undefined) };
+};
+
 // Each recording is one whole page: it starts at the record's first message, and nothing older precedes it.
-export const transcriptFor = (id: string): SandboxHandlerOutput<`agents`, `transcript`> => ({ ...(TRANSCRIPTS[id] ?? { messages: [] }), from: 0, more: false });
+export const transcriptFor = (id: string): SandboxHandlerOutput<`agents`, `transcript`> => {
+    const transcript = TRANSCRIPTS[id];
+    return { ...(transcript === undefined ? { messages: [] } : quietly(id, transcript)), from: 0, more: false };
+};
 
 // The documents a recorded conversation's calls wrote, as the daemon lists them for its owner (agents.documents).
 export const documentsFor = (id: string): string[] => producedDocumentPaths(TRANSCRIPTS[id]?.messages ?? []);

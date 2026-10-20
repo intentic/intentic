@@ -61,7 +61,7 @@ One board shows every agent, sorted by who needs you. Each card shows the model,
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/marketing/readme/board-dark.png">
-  <img src="docs/marketing/readme/board-light.png" alt="The fleet board: Attention, Active and Finished lanes holding agents on Claude Sonnet, Claude Opus, Claude Haiku and GPT-5.2 Codex, subagents under a parent run, a run started from Discord, a Land now button on finished work, and a banner offering to resume six runs when Codex has room again." width="100%">
+  <img src="docs/marketing/readme/board-light.png" alt="The fleet board: one agent with a question for you in Attention; three at work in Active on Claude Opus, Claude Sonnet and GPT-5.2 Codex; and three in Finished, with a Land now button on a soft-delete migration, release notes already landed and a nightly dependency audit started from Discord." width="100%">
 </picture>
 
 ### Approve the plan before any code changes
@@ -70,7 +70,7 @@ Agents read the code, write a plan and wait. Approve it, or reply to keep planni
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/marketing/readme/plan-dark.png">
-  <img src="docs/marketing/readme/plan-light.png" alt="The chat: a four-step plan for adding Stripe checkout, two things the plan needs from you (a secret and an image change), and a bar with Approve and Keep planning." width="100%">
+  <img src="docs/marketing/readme/plan-light.png" alt="The chat: the task as it was asked, a four-step plan for adding Stripe checkout, and the bar under it with Approve and Keep planning." width="100%">
 </picture>
 
 ### Read every diff before it lands
@@ -79,7 +79,7 @@ Finished work waits on its branch with the agent's own report. Read it file by f
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/marketing/readme/review-dark.png">
-  <img src="docs/marketing/readme/review-light.png" alt="A finished agent run under review: its branch agent/soft-deletes, four changed files with line counts, the schema diff, a Land now button, and the agent's summary of what it did and what is left to decide." width="100%">
+  <img src="docs/marketing/readme/review-light.png" alt="A finished agent run under review: its branch agent/soft-deletes, four changed files with line counts, the users route's diff in which the delete becomes an update, a Land now button, and the agent's own report of what it did and what is left to decide." width="100%">
 </picture>
 
 ### Close the browser. The agents keep going.
@@ -111,7 +111,7 @@ Connect GitHub, PostgreSQL, Sentry, Stripe, Discord, SSH, a VPN or any MCP serve
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/marketing/readme/capabilities-dark.png">
-  <img src="docs/marketing/readme/capabilities-light.png" alt="The capability catalog grouped by Platform, Code and issues, Observability, Data, Communication and Business: Docker, GitHub, Sentry, PostgreSQL, Discord and Stripe among them, with the connected ones marked." width="100%">
+  <img src="docs/marketing/readme/capabilities-light.png" alt="The capability catalog grouped by Platform, Code and issues, Observability, Data and Communication: Docker, GitHub, GitLab, npm, Sentry, PostHog, PostgreSQL, MySQL, Discord and Slack among them, with the connected ones marked." width="100%">
 </picture>
 
 ### Start agents on events
@@ -120,7 +120,7 @@ Wake an agent on a schedule, a push, a failed pipeline, a Sentry alert, a paymen
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/marketing/readme/automations-dark.png">
-  <img src="docs/marketing/readme/automations-light.png" alt="Automations: a docs check after work lands, a nightly dependency audit, a Discord on-call responder, a certificate renewal reminder, a visitor chat and a CI failure webhook, plus templates for new ones." width="100%">
+  <img src="docs/marketing/readme/automations-light.png" alt="Automations: a docs check after work lands, a nightly dependency audit and an uptime probe among the code chores, then a Discord on-call responder, a watch for the next PostgreSQL release and a certificate renewal reminder among the integrations, each with its last run and its switch." width="100%">
 </picture>
 
 ## Where it runs

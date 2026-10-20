@@ -158,16 +158,13 @@ html:not([data-variant="desk"]) .home .headline .display {
     left: 0;
     max-width: none;
 }
-/* The centre frame is wide enough to hold its screenshot at close to true size; the two wings are not, so they are drawn a third over and crop harder. */
-.home .screen-app {
-    width: 112%;
-}
-/* Each wing is drawn wide enough to FILL its portrait crop, and the two need very different amounts. */
-.home .screen-plan {
-    width: 135%;
-}
+/* EVERY SHOT IS TAKEN IN ITS FRAME'S OWN SHAPE (capture.mts): 16:9 for the centre, 1:2 and 5:9 for the wings. So each
+   is drawn whole, edge to edge, and nothing is cropped off its right side. They used to be drawn 112%, 135% and 222%
+   wide to fill boxes of another shape, which cut the board's last lane and left only the left edge of each wing. */
+.home .screen-app,
+.home .screen-plan,
 .home .screen-chat {
-    width: 222%;
+    width: 100%;
 }
 
 /* The demo press covers the complete centre frame. */
@@ -749,9 +746,6 @@ html:not([data-variant="desk"]) .home .headline .display {
     .home .window-chat {
         top: -4%;
         width: 25%;
-    }
-    .home .screen-app {
-        width: 138%;
     }
 }
 /* THE WINGS COME OFF ON A PHONE. */

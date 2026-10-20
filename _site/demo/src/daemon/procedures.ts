@@ -535,7 +535,7 @@ export const procedures = {
         rollup: () => ({
             rows: demoUsageRollup(
                 STARTED_AT,
-                (model) => roster.agents.find((agent) => agent.startedBy?.startsWith(`agent:`) !== true && agent.model === model)?.id,
+                (model) => roster.agents.filter((agent) => agent.startedBy?.startsWith(`agent:`) !== true && agent.model === model).map((agent) => agent.id),
             ),
         }),
         // What every connection read posts, on arrival and on the rail's refresh control alike. Nothing held: every demo

@@ -23,7 +23,9 @@ const INK = "#29201a";
 const MUTED = "#62564e";
 const GOLD = "#84390d";
 
-// The board shot is 1500x560; drawn at this width it lands on 1072x400, and the window crops the last 60px so the
+// The board shot is 1500x560, the top of the light `stage-run` capture scaled down; re-cut it when that shot changes:
+//   magick src/assets/product-light/stage-run.png -crop 2880x1075+0+0 +repage -resize '1500x560!' scripts/og/board-light.png
+// Drawn at this width it lands on 1072x400, and the window crops the last 60px so the
 // picture runs off the bottom edge instead of stopping short of it.
 const SHOT_W = 1072;
 const SHOT_H = 400;

@@ -1,4 +1,5 @@
 import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import { demoQuiet, deskEdition } from "../mode";
 
 // One of the owner's own computers, as the daemon's device registry reports it. The Devices tab used to answer
 // "the demo fixture doesn't serve GET /system/devices", so every control under a paired folder — pause, unpair,
@@ -127,9 +128,14 @@ export const demoCommandSaid = (command: string, sandboxId: string | undefined):
     return `Ran ${command} for ${target}.`;
 };
 
+// A quiet recording (mode.ts `demoQuiet`) keeps the one folder the PC both runs and syncs, and drops the wedge: no
+// conflict to decide, no paused sync, no folder left behind by a sandbox that is gone, and no second row naming the
+// sandbox the page is served from beside the row that already says "the one you're using".
+const QUIET_PAIRED_ON = new Map<string, readonly Pairing[]>([[`ada-pc`, [RUNS_HERE]]]);
+
 // One side's folders as the page last left them.
 const pairingsOn = (hostId: string): Pairing[] =>
-    (PAIRED_ON.get(hostId) ?? [])
+    ((demoQuiet() ? QUIET_PAIRED_ON : PAIRED_ON).get(hostId) ?? [])
         .filter((pairing) => !demoState.removed.has(pairing.sandboxId) && !demoState.unpaired.has(pairing.sandboxId))
         .map((pairing) => ({
             ...pairing,
@@ -137,15 +143,16 @@ const pairingsOn = (hostId: string): Pairing[] =>
             mirroring: demoState.mirroring.get(pairing.sandboxId) ?? pairing.mirroring,
         }));
 
-// A port reaches localhost only while its sandbox's folder is still paired here with mirroring on.
+// A port reaches localhost only while its sandbox's folder is still paired here with mirroring on. A quiet recording
+// has no port another program already holds.
 const portsOn = (hostId: string, ports: NonNullable<Device[`report`]>[`ports`]): NonNullable<Device[`report`]>[`ports`] => {
     const mirrored = new Set(pairingsOn(hostId).filter((pairing) => pairing.mirroring !== `off`).map((pairing) => pairing.sandboxId));
-    return ports.filter((port) => mirrored.has(port.sandboxId));
+    return ports.filter((port) => mirrored.has(port.sandboxId) && !(demoQuiet() && port.state === `busy`));
 };
 
 // Seven links, five of them to sandboxes deleted hours ago: the strip that offers "Forget them", until it is pressed.
 const demoLinks = (now: number): NonNullable<NonNullable<Device[`facts`]>[`links`]> =>
-    demoState.linksForgotten ? { total: 2, unreachable: 0 } : { total: 7, unreachable: 5, unreachableSince: now - 7 * HOUR };
+    demoState.linksForgotten || demoQuiet() ? { total: 2, unreachable: 0 } : { total: 7, unreachable: 5, unreachableSince: now - 7 * HOUR };
 
 const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
     {
@@ -188,7 +195,53 @@ const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
 const sandboxes = (): NonNullable<Device[`sandboxes`]> =>
     SANDBOXES.filter((box) => !demoState.removed.has(box.slug)).map((box) => ({ ...box, running: demoState.running.get(box.slug) ?? box.running }));
 
-export const demoDevices = (now: number): Device[] => [
+// What a quiet recording shows of the fleet: the three machines that answer, all healthy. The two laptops that are
+// asleep are left off, and the Mac's stopped sync agent (the board's amber edge) is running: states to explore rather
+// than a fleet at rest.
+export const demoDevices = (now: number): Device[] => (demoQuiet() ? quietFleet(allDevices(now)) : allDevices(now));
+
+const QUIET_AWAY = new Set([`old-thinkpad`, `ada-air`]);
+
+// The same fleet as a maker's (mode.ts `deskEdition`): the build server is the house's server, and what the machines run
+// is named for a shop's work rather than a codebase's. Names only: every slug, port and pairing stays as it is. The
+// stopped containers are left off, since the account's own names for those (platform.ts) are a developer's.
+const DESK_MACHINES = new Map([[`build-box`, `home-server`]]);
+const DESK_SANDBOXES = new Map([
+    [`docs-site`, `family-photos`],
+    [`staging-api`, `shop-site`],
+    [`ci-runner-1`, `orders`],
+    [`ci-runner-2`, `newsletter-archive`],
+    [`ml-eval`, `photo-archive`],
+    [`design-system`, `portfolio`],
+]);
+const forDesk = (device: Device): Device => {
+    if (!deskEdition) {
+        return device;
+    }
+    const name = DESK_MACHINES.get(device.label) ?? device.label;
+    const renamed: Device = { ...device, label: name };
+    // The hostname is renamed with the label, or the tile would print it beside the new name as a second one.
+    if (device.facts !== undefined) {
+        renamed.facts = { ...device.facts, hostname: name };
+    }
+    if (device.report !== undefined) {
+        renamed.report = { ...device.report, hostname: name };
+    }
+    if (device.sandboxes !== undefined) {
+        renamed.sandboxes = device.sandboxes.filter((box) => box.running).map((box) => ({ ...box, name: DESK_SANDBOXES.get(box.slug) ?? box.name }));
+    }
+    return renamed;
+};
+
+const quietFleet = (devices: Device[]): Device[] =>
+    devices
+        .filter((device) => !QUIET_AWAY.has(device.key))
+        .map((device) =>
+            device.report?.agent?.running === false ? { ...device, report: { ...device.report, agent: { ...device.report.agent, running: true, pid: 51_207 } } } : device,
+        )
+        .map(forDesk);
+
+const allDevices = (now: number): Device[] => [
     {
         key: `ada-pc`,
         label: `ada-pc`,

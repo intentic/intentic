@@ -21,70 +21,65 @@ const HIDE = `
 // Large text and the chat docked to the rail (so the board gets the window's whole width) unless a shot says otherwise.
 const ROOMY = { "ui-text-size": "large", "ui-chat-home": "rail" };
 
-/** Every raw picture the README is built from. `mode` picks the demo's fixture density (_site/demo/src/mode.ts). */
+// Every picture is of the demo's `showcase` recording served QUIET, the same afternoon the site's screenshots show
+// (_tools/e2e/shots/capture.mts): seven agents, one asking for you, three at work, three done, and none of the busy
+// moment's marks (a cooling cache, a teammate's reactions, a key an agent is waiting for, a failing pipeline). The
+// README was shot of the loud `full` recording, and every picture of it read as a dashboard of alarms.
+const SHOWCASE = "showcase";
+// The connector extensions, for the one picture of the catalogue; no other extension's icon joins the rail.
+const CONNECTORS = ["intentic.connectors", "intentic.discord", "intentic.slack"];
+
+/** Every raw picture the README is built from. `extensions` pins which are on; every shot's default is none. */
 export const SHOTS = [
-    // The hero's window: the whole fleet on the board, and the docked chat holding a plan that waits for a yes. The
-    // site's own showcase size, since narrower windows squeeze the card titles; a slimmer chat gives the lanes room.
+    // The hero's window: the board, and the docked chat holding a plan that waits for a yes. Default text, since the
+    // window is drawn small beside the phone; the board falls to two columns beside the chat, which reads at that size.
     {
         name: "hero-app",
         path: "/agents",
         openFirst: "/agents/cnv_checkout_stripe",
-        mode: "full",
-        waitFor: "text=ATTENTION",
-        viewport: { width: 1760, height: 1000 },
+        waitFor: "text=Plan waiting for your approval",
+        viewport: { width: 1280, height: 800 },
         storage: { "ui-text-size": "default", "ui-chat-home": "side", "ui-chat-width": "400" },
     },
-    { name: "hero-phone", path: "/agents", openFirst: "/agents/cnv_checkout_stripe", mode: "default", waitFor: "text=ATTENTION", phone: true },
-    // The whole fleet: every lane, subagents on another provider, a Discord-started run, a teammate.
-    {
-        name: "board",
-        path: "/agents",
-        openFirst: "/agents/cnv_checkout_stripe",
-        mode: "full",
-        waitFor: "text=ATTENTION",
-        viewport: { width: 1280, height: 860 },
-    },
+    { name: "hero-phone", path: "/agents", openFirst: "/agents/cnv_checkout_stripe", waitFor: "text=ATTENTION", phone: true },
+    // The whole fleet across three lanes: Opus, Sonnet, Haiku and Codex at work, a run started from Discord, a teammate.
+    { name: "board", path: "/agents", openFirst: "/agents/cnv_checkout_stripe", waitFor: "text=ATTENTION", viewport: { width: 1280, height: 800 } },
     // The chat on its own page: the plan the agent wrote, and the bar that asks for a yes.
     {
         name: "plan",
         path: "/chat",
         openFirst: "/agents/cnv_checkout_stripe",
-        mode: "default",
         waitFor: "text=Plan waiting for your approval",
-        viewport: { width: 1280, height: 900 },
+        viewport: { width: 1280, height: 760 },
     },
     // A finished run waiting to land: its branch, its files, the diff and the agent's own account of the work.
+    // Wide enough that the review keeps its file list beside the diff (narrower, it folds the list into a menu), open on
+    // the route file: three small edits in a whole file, where the schema is eleven lines.
     {
         name: "review",
         path: "/agents/cnv_soft_deletes",
-        openFirst: "/agents",
-        mode: "default",
-        waitFor: "text=liveUsers",
-        viewport: { width: 1240, height: 780 },
-        storage: { "ui-chat-home": "side", "ui-chat-width": "380" },
+        openFirst: "/agents/cnv_soft_deletes",
+        waitFor: "text=held on",
+        click: ['div[class~="group/file"] button:has-text("users.ts")'],
+        viewport: { width: 1440, height: 800 },
+        storage: { "ui-chat-home": "side", "ui-chat-width": "420" },
     },
-    { name: "phone-board", path: "/agents", openFirst: "/agents/cnv_checkout_stripe", mode: "default", waitFor: "text=ATTENTION", phone: true },
-    { name: "phone-review", path: "/agents/cnv_soft_deletes", openFirst: "/agents", mode: "default", waitFor: "text=held on", phone: true },
-    { name: "phone-changes", path: "/workspace?panel=changes", mode: "default", waitFor: "text=CheckoutPanel.tsx", phone: true },
+    { name: "phone-board", path: "/agents", openFirst: "/agents/cnv_checkout_stripe", waitFor: "text=ATTENTION", phone: true },
+    { name: "phone-review", path: "/agents/cnv_soft_deletes", openFirst: "/agents", waitFor: "text=held on", phone: true },
+    { name: "phone-changes", path: "/workspace?panel=changes", waitFor: "text=CheckoutPanel.tsx", phone: true },
     // What the work would have cost at API rates, and the plan limits of every connected account.
-    {
-        name: "usage",
-        path: "/sandbox/usage",
-        mode: "default",
-        waitFor: "text=accounts have room",
-        viewport: { width: 1400, height: 1180 },
-    },
-    // The catalogue's categories beside one connection, open on what it will add to the sandbox before it is saved.
+    { name: "usage", path: "/sandbox/usage", waitFor: "text=accounts have room", viewport: { width: 1400, height: 1180 } },
+    // The catalogue, its shelves full of the services a reader knows (the demo reads the shipped manifests).
+    // Default text, so the shelves are three tiles wide and every one but Data's is full.
     {
         name: "capabilities",
         path: "/capabilities",
-        openFirst: "/agents/cnv_checkout_stripe",
-        mode: "full",
         waitFor: "text=Connected",
-        click: ['text="GitHub"'],
         viewport: { width: 1280, height: 860 },
+        extensions: CONNECTORS,
+        storage: { "ui-text-size": "default" },
     },
-    { name: "automations", path: "/ext/automations", mode: "full", waitFor: "text=CODE CHORES", viewport: { width: 1120, height: 700 } },
+    { name: "automations", path: "/ext/automations", waitFor: "text=CODE CHORES", viewport: { width: 1120, height: 700 }, extensions: ["intentic.automations"] },
 ];
 
 const PHONE = { width: 430, height: 932 };
@@ -98,7 +93,7 @@ const storageFor = (shot, { scheme, skin }) => {
     return Object.assign(storage, shot.storage);
 };
 
-/** A browser context with the look, the fixture density and the hidden chrome in place before the app boots. */
+/** A browser context with the look, the recording and the hidden chrome in place before the app boots. */
 const openContext = async (browser, shot, look) => {
     const phone = shot.phone === true;
     const context = await browser.newContext({
@@ -116,13 +111,17 @@ const openContext = async (browser, shot, look) => {
         },
         storageFor(shot, look),
     );
-    await context.addInitScript((mode) => {
-        sessionStorage.setItem("intentic.demo.mode", mode);
-        // The rail carries one icon per extension: a bare rail unless the extensions are the subject.
-        if (mode !== "full") {
-            sessionStorage.setItem("intentic.demo.extensions", "[]");
-        }
-    }, shot.mode);
+    await context.addInitScript(
+        ({ mode, extensions }) => {
+            sessionStorage.setItem("intentic.demo.mode", mode);
+            // Quiet, with nothing kept: the key the screenshots harness writes, which is also what keeps a dev server's
+            // extras (the transcript specimen) off the board.
+            sessionStorage.setItem("intentic.demo.quiet", "[]");
+            // The rail carries one icon per extension: a bare rail unless the extensions are the subject.
+            sessionStorage.setItem("intentic.demo.extensions", JSON.stringify(extensions));
+        },
+        { mode: SHOWCASE, extensions: shot.extensions ?? [] },
+    );
     await context.addInitScript((css) => {
         const style = document.createElement("style");
         style.textContent = css;

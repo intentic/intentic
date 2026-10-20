@@ -230,7 +230,8 @@ export const agentChanges = (agentId: string): AgentChanges => {
     if (outside !== undefined) {
         changes.outside = outside;
     }
-    const ignored = IGNORED.get(agentId);
+    // The files no land carries are an edge a visitor goes looking for; a quiet recording's review opens on the diff.
+    const ignored = demoQuiet() ? undefined : IGNORED.get(agentId);
     if (ignored !== undefined && ignored.length > 0) {
         changes.ignored = ignored;
     }
@@ -911,7 +912,7 @@ export const sessions = (now: number): SessionSummary[] => {
         { id: `ses_01j9latency`, title: `Investigate the p99 latency spike on /checkout`, updatedAt: now - 60_000 },
         { id: `ses_01j9soft`, title: `Soft-delete the users table`, updatedAt: now - 18 * 60_000 },
         { id: `ses_01j9notes`, title: `Draft the release notes for 2.4`, updatedAt: now - 34 * 60_000 },
-        { id: `ses_01j9audit`, title: `Nightly dependency audit, 3 advisories, 2 patched`, updatedAt: now - 7 * hour },
+        { id: `ses_01j9audit`, title: `Nightly dependency audit`, updatedAt: now - 7 * hour },
         { id: `ses_01j9seo`, title: `Add structured data to the product pages`, updatedAt: now - 26 * hour },
         { id: `ses_01j9emails`, title: `Move transactional emails to the queue`, updatedAt: now - 2 * 24 * hour },
         { id: `ses_01j9upgrade`, title: `Upgrade to Vite 8 and drop the CJS shims`, updatedAt: now - 3 * 24 * hour },
