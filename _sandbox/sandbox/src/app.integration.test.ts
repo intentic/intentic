@@ -70,6 +70,16 @@ test("GET /health reports ok, and names the sandbox so a loopback probe can tell
     expect(await (await createApp(local).request("/health")).json()).toMatchObject({ profile: "local" });
 });
 
+// A tab opened on the sandbox's own address asks for its icon with no session: the ICO answers anyway, before boot too.
+test("GET /favicon.ico answers the sandbox's ICO to anyone", async () => {
+    const res = await createApp(services()).request("/favicon.ico");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/x-icon");
+    const bytes = Buffer.from(await res.arrayBuffer());
+    // ICO's header: reserved 0, type 1 (icon), three images.
+    expect([bytes.readUInt16LE(0), bytes.readUInt16LE(2), bytes.readUInt16LE(4)]).toEqual([0, 1, 3]);
+});
+
 // An editor must know before any sign-in whether this daemon takes the platform's identity assertion, since the route
 // list arrives only after one; a loopback daemon asks for no proof and names none.
 test("GET /health names the proofs a session opens with, and none on a loopback daemon", async () => {

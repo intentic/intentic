@@ -31,6 +31,7 @@ import { decryptSecret } from "./crypto.js";
 import { reportHostedBuild } from "./sandbox/hosted/build/hosted-build.js";
 import { LOG_TAIL_BYTES, REPORT_HEADERS } from "./sandbox/hosted/build/hosted-build-script.js";
 import type { Logger } from "pino";
+import { probeRoutes } from "./probe/probe.routes.js";
 import { router } from "./router.js";
 import { createTracingHttpMiddleware } from "./tracing.js";
 import { hostedPlanHttpRoutes } from "./sandbox/hosted/plan/hosted-plan.routes.js";
@@ -159,14 +160,14 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
     // Better Auth owns everything under /api/auth (sign-in, OAuth callback, session, sign-out).
     app.on([`POST`, `GET`], `/api/auth/**`, (c: Context) => auth.handler(c.req.raw));
 
-    app.get(`/health`, async (c) => {
-        try {
-            await prisma.$queryRaw`SELECT 1`;
-            return c.json({ status: `ok` });
-        } catch (error) {
-            return c.json({ status: `error`, message: error instanceof Error ? error.message : `unknown` }, 503);
-        }
-    });
+    app.route(
+        `/`,
+        probeRoutes({
+            ping: async () => {
+                await prisma.$queryRaw`SELECT 1`;
+            },
+        }),
+    );
 
     // The connect script redeems the setup code for plain KEY=value lines; 404 for unknown and expired alike. Beside
     // `code`, an `ic` new enough names the machine claiming (`host`, `os`, `instance`; setup-code.ts): the first claim

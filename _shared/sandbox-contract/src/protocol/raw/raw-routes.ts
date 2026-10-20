@@ -13,6 +13,8 @@ export const RAW_ROUTES = {
     // A person opening this sandbox's own address in a browser: sent to the app's /open on it, the address being what
     // they may still hold when the platform has lost the rest. Anything else gets the same 401 as before it existed.
     "GET /": { auth: "door", beforeBoot: true },
+    // The tab icon a browser asks for on that address: the lotus in the sandbox green, the same bytes for everyone.
+    "GET /favicon.ico": { auth: "door", beforeBoot: true },
     "GET /diff/raw": { lane: "bulk" },
     // Arming the dictation model is a read any tier makes; dictating is writing a message, the collaborator's grant.
     "GET /speech/status": { guest: true },

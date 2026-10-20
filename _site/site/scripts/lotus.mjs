@@ -10,6 +10,11 @@ export const ORNAMENTS = join(import.meta.dirname, "../src/components/ornaments.
 /** The one ember the brand spends, from global.css; named here since a stylesheet is not a module. */
 export const EMBER = "#e07b27";
 
+/* The backends' own tints (scripts/backend-icons.mjs): the same lotus, recoloured, so a tab on api.intentic.dev or on a
+ * sandbox's address tells itself apart from the site and from each other at 16px. */
+export const API_BLUE = "#5b8def";
+export const SANDBOX_GREEN = "#2fb58a";
+
 // Box crops to the petals' actual extent, no padding: every unit of margin is a unit off the shape at 16px.
 export const PETALS_BOX = "7.2 2.6 17.6 20.2";
 
@@ -36,11 +41,11 @@ export const petals = () => {
 };
 
 /**
- * One square icon at `size`. The explicit square viewBox matters: a rasteriser given only a width keeps the crop's
- * portrait ratio, writing e.g. 16x18 under a square name.
+ * One square icon at `size`, in `fill` (the ember unless a backend tints it). The explicit square viewBox matters: a
+ * rasteriser given only a width keeps the crop's portrait ratio, writing e.g. 16x18 under a square name.
  */
-export const icon = (size, paths) =>
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${PETALS_BOX}" fill="${EMBER}">\n  ${paths.join("\n  ")}\n</svg>`;
+export const icon = (size, paths, fill = EMBER) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="${PETALS_BOX}" fill="${fill}">\n  ${paths.join("\n  ")}\n</svg>`;
 
 // ICO is a directory of images bolted to a header; each entry is 16 bytes, with the size byte 0 meaning 256. Payloads
 // are ordinary PNGs.

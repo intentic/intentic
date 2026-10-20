@@ -57,6 +57,7 @@ export const UNSERVED = {
     "GET /extension/events": NOT_THE_EDITORS,
     // What an extension's own backend or process asks about itself (its settings, what moved); the editor never does.
     "GET /extension/settings": NOT_THE_EDITORS,
+    "GET /favicon.ico": NOT_THE_EDITORS,
     "GET /fleet": NOT_THE_EDITORS,
     "GET /fleet/{handle}": NOT_THE_EDITORS,
     "GET /intake/sdk.js": OFF_SITE,

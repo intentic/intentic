@@ -7,8 +7,12 @@ import { AT_REST_ACCOUNT_STORE, AT_REST_STORES, atRestActive } from "../../store
 import { stateStatus } from "../../store/evolution/state-convergence.js";
 import { reachPosture } from "../listeners/reach-posture.js";
 import { buildInfo } from "./build-info.js";
+import { FAVICON_ICO_BASE64 } from "./favicon.generated.js";
 import { openInApp } from "./open-in-app.js";
 import { profileTraits } from "./profile.js";
+
+// The tab icon (_site/site/scripts/backend-icons.mjs): the lotus in the sandbox green, apart from the site's and the api's.
+const FAVICON = Buffer.from(FAVICON_ICO_BASE64, "base64");
 
 export const healthRawRoutes = defineRawRoutes((services: Pick<Services, "config" | "boot" | "announcer" | "reach" | "auth">) => ({
     // The "is a daemon there" probe every flow uses (launch scripts, /setup, the browser's loopback probe).
@@ -48,4 +52,5 @@ export const healthRawRoutes = defineRawRoutes((services: Pick<Services, "config
     },
     // A browser opening this sandbox's own address lands in the app on it (system/boot/open-in-app.ts).
     "GET /": (c) => openInApp(services.config, c),
+    "GET /favicon.ico": (c) => c.body(FAVICON, 200, { "Content-Type": "image/x-icon", "Cache-Control": "public, max-age=604800, immutable" }),
 }));
