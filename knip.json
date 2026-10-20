@@ -129,6 +129,8 @@
                 // Stubs the invariant check reads as text, generators run by hand, and hooks Claude Code runs by path.
                 "src/**/invariant.ts",
                 "claude-policy/plugins/*/hooks/*.mjs",
+                // Run by path inside the starter's own build (starter/starter.Dockerfile), never imported.
+                "starter/*.mjs",
                 "bin/*.mjs",
                 "bin/*.test.mjs",
                 "scripts/*.{sh,mjs}"

@@ -141,7 +141,21 @@ test("compose-image-dockerfile.mjs stamps the hashes this module computes, in th
     expect(composed.indexOf("# ---- pack: semantic ----")).toBeLessThan(cliCopy);
     expect(composed.indexOf("# ---- pack: speech ----")).toBeLessThan(cliCopy);
     expect(composed.indexOf("COPY --link --from=trees layers/sandbox-deps/ /")).toBeLessThan(cliCopy);
+    expect(composed.indexOf("COPY --link --from=trees layers/starter/ /")).toBeLessThan(cliCopy);
+    // A post-trees pack's static layer root is hoisted with them: messaging's third-party packages, not its gateways.
+    expect(composed.indexOf("COPY --link --from=trees layers/messaging-deps/ /")).toBeLessThan(cliCopy);
+    expect(composed.indexOf("COPY --from=trees extensions/discord /opt/extensions/discord")).toBeGreaterThan(treesCopy);
+    expect(composed.split("COPY --link --from=trees layers/messaging-deps/ /")).toHaveLength(2);
     // The core profile is the Dockerfile unmodified: the minimal image is not a variant.
     const core = execFileSync("node", ["_tools/scripts/image/compose-image-dockerfile.mjs", "core"], { cwd: repoRoot, encoding: "utf8" });
     expect(core).toBe(readFileSync(join(sandboxRoot, "Dockerfile"), "utf8"));
+});
+
+// The baked starter is installed by a build of its own (starter/starter.Dockerfile) into paths and versions the image
+// must match: the store it pins as its storeDir, the pnpm that wrote its modules, the Node its packages were fetched
+// for. The pnpm pin is one of the tool-pins check's sites; the base is held here.
+test("the starter is built on the image's own base", () => {
+    const fromOf = (file: string): string | undefined => /^FROM (\S+)/m.exec(readFileSync(join(sandboxRoot, file), "utf8"))?.[1];
+    expect(fromOf("starter/starter.Dockerfile")).toMatch(/^node:\S+@sha256:[a-f0-9]{64}$/);
+    expect(fromOf("starter/starter.Dockerfile")).toBe(fromOf("Dockerfile"));
 });

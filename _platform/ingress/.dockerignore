@@ -1,1 +1,11 @@
+# The build reads Cargo.toml, Cargo.lock and src/ from this context (the sibling crates arrive as named contexts), so
+# everything else stays out: a change to the tests, the docs or the Fly configs then re-runs no compile.
 target
+node_modules
+tests
+*.md
+fly*.toml
+package.json
+turbo.json
+Dockerfile
+.dockerignore

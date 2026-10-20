@@ -2,7 +2,8 @@
 #
 # The core Dockerfile, its packs and the CI base image download ripgrep, jq, yq, gh, cloudflared, uv, ruff, pyright,
 # pnpm, Bun and Docker Engine at fixed versions (and ripgrep, jq, gh, and cloudflared's and Bun's images, at fixed
-# checksums). Moving those was a chore nobody was assigned, so they drifted a release or several behind.
+# checksums), and the pi-agent extension's fragment the Pi CLI. Moving those was a chore nobody was assigned, so they
+# drifted a release or several behind.
 # _tools/scripts/tools/tool-pins.mjs lists every place each is written; this workflow is the assignee, the sibling of
 # engines.yml for everything that is not an agent engine.
 #
@@ -41,6 +42,7 @@ on:
           - pyright
           - pnpm
           - docker
+          - pi
       version:
         description: Take exactly this version, skipping the soak window. Needs a single tool above.
         type: string

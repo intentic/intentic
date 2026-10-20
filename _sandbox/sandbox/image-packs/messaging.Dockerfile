@@ -8,6 +8,14 @@
 # deployed tree is already correct for this image. It used to rebuild @discordjs/opus here, source-compiled
 # against whatever host ran pnpm deploy — that binding is gone, and with it the tar 6.2.1 its node-pre-gyp
 # installer dragged in.
+
+# The gateways' third-party packages, one static layer root for all of them (prepare-image-trees.sh moves them out of
+# each deployed tree and fixes every timestamp): the same bytes on every release whose lockfile moved none of them, so
+# an update keeps the layer. compose-image-dockerfile.mjs splices this COPY above the per-commit trees with the
+# pre-trees packs; the trees below merge over it. What they share with the daemon's tree is not here at all: it is a
+# link into /opt/sandbox's copy (the dedupe in prepare-image-trees.sh).
+COPY --link --from=trees layers/messaging-deps/ /
+
 COPY --from=trees extensions/discord /opt/extensions/discord
 COPY --from=trees extensions/imap /opt/extensions/imap
 # The slack gateway is pure JS (Socket Mode over undici) — no native build step to redo after the COPY.

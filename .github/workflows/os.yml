@@ -52,6 +52,16 @@ jobs:
         with:
           persist-credentials: false
 
+      # Each edition is built and then rechunked (build.sh), so podman's store holds the base, both rechunked editions,
+      # the desktop's unchunked build and the rechunker's working copy at once, beside the OCI layouts the push reads:
+      # up to 20 GB during the desktop's rechunking (measured 2026-10-20), on top of the cargo build and the boot test's
+      # disk. The preinstalled SDKs this job never touches make the room.
+      - name: Disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+
       - name: What to build
         id: plan
         env:
@@ -125,14 +135,15 @@ jobs:
           CHANNEL: ${{ steps.plan.outputs.channel }}
           VERSION: ${{ steps.plan.outputs.version }}
         run: |
-          # The login above is docker's; podman reads the same auth file.
+          # The login above is docker's; skopeo reads the same auth file. Each edition goes up from the OCI layout
+          # build.sh's rechunking wrote, byte for byte, not from podman's store: a push from the store drops the
+          # layer annotations the next build reads its layer layout from (build.sh, rechunk).
           export REGISTRY_AUTH_FILE="$HOME/.docker/config.json"
           for repo in ghcr.io/intentic/os ghcr.io/intentic/os-desktop; do
             name="${repo##*/}"
-            sudo -E podman push --digestfile "$RUNNER_TEMP/$name.digest" "$repo:$CHANNEL"
+            skopeo copy --digestfile "$RUNNER_TEMP/$name.digest" "oci:_os/os-image/out/oci/$name" "docker://$repo:$CHANNEL"
             if [ "$CHANNEL" = stable ]; then
-              sudo -E podman tag "$repo:$CHANNEL" "$repo:$VERSION"
-              sudo -E podman push "$repo:$VERSION"
+              skopeo copy "oci:_os/os-image/out/oci/$name" "docker://$repo:$VERSION"
             fi
             echo "$name=$(cat "$RUNNER_TEMP/$name.digest")" >> "$GITHUB_OUTPUT"
           done

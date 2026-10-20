@@ -5,9 +5,15 @@ import { renderTemplate } from "../lib/templates.js";
 
 const APP_GITIGNORE = "node_modules/\n";
 
+// What `COPY . .` leaves out of the deploy image: the repository's history, the dependencies installed in the
+// sandbox (the Dockerfile installs its own, for the image's platform, and a copied node_modules would replace them),
+// and any .env file, whose secrets would otherwise ship inside every image CI pushes.
+const APP_DOCKERIGNORE = ".git\n**/node_modules\n**/.env*\n";
+
 // A minimal, runnable starter app: it serves on the PORT the sandbox's app process manager injects (its
-// apps.json entry fronts it at its own preview hostname), and the Dockerfile is the deploy build CI runs. Zero dependencies,
-// so there is no install step, the agent fills it in. Importing an existing repo (appRepo) skips all of this.
+// apps.json entry fronts it at its own preview hostname), and the Dockerfile is the deploy build CI runs. Zero
+// dependencies, so the Dockerfile's install has nothing to do until the agent adds one; it is there so that adding one
+// needs no Dockerfile change. Importing an existing repo (appRepo) skips all of this.
 const STARTER_APP_PACKAGE = `${JSON.stringify(
     {
         name: "app",
@@ -33,5 +39,6 @@ export const scaffoldApp = async (appDir: string, appRepo: string | undefined): 
     await writeFile(join(appDir, "package.json"), STARTER_APP_PACKAGE);
     await writeFile(join(appDir, "server.js"), renderTemplate("scaffold/server.js", {}));
     await writeFile(join(appDir, "Dockerfile"), renderTemplate("scaffold/Dockerfile", {}));
+    await writeFile(join(appDir, ".dockerignore"), APP_DOCKERIGNORE);
     await writeFile(join(appDir, ".gitignore"), APP_GITIGNORE);
 };

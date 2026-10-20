@@ -4,7 +4,7 @@ The Intentic OS images: a bootc container image of Fedora that boots straight in
 
 ```mermaid
 flowchart LR
-    build["build.sh<br/>docker or podman build"] --> server[("ghcr.io/intentic/os<br/>server edition")]
+    build["build.sh<br/>docker or podman build,<br/>rechunked under podman"] --> server[("ghcr.io/intentic/os<br/>server edition")]
     server --> desktop[("ghcr.io/intentic/os-desktop<br/>+ sway kiosk, app")]
     server --> disk["disk.sh<br/>bootc-image-builder"]
     desktop --> disk
@@ -23,6 +23,16 @@ flowchart LR
   default until verified on bare metal), and `greenboot` runs `ic os health` on every boot and rolls back a deployment
   that fails it three boots running. `greenboot-default-health-checks` is left out because its DNS and repository
   checks would roll back a box that is merely offline.
+- **An update downloads what changed.** A fresh `dnf install` rewrites its whole layer, so a plain build made
+  every update fetch the server's 818 MB package layer even when only `ic` had changed. Under rootful podman (CI),
+  `build.sh` rechunks each edition with `rpm-ostree compose build-chunked-oci`: the finished filesystem is re-packed
+  into 96 layers by package, and Intentic's own files (`ic`, `rootfs/`, `release.json`) go into one small
+  `intentic-os` layer with the few files a build rewrites every time (the desktop's font caches), marked by the
+  `user.component` attribute in the Containerfiles. The layout follows the published image of the same channel, so
+  packages keep their layer from release to release. An update that changed only `ic` came to 18 MB for the server
+  edition and 22 MB for the desktop, against 282 MB and about 950 MB before. CI pushes the OCI layout rpm-ostree
+  wrote, not podman's store, whose push drops the layer annotations the next build reads the layout from. A docker
+  build skips rechunking and boots the same.
 - **Nothing reboots by itself.** bootc's own update timer (which pulls and reboots) is masked;
   `intentic-os-update.timer` only stages. Rebooting into an update is `ic os update --apply`, from the steward agent
   with the owner's yes or from the desktop app.

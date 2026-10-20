@@ -121,7 +121,47 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 ```
 
 Other package managers take the same treatment where they have a cache directory worth keeping:
-`/root/.cargo/registry` for cargo, `/root/.npm` for npm, `/root/.cache/pip` for pip.
+`/root/.cargo/registry` for cargo (`$CARGO_HOME/registry` when you set `CARGO_HOME`), `/root/.npm` for npm,
+`/root/.cache/pip` for pip. A `cargo install` also keeps its compile: give it a target directory on a mount
+(`--mount=type=cache,id=cargo-target-<crate>,target=/var/cache/cargo-target` and
+`CARGO_TARGET_DIR=/var/cache/cargo-target cargo install …`), and the rebuild links instead of compiling ~200 crates.
+
+### A heavy toolchain: install it once, copy it out on every rebuild
+
+A cache MOUNT keeps downloads, but a toolchain that is itself gigabytes (an Android SDK with its NDK and system image,
+Flutter with its precache, rustup's toolchains) still downloads in full on every update, because the install is what
+writes it. For those, install into the image once, keep a copy in a cache mount, and on every later rebuild copy the
+copy out: no network, no compile, only a local copy. This is the shape; copy it and change the four marked things:
+
+```dockerfile
+# (1) the mount id names the tool; (2) KEY names everything that decides what gets installed: a version, a package
+# list, a URL. Change the recipe and the key changes with it, so a stale copy is never reused; (3) the paths the
+# install writes; (4) the install itself.
+RUN --mount=type=cache,id=toolchain-flutter,target=/var/cache/toolchain,sharing=locked \
+    set -eu; \
+    key="$(printf '%s' 'flutter 3.47.7 precache android' | sha256sum | cut -c1-16)"; \
+    cache="/var/cache/toolchain/$key"; \
+    if [ -e "$cache/.complete" ]; then \
+        cp -a "$cache/flutter" /opt/flutter; \
+    else \
+        rm -rf /var/cache/toolchain/* /opt/flutter; \
+        curl -fsSL https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.7-stable.tar.xz \
+            | tar -xJ -C /opt; \
+        /opt/flutter/bin/flutter precache --android; \
+        mkdir -p "$cache" && cp -a /opt/flutter "$cache/flutter" && touch "$cache/.complete"; \
+    fi
+```
+
+What to know before using it:
+- **Only the paths you copy come back.** Anything else the install writes (`/etc/gitconfig`, a file under `/root`, a
+  shell profile) is NOT replayed on a reuse: do those steps after the `fi`, so they run both times.
+- **A floating version needs a key that floats with it.** `stable`, `latest` or an unversioned URL would freeze at
+  whatever was cached first; derive the key from what upstream publishes instead (rustup:
+  `curl -fsSL https://static.rust-lang.org/dist/channel-rust-stable.toml.sha256`), so a new release installs fresh.
+- `rm -rf /var/cache/toolchain/*` on a miss drops the previous version, so the cache holds one copy per mount id.
+- The cache lives in the Docker builder of the machine that rebuilds, and Docker may evict it when its disk is
+  short: that costs one full install, never a wrong one. It does cost the toolchain's size again in that builder.
+- Apt packages are not this case: the apt mounts already make them cheap.
 
 6. **Don't hand-write a fragment for a tool the sandbox already packs.** If the thing you need is one of the
    feature packs (a browser, llama.cpp, a Docker engine), enabling its capability composes it for

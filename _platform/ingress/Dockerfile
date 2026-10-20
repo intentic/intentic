@@ -49,7 +49,12 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --locked --bin intentic-ingress \
     && cp target/release/intentic-ingress /intentic-ingress
 
-FROM debian:trixie-20260918-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+# Distroless rather than debian-slim, because the binary needs glibc and libgcc_s (it unwinds on panic) and nothing
+# else: its TLS roots are compiled in (webpki-roots), it starts no other program, and it writes no file. `cc` is the
+# variant that carries libgcc_s, and debian13 is the trixie the build stage links against. The root variant on
+# purpose: on Fly the QUIC door binds UDP 443, a privileged port. There is no shell, so `fly ssh console` has nothing to
+# open; Fly's checks are TCP (fly.toml) or an HTTP GET (fly.edge-proxy.toml), and neither runs anything in here.
+FROM gcr.io/distroless/cc-debian13:latest@sha256:159783207c2cd44c2aa5715961d13c8612368ac9bd450f887e3f08fc8ea461e3
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 COPY --from=build /intentic-ingress /usr/local/bin/intentic-ingress
 # Declared after the FROM it applies to, and defaulted so a hand build needs no argument. docker-release.sh passes the

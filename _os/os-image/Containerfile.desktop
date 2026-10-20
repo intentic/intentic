@@ -14,7 +14,8 @@ ARG REPOSITORY=ghcr.io/intentic/os-desktop
 # The app's own .rpm (build.sh stages it) pulls WebKitGTK and GTK; sway, greetd, Chromium and fonts come from Fedora.
 # The rpm is BIND-mounted, not COPY'd: a COPY committed it as a 62 MB layer of its own that the RUN then deleted, so
 # every pull of this image carried the app twice. No `dnf clean all` either: it emptied the cache mount keepcache=1
-# exists to fill, and a mount is never committed, so it saved the image nothing.
+# exists to fill, and a mount is never committed, so it saved the image nothing. The transaction's history and
+# ldconfig's cache go, as in the server edition (Containerfile says why).
 RUN --mount=type=bind,source=desktop/rpm,target=/tmp/intentic-rpm \
     --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
     dnf -y --setopt=keepcache=1 install \
@@ -24,17 +25,24 @@ RUN --mount=type=bind,source=desktop/rpm,target=/tmp/intentic-rpm \
         mesa-dri-drivers mesa-vulkan-drivers \
         pipewire wireplumber \
         /tmp/intentic-rpm/*.rpm \
-    && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf /run/selinux-policy
+    && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf /run/selinux-policy \
+        /var/cache/ldconfig /usr/lib/sysimage/libdnf5/transaction_history.sqlite*
 
 COPY desktop/rootfs/ /
-# The screen is the app's: pairing happens in it (This device) or on the LAN page, never on tty1.
-RUN rm /usr/lib/systemd/system/intentic-pair.service.d/50-console.conf \
+# The screen is the app's: pairing happens in it (This device) or on the LAN page, never on tty1. The desktop's own
+# files are marked for the intentic-os layer, as the server edition's are (Containerfile says why), and so are
+# fontconfig's caches (210 KB), which no package owns and which hold the build's time: left in the layer of files no
+# package owns, they made every update download its 132 MB again (measured 2026-10-20).
+RUN --mount=type=bind,source=desktop/rootfs,target=/tmp/rootfs \
+    rm /usr/lib/systemd/system/intentic-pair.service.d/50-console.conf \
     && chmod 0755 /usr/libexec/intentic-os/* \
     && visudo -cf /etc/sudoers.d/intentic-os \
     && systemctl enable greetd.service \
     && systemctl set-default graphical.target \
     && printf '{"name":"Intentic OS","edition":"desktop","version":"%s","channel":"%s","repository":"%s"}\n' \
-        "$VERSION" "$CHANNEL" "$REPOSITORY" > /usr/lib/intentic-os/release.json
+        "$VERSION" "$CHANNEL" "$REPOSITORY" > /usr/lib/intentic-os/release.json \
+    && find /tmp/rootfs -type f -printf '/%P\0' | xargs -0 setfattr -n user.component -v intentic-os \
+    && setfattr -n user.component -v intentic-os /usr/lib/intentic-os/release.json /usr/lib/fontconfig/cache/*
 
 LABEL org.opencontainers.image.title="Intentic OS desktop" \
       org.opencontainers.image.version="${VERSION}" \

@@ -27,6 +27,10 @@ ARG REPOSITORY=ghcr.io/intentic/os
 # build host's: it is installed without scripts, and its kata-osbuilder-generate.service builds that initrd on the
 # box at boot, from the kernel this image boots. Its dracut config asks for the `dbus` module, which needs
 # dbus-daemon even though the system bus here is dbus-broker; without it the initrd build fails at boot.
+#
+# The transaction's history and ldconfig's cache are removed again, as the base image ships without them: they are
+# new bytes on every build, and rechunking (build.sh) files them in libdnf5's and glibc's layers, so an update of
+# nothing but `ic` downloaded those two again (20 and 4 MB, measured 2026-10-20). The rpm database has to stay.
 RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
     dnf -y --setopt=keepcache=1 install \
         moby-engine \
@@ -39,20 +43,31 @@ RUN --mount=type=cache,target=/var/cache/libdnf5,sharing=locked \
         wpa_supplicant \
         udisks2 \
     && dnf -y --setopt=keepcache=1 --setopt=tsflags=noscripts install kata-containers \
-    && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf
+    && rm -rf /var/log/dnf5.log* /var/lib/dnf /run/dnf \
+        /var/cache/ldconfig /usr/lib/sysimage/libdnf5/transaction_history.sqlite*
 
 # The host CLI every door goes through (build.sh puts the binary for this architecture here).
 COPY --chmod=0755 bin/ic /usr/bin/ic
 
 # Units, policy defaults, the intentic user, sudo rules, Docker's config and the health check.
+#
+# Every file of Intentic's own, `ic` and release.json included, is marked for a layer of its own when build.sh
+# rechunks the image (rpm-ostree reads the user.component attribute). Unmarked, they shared the layer of files no
+# package owns with the 107 MB initramfs, which an update then downloaded again whenever `ic` changed. Files only: a
+# directory's mark reaches no further than the rechunking of this image, so the desktop edition would not see it.
+# Not "intentic": that is the desktop app's package, and rpm-ostree names a package's layer after the package.
 COPY rootfs/ /
-RUN chmod 0440 /etc/sudoers.d/intentic-os \
+RUN --mount=type=bind,source=rootfs,target=/tmp/rootfs \
+    chmod 0440 /etc/sudoers.d/intentic-os \
     && chmod 0755 /usr/lib/greenboot/check/required.d/50-intentic-sandboxes.sh /usr/libexec/intentic-os/* \
-    && visudo -cf /etc/sudoers.d/intentic-os
+    && visudo -cf /etc/sudoers.d/intentic-os \
+    && find /tmp/rootfs -type f -printf '/%P\0' | xargs -0 setfattr -n user.component -v intentic-os \
+    && setfattr -n user.component -v intentic-os /usr/bin/ic
 
 # What this image is, read by `ic os` and everything that calls it.
 RUN printf '{"name":"Intentic OS","edition":"server","version":"%s","channel":"%s","repository":"%s"}\n' \
-        "$VERSION" "$CHANNEL" "$REPOSITORY" > /usr/lib/intentic-os/release.json
+        "$VERSION" "$CHANNEL" "$REPOSITORY" > /usr/lib/intentic-os/release.json \
+    && setfattr -n user.component -v intentic-os /usr/lib/intentic-os/release.json
 
 # bootc's own timer pulls AND reboots on its schedule; on Intentic OS a reboot is the owner's call, so it is masked and
 # intentic-os-update.timer only stages.

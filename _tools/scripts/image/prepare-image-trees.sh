@@ -7,7 +7,10 @@
 #   bash _tools/scripts/image/prepare-image-trees.sh
 set -euo pipefail
 . "$(dirname "$0")/../lib/repo-root.sh"
+. "$(dirname "$0")/../lib/docker-config.sh"
 cd "$(repo_root)"
+# The starter build below is a docker build, as netd's is: the same fix for a credential helper this shell cannot run.
+docker_config_without_missing_helpers
 
 out=.image-out
 
@@ -125,6 +128,31 @@ for bin in "$out"/sandbox/node_modules/.pnpm/onnxruntime-node@*/node_modules/onn
     rmdir "$bin"/* 2>/dev/null || true
 done
 
+# The daemon's own TypeScript source and its tests: 29 MiB of every image (12 of it tests) that nothing at run time
+# reads. The daemon runs dist/, and the `@intentic/src` export condition that points at source is a build-tool
+# condition the image's node never sets.
+rm -rf "$out/sandbox/src"
+
+# THE EXTENSION TREES SHARE THE DAEMON'S PACKAGES. Each gateway is its own `pnpm deploy`, so each carried its own copy of
+# what the daemon's tree already holds: 15 MiB of @intentic/sandbox-contract apiece, zod, and the rest. A package
+# directory that is byte-for-byte the daemon's (same name in pnpm's store, which names the exact version and peers,
+# and the same content, symlinks included) becomes a link to the daemon's copy. Node resolves through the link's real
+# path, so its dependencies come from the daemon's tree, the same versions under the same names. Relative, so it
+# resolves the same in .image-out and in the image (/opt/extensions/<ext> beside /opt/sandbox). Done before the
+# daemon's third-party packages move out of $out/sandbox below, so every candidate is still there to compare.
+for store in "$out"/extensions/*/node_modules/.pnpm; do
+    [ -d "$store" ] || continue
+    for dir in "$store"/*; do
+        name="${dir##*/}"
+        shared="$out/sandbox/node_modules/.pnpm/$name"
+        case "$name" in node_modules | lock.yaml) continue ;; esac
+        if [ ! -L "$dir" ] && [ -d "$shared" ] && diff -rq --no-dereference "$dir" "$shared" >/dev/null 2>&1; then
+            rm -rf "$dir"
+            ln -s "../../../../sandbox/node_modules/.pnpm/$name" "$dir"
+        fi
+    done
+done
+
 # STATIC LAYER ROOTS: what the image copies with `COPY --link --from=trees layers/<name>/ /`, so a layer whose bytes did
 # not change keeps its digest and an update does not download it again. Two things decide that digest besides the
 # content, and both used to change from build to build: each file's mtime (when this runner happened to fetch or
@@ -160,6 +188,24 @@ for dir in "$out"/sandbox/node_modules/.pnpm/*; do
 done
 normalize_times "$out/layers/sandbox-deps"
 
+# The same split for the extension trees (the messaging pack's gateways): the third-party packages left after the
+# dedupe above go to one static layer root, the per-commit rest stays in each tree.
+for store in "$out"/extensions/*/node_modules/.pnpm; do
+    [ -d "$store" ] || continue
+    ext="${store%/node_modules/.pnpm}"
+    ext="${ext##*/}"
+    target="$out/layers/messaging-deps/opt/extensions/$ext/node_modules/.pnpm"
+    mkdir -p "$target"
+    for dir in "$store"/*; do
+        case "${dir##*/}" in
+            node_modules | lock.yaml | @intentic+* | *@file+* | *@link+*) ;;
+            *) [ -L "$dir" ] || mv "$dir" "$target/" ;;
+        esac
+    done
+done
+mkdir -p "$out/layers/messaging-deps"
+normalize_times "$out/layers/messaging-deps"
+
 # netd the entrypoint execs (_sandbox/netd), compiled in the image's own Debian release: the one piece of the
 # payload no JS build produces, and whose glibc must be the image's rather than this machine's.
 bash _tools/scripts/image/build-netd.sh "$out/netd"
@@ -180,4 +226,22 @@ if [ ! -f "$out/.speech-models-complete" ]; then
 fi
 static_layer iq-models "$out/iq-models" /opt/iq-models
 static_layer speech-models "$out/speech-models" /opt/speech-models
+
+# The starter site a new sandbox opens on, scaffolded by this commit's CLI and installed (_sandbox/sandbox/starter/
+# starter.Dockerfile, which says why it is built here and not in the image). Its output is already a layer root with
+# pnpm's clocks taken out; intentic's own first page goes over the template's (starter-site/ replaces src/ and public/
+# only, never the package or its install), and then every timestamp is fixed like the other static layers.
+# STARTER_TEMPLATE_REF picks the template's branch or tag, main by default.
+# It also hands back pnpm's metadata for the `pnpm` package, which the seeded starter's first `pnpm` resolves its pinned
+# pnpm through (starter.Dockerfile says why it is kept apart); that tree is copied among the per-commit layers.
+starter_build="$out/layers/.starter-build"
+docker buildx build --file _sandbox/sandbox/starter/starter.Dockerfile --build-context cli="$out/cli" \
+    --build-arg STARTER_TEMPLATE_REF="${STARTER_TEMPLATE_REF:-main}" \
+    --output "type=local,dest=$starter_build" _sandbox/sandbox/starter
+[ -f "$starter_build/starter/opt/starter/node_modules/.modules.yaml" ] || { echo "the starter build produced no installed starter" >&2; exit 1; }
+mv "$starter_build/starter" "$out/layers/starter"
+mv "$starter_build/pnpm-metadata" "$out/layers/pnpm-metadata"
+rmdir "$starter_build"
+cp -R _sandbox/sandbox/starter-site/. "$out/layers/starter/opt/starter/_apps/landing/"
+normalize_times "$out/layers/starter"
 echo "image trees ready in $out/"

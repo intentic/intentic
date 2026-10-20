@@ -357,6 +357,22 @@ RUN set -eu; arch="$(dpkg --print-architecture)"; \
 # because Docker's classic store re-downloads every layer above the first changed one whatever its digest. The tree
 # COPY'd into /opt/sandbox below merges over it: the workspace's own packages, the .pnpm index and the daemon itself.
 COPY --link --from=trees layers/sandbox-deps/ /
+# THE STARTER SITE, baked so a new sandbox never builds it. A fresh workspace used to open empty, with nothing running
+# and nothing to look at; the daemon's first boot now copies this tree into /work and starts its dev server
+# (src/scaffold/starter-site.ts), so the preview is live seconds after the machine is. The install is the whole reason
+# this is baked: it takes a minute or two and cannot be made shorter, so it is paid once, at image build time, instead
+# of on every new user's clock.
+#
+# Built OUTSIDE this file now, by prepare-image-trees.sh through starter/starter.Dockerfile: the same CLI the Add-app
+# button runs scaffolds it (one code path, so the baked starter and a hand-added landing app cannot drift), on this
+# image's Node and pnpm, into this image's paths (/opt/starter, and the pnpm store under $PNPM_HOME it is installed
+# from), with intentic's own first page laid over the template's. It used to be a RUN right after the per-commit CLI
+# tree, so every release re-ran it, and a pnpm install is never the same bytes twice: 1.342.0 → 1.344.0 shipped it as a
+# new 189 MB layer (886 MB unpacked, pnpm's 176 MB metadata cache among it) with nothing in it changed. Built apart and
+# with pnpm's clocks taken out (starter/normalize-starter.mjs), two builds from the same template and lockfile are the
+# same bytes, so the layer keeps its digest until the template really changes. Placed with the other static layers,
+# below the CLI tree, for the classic store's sake.
+COPY --link --from=trees layers/starter/ /
 # The intentic CLI on PATH — the /intentic endpoint shells out to it for resolve/plan dry-runs, and
 # connect.sh runs it via `--entrypoint intentic`. tsc emits cli.js without the exec bit, so chmod it:
 # runc resolves the entrypoint with Go's exec.LookPath, which reports a non-executable PATH entry as
@@ -364,35 +380,10 @@ COPY --link --from=trees layers/sandbox-deps/ /
 COPY --from=trees cli /opt/intentic-cli
 RUN chmod +x /opt/intentic-cli/dist/cli.js \
     && ln -s /opt/intentic-cli/dist/cli.js /usr/local/bin/intentic
-# THE STARTER SITE, built here so a new sandbox never builds it. A fresh workspace used to open empty, with
-# nothing running and nothing to look at; the daemon's first boot now copies this tree into /work and starts its
-# dev server (src/scaffold/starter-site.ts), so the preview is live seconds after the machine is. The install is
-# the whole reason this is baked: it takes a minute or two and cannot be made shorter, so it is paid once, at
-# image build time, instead of on every new user's clock.
-#
-# Built by the SAME CLI the Add-app button runs — one code path, so the baked starter and a hand-added landing
-# app cannot drift — and installed INSIDE the image, so every native dependency matches this platform rather
-# than whichever host prepared the trees. The `.git` the scaffold leaves behind is dropped: the daemon inits the
-# repo itself when it seeds it, with the git dir on /history like every other workspace repo. Pinned by ref so a
-# template push cannot silently change what an image built yesterday ships.
-#
-# The CLI takes the template's source ARCHIVE, not a clone, for the reason the oh-my-zsh layer above spells out:
-# an unauthenticated `git-upload-pack` from this egress is answered with a Basic-auth challenge git turns into a
-# username prompt no build can answer, and this layer is where that took the `images` job down.
-#
-# Only the page differs from a hand-added landing app: starter-site/ lays intentic's own first page (and its
-# fonts) over the template's src/ and public/, leaving its package, config and install untouched.
-#
-# pnpm's metadata cache (~/.cache/pnpm, 176 MB in 1.344.0) is a cache MOUNT, for the reason the npm installs above give:
-# nothing reads it at run time, and committed it was a fifth of this layer. The store under $PNPM_HOME stays in the
-# image on purpose: the seeded starter names it as its storeDir (src/scaffold/starter-site.ts), and its files are the
-# same inodes as /opt/starter's node_modules, so it costs the layer next to nothing.
-ARG STARTER_TEMPLATE_REF=main
-RUN --mount=type=cache,target=/root/.cache/pnpm \
-    intentic scaffold monorepo --dir /opt --name starter --ref "$STARTER_TEMPLATE_REF" \
-    && intentic scaffold add-app --dir /opt/starter --apps landing --ref "$STARTER_TEMPLATE_REF" \
-    && rm -rf /opt/starter/.git
-COPY _sandbox/sandbox/starter-site/ /opt/starter/_apps/landing/
+# The registry's metadata for the `pnpm` package, from the starter's build: pnpm resolves the starter's pinned pnpm
+# through it before running the copy the starter layer above carries, so without it a seeded starter's first `pnpm`
+# needs the network. Here among the per-commit layers, since it changes whenever pnpm publishes (starter.Dockerfile).
+COPY --link --from=trees layers/pnpm-metadata/ /
 # `tsx` as a shim over node's own type stripping. Agents reach for tsx to run a one-off .ts script because that
 # is what the ecosystem taught them, and a project that lists it in devDependencies resolves its own — but a
 # scratch script outside any package hit `tsx: not found` and the agent went looking for workarounds. Node 24

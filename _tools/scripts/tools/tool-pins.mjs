@@ -1,7 +1,7 @@
-// WHERE EACH PINNED TOOL IN THE SANDBOX IMAGE IS WRITTEN, once: the binaries and CLIs the core Dockerfile, its packs and
-// the CI base image fetch at a fixed version. The bumper writes through this table and the `tool-pins` check reads it,
-// so a site listed here cannot be moved by one and forgotten by the other (the engines' own table, engine-pins.mjs, is
-// the same idea for the agent engines and owns the reading and writing both use).
+// WHERE EACH PINNED TOOL IN THE SANDBOX IMAGE IS WRITTEN, once: the binaries and CLIs the core Dockerfile, its packs,
+// the CI base image and an extension's image fragment fetch at a fixed version. The bumper writes through this table
+// and the `tool-pins` check reads it, so a site listed here cannot be moved by one and forgotten by the other
+// (engine-pins.mjs is the same idea for the agent engines, and owns the reading and writing both use).
 //
 // A pin is more than its version where the download is checked: ripgrep, jq and gh carry a sha256 per architecture,
 // cloudflared's and Bun's container images a digest. Those are DERIVED from the version (`derive`), fetched by the
@@ -14,7 +14,9 @@
 //     number is a different decision from a bump.
 //   - node-gyp: tracks the headers of the Node it compiles against, so it moves with the node base image.
 //   - @posthog/cli: its pin decides which tool names the posthog skill's commands resolve to, which no test here reads.
-//   - the agent engines: engines.json and _tools/scripts/engines own those.
+//   - the agent engines: engines.json and _tools/scripts/engines own those. Pi is an agent too but is listed below: a
+//     sandbox installs an engine at the version engines.json blesses, while Pi is baked into the overlay by the
+//     pi-agent extension's fragment, so its pin is a Dockerfile line like the rest of this table.
 // Everything here is plain file reading until `derive`, which is the only part that needs the network.
 
 import { createHash } from "node:crypto";
@@ -223,6 +225,8 @@ export const TOOL_PINS = [
             site("package.json", /^ {8}"pnpm": "([^"]+)"$/gm, 1),
             site("_tools/extension-example/seed/package.json", /"packageManager": "pnpm@([^"]+)"/g, 1),
             site(DOCKERFILE, /PNPM_VERSION=(\S+) /g, 1),
+            // The baked starter is installed by its own build, and must be by the image's pnpm (starter.Dockerfile).
+            site("_sandbox/sandbox/starter/starter.Dockerfile", /PNPM_VERSION=(\S+) /g, 1),
             site(CI_BASE, /PNPM_VERSION=(\S+) /g, 1),
         ],
     },
@@ -260,6 +264,17 @@ export const TOOL_PINS = [
         withinMajor: true,
         sites: [site(pack("docker"), /^ARG DOCKER_VERSION=(\S+)$/gm, 1)],
         available: dockerAptMissing,
+    },
+    {
+        id: "pi",
+        label: "Pi coding agent",
+        // Unlike @posthog/cli's pin, nothing here is written against one Pi version: the daemon asks `pi --version` and
+        // adapts (_sandbox/sandbox/src/runtimes/pi/pi-rpc.ts), and the fragment was unpinned, taking upstream's newest,
+        // until it was pinned so every overlay builds the same one. The bump keeps it that current, behind the soak. Held
+        // below a new major, because the daemon drives Pi over its RPC protocol and a major is where that would change.
+        upstream: { kind: "npm", package: "@earendil-works/pi-coding-agent" },
+        withinMajor: true,
+        sites: [site("_extensions/pi-agent/env/pi.Dockerfile", /@earendil-works\/pi-coding-agent@(\S+)$/gm, 1)],
     },
 ];
 

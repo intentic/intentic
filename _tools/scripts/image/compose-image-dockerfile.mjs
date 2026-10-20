@@ -44,14 +44,54 @@ if (unknown.length > 0) {
 const readsCommitTrees = (content) =>
     content.split("\n").some((line) => !line.trim().startsWith("#") && line.includes("--from=trees") && !/\slayers\//u.test(line));
 
+// A COPY of a static layer root: built apart (--link), the same bytes from commit to commit.
+const isStaticCopy = (instruction) =>
+    /^\s*COPY\s[^\n]*--link[^\n]*--from=trees\s+layers\//u.test(instruction) ||
+    /^\s*COPY\s[^\n]*--from=trees[^\n]*--link\s+layers\//u.test(instruction);
+
+// A post-trees pack's static layer roots, each with the comment block written above it, taken out to splice ABOVE the
+// per-commit trees with the pre-trees packs (messaging's third-party packages, beside its per-commit gateway trees): Docker's
+// classic store re-downloads every layer above the first changed one, so a static layer below them is kept on an update.
+// --link makes the layer independent of what sits under it, so moving it changes nothing it contains.
+const hoistStatic = (content) => {
+    const hoisted = [];
+    const rest = [];
+    let comments = [];
+    const lines = content.split("\n");
+    for (let at = 0; at < lines.length; at += 1) {
+        const line = lines[at];
+        if (line.trim().startsWith("#")) {
+            comments.push(line);
+            continue;
+        }
+        if (line.trim() === "") {
+            rest.push(...comments, line);
+            comments = [];
+            continue;
+        }
+        const instruction = [line];
+        while (instruction.at(-1).trimEnd().endsWith("\\") && at + 1 < lines.length) {
+            at += 1;
+            instruction.push(lines[at]);
+        }
+        (isStaticCopy(instruction.join("\n")) ? hoisted : rest).push(...comments, ...instruction);
+        comments = [];
+    }
+    rest.push(...comments);
+    return { hoisted: hoisted.join("\n"), rest: rest.join("\n").trim() };
+};
+
 // Fragment verbatim, then a stamp RUN; hash is sha256 of the trimmed content, matching packs.ts's, or a baked pack
-// reads as not baked.
+// reads as not baked. A post-trees pack's static layer roots are split off to splice with the pre-trees packs.
 const section = (name) => {
     const content = readFileSync(join(packsDir, `${name}.Dockerfile`), "utf8").trim();
     const hash = createHash("sha256").update(content).digest("hex");
+    const postTrees = content.includes("/opt/sandbox") || readsCommitTrees(content);
+    const { hoisted, rest } = postTrees ? hoistStatic(content) : { hoisted: "", rest: content };
     return {
-        postTrees: content.includes("/opt/sandbox") || readsCommitTrees(content),
-        text: [`# ---- pack: ${name} ----`, content, `RUN mkdir -p /opt/packs && printf '%s' '${hash}' > /opt/packs/${name}`].join("\n"),
+        postTrees,
+        hoisted: hoisted === "" ? undefined : [`# ---- pack: ${name}, its static layers (the rest splices below the trees) ----`, hoisted].join("\n"),
+        text: [`# ---- pack: ${name} ----`, rest, `RUN mkdir -p /opt/packs && printf '%s' '${hash}' > /opt/packs/${name}`].join("\n"),
     };
 };
 const sections = profile.map(section);
@@ -77,9 +117,8 @@ lines = splice(
     POST_MARKER,
     sections.filter((entry) => entry.postTrees).map((entry) => entry.text),
 );
-lines = splice(
-    lines,
-    PRE_MARKER,
-    sections.filter((entry) => !entry.postTrees).map((entry) => entry.text),
-);
+lines = splice(lines, PRE_MARKER, [
+    ...sections.filter((entry) => !entry.postTrees).map((entry) => entry.text),
+    ...sections.flatMap((entry) => (entry.hoisted === undefined ? [] : [entry.hoisted])),
+]);
 process.stdout.write(lines.join("\n"));
