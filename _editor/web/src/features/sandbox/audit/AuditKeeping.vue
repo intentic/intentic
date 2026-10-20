@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { AuditSettings } from "@intentic/sandbox-contract/schemas/data-protection";
-import { Notice, Picker, Row, RowGroup, RowNote, toneInk, ui } from "@intentic/ui";
+import { Notice, Picker, Row, RowGroup, RowNote, toneInk } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref } from "vue";
@@ -24,16 +24,44 @@ const setAudit = (fields: Partial<AuditSettings>): void => {
     }
 };
 
-// An address is saved only once it is one the daemon would take: HTTPS, or empty to stop forwarding.
+// The address is always HTTPS (the daemon refuses anything else), so the scheme is printed in front of the box rather
+// than typed into it: the box holds the rest. A whole address pasted in folds its `https://` into that prefix as it
+// lands; any other scheme stays in the box and is refused by name on commit. Empty stops forwarding.
+const SCHEME = `https://`;
+const SCHEME_AT_START = /^\s*https:\/\//iu;
+const OTHER_SCHEME = /^[a-z][a-z\d+.-]*:\/\//iu;
+const urlRest = computed(() => (audit.value?.forwardUrl ?? ``).replace(SCHEME_AT_START, ``));
+// What is typed and not yet saved. Kept apart from the saved address so a refused one stays in the box beside its
+// reason: Vue writes a bound `value` back on every render, and the error's own render would put the old address back.
+const draft = ref<string>();
 const urlError = ref<string>();
-const commitUrl = (event: Event): void => {
-    // SAFETY: bound only to the URL <input> below, whose change event targets that input.
-    const value = (event.target as HTMLInputElement).value.trim();
-    const valid = value === `` || (URL.canParse(value) && new URL(value).protocol === `https:`);
-    urlError.value = valid ? undefined : t(`sandbox.sandboxAudit.forwardUrlInvalid`);
-    if (valid && value !== audit.value?.forwardUrl) {
-        setAudit({ forwardUrl: value });
+const URL_ERROR_ID = `audit-forward-url-error`;
+const foldScheme = (event: Event): void => {
+    // SAFETY: bound only to the address <input> below, whose input event targets that input.
+    const input = event.target as HTMLInputElement;
+    urlError.value = undefined;
+    if (SCHEME_AT_START.test(input.value)) {
+        input.value = input.value.replace(SCHEME_AT_START, ``);
     }
+    draft.value = input.value;
+};
+const commitUrl = (event: Event): void => {
+    // SAFETY: bound only to the address <input> below, whose change event targets that input.
+    const rest = (event.target as HTMLInputElement).value.trim().replace(SCHEME_AT_START, ``);
+    const value = rest === `` ? `` : `${SCHEME}${rest}`;
+    const valid = value === `` || (!OTHER_SCHEME.test(rest) && URL.canParse(value) && new URL(value).hostname !== ``);
+    urlError.value = valid ? undefined : t(`sandbox.sandboxAudit.forwardUrlInvalid`);
+    if (valid) {
+        draft.value = undefined;
+        if (value !== audit.value?.forwardUrl) {
+            setAudit({ forwardUrl: value });
+        }
+    }
+};
+// Escape puts the saved address back and drops what was typed.
+const revertUrl = (): void => {
+    draft.value = undefined;
+    urlError.value = undefined;
 };
 
 // Only secrets someone stored by name can carry the token; a connection's own credential is not offered.
@@ -51,6 +79,8 @@ const pickSecret = (value: string | undefined): void => {
     }
 };
 
+// How the copies are getting there, once there is somewhere to send them: a line under the two rows, its glyph in the
+// rows' own column.
 const forwardingLine = computed(() => {
     const forwarding = status.value?.forwarding;
     if (forwarding === undefined) {
@@ -59,12 +89,17 @@ const forwardingLine = computed(() => {
     if (forwarding.lastError !== undefined) {
         return {
             tone: `danger` as const,
+            icon: `exclamation-triangle` as const,
             text: t(`sandbox.sandboxAudit.forwardFailing`, { error: forwarding.lastError, count: forwarding.pending }),
         };
     }
     return forwarding.pending === 0
-        ? { tone: `success` as const, text: t(`sandbox.sandboxAudit.forwardUpToDate`) }
-        : { tone: `warning` as const, text: t(`sandbox.sandboxAudit.forwardPending`, { count: forwarding.pending }, forwarding.pending) };
+        ? { tone: `success` as const, icon: `check-circle` as const, text: t(`sandbox.sandboxAudit.forwardUpToDate`) }
+        : {
+              tone: `warning` as const,
+              icon: `clock` as const,
+              text: t(`sandbox.sandboxAudit.forwardPending`, { count: forwarding.pending }, forwarding.pending),
+          };
 });
 </script>
 
@@ -80,38 +115,55 @@ const forwardingLine = computed(() => {
                 />
             </template>
         </Row>
-        <Row icon="external-link" :title="t(`sandbox.sandboxAudit.forwardTitle`)" :description="t(`sandbox.sandboxAudit.forwardDescription`)">
-            <template #below>
-                <div class="flex max-w-2xl flex-col gap-3">
-                    <div class="ui-field">
-                        <label class="ui-field-label" for="audit-forward-url">{{ t(`sandbox.sandboxAudit.forwardUrlLabel`) }}</label>
-                        <input
-                            id="audit-forward-url"
-                            type="url"
-                            :value="audit?.forwardUrl ?? ``"
-                            :disabled="audit === undefined"
-                            :class="ui.input()"
-                            placeholder="https://"
-                            @change="commitUrl"
-                        />
-                        <span v-if="urlError !== undefined" class="ui-field-error">{{ urlError }}</span>
-                    </div>
-                    <div class="ui-field">
-                        <span class="ui-field-label">{{ t(`sandbox.sandboxAudit.forwardSecretLabel`) }}</span>
-                        <Picker
-                            :model-value="audit?.forwardSecret === `` || audit === undefined ? NO_SECRET : audit.forwardSecret"
-                            :options="secretOptions"
-                            :disabled="audit === undefined || audit.forwardUrl === ``"
-                            :aria-label="t(`sandbox.sandboxAudit.forwardSecretLabel`)"
-                            class="w-72 justify-between text-xs"
-                            @update:model-value="pickSecret"
-                        />
-                        <span class="text-2xs text-muted">{{ t(`sandbox.sandboxAudit.forwardSecretHint`) }}</span>
-                    </div>
-                    <p v-if="forwardingLine !== undefined" class="text-xs" :class="toneInk(forwardingLine.tone)">{{ forwardingLine.text }}</p>
-                </div>
+        <!-- The address is the row's control, as every other setting on the page is: an empty box is "off". A refused address
+             takes the description's place, so the row stays the height it was and the reason sits beside the box. -->
+        <Row icon="external-link" :title="t(`sandbox.sandboxAudit.forwardTitle`)">
+            <template #description>
+                <span v-if="urlError !== undefined" :id="URL_ERROR_ID" :class="toneInk(`danger`)">{{ urlError }}</span>
+                <template v-else>{{ t(`sandbox.sandboxAudit.forwardDescription`) }}</template>
+            </template>
+            <template #control>
+                <!-- The shell is the frame and takes the focus; the scheme is printed, never typed. -->
+                <label
+                    class="ui-field-shell flex w-72 max-w-full cursor-text items-center overflow-hidden px-2 py-1 font-mono text-base md:text-xs"
+                    :class="urlError === undefined ? `` : `ui-field-error-box`"
+                >
+                    <span class="-my-1 -ml-2 mr-2 flex shrink-0 select-none items-center self-stretch border-r border-line bg-overlay px-2 text-muted" aria-hidden="true">{{
+                        SCHEME
+                    }}</span>
+                    <input
+                        type="text"
+                        inputmode="url"
+                        autocomplete="off"
+                        autocapitalize="off"
+                        spellcheck="false"
+                        :value="draft ?? urlRest"
+                        :disabled="audit === undefined"
+                        :aria-label="t(`sandbox.sandboxAudit.forwardUrlLabel`)"
+                        :aria-invalid="urlError !== undefined"
+                        :aria-describedby="urlError === undefined ? undefined : URL_ERROR_ID"
+                        :placeholder="t(`sandbox.sandboxAudit.forwardUrlPlaceholder`)"
+                        class="field-bare min-w-0 flex-1 truncate md:text-xs"
+                        @input="foldScheme"
+                        @change="commitUrl"
+                        @keydown.esc="revertUrl"
+                    />
+                </label>
             </template>
         </Row>
+        <Row icon="key" :title="t(`sandbox.sandboxAudit.forwardSecretLabel`)" :description="t(`sandbox.sandboxAudit.forwardSecretHint`)">
+            <template #control>
+                <Picker
+                    :model-value="audit?.forwardSecret === `` || audit === undefined ? NO_SECRET : audit.forwardSecret"
+                    :options="secretOptions"
+                    :disabled="audit === undefined || audit.forwardUrl === ``"
+                    :aria-label="t(`sandbox.sandboxAudit.forwardSecretLabel`)"
+                    class="ui-field-sm w-72 max-w-full justify-between md:text-xs"
+                    @update:model-value="pickSecret"
+                />
+            </template>
+        </Row>
+        <RowNote v-if="forwardingLine !== undefined" :icon="forwardingLine.icon" :tone="forwardingLine.tone">{{ forwardingLine.text }}</RowNote>
         <RowNote v-if="refusal !== undefined" variant="block"><Notice :of="refusal" /></RowNote>
     </RowGroup>
 </template>
