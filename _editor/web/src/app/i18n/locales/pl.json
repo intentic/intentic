@@ -2959,7 +2959,11 @@
             "continuesShortly": "wznowi za chwilę",
             "takeBack": "Cofnij",
             "bookedForSpentRoomNow": "Zaplanowano na odnowienie {waited}, ale konto, na którym działa teraz ten czat, ma zapas: Wyślij teraz wyśle ją tam.",
-            "bookedForSpentRoomOn": "Zaplanowano na odnowienie {waited}, ale {serving}, na którym działa teraz ten czat, ma zapas: Wyślij teraz wyśle ją tam."
+            "bookedForSpentRoomOn": "Zaplanowano na odnowienie {waited}, ale {serving}, na którym działa teraz ten czat, ma zapas: Wyślij teraz wyśle ją tam.",
+            "servedElsewhere": "Czeka na wysłanie do {served}. W polu wiadomości wybrano {pick}.",
+            "moveToPick": "Przenieś ją tam | Przenieś je tam | Przenieś je tam",
+            "bookedForSpentReopened": "Zaplanowano na odnowienie {waited}, a ma już zapas: Wyślij teraz wyśle ją od razu.",
+            "servedOn": "Pójdzie do {served}. | Pójdą do {served}. | Pójdą do {served}."
         },
         "sandboxNotice": {
             "compacted": "Kontekst został skrócony, żeby zwolnić miejsce.",
@@ -4225,7 +4229,8 @@
             "switchedLoop": "Przełączono na działanie przez {loop}: Twoja następna wiadomość rozpocznie nową sesję, do której przejdzie dotychczasowa rozmowa.",
             "switchedModel": "Przełączono na {model}",
             "switchedProvider": "Przełączono na {provider}: Twoja następna wiadomość rozpocznie nową sesję, do której przejdzie dotychczasowa rozmowa.",
-            "waitingKeepTheirs": "Czekająca wiadomość, gdy pójdzie sama, trafi do modelu, dla którego ją napisano; wysłana teraz pójdzie na nowym wyborze. | {count} czekające wiadomości, gdy pójdą same, trafią do modelu, dla którego je napisano; wysłane teraz pójdą na nowym wyborze. | {count} czekających wiadomości, gdy pójdą same, trafi do modelu, dla którego je napisano; wysłane teraz pójdą na nowym wyborze."
+            "waitingKeepTheirs": "Czekająca wiadomość, gdy pójdzie sama, trafi do modelu, dla którego ją napisano; wysłana teraz pójdzie na nowym wyborze. | {count} czekające wiadomości, gdy pójdą same, trafią do modelu, dla którego je napisano; wysłane teraz pójdą na nowym wyborze. | {count} czekających wiadomości, gdy pójdą same, trafi do modelu, dla którego je napisano; wysłane teraz pójdą na nowym wyborze.",
+            "waitingFollow": "Czekająca wiadomość też tam pójdzie. | {count} czekające wiadomości też tam pójdą. | {count} czekających wiadomości też tam pójdzie."
         },
         "transcriptView": {
             "editedDropped": "Zmieniono tę wiadomość: usunięto {count} wiadomość, a pliki przywrócono do tego punktu. | Zmieniono tę wiadomość: usunięto {count} wiadomości, a pliki przywrócono do tego punktu. | Zmieniono tę wiadomość: usunięto {count} wiadomości, a pliki przywrócono do tego punktu.",

@@ -11,7 +11,8 @@ import { startTurn } from "./turns";
 // re-time, reword or take them back. Kept on the card, as the daemon's roster carries it, so every surface reads one copy.
 const NO_QUEUE: ConversationQueue = { items: [], revision: 0 };
 type QueuedMessage = ConversationQueue[`items`][number];
-type Hold = Pick<QueuedMessage, `until` | `after`>;
+type Hold = Pick<QueuedMessage, `until` | `after` | `reopenOf`>;
+type Serving = NonNullable<QueuedMessage[`serves`]>;
 const queueOf = (id: string): ConversationQueue => roster.agents.find((agent) => agent.id === id)?.queue ?? NO_QUEUE;
 const writeQueue = (id: string, queue: ConversationQueue): ConversationQueue => {
     amendAgent(id, ({ queue: _old, ...card }) => (queue.items.length === 0 && queue.revision === 0 ? card : { ...card, queue }));
@@ -29,11 +30,34 @@ const queueFromMessages = (items: readonly QueuedMessage[], revision: number): C
     return after === undefined ? { items: [...items], revision } : { items: [...items], revision, paused: `scheduled`, after };
 };
 
-// A message with this booking in place of the one it had.
+// A message with this booking in place of the one it had; a new booking's reason replaces the old one's too.
 const rebooked = (item: QueuedMessage, hold: Hold): QueuedMessage => {
-    const { until: _until, after: _after, ...rest } = item;
+    const { until: _until, after: _after, reopenOf: _reopenOf, ...rest } = item;
     return { ...rest, ...hold };
 };
+
+// Who a person's words go on, as their request names them (conversation-queue.ts servingOf): the card's own where the
+// request names none.
+const servingOf = (id: string, input: { readonly agent?: string | undefined; readonly harness?: Serving[`harness`] | undefined; readonly model?: string | undefined; readonly effort?: string | undefined; readonly account?: string | undefined }): Serving => {
+    const card = roster.agents.find((agent) => agent.id === id);
+    const serving: Serving = { agent: input.agent ?? card?.provider ?? `claude`, harness: input.harness ?? `native` };
+    const model = input.model ?? card?.model;
+    if (model !== undefined && model !== ``) {
+        serving.model = model;
+    }
+    if (input.effort !== undefined) {
+        serving.effort = input.effort;
+    }
+    const account = input.account ?? (serving.agent === card?.provider ? card.account : undefined);
+    if (account !== undefined) {
+        serving.account = account;
+    }
+    return serving;
+};
+
+// The allowance an instant booked for a reopen waits out (booking-ask.ts): the account the words go on.
+const reopenOfServing = (serving: Serving | undefined): QueuedMessage[`reopenOf`] =>
+    serving === undefined ? undefined : serving.account === undefined ? { agent: serving.agent } : { agent: serving.agent, account: serving.account };
 
 // A booking's hold, or nothing when what it would wait for has already come: a time past, or an agent with nothing
 // running and nothing left to land (work-landed.ts, read here off its card).
@@ -116,14 +140,19 @@ const book = (input: SandboxHandlerInput<`agent`, `run`>, id: string, hold: Hold
         roster.agents = [bookedCard(input, id, now), ...roster.agents];
     }
     const queue = queueOf(id);
+    const serves = servingOf(id, input);
     const item: QueuedMessage = {
         id: input.messageId ?? crypto.randomUUID(),
         text: input.prompt,
         voice: `person`,
         queuedAt: now,
         revision: queue.revision + 1,
+        serves,
         ...hold,
     };
+    if (input.sendAtReopen === true && hold.until !== undefined) {
+        item.reopenOf = reopenOfServing(serves);
+    }
     writeQueue(id, queueFromMessages([...queue.items, item], item.revision));
     armBooking(id, item.id, hold.until);
     return { delivered: `queued` as const };
@@ -164,7 +193,7 @@ const unopened = (id: string, left: ConversationQueue): boolean => {
 // The queue's four doors, each refused as the daemon refuses it: nothing waiting, a message named that has gone, or one
 // changed since it was read. Re-timing and letting go act on the messages named, or on every one when none are.
 export const queueDoors = {
-    queueSchedule: ({ conversationId, sendAt, sendAfter, ids }: SandboxHandlerInput<`agent`, `queueSchedule`>): ConversationQueue => {
+    queueSchedule: ({ conversationId, sendAt, sendAfter, sendAtReopen, ids }: SandboxHandlerInput<`agent`, `queueSchedule`>): ConversationQueue => {
         const queue = queueOf(conversationId);
         if (queue.items.length === 0 || (ids ?? []).some((id) => !queue.items.some((item) => item.id === id))) {
             return refuse(`Nothing you named waits in that conversation's queue to schedule.`, 404);
@@ -178,13 +207,44 @@ export const queueDoors = {
         for (const item of queue.items.filter(named)) {
             armBooking(conversationId, item.id, hold.until);
         }
+        // A reopen is waited out where the words go: the newest person's among them.
+        const reopenOf = sendAtReopen === true && hold.until !== undefined ? reopenOfServing(queue.items.filter(named).findLast((item) => item.voice === `person`)?.serves) : undefined;
+        const booked: Hold = reopenOf === undefined ? hold : { ...hold, reopenOf };
         return writeQueue(
             conversationId,
             queueFromMessages(
-                queue.items.map((item) => (named(item) ? rebooked(item, hold) : item)),
+                queue.items.map((item) => (named(item) ? rebooked(item, booked) : item)),
                 queue.revision + 1,
             ),
         );
+    },
+    // A person's waiting words pointed at another pick, letting nothing go (conversation-queue.ts rerouted): a model or
+    // effort left out keeps each one's own, an account left out goes on the conversation's own.
+    queueReroute: ({ conversationId, routing, ids }: SandboxHandlerInput<`agent`, `queueReroute`>): ConversationQueue => {
+        const queue = queueOf(conversationId);
+        if (queue.items.length === 0) {
+            return refuse(`Nothing waits in that conversation's queue to move.`, 404);
+        }
+        const next = queue.revision + 1;
+        const moved = (item: QueuedMessage): QueuedMessage => {
+            if (item.voice !== `person` || item.serves === undefined || (ids !== undefined && !ids.includes(item.id))) {
+                return item;
+            }
+            const serves: Serving = { agent: routing.agent, harness: routing.harness };
+            const model = routing.model ?? item.serves.model;
+            const effort = routing.effort ?? item.serves.effort;
+            if (model !== undefined) {
+                serves.model = model;
+            }
+            if (effort !== undefined) {
+                serves.effort = effort;
+            }
+            if (routing.account !== undefined) {
+                serves.account = routing.account;
+            }
+            return { ...item, serves, revision: next };
+        };
+        return writeQueue(conversationId, { ...queue, items: queue.items.map(moved), revision: next });
     },
     queueResume: ({ conversationId, ids }: SandboxHandlerInput<`agent`, `queueResume`>): SandboxHandlerOutput<`agent`, `queueResume`> => {
         const run = letGo(conversationId, ids);
@@ -225,6 +285,23 @@ export const queueDoors = {
             revision: next,
         });
     },
+};
+
+// A conversation moved to another of its provider's accounts (switch-account.ts): its card runs there from now on, and
+// so does every person's word waiting in its queue, held or booked, each keeping its own model (queue-rerouted).
+export const switchAccount = ({ conversationId, account }: SandboxHandlerInput<`agent`, `switchAccount`>): SandboxHandlerOutput<`agent`, `switchAccount`> => {
+    if (!roster.agents.some((agent) => agent.id === conversationId)) {
+        return refuse(`No such conversation to move.`, 404);
+    }
+    amendAgent(conversationId, (card) => ({ ...card, account }));
+    const queue = queueOf(conversationId);
+    if (queue.items.some((item) => item.voice === `person` && item.serves !== undefined && item.serves.account !== account)) {
+        const next = queue.revision + 1;
+        const moved = (item: QueuedMessage): QueuedMessage =>
+            item.voice === `person` && item.serves !== undefined ? { ...item, serves: { ...item.serves, account }, revision: next } : item;
+        writeQueue(conversationId, { ...queue, items: queue.items.map(moved), revision: next });
+    }
+    return {};
 };
 
 // What waited on an agent's land goes once that land is in: the messages booked for it, and no other.

@@ -62,7 +62,8 @@ describe(`the provider`, () => {
                 displacedModel: undefined,
                 sentModel: undefined,
             },
-            effects: { kept: true, remember: { provider: `codex`, value: `codex-model` }, segmentCut: true, divider: `refresh` },
+            // The words already waiting go where the next message goes (agent.queueReroute).
+            effects: { kept: true, remember: { provider: `codex`, value: `codex-model` }, segmentCut: true, divider: `refresh`, follow: true },
         });
     });
 
@@ -119,7 +120,7 @@ describe(`the model`, () => {
 
         expect(reduceSelection(owed, { kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } }, WORLD)).toEqual({
             selection: { ...owed, auto: false, model: `haiku`, displacedModel: undefined, movedFrom: undefined },
-            effects: { kept: true, remember: { provider: `claude`, value: `haiku` }, divider: `refresh` },
+            effects: { kept: true, remember: { provider: `claude`, value: `haiku` }, divider: `refresh`, follow: true },
         });
     });
 
@@ -176,7 +177,7 @@ describe(`the settings`, () => {
     it(`writes each setting through to the next new chat, except speed, which drops the last answer instead`, () => {
         expect(reduceSelection(SEEDED, { kind: `setEffort`, effort: `max` }, WORLD)).toEqual({
             selection: { ...SEEDED, effortPick: `max` },
-            effects: { defaults: { effort: `max` } },
+            effects: { defaults: { effort: `max` }, follow: true },
         });
         expect(reduceSelection(SEEDED, { kind: `setThinking`, thinking: false }, WORLD).effects).toEqual({ defaults: { thinking: false } });
         expect(reduceSelection(SEEDED, { kind: `setFast`, fast: true }, WORLD)).toEqual({
@@ -202,7 +203,13 @@ describe(`the settings`, () => {
     it(`switches the harness as a segment cut, remembered`, () => {
         expect(reduceSelection(SENT, { kind: `selectHarness`, harness: `claude-code` }, WORLD)).toEqual({
             selection: { ...SENT, harness: `claude-code`, sentModel: undefined },
-            effects: { kept: true, defaults: { harness: { provider: SENT.provider, harness: `claude-code` } }, segmentCut: true, divider: `refresh` },
+            effects: {
+                kept: true,
+                defaults: { harness: { provider: SENT.provider, harness: `claude-code` } },
+                segmentCut: true,
+                divider: `refresh`,
+                follow: true,
+            },
         });
     });
 });

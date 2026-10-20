@@ -90,7 +90,7 @@ export const steerPerson = async (services: Services, conversationId: string, st
 // The message as the queue keeps it, named: a sender that gave no id gets one, since the queue and a rewind name it.
 const named = (said: Said): Omit<QueuedItem, "revision"> => {
     // The booking is the admission's to act on (bookingFor), never a field the started turn carries.
-    const { actor, owner, areas, unseenRuns: _unseen, speaker, sendAt: _at, sendAfter: _after, ...turn } = said.turn;
+    const { actor, owner, areas, unseenRuns: _unseen, speaker, sendAt: _at, sendAfter: _after, sendAtReopen: _reopen, ...turn } = said.turn;
     const id = turn.messageId ?? randomUUID();
     return {
         id,
@@ -574,14 +574,17 @@ export const createAdmission = (
         // What waits, booked anew (only the messages named, when any are): held by whatever held it before or by nothing
         // (messages behind a running turn), it now waits for this. Nothing left to wait for lets it go now, as a release
         // would. A message named that no longer waits is missing, and nothing is re-timed in its place.
-        reschedule: ({ conversationId, sendAt, sendAfter, ids }) =>
+        reschedule: ({ conversationId, sendAt, sendAfter, sendAtReopen, ids }) =>
             inTurn(conversationId, async () => {
                 const daemon = services();
                 const { items } = daemon.conversations.queued(conversationId);
                 if (items.length === 0 || (ids !== undefined && !ids.every((id) => items.some((item) => item.id === id)))) {
                     return "missing";
                 }
-                const booking = bookingOfAsk(daemon, { conversationId, sendAt, sendAfter }, Date.now());
+                // A reopen is waited out where the words go: the newest person's among them, whose routing their turn takes.
+                const routedBy = items.findLast((item) => item.voice === "person" && (ids === undefined || ids.includes(item.id)))?.turn;
+                const ask = { conversationId, sendAt, sendAfter, sendAtReopen, agent: routedBy?.agent, account: routedBy?.account };
+                const booking = bookingOfAsk(daemon, ask, Date.now());
                 if (unbookable(booking)) {
                     return { invalid: "invalid" in booking ? booking.invalid : booking.why };
                 }

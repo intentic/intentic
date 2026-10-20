@@ -1,5 +1,7 @@
+import { DEFAULT_PROVIDER, type QueuedReopen } from "@intentic/sandbox-contract/schemas/agent";
 import type { Services } from "../../../composition.js";
 import type { Booking } from "../../../conversations/actor/conversation-queue.js";
+import { opt } from "../../../opt.js";
 import { unwaitable, workLanded } from "../../../conversations/land/work-landed.js";
 import type { Said, Unsaid } from "../../../seams/turn-starter.js";
 
@@ -11,12 +13,31 @@ import type { Said, Unsaid } from "../../../seams/turn-starter.js";
 const LONGEST_BOOKING_MS = 31 * 24 * 60 * 60 * 1000;
 
 // What a scheduled send asks to wait for, as its fields name it: an instant, or another conversation's work; and which
-// conversation is asking.
+// conversation is asking. An instant may be a spent allowance's reopen (`sendAtReopen`), waited out on the provider and
+// account the words go on (`agent`, `account`, else the conversation's own).
 export interface BookingAsk {
     readonly conversationId: string;
     readonly sendAt?: number | undefined;
     readonly sendAfter?: string | undefined;
+    readonly sendAtReopen?: true | undefined;
+    readonly agent?: string | undefined;
+    readonly account?: string | undefined;
 }
+
+/**
+ * The allowance words routed so wait out: their provider, and the account they name, else the one the conversation runs
+ * on when that is the same provider's (another provider's account pays for nothing here). No account at all is the
+ * provider's every account, which is what a reopen read for a chat with none means (allowance-gate.ts spentUntil).
+ */
+export const reopenOfRouted = (
+    services: Pick<Services, "agents">,
+    conversationId: string,
+    routed: { readonly agent?: string | undefined; readonly account?: string | undefined },
+): QueuedReopen => {
+    const profile = services.agents.entry(conversationId)?.profile;
+    const agent = routed.agent ?? profile?.provider ?? DEFAULT_PROVIDER;
+    return { agent, ...opt("account", routed.account ?? (profile?.provider === agent ? profile.account : undefined)) };
+};
 
 /**
  * The booking a scheduled send waits by, undefined when there is nothing left to wait for (an instant already past, a
@@ -33,7 +54,11 @@ export const bookingOfAsk = (services: Services, ask: BookingAsk, now: number): 
         }
         return workLanded(services, ask.sendAfter, now) ? undefined : { after: { conversationId: ask.sendAfter, since: now } };
     }
-    return ask.sendAt === undefined || ask.sendAt <= now ? undefined : { until: Math.min(ask.sendAt, now + LONGEST_BOOKING_MS) };
+    if (ask.sendAt === undefined || ask.sendAt <= now) {
+        return undefined;
+    }
+    const until = Math.min(ask.sendAt, now + LONGEST_BOOKING_MS);
+    return ask.sendAtReopen === true ? { until, reopenOf: reopenOfRouted(services, ask.conversationId, ask) } : { until };
 };
 
 // A person's words only: the sandbox's and an agent's never wait on a clock somebody set.

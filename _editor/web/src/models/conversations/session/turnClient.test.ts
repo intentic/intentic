@@ -18,7 +18,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { runningTurn } from "../../../testing/runningTurn";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
 import type { PickUp } from "../endings/pickUp";
-import type { SendLater } from "../drafts/sendLater";
+import { reopenBooking, type SendLater } from "../drafts/sendLater";
 import type { TurnFailures } from "../endings/turnFailures";
 import type { ForkLink, FreshLink, SessionRef, TurnSettings } from "../run/turnRequest";
 import type { ChatMessage } from "../transcript/transcript";
@@ -556,6 +556,20 @@ describe(`saying something`, () => {
             paused: `scheduled`,
             until: at,
         });
+    });
+
+    // A spent allowance's reopen is said as one, so the sandbox keeps the reason with the booking (`reopenOf`); a time the
+    // reader chose says nothing of the kind.
+    it(`says a booking is a spent allowance's reopen only when it is one`, async () => {
+        const { client, host } = clientOf();
+        host.registered.value = true;
+        answers({ delivered: `queued` });
+        const at = Date.now() + 60 * 60 * 1_000;
+
+        await client.schedule(`ship it`, reopenBooking(at));
+        await client.schedule(`and the docs`, { sendAt: at });
+
+        expect(run.mock.calls.map(([body]) => body.sendAtReopen)).toEqual([true, undefined]);
     });
 
     // The booking opens a chat the daemon has no record of yet: it comes back on the board as scheduled, named after its

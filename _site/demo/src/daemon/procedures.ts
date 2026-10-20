@@ -69,7 +69,7 @@ import { archiveAgents, assignAgent, keepWarmAgent, land, reactToAgent, searchAg
 import { agentFlow, sandboxFlow } from "./deviceFlows";
 import { events } from "./events";
 import { demoAreas, demoPersonas, removeArea, saveArea, savePersona } from "./personas";
-import { queueDoors, sayOrBook } from "./queue";
+import { queueDoors, sayOrBook, switchAccount } from "./queue";
 import { agentAnswer, amendAgent, boardAgents, broadcastRoster, heldApprovals, patchAgent, roster, STARTED_AT } from "./roster";
 import { DEMO_REPO_CHECKS, DEMO_RUN_TARGETS, DEMO_SAFETY_POLICY, DEMO_SAVINGS, DEMO_SETTINGS, DEMO_SYSTEM_PROMPT } from "./settings";
 import { attach, reply, stopTurn } from "./turns";
@@ -223,6 +223,7 @@ export const procedures = {
     agent: {
         run: sayOrBook,
         ...queueDoors,
+        switchAccount,
         attach: ({ conversationId }) => attach(conversationId),
         reply,
         steer: () => ({ delivered: `steered` as const }),

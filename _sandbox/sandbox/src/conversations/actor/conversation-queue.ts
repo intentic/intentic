@@ -3,8 +3,12 @@ import {
     ATTACHMENT_LIMIT,
     type ConversationQueue,
     MessageVoiceSchema,
+    type QueuedReopen,
+    QueuedReopenSchema,
+    type QueuedServing,
     type QueuePause,
     QueuePauseSchema,
+    withRuntimeDefaults,
 } from "@intentic/sandbox-contract/schemas/agent";
 import { mentionPaths } from "@intentic/sandbox-contract/text/mentions";
 import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
@@ -49,6 +53,10 @@ const QueuedItemSchema = z.object({
     // soon as the conversation is free.
     until: z.number().optional(),
     after: AfterLandSchema.optional(),
+    // What an instant booking waits out when it is an allowance's reopen rather than a time somebody chose: the account
+    // it was booked for, by the composer (`sendAtReopen`) or by the sandbox (allowance-gate.ts). Goes with the booking: a
+    // new one replaces it, a move to another account keeps it, which is how a window knows the wait is no longer needed.
+    reopenOf: QueuedReopenSchema.optional(),
     // A continuation, not words (agent.run `continues`, booked for later): it carries the conversation on from where its
     // last turn stopped, its prompt empty, and goes alone (turn-admission.ts, together). A turn that starts before it
     // goes makes it moot (`superseded`).
@@ -72,16 +80,19 @@ export const TurnQueueSchema = z.object({
 });
 export type TurnQueue = z.infer<typeof TurnQueueSchema>;
 
-// What a booked message waits for: an instant, or another conversation's work landing. Exactly one.
-export type Booking = { readonly until: number; readonly after?: undefined } | { readonly after: AfterLand; readonly until?: undefined };
+// What a booked message waits for: an instant, or another conversation's work landing. Exactly one. An instant may say
+// it is an allowance's reopen (`reopenOf`).
+export type Booking =
+    | { readonly until: number; readonly after?: undefined; readonly reopenOf?: QueuedReopen | undefined }
+    | { readonly after: AfterLand; readonly until?: undefined; readonly reopenOf?: undefined };
 
 // The holds a press lets go: a Stop, or a refusal at the door. Neither touches a booked message.
 export type QueueHold = Exclude<QueuePause, "scheduled">;
 
 // The booking one message waits by, if any.
-export const bookingOfItem = (item: Pick<QueuedItem, "until" | "after">): Booking | undefined => {
+export const bookingOfItem = (item: Pick<QueuedItem, "until" | "after" | "reopenOf">): Booking | undefined => {
     if (item.until !== undefined) {
-        return { until: item.until };
+        return { until: item.until, ...opt("reopenOf", item.reopenOf) };
     }
     return item.after === undefined ? undefined : { after: item.after };
 };
@@ -130,8 +141,8 @@ const soonestOf = (items: readonly QueuedItem[]): Booking | undefined => {
 
 // A message with this booking in place of whatever it had; undefined takes its booking off.
 const rebooked = (item: QueuedItem, booking: Booking | undefined): QueuedItem => {
-    const { until: _until, after: _after, ...rest } = item;
-    return { ...rest, ...opt("until", booking?.until), ...opt("after", booking?.after) };
+    const { until: _until, after: _after, reopenOf: _reopenOf, ...rest } = item;
+    return { ...rest, ...opt("until", booking?.until), ...opt("after", booking?.after), ...opt("reopenOf", booking?.reopenOf) };
 };
 
 export const NO_QUEUE: TurnQueue = { items: [], revision: 0 };
@@ -251,8 +262,9 @@ export const released = (queue: TurnQueue, ids?: readonly string[]): TurnQueue =
 
 /**
  * Points each person's waiting message the press names (every one, when it names none) at who it names to serve it: the
- * usual answer to a refusal that held them. No model named keeps each message's own, since an unloaded catalog has no
- * pick to send.
+ * usual answer to a refusal that held them, and what a pick in the model picker does to words already waiting
+ * (agent.queueReroute). No model named keeps each message's own, since an unloaded catalog has no pick to send; no
+ * effort named keeps its own too, and a move onto another model names that model's (a tier may mean nothing there).
  */
 export const rerouted = (queue: TurnQueue, routing: ResumeRouting, ids?: readonly string[]): TurnQueue => {
     const these = named(queue, ids);
@@ -261,7 +273,8 @@ export const rerouted = (queue: TurnQueue, routing: ResumeRouting, ids?: readonl
         turn.agent === routing.agent &&
         turn.harness === routing.harness &&
         turn.account === routing.account &&
-        (routing.model === undefined || turn.model === routing.model);
+        (routing.model === undefined || turn.model === routing.model) &&
+        (routing.effort === undefined || turn.effort === routing.effort);
     const moving = (item: QueuedItem): boolean => item.voice === "person" && these.has(item.id) && !servedSo(item.turn);
     if (!queue.items.some(moving)) {
         return queue;
@@ -270,9 +283,16 @@ export const rerouted = (queue: TurnQueue, routing: ResumeRouting, ids?: readonl
         if (!moving(item)) {
             return item;
         }
-        const { agent: _agent, harness: _harness, account: _account, model, ...turn } = item.turn;
+        const { agent: _agent, harness: _harness, account: _account, model, effort, ...turn } = item.turn;
         const pick = routing.model ?? model;
-        const routed = { ...turn, agent: routing.agent, harness: routing.harness, ...opt("account", routing.account), ...opt("model", pick) };
+        const routed = {
+            ...turn,
+            agent: routing.agent,
+            harness: routing.harness,
+            ...opt("account", routing.account),
+            ...opt("model", pick),
+            ...opt("effort", routing.effort ?? effort),
+        };
         return { ...item, revision: queue.revision + 1, turn: routed };
     };
     return next(queue, queue.items.map(moved), holdOf(queue));
@@ -323,9 +343,21 @@ export const edited = (queue: TurnQueue, id: string, revision: number, text: str
     };
 };
 
+// Who a person's waiting words go on, as their request names it: what a window compares with its own pick, since the
+// words go there by themselves whatever the composer says now. The sandbox's and an agent's take the conversation's
+// routing when they go (turn-admission.ts onCurrentRouting), and a continuation carries on where the conversation runs.
+const servingOf = (item: QueuedItem): QueuedServing | undefined => {
+    if (item.voice !== "person" || item.continues === true) {
+        return undefined;
+    }
+    const { agent, harness } = withRuntimeDefaults(item.turn);
+    const { model, effort, account } = item.turn;
+    return { agent, harness, ...opt("model", model === "" ? undefined : model), ...opt("effort", effort), ...opt("account", account) };
+};
+
 /**
- * The queue as every window shows it: the words, their files, whose they are and when each booked one goes, never the
- * request behind them. The queue-level booking is the soonest, for editors that read only that.
+ * The queue as every window shows it: the words, their files, whose they are, when each booked one goes and who serves
+ * it, never the rest of the request behind them. The queue-level booking is the soonest, for editors that read only that.
  */
 export const queueView = (queue: TurnQueue): ConversationQueue => ({
     items: queue.items.map((item) => ({
@@ -337,6 +369,8 @@ export const queueView = (queue: TurnQueue): ConversationQueue => ({
         revision: item.revision,
         ...opt("until", item.until),
         ...opt("after", item.after?.conversationId),
+        ...opt("reopenOf", item.until === undefined ? undefined : item.reopenOf),
+        ...opt("serves", servingOf(item)),
         ...opt("continues", item.continues),
     })),
     revision: queue.revision,

@@ -2959,7 +2959,11 @@
             "continuesShortly": "continues in a moment",
             "takeBack": "Take back",
             "bookedForSpentRoomNow": "Booked for when {waited} reopens, but the account this chat runs on now has room: Send now sends it there.",
-            "bookedForSpentRoomOn": "Booked for when {waited} reopens, but {serving}, which this chat runs on now, has room: Send now sends it there."
+            "bookedForSpentRoomOn": "Booked for when {waited} reopens, but {serving}, which this chat runs on now, has room: Send now sends it there.",
+            "servedElsewhere": "Waiting to go on {served}. The composer is on {pick}.",
+            "moveToPick": "Move it there | Move them there",
+            "bookedForSpentReopened": "Booked for when {waited} reopens, and it has room again: Send now sends it.",
+            "servedOn": "Goes on {served}. | Go on {served}."
         },
         "sandboxNotice": {
             "compacted": "Context compacted to free up space.",
@@ -4225,7 +4229,8 @@
             "switchedLoop": "Switched to running through {loop}: your next message starts a fresh session with the conversation so far carried over.",
             "switchedModel": "Switched to {model}",
             "switchedProvider": "Switched to {provider}: your next message starts a fresh session with the conversation so far carried over.",
-            "waitingKeepTheirs": "The message already waiting goes on the model it was written for when it goes by itself; sending it now sends it on the new pick. | The {count} messages already waiting go on the model they were written for when they go by themselves; sending them now sends them on the new pick."
+            "waitingKeepTheirs": "The message already waiting goes on the model it was written for when it goes by itself; sending it now sends it on the new pick. | The {count} messages already waiting go on the model they were written for when they go by themselves; sending them now sends them on the new pick.",
+            "waitingFollow": "The message already waiting goes there too. | The {count} messages already waiting go there too."
         },
         "transcriptView": {
             "editedDropped": "Edited this message, {count} message dropped and the files restored to this point. | Edited this message, {count} messages dropped and the files restored to this point.",

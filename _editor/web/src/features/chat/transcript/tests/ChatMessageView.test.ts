@@ -1696,7 +1696,7 @@ describe(`a low-memory hold`, () => {
         expect(atReopen?.textContent?.trim()).toMatch(/^Send at \S/u);
         expect(sendAnyway(element)?.textContent?.trim()).toBe(`Send anyway`);
         atReopen!.click();
-        expect(scheduleContinue).toHaveBeenCalledWith({ sendAt: reopensAt * 1000 });
+        expect(scheduleContinue).toHaveBeenCalledWith({ sendAt: reopensAt * 1000, sendAtReopen: true });
         expect(resendKept).not.toHaveBeenCalled();
     });
 

@@ -136,6 +136,10 @@ export interface PickEffects {
     // Move the conversation the daemon holds to this account (switchAccount); a chat it does not hold yet takes the pick
     // on its first turn instead.
     readonly switchAccount?: string;
+    // The reader's own pick of who serves the next turn: the person's words already waiting go on it too
+    // (agent.queueReroute), since they otherwise go by themselves on the pick they were sent under. An account pick needs
+    // no asking: switchAccount moves them with the conversation.
+    readonly follow?: true;
     // What the running segment reported (its model, its context meter) no longer describes the next turn.
     readonly segmentCut?: true;
     // The last speed answer described a turn run under the old fast pick.
@@ -242,7 +246,7 @@ const REDUCERS: Reducers = {
         // A choice, so nothing is owed back: whatever the app had moved this chat from no longer applies.
         return {
             selection: { ...moved, movedFrom: undefined },
-            effects: { kept: true, remember: { provider, value: moved.model }, segmentCut: true, divider: `refresh` },
+            effects: { kept: true, remember: { provider, value: moved.model }, segmentCut: true, divider: `refresh`, follow: true },
         };
     },
     repointProvider: (selection, { provider }, world) => {
@@ -275,7 +279,7 @@ const REDUCERS: Reducers = {
             // debts go, since a same-provider pick skips the provider switch's own clearing.
             selection: { ...moved.selection, auto: false, model: pick.value, movedFrom: undefined, displacedModel: undefined },
             // A same-provider swap earns a divider too: it re-reads the whole conversation on a model never seen.
-            effects: { ...moved.effects, kept: true, remember: pick, divider: `refresh` },
+            effects: { ...moved.effects, kept: true, remember: pick, divider: `refresh`, follow: true },
         };
     },
     wearModel: (selection, { pin }, world) => {
@@ -311,7 +315,7 @@ const REDUCERS: Reducers = {
             ? unchanged(selection)
             : { selection: { ...selection, model: selection.displacedModel, displacedModel: undefined }, effects: { divider: `refresh` } },
     // The PICK, not always the effort in force: the effort a turn runs at is this clamped to the model's scale.
-    setEffort: (selection, { effort }) => ({ selection: { ...selection, effortPick: effort }, effects: { defaults: { effort } } }),
+    setEffort: (selection, { effort }) => ({ selection: { ...selection, effortPick: effort }, effects: { defaults: { effort }, follow: true } }),
     // No clamp: turning thinking off invalidates a `max` pick, but the effort in force already reads thinking.
     setThinking: (selection, { thinking }) => ({ selection: { ...selection, thinking }, effects: { defaults: { thinking } } }),
     // Never a default (see `fast`); the last answer described a turn run under the old setting.
@@ -340,7 +344,13 @@ const REDUCERS: Reducers = {
             ? unchanged(selection)
             : {
                   selection: { ...selection, harness, sentModel: undefined },
-                  effects: { kept: true, defaults: { harness: { provider: selection.provider, harness } }, segmentCut: true, divider: `refresh` },
+                  effects: {
+                      kept: true,
+                      defaults: { harness: { provider: selection.provider, harness } },
+                      segmentCut: true,
+                      divider: `refresh`,
+                      follow: true,
+                  },
               },
     // The daemon's word on where the conversation runs, shown: how a move the daemon made by itself (a limit move, a
     // turn moved off an account that can no longer serve) reaches the composer. It decides nothing: a turn names no

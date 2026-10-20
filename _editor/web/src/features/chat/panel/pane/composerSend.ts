@@ -25,7 +25,7 @@ import {
 } from "../../composer/composerIntent";
 import type { InputHistory } from "../../drafts/inputHistory";
 import { continueKeyHintOf } from "./continueKeyHint";
-import { bookingOf, laterLabel, type SendLater, type TurnBooking } from "../../../../models/conversations/drafts/sendLater";
+import { bookingOf, laterLabel, reopenBooking, type SendLater, type TurnBooking } from "../../../../models/conversations/drafts/sendLater";
 import type { RunThrough } from "../../models/run-settings/useRunThrough";
 import type { ChatRouting } from "../../routing/chatRoute";
 import { type ContinueOptions, type PickUp, pickUpReady, pickUpShort, wakesHeldUntil } from "../../../../models/conversations/endings/pickUp";
@@ -235,8 +235,8 @@ const reopenContinuation =
             // A Continue that waits as one, so nothing joins the chat as the reader's words; only a sandbox from before
             // `agent.queueContinue` books the word "Continue" instead.
             void (supportsRoute(`agent.queueContinue`)
-                ? chat.turn.scheduleContinue({ sendAt: until })
-                : chat.turn.schedule(continuationFor(host.view.messages.value), { sendAt: until }));
+                ? chat.turn.scheduleContinue(reopenBooking(until))
+                : chat.turn.schedule(continuationFor(host.view.messages.value), reopenBooking(until)));
         }
         host.pin();
     };
@@ -472,7 +472,7 @@ export const useComposerSend = (host: SendHost) => {
             // allow(silent-catch): the write is optimistic and rolls back on failure, so the card's control saying `wait` is the report.
             void host.armLimitResend().catch(() => undefined);
         }
-        sendDraft(booking === undefined ? undefined : { sendAt: booking });
+        sendDraft(booking === undefined ? undefined : reopenBooking(booking));
     };
 
     return {

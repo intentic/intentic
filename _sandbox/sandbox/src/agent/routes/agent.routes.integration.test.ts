@@ -240,7 +240,7 @@ describe("the conversation's queue", () => {
             delivered: "queued",
         });
         expect(await queueOf(client, "conv-q")).toEqual({
-            items: [{ id: "m-2", text: "and the changelog", voice: "person", queuedAt: expect.any(Number), revision: 1 }],
+            items: [{ id: "m-2", text: "and the changelog", voice: "person", queuedAt: expect.any(Number), revision: 1, serves: { agent: "grok", harness: "native" } }],
             revision: 1,
         });
 
@@ -459,7 +459,9 @@ describe("the conversation's queue", () => {
             await client.agent.run({ prompt: "update the docs for it", conversationId: "conv-next", agent: "grok", messageId: "m-next", sendAfter: "conv-first" }),
         ).toEqual({ delivered: "queued" });
         expect(await queueOf(client, "conv-next")).toEqual({
-            items: [{ id: "m-next", text: "update the docs for it", voice: "person", queuedAt: expect.any(Number), revision: 1, after: "conv-first" }],
+            items: [
+                { id: "m-next", text: "update the docs for it", voice: "person", queuedAt: expect.any(Number), revision: 1, after: "conv-first", serves: { agent: "grok", harness: "native" } },
+            ],
             revision: 1,
             paused: "scheduled",
             after: "conv-first",
@@ -525,6 +527,27 @@ describe("the conversation's queue", () => {
         await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
         expect(prompts[1]).toContain("write the guide");
         gates[1]?.();
+    });
+
+    // A message booked for an allowance's reopen says so, and a pick moves waiting words without letting them go
+    // (2026-10-20): the queue kept neither, so a window guessed the reason from the instant, and words booked on one model
+    // went out on it after the reader had picked another.
+    it("records a reopen booking's reason, and moves waiting words to another pick, keeping their time", async () => {
+        const { services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        const at = Date.now() + 60 * 60 * 1000;
+        await client.agent.run({ prompt: "write the guide", conversationId: "conv-reopen", agent: "grok", model: "grok-5", sendAt: at, sendAtReopen: true });
+
+        const moved = await client.agent.queueReroute({ conversationId: "conv-reopen", routing: { agent: "grok", harness: "native", model: "grok-5-mini", effort: "low" } });
+        expect(moved.items).toMatchObject([{ until: at, reopenOf: { agent: "grok" }, serves: { agent: "grok", model: "grok-5-mini", effort: "low" } }]);
+
+        // A time somebody chose is an appointment, not an allowance's wait; booked for the reopen again, it is one.
+        const chosen = await client.agent.queueSchedule({ conversationId: "conv-reopen", sendAt: at + 1_000 });
+        expect(chosen.items[0]).not.toHaveProperty("reopenOf");
+        expect((await client.agent.queueSchedule({ conversationId: "conv-reopen", sendAt: at, sendAtReopen: true })).items).toMatchObject([
+            { until: at, reopenOf: { agent: "grok" } },
+        ]);
+        expect(await errorCode(client.agent.queueReroute({ conversationId: "conv-empty", routing: { agent: "grok", harness: "native" } }))).toBe("NOT_FOUND");
     });
 
     // Each booked message goes at its own time (2026-10-06): the queue once held one booking for all of them, so the

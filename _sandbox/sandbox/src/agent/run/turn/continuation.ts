@@ -81,7 +81,8 @@ export const bookContinuation = async (services: Services, ask: ContinueAsk, now
     if (item === undefined) {
         return "unknown";
     }
-    const booking = bookingOfAsk(services, ask, now);
+    // A reopen is waited out where the continuation goes: who serves it, as its item names them.
+    const booking = bookingOfAsk(services, { ...ask, agent: item.turn.agent, account: item.turn.account }, now);
     if (unbookable(booking)) {
         return { invalid: "invalid" in booking ? booking.invalid : booking.why };
     }

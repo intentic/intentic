@@ -198,7 +198,6 @@ export const UNSERVED = {
     "agent.resume": UNSIMULATED_WRITE,
     "agent.rewind": UNSIMULATED_WRITE,
     "agent.routeChat": UNSIMULATED_WRITE,
-    "agent.switchAccount": UNSIMULATED_WRITE,
     // The desktop app's status bar and `ic sandbox attention` read it with a session minted for the owner; no view does.
     "agents.attention": NOT_THE_EDITORS,
     "agents.conflicts": UNFILLED_VIEW,

@@ -250,6 +250,9 @@ const samplesOf = (
             queueSchedule: { conversationId: fleet.SCHEDULED_AGENT_ID, sendAfter: fleet.FEATURED_AGENT_ID, ids: [fleet.SCHEDULED_MESSAGE_ID] },
             queueRemove: { conversationId: fleet.SCHEDULED_AGENT_ID, id: fleet.SCHEDULED_MESSAGE_ID, revision: 2 },
             queueResume: { conversationId: fleet.SCHEDULED_AGENT_ID },
+            // The held card's message moved to another pick, and its conversation to the account it already runs on.
+            queueReroute: { conversationId: fleet.HELD_AGENT_ID, routing: { agent: `codex`, harness: `native`, model: `gpt-5.2-codex` } },
+            switchAccount: { conversationId: fleet.HELD_AGENT_ID, account: `acc_claude_demo` },
             commands: {},
             refusals: undefined,
         },

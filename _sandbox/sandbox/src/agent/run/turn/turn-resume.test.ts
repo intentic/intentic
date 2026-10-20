@@ -284,7 +284,8 @@ describe("the pass books words for the reopen rather than sending them into a sp
         await createTurnResumeScheduler(services).tick(NOW);
         expect(drained).toEqual([]);
         const queue = conversations.queued("c1");
-        expect(queue.items).toMatchObject([{ id: "m-1", until: REOPEN * 1000 }]);
+        // Booked as the reopen it is, on the account it waits out, so every window can tell it from a chosen time.
+        expect(queue.items).toMatchObject([{ id: "m-1", until: REOPEN * 1000, reopenOf: { agent: "claude", account: "acct-b" } }]);
         // Booked, the hold is answered: the queue reads scheduled, and no memory hold is left for a later pass.
         expect(queue.paused).toBe("scheduled");
     });

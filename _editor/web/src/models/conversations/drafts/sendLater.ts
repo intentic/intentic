@@ -11,8 +11,16 @@ import { formatUntil } from "@intentic/ui/time";
 
 export type SendLater = { readonly kind: `at`; readonly at: number } | { readonly kind: `after`; readonly conversationId: string };
 
-/** The wire's spelling of a pick: what `agent.run` and `agent.queueSchedule` take beside the words. */
-export type TurnBooking = { readonly sendAt: number; readonly sendAfter?: undefined } | { readonly sendAfter: string; readonly sendAt?: undefined };
+/**
+ * The wire's spelling of a pick: what `agent.run` and `agent.queueSchedule` take beside the words. `sendAtReopen` says the
+ * instant is a spent allowance's reopen rather than a time the reader chose, which the queue keeps (`reopenOf`).
+ */
+export type TurnBooking =
+    | { readonly sendAt: number; readonly sendAfter?: undefined; readonly sendAtReopen?: true }
+    | { readonly sendAfter: string; readonly sendAt?: undefined; readonly sendAtReopen?: undefined };
+
+/** A booking for a spent allowance's reopen at `at` (ms): what every press that waits out an allowance books. */
+export const reopenBooking = (at: number): TurnBooking => ({ sendAt: at, sendAtReopen: true });
 
 export const bookingOf = (later: SendLater): TurnBooking => (later.kind === `at` ? { sendAt: later.at } : { sendAfter: later.conversationId });
 

@@ -3,6 +3,7 @@ import type { Services } from "../../../../composition.js";
 import type { TurnInput } from "../../../../seams/turn-starter.js";
 import { spentRung } from "../../../models/role-model-quota.js";
 import { allowanceWall } from "../../../../usage/serviceability/serviceability.js";
+import { reopenOfRouted } from "../booking-ask.js";
 
 /* WHAT GOES OUT WITH NOBODY PRESSING ANYTHING NEVER GOES INTO AN ALLOWANCE THE RECORDS CALL SPENT. A person's words the
    sandbox releases by itself (a memory hold once room comes back, a booking whose time came) used to go straight to the
@@ -54,10 +55,12 @@ export const rebookedForReopen = async (services: Services, conversationId: stri
     const words = services.conversations.queued(conversationId).items.filter((item) => item.voice === "person" && ids.includes(item.id));
     const routedBy = words.at(-1);
     const until = routedBy === undefined ? undefined : await spentUntil(services, routedBy.turn, now);
-    if (until === undefined) {
+    if (routedBy === undefined || until === undefined) {
         return false;
     }
-    services.conversations.send(conversationId, { kind: "queue-rescheduled", booking: { until }, ids: words.map((item) => item.id) }, now);
+    // Booked as the reopen it is, so every window can tell it from a time somebody chose (`reopenOf`).
+    const reopenOf = reopenOfRouted(services, conversationId, withRuntimeDefaults(routedBy.turn));
+    services.conversations.send(conversationId, { kind: "queue-rescheduled", booking: { until, reopenOf }, ids: words.map((item) => item.id) }, now);
     services.logger.info(
         { conversationId, messages: words.length, account: routedBy?.turn.account, until: new Date(until).toISOString() },
         "resume pass: words would go out on an account the records call spent, booked for its reopen instead",

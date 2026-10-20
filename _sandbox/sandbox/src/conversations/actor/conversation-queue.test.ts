@@ -172,7 +172,17 @@ describe("a conversation's queue", () => {
         const waitingOn = scheduled(NO_QUEUE, message("m1", "one"), { after });
         expect(waitingOn).toEqual({ items: [expect.objectContaining({ id: "m1", revision: 1, after })], revision: 1, paused: "scheduled", after });
         expect(queueView(waitingOn)).toEqual({
-            items: [{ id: "m1", text: "one", voice: "person", queuedAt: 1_000, revision: 1, after: "brave-otter-k2" }],
+            items: [
+                {
+                    id: "m1",
+                    text: "one",
+                    voice: "person",
+                    queuedAt: 1_000,
+                    revision: 1,
+                    after: "brave-otter-k2",
+                    serves: { agent: "codex", harness: "native", model: "gpt-6", account: "acct-1" },
+                },
+            ],
             revision: 1,
             paused: "scheduled",
             after: "brave-otter-k2",
@@ -256,15 +266,57 @@ describe("a conversation's queue", () => {
         ]);
     });
 
-    it("shows every window the words, their files and whose they are, never the request behind them", () => {
+    it("shows every window the words, their files, whose they are and who serves them, never the rest of the request", () => {
         const queue = hold(
             waiting(message("m1", "look", { turn: { conversationId: "c1", prompt: "look", attachments: ["shot.png"], agent: "codex" } })),
             "refused",
         );
         expect(queueView(queue)).toEqual({
-            items: [{ id: "m1", text: "look", attachments: ["shot.png"], voice: "person", queuedAt: 1_000, revision: 1 }],
+            items: [{ id: "m1", text: "look", attachments: ["shot.png"], voice: "person", queuedAt: 1_000, revision: 1, serves: { agent: "codex", harness: "native" } }],
             revision: 2,
             paused: "refused",
         });
+    });
+
+    // The bug these pin (2026-10-20): a pick in the model picker changed what the composer said and nothing about the
+    // words already waiting, which went by themselves on the pick they were sent under, and no window could tell which
+    // that was. A window now sees who serves each person's message, and moves them with the pick (agent.queueReroute).
+    it("says who serves each person's words, and nothing for the sandbox's or a continuation, which go where the conversation runs", () => {
+        const queue = waiting(
+            message("m1", "one", { turn: { conversationId: "c1", prompt: "one", agent: "claude", harness: "native", model: "", effort: "high" } }),
+            message("w1", "Watch fired", { voice: "sandbox" }),
+            message("k1", "", { continues: true }),
+        );
+        expect(queueView(queue).items.map((item) => item.serves)).toEqual([{ agent: "claude", harness: "native", effort: "high" }, undefined, undefined]);
+    });
+
+    it("moves the words to a picked model and its effort, keeping their bookings, and writes nothing for a pick that changes nothing", () => {
+        const queue = scheduled(waiting(message("m1", "one", { turn: { ...message("m1", "one").turn, effort: "xhigh" } })), message("m2", "two"), {
+            until: 9_000,
+        });
+        const moved = rerouted(queue, { agent: "codex", harness: "native", account: "acct-1", model: "gpt-6-mini", effort: "low" });
+        expect(moved.items.map(({ id, until, turn }) => ({ id, until, model: turn.model, effort: turn.effort }))).toEqual([
+            { id: "m1", until: undefined, model: "gpt-6-mini", effort: "low" },
+            { id: "m2", until: 9_000, model: "gpt-6-mini", effort: "low" },
+        ]);
+        expect(rerouted(moved, { agent: "codex", harness: "native", account: "acct-1", model: "gpt-6-mini", effort: "low" })).toBe(moved);
+        // No effort named keeps each message's own.
+        expect(rerouted(queue, { agent: "codex", harness: "native", account: "acct-1", model: "gpt-6-mini" }).items.map((item) => item.turn.effort)).toEqual([
+            "xhigh",
+            undefined,
+        ]);
+    });
+
+    // The bug these pin (2026-10-20): a message booked for a spent account's reopen kept no reason, so a window told it
+    // from a time somebody chose only by matching its instant against whatever the usage feed said that minute.
+    it("keeps the allowance a booking waits out with the booking, through a move to another account, and drops it with a new time", () => {
+        const reopenOf = { agent: "claude", account: "pro" };
+        const booked = scheduled(NO_QUEUE, message("m1", "one"), { until: 9_000, reopenOf });
+        expect(queueView(booked).items).toMatchObject([{ id: "m1", until: 9_000, reopenOf }]);
+        const moved = rerouted(booked, { agent: "claude", harness: "native", account: "max" });
+        expect(moved.items[0]).toMatchObject({ until: 9_000, reopenOf, turn: { account: "max" } });
+        // Re-timed by a person to a time they chose: no longer an allowance's wait.
+        expect(queueView(rescheduled(moved, { until: 12_000 })).items[0]).not.toHaveProperty("reopenOf");
+        expect(released(moved).items[0]).not.toHaveProperty("reopenOf");
     });
 });

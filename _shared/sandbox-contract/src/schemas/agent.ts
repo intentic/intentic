@@ -323,6 +323,15 @@ const AgentTurnFieldsSchema = z.object({
         .describe(
             "Hold this message until then (epoch milliseconds) instead of starting a turn now: a time you chose, or the reopen of an allowance you know is spent. It waits in the conversation's queue, where it can be sent early, reworded, rescheduled or removed, and goes by itself at that instant, even for a conversation this message opens or one whose turn is running now. Ignored when already past; at most a month ahead.",
         ),
+    // Why `sendAt` is the instant it is, when it is not a time somebody chose: the composer booked the message for the
+    // spent allowance's reopen. Kept with the booking (`reopenOf` on the queue), so every window can tell an allowance
+    // wait from an appointment without matching instants against whatever the usage feed says now.
+    sendAtReopen: z
+        .literal(true)
+        .optional()
+        .describe(
+            "Says `sendAt` is the reopen of the allowance this message would be refused by, not a time you chose. Recorded with the booking (the queue's `reopenOf` names the account it waits for), so every window can say the message waits on an allowance, and see when the conversation has moved somewhere with room. Only with `sendAt`.",
+        ),
     // The other scheduled send: work that builds on another agent's, held until that agent's work is in the workspace.
     // Held in the queue like `sendAt`; the queue's `after` is this. Never both: a hold waits on exactly one thing.
     sendAfter: ConversationIdSchema.optional().describe(
@@ -511,6 +520,25 @@ export type MessageReceipt = z.infer<typeof MessageReceiptSchema>;
 // a job that ended, a land that broke something), or another agent (a child reporting back).
 export const MessageVoiceSchema = z.enum(["person", "sandbox", "agent"]);
 export type MessageVoice = z.infer<typeof MessageVoiceSchema>;
+// The account a message booked for an allowance's reopen waits on: what it waits out, which the booking's instant alone
+// cannot say once the chat has moved somewhere with room.
+export const QueuedReopenSchema = z.object({
+    agent: AgentProviderSchema.describe("The provider whose allowance it waits out."),
+    account: z
+        .string()
+        .optional()
+        .describe("Which of its accounts. Absent when none was named, and every account of the provider read spent."),
+});
+export type QueuedReopen = z.infer<typeof QueuedReopenSchema>;
+// Who a person's waiting message goes on, as its request names it now.
+export const QueuedServingSchema = z.object({
+    agent: AgentProviderSchema.describe("The provider."),
+    harness: AgentHarnessSchema.describe("The agentic loop."),
+    model: z.string().optional().describe("The model. Absent when it named none, and takes the conversation's own."),
+    effort: z.string().optional().describe("How hard it thinks, where the model offers a choice."),
+    account: z.string().optional().describe("The account that pays for it. Absent when it named none, and goes on the conversation's own."),
+});
+export type QueuedServing = z.infer<typeof QueuedServingSchema>;
 // One message waiting for the conversation's next turn, as every window shows it.
 export const QueuedMessageSchema = z.object({
     id: z.string().describe("The message's id: what its sender named it, or what the sandbox did."),
@@ -529,6 +557,12 @@ export const QueuedMessageSchema = z.object({
         .describe("When this message goes out by itself, in milliseconds: it was scheduled for that time. Each message keeps its own booking."),
     after: ConversationIdSchema.optional().describe(
         "The conversation whose finished work must land before this message goes out by itself, in place of `until`.",
+    ),
+    reopenOf: QueuedReopenSchema.optional().describe(
+        "The allowance this message's `until` waits out: it was booked for that account's reopen, by the composer or by the sandbox holding words it would not send into a spent allowance, rather than for a time somebody chose. Absent on any other booking, and from sandboxes older than the field.",
+    ),
+    serves: QueuedServingSchema.optional().describe(
+        "Who serves the turn this message starts: the provider, loop, model, effort and account it was sent under, or was moved to since (`agent.queueReroute`, an account switch). Only on a person's words; the sandbox's and an agent's own go on wherever the conversation runs when they go. Absent from sandboxes older than the field.",
     ),
     continues: z
         .literal(true)

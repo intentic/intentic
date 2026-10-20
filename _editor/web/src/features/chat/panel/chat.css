@@ -936,6 +936,13 @@
     .composer-glyph > svg {
         font-size: var(--text-xs);
     }
+    /* The model pill saying the model it just moved to (ComposerModelPill's reveal): a pill again for those seconds, its
+       name truncating before anything beside it gives way. */
+    .composer-glyph.composer-revealed {
+        flex-shrink: 1;
+        aspect-ratio: auto;
+        padding-inline: calc(var(--spacing) * 2.5);
+    }
 }
 /* On a phone, 40px wide like the paperclip and the mic (their height keeps the 44): eight presses in a 360px row. */
 @media (max-width: 767.98px) {
@@ -943,6 +950,9 @@
         .composer-glyph {
             aspect-ratio: auto;
             width: 2.5rem;
+        }
+        .composer-glyph.composer-revealed {
+            width: auto;
         }
         .composer-glyph > svg {
             font-size: var(--text-base);

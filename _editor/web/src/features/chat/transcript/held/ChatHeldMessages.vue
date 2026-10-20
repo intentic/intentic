@@ -8,6 +8,7 @@ import { memoryNext } from "../../../../models/conversations/endings/turnBreak";
 import MemoryRaise from "../notices/MemoryRaise.vue";
 import ChatHeldBooking from "./ChatHeldBooking.vue";
 import ChatHeldBubble from "./ChatHeldBubble.vue";
+import ChatHeldRouting from "./ChatHeldRouting.vue";
 import ChatHeldStatus from "./ChatHeldStatus.vue";
 import { HELD_PRESS_ATTR } from "../../panel/pane/heldLineSeen";
 import { useHeldQueue } from "./heldQueue";
@@ -97,6 +98,7 @@ const press = computed((): HeldPress => {
                     <MemoryRaise v-if="notice?.noticeAction === `sandboxMemory` && !streaming" />
                 </span>
             </ChatHeldStatus>
+            <ChatHeldRouting :messages="bubbles" :compact="compact" />
             <!-- What happens next, asked as every wall asks it (a spent allowance's card, ChatContinueStrip): wait for the
                  press, or send it by itself once memory has stayed free for a while. -->
             <div v-if="reason === `memory`" class="flex flex-col gap-1 text-2xs text-muted" :class="compact ? `items-start` : `items-end`">

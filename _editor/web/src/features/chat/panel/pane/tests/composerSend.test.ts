@@ -137,7 +137,7 @@ describe(`a scheduled send`, () => {
         send.submit();
 
         expect(host.armLimitResend).toHaveBeenCalledTimes(1);
-        expect(schedule.mock.calls).toEqual([[`ship it`, { sendAt: reopens * 1_000 }, [], undefined]]);
+        expect(schedule.mock.calls).toEqual([[`ship it`, { sendAt: reopens * 1_000, sendAtReopen: true }, [], undefined]]);
         expect(say).not.toHaveBeenCalled();
         // The box is spent as for any send: the words now wait in the queue.
         expect(chat.draft.value).toBe(``);
@@ -228,7 +228,7 @@ describe(`a scheduled send`, () => {
         expect(send.sendHint.value).toMatchObject({ title: `Continue at reset` });
         send.submit();
 
-        expect(scheduleContinue.mock.calls).toEqual([[{ sendAt: reopens * 1_000 }]]);
+        expect(scheduleContinue.mock.calls).toEqual([[{ sendAt: reopens * 1_000, sendAtReopen: true }]]);
         expect(schedule).not.toHaveBeenCalled();
         expect(host.armLimitResend).toHaveBeenCalledTimes(1);
         expect(continued).not.toHaveBeenCalled();

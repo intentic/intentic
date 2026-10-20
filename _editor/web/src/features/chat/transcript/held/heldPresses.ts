@@ -5,6 +5,7 @@ import { computed } from "vue";
 import { supportsRoute } from "../../../../client/sandbox/useDaemonRoutes";
 import { atReopenPhrase, pickUpWhen } from "../../../../models/conversations/endings/pickUp";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
+import { reopenBooking } from "../../../../models/conversations/drafts/sendLater";
 
 /* WHAT A MESSAGE THAT DID NOT GO OUT OFFERS, DECIDED ONCE. Every surface that draws one (the held line under its words,
    the bar over the composer, the row under a turn the sandbox kept) asks here, from what stands now rather than from the
@@ -53,7 +54,7 @@ export const useReopenPress = (active: () => boolean, arm?: () => Promise<void>)
         }
         // allow(silent-catch): the write is optimistic and rolls back on failure, so the limit card's control saying `wait` is the report.
         void arm?.().catch(() => undefined);
-        void conversation.value.turn.reschedule({ sendAt: at }, ids);
+        void conversation.value.turn.reschedule(reopenBooking(at), ids);
     };
     // A turn the sandbox kept has no words in the queue: a Continue booked for the reopen runs it again then, as it was.
     // Only a sandbox that books a Continue can; undefined elsewhere, where the kept turn keeps its own press alone.
@@ -63,7 +64,7 @@ export const useReopenPress = (active: () => boolean, arm?: () => Promise<void>)
             : (): void => {
                   const at = reopenAt.value;
                   if (at !== undefined) {
-                      void conversation.value.turn.scheduleContinue({ sendAt: at });
+                      void conversation.value.turn.scheduleContinue(reopenBooking(at));
                   }
               },
     );

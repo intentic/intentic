@@ -1,11 +1,14 @@
 import { capabilitiesOf, clampMode, fastAllowed, loopLabel, loopOf, providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { AgentProvider, PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { SPENT_UTILIZATION } from "@intentic/sandbox-contract/models/plan-pools";
 import { t } from "@intentic/ui/i18n";
 import { computed, shallowRef } from "vue";
 import { providerAccounts } from "../../providers/providerAccounts";
 import { modelLabelFor, providerModels } from "../../providers/providerCatalog";
 import { servingAccount } from "../accounts/servingAccount";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
+import { followPick } from "./queueCalls";
 import { clampEffort } from "../../providers/effortScale";
 import { rememberedHarnessFor, rememberedModelFor, rememberedProviderFor, rememberHarness, rememberPick, turnDefaults } from "../run/turnDefaults";
 import { accountIntent, readsAsContinuing, type SessionRef, type TurnSettings } from "../run/turnRequest";
@@ -44,26 +47,36 @@ export interface SwitchPoint {
     readonly modelLabel: string;
     // Whose allowance the model spends, when the plan meters it separately (` · 5h 87% used`), else empty.
     readonly allowance: string;
-    // Messages already waiting in the queue (held, or booked for later). Each carries the provider and model it was
-    // written under and goes out on them by itself; only a press that sends it now sends it on the new pick.
+    // A person's messages already waiting in the queue (held, or booked for later). Each carries the provider and model
+    // it was written under and goes out on them by itself, unless the pick moves it (`follows`).
     readonly waiting: number;
+    // The sandbox moves waiting messages onto a provider, loop or model pick (agent.queueReroute); an older one leaves
+    // them on theirs, and only a press that sends them now sends them on the new pick.
+    readonly follows: boolean;
 }
 
-// Said under a provider, loop or model switch while messages wait, since the divider sits right above them and its
-// "your next message" would otherwise read as covering them. Not under an account switch: the daemon moves the
-// conversation to the new account, and waiting messages go there with it.
-const waitingNote = (point: SwitchPoint): string =>
-    point.waiting === 0 ? `` : ` ${t(`chat.composerSelection.waitingKeepTheirs`, { count: point.waiting }, point.waiting)}`;
+// Said under a switch while messages wait, since the divider sits right above them and its "your next message" would
+// otherwise read as leaving them out, or as covering them where they keep their own pick. An account switch always
+// takes them along: the daemon moves the conversation's waiting words with it (switchAccount).
+const waitingNote = (point: SwitchPoint, moved: boolean): string => {
+    if (point.waiting === 0) {
+        return ``;
+    }
+    const note = moved
+        ? t(`chat.composerSelection.waitingFollow`, { count: point.waiting }, point.waiting)
+        : t(`chat.composerSelection.waitingKeepTheirs`, { count: point.waiting }, point.waiting);
+    return ` ${note}`;
+};
 
 // The words for what retired the session. An account the picker has no row for is said as its provider, as before.
 const segmentWords = (point: SwitchPoint): string => {
     if (point.segment === `account` && point.accountLabel !== undefined) {
-        return t(`chat.composerSelection.switchedAccount`, { account: point.accountLabel });
+        return `${t(`chat.composerSelection.switchedAccount`, { account: point.accountLabel })}${waitingNote(point, true)}`;
     }
     if (point.segment === `loop`) {
-        return `${t(`chat.composerSelection.switchedLoop`, { loop: point.loopLabel })}${waitingNote(point)}`;
+        return `${t(`chat.composerSelection.switchedLoop`, { loop: point.loopLabel })}${waitingNote(point, point.follows)}`;
     }
-    return `${t(`chat.composerSelection.switchedProvider`, { provider: point.providerLabel })}${waitingNote(point)}`;
+    return `${t(`chat.composerSelection.switchedProvider`, { provider: point.providerLabel })}${waitingNote(point, point.follows)}`;
 };
 
 // A provider, account or harness switch retires the session; unconditional about what carries over, since that is the
@@ -76,7 +89,7 @@ export const segmentSwitchText = (point: SwitchPoint): string | undefined => (!p
 export const modelSwitchText = (point: SwitchPoint): string | undefined =>
     point.sentModel === undefined || point.sentModel === point.model
         ? undefined
-        : `${t(`chat.composerSelection.switchedModel`, { model: point.modelLabel })}${point.allowance}${waitingNote(point)}`;
+        : `${t(`chat.composerSelection.switchedModel`, { model: point.modelLabel })}${point.allowance}${waitingNote(point, point.follows)}`;
 
 // What the selection moved off the held session: its provider first, then its account, else the loop, which is the only
 // other thing readsAsContinuing weighs. No session at all is a provider's first segment, said as the provider.
@@ -95,11 +108,11 @@ export const switchNoticeText = (point: SwitchPoint): string | undefined => segm
 export const midTurnSwitchText = (point: SwitchPoint, switchedMidTurn: boolean): string | undefined =>
     (switchedMidTurn ? segmentSwitchText(point) : undefined) ?? modelSwitchText(point);
 
-// How far a booking's instant may sit from an allowance's reopen and still be the booking made for it.
-const REOPEN_MATCH_MS = 60_000;
-
 // What a selection reads and writes of the conversation around it.
-type SelectionHost = Pick<Conversation, "session" | "registered" | "activeModel" | "contextUsage" | "fastMode" | "box" | "peek" | "queue"> & {
+type SelectionHost = Pick<
+    Conversation,
+    "conversationId" | "error" | "session" | "registered" | "activeModel" | "contextUsage" | "fastMode" | "box" | "peek" | "queue"
+> & {
     readonly transcript: Pick<TranscriptView, "messages" | "notice" | "rewordNotice" | "write">;
     readonly turn: Pick<TurnClient, "streaming" | "generating" | "moveAccount">;
 };
@@ -175,14 +188,24 @@ export class ComposerSelection {
     // only meet a spent allowance (composerIntent's `scheduled`).
     readonly servingState = computed(() => this.accountRows.value.find((row) => row.id === this.servingAccount.value?.id)?.state);
 
-    // The account on this chat's provider whose spent allowance reopens at `at` (ms), if one does: what a message booked
-    // for a reopen waits on, read back off its instant, since the queue keeps no reason for a booking. The composer books
-    // at the reopen itself (composerIntent's `scheduled`), so a minute either side is the same booking.
-    spentReopeningAt(at: number): string | undefined {
-        return this.accountRows.value.find(
-            (row) => row.state.kind === `spent` && row.state.reopensAt !== undefined && Math.abs(row.state.reopensAt * 1_000 - at) <= REOPEN_MATCH_MS,
-        )?.id;
-    }
+    // Who the next turn goes on, as a move of words already waiting names it (agent.queueReroute): the runtime, model and
+    // effort the composer holds, and the account only where a send would name one (accountIntent), else the daemon's.
+    readonly followRouting = computed((): ResumeRouting => {
+        const { provider, harness, model, account, accountPicked } = this.state.value;
+        const named = accountIntent({ agent: provider, account, accountPicked }, { registered: true, session: this.host.session.value });
+        const effort = this.effort.value;
+        const routing: ResumeRouting = { agent: provider, harness };
+        if (model !== ``) {
+            routing.model = model;
+        }
+        if (effort !== ``) {
+            routing.effort = effort;
+        }
+        if (named !== undefined) {
+            routing.account = named;
+        }
+        return routing;
+    });
 
     private readonly accountRows = computed(() => {
         const provider = this.provider.value;
@@ -221,6 +244,10 @@ export class ComposerSelection {
         }
         if (effects.session !== undefined) {
             this.host.session.value = effects.session;
+        }
+        // The words already waiting go where the next message goes, rather than by themselves on the pick they were sent under.
+        if (effects.follow === true) {
+            void followPick(this.host, this.followRouting.value);
         }
         this.divide(effects.divider);
     }
@@ -331,6 +358,7 @@ export class ComposerSelection {
             // A person's words only: the daemon runs those on the routing they were queued with, where the sandbox's and
             // an agent's own messages take the conversation's current one (turn-admission.ts turnOf).
             waiting: (this.host.queue.value?.items ?? []).filter((item) => item.voice === `person` && item.continues !== true).length,
+            follows: supportsRoute(`agent.queueReroute`),
         };
     }
 

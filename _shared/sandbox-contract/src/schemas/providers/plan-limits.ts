@@ -482,6 +482,19 @@ export const QueueResumeSchema = z.object({
         ),
 });
 export type QueueResume = z.infer<typeof QueueResumeSchema>;
+// Points a person's waiting messages at another provider, model or account without letting them go: what a pick in the
+// model picker does to the words already waiting, which would otherwise go by themselves on the pick they were sent under.
+export const QueueRerouteSchema = z.object({
+    conversationId: z.string().min(1).describe("Whose queue."),
+    routing: ResumeRoutingSchema.describe(
+        "Who serves the turn each message starts from now on. A model or effort left out keeps each message's own; an account left out goes on the conversation's own when it goes.",
+    ),
+    ids: z
+        .array(z.string().min(1))
+        .optional()
+        .describe("Which waiting messages to move. Leave it out to move every person's waiting message, held or booked; each keeps its own booking."),
+});
+export type QueueReroute = z.infer<typeof QueueRerouteSchema>;
 // Re-times what a conversation's queue holds: the same messages (or only those `ids` names), booked for another instant
 // or for after another conversation's work lands. One of the two, never both, since a booking waits on exactly one thing.
 export const QueueScheduleSchema = z
@@ -496,6 +509,12 @@ export const QueueScheduleSchema = z
         sendAfter: ConversationIdSchema.optional().describe(
             "Send what waits once that conversation has finished and all of its work has landed in the workspace, instead. Sent now when it has nothing running and nothing left to land.",
         ),
+        sendAtReopen: z
+            .literal(true)
+            .optional()
+            .describe(
+                "Says `sendAt` is the reopen of the allowance what waits would be refused by, not a time you chose; the queue records it as `reopenOf`. Only with `sendAt`.",
+            ),
         ids: z
             .array(z.string().min(1))
             .optional()
@@ -521,6 +540,10 @@ export const QueueContinueSchema = z
             .optional()
             .describe("Carry on at this instant (epoch milliseconds). At most a month ahead; an instant already past carries on now."),
         sendAfter: ConversationIdSchema.optional().describe("Carry on once that conversation has finished and all of its work has landed, instead."),
+        sendAtReopen: z
+            .literal(true)
+            .optional()
+            .describe("Says `sendAt` is the reopen of a spent allowance, not a time you chose; the queue records it as `reopenOf`. Only with `sendAt`."),
         routing: ResumeRoutingSchema.optional().describe(
             "Who serves the turn it starts. Leave it out to carry on where the conversation runs when it goes.",
         ),

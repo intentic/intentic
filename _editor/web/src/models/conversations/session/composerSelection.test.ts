@@ -23,6 +23,8 @@ const providerName = providerLabel;
 const CARRIED = `your next message starts a fresh session with the conversation so far carried over.`;
 const FRESH = (name: string | undefined): string => `Switched to ${name}: ${CARRIED}`;
 const WAITING_ONE = `The message already waiting goes on the model it was written for when it goes by itself; sending it now sends it on the new pick.`;
+const FOLLOW_ONE = `The message already waiting goes there too.`;
+const FOLLOW_TWO = `The 2 messages already waiting go there too.`;
 
 // The session a first turn on Claude minted, on account `a1`.
 const CLAUDE_SESSION: SessionRef = { id: `s-1`, provider: `claude`, account: `a1`, harness: `native` };
@@ -35,6 +37,8 @@ const selectionOf = () => {
     const moved: string[] = [];
     const transcript = new TranscriptView(() => undefined, unstubbed<TranscriptHost>(`transcriptHost`, {}));
     const host = {
+        conversationId: `c-1`,
+        error: ref<string | null>(null),
         session: ref<SessionRef | undefined>(),
         registered: ref(false),
         activeModel: ref<string | null>(`reported-model`),
@@ -81,6 +85,7 @@ describe(`the words a switch owes`, () => {
         modelLabel: `Haiku`,
         allowance: ``,
         waiting: 0,
+        follows: false,
     };
 
     it(`a segment switch says the session starts fresh, once anything has happened and only if it no longer resumes`, () => {
@@ -109,12 +114,16 @@ describe(`the words a switch owes`, () => {
         expect(segmentSwitchText({ ...MOVED, segment: `loop`, loopLabel: `OpenCode` })).toBe(`Switched to running through OpenCode: ${CARRIED}`);
     });
 
-    // The divider sits right above messages already waiting, which go on the pick they were queued with by themselves.
-    it(`says that waiting messages keep their model under a provider or model switch, never under an account move`, () => {
+    // The divider sits right above messages already waiting: a sandbox that moves them with the pick takes them along,
+    // and an older one sends them by themselves on the pick they were queued with.
+    it(`says waiting messages go on the new pick where the sandbox moves them, and keep theirs where it cannot`, () => {
         expect(segmentSwitchText({ ...MOVED, waiting: 1 })).toBe(`${FRESH(`Codex`)} ${WAITING_ONE}`);
         expect(modelSwitchText({ ...MOVED, waiting: 1 })).toBe(`Switched to Haiku ${WAITING_ONE}`);
+        expect(segmentSwitchText({ ...MOVED, waiting: 1, follows: true })).toBe(`${FRESH(`Codex`)} ${FOLLOW_ONE}`);
+        expect(modelSwitchText({ ...MOVED, waiting: 2, follows: true })).toBe(`Switched to Haiku ${FOLLOW_TWO}`);
+        // An account move always takes them along: the daemon moves the conversation's waiting words with it.
         expect(segmentSwitchText({ ...MOVED, waiting: 2, segment: `account`, accountLabel: `Claude Pro` })).toBe(
-            `Switched to the Claude Pro account: ${CARRIED}`,
+            `Switched to the Claude Pro account: ${CARRIED} ${FOLLOW_TWO}`,
         );
     });
 
@@ -403,20 +412,3 @@ describe(`the divider a reopened chat is owed`, () => {
     });
 });
 
-describe(`a booking made for a spent allowance's reopen`, () => {
-    const REOPENS = 1_900_000_000;
-    const row = (id: string, state: AccountState): OauthAccount => ({ id, label: id, connectedAt: 0, state });
-
-    it(`is read back off its instant, to the account whose allowance reopens then`, () => {
-        providerAccounts.value = {
-            ...providerAccounts.value,
-            claude: [row(`pro`, { kind: `spent`, reopensAt: REOPENS }), row(`max`, { kind: `ready`, room: 50 })],
-        };
-        const { selection } = selectionOf();
-
-        expect(selection.spentReopeningAt(REOPENS * 1_000)).toBe(`pro`);
-        expect(selection.spentReopeningAt(REOPENS * 1_000 + 30_000)).toBe(`pro`);
-        // A time the reader chose is nobody's reopen.
-        expect(selection.spentReopeningAt(REOPENS * 1_000 + 10 * 60_000)).toBeUndefined();
-    });
-});

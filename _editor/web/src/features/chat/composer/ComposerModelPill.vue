@@ -1,6 +1,6 @@
 <!-- Model pill (provider mark, name, chevron) that opens <ChatModelPicker>, shared by both composers. -->
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { trialBadge } from "../../../models/providers/access";
@@ -69,6 +69,34 @@ const olderHint = computed(() =>
           },
 );
 
+// A move to another model, said on the pill for a moment even where a narrow composer keeps it down to its logo: the logo
+// is the same for every model of a provider, so a swap there changed nothing on screen, and the chat ran on a model the
+// reader could not see they had picked (2026-10-20). The name stands for a few seconds with the flash, then the pill
+// goes back to its logo. Not on Auto, nor on the press to choose one, which say their own words.
+const REVEAL_MS = 3_000;
+const revealed = ref(false);
+let hiding: ReturnType<typeof setTimeout> | undefined;
+watch([provider, model], () => {
+    if (reading.value.unset || auto.value) {
+        return;
+    }
+    revealed.value = true;
+    clearTimeout(hiding);
+    hiding = setTimeout(() => {
+        revealed.value = false;
+    }, REVEAL_MS);
+});
+onBeforeUnmount(() => clearTimeout(hiding));
+
+// Down to its logo, the pill names its model under the pointer, as any glyph press names itself: which model answers is
+// otherwise one press away. Read when the pointer arrives, since the name hides by the composer's width, not by a prop.
+const nameEl = ref<HTMLElement>();
+const nameHidden = ref(false);
+const measureName = (): void => {
+    nameHidden.value = nameEl.value !== undefined && nameEl.value.getClientRects().length === 0;
+};
+const nameHint = computed(() => (nameHidden.value && !reading.value.unset ? { title: modelLabelText.value } : undefined));
+
 // The button itself: see the note above on why the anchor has to be this element and not a stand-in.
 const el = ref<HTMLButtonElement>();
 defineExpose({ el, label: modelLabelText });
@@ -79,18 +107,20 @@ defineExpose({ el, label: modelLabelText });
         ref="el"
         type="button"
         class="composer-ghost h-8 min-w-0 gap-1.5 px-2.5 text-2xs font-medium max-md:h-11"
+        :class="{ 'composer-revealed composer-flash': revealed }"
         :disabled="disabled"
         :aria-expanded="expanded"
         :aria-label="ariaLabel ?? t(`chat.composerModelPill.model`, { modelLabelText })"
         :aria-description="nextHint ?? olderHint?.note"
-        v-tooltip.top="nextHint ?? olderHint ?? trialHint"
+        v-tooltip.top="nextHint ?? olderHint ?? trialHint ?? nameHint"
+        @pointerenter="measureName"
     >
         <!-- A vendor's mark over a chat that vendor cannot answer is the same lie as its name; the list's own mark stands there. -->
         <Icon v-if="reading.unset" name="th-large" class="shrink-0 text-2xs text-link" aria-hidden="true" />
         <!-- Auto's own mark, so the armed state is legible with the label hidden on a narrow composer. -->
         <Icon v-else-if="auto" name="sparkles" class="shrink-0 text-2xs text-link" aria-hidden="true" />
         <ProviderLogo v-else :provider="provider" class="shrink-0 text-2xs text-link" />
-        <span class="truncate" :class="labelClass">{{ modelLabelText }}</span>
+        <span ref="nameEl" class="truncate" :class="revealed ? `` : labelClass">{{ modelLabelText }}</span>
         <!-- Hides with the name: on a pill down to its logo it would be the one word left. -->
         <span v-if="runningOn !== undefined" class="shrink-0 font-normal text-subtle" :class="labelClass">{{ t(`chat.composerModelPill.nextMessage`) }}</span>
         <span v-else-if="newer !== undefined" class="shrink-0 font-normal text-warning" :class="labelClass">{{ t(`chat.composerModelPill.older`) }}</span>

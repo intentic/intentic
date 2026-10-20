@@ -222,9 +222,12 @@ const stateOccasions = (
     input: { readonly booking?: TurnBooking | undefined; readonly conversationAutoLand?: boolean | undefined; readonly registered: boolean },
     here: boolean,
 ): void => {
-    const { sendAt, sendAfter } = input.booking ?? {};
+    const { sendAt, sendAfter, sendAtReopen } = input.booking ?? {};
     if (sendAt !== undefined) {
         body.sendAt = sendAt;
+        if (sendAtReopen === true) {
+            body.sendAtReopen = true;
+        }
     }
     if (sendAfter !== undefined) {
         body.sendAfter = sendAfter;

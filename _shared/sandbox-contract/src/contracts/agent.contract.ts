@@ -19,6 +19,7 @@ import {
     QueuedMessageRefSchema,
     QueueEditSchema,
     QueueContinueSchema,
+    QueueRerouteSchema,
     QueueResumeSchema,
     QueueScheduleSchema,
     ResumeTurnSchema,
@@ -127,6 +128,17 @@ export const agentContract = {
         .meta({ floor: "collaborator", guest: true })
         .input(QueueResumeSchema)
         .output(QueueResumedSchema),
+    queueReroute: procedure
+        .route({
+            method: "POST",
+            path: "/agent/queue/reroute",
+            summary: "Move waiting messages to another model",
+            description:
+                "Points the person's messages waiting in the conversation's queue at another provider, loop, model or account, without letting them go: held ones stay held and booked ones keep their time, and when they go they go there. What a pick in the model picker does to words already waiting, which otherwise go out on the pick they were sent under. The sandbox's and an agent's own messages always go wherever the conversation runs, and are left alone.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .input(QueueRerouteSchema)
+        .output(ConversationQueueSchema),
     // NOT_FOUND when nothing waits; BAD_REQUEST when the conversation named to wait for is unknown or archived.
     queueSchedule: procedure
         .route({

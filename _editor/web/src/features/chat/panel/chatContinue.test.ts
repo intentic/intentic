@@ -448,7 +448,7 @@ it(`continues a turn that stopped short at the spent account's reopen, instead o
 
     // A Continue booked for the reopen, which re-runs the held turn then: never the word "Continue" as the reader's
     // message, which stood in the transcript as words nobody wrote and superseded the held turn (2026-10-17).
-    expect(scheduleContinue.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000 }]]);
+    expect(scheduleContinue.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000, sendAtReopen: true }]]);
     expect(schedule).not.toHaveBeenCalled();
     // Set for a reopen the provider named too early, as any scheduled send sets it.
     expect(setBreakPolicy).toHaveBeenCalledWith(conversation.conversationId, `limit`, `resend`);
@@ -471,7 +471,7 @@ it(`books the same continuation from Enter on the empty box`, async () => {
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
 
-    expect(scheduleContinue.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000 }]]);
+    expect(scheduleContinue.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000, sendAtReopen: true }]]);
     expect(schedule).not.toHaveBeenCalled();
     expect(carry).not.toHaveBeenCalled();
 });

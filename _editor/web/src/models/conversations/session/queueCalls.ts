@@ -1,11 +1,14 @@
 import type { ConversationQueue } from "@intentic/sandbox-contract/schemas/agent";
+import type { ResumeRouting } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { t } from "@intentic/ui/i18n";
 import { orRefusal, SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { FollowEnd } from "../../../client/sandbox/streams/turnStream";
 import { uuid } from "../../../lib/uuid";
 import type { TurnBooking } from "../drafts/sendLater";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import type { Conversation } from "./conversation";
+import { movedByPick } from "./waitingRouting";
 
 // A conversation's queue as the calls that change it answer it: which of two copies is newer, what a refusal says, and
 // the Continue booked for later. Apart from TurnClient, which reaches them through its own methods.
@@ -46,5 +49,38 @@ export const bookContinue = async (
     if (!left.items.some((item) => item.continues === true)) {
         await followNow();
     }
+    return true;
+};
+
+/**
+ * Moves the person's words waiting in the queue onto `routing` (agent.queueReroute), among `ids` when named: what a pick
+ * in the model picker does to them, since they otherwise go by themselves on the pick they were sent under. Only words
+ * served elsewhere are named, so a pick that changes nothing for them asks nothing. Held ones stay held and booked ones
+ * keep their time. Only a sandbox with the route can move them; on an older one the divider says they keep theirs.
+ * Resolves with whether anything moved.
+ */
+export const followPick = async (
+    chat: Pick<Conversation, "conversationId" | "error" | "box" | "queue">,
+    routing: ResumeRouting,
+    ids?: readonly string[],
+): Promise<boolean> => {
+    const moving = movedByPick(chat.queue.value, routing, ids);
+    if (moving.length === 0 || !supportsRoute(`agent.queueReroute`)) {
+        return false;
+    }
+    const left = await orRefusal(
+        sandboxRpc.agent.queueReroute(
+            { conversationId: chat.conversationId, routing, ids: moving.map((item) => item.id) },
+            { context: { at: chat.box.value } },
+        ),
+    );
+    // Gone out or taken back since: nothing is left to move, and the queue the next frame brings says so.
+    if (left instanceof SandboxHttpError) {
+        if (left.status !== 404) {
+            chat.error.value = queueRefusal(left);
+        }
+        return false;
+    }
+    chat.queue.value = newerQueue(chat.queue.value, left);
     return true;
 };

@@ -209,7 +209,7 @@ describe(`a message the sandbox held for low memory`, () => {
 
         later!.click();
         await settled();
-        expect(reschedule.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000 }, [`m1`]]]);
+        expect(reschedule.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000, sendAtReopen: true }, [`m1`]]]);
         expect(resume).not.toHaveBeenCalled();
     });
 
@@ -349,7 +349,7 @@ describe(`the other holds, drawn the same way`, () => {
 
         later!.click();
         await settled();
-        expect(reschedule.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000 }, [`m1`]]]);
+        expect(reschedule.mock.calls).toEqual([[{ sendAt: reopensAt * 1_000, sendAtReopen: true }, [`m1`]]]);
         expect(resume).not.toHaveBeenCalled();
     });
 
@@ -411,8 +411,14 @@ describe(`a scheduled send`, () => {
         afterEach(() => {
             providerAccounts.value = kept;
         });
-        const bookedOn = (account: string): Conversation => {
-            const chat = chatHolding({ items: [held({ attachments: [], until: reopens * 1_000 })], paused: `scheduled`, until: reopens * 1_000 }, SENT);
+        // The sandbox keeps why it was booked (`reopenOf`); without it the booking is a time somebody chose.
+        const PRO = { agent: `claude`, account: `pro` } as const;
+        const bookedOn = (account: string, reopenOf: QueuedMessage[`reopenOf`] | null = PRO): Conversation => {
+            const why = reopenOf === null ? {} : { reopenOf };
+            const chat = chatHolding(
+                { items: [held({ attachments: [], until: reopens * 1_000, ...why })], paused: `scheduled`, until: reopens * 1_000 },
+                SENT,
+            );
             chat.selection.apply({ kind: `set`, picks: { provider: `claude`, model: `claude-sonnet-5`, account } });
             return chat;
         };
@@ -430,6 +436,66 @@ describe(`a scheduled send`, () => {
             await nextTick();
 
             expect(element.textContent).not.toContain(`has room`);
+        });
+
+        // The bug this pins (2026-10-20): the reason was guessed from the instant, so a time the reader chose that fell
+        // within a minute of a reopen read as an allowance's wait.
+        it(`says nothing for a time somebody chose, however close it falls to a reopen`, async () => {
+            const element = mount(bookedOn(`max`, null));
+            await nextTick();
+
+            expect(element.textContent).not.toContain(`Booked for when`);
+        });
+
+        it(`says the account it waited for has room again when it reopened early`, async () => {
+            providerAccounts.value = { ...kept, claude: [{ id: `pro`, label: `Claude Pro`, connectedAt: 0, state: { kind: `ready`, room: 80 } }] };
+            const element = mount(bookedOn(`pro`));
+            await nextTick();
+
+            expect(element.textContent).toContain(`Booked for when Claude Pro reopens, and it has room again: Send now sends it.`);
+        });
+
+
+    });
+
+    // Words go by themselves on the pick they were sent under; a pick moves them, and where it did not (another window's
+    // pick, a refused move) the line says where they go, with the press that moves them (2026-10-20).
+    describe(`waiting to go somewhere the composer does not point`, () => {
+        const waitingOn = (serves: QueuedMessage[`serves`]): Conversation => {
+            const until = Date.now() + 3_600_000;
+            const chat = chatHolding({ items: [held({ attachments: [], until, serves })], paused: `scheduled`, until }, SENT);
+            chat.selection.apply({ kind: `set`, picks: { provider: `codex`, harness: `native`, model: `gpt-6` } });
+            return chat;
+        };
+
+        it(`names where the words go and where the composer is, with the press that moves them`, async () => {
+            const element = mount(waitingOn({ agent: `claude`, harness: `native`, model: `claude-opus-5` }));
+            await nextTick();
+
+            expect(element.textContent).toMatch(/Waiting to go on Claude Code · .+\. The composer is on Codex · .+\./u);
+            expect(pressNamed(element, `Move it there`)).toHaveLength(1);
+        });
+
+        it(`says nothing where they already go where the composer points, or where the sandbox does not say`, async () => {
+            const same = mount(waitingOn({ agent: `codex`, harness: `native`, model: `gpt-6` }));
+            const unknown = mount(waitingOn(undefined));
+            await nextTick();
+
+            expect(same.textContent).not.toContain(`Waiting to go on`);
+            expect(same.textContent).not.toContain(`Goes on`);
+            expect(unknown.textContent).not.toContain(`Waiting to go on`);
+        });
+
+        // A booked first message has nothing above it to say which model answers it, and a switch there changed
+        // nothing on screen but the pill.
+        it(`says where they go on a chat with nothing in it yet, even where the composer agrees`, async () => {
+            const until = Date.now() + 3_600_000;
+            const chat = chatHolding({ items: [held({ attachments: [], until, serves: { agent: `codex`, harness: `native`, model: `gpt-6` } })], paused: `scheduled`, until }, []);
+            chat.selection.apply({ kind: `set`, picks: { provider: `codex`, harness: `native`, model: `gpt-6` } });
+            const element = mount(chat);
+            await nextTick();
+
+            expect(element.textContent).toMatch(/Goes on Codex · .+\./u);
         });
     });
 
