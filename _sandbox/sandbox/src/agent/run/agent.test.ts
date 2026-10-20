@@ -1209,6 +1209,29 @@ test("a retry storm past the in-turn bound ends the turn as an outage rather tha
     ]);
 });
 
+// The CLI is still sleeping out its backoff when the stream ends on a spent allowance; left alone, the SDK's close waits
+// its 2 s stdin grace before killing it, and the chat's loader sits under the refusal that whole time.
+test("a spent allowance ending the stream interrupts the CLI's backoff rather than waiting out its close", async () => {
+    withoutTmux();
+    const interrupts: string[] = [];
+    const queryFn: QueryFn = () =>
+        Object.assign(
+            (async function* () {
+                // SAFETY: the fields the fold reads off an api_retry, as the CLI sends them.
+                yield { type: "system", subtype: "api_retry", session_id: "s", attempt: 1, max_retries: 10, retry_delay_ms: 500, error_status: 429, error: "rate_limit" } as SDKMessage;
+            })(),
+            {
+                interrupt: async () => {
+                    interrupts.push("interrupt");
+                    return undefined;
+                },
+            },
+        );
+    const events = await collect(request, queryFn);
+    expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "rate_limit" }));
+    expect(interrupts).toEqual(["interrupt"]);
+});
+
 test("a retry storm short of the bound is still absorbed in place: the turn keeps its session and says so", async () => {
     const events = await collect(
         request,

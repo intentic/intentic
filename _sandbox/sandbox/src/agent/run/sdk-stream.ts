@@ -1064,6 +1064,11 @@ export async function* streamSdk(args: StreamSdkArgs): AsyncGenerator<AgentEvent
     for await (const message of sdkTurns(session, args.steering, args.redeliver)) {
         const ended = yield* fold.onMessage(message);
         if (ended) {
+            // The stream ends on a retry the CLI is still sleeping out (onApiRetry), so the close in sdkTurns would sit
+            // out the SDK's whole 2 s stdin-close grace before its SIGTERM, with the chat's loader still up under the
+            // refusal it already shows. Interrupted first, the CLI drops the backoff and exits in tens of ms.
+            // allow(silent-catch): a CLI that cannot take the interrupt is still ended by the close, only later.
+            await session.interrupt?.().catch(() => undefined);
             return;
         }
     }
