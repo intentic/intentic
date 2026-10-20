@@ -178,7 +178,7 @@ const pickAccount = (id: string): void => {
 
     <!-- The refusal belonging to this selection but no single row (`unplacedRefusal`); shown above every control it qualifies. -->
     <p v-if="unplacedRefusal" class="flex items-start gap-1.5 text-2xs text-warning" v-tooltip.top="unplacedRefusal">
-        <Icon name="exclamation-triangle" class="mt-px shrink-0 text-[0.6rem]" aria-hidden="true" />
+        <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs" aria-hidden="true" />
         <span class="line-clamp-2">{{ unplacedRefusal }}</span>
     </p>
 
@@ -229,8 +229,8 @@ const pickAccount = (id: string): void => {
                         >
                     </span>
                     <!-- Truncated on the row, full text on hover; leads with the condition that decides the click. -->
-                    <span v-if="a.refused" class="flex max-w-full items-center gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
-                        <Icon name="exclamation-triangle" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
+                    <span v-if="a.refused" class="flex max-w-full items-start gap-1 text-2xs text-warning" v-tooltip.top="a.refused">
+                        <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs" aria-hidden="true" />
                         <span class="truncate">{{ a.refused }}</span>
                     </span>
                     <span v-else-if="a.waiting" class="max-w-full truncate text-2xs text-subtle">{{ a.waiting }}</span>
