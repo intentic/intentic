@@ -3,7 +3,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import { type AgentProvider, AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import type { ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import type { ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
+import { answerCovers, type ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
 import type { Services } from "../../../composition.js";
 import { recordProviderSuccess } from "../../providers/provider-health.js";
 import { opt } from "../../../opt.js";
@@ -14,7 +14,7 @@ import { accountFactsOf } from "../../../usage/serviceability/serviceability.js"
 import { ACCOUNT_WIDE } from "../../../usage/observed-limits.js";
 import { FAN_OUT } from "../../subagents/fan-out-governor.js";
 import { runOutOf } from "../../../usage/run-outs.js";
-import { checkAnswered } from "../../../usage/drift/contradictions.js";
+import { checkAnswered, readingKeys } from "../../../usage/drift/contradictions.js";
 import { runningOn } from "../turn/turn-pulse.js";
 
 // The writes a turn's frames cause beyond the stream: its activity rows, the refusals its first answer disproves, the
@@ -82,11 +82,12 @@ export const turnActivity =
 // The first real content proves an outage over fleet-wide, releasing every stranded turn at once, and settles what this
 // provider and account last refused: content on the wire is the only evidence a refusal no poll can re-check yields to.
 // It reopens the model it ran on as well, so the picker stops greying a row whose turns go through.
-// A spent allowance is settled only for the model that answered (provider-refusals.ts answeredBy); an account refused
-// outright is settled by any answer on it. The observed ledger is settled the same way: the account's entry for the model
-// it just served, and its account-wide refusal. `askedAt` is when the answered request went out: only what was filed
-// before it is settled, since a request already in flight when a refusal was filed proves nothing about it
-// (frame-reducers.ts). Undefined settles whatever stands, for a caller that cannot say.
+// A spent allowance is settled for the model that answered (provider-refusals.ts answeredBy), and for any other model
+// that spends no pool the answering one does not (settleCovered); an account refused outright is settled by any answer
+// on it. The observed ledger is settled the same way: the account's entry for the model it just served, and its
+// account-wide refusal. `askedAt` is when the answered request went out: only what was filed before it is settled, since
+// a request already in flight when a refusal was filed proves nothing about it (frame-reducers.ts). Undefined settles
+// whatever stands, for a caller that cannot say.
 export const providerAnswered = (
     deps: Pick<Services, "providerRefusals" | "claudeSeats" | "modelCooldowns" | "observedLimits" | "headroom" | "logger">,
     provider: string,
@@ -103,11 +104,12 @@ export const providerAnswered = (
     void deps.providerRefusals.clear(provider, account, served, askedAt).catch((error: unknown) => deps.logger.warn({ err: error }, "provider refusal: settle failed"));
     if (served !== undefined) {
         void deps.modelCooldowns.clear(provider, served, askedAt).catch((error: unknown) => deps.logger.warn({ err: error }, "model cooldown: settle failed"));
+        void settleCovered(deps, provider, account, served, askedAt);
     }
     // The same answer checks the plan-limit readings: one that said this model could not run is wrong (drift/contradictions.ts).
     const routed = AgentProviderSchema.safeParse(provider);
     if (served !== undefined && askedAt !== undefined && routed.success) {
-        void checkAnswered(deps, routed.data, account, served, askedAt);
+        void checkAnswered(deps, routed.data, readingAccount(provider, account), served, askedAt);
     }
     // Clears the seat mark too, so a re-enabled account rejoins rotation without a reconnect.
     if (account === undefined) {
@@ -128,6 +130,44 @@ export const settleAnswered = (
 ): void => {
     if (askedAt !== undefined) {
         providerAnswered(deps, provider, account, model, askedAt);
+    }
+};
+
+// The account whose readings an answer speaks for. A translator-routed turn names a label (Codex's
+// "codex-subscription"), the key of no reading: the translator picked one of the provider's credentials, unnamed.
+const readingAccount = (provider: string, account: string | undefined): string | undefined =>
+    KeyedProviderSchema.safeParse(provider).success ? undefined : account;
+
+/* An answer proves open every pool its model spends, so it settles another model's spent allowance as well where that
+   model spends no pool the answering one does not (answerCovers): the refusal on file and the bench beside it. Codex
+   meters every model from one allowance: a Luna turn went through while Sol stayed refused and benched, and the account
+   rail read every Codex account spent over it (2026-10-20). Judged on the readings the answer speaks for: the account it
+   named, or for a routed turn, every reading of the provider, each of which must show it, since nothing says which of
+   them the translator picked. A model metered by its own slice is never settled by another's answer. Never rejects. */
+const settleCovered = async (
+    deps: Pick<Services, "providerRefusals" | "modelCooldowns" | "headroom" | "logger">,
+    provider: string,
+    account: string | undefined,
+    served: string,
+    askedAt: number | undefined,
+): Promise<void> => {
+    try {
+        const [stored, refusals, cooling] = await Promise.all([deps.headroom.read(), deps.providerRefusals.onFile(), deps.modelCooldowns.cooling(provider)]);
+        const readings = readingKeys(stored, provider, readingAccount(provider, account)).flatMap((key) => {
+            const usage = stored[key];
+            return usage === undefined ? [] : [usage];
+        });
+        const covered = (model: string): boolean =>
+            model !== served && readings.length > 0 && readings.every((usage) => answerCovers(usage, { id: served }, { id: model }));
+        const refused = new Set(
+            (refusals[provider] ?? []).flatMap((refusal) => (refusal.kind === "limit" && refusal.model !== undefined && covered(refusal.model) ? [refusal.model] : [])),
+        );
+        await Promise.all([
+            ...[...refused].map(async (model) => deps.providerRefusals.clear(provider, account, model, askedAt)),
+            ...[...cooling.keys()].filter(covered).map(async (model) => deps.modelCooldowns.clear(provider, model, askedAt)),
+        ]);
+    } catch (error) {
+        deps.logger.warn({ err: error, provider, model: served }, "provider refusal: settling the models an answer covers failed");
     }
 };
 

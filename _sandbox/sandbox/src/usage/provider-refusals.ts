@@ -55,9 +55,9 @@ const FORGET_AFTER_MS = 7 * 24 * 60 * 60_000;
      "blocked, an admin's to fix" on its card for six more. A Claude seat refused outright is held by its seat mark,
      re-tested by a probe (claude-seat-check.ts), not by this entry.
    - An allowance no reading measures (`unmetered`) refused with no instant to try again at, in a wording nothing here
-     reads: as long as any refusal no reading can check (OBSERVED_FOR_MS). No reading answers it and only a turn on its
-     very model settles it, so a team credit refused in Codex's then-unread dated wording stood a week against the spawn
-     gate and the ladder, for a credit back in three and a half hours (2026-10-15). */
+     reads: as long as any refusal no reading can check (OBSERVED_FOR_MS). No reading answers it and only a turn settles
+     it, so one refused in Codex's then-unread dated wording stood a week against the spawn gate and the ladder, for an
+     allowance back in three and a half hours (2026-10-15). */
 const forgetAfter = (refusal: ProviderRefusal): number => {
     if (refusal.kind === "entitlement") {
         return ENTITLEMENT_FOR_MS;

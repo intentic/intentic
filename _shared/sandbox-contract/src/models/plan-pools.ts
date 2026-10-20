@@ -63,6 +63,17 @@ const fullest = (windows: readonly UsageWindow[]): UsageWindow | undefined =>
 // nothing was measured) — distinct from a measured 0%.
 export const bindingWindow = (usage: AccountUsage | undefined, model?: ModelRef): UsageWindow | undefined => fullest(gatingWindows(usage, model));
 
+/**
+ * Whether a turn answered on `served` proves `other` had room on this account too: every pool `other` spends gates
+ * `served` as well, so the answer went through each of them. False where nothing is read, and where `other` spends a pool
+ * of its own (Claude's Opus slice, a model the plan has no entitlement to), which another model's answer says nothing
+ * about. Codex meters every model from one allowance, so a Luna turn going through proves Sol's allowance open as well.
+ */
+export const answerCovers = (usage: AccountUsage | undefined, served: ModelRef, other: ModelRef): boolean => {
+    const pools = gatingWindows(usage, other);
+    return pools.length > 0 && pools.every((window) => gatesModel(window.gates, served));
+};
+
 // The model's own metered pool, by most specific name match; distinct from bindingWindow, which may answer with an
 // all-models pool. Two matches tied in specificity return undefined rather than guess.
 export const scopedWindow = (usage: AccountUsage | undefined, model: ModelRef): UsageWindow | undefined => {
@@ -200,10 +211,12 @@ export interface ServiceFacts {
 
 // A spent allowance is over once a reading with room lands after it; a refused credential once any reading does (the
 // token worked). Nothing a reading says answers an entitlement refusal: a seatless account authenticates and reads fine.
-// Nor does any reading answer an allowance it does not measure (`unmetered`: an admin's credit).
-const answers = (refusal: ProviderRefusal, facts: ServiceFacts): boolean => {
+// Nor does the refused account's own reading answer an allowance it does not measure (`unmetered`: an admin's credit).
+// `measured` says whether this reading can speak to the allowance at all: false for that account's own, true for any
+// account's where nothing says which one refused (refusalVerdict).
+const answers = (refusal: ProviderRefusal, facts: ServiceFacts, measured: boolean = refusal.unmetered !== true): boolean => {
     const measuredAt = facts.usage?.measuredAt;
-    if (refusal.kind === "entitlement" || refusal.unmetered === true || measuredAt === undefined || measuredAt <= refusal.at) {
+    if (refusal.kind === "entitlement" || !measured || measuredAt === undefined || measuredAt <= refusal.at) {
         return false;
     }
     if (refusal.kind === "auth") {
@@ -215,8 +228,9 @@ const answers = (refusal: ProviderRefusal, facts: ServiceFacts): boolean => {
 
 /**
  * How a provider's last refusal stands against everything read since, over every account the provider holds: `gone` once
- * the account it named is disconnected, `answered` once that account (or, for a refusal naming none, any account) has a
- * later reading that contradicts it, else `standing`. An empty list is one not loaded yet, so the refusal stands.
+ * the account it named is disconnected, `answered` once the instant it named has passed or once that account (or, for a
+ * refusal naming none, any account) has a later reading that contradicts it, else `standing`. An empty list is one not
+ * loaded yet, so the refusal stands.
  */
 export const refusalVerdict = (
     refusal: ProviderRefusal,
@@ -227,14 +241,24 @@ export const refusalVerdict = (
     if (refusal.account !== undefined && named.length === 0) {
         return accounts.length === 0 ? "standing" : "gone";
     }
-    // Where the provider named when to try again, and it is known which account it refused (it named one, or there is
-    // only one), its own words outrank a usage endpoint that kept showing room while it refused: over at that instant,
-    // and not before. A nameless refusal over several accounts is still answered by any of them reading room, since the
-    // translator benches the one it refused and routes on.
-    if (refusal.kind === "limit" && refusal.resetsAt !== undefined && (refusal.account !== undefined || accounts.length <= 1 || refusal.unmetered === true)) {
-        return refusal.resetsAt * 1000 <= now ? "answered" : "standing";
+    // The provider's own "try again at" is over at that instant, whichever account it refused.
+    if (refusal.kind === "limit" && refusal.resetsAt !== undefined && refusal.resetsAt * 1000 <= now) {
+        return "answered";
     }
-    return (refusal.account === undefined ? accounts : named).some((facts) => answers(refusal, facts)) ? "answered" : "standing";
+    // Where it is known which account it refused (it named one, or there is only one), the provider's own instant
+    // outranks a usage endpoint that kept showing room while it refused: over at that instant, and not before.
+    const known = refusal.account !== undefined || accounts.length <= 1;
+    if (refusal.kind === "limit" && refusal.resetsAt !== undefined && known) {
+        return "standing";
+    }
+    if (known) {
+        return (refusal.account === undefined ? accounts : named).some((facts) => answers(refusal, facts)) ? "answered" : "standing";
+    }
+    /* A nameless refusal over several accounts is one of them saying no, and nothing says which: the translator benches
+       the one it refused and routes on, so any of them reading room since answers it, whatever kind of allowance it was
+       and whatever instant it named. Held to its instant, or to an allowance no reading measures, one team account's
+       refusal held every Codex account spent for a day, the two free ones reading 0% used included (2026-10-19). */
+    return accounts.some((facts) => answers(refusal, facts, true)) ? "answered" : "standing";
 };
 
 // The account reopens for this question when the pools holding it shut do: all of them for a model's own question (or
@@ -298,19 +322,36 @@ export const readingHeadroom = (usage: AccountUsage | undefined, model?: ModelRe
     return spent(reopening(holding, sliced));
 };
 
-// A standing limit refusal reads its pool as full, since a polled reading freezes the moment a pool actually empties: the
-// pool the refused turn's model spends, else the one asked about, else the tightest. Never another model's allowance.
-const refusedPool = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model: ModelRef | undefined): AccountState => {
-    const refusedModel = refusal.model === undefined ? model : { id: refusal.model };
-    const binding = bindingWindow(usage, refusedModel);
+/**
+ * A reading as a standing limit refusal leaves it, for every surface that draws or judges it: the pool the refused turn's
+ * model spends (else the one asked about, else the tightest) read full, since a polled reading freezes the moment a pool
+ * actually empties, and reopening when the provider said to try again, where it said, over whatever the polled pool last
+ * said. Never another model's allowance. The reading as it was where it has no such pool.
+ */
+export const pinRefused = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model?: ModelRef): AccountUsage | undefined => {
+    const binding = bindingWindow(usage, refusal.model === undefined ? model : { id: refusal.model });
     if (usage === undefined || binding === undefined) {
+        return usage;
+    }
+    const pinned = (window: UsageWindow): UsageWindow =>
+        refusal.resetsAt === undefined ? pinnedFull(window) : { ...pinnedFull(window), resetsAt: refusal.resetsAt };
+    return { ...usage, windows: usage.windows.map((window) => (window === binding ? pinned(window) : window)) };
+};
+
+/**
+ * The plan-limit verdict on a reading a standing limit refusal covers (pinRefused), the one rule the daemon's verdict and
+ * the editor's live re-reading both judge by. Spent until the provider's own "try again at" where it named one: the
+ * editor once re-judged the pinned pool by its own reset alone, and drew "spent until 19:55" over a daemon verdict, and a
+ * model picker, both saying 15:53 (2026-10-20).
+ */
+export const refusedHeadroom = (usage: AccountUsage | undefined, refusal: ProviderRefusal, model?: ModelRef): AccountState => {
+    const pinned = pinRefused(usage, refusal, model);
+    if (pinned === usage) {
         // No pool to pin: the refusal itself is the evidence, unless it was about a different model than this question.
         const sameModel = refusal.model === undefined || model === undefined || refusal.model === model.id;
         return sameModel ? spent(refusal.resetsAt) : readingHeadroom(usage, model);
     }
-    const pinned = usage.windows.map((window) => (window === binding ? pinnedFull(window) : window));
-    const state = readingHeadroom({ ...usage, windows: pinned }, model);
-    // The provider's own "try again at" is when it reopens, over whatever the polled pool last said.
+    const state = readingHeadroom(pinned, model);
     return state.kind === "spent" && refusal.resetsAt !== undefined ? spent(refusal.resetsAt) : state;
 };
 
@@ -345,7 +386,7 @@ export const serviceState = (facts: ServiceFacts, refusal?: ProviderRefusal, mod
     if (cooling?.until !== undefined && cooling.until * 1000 > now) {
         return { kind: "blocked", fix: "wait", reason: cooling.reason ?? "cooling down", until: cooling.until };
     }
-    return refusal?.kind === "limit" ? refusedPool(facts.usage, refusal, model) : readingHeadroom(facts.usage, model);
+    return refusal?.kind === "limit" ? refusedHeadroom(facts.usage, refusal, model) : readingHeadroom(facts.usage, model);
 };
 
 /** The refusals a provider's accounts are judged against: its last one, or every one on file (each account's own beside it). */

@@ -189,12 +189,36 @@ describe("a spent allowance", () => {
         }
     });
 
-    // 2026-10-17: Codex's team credit ran out while its weekly pool read 57%; no reading may answer that refusal.
-    test("an allowance an admin grants is filed as one no reading measures, with the reset the vendor named", async () => {
+    // Cursor's team spend limit is an admin's to raise, and no reading measures it.
+    test("an allowance an admin grants is filed as one no reading measures", async () => {
+        const cursor: ErrorFrame = { ...limit, message: "You're out of usage. Switch to Auto or Composer 2.5, or ask your admin to increase your limit to continue." };
+        const [write] = (await classifyFailure(cursor, context({ provider: "cursor", model: "composer-2.5" }), answering({ way }))).writes;
+        expect(write).toMatchObject({ kind: "provider-refusal", refusal: { kind: "limit", unmetered: true } });
+    });
+
+    // 2026-10-15, -17, -19: each "send a request to your admin or try again at …" named the team plan's 5-hour window,
+    // which the reading measured full. Filed as a credit no reading answers, the last held every Codex account a day.
+    test("Codex's admin wording is a spent window a reading measures, with the reset the vendor named", async () => {
         const codex: ErrorFrame = { ...limit, message: "You’ve hit your usage limit. To get more access now, send a request to your admin or try again at 5:46 PM." };
-        const plan = await classifyFailure(codex, context({ provider: "codex", model: "gpt-6.1-sol" }), answering({ way }));
+        const [write] = (await classifyFailure(codex, context({ provider: "codex", model: "gpt-6.1-sol" }), answering({ way }))).writes;
+        expect(write).toMatchObject({ kind: "provider-refusal", refusal: { kind: "limit", resetsAt: expect.any(Number) } });
+        expect(write?.kind === "provider-refusal" ? write.refusal : undefined).not.toHaveProperty("unmetered");
+    });
+
+    // 2026-10-19: a held turn re-fired at 13:53:00 for a window reopening at 13:53:35 was refused "try again at 1:53 PM"
+    // 35 seconds into that minute. Filed a day out, as an admin's credit no reading answers, it held every Codex account
+    // spent for that day. Written on this process's own clock, as the vendor's loop writes it.
+    test("a refusal naming the minute under way reopens at that minute's end, a reading's to answer", async () => {
+        const said = Date.parse("2026-10-19T13:53:35.875Z");
+        const local = new Date(said);
+        const clock = `${String(local.getHours() % 12 || 12)}:${String(local.getMinutes()).padStart(2, "0")} ${local.getHours() < 12 ? "AM" : "PM"}`;
+        const codex: ErrorFrame = { ...limit, message: `You’ve hit your usage limit. To get more access now, send a request to your admin or try again at ${clock}.` };
+        const plan = await classifyFailure(codex, context({ provider: "codex", model: "gpt-6.1-sol", now: said }), answering({ way }));
+        const minuteEnds = (Math.floor(said / 60_000) + 1) * 60;
+        expect(plan.frame.resetsAt).toBe(minuteEnds);
         const [write] = plan.writes;
-        expect(write).toMatchObject({ kind: "provider-refusal", refusal: { kind: "limit", unmetered: true, resetsAt: expect.any(Number) } });
+        expect(write).toMatchObject({ kind: "provider-refusal", refusal: { kind: "limit", resetsAt: minuteEnds } });
+        expect(write?.kind === "provider-refusal" ? write.refusal : undefined).not.toHaveProperty("unmetered");
     });
 
     // 2026-10-17: each of these was booked at the loop's own instant and refused again when it came.

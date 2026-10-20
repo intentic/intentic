@@ -13,9 +13,9 @@ import {
     bindingWindow,
     readingHeadroom,
     type ModelRef,
-    pinnedFull,
-    provenFull,
+    pinRefused,
     refusalVerdict,
+    refusedHeadroom,
     scopedWindow,
     type ServiceFacts,
     SPENT_UTILIZATION,
@@ -85,18 +85,20 @@ const TIGHT_PERCENT = 75;
 const freshest = (provider: AgentProvider, account: string, attached: AccountUsage | undefined): AccountUsage | undefined =>
     lookupUsage(provider, account) ?? attached;
 
-// A standing `limit` refusal reads its account's pool as full, since polled readings freeze the moment a pool
-// actually empties. Keyed by provider: a routed refusal names no account, so it covers every credential the
-// provider holds.
-// Pins the pool binding the refused turn's model (`refusal.model`), else the model asked about, else the
-// account's tightest — never a different allowance than the one that actually refused.
+// The provider's last refusal where it is a `limit` one still standing over this account, judged on this reading. Keyed
+// by provider: a routed refusal names no account, so it covers every credential the provider holds until one of them
+// reads room since.
+const standingLimit = (provider: AgentProvider, account: string, usage: AccountUsage | undefined, now: number = Date.now()): ProviderRefusal | undefined => {
+    const refusal = providerRefusals.value[provider];
+    return refusal !== undefined && limitStandsFor(provider, account, usage, now) ? refusal : undefined;
+};
+
+// A standing `limit` refusal reads its account's pool as full until the provider's own "try again at", by the
+// contract's one rule (pinRefused), the one the daemon's verdict reads too: never a different allowance than the one
+// that actually refused.
 const spentByRefusal = (provider: AgentProvider, account: string, usage: AccountUsage | undefined, model: ModelRef | undefined): AccountUsage | undefined => {
-    const refused = providerRefusals.value[provider]?.model;
-    const binding = bindingWindow(usage, refused === undefined ? model : { id: refused });
-    if (usage === undefined || binding === undefined || provenFull(binding) || !limitStandsFor(provider, account, usage)) {
-        return usage;
-    }
-    return { ...usage, windows: usage.windows.map((entry) => (entry === binding ? pinnedFull(entry) : entry)) };
+    const refusal = standingLimit(provider, account, usage);
+    return refusal === undefined ? usage : pinRefused(usage, refusal, model);
 };
 
 // An account's reading as any surface should draw it: freshest data, corrected for what the plan has since
@@ -502,11 +504,14 @@ export const accountState = (provider: AgentProvider, facts: AccountFacts, model
     if (stillBlocked(verdict, now)) {
         return verdict;
     }
-    const live = liveUsage(provider, facts.account, facts.usage, model);
-    if (live === undefined && verdict.kind !== `blocked`) {
+    const fresh = freshest(provider, facts.account, facts.usage);
+    if (fresh === undefined && verdict.kind !== `blocked`) {
         return verdict;
     }
-    const local = readingHeadroom(live, model);
+    // By the same rule the daemon judged by (refusedHeadroom), so a standing refusal reopens here when it does there,
+    // at the provider's own "try again at", not at whatever the pinned pool's own reset is.
+    const refusal = standingLimit(provider, facts.account, fresh, now);
+    const local = refusal === undefined ? readingHeadroom(fresh, model) : refusedHeadroom(fresh, refusal, model);
     // The daemon judged `spent` with the refusal it holds; this window's copy of that refusal can be missing, and a
     // rounded pool read at the line is then no proof either way. Only a reading showing room below the line, or the
     // reopening instant passing, answers the daemon's verdict, never a re-read at 0 room.
@@ -738,14 +743,14 @@ export const refusalFor = (provider: AgentProvider, now: number = Date.now()): R
 
 // Whether a `limit` refusal still stands for this account: must be a limit refusal, must name this account or
 // none (then it covers every connection), and must be unanswered by a since reading with room.
-const limitStandsFor = (provider: AgentProvider, account: string, reading: AccountUsage | undefined): boolean => {
+const limitStandsFor = (provider: AgentProvider, account: string, reading: AccountUsage | undefined, now: number = Date.now()): boolean => {
     const refusal = providerRefusals.value[provider];
     if (refusal === undefined || refusal.kind !== `limit` || (refusal.account !== undefined && refusal.account !== account)) {
         return false;
     }
     // This account's fresher reading goes first, ahead of any stale copy.
     const accounts = [{ account, usage: reading }, ...providerFacts(provider).filter((entry) => entry.account !== account)];
-    return refusalVerdict(refusal, accounts) === `standing`;
+    return refusalVerdict(refusal, accounts, now) === `standing`;
 };
 
 // Readings that stopped moving, grouped by the provider's reason: four accounts Google wants verified are one sentence,

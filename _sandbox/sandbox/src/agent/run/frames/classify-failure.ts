@@ -204,7 +204,8 @@ const refusalWrites = (event: ErrorFrame, context: FailureContext, reopening: Re
         ...opt("account", refusingAccount(provider, context.attribution.account)),
         ...opt("model", model),
         ...opt("resetsAt", kind === "limit" ? refusalReset(event, context, reopening) : undefined),
-        // A team's credit no usage endpoint reads: the refusal stands against every reading (ProviderRefusal.unmetered).
+        // An admin's allowance no usage endpoint reads (Cursor's team spend limit): the refusal stands against every
+        // reading (ProviderRefusal.unmetered). Codex's "send a request to your admin" is not one (failure-sentences.ts).
         ...opt("unmetered", kind === "limit" && isAdminGrantedAllowanceText(event.message) ? true : undefined),
     };
     const observed: FailureWrite[] =

@@ -20,7 +20,7 @@ const published = (usage: AccountUsage): AccountUsage => ({ ...usage, windows: u
 
 // The readings the answer speaks for: the account it named, under either key the store files it by, or, for a routed turn
 // that names none, every reading of the provider.
-const readingKeys = (stored: Readonly<Record<string, AccountUsage>>, provider: string, account: string | undefined): string[] =>
+export const readingKeys = (stored: Readonly<Record<string, AccountUsage>>, provider: string, account: string | undefined): string[] =>
     account === undefined ? Object.keys(stored).filter((key) => key.startsWith(`${provider}:`)) : [account, `${provider}:${account}`].filter((key) => key in stored);
 
 interface AnsweredDeps {

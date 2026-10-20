@@ -207,14 +207,14 @@ test("forgets an account refused outright after a day, as the ledger holding it 
     expect(Object.keys(await store.read()).sort()).toEqual(["cursor", "kimi"]);
 });
 
-// 2026-10-15: a team credit refused in a wording nothing read was filed with no reset; no reading answers such a refusal,
-// so it stood a week against the spawn gate and the ladder for a credit back in three and a half hours.
+// 2026-10-15: a refusal filed as an allowance no reading measures, with no reset, stood a week against the spawn gate
+// and the ladder for an allowance back in three and a half hours, since no reading answers such a refusal.
 test("forgets an allowance no reading measures after two hours where it named no reset, and keeps one that did", async () => {
     const { store } = tempStore();
-    const message = "You’ve hit your usage limit. To get more access now, send a request to your admin.";
-    await store.record("codex", refusal({ message, unmetered: true, at: Date.now() - 2 * 60 * 60_000 - 60_000 }));
+    const message = "You're out of usage. Switch to Auto or Composer 2.5, or ask your admin to increase your limit to continue.";
+    await store.record("cursor", refusal({ message, unmetered: true, at: Date.now() - 2 * 60 * 60_000 - 60_000 }));
     expect(await store.read()).toEqual({});
     const resetsAt = Math.ceil(Date.now() / 1000) + 3_600;
-    await store.record("codex", refusal({ message, unmetered: true, resetsAt, at: Date.now() - 2 * 60 * 60_000 - 60_000 }));
-    expect(await store.read()).toMatchObject({ codex: { unmetered: true, resetsAt } });
+    await store.record("cursor", refusal({ message, unmetered: true, resetsAt, at: Date.now() - 2 * 60 * 60_000 - 60_000 }));
+    expect(await store.read()).toMatchObject({ cursor: { unmetered: true, resetsAt } });
 });

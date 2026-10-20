@@ -146,11 +146,16 @@ const SPENT_QUOTA =
 export const mentionsSpentAllowance = (text: string): boolean =>
     isUsageLimitText(text) || SPENT_ALLOWANCE_PHRASES.some((phrase) => text.toLowerCase().includes(phrase)) || SPENT_QUOTA.test(text);
 
-// An allowance an organisation's admin grants, which no usage endpoint reads: a team plan's weekly pool at 57% still
-// refuses once the credit is gone (2026-10-17), so a refusal in these words stands against every reading.
-// allow(dependency-text): Codex's "send a request to your admin or try again at 5:46 PM", Cursor's "ask your admin to
-// increase your limit"; an unseen wording is a plain spent allowance, as before.
-const ADMIN_GRANTED = /\b(?:send a request to|ask) your (?:admin|administrator|workspace owner)\b/i;
+/* An allowance an organisation's admin grants, which no usage endpoint reads, so a refusal in these words stands against
+   every reading: Cursor's "ask your admin to increase your limit", a team's spend limit.
+   NOT Codex's "To get more access now, send a request to your admin or try again at 5:46 PM", which is only how a
+   ChatGPT team plan words its ordinary windows running out. Each time it was read as an admin's credit, the window it
+   named was one the reading measured, full: its 5-hour pool, reopening at 00:54:50, 17:46:56 and 13:53:35, the very
+   minutes it said (2026-10-15, -17, -19). Read as one no reading answers, the last of them, booked a day out, held
+   every Codex account spent for that day, the two free ones reading 0% used included. */
+// allow(dependency-text): Cursor's "ask your admin to increase your limit"; an unseen wording is a plain spent
+// allowance, as before.
+const ADMIN_GRANTED = /\bask your (?:admin|administrator|workspace owner)\b/i;
 
 export const isAdminGrantedAllowanceText = (text: string): boolean => ADMIN_GRANTED.test(text);
 

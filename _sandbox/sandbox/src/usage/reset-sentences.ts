@@ -71,15 +71,37 @@ const wallTime = (hourText: string, minuteText: string | undefined, meridiemText
     return [meridiem === undefined ? hour : (hour % 12) + (meridiem === "pm" ? 12 : 0), minute];
 };
 
-// The next time the loop's clock reads this hour and minute, today or tomorrow there, in epoch seconds. Tomorrow is the
-// next calendar day on that clock, not twenty-four hours on, so a night that changes the clocks still lands as said.
+/* A wall clock names a minute, and a vendor prints the minute its reset falls in with the seconds dropped: Codex's "try
+   again at 5:46 PM" was its window's 17:46:56, "12:54 AM" its 00:54:50 and "1:53 PM" its 13:53:35 (2026-10-15, -17,
+   -19). So a clock is read as the END of the minute it names, the first instant certain to be past the reset. Read as
+   its start, a held turn re-fired up to a minute before the window reopened and was refused again (2026-10-19). */
+const MINUTE_MS = 60_000;
+
+/* How long after the minute it names ends a clock still means that minute, not the same time tomorrow: a loop's own
+   retries before it gives up and says so, and a clock running a little apart from the vendor's. A sentence like that
+   names a reset that has just happened. Read as tomorrow, "try again at 1:53 PM" said at 13:53:35, by a turn re-fired
+   35 seconds before the reset, held every Codex account spent for a day (2026-10-19). Codex never means tomorrow by a
+   bare clock anyway: a reset on another day is written with its date (AT_DATE). */
+const JUST_PAST_MS = 5 * MINUTE_MS;
+
+// The end of the minute the loop's clock next shows this hour and minute, in epoch seconds: today, or tomorrow there
+// once it is past. Tomorrow is the next calendar day on that clock, not twenty-four hours on, so a night that changes
+// the clocks still lands as said. Undefined where the minute named ended moments ago (JUST_PAST_MS): that reset has
+// happened, and there is nothing to wait for.
 const nextClock = (match: RegExpExecArray, now: number, zone: Zone): number | undefined => {
     const time = wallTime(match[1] ?? "", match[2], match[3]);
     if (time === undefined) {
         return undefined;
     }
-    const today = wallClockInstant(civilDayIn(now, zone), time[0], time[1], zone);
-    return (today > now ? today : wallClockInstant(civilDayIn(nextDayStartIn(now, zone), zone), time[0], time[1], zone)) / 1000;
+    // From the day the grace began on, so "11:59 PM" said just after midnight is the minute just gone, not tonight's.
+    const days = [civilDayIn(now - JUST_PAST_MS, zone), civilDayIn(now, zone), civilDayIn(nextDayStartIn(now, zone), zone)];
+    for (const day of days) {
+        const ends = wallClockInstant(day, time[0], time[1], zone) + MINUTE_MS;
+        if (ends > now - JUST_PAST_MS) {
+            return ends > now ? ends / 1000 : undefined;
+        }
+    }
+    return undefined;
 };
 
 // A calendar day as `YYYY-MM-DD`, or undefined for one no calendar holds: "Oct 32nd" is a misread, not November 1st.
@@ -89,8 +111,8 @@ const calendarDay = (year: number, month: number, day: number): CivilDay | undef
     return utcDay === `${String(year).padStart(4, "0")}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}` ? utcDay : undefined;
 };
 
-// The dated wall clock a sentence names on the loop's clock, in epoch seconds; with no year, this one there, or the
-// next once that is past.
+// The end of the dated minute a sentence names on the loop's clock (MINUTE_MS), in epoch seconds; with no year, this
+// one there, or the next once that is past by more than a moment (JUST_PAST_MS).
 const datedClock = (match: RegExpExecArray, now: number, zone: Zone): number | undefined => {
     const month = MONTHS.indexOf((match[1] ?? "").toLowerCase());
     const time = wallTime(match[4] ?? "", match[5], match[6]);
@@ -101,17 +123,18 @@ const datedClock = (match: RegExpExecArray, now: number, zone: Zone): number | u
     const year = named ?? Number(civilDayIn(now, zone).slice(0, 4));
     const at = (inYear: number): number | undefined => {
         const day = calendarDay(inYear, month, Number(match[2]));
-        return day === undefined ? undefined : wallClockInstant(day, time[0], time[1], zone);
+        return day === undefined ? undefined : wallClockInstant(day, time[0], time[1], zone) + MINUTE_MS;
     };
     const instant = at(year);
-    const chosen = named === undefined && instant !== undefined && instant <= now ? at(year + 1) : instant;
+    const chosen = named === undefined && instant !== undefined && instant <= now - JUST_PAST_MS ? at(year + 1) : instant;
     return chosen === undefined ? undefined : chosen / 1000;
 };
 
 /**
  * When the vendor's sentence says the allowance reopens, in epoch seconds; undefined when it names no instant, or one
  * in the past or further off than any plan's cycle. Read first: "Resets in …", a written instant, a dated wall clock, a
- * time of day, then a JSON body's own seconds field. A wall clock is read on `zone`, the clock the loop wrote it on.
+ * time of day, then a JSON body's own seconds field. A wall clock is read on `zone`, the clock the loop wrote it on, as
+ * the end of the minute it names; one that ended moments ago names a reset already past, so nothing.
  */
 export const namedReset = (message: string, now: number = Date.now(), zone: Zone = loopZone()): number | undefined => {
     const nowSeconds = now / 1000;

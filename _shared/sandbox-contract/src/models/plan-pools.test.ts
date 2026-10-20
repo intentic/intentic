@@ -1,11 +1,14 @@
 import {
+    answerCovers,
     bindingWindow,
     currentWindows,
     gatesModel,
     gatingWindows,
+    pinRefused,
     readingHeadroom,
     preferredAccount,
     refusalVerdict,
+    refusedHeadroom,
     roomiestAccount,
     scopedWindow,
     uncoveredModels,
@@ -259,15 +262,40 @@ test("a refusal stands until a later reading contradicts it, and never past its 
     expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [])).toBe("standing");
 });
 
-// 2026-10-17: Codex's team credit ran out while its weekly pool read 57% on the shared credential.
-test("an allowance no reading measures stands against every reading, until the provider's own reset", () => {
+// An admin's allowance (Cursor's team spend limit) is one the refused account's own reading does not measure.
+test("an allowance no reading measures stands against its own account's reading, until the provider's own reset", () => {
     const room = at(Date.now() + 60_000, window({ kind: "seven_day", utilization: 43 }));
     const credit = refusal({ kind: "limit", unmetered: true, at: Date.now(), resetsAt: Math.floor(Date.now() / 1000) + 3_600 });
-    expect(refusalVerdict(credit, [{ account: "a", usage: room }, { account: "b", usage: room }])).toBe("standing");
-    expect(refusalVerdict({ ...credit, resetsAt: Math.floor(Date.now() / 1000) - 1 }, [{ account: "a", usage: room }, { account: "b", usage: room }])).toBe(
-        "answered",
-    );
+    expect(refusalVerdict({ ...credit, account: "a" }, [{ account: "a", usage: room }, { account: "b", usage: room }])).toBe("standing");
+    expect(refusalVerdict(credit, [{ account: "a", usage: room }])).toBe("standing");
+    expect(refusalVerdict({ ...credit, account: "a", resetsAt: Math.floor(Date.now() / 1000) - 1 }, [{ account: "a", usage: room }])).toBe("answered");
     expect(refusalVerdict({ ...credit, resetsAt: undefined }, [{ account: "a", usage: room }])).toBe("standing");
+});
+
+// 2026-10-19: one routed refusal ("try again at 1:53 PM", filed a day out, as an admin's credit) named no account and
+// held all three Codex accounts spent for that day, two free ones reading 0% of their month used among them.
+test("a nameless refusal over several accounts is answered by any of them reading room since, whatever it named", () => {
+    const filed = Date.parse("2026-10-19T13:53:35Z");
+    const now = Date.parse("2026-10-20T09:22:10Z");
+    const monthly = at(Date.parse("2026-10-20T09:22:03Z"), window({ kind: "monthly", label: "Monthly · all models", utilization: 0 }));
+    const fiveHour = at(Date.parse("2026-10-20T09:22:03Z"), window({ kind: "five_hour", utilization: 0 }), window({ kind: "seven_day", utilization: 0 }));
+    const accounts = [
+        { account: "free-1", usage: monthly },
+        { account: "free-2", usage: monthly },
+        { account: "team", usage: fiveHour },
+    ];
+    const codex = refusal({ kind: "limit", at: filed, model: "gpt-6.1-sol", resetsAt: Date.parse("2026-10-20T13:53:00Z") / 1000, unmetered: true });
+    expect(refusalVerdict(codex, accounts, now)).toBe("answered");
+    expect(Object.fromEntries(serviceStates(accounts, codex, undefined, now))).toEqual({
+        "free-1": { kind: "ready", room: 100 },
+        "free-2": { kind: "ready", room: 100 },
+        team: { kind: "ready", room: 100 },
+    });
+    // Until one of them is read with room after it, it stands over all of them.
+    const before = accounts.map((entry) => ({ ...entry, usage: { ...entry.usage, measuredAt: filed - 1 } }));
+    expect(refusalVerdict(codex, before, now)).toBe("standing");
+    // And never past the instant the provider named.
+    expect(refusalVerdict(codex, before, Date.parse("2026-10-20T13:53:00Z"))).toBe("answered");
 });
 
 
@@ -386,4 +414,37 @@ test("a pool the provider stopped reporting is dropped once its window closes, n
     const live = window({ kind: "google:3p-weekly", utilization: 20, resetsAt: 9_000 });
     expect(currentWindows(usage(missing, live), 2_000_000)).toEqual([live]);
     expect(currentWindows(usage(missing, live), 900_000)).toEqual([missing, live]);
+});
+
+// The one rule the daemon's verdict and the editor's live re-reading both judge a standing refusal by (2026-10-20: the
+// editor drew "spent until 19:55", the pinned pool's own reset, over a daemon verdict of 15:53).
+test("a standing refusal pins the pool its model spends, reopening when the provider said, for every surface alike", () => {
+    const reading = at(2_000, window({ kind: "five_hour", utilization: 0, resetsAt: 20_000 }), window({ kind: "seven_day", utilization: 0, resetsAt: 600_000 }));
+    const said = refusal({ kind: "limit", model: "gpt-6.1-sol", resetsAt: 9_000 });
+    expect(pinRefused(reading, said)?.windows.map((entry) => [entry.kind, entry.utilization, entry.resetsAt])).toEqual([
+        ["five_hour", 100, 9_000],
+        ["seven_day", 0, 600_000],
+    ]);
+    expect(refusedHeadroom(reading, said)).toEqual({ kind: "spent", reopensAt: 9_000 });
+    // Where it named no instant, the pinned pool keeps its own reset, and that is when it reopens.
+    expect(refusedHeadroom(reading, { ...said, resetsAt: undefined })).toEqual({ kind: "spent", reopensAt: 20_000 });
+    // No pool to pin: the refusal itself is the evidence for its own model, and none for another's.
+    expect(pinRefused(undefined, said)).toBeUndefined();
+    expect(refusedHeadroom(undefined, said)).toEqual({ kind: "spent", reopensAt: 9_000 });
+    expect(refusedHeadroom(undefined, said, { id: "gpt-6-luna" })).toEqual({ kind: "unknown" });
+    // The daemon's verdict is this rule.
+    expect(serviceState({ account: "a", usage: reading }, said, undefined, 0)).toEqual(refusedHeadroom(reading, said));
+});
+
+test("an answer on one model covers another only where every pool the other spends gates it too", () => {
+    const codex = usage(window({ kind: "five_hour", utilization: 0 }), window({ kind: "seven_day", utilization: 0 }));
+    expect(answerCovers(codex, { id: "gpt-6-luna" }, { id: "gpt-6.1-sol" })).toBe(true);
+    // A plan with no entitlement to a model meters it by a pool of its own.
+    const free = usage(window({ kind: "monthly", utilization: 0 }), window({ kind: "entitlement:gpt-6.1-sol", utilization: 100, gates: { models: ["gpt-6.1-sol"] } }));
+    expect(answerCovers(free, { id: "gpt-6-luna" }, { id: "gpt-6.1-sol" })).toBe(false);
+    // Haiku's answer says nothing of Opus's own slice, and Opus's says everything of Haiku's pools.
+    expect(answerCovers(CLAUDE, { id: "claude-haiku-4-5" }, { id: "claude-opus-4-6" })).toBe(false);
+    expect(answerCovers(CLAUDE, { id: "claude-opus-4-6" }, { id: "claude-haiku-4-5" })).toBe(true);
+    // Nothing read proves nothing.
+    expect(answerCovers(undefined, { id: "gpt-6-luna" }, { id: "gpt-6.1-sol" })).toBe(false);
 });

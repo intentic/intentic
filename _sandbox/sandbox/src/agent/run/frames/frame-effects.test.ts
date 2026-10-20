@@ -1,6 +1,7 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import type { AccountUsage, ProviderRefusal, UsageWindow } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
+import { opt } from "../../../opt.js";
 import { recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { recordingTurnStores, services } from "../../../harness/route-services.testing.js";
 import { beginTurn } from "../../../conversations/actor/conversation-actors.testing.js";
@@ -170,6 +171,65 @@ describe("the first answer", () => {
             () => expect(warnings(lines)).toStrictEqual(["provider refusal: settle failed", "claude account: could not clear the entitlement mark"]),
             SETTLES,
         );
+    });
+});
+
+// What the provider's accounts read and what stands refused and benched on them, over the recording stores.
+const onFile = (readings: Record<string, AccountUsage>, refused: readonly ProviderRefusal[], benched: readonly string[]) => {
+    const stores = recordingTurnStores();
+    const { providerRefusals, modelCooldowns, headroom } = stores.overrides;
+    if (providerRefusals === undefined || modelCooldowns === undefined || headroom === undefined) {
+        throw new Error("the recording stores carry every one of these");
+    }
+    const provider = refused[0]?.account === undefined ? "codex" : "claude";
+    const deps = services({
+        ...stores.overrides,
+        providerRefusals: { ...providerRefusals, onFile: async () => ({ [provider]: [...refused] }) },
+        modelCooldowns: { ...modelCooldowns, cooling: async () => new Map(benched.map((model) => [model, { until: Date.now() + 3_600_000, message: "spent", since: 1 }])) },
+        headroom: { ...headroom, read: async () => readings },
+    });
+    return { deps, writes: stores.writes };
+};
+
+const pool = (kind: string, gates: UsageWindow["gates"] = "all"): UsageWindow => ({ kind, utilization: 0, gates });
+const spentOn = (model: string, account?: string): ProviderRefusal => ({ at: 1, kind: "limit", message: "spent", model, ...opt("account", account) });
+
+describe("an answer on a model that shares its allowance", () => {
+    // 2026-10-20: a Luna turn went through while Sol stayed refused and benched for another hour over the same allowance.
+    test("settles another model's refusal and bench where every pool it spends gates the model that answered", async () => {
+        const { deps, writes } = onFile(
+            {
+                "codex:codex-team.json": { windows: [pool("five_hour"), pool("seven_day")], measuredAt: 1 },
+                "codex:codex-free.json": { windows: [pool("monthly")], measuredAt: 1 },
+            },
+            [spentOn("gpt-6.1-sol")],
+            ["gpt-6.1-sol"],
+        );
+        // A routed turn names its subscription's label, the key of no reading: every reading of the provider speaks.
+        providerAnswered(deps, "codex", "codex-subscription", "gpt-6-luna", 2);
+        await waitFor(() => expect(writes.cooldownsCleared).toContainEqual({ provider: "codex", model: "gpt-6.1-sol", askedAt: 2 }), SETTLES);
+        expect(writes.refusalsCleared).toContainEqual({ provider: "codex", account: "codex-subscription", model: "gpt-6.1-sol", askedAt: 2 });
+    });
+
+    test("leaves a model alone where any pool it spends is its own", async () => {
+        const plan = { windows: [pool("five_hour"), pool("seven_day"), pool("model:Opus", { models: ["Opus"] })], measuredAt: 1 };
+        const { deps, writes } = onFile({ acct: plan }, [spentOn("claude-sonnet-4-6", "acct"), spentOn("claude-opus-4-6", "acct")], []);
+        providerAnswered(deps, "claude", "acct", "claude-haiku-4-5", 2);
+        await waitFor(() => expect(writes.refusalsCleared).toContainEqual({ provider: "claude", account: "acct", model: "claude-sonnet-4-6", askedAt: 2 }), SETTLES);
+        expect(writes.refusalsCleared.map((entry) => entry.model)).not.toContain("claude-opus-4-6");
+    });
+
+    test("settles nothing more where a routed provider's readings disagree, or nothing is read", async () => {
+        const entitled = { windows: [pool("monthly"), pool("entitlement:gpt-6.1-sol", { models: ["gpt-6.1-sol"] })], measuredAt: 1 };
+        const split = onFile({ "codex:codex-team.json": { windows: [pool("five_hour")], measuredAt: 1 }, "codex:codex-free.json": entitled }, [spentOn("gpt-6.1-sol")], ["gpt-6.1-sol"]);
+        providerAnswered(split.deps, "codex", "codex-subscription", "gpt-6-luna", 2);
+        const unread = onFile({}, [spentOn("gpt-6.1-sol")], ["gpt-6.1-sol"]);
+        providerAnswered(unread.deps, "codex", "codex-subscription", "gpt-6-luna", 2);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        for (const { writes } of [split, unread]) {
+            expect(writes.cooldownsCleared).toStrictEqual([{ provider: "codex", model: "gpt-6-luna", askedAt: 2 }]);
+            expect(writes.refusalsCleared).toStrictEqual([{ provider: "codex", account: "codex-subscription", model: "gpt-6-luna", askedAt: 2 }]);
+        }
     });
 });
 

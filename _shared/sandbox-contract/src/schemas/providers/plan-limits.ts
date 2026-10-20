@@ -170,8 +170,8 @@ export const ProviderRefusalSchema = z.object({
         .describe(
             "When the provider said to try again, in epoch seconds, for a spent allowance where it named one. Until then the refusal stands whatever a reading says; after it, it is over.",
         ),
-    // Codex's "To get more access now, send a request to your admin": a team's credit, which no usage endpoint reads,
-    // so a weekly pool at 57% says nothing about it (2026-10-17).
+    // Cursor's "ask your admin to increase your limit": a team's spend limit, which no usage endpoint reads. Not Codex's
+    // "send a request to your admin", which names a window its reading measures (failure-sentences.ts ADMIN_GRANTED).
     unmetered: z
         .literal(true)
         .optional()

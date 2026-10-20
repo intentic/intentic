@@ -727,6 +727,26 @@ describe(`accountState`, () => {
         expect(accountState(`claude`, benched, undefined, 1_000_000)).toEqual({ kind: `ready`, room: 57.6 });
     });
 
+    // 2026-10-20: the daemon held Codex spent until the provider's "try again at 1:53 PM"; this window re-judged the pinned
+    // 5-hour pool by that pool's own reset and drew "spent · 19:55" beside a picker saying "Back at 15:53".
+    it(`reopens a refused account when the provider said to try again, as the daemon judged it, and draws the pin so`, () => {
+        const until = Math.ceil(Date.now() / 1000) + 3_600;
+        const reading = usage({
+            windows: [window({ kind: `five_hour`, utilization: 0, resetsAt: until + 7_200 }), window({ kind: `seven_day`, utilization: 0, resetsAt: until + 86_400 })],
+            measuredAt: 2_000,
+        });
+        translatorAccounts.value = { codex: [{ name: `team.json`, label: `team`, usage: reading }], grok: [], kimi: [], gemini: [] };
+        providerRefusals.value = { codex: { at: 1_000, kind: `limit`, message: `try again at 1:53 PM`, model: `gpt-6.1-sol`, resetsAt: until } };
+        const refused = row({ account: `team.json`, usage: reading, state: { kind: `spent`, reopensAt: until } });
+        expect(accountState(`codex`, refused)).toEqual({ kind: `spent`, reopensAt: until });
+        expect(accountState(`codex`, refused, { id: `gpt-6-luna` })).toEqual({ kind: `spent`, reopensAt: until });
+        expect(liveUsage(`codex`, `team.json`, reading)?.windows.map((entry) => [entry.utilization, entry.resetsAt])).toEqual([
+            [100, until],
+            [0, until + 86_400],
+        ]);
+        translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
+    });
+
     it(`answers for the model asked about, not the account's tightest pool`, () => {
         const opusSpent = usage({ windows: [window({ utilization: 30 }), window({ kind: `model:Opus`, utilization: 100, gates: { models: [`Opus`] } })], measuredAt: 500 });
         const judged = row({ usage: opusSpent, state: { kind: `ready`, room: 70 } });

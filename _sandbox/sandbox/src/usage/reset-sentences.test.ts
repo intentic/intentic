@@ -23,19 +23,40 @@ test("reads a countdown written in words", () => {
     expect(namedReset(`Weekly limit reached · resets in 3d`, NOW)).toBe(at(3 * 86_400));
 });
 
-test("reads a time of day as the next time the container's UTC clock shows it", () => {
+// A clock names a minute, its seconds dropped: this "5:46 PM" was the window's 17:46:56. Read as the minute's end, the
+// first instant certain to be past the reset.
+test("reads a time of day as the end of that minute, the next time the container's UTC clock shows it", () => {
     const codex = `You’ve hit your usage limit. To get more access now, send a request to your admin or try again at 5:46 PM.`;
-    expect(namedReset(codex, NOW, UTC_CLOCK)).toBe(Date.UTC(2026, 9, 17, 17, 46) / 1000);
-    // Already past today: tomorrow.
-    expect(namedReset(`try again at 9:05 AM`, NOW, UTC_CLOCK)).toBe(Date.UTC(2026, 9, 18, 9, 5) / 1000);
-    expect(namedReset(`try again at 17:46`, NOW, UTC_CLOCK)).toBe(Date.UTC(2026, 9, 17, 17, 46) / 1000);
+    expect(namedReset(codex, NOW, UTC_CLOCK)).toBe(Date.UTC(2026, 9, 17, 17, 47) / 1000);
+    // Long past today: tomorrow.
+    expect(namedReset(`try again at 9:05 AM`, NOW, UTC_CLOCK)).toBe(Date.UTC(2026, 9, 18, 9, 6) / 1000);
+    expect(namedReset(`try again at 17:46`, NOW, UTC_CLOCK)).toBe(Date.UTC(2026, 9, 17, 17, 47) / 1000);
+});
+
+// 2026-10-19: a held turn re-fired at 13:53:00 for a window reopening at 13:53:35, was refused "try again at 1:53 PM",
+// and that minute, begun 35 seconds before, was read as tomorrow's: every Codex account read spent for a day.
+test("a clock naming the minute under way is that minute's end, not the same time tomorrow", () => {
+    const codex = `You’ve hit your usage limit. To get more access now, send a request to your admin or try again at 1:53 PM.`;
+    const said = Date.parse("2026-10-19T13:53:35.875Z");
+    expect(namedReset(codex, said, UTC_CLOCK)).toBe(Date.parse("2026-10-19T13:54:00Z") / 1000);
+});
+
+test("a clock that ended moments ago names a reset already past, and only a long-gone one means tomorrow", () => {
+    const said = Date.parse("2026-10-19T13:53:35Z");
+    // Its minute ended a few minutes ago: the reset happened, there is nothing to wait for.
+    expect(namedReset(`try again at 1:50 PM`, said, UTC_CLOCK)).toBeUndefined();
+    expect(namedReset(`try again at 1:49 PM`, said, UTC_CLOCK)).toBeUndefined();
+    // Past by more than a loop's retries and a clock's drift: the same time on the next calendar day.
+    expect(namedReset(`try again at 1:40 PM`, said, UTC_CLOCK)).toBe(Date.parse("2026-10-20T13:41:00Z") / 1000);
+    // Just after midnight, a minute just before it is yesterday's, not tonight's.
+    expect(namedReset(`try again at 11:59 PM`, Date.parse("2026-10-20T00:00:30Z"), UTC_CLOCK)).toBeUndefined();
 });
 
 // Codex prints in its own process's zone, which is this one's: a container started with TZ set reads 5:46 PM local.
 test("reads a time of day on the loop's own wall clock, which is this process's unless named", () => {
     const codex = `You’ve hit your usage limit. To get more access now, send a request to your admin or try again at 5:46 PM.`;
-    // 13:11 UTC is 15:11 in Warsaw (CEST, two hours ahead): 5:46 PM there is 15:46 UTC.
-    expect(namedReset(codex, NOW, WARSAW)).toBe(Date.UTC(2026, 9, 17, 15, 46) / 1000);
+    // 13:11 UTC is 15:11 in Warsaw (CEST, two hours ahead): 5:46 PM there is 15:46 UTC, a minute that ends at 15:47.
+    expect(namedReset(codex, NOW, WARSAW)).toBe(Date.UTC(2026, 9, 17, 15, 47) / 1000);
     expect(namedReset(codex, NOW)).toBe(namedReset(codex, NOW, localZone()));
 });
 
@@ -43,11 +64,14 @@ test("reads a time of day on the loop's own wall clock, which is this process's 
 test("reads a dated wall clock, Codex's wording for a reset on another day", () => {
     const said = Date.parse("2026-10-15T21:29:39.582Z");
     const codex = `You’ve hit your usage limit. To get more access now, send a request to your admin or try again at Oct 16th, 2026 12:54 AM.`;
-    expect(namedReset(codex, said, UTC_CLOCK)).toBe(Date.parse("2026-10-16T00:54:00Z") / 1000);
-    expect(namedReset(codex, said, WARSAW)).toBe(Date.parse("2026-10-15T22:54:00Z") / 1000);
-    expect(namedReset(`try again at Oct 10th, 2026 2:28 AM.`, Date.parse("2026-10-09T23:26:31Z"), UTC_CLOCK)).toBe(Date.parse("2026-10-10T02:28:00Z") / 1000);
+    // The window behind this one reopened at 00:54:50: the minute's end is the first instant certain to be past it.
+    expect(namedReset(codex, said, UTC_CLOCK)).toBe(Date.parse("2026-10-16T00:55:00Z") / 1000);
+    expect(namedReset(codex, said, WARSAW)).toBe(Date.parse("2026-10-15T22:55:00Z") / 1000);
+    expect(namedReset(`try again at Oct 10th, 2026 2:28 AM.`, Date.parse("2026-10-09T23:26:31Z"), UTC_CLOCK)).toBe(Date.parse("2026-10-10T02:29:00Z") / 1000);
     // No year: this one's.
-    expect(namedReset(`try again at Oct 18 9:00 AM`, NOW, UTC_CLOCK)).toBe(Date.parse("2026-10-18T09:00:00Z") / 1000);
+    expect(namedReset(`try again at Oct 18 9:00 AM`, NOW, UTC_CLOCK)).toBe(Date.parse("2026-10-18T09:01:00Z") / 1000);
+    // No year, and its minute ended moments ago: that reset has happened, not next year's.
+    expect(namedReset(`try again at Oct 17 1:09 PM`, NOW, UTC_CLOCK)).toBeUndefined();
     // A day no calendar holds is a misread, not the 1st of November.
     expect(namedReset(`try again at Oct 32nd, 2026 9:00 AM`, NOW, UTC_CLOCK)).toBeUndefined();
 });
