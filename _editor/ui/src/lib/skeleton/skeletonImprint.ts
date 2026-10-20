@@ -5,7 +5,7 @@
 // a line was, never what it said.
 
 /** Bumped when the encoding below changes; a stored imprint of another version is ignored and taken again. */
-export const IMPRINT_VERSION = 1;
+export const IMPRINT_VERSION = 2;
 
 /**
  * An element kept as itself. Strings are indices into the imprint's table, so a list's repeated classes cost once.
@@ -15,6 +15,8 @@ export interface ImprintElement {
     /** Tag name, from a fixed list (`KEPT_TAGS`); anything else became `div` or `span` by how it laid out. */
     e: string;
     c?: number;
+    /** The page's `data-width` variant, which selects its container width in CSS. */
+    d?: number;
     /** The inline style, minus anything that loads (`url(`) or was mid-animation. */
     s?: number;
     /** Vue's scoped-style markers (`data-v-…`), so a component's scoped rules still reach its ghost. */
@@ -341,6 +343,10 @@ const elementOf = (capture: Capture, element: Element, style: CSSStyleDeclaratio
     const classes = element.getAttribute(`class`)?.trim() ?? ``;
     if (classes !== ``) {
         kept.c = intern(capture, classes);
+    }
+    const width = element.getAttribute(`data-width`);
+    if (width !== null) {
+        kept.d = intern(capture, width);
     }
     const inline = sanitizeStyle(element.getAttribute(`style`) ?? ``);
     if (inline !== ``) {

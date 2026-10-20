@@ -137,7 +137,7 @@ flowchart LR
   the parts below itself. _2026-10-20: each view used to wire them with a loading flag of its own. Every one it got
   wrong was a skeleton for ever, no skeleton, or another view's, fixed one view at a time while the next view broke._
   Inside it, `v-skeleton-source="name"` on the content takes its imprint once it has settled (`src/lib/skeleton/skeletonImprint.ts`):
-  the same elements and classes, each line of text a bar as wide as that line was, and each icon, picture, field and
+  the same elements, classes and page width (`data-width`), each line of text a bar as wide as that line was, and each icon, picture, field and
   button a block of its measured size. No words are kept. `<SkeletonSnapshot of="name">` draws that imprint, and
   draws its slot (the region's `#fallback`, usually `SkeletonRows`) until one exists. Badges and painted marks with
   nothing in them (a status dot, a meter's fill) become neutral blocks, so a stale colour never reads as current. An

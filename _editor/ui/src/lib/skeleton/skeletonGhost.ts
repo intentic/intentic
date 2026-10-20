@@ -21,7 +21,7 @@ interface GhostAttributes {
     "aria-hidden"?: `true`;
     "aria-busy"?: `true`;
     "aria-label"?: string;
-    [scoped: `data-${string}`]: ``;
+    [scoped: `data-${string}`]: string | undefined;
 }
 
 const px = (value: number): string => `${value}px`;
@@ -60,6 +60,9 @@ const attributesOf = (node: ImprintElement, table: Table, root: GhostAttributes)
     const attributes: GhostAttributes = { ...root, class: [node.c === undefined ? undefined : table[node.c], ...(root.class ?? [])] };
     if (node.s !== undefined) {
         attributes.style = table[node.s];
+    }
+    if (node.d !== undefined) {
+        attributes[`data-width`] = table[node.d];
     }
     if (node.x !== undefined) {
         [attributes.colspan, attributes.rowspan] = node.x;

@@ -195,6 +195,25 @@ const mount = (render: () => VNode): HTMLElement => {
 const FALLBACK = () => h(`p`, { class: `fallback` }, `hand-drawn`);
 
 describe(`<SkeletonSnapshot>`, () => {
+    it.each([`content`, `wide`, `full`])(`keeps the %s page width on root and nested page shells`, async (width) => {
+        const imprint = takeImprint(
+            laidOut(
+                `<div data-box="0,0,1280,120" class="ui-page" data-width="${width}" data-private="not layout">` +
+                    `<div data-box="0,0,1200,80" class="ui-page" data-width="${width}">` +
+                    `<p data-box="0,0,200,16" data-lines="120">page content</p></div></div>`,
+            ),
+        );
+        if (imprint === undefined) {
+            throw new Error(`page fixture has no imprint`);
+        }
+        rememberImprint(`default`, `page`, imprint);
+        const host = mount(() => h(SkeletonSnapshot, { of: `page` }));
+        await nextTick();
+
+        expect([...host.querySelectorAll(`.ui-page`)].map((page) => page.getAttribute(`data-width`))).toEqual([width, width]);
+        expect(host.querySelector(`[data-private]`)).toBeNull();
+    });
+
     it(`draws its fallback until the name has an imprint in the current scope, then the imprint`, async () => {
         const scope = ref(`sandbox-a`);
         configureSkeletonSnapshots({ scope: () => scope.value });
