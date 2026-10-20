@@ -1446,7 +1446,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/sdk-stream.ts": {
-        "count": 1068,
+        "count": 1047,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/sdk-stream.ts#onResult#cyclomatic": {

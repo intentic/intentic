@@ -18,6 +18,8 @@ import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 import { opt } from "../../opt.js";
 import { poolName, type RunOut } from "../../usage/run-outs.js";
 import { runningOn } from "../run/turn/turn-pulse.js";
+import { childCostOf, forecastBudget } from "../run/spend/budget-planner.js";
+import { forecastWords } from "../run/spend/budget-words.js";
 
 // What a parent may spend on a child right now: connected providers, their models' headroom, and how much. Reads happen
 // once per provider, not per model, and every model is judged by the one rule the spawn gate, the role ladder and the
@@ -81,12 +83,16 @@ export interface SpawnableProvider {
     // When its allowance last ran out, and under how many of this sandbox's agents (usage/run-outs.ts): the rate beside
     // the level, so a parent can see how fast a fan-out on it spends a window.
     readonly lastRunOut?: RunOut;
+    // The fan-out planner's projection for children of its heaviest model, in words (agent/run/spend/budget-words.ts): each
+    // account's standing and how many more fit now. Absent for a provider whose accounts read no figure.
+    readonly budget?: string;
 }
 
 // Every connected account of a provider as the serviceability rule reads it (usage/serviceability.ts accountFactsOf):
 // the same facts for every provider, Claude's seat marks, the translator's benches and a door's plain rows alike. An
-// unreadable list leaves the provider with nothing on file, read as unmetered rather than empty.
-const factsOf = async (services: Services, provider: AgentProvider): Promise<readonly ServiceFacts[]> =>
+// unreadable list leaves the provider with nothing on file, read as unmetered rather than empty. The fan-out budget
+// reads the same (fan-out-budget.ts).
+export const factsOf = async (services: Services, provider: AgentProvider): Promise<readonly ServiceFacts[]> =>
     // allow(silent-catch): the listing is advice, and one provider's trouble must not silence the rest.
     accountFactsOf(services, provider).catch(() => []);
 
@@ -150,23 +156,6 @@ const standingOf = (readings: readonly ServiceFacts[], states: ReadonlyMap<strin
     return { ready, total: readings.length, ...opt("backAt", back.length === 0 ? undefined : Math.min(...back)) };
 };
 
-/**
- * The most room any one account of a provider has left for a model, in percent, as the listing would quote it; undefined
- * for a provider nothing measures, or a reading that fails. What the fan-out governor caps concurrent children by.
- */
-export const bestRoomFor = async (services: Services, provider: AgentProvider, model: string): Promise<number | undefined> => {
-    try {
-        const readings = await factsOf(services, provider);
-        if (readings.length === 0) {
-            return undefined;
-        }
-        const refusals = (await services.providerRefusals.onFile())[provider] ?? [];
-        return bestHeadroom(readings, { id: model }, refusals)?.percentLeft;
-    } catch {
-        // allow(silent-catch): a cap is advice; an unreadable reading caps nothing, as before there was one.
-        return undefined;
-    }
-};
 
 // Earliest instant among those given, ignoring undefineds; any one pool reopening makes the provider spendable again.
 const soonest = (instants: readonly (number | undefined)[]): number | undefined =>
@@ -238,9 +227,35 @@ export const spawnableProviders = async (services: Services): Promise<readonly S
     return Promise.all(
         NATIVE_PROVIDERS.filter((provider) => ready[provider]).map(async (provider) => {
             const [catalog, readings] = await Promise.all([services.providerCatalogs[provider].models().catch(() => ({ models: [] })), factsOf(services, provider)]);
-            return spendable(provider, catalog, readings, refusals[provider] ?? [], { running: runningByModel(provider), lastRunOut: runOuts[provider] });
+            const row = spendable(provider, catalog, readings, refusals[provider] ?? [], { running: runningByModel(provider), lastRunOut: runOuts[provider] });
+            const budget = readings.length === 0 ? undefined : await budgetLine(services, row, readings);
+            return budget === undefined ? row : { ...row, budget };
         }),
     );
+};
+
+// The model a budget line is said for: the one this sandbox runs most on the provider now, else the heaviest it lists,
+// since a line said for the lightest would promise room the usual child does not get.
+const budgetModel = (services: Services, row: SpawnableProvider): string | undefined => {
+    const busiest = Object.entries(row.running ?? {}).toSorted((left, right) => right[1] - left[1])[0]?.[0];
+    if (busiest !== undefined && row.models.some((model) => model.id === busiest)) {
+        return busiest;
+    }
+    return row.models.reduce<{ readonly id: string; readonly rate: number } | undefined>((heaviest, model) => {
+        const rate = childCostOf(services, row.id, model.id).tokensPerHour;
+        return heaviest === undefined || rate > heaviest.rate ? { id: model.id, rate } : heaviest;
+    }, undefined)?.id;
+};
+
+// The provider's budget line, where its accounts read a figure.
+const budgetLine = async (services: Services, row: SpawnableProvider, readings: readonly ServiceFacts[]): Promise<string | undefined> => {
+    const model = budgetModel(services, row);
+    if (model === undefined) {
+        return undefined;
+    }
+    // allow(silent-catch): the budget line is advice beside the figures; a projection that cannot be read leaves them alone.
+    const forecast = await forecastBudget(services, { provider: row.id, model, readings }).catch(() => undefined);
+    return forecast === undefined ? undefined : forecastWords(forecast, model);
 };
 
 // Reopen time in words rather than an absolute instant, since the daemon does not know the reader's timezone.
@@ -340,7 +355,7 @@ const runOutText = (runOut: RunOut | undefined, now: number): string => {
 };
 
 const providerText = (provider: SpawnableProvider, now: number, named: number): string => {
-    const load = `${runningText(provider.running)}${runOutText(provider.lastRunOut, now)}`;
+    const load = `${runningText(provider.running)}${runOutText(provider.lastRunOut, now)}${provider.budget === undefined ? `` : `; ${provider.budget}`}`;
     if (provider.models.length === 0) {
         const renews = provider.reopensAt === undefined ? `` : `, renews ${inWords(provider.reopensAt, now)}`;
         // Two different silences: nothing left to spend, versus nothing to list at all.
@@ -378,9 +393,11 @@ const modelsText = (models: readonly SpawnableModel[], now: number, named: numbe
 };
 
 // What the figures above do NOT say: they are per account, and children started together spend the same one. Thirteen
-// Claude children were once started against an account reading "96% left" and all hit the wall together (2026-10-12).
+// Claude children were once started against an account reading "96% left" and all hit the wall together (2026-10-12),
+// and ten against "84% left" in 2026-10-20 after this sentence said so: the arithmetic is the sandbox's now, and the
+// sentence says what it does with it.
 const SHARED_POOL =
-    "Each figure is one account's, and subagents you start together draw on it together: a fan-out of N spends roughly N times what one does, so a listing with room is not a promise that every child finishes.";
+    "Each figure is one account's, and subagents started together spend together. The sandbox places each subagent on the account left with the most room after it, and one the accounts cannot carry through their windows waits as pending and starts by itself when room is back: spawn what the work needs, and read the budget line for how many start at once.";
 
 /** Every unmetered model named rather than counted, for `agents providers --all`. */
 export interface CatalogTextOptions {

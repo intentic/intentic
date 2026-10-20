@@ -2708,9 +2708,13 @@
             "toDropOneDrop": "um einen loszuwerden, entfernen Sie das, was ihn mitbringt"
         },
         "agentSubagents": {
+            "keepRoomForYou": "Für dich freigehaltener Spielraum",
+            "keepRoomForYouDescription": "Punkte jedes Kontingentfensters von 100, die Subagenten für deine eigenen Chats übrig lassen.",
             "maximumDelegatedAgentsRunning": "Höchstzahl delegierter Agenten, die parallel laufen.",
             "maximumDelegationDepth": "Maximale Verschachtelungstiefe der Delegation.",
             "nestingDepth": "Verschachtelungstiefe",
+            "planByAllowance": "Fan-outs nach Kontingent planen",
+            "planByAllowanceDescription": "Einen Subagenten nur dort starten, wo das Kontingent eines Kontos ihn tragen kann, auf dem Konto, das danach am meisten Spielraum behält. Die übrigen warten als ausstehend und starten von selbst, sobald wieder Spielraum da ist.",
             "spawnSubagents": "Subagenten starten",
             "spawnedSubagentSpends": "Ein gestarteter Subagent läuft als eigene Unterhaltung, auf jedem verbundenen Anbieter, und verbraucht dieselben verbundenen Konten wie dieser.",
             "spawningRefusedOutright": "Das Starten wird rundheraus verweigert, die Grenzen unten begrenzen also nur die Subagenten, die eine Laufzeit prozessintern startet.",

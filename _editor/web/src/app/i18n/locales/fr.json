@@ -2708,9 +2708,13 @@
             "toDropOneDrop": "pour en retirer un, retirez ce qui le livre"
         },
         "agentSubagents": {
+            "keepRoomForYou": "Marge gardée pour vous",
+            "keepRoomForYouDescription": "Points de chaque fenêtre de quota, sur 100, que les sous-agents laissent à vos propres conversations.",
             "maximumDelegatedAgentsRunning": "Nombre maximal d'agents délégués tournant en parallèle.",
             "maximumDelegationDepth": "Profondeur maximale de délégation.",
             "nestingDepth": "Profondeur d'imbrication",
+            "planByAllowance": "Planifier les déploiements selon le quota",
+            "planByAllowanceDescription": "Ne lancer un sous-agent que là où le quota d'un compte peut le porter, sur le compte qui garde le plus de marge ensuite. Les autres attendent en file et démarrent d'eux-mêmes dès que la marge revient.",
             "spawnSubagents": "Lancer des sous-agents",
             "spawnedSubagentSpends": "Un sous-agent lancé tourne comme une conversation à part entière, sur n'importe quel fournisseur connecté, et dépense les mêmes comptes connectés que celui-ci.",
             "spawningRefusedOutright": "Le lancement est refusé d'emblée : les limites ci-dessous ne bornent donc que les sous-agents qu'un environnement démarre dans son propre processus.",

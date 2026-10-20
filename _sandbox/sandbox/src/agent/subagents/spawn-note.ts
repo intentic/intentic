@@ -16,9 +16,10 @@ export const spawnNote = (): string =>
     "spawn naming one is refused before it takes a seat. What it lists is what is not known to be spent, which is not " +
     "the same as a promise: a provider that publishes no allowance is listed as `not metered`, and the only thing that " +
     "ever measures one of those is a turn it has already refused. Each figure is one account's, and subagents started " +
-    "together draw on it together: N of them spend it about N times as fast as one. The listing says which pool each " +
-    "figure is (a five-hour window, a weekly one), how many agents already run on each provider, and when each last ran " +
-    "out, how far into its window and under how many agents: read that before starting several on one provider. " +
+    "together spend together, so the sandbox does the arithmetic: a provider with metered accounts carries a budget line " +
+    "saying how many more children of its usual model fit through their windows now. Each child is placed on the " +
+    "account left with the most room after it, and one the accounts cannot carry waits as pending and starts by itself " +
+    "as running ones end or a window reopens, so spawn what the work needs rather than what you think fits. " +
     "The subagent runs as its own conversation in an isolated " +
     "copy of the repos cut from your current work, on the named provider's account (claude, codex, grok, kimi, gemini, " +
     "cursor — e.g. `--provider cursor --model composer-2.5`). Its finished work comes back into your checkout, as an " +

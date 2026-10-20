@@ -20,7 +20,8 @@ import { steerTurn } from "../checkpoints/agent-steering.js";
 import { markConversationTaint, RUNTIME_SOURCE } from "../../guard/turn-taint.js";
 import { killCauseOf, killNote, runtimeKilled } from "./child-death.js";
 import { noteChildWork } from "./child-verification.js";
-import { bestRoomFor, type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
+import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
+import { heldResult, type Placed, releasedGate, startGate } from "./fan-out-budget.js";
 import {
     blockedMoveReporter,
     markSubagentEndingReported,
@@ -43,7 +44,7 @@ import {
     markFamilyEnded,
 } from "./family-cancel.js";
 import { endPause, pauseChild } from "./paused-children.js";
-import { capForRoom, FAN_OUT, type Lane, siblingNewsWords } from "./fan-out-governor.js";
+import { FAN_OUT, type Lane, siblingNewsWords } from "./fan-out-governor.js";
 import { waitForWork, type WorkWaitOutcome } from "./waiting/work-wait.js";
 import { deliverWake } from "../../seams/wake-delivery.js";
 import { spokenBy } from "../../seams/turn-speaker.js";
@@ -54,7 +55,7 @@ import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.j
 import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
 import { childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
-import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, laneHeldNote, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
+import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
 import { elsewhereFor, namedPaths, spentAsked } from "./child-listing.js";
 import { seatLine } from "./child-admission.js";
 import { resultContract, type ResultSchema, type ResultValue, turnResult } from "./child-result.js";
@@ -958,22 +959,16 @@ type Seat = Extract<Awaited<ReturnType<typeof admitChildTurn>>, { readonly ok: t
 
 type GovernedStart = ChildStart & { readonly spec: ChildSpawnSpec; readonly repointed?: ChildRun };
 
-// A start the governor let go, or held on its lane (fan-out-governor.ts) with its seat. Undefined lets it start now; a
-// held one is filed as a waiting child, and its result says why and that it starts by itself.
-const governedStart = async (services: Services, parent: ChildParent, start: GovernedStart, seat: Seat): Promise<ChildSpawnResult | undefined> => {
+// A start the governor let go, placed by the fan-out budget (fan-out-budget.ts), or held on its lane with its seat by
+// either. A held one is filed as a waiting child, and its result says why and that it starts by itself.
+const governedStart = async (services: Services, parent: ChildParent, start: GovernedStart, seat: Seat): Promise<ChildSpawnResult | Placed> => {
     const lane: Lane = { provider: start.spec.provider, model: start.spec.model };
-    const admission = FAN_OUT.admit(start.id, lane, capForRoom(await bestRoomFor(services, start.spec.provider, lane.model)));
-    if (admission.go) {
-        return undefined;
+    const gate = await startGate(services, start.id, start.spec, lane);
+    if (!("held" in gate)) {
+        return gate;
     }
-    holdOnLane(services, parent, { ...start, seat }, lane, admission.reason);
-    const news = siblingNewsWords(FAN_OUT.news(lane.provider));
-    return {
-        ok: true,
-        id: start.id,
-        held: true,
-        note: [laneHeldNote(start.id, admission.reason), news].filter((part) => part !== undefined).join(" "),
-    };
+    holdOnLane(services, parent, { ...start, seat }, lane, gate.held);
+    return heldResult(start.id, gate.held, lane);
 };
 
 // Filed as a waiting child, so `wait` parks on it and `send` says why it has not started; the governor starts it.
@@ -995,7 +990,11 @@ const holdOnLane = (services: Services, parent: ChildParent, start: GovernedStar
         start: async () => {
             try {
                 const spent = (await spentAsked(services, start.spec)) ?? (cancelled() ? NOT_STARTED.cancelled : undefined);
-                const started = spent === undefined ? await startChild(services, parent, start) : { ok: false as const, message: spent };
+                const gate = spent === undefined ? await releasedGate(services, start.id, start.spec, lane) : { spec: start.spec };
+                if ("wait" in gate) {
+                    return gate;
+                }
+                const started = spent === undefined ? await startChild(services, parent, { ...start, spec: gate.spec }) : { ok: false as const, message: spent };
                 if (!started.ok && cancelled()) {
                     start.seat.release();
                     endUnstarted(services, start.id);
@@ -1066,9 +1065,9 @@ const startChild = async (
     // `fromLine`: a start the seat line released, which goes back to the line rather than joining it again.
     start: GovernedStart & { readonly seat?: Seat; readonly fromLine?: true },
 ): Promise<ChildSpawnResult> => {
-    const { asked, spec, depth, id, repointed } = start;
-    if (spec.provider !== asked.provider) {
-        const refused = await refusedByRules(services, spec.provider);
+    const { asked, depth, id, repointed } = start;
+    if (start.spec.provider !== asked.provider) {
+        const refused = await refusedByRules(services, start.spec.provider);
         if (refused !== undefined) {
             return { ok: false, message: refused };
         }
@@ -1077,27 +1076,27 @@ const startChild = async (
     if (!admitted.ok) {
         return admitted.atOnce !== undefined && start.fromLine === undefined ? waitForSeat(services, parent, start, admitted.atOnce) : admitted;
     }
-    const governed = start.seat === undefined ? await governedStart(services, parent, start, admitted) : undefined;
-    if (governed !== undefined) {
+    const governed = start.seat === undefined ? await governedStart(services, parent, start, admitted) : { spec: start.spec, note: undefined };
+    if ("ok" in governed) {
         return governed;
     }
-    const { provider, harness } = childRouting(spec);
+    const { provider, harness } = childRouting(governed.spec);
 
     // Seat is claimed here; every exit must hand it to a running turn or refund it, or the cap drops permanently.
     let handedOff = false;
     try {
         composeRuntimeFloor(parent.conversationId, provider, capabilitiesOf(provider, harness));
-        const placement = await childPlacement(services, spec, provider, harness);
+        const placement = await childPlacement(services, governed.spec, provider, harness);
         // A held start its parent cancelled while this was placing it: the fresh record below would wipe the cancel.
         if (start.seat !== undefined && services.conversations.holdings(CHILDREN).get(id)?.cancelled === true) {
             return { ok: false, message: NOT_STARTED.cancelled };
         }
-        const record = childRecordOf(parent, spec, depth);
+        const record = childRecordOf(parent, governed.spec, depth);
         const turn: TurnInput & { conversationId: string } = {
-            prompt: spec.result === undefined ? spec.prompt : `${spec.prompt}\n\n${resultContract(spec.result.schema)}`,
+            prompt: governed.spec.result === undefined ? governed.spec.prompt : `${governed.spec.prompt}\n\n${resultContract(governed.spec.result.schema)}`,
             conversationId: id,
             // By the settings as it starts, which for a start the owner allowed later is when they allowed it.
-            ...childOpening(spec, admitted.limitPolicy),
+            ...childOpening(governed.spec, admitted.limitPolicy),
             // Its starter is the parent, which is also how it inherits the parent's owner (agents-registry.ts).
             ...spokenBy({ kind: "agent", conversationId: parent.conversationId }),
             ...opt("placement", placement === undefined ? undefined : { kind: "runner" as const, id: placement }),
@@ -1105,13 +1104,14 @@ const startChild = async (
         };
         services.conversations.holdings(CHILDREN).hold(parent.conversationId, id, record, id);
         // Files under the parent's conversation, what `wait` matches; a held start's waiting row gives way to this one.
-        openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(id, spec, depth), true);
+        openSpawnedChild(rosterHandle(services, parent.conversationId), childBirth(id, governed.spec, depth), true);
         record.turns = (services.conversations.holdings(CHILDREN).get(id)?.turns ?? 0) + 1;
         runChildTurn(services, id, parent.conversationId, turn, placement === undefined ? "local" : { runner: placement });
         handedOff = true;
         keepChild(services, id);
         const note = [
             repointed === undefined ? undefined : repointedNote(childRunOf(asked), repointed),
+            governed.note,
             siblingNewsWords(FAN_OUT.news(provider)),
         ].filter((part) => part !== undefined);
         return note.length === 0 ? { ok: true, id } : { ok: true, id, note: note.join(" ") };
@@ -1207,8 +1207,8 @@ export const resumeHeldChild = async (services: Services, id: string, kid: Child
     }
     const seat = reservedSeat(services, kid.parent, (await services.sandboxSettings.get()).limitPolicy);
     const governed = await governedStart(services, parent, start, seat);
-    if (governed === undefined) {
-        await startAllowedWithSeat(services, parent, start, seat);
+    if (!("ok" in governed)) {
+        await startAllowedWithSeat(services, parent, { ...start, spec: governed.spec }, seat);
     }
 };
 

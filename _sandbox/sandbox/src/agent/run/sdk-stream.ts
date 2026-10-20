@@ -21,6 +21,7 @@ import type { TurnAllowance } from "../providers/harness-credentials.js";
 import { opt } from "../../opt.js";
 import { type CacheCreationBuckets, ttlFromCacheCreation } from "./turn/prompt-cache.js";
 import { noteRetryCause } from "./turn/turn-pulse.js";
+import { MessageTally } from "./spend/message-tally.js";
 import { promptFingerprint } from "./prompt-fingerprint.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
 import { endJobTheCliStopped, noteJobNotice, noteJobShell, noteModelRequest } from "../tools/jobs/background-jobs.js";
@@ -451,8 +452,8 @@ class TurnFold {
     private readonly textBlocks = new Map<string, number>();
     // Fast-mode speed, de-duplicated on the (state, reason) pair, since a changing reason alone is informative.
     private fastReported: string | undefined;
-    // The query's running total as of the last result, in USD: the SDK reports that total, a frame only its growth.
-    private spentUsd: number;
+    // What the stream spent, by its messages and its results: the meter's feed and the ledger's (spend/message-tally.ts).
+    readonly tally: MessageTally;
     // Whether this turn already said its session outgrew the window; the result's ending repeats the assistant's error.
     private overflowed = false;
     // Where a turn the safety classifier stops can resume from, and whether it has stopped: said once, and the interrupted
@@ -467,7 +468,7 @@ class TurnFold {
     constructor(args: StreamSdkArgs, session: AgentQuery) {
         this.args = args;
         this.session = session;
-        this.spentUsd = args.carriedCostUsd;
+        this.tally = new MessageTally(args.subagents?.conversationId, args.carriedCostUsd);
     }
 
     // One SDK message onto its frames; returns true when the message ends the whole stream (a terminal rate_limit
@@ -607,6 +608,7 @@ class TurnFold {
 
     // Tool calls surface here (text and thinking streamed as deltas); a subagent's failure is its Agent call's result, not the turn's.
     private async *onAssistant(message: SDKAssistantMessage, sessionId: unknown, parent: string | undefined): AsyncGenerator<AgentEvent> {
+        this.tally.take(message.message.id, message.message.usage);
         if (message.error !== undefined) {
             if (parent === undefined) {
                 yield* isSafeguardRefusal(message) ? this.onFlagged(message) : this.onFailure(message);
@@ -971,17 +973,6 @@ class TurnFold {
         };
     }
 
-    // This result's own spend, off the running total the SDK reports: carried in from a resumed transcript, cumulative
-    // across results. A total below the last means the count started over (a /clear, a zeroed crash result).
-    private spentSince(total: number | undefined): number | undefined {
-        if (total === undefined) {
-            return undefined;
-        }
-        const previous = total < this.spentUsd ? 0 : this.spentUsd;
-        this.spentUsd = total;
-        return total - previous;
-    }
-
     // How the turn ended when it didn't succeed. A session past its window outranks the subtype and is said once, since
     // the assistant's error usually said it first; otherwise the subtype decides the code and rides the sentence.
     private endingFrame(message: SdkOf<"result">): AgentEvent | undefined {
@@ -1002,22 +993,7 @@ class TurnFold {
     }
 
     private async *onResult(message: SdkOf<"result">): AsyncGenerator<AgentEvent> {
-        // Only surface accounting when the SDK actually reported it; an empty frame on every turn would be noise.
-        if (message.usage !== undefined || message.total_cost_usd !== undefined) {
-            yield {
-                kind: "usage",
-                ...opt("costUsd", this.spentSince(message.total_cost_usd)),
-                ...opt("inputTokens", message.usage?.input_tokens),
-                ...opt("outputTokens", message.usage?.output_tokens),
-                ...opt("cacheReadTokens", message.usage?.cache_read_input_tokens),
-                ...opt("cacheCreationTokens", message.usage?.cache_creation_input_tokens),
-                ...opt("durationMs", message.duration_ms),
-                ...opt("numTurns", message.num_turns),
-                ...opt("openingCacheReadTokens", this.opening?.read),
-                ...opt("openingCacheCreationTokens", this.opening?.written),
-                ...opt("promptFingerprint", this.fingerprint?.hash),
-            };
-        }
+        yield* this.tally.resultFrames(message, { opening: this.opening, fingerprint: this.fingerprint?.hash });
         // Context-window fill: pairs the latest message_start size with the model's window, keyed by the turn's model.
         if (this.contextTokens !== undefined) {
             const window =
@@ -1057,6 +1033,7 @@ export async function* streamSdk(args: StreamSdkArgs): AsyncGenerator<AgentEvent
     for await (const message of sdkTurns(session, args.steering, args.redeliver)) {
         const ended = yield* fold.onMessage(message);
         if (ended) {
+            yield* fold.tally.owedFrames();
             // The stream ends on a retry the CLI is still sleeping out (onApiRetry), so the close in sdkTurns would sit
             // out the SDK's whole 2 s stdin-close grace before its SIGTERM, with the chat's loader still up under the
             // refusal it already shows. Interrupted first, the CLI drops the backoff and exits in tens of ms.
@@ -1065,4 +1042,6 @@ export async function* streamSdk(args: StreamSdkArgs): AsyncGenerator<AgentEvent
             return;
         }
     }
+    // A stream with no result for its last requests (one cut off mid-retry above, a CLI that died) still owes what they spent.
+    yield* fold.tally.owedFrames();
 }

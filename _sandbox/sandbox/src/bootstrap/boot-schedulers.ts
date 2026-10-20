@@ -1,3 +1,4 @@
+import { learnBurnRates } from "../agent/run/spend/burn-wiring.js";
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
 import { onChildSettled,childTurnResult,isWorker,resultWords } from "../agent/subagents/child-records.js";
 import { onJobEnded } from "../agent/tools/jobs/job-ended.js";
@@ -228,6 +229,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     shutdown.push(startRuntimeHealth(services));
     // Idle backstop: headroom is otherwise re-read only on a turn, refusal or screen.
     shutdown.push(services.headroom.start());
+    shutdown.push(learnBurnRates(services));
     // Anything the watchers see, a repo appearing or going, or a write the daemon made where no watcher looks.
     services.history.start((changed) => {
         const stops = [subscribeWorkspaceChanges(changed), subscribeRepoChanges(changed), subscribeUnwatchedWrites(changed)];

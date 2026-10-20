@@ -7,6 +7,8 @@ import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { activityLogDocument } from "../activity/activity-store.js";
 import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
+import { burnRatesDocument } from "../agent/run/spend/burn-rates.js";
+import { readingsLogDocument } from "../agent/run/spend/readings-log.js";
 import { spawnedChildrenDocument } from "../agent/subagents/spawned-children.js";
 import { scriptRunsDocument } from "../agent/subagents/workflows/script-run-store.js";
 import { keptJobRecordsDocument } from "../agent/tools/jobs/kept-job-records.js";
@@ -123,6 +125,8 @@ import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js"
 const documentsPart1 = (): readonly DocumentSpec[] => [
     activityLogDocument,
     claudeSeatsDocument,
+    burnRatesDocument,
+    readingsLogDocument,
     spawnedChildrenDocument,
     scriptRunsDocument,
     keptJobRecordsDocument,
@@ -163,6 +167,9 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
+];
+
+const documentsPart2 = (): readonly DocumentSpec[] => [
     extensionSettingsDocument,
     extensionUpdatePolicyDocument,
     extensionUpdatesDocument,
@@ -185,9 +192,6 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     runnerPairConsumedDocument,
     syncPairConsumedDocument,
     webextEnrollmentsDocument,
-];
-
-const documentsPart2 = (): readonly DocumentSpec[] => [
     webextPairConsumedDocument,
     peerToolsDocument,
     conversationGrantsDocument,
@@ -210,6 +214,9 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
     keyringCopiesDocument,
+];
+
+const documentsPart3 = (): readonly DocumentSpec[] => [
     keyringDevicesDocument,
     keyringSyncMailboxDocument,
     secretHostGuardsDocument,
@@ -257,6 +264,7 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
 export const stateDocuments = (): readonly DocumentSpec[] => [
     ...documentsPart1(),
     ...documentsPart2(),
+    ...documentsPart3(),
 ];
 
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.

@@ -24,6 +24,8 @@ import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { fileProviderRefusalStore, providerRefusalsDocument, type ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { fileRunOutStore, runOutsDocument, type RunOutStore } from "../../usage/run-outs.js";
 import { fileUsageStore, type UsageStore, usageLedgerDocument } from "../../usage/usage-store.js";
+import { type BurnRates, burnRatesDocument, createBurnRates } from "../run/spend/burn-rates.js";
+import { fileReadingsLog, readingsLogDocument } from "../run/spend/readings-log.js";
 import { type HarnessRequest, runAgent } from "../run/agent.js";
 import { judgeCommand, type JudgeFacts } from "../tools/command-judge.js";
 import type { AgentRequest, ContainerCredential } from "./agent-request.js";
@@ -90,6 +92,9 @@ export interface ProvidersSlice {
     // When each provider's allowance last ran out, and under how many of this sandbox's agents: the rate beside the
     // figure left that a parent fanning out reads (usage/run-outs.ts).
     readonly runOuts: RunOutStore;
+    // What one point of each account's window costs and what each model spends an hour, learned from the live meter and
+    // every reading (agent/run/spend/burn-rates.ts); what the fan-out planner projects from.
+    readonly burnRates: BurnRates;
 }
 
 // What the slice is built from: the members built before it, since the provider areas and the headroom read them too;
@@ -136,6 +141,7 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
         providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path), { log }),
         modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path), { log }),
         runOuts: fileRunOutStore(join(historyRoot, runOutsDocument.path)),
+        burnRates: createBurnRates({ path: join(historyRoot, burnRatesDocument.path), log: fileReadingsLog(join(historyRoot, readingsLogDocument.path)) }),
         providerCatalogs: providerCatalogsOf(built.providerModules, whole),
         providerReadiness: () => providerReadiness(whole()),
         providerAccounts: (provider) => providerAccountsOf(whole(), provider),

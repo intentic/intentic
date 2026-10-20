@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 import { createRepeatGate } from "../../../logs/repeat-gate.js";
 import { opt } from "../../../opt.js";
 import { ANSWERED_FRAMES } from "../frames/frame-reducers.js";
+import { meterTurnTotal } from "../spend/token-meter.js";
 
 // What a running turn last showed of itself, per conversation: which turn and run it is, when its runtime last said
 // anything, and the upstream retry it is riding out. A turn that sat at "Thinking" for hours while its loop retried a
@@ -115,6 +116,12 @@ export const pulseFrame = (logger: Pick<Logger, "info" | "warn">, conversationId
         return;
     }
     const moved: TurnPulse = { ...pulse, lastEventAt: now, lastEvent: event.kind };
+    // A runtime that reports its spend only at the turn's end is metered then; one metered request by request (the Claude
+    // Code loop, spend/message-tally.ts) already was, and the meter ignores this total.
+    if (event.kind === "usage") {
+        const { inputTokens: input, outputTokens: output, cacheReadTokens: cacheRead, cacheCreationTokens: cacheWrite } = event;
+        meterTurnTotal(pulse, { input, output, cacheRead, cacheWrite }, now);
+    }
     if (event.kind === "provider_retry") {
         pulses.set(pulse.conversationId, onRetry(logger, moved, event, now));
         return;

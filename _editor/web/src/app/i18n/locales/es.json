@@ -2718,9 +2718,13 @@
             "toDropOneDrop": "para quitar una, quita lo que la trae"
         },
         "agentSubagents": {
+            "keepRoomForYou": "Margen reservado para ti",
+            "keepRoomForYouDescription": "Puntos de cada ventana de cuota, sobre 100, que los subagentes dejan para tus propios chats.",
             "maximumDelegatedAgentsRunning": "Máximo de agentes delegados en paralelo.",
             "maximumDelegationDepth": "Profundidad máxima de delegación.",
             "nestingDepth": "Profundidad de anidamiento",
+            "planByAllowance": "Planificar los despliegues según la cuota",
+            "planByAllowanceDescription": "Iniciar un subagente solo donde la cuota de una cuenta pueda sostenerlo, en la cuenta que conserve más margen después. El resto espera como pendiente y arranca solo cuando vuelve a haber margen.",
             "spawnSubagents": "Lanzar subagentes",
             "spawnedSubagentSpends": "Un subagente lanzado funciona como una conversación propia, en cualquier proveedor conectado, y gasta las mismas cuentas conectadas que este.",
             "spawningRefusedOutright": "Lanzar subagentes está rechazado de plano, así que los límites de abajo solo acotan los subagentes que un entorno inicia dentro de su proceso.",

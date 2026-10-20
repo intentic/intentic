@@ -6063,9 +6063,13 @@
             "toDropOneDrop": "to drop one, drop the thing that ships it"
         },
         "agentSubagents": {
+            "keepRoomForYou": "Room kept for you",
+            "keepRoomForYouDescription": "Points of each allowance window, out of 100, that subagents leave for your own chats.",
             "maximumDelegatedAgentsRunning": "Maximum delegated agents running in parallel.",
             "maximumDelegationDepth": "Maximum delegation depth.",
             "nestingDepth": "Nesting depth",
+            "planByAllowance": "Plan fan-outs by allowance",
+            "planByAllowanceDescription": "Start a subagent only where an account's allowance can carry it, on the account left with the most room after it. The rest wait as pending and start by themselves as room comes back.",
             "spawnSubagents": "Spawn subagents",
             "spawnedSubagentSpends": "A spawned subagent runs as a conversation of its own, on any connected provider, and spends the same connected accounts this one does.",
             "spawningRefusedOutright": "Spawning is refused outright, so the limits below bound only the subagents a runtime starts in-process.",

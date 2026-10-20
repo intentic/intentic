@@ -5592,9 +5592,13 @@
             "toDropOneDrop": "żeby jakąś usunąć, usuń to, co ją przynosi"
         },
         "agentSubagents": {
+            "keepRoomForYou": "Zapas zostawiony dla ciebie",
+            "keepRoomForYouDescription": "Punkty każdego okna limitu, na 100, które podagenty zostawiają na twoje własne czaty.",
             "maximumDelegatedAgentsRunning": "Maksymalna liczba delegowanych agentów działających równolegle.",
             "maximumDelegationDepth": "Maksymalna głębokość delegowania.",
             "nestingDepth": "Głębokość zagnieżdżenia",
+            "planByAllowance": "Planuj podagenty według limitu",
+            "planByAllowanceDescription": "Uruchamiaj podagenta tylko tam, gdzie limit konta go udźwignie, na koncie, któremu zostanie potem najwięcej zapasu. Pozostałe czekają w kolejce i ruszają same, gdy zapas wróci.",
             "spawnSubagents": "Uruchamiaj podagenty",
             "spawnedSubagentSpends": "Uruchomiony podagent działa jako osobna rozmowa, na dowolnym podłączonym dostawcy, i wydaje te same podłączone konta co ten.",
             "spawningRefusedOutright": "Uruchamianie jest odrzucane wprost, więc limity poniżej ograniczają tylko podagenty, które środowisko uruchomieniowe startuje w swoim procesie.",

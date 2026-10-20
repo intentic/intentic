@@ -1357,6 +1357,52 @@ test("a usage-limit retry parks the turn at its reset instead of masquerading as
     }
 });
 
+// Ten children that had worked fifty minutes each were filed at no tokens (2026-10-20): the CLI the limit cut off never
+// sent its result, so its turn's whole spend went unaccounted. What its messages reported is said as the turn's usage.
+test("a stream a usage limit cuts off still reports what its messages spent, helpers' included", async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-30T20:00:00.000Z"));
+    const usage = (output: number) => ({ input_tokens: 3, output_tokens: output, cache_read_input_tokens: 1_000, cache_creation_input_tokens: 200 });
+    try {
+        const events = await collect(
+            request,
+            fakeQuery(
+                // One message read twice as its output grew, and one of a helper's: counted as 3+200 in, 70 out.
+                { type: "assistant", session_id: "s", parent_tool_use_id: null, message: { id: "m1", content: [], usage: usage(40) } },
+                { type: "assistant", session_id: "s", parent_tool_use_id: null, message: { id: "m1", content: [], usage: usage(60) } },
+                { type: "assistant", session_id: "s", parent_tool_use_id: "toolu_helper", message: { id: "m2", content: [], usage: usage(10) } },
+                {
+                    type: "system",
+                    subtype: "api_retry",
+                    session_id: "s",
+                    attempt: 1,
+                    max_retries: 300,
+                    retry_delay_ms: 15 * 60_000,
+                    error_status: 429,
+                    error: "rate_limit",
+                },
+                { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "never" } } },
+            ),
+        );
+        expect(events.filter((event) => event.kind === "usage")).toEqual([
+            { kind: "usage", inputTokens: 6, outputTokens: 70, cacheReadTokens: 2_000, cacheCreationTokens: 400 },
+        ]);
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
+test("a stream whose result accounted for its messages owes nothing more", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "assistant", session_id: "s", parent_tool_use_id: null, message: { id: "m1", content: [], usage: { input_tokens: 5, output_tokens: 9 } } },
+            { type: "result", subtype: "success", session_id: "s", usage: { input_tokens: 5, output_tokens: 9 }, total_cost_usd: 0.01, modelUsage: {} },
+        ),
+    );
+    expect(events.filter((event) => event.kind === "usage")).toEqual([expect.objectContaining({ kind: "usage", inputTokens: 5, outputTokens: 9 })]);
+});
+
 // Routed 429s must use the recorded vendor quota's reset, not the SDK's own backoff delay.
 const retryFrame = { type: "system", subtype: "api_retry", session_id: "s", attempt: 1, max_retries: 300, error_status: 429 } as const;
 

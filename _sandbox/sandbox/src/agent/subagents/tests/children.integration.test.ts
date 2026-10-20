@@ -16,6 +16,7 @@ import { breakPolicyFor } from "../../run/turn/break-policy.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../../guard/turn-taint.js";
 import { unstubbed } from "@intentic/testing";
 import { reportChildTurn } from "../child-report.js";
+import { FAN_OUT } from "../fan-out-governor.js";
 import { childLandingWords } from "../../../conversations/land/child-lands.js";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -173,11 +174,12 @@ describe("what a child's conversation opens with", () => {
     };
     const go = { prompt: "Review the audit of batch 24", provider: "codex", model: "gpt-5.1-codex" } as const;
 
-    // Under `resend` or `move` it inherits, so the card shows the sandbox's answer and follows the owner changing it. A
-    // turn that stopped short is carried on whatever the sandbox answers: nobody watches a child (2026-10-17).
+    // Under `move` it inherits, so the card shows the sandbox's answer and follows the owner changing it; under `wait` or
+    // `resend` it moves to another account with room first, the reset its fallback (2026-10-20). A turn that stopped short
+    // is carried on whatever the sandbox answers: nobody watches a child (2026-10-17).
     const answers: [LimitPolicy, string, Postures, LimitPolicy | undefined][] = [
-        ["wait", "a re-run of its own", { limit: "resend", stopped: "retry" }, "resend"],
-        ["resend", "nothing of its own", { stopped: "retry" }, undefined],
+        ["wait", "a move of its own", { limit: "move", stopped: "retry" }, "move"],
+        ["resend", "a move of its own", { limit: "move", stopped: "retry" }, "move"],
         ["move", "nothing of its own", { stopped: "retry" }, undefined],
     ];
     it.each(answers)(
@@ -225,7 +227,7 @@ describe("what a child's conversation opens with", () => {
         expect(await sendToChild(services, parent, result.id, "Try it here instead.")).toMatchObject({ ok: true });
         await finishedIn(fleet, result.id);
         expect(fleet.agents.entry(result.id)).toMatchObject({
-            postures: { limit: "resend" },
+            postures: { limit: "move" },
             social: { title: { text: "Test audit reviewer, batch 24", source: "model" } },
         });
     });
@@ -1311,7 +1313,7 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             }
             cards.resolve({ kind: "permission", requestId: await cardOn(), decision: "once" });
             await settled(result.id);
-            expect(turns[0]).toMatchObject({ title: "Port the parser", titleSource: "model", postures: { limit: "resend" } });
+            expect(turns[0]).toMatchObject({ title: "Port the parser", titleSource: "model", postures: { limit: "move" } });
         } finally {
             live.release();
         }
@@ -1989,7 +1991,7 @@ describe("a child whose allowance runs out", () => {
         // Booked at the reset, which is what keeps the card out of the Attention lane.
         expect(fleet.agents.get(result.id)).toMatchObject({
             title: "Test audit reviewer, batch 24",
-            limitPolicy: "resend",
+            limitPolicy: "move",
             failureCode: "rate_limit",
             limitResetsAt: RESETS_AT,
             limitHeld: true,
@@ -2345,6 +2347,71 @@ describe("what a parent reads of a child's report", () => {
 });
 
 // 2026-10-17: three children went onto a Cursor nothing had proven that day, and all three were refused.
+// 2026-10-20: ten Opus children went onto the one Claude account reading most room and stopped together when its
+// five-hour window ran out. Each start now asks the fan-out planner (agent/run/spend/budget-planner.ts), which places it on an
+// account or holds it as pending.
+describe("the fan-out budget", () => {
+    const S = Math.floor(Date.now() / 1000);
+    const nearlySpent = (account: string) => ({
+        windows: [
+            { kind: "five_hour", utilization: 92, resetsAt: S + 4 * 3_600, gates: "all" as const, rounded: true },
+            { kind: "seven_day", utilization: 40, resetsAt: S + 72 * 3_600, gates: "all" as const, rounded: true },
+        ],
+        measuredAt: Date.now(),
+        account,
+    });
+    const budgeted = (body: TurnStarter["stream"]): Services =>
+        drivenBy(
+            unstubbed<Services>("services", {
+                ...spawnServices({}, [], actors),
+                claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
+                    // SAFETY: the serviceability facts read only each account's id and label off the store's rows.
+                    list: async () => [
+                        { id: "radarsu", label: "radarsu@example.com" },
+                        { id: "artur", label: "artur@example.com" },
+                    ] as Awaited<ReturnType<Services["claudeStore"]["list"]>>,
+                }),
+                claudeSeats: unstubbed<Services["claudeSeats"]>("claudeSeats", { read: async () => ({}) }),
+                accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => ({ radarsu: nearlySpent("radarsu"), artur: nearlySpent("artur") }) }),
+                // SAFETY: no routed provider holds an account here; every key the listing reads is an empty list.
+                cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", { accounts: async () => ({ codex: [], kimi: [], gemini: [], grok: [] }) as Awaited<ReturnType<Services["cliProxy"]["accounts"]>> }),
+                providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { onFile: async () => ({}) }),
+                runOuts: { read: async () => ({}), record: async () => {} },
+                burnRates: { ready: async () => {}, tokensPerPoint: () => undefined, modelPace: () => undefined, reading: async () => {}, turnEnded: async () => {} },
+            }),
+            body,
+        );
+    const opus = { provider: "claude", model: "claude-opus-5-5" } as const;
+
+    it("starts the first child placed on an account even short, holds the next, and starts it once the first ends", async () => {
+        const turns: TurnInput[] = [];
+        const gate = Promise.withResolvers<void>();
+        const services = budgeted(async function* (input: TurnInput): AsyncGenerator<AgentEvent> {
+            turns.push(input);
+            if (turns.length === 1) {
+                await gate.promise;
+            }
+            yield { kind: "delta", text: "On it." };
+            yield { kind: "done" };
+        });
+        // The parent's own turn answered on the lane, so no canary stands in the way: only the budget does.
+        FAN_OUT.served(opus);
+        const first = await spawnChild(services, parent, { prompt: "architect 1", ...opus });
+        const second = await spawnChild(services, parent, { prompt: "architect 2", ...opus });
+        expect(first).toMatchObject({ ok: true, note: expect.stringContaining("although no account carries it") });
+        expect(second).toMatchObject({ ok: true, held: true, note: expect.stringContaining("it waits for room") });
+        if (!first.ok || !second.ok) {
+            throw new Error("not spawned");
+        }
+        expect(turns.map((turn) => turn.account)).toEqual(["radarsu"]);
+        gate.resolve();
+        await settled(first.id);
+        await settled(second.id);
+        expect(turns.map((turn) => turn.prompt)).toEqual(["architect 1", "architect 2"]);
+        expect(turns[1]?.account).toEqual(expect.any(String));
+    });
+});
+
 describe("the fan-out governor", () => {
     const refusing = (turns: TurnInput[]): TurnStarter["stream"] =>
         async function* refused(input: TurnInput) {

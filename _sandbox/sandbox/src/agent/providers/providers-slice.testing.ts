@@ -95,6 +95,8 @@ export const providersSliceFake = (context: SliceFakeContext, { usage, cliProxy 
         },
         // Nothing ran out yet; written beside every spent allowance's refusal, so any refused turn touches this store.
         runOuts: { read: async () => ({}), record: async () => {} },
+        // Nothing learned yet: the fan-out planner projects from its priors.
+        burnRates: { ready: async () => {}, tokensPerPoint: () => undefined, modelPace: () => undefined, reading: async () => {}, turnEnded: async () => {} },
         cliProxy: emptyCliProxy(cliProxy),
         providerCatalogs: testProviderCatalogs,
         // The real tables: which runtime a pair reaches and which module answers for a provider are facts about the

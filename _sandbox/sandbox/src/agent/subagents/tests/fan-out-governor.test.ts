@@ -1,6 +1,5 @@
 import {
     CANARY_PATIENCE_MS,
-    capForRoom,
     createFanOutGovernor,
     type HeldStart,
     type Lane,
@@ -48,23 +47,23 @@ beforeEach(() => {
 
 test("a lane nothing has proven takes one child, and its siblings start once it is answered", async () => {
     const governor = createFanOutGovernor(now);
-    expect(governor.admit("sub-1", OPUS, undefined)).toEqual({ go: true });
-    const second = governor.admit("sub-2", OPUS, undefined);
+    expect(governor.admit("sub-1", OPUS)).toEqual({ go: true });
+    const second = governor.admit("sub-2", OPUS);
     expect(second).toMatchObject({ go: false, reason: expect.stringContaining("`sub-1`") });
     const fate = held(governor, "sub-2");
     governor.answered("sub-1");
     await settle();
     expect(fate).toEqual(["started"]);
     // Proven now: the next one goes at once.
-    expect(governor.admit("sub-3", OPUS, undefined)).toEqual({ go: true });
+    expect(governor.admit("sub-3", OPUS)).toEqual({ go: true });
     governor.reset();
 });
 
 test("a canary refused before answering hands its siblings to the records: the next goes first, a spent one is handed back", async () => {
     const governor = createFanOutGovernor(now);
-    governor.admit("sub-1", OPUS, undefined);
-    governor.admit("sub-2", OPUS, undefined);
-    governor.admit("sub-3", OPUS, undefined);
+    governor.admit("sub-1", OPUS);
+    governor.admit("sub-2", OPUS);
+    governor.admit("sub-3", OPUS);
     const two = held(governor, "sub-2", true);
     const three = held(governor, "sub-3");
     governor.ended("sub-1", { answered: false, failure: "You're out of usage." });
@@ -80,8 +79,8 @@ test("a slow canary does not hold its siblings past its patience", async () => {
     jest.useFakeTimers();
     try {
         const governor = createFanOutGovernor(now);
-        governor.admit("sub-1", OPUS, undefined);
-        governor.admit("sub-2", OPUS, undefined);
+        governor.admit("sub-1", OPUS);
+        governor.admit("sub-2", OPUS);
         const fate = held(governor, "sub-2");
         jest.advanceTimersByTime(CANARY_PATIENCE_MS + 1);
         await settle();
@@ -94,39 +93,52 @@ test("a slow canary does not hold its siblings past its patience", async () => {
 
 test("a lane proven long ago is probed again", () => {
     const governor = createFanOutGovernor(now);
-    governor.admit("sub-1", OPUS, undefined);
+    governor.admit("sub-1", OPUS);
     governor.answered("sub-1");
     governor.ended("sub-1", { answered: true, failure: undefined });
     clock += PROVEN_FOR_MS + 1;
-    governor.admit("sub-2", OPUS, undefined);
-    expect(governor.admit("sub-3", OPUS, undefined)).toMatchObject({ go: false });
+    governor.admit("sub-2", OPUS);
+    expect(governor.admit("sub-3", OPUS)).toMatchObject({ go: false });
     governor.reset();
 });
 
-test("a provider with little room left takes few children at once, and the rest start as one ends", async () => {
+test("a start the budget still holds goes back to the head of its lane, and goes once room is back", async () => {
     const governor = createFanOutGovernor(now);
     const CODEX: Lane = { provider: "codex", model: "gpt-6.1-sol" };
-    governor.admit("sub-0", CODEX, undefined);
-    governor.answered("sub-0");
-    governor.ended("sub-0", { answered: true, failure: undefined });
-    expect(capForRoom(25)).toBe(2);
-    expect(capForRoom(9)).toBe(1);
-    expect(capForRoom(57)).toBeUndefined();
-    expect(governor.admit("sub-1", CODEX, 2)).toEqual({ go: true });
-    expect(governor.admit("sub-2", CODEX, 2)).toEqual({ go: true });
-    expect(governor.admit("sub-3", CODEX, 2)).toMatchObject({ go: false, reason: expect.stringContaining("codex") });
+    governor.served(CODEX);
+    expect(governor.admit("sub-1", CODEX)).toEqual({ go: true });
+    expect(governor.runningOn("codex")).toBe(1);
+    // The budget held sub-2 after its lane let it go: it is not counted as running.
+    expect(governor.admit("sub-2", CODEX)).toEqual({ go: true });
+    governor.retract("sub-2");
+    expect(governor.runningOn("codex")).toBe(1);
+    let room = false;
     const fate: string[] = [];
-    governor.hold({ childId: "sub-3", lane: CODEX, start: async () => fate.push("started") > 0, abandon: async () => undefined, cancel: () => undefined });
+    governor.hold({
+        childId: "sub-2",
+        lane: CODEX,
+        start: async () => {
+            fate.push(room ? "started" : "waits");
+            return room ? true : { wait: true, retryAt: clock + 60 * 60_000 };
+        },
+        abandon: async () => undefined,
+        cancel: () => undefined,
+    });
+    governor.reconsider("codex");
+    await settle();
+    expect(fate).toEqual(["waits"]);
+    room = true;
     governor.ended("sub-1", { answered: true, failure: undefined });
     await settle();
-    expect(fate).toEqual(["started"]);
+    expect(fate).toEqual(["waits", "started"]);
+    expect(governor.runningOn("codex")).toBe(1);
     governor.reset();
 });
 
 test("a held start withdrawn by a cancel never starts", async () => {
     const governor = createFanOutGovernor(now);
-    governor.admit("sub-1", OPUS, undefined);
-    governor.admit("sub-2", OPUS, undefined);
+    governor.admit("sub-1", OPUS);
+    governor.admit("sub-2", OPUS);
     const fate = held(governor, "sub-2");
     expect(governor.withdraw("sub-2")).toBe(true);
     governor.answered("sub-1");
@@ -146,19 +158,19 @@ test("a spawn result names what its siblings just ran into", () => {
 
 test("a lane a canary's patience let go is suspect again once a start on it is refused before answering", () => {
     const governor = createFanOutGovernor(now);
-    governor.admit("sub-1", OPUS, undefined);
+    governor.admit("sub-1", OPUS);
     governor.answered("sub-1");
-    governor.admit("sub-2", OPUS, undefined);
+    governor.admit("sub-2", OPUS);
     governor.ended("sub-2", { answered: false, failure: "out of usage" });
-    governor.admit("sub-3", OPUS, undefined);
-    expect(governor.admit("sub-4", OPUS, undefined)).toMatchObject({ go: false });
+    governor.admit("sub-3", OPUS);
+    expect(governor.admit("sub-4", OPUS)).toMatchObject({ go: false });
     governor.reset();
 });
 
 test("a lane any turn was just answered on needs no canary", () => {
     const governor = createFanOutGovernor(now);
     governor.served(OPUS);
-    expect(governor.admit("sub-1", OPUS, undefined)).toEqual({ go: true });
-    expect(governor.admit("sub-2", OPUS, undefined)).toEqual({ go: true });
+    expect(governor.admit("sub-1", OPUS)).toEqual({ go: true });
+    expect(governor.admit("sub-2", OPUS)).toEqual({ go: true });
     governor.reset();
 });

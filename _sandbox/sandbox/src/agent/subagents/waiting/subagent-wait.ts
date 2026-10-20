@@ -270,8 +270,11 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               "left out of this list, and a spawn naming one is refused before it takes a seat. What it shows is what " +
                               "is not known to be spent, which is weaker than a promise: a provider publishing no allowance reads as " +
                               "not metered, and the only thing that ever measures one of those is a turn it has already refused. Each " +
-                              "figure is one account's, and subagents started together draw on it together: N children spend it " +
-                              "about N times as fast as one, so read the last run-out before starting several on one provider.",
+                              "figure is one account's, and subagents started together spend together, so the sandbox does the " +
+                              "arithmetic: each provider with metered accounts carries a budget line saying how many more children of " +
+                              "its usual model fit through their windows now. Spawn what the work needs: each child is placed on the " +
+                              "account left with the most room after it, and one the accounts cannot carry waits as pending and starts " +
+                              "by itself as running ones end or a window reopens.",
                           {},
                           async () => {
                               const children = deps.children;

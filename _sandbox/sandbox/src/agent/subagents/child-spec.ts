@@ -146,16 +146,18 @@ export const taskLine = (spec: Pick<ChildSpawnSpec, "prompt" | "description">): 
 
 // What the turn that opens a child's conversation says of it beyond its task, which the registry reads off that turn
 // alone. Its title is the parent's own words when the parent described it, a name the naming pass keeps, else the
-// prompt's head for that pass to name. And nobody watches a child while its parent waits on it, so where the sandbox's
-// standing answer to a spent allowance is to wait for a person's press, the child answers that ending itself: its turn
-// goes again once the allowance reopens. A sandbox already answering `resend` or `move` is inherited as it stands. A turn
+// prompt's head for that pass to name. And nobody watches a child while its parent waits on it, so a child answers a
+// spent allowance itself, whatever the sandbox's standing answer: `move`, onto another account of its provider with room
+// right away (the fan-out planner's pick, agent/models/sibling-account.ts), else its turn goes again once the allowance
+// reopens. Before 2026-10-20 a child only waited for the reset: ten stopped together while the account beside theirs read
+// 84% left, and their fallbacks moved four of them onto another provider first. A turn
 // that stopped short (a vendor loop's hard cap reached mid-work, a crashed harness) is carried on the same way, on the
 // stop ladder's bounded tries: two Gemini children that had edited a dozen files each ended as plain failures at the
 // 30-minute cap, and their work was rescued by hand (2026-10-17).
 export const childOpening = (spec: ChildSpawnSpec, sandboxLimit: LimitPolicy): Pick<TurnInput, "title" | "titleSource" | "postures"> => ({
     title: taskLine(spec).slice(0, 80),
     ...opt("titleSource", spec.description === undefined ? undefined : ("model" as const)),
-    postures: { ...opt("limit", sandboxLimit === "wait" ? ("resend" as const) : undefined), stopped: "retry" },
+    postures: { ...opt("limit", sandboxLimit === "move" ? undefined : ("move" as const)), stopped: "retry" },
 });
 
 // A child's spec on another provider and model: its task, description and placement kept, every knob of the old model

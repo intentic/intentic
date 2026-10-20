@@ -158,7 +158,9 @@ const providersTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomT
         "left out, and a spawn naming one is refused before it takes a seat. What this shows is what is not known to " +
         "be spent, which is weaker than a promise: a provider publishing no allowance reads as not metered, and the " +
         "only thing that ever measures one of those is a turn it has already refused. Each figure is one account's, " +
-        "and subagents started together draw on it together: N children spend it about N times as fast as one.",
+        "and subagents started together spend together: the budget line says how many more children fit now, each " +
+        "child is placed on the account left with the most room after it, and one that does not fit waits as pending " +
+        "and starts by itself when room is back.",
     inputSchema: { type: "object", properties: {}, required: [] },
     // The listing as the CLI prints it, the same words every runtime's agent reads before it fans out.
     execute: async () => spawnCatalogText(await children.providers()),

@@ -602,6 +602,8 @@ export const SandboxSettingsSchema = z.object({
     childRerunHorizonHours: z.number().int().min(0).max(24).default(6).describe(
         "How long a subagent refused for a spent allowance waits for the provider's reset before it goes again by itself. Past it, or at 0, it stops and its parent hears where else the work can go. One spawned with fallbacks waits at most 90 minutes and then moves to them.",
     ),
+    subagentBudget: z.boolean().default(true).describe("Start a subagent only where an account's allowance can carry it through its windows, on the account left with the most room after it. The rest wait as pending and start by themselves as running ones end or a window reopens. Off, every subagent starts at once, wherever the most room reads now."),
+    subagentReservePercent: z.number().int().min(0).max(50).default(10).describe("How much of each allowance window, in points of 100, subagents leave for your own conversations: a fan-out is planned against what is left past it."),
     // Width again, for a team-chat automation rather than a turn: each thread a message lands in is a conversation of
     // its own, and threads of one automation are worked on side by side up to this many (automations/scheduler.ts in
     // the daemon); one more waits, told it is queued, until a slot frees. Read per fire, so a change holds from the next

@@ -6,6 +6,8 @@ import type { SeatRefusal } from "../providers/claude/claude-seats.js";
 import { conversationEntry } from "../../conversations/registry/agents-store.testing.js";
 import { bookLimitMove, siblingWithRoom } from "./sibling-account.js";
 import { claudeReading } from "../providers/claude/claude-usage.testing.js";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { beginPulse, endPulse } from "../run/turn/turn-pulse.js";
 
 const account = (id: string, extra: Partial<OauthAccount> = {}): OauthAccount => ({ id, label: id, ...extra }) as OauthAccount;
 // A Claude account's five-hour pool, as the reader files it (rounded).
@@ -109,4 +111,29 @@ test("a conversation's override outranks the sandbox default", async () => {
         account: "room",
         carry: false,
     });
+});
+
+// Ten children once moved together onto the account reading most room and emptied it in thirty minutes (2026-10-20): a
+// move lands where the planner projects most room once what already runs there is counted, not on the fullest meter.
+test("moves onto the account the fan-out planner projects roomiest once its load is counted", async () => {
+    const now = Date.now();
+    const crowdedTurns = Array.from({ length: 6 }, (_, index) => `kid-${String(index)}`);
+    for (const conversationId of crowdedTurns) {
+        beginPulse({ conversationId, turnId: `t-${conversationId}`, provider: "claude", harness: "native", model: "claude-opus-5-5", account: "crowded", startedAt: now });
+    }
+    try {
+        const base = fakeServices({ accounts: [account("spent"), account("crowded"), account("quiet")], usage: { spent: reading(100), crowded: reading(30), quiet: reading(40) } });
+        expect(await siblingWithRoom(base, { provider: "claude", model: "claude-opus-5-5", refused: "spent" })).toBe("crowded");
+        const planned = {
+            ...base,
+            burnRates: { ready: async () => {}, tokensPerPoint: () => undefined, modelPace: () => undefined, reading: async () => {}, turnEnded: async () => {} },
+            runOuts: { read: async () => ({}), record: async () => {} },
+            sandboxSettings: { get: async () => SandboxSettingsSchema.parse({}) },
+        };
+        expect(await siblingWithRoom(planned, { provider: "claude", model: "claude-opus-5-5", refused: "spent" })).toBe("quiet");
+    } finally {
+        for (const conversationId of crowdedTurns) {
+            endPulse(conversationId, `t-${conversationId}`);
+        }
+    }
 });

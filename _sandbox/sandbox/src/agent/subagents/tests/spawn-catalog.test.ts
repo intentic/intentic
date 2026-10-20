@@ -301,12 +301,28 @@ describe("a provider that meters nothing", () => {
 // Thirteen Claude children were once started against an account reading "96% left" and all hit the wall together: the
 // figure was true and said nothing about spending it thirteen times over.
 describe("one account's figure, spent by every child at once", () => {
-    it("says that subagents started together draw on it together", () => {
+    it("says that subagents started together spend together, and what the sandbox does about it", () => {
         const text = spawnCatalogText([
             { id: "claude", label: "Claude", models: [{ id: "opus", label: "Opus", headroom: { percentLeft: 96 } }], spent: 0 },
         ]);
 
-        expect(text).toContain("subagents you start together draw on it together");
+        expect(text).toContain("subagents started together spend together");
+        expect(text).toContain("waits as pending and starts by itself");
+    });
+
+    // Ten children went onto one account reading 84% left after the listing printed the figure and said N children spend
+    // it N times as fast (2026-10-20): the planner's own count is said instead, beside the figure.
+    it("carries the planner's budget line beside the provider's figures", () => {
+        const text = spawnCatalogText([
+            {
+                id: "claude",
+                label: "Claude",
+                models: [{ id: "opus", label: "Opus", headroom: { percentLeft: 84 } }],
+                spent: 0,
+                budget: "budget: radarsu five-hour 84% left (2 agents on it now); about 9 more opus children fit now",
+            },
+        ]);
+        expect(text).toContain("; budget: radarsu five-hour 84% left (2 agents on it now); about 9 more opus children fit now");
     });
 
     // With nothing metered there is no figure to misread, and the sentence would be noise on the listing read most.
