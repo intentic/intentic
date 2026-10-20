@@ -71,7 +71,7 @@ const PENDING_POLL_MS = 3_000;
 export function useCapabilities() {
     const queryClient = useQueryClient();
 
-    const { query, error } = useSandboxQuery({
+    const { query, error, loaded } = useSandboxQuery({
         queryKey: capabilitiesKey,
         queryFn: fetchCapabilities,
         refetchInterval: ({ state }) =>
@@ -133,9 +133,8 @@ export function useCapabilities() {
         // `cli`); the evidence renders verbatim beside the claim.
         recommendationFor: (tile: string): CapabilityRecommendation | undefined =>
             recommendations.value.find((recommendation) => recommendation.entry === tile),
-        // Whether the manifest has arrived or definitively failed: the rail's half of "absent vs. merely late" (see
-        // usePanels.settled).
-        settled: computed(() => query.isFetched.value || query.isError.value),
+        // Where the manifest stands: the rail's half of "absent vs. not known yet" (see usePanels.loaded).
+        loaded,
         error,
         isLoading: query.isLoading,
         refetch: query.refetch,

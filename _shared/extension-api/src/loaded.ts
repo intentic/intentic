@@ -1,4 +1,4 @@
-import { computed, type ComputedRef, hasInjectionContext, inject, type InjectionKey, onScopeDispose } from "vue";
+import { computed, type ComputedRef, hasInjectionContext, inject, type InjectionKey, onScopeDispose, ref, watch } from "vue";
 
 // WHAT A VIEW HAS OF SOMETHING IT READS, said once. Every read the app makes (a daemon query, a route's code, an
 // extension's view, a hand-rolled fetch) is one of four things, and a view draws from this union rather than from a
@@ -49,13 +49,39 @@ export const loadedFrom = <T>(facts: ReadFacts<T>, since: number): Loaded<T> => 
 /**
  * A read's facts as a `Loaded`, its wait stamped with when it began, and joined to the wait of the <Await> region it is
  * read in (`joinAwait`), so that region's placeholder stands until it has answered: the view never has to say so.
+ *
+ * Only a retry the person asked for (the `retry` this hands out) turns a failure back into a wait. A try the read makes
+ * by itself after failing (a refetch on an interval, on focus, on a push) leaves the failure on screen until it answers:
+ * counted as a wait, every background try put the region's placeholder back over its failure for a whole retry cycle,
+ * so under a read that kept failing a page showed its skeleton nine seconds in ten and its failure for one.
  */
 export const useLoaded = <T>(facts: () => ReadFacts<T>, options: { readonly join?: boolean } = {}): ComputedRef<Loaded<T>> => {
     let since = Date.now();
     let waiting = false;
+    // A retry the person asked for is in flight; cleared once the read stops fetching, however it ended.
+    const asked = ref(false);
+    watch(
+        () => facts().fetching,
+        (fetching) => {
+            if (!fetching) {
+                asked.value = false;
+            }
+        },
+        // Every change, not the last one per tick: a try that starts and ends between two ticks must still clear it.
+        { flush: `sync` },
+    );
     const loaded = computed(() => {
         const read = facts();
-        const next = loadedFrom(read, since);
+        const own = read.retry;
+        const retry =
+            own === undefined
+                ? undefined
+                : (): void => {
+                      asked.value = true;
+                      own();
+                  };
+        const quiet = read.data === undefined && read.error !== undefined && read.fetching && !asked.value;
+        const next = loadedFrom({ ...read, fetching: quiet ? false : read.fetching, retry }, since);
         if (next.state === `waiting` && !waiting) {
             since = Date.now();
             waiting = true;

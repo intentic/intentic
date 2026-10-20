@@ -155,6 +155,7 @@ const finish = (id: string): void => {
             <!-- The selected template is shown beside the close control. -->
             <div v-if="recipes.length > 0" class="relative flex shrink-0 items-center">
                 <!-- Clearing stays inside the selected-template chip. -->
+                <!-- allow(recipes): the chip is a container for two inner buttons (template, ×) that own its padding and gap -->
                 <div :class="ui.chip({ on: template !== undefined }, `gap-0 px-0`)">
                     <button
                         type="button"

@@ -4,6 +4,7 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { headSha } from "../../git/changes/changes.js";
 import { rebaseOnto, rebaseSince } from "../../git/changes/changes-commits.js";
 import { AGENT_GIT_AUTHOR, withConversationTrailer } from "../../git-identity.js";
+import { droppedRef } from "../../git/agent-refs.js";
 import { mainLineUnder, presenceOf } from "./agent-changes.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { Upstream } from "./land-target.js";
@@ -16,8 +17,12 @@ import { assertLinked } from "../worktrees/checkout-link.js";
 // checkout instead (land-target.ts `upstreamOf`): what the parent has written is committed there first, as a checkpoint
 // is, and only the child's own commits are replayed onto it.
 //
-// That retry drops commits, so what main holds is read from main rather than taken from the rung: see
-// `mainAccountsForPrefix`.
+// LETTING COMMITS GO IS ONE DECISION, MADE ON CONTENT (2026-10-20). Replaying only what follows a land's tip drops every
+// commit up to it, so both lines take it through one door, `replaySinceLanded`, and only once the tree the work landed
+// in is read to still hold what the dropped commits carry (`upstreamAccountsForPrefix`): the rung records that a land
+// happened, never that it is still there. Until then the parent's line trusted the rung outright, and a parent `merge`
+// that wrote nothing yet moved it (land.ts, now proven) had its child's next catch-up rebase every commit away. The tip
+// before a drop is pinned on `refs/intentic/dropped/<id>` (agent-refs.ts `droppedRef`) whatever the rebase then does.
 //
 // `standsElsewhere`: a repo whose copy the conversation moved to a branch of its own (a pull request it was asked to
 // work on, a CI branch it pushes) is not synced at all. A rebase runs on whatever the copy stands on, so it used to
@@ -67,53 +72,63 @@ const contains = async (dir: string, tip: string, head: string, git: GitRunner):
     }
 };
 
-// Whether main can still account for every path the prefix about to be dropped carries. `landedTip` is bookkeeping, not
-// evidence: a land copies content into the main tree and records the rung, and the user can then discard all of it in
-// the Changes panel without a single sha moving. A path is accounted for when main still reads the same on it (the
-// user committed the land, or it is landed and not yet committed) or when main's own history has moved it since the
-// fork, which is the user editing what they landed. One path main has never seen means the land is not there any more:
-// the rung is void and the prefix must not be dropped. Asked only after a plain rebase has already refused, so the cost
-// falls on the conflict path alone.
-const mainAccountsForPrefix = async (
+// Whether the tree the work lands in can still account for every path the prefix about to be dropped carries. `landedTip`
+// is bookkeeping, not evidence: a land copies content into that tree and records the rung, and the user can then discard
+// all of it in the Changes panel without a single sha moving. A path is accounted for when the tree still reads the same
+// on it (the land is committed, or landed and not yet committed), or when the upstream's own history has moved it since
+// the fork and the path is still there, which is the user editing what they landed. A path the upstream moved AWAY (a
+// rename, a deletion) is not that: the land never reached it, and its commit is the only copy of the work. One path
+// unaccounted for means the land is not there any more: the rung is void and the prefix must not be dropped.
+const upstreamAccountsForPrefix = async (
     worktree: string,
-    main: string,
-    head: string,
+    // The checkout the work lands in: the main tree's, or the parent's for a child following it.
+    upstream: string,
+    onto: string,
     landedTip: string,
-    // Main-line movement since divergence, already read for the report; `moved ∩ prefix` is the user's own editing.
+    // Upstream movement since divergence, already read for the report.
     moved: readonly string[],
     git: GitRunner,
 ): Promise<boolean> => {
     try {
         // Three-dot: the prefix's own side of the fork, so main-line movement is not mistaken for landed work.
-        const prefix = await pathsOf(worktree, [`${head}...${landedTip}`], git);
+        const prefix = await pathsOf(worktree, [`${onto}...${landedTip}`], git);
         if (prefix.length === 0) {
             return true;
         }
-        const { inWorkspace } = await presenceOf(main, worktree, landedTip, prefix, git);
+        const { inWorkspace } = await presenceOf(upstream, worktree, landedTip, prefix, git);
         const edited = new Set(moved);
-        return prefix.every((path) => inWorkspace.has(path) || edited.has(path));
+        for (const path of prefix) {
+            if (!inWorkspace.has(path) && !(edited.has(path) && (await pathExists(join(upstream, path))))) {
+                return false;
+            }
+        }
+        return true;
     } catch {
         // A probe that could not run has proven nothing; refusing costs a conflict errand, dropping costs the work.
         return false;
     }
 };
 
-// Retries the rebase from `landedTip` only if it is still an ancestor of HEAD and main still holds what it names;
-// otherwise nothing has landed, or nothing of it is left, and the refusal stands.
-const replayUnlanded = async (
+// The one road by which a catch-up lets commits go: everything up to `landedTip` dropped and only what follows replayed,
+// taken only while HEAD still descends from `landedTip` and the upstream still accounts for what it drops. The tip as it
+// stood is pinned first. `undefined` when the drop is not proven safe and nothing was tried; else whether it replayed.
+const replaySinceLanded = async (
     worktree: string,
-    main: string,
+    upstream: string,
     onto: string,
     landedTip: string | undefined,
     moved: readonly string[],
+    id: string,
     git: GitRunner,
-): Promise<boolean> => {
+): Promise<boolean | undefined> => {
     if (landedTip === undefined || !(await contains(worktree, "HEAD", landedTip, git))) {
-        return false;
+        return undefined;
     }
-    if (!(await mainAccountsForPrefix(worktree, main, onto, landedTip, moved, git))) {
-        return false;
+    if (!(await upstreamAccountsForPrefix(worktree, upstream, onto, landedTip, moved, git))) {
+        return undefined;
     }
+    const tip = (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim();
+    await git(worktree, ["update-ref", droppedRef(id), tip]);
     return (await rebaseSince(worktree, onto, landedTip, AGENT_GIT_AUTHOR, git)).ok;
 };
 
@@ -163,14 +178,14 @@ const syncOne = async (
         return behind;
     }
     // Refused; retry without the already-landed prefix, the likely cause of the conflict.
-    const replayed = await replayUnlanded(worktree, worktrees.mainDir(repo), head, landedTip, moved, git);
-    return replayed ? behind : { ...behind, blocked: true };
+    const replayed = await replaySinceLanded(worktree, worktrees.mainDir(repo), head, landedTip, moved, id, git);
+    return replayed === true ? behind : { ...behind, blocked: true };
 };
 
 // A child's repo onto its parent's checkout: the parent's remainder committed first, so the child sits on everything the
-// parent has written, then only the child's own commits replayed, from its last land's tip while the branch still
-// descends from it (that much is already the parent's), else from the parent commit it sat on. A refusal rolls back and
-// leaves the branch where it was, as the main line's does.
+// parent has written, then only the child's own commits replayed: from its last land's tip where the parent is read to
+// still hold what that drops (`replaySinceLanded`), else from the parent commit it sat on, every commit of it. A refusal
+// rolls back and leaves the branch where it was, as the main line's does.
 const syncOntoParent = async (
     worktrees: AgentWorktrees,
     id: string,
@@ -202,9 +217,10 @@ const syncOntoParent = async (
     const mine = new Set(await pathsOf(worktree, [`${head}...${tip}`], git));
     const commits = Number((await git(worktree, ["rev-list", "--count", `${tip}..${head}`])).stdout.trim());
     const behind = { repo, onto: head, commits, moved, overlap: moved.filter((path) => mine.has(path)) };
-    const since = landedTip !== undefined && (await contains(worktree, "HEAD", landedTip, git)) ? landedTip : base;
     await commitWorktreeRemainder(repo, worktree, withConversationTrailer(`Agent: ${title ?? id}`, id), worktrees.mainDir("root"), git);
-    return (await rebaseSince(worktree, head, since, AGENT_GIT_AUTHOR, git)).ok ? behind : { ...behind, blocked: true };
+    const sinceLanded = await replaySinceLanded(worktree, upstream, head, landedTip, moved, id, git);
+    const replayed = sinceLanded ?? (await rebaseSince(worktree, head, base, AGENT_GIT_AUTHOR, git)).ok;
+    return replayed ? behind : { ...behind, blocked: true };
 };
 
 // One repo of a composition as a sync reads it: the land rung (`landedTip`) the main line's retry needs, and the commit

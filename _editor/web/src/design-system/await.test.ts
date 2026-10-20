@@ -47,6 +47,40 @@ describe(`loadedFrom`, () => {
     });
 });
 
+describe(`useLoaded`, () => {
+    // Under a read that kept failing, every try it made by itself (an interval, a push) put the region's skeleton back
+    // over its failure for a whole retry cycle: the extension pages showed a skeleton nine seconds in ten. Only a retry
+    // the person pressed is a wait again.
+    it(`keeps a failure on screen through a try the read makes by itself, and waits on a retry the person asked for`, async () => {
+        const read = ref<ReadFacts<string>>(facts({ error: `down` }));
+        const refetch = jest.fn(() => {
+            read.value = facts({ error: `down`, fetching: true });
+        });
+        const loaded = useLoaded(() => ({ ...read.value, retry: refetch }), { join: false });
+        expect(loaded.value.state).toBe(`failed`);
+
+        read.value = facts({ error: `down`, fetching: true });
+        expect(loaded.value.state).toBe(`failed`);
+        read.value = facts({ error: `down` });
+        await nextTick();
+
+        const failed = loaded.value;
+        if (failed.state !== `failed`) {
+            throw new Error(`expected a failure`);
+        }
+        failed.retry?.();
+        expect(refetch).toHaveBeenCalledTimes(1);
+        expect(loaded.value.state).toBe(`waiting`);
+
+        read.value = facts({ error: `down` });
+        await nextTick();
+        expect(loaded.value.state).toBe(`failed`);
+        // Settled, the next try it makes by itself is quiet again.
+        read.value = facts({ error: `down`, fetching: true });
+        expect(loaded.value.state).toBe(`failed`);
+    });
+});
+
 // The two utilities <Await> lays its insides out with, as the app's stylesheet has them: jsdom loads no Tailwind.
 beforeAll(() => {
     const sheet = document.createElement(`style`);
@@ -190,6 +224,49 @@ describe(`<Await>`, () => {
         await advance(0);
         expect(host.querySelector(`.hidden`)).toBeNull();
         expect(host.querySelector(`[data-answer]`)?.textContent).toBe(`rows`);
+    });
+
+    // A hub's route view is remembered per path (asyncView.ts), so a move between its sections renames the region while
+    // its answer, the hub's code, stays the one on screen. Re-holding it there drew the whole hub outline, rail and
+    // title, over the mounted hub until the new section's reads answered; the section's own wait is the section's.
+    it(`keeps a drawn region shown when only the name it is remembered under changes`, async () => {
+        const name = ref(`route:/hub/one`);
+        const inner = shallowRef<Loaded<string>>(ready(`one`));
+        const host = mount(() =>
+            h(Await, { of: ready(`hub`), imprint: name.value }, { default: () => h(Await, { of: inner.value }, { default: answer, ...FALLBACK }) }),
+        );
+        await flush();
+        expect(host.querySelector(`.hidden`)).toBeNull();
+
+        name.value = `route:/hub/two`;
+        inner.value = waiting();
+        await flush();
+        await advance(REVEAL_DELAY_MS);
+        // The outer region stays as it is; only the inner one stands in its fallback.
+        expect(host.querySelector(`[data-skeleton-snapshot]`)).toBeNull();
+        expect(host.querySelector(`[data-fallback]`)).not.toBeNull();
+        expect(host.querySelector(`.hidden [data-fallback]`)).toBeNull();
+    });
+
+    it(`holds again under a new name with a new answer, and never for a refresh under the same name`, async () => {
+        const name = ref(`diff:one.ts`);
+        const read = shallowRef(ready(`one`));
+        const inner = shallowRef<Loaded<string>>(ready(`rows`));
+        const host = mount(() => h(Await, { of: read.value, imprint: name.value }, { default: () => h(Await, { of: inner.value }, { default: answer }) }));
+        await flush();
+        expect(host.querySelector(`.hidden`)).toBeNull();
+
+        // A poll's fresh answer while a read inside has just started: the region stays shown.
+        read.value = ready(`one, again`);
+        inner.value = waiting();
+        await flush();
+        expect(host.querySelector(`.hidden`)).toBeNull();
+
+        // Another file: about something else, so its insides' first reads hold it again.
+        name.value = `diff:two.ts`;
+        read.value = ready(`two`);
+        await flush();
+        expect(host.querySelector(`.hidden`)).not.toBeNull();
     });
 
     it(`draws an answer already here at once, holding nothing`, async () => {

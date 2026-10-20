@@ -497,10 +497,11 @@ export const accountState = (provider: AgentProvider, facts: AccountFacts, model
 };
 
 /**
- * What a provider's accounts can serve of one model together (fleetCapacity), the answer the daemon's spawn listing,
- * role ladder and Auto offer read: a picker row is drawn spent exactly when a subagent asking for it would be refused.
+ * What a provider's accounts can serve of one model together (fleetCapacity), or of anything with no model named, the
+ * answer the daemon's spawn listing, role ladder and Auto offer read: a picker row is drawn spent exactly when a subagent
+ * asking for it would be refused, and a job's button names the rung its run opens on (roleModel.ts).
  */
-export const modelCapacity = (provider: AgentProvider, model: ModelRef, now: number = Date.now()): FleetCapacity =>
+export const modelCapacity = (provider: AgentProvider, model: ModelRef | undefined, now: number = Date.now()): FleetCapacity =>
     fleetCapacity(providerFacts(provider), refusalsOf(provider), model, now);
 
 /** Of some picker rows (a key, the provider, the model), those no account can serve now, each with when one is back. */

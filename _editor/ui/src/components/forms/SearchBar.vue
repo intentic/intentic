@@ -70,9 +70,13 @@ const rootClass = computed(() =>
 const searching = computed(() => query.value !== ``);
 
 const input = ref<HTMLInputElement | null>(null);
-const focus = (select = false): void => {
+/** Focus the field: `true` selects what is in it, `"end"` puts the caret after it (a prefix the next key must keep). */
+const focus = (select: boolean | `end` = false): void => {
     input.value?.focus();
-    if (select) {
+    if (select === `end`) {
+        const end = input.value?.value.length ?? 0;
+        input.value?.setSelectionRange(end, end);
+    } else if (select) {
         input.value?.select();
     }
 };
@@ -141,9 +145,9 @@ onBeforeUnmount(() => listen(false));
         <!-- allow(inputs): THE FRAME IS THE ROW'S, not the input's: `ui-search` / `ui-search-band` on the box above draws the fill,
              the edge and the one focus state (utilities.css), and the input is `field-bare` inside it, as a field in a
              `ui-field-shell` is. Its height is the row's, so it carries no padding of its own. -->
+        <!-- The caller's attributes come after the bar's own, so a field that drives a listbox says `role="combobox"`. -->
         <input
             ref="input"
-            v-bind="passAttrs"
             v-model="query"
             type="text"
             :placeholder="placeholder ?? t(`ui.action.filter`)"
@@ -157,6 +161,7 @@ onBeforeUnmount(() => listen(false));
             :aria-controls="ariaControls"
             :aria-activedescendant="ariaActivedescendant"
             :aria-keyshortcuts="shortcut"
+            v-bind="passAttrs"
             @keydown.esc="clearable && clear()"
         />
         <!-- `mousedown` is suppressed on every control here so a press keeps the caret in the field rather than stealing it; click still fires for keyboard activation. -->

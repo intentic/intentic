@@ -7,6 +7,7 @@ import type { TranslatorAccounts } from "@intentic/sandbox-contract/schemas/prov
 import type { TrialStatusResponse } from "@intentic/sandbox-contract/contracts/endpoints.contract";
 import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { type FixtureRouter, refuse } from "@intentic/contract-serve";
+import { clearingSentDraft, draftDoors } from "./drafts";
 import { BROWSER_SESSIONS, closeOwnBrowser, closeOwnTab, OWN_SESSION, openOwnBrowser, ownSession } from "../browser";
 import { demoSecretInventory } from "../fixture/access";
 import { demoAuditExport, demoAuditList, demoAuditStatus, demoAuditVerify } from "../fixture/audit";
@@ -64,7 +65,7 @@ import {
 import { commit, discard, gitChanges, indexRunState, stage, startIndexRun, unstage } from "./gitIndex";
 import { demoMode, demoQuiet, deskEdition, freshEdition } from "../mode";
 import { HANDOVER_TEXT, HANDOVER_TEXT_BEFORE } from "../fixture/document";
-import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS } from "./accounts";
+import { DEMO_CATALOGS, DEMO_CLAUDE_ACCOUNT, DEMO_CLAUDE_ACCOUNT_SECOND, DEMO_TRANSLATOR_ACCOUNTS, demoRefusals } from "./accounts";
 import { archiveAgents, assignAgent, keepWarmAgent, land, reactToAgent, searchAgents, searchSessions, setBreakPolicy, stopJob } from "./cards";
 import { agentFlow, sandboxFlow } from "./deviceFlows";
 import { events } from "./events";
@@ -202,7 +203,8 @@ export const procedures = {
         fileDiff: ({ repo, path }) => fileDiff(repo, path),
         rename: ({ id, title }) => agentAnswer(patchAgent(id, { title })),
         seen: ({ id }) => agentAnswer(patchAgent(id, { seenAt: Date.now() })),
-        // As the daemon does: records since when a composer holds unsent words (the words stay in the tab), null clears it.
+        ...draftDoors,
+        // As the daemon does for a client keeping its words to itself: records since when a composer held them.
         unsent: ({ id, at }) => agentAnswer(amendAgent(id, ({ unsentAt: _cleared, ...card }) => (at === null ? card : { ...card, unsentAt: at }))),
         react: reactToAgent,
         assign: assignAgent,
@@ -218,7 +220,7 @@ export const procedures = {
         unarchive: () => ({ moved: [], rev: roster.rev }),
     },
     agent: {
-        run: sayOrBook,
+        run: clearingSentDraft(sayOrBook),
         ...queueDoors,
         switchAccount,
         attach: ({ conversationId }) => attach(conversationId),
@@ -226,7 +228,7 @@ export const procedures = {
         steer: () => ({ delivered: `steered` as const }),
         stop: stopTurn,
         commands: () => ({ commands: DEMO_COMMANDS }),
-        refusals: () => ({ refusals: {} }),
+        refusals: demoRefusals,
     },
     sessions: {
         list: ({ query = ``, caseSensitive }) => ({ sessions: searchSessions(query, caseSensitive === true) }),

@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
 import { pairingItem, statusSummary } from "../../status.js";
 import { projectsHostChange, selectPairings, transportFor } from "../commands.js";
-import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingProblem, withPairing } from "../config.js";
+import { attachedKey, isAttachedPairing, type Pairing, pairingKey, pairingProblem, pairingSlugs, withPairing } from "../config.js";
 import { folderRefusal } from "../folders.js";
 import { pollingPairings, readyToPrepare, reportCarriers } from "../mirror.js";
 import { backupSessionName, sessionName, sessionsByName, syncSessionNames } from "../mutagen.js";
@@ -194,6 +194,7 @@ describe("reportCarriers", () => {
 
 describe("the report of a computer whose folders attach to its sandbox", () => {
     const AGENT = { running: true, pid: 1, build: "1.0.0", installed: "1.0.0" };
+    const SLUG = pairingSlugs(shop.sandboxUrl)[0];
     const sessions = sessionsByName([
         { name: sessionName(`${SANDBOX}~shop`), status: "watching", alpha: {}, beta: {}, ignore: {} },
         { name: sessionName(`${SANDBOX}~blog`), status: "staging-beta", alpha: {}, beta: {}, ignore: {} },
@@ -207,9 +208,10 @@ describe("the report of a computer whose folders attach to its sandbox", () => {
 
     it("reads each attached folder's own session, and none for the host", () => {
         expect(built.pairings.slice(0, 3)).toEqual([
-            { sandboxId: SANDBOX, mode: "sync", projectsHost: true, mirroring: "on" },
-            { sandboxId: SANDBOX, mode: "sync", localDir: shop.localDir, remoteDir: `${WORKSPACE_ROOT}/shop`, deliver: "auto", mirroring: "on", mutagenStatus: "watching" },
-            { sandboxId: SANDBOX, mode: "sync", localDir: blog.localDir, remoteDir: `${WORKSPACE_ROOT}/blog`, deliver: "auto", mirroring: "on", mutagenStatus: "staging-beta" },
+            // Each row names the slug its sandbox goes by, which the desktop app reads a folder's sandbox off.
+            { sandboxId: SANDBOX, slug: SLUG, mode: "sync", projectsHost: true, mirroring: "on" },
+            { sandboxId: SANDBOX, slug: SLUG, mode: "sync", localDir: shop.localDir, remoteDir: `${WORKSPACE_ROOT}/shop`, deliver: "auto", mirroring: "on", mutagenStatus: "watching" },
+            { sandboxId: SANDBOX, slug: SLUG, mode: "sync", localDir: blog.localDir, remoteDir: `${WORKSPACE_ROOT}/blog`, deliver: "auto", mirroring: "on", mutagenStatus: "staging-beta" },
         ]);
     });
 

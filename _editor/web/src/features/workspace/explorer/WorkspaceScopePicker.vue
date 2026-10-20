@@ -1,6 +1,6 @@
 <!-- The scope chip's list: the shared tree first, then every conversation's copy under the board's own lanes, each row saying what that conversation is doing, how much it changed and when it last worked, so two copies with the same title can be told apart. Each lane folds to its latest few; typing reaches every copy. -->
 <script setup lang="ts">
-import { DiffStat, Icon, SearchBar, ui, useListNavigation } from "@intentic/ui";
+import { DiffStat, Icon, SearchBar, SectionHeader, ui, useListNavigation } from "@intentic/ui";
 import { formatDayMonth, timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onMounted, ref, useId } from "vue";
@@ -187,13 +187,12 @@ onMounted(() => {
             </button>
 
             <template v-for="group in groups" :key="group.lane">
-                <p
-                    role="presentation"
-                    class="flex items-baseline justify-between gap-2 px-3 pb-1 pt-3 text-2xs font-medium uppercase tracking-wide text-subtle"
-                >
-                    <span>{{ group.label }}</span>
-                    <span class="tabular-nums">{{ group.total }}</span>
-                </p>
+                <!-- The total counts the copies folded behind "Show more" too, which the rows under it do not tally. -->
+                <SectionHeader :label="group.label" density="dense" class="px-3 pb-1 pt-3" role="presentation">
+                    <template #info>
+                        <span class="text-2xs tabular-nums text-subtle">{{ group.total }}</span>
+                    </template>
+                </SectionHeader>
                 <button
                     v-for="row in group.rows"
                     :id="optionId(row.agent.id)"

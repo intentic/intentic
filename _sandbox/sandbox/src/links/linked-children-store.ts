@@ -41,7 +41,14 @@ export type StoredChildren = z.infer<typeof StoredChildrenSchema>;
 
 // On the history volume: which far conversations this sandbox's agents are still waiting on, so a restart picks the
 // following up again and the parent still hears how each one ended.
-export const linkedChildrenDocument = defineDocument({ root: "history", path: "links/linked-children.json", schema: StoredChildrenSchema });
+export const linkedChildrenDocument = defineDocument({
+    root: "history",
+    path: "links/linked-children.json",
+    // The tasks this sandbox's conversations handed to linked sandboxes, followed until they
+    // settle: part of the conversations' own record, so it goes where they go.
+    portability: "carry",
+    schema: StoredChildrenSchema,
+});
 
 // The task once the far side took it: its conversation there on file, and the ask no longer kept.
 export const askedOf = (pending: StoredChild, remote: string): AskedChild => {

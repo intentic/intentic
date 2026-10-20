@@ -242,8 +242,9 @@ test("work the agent committed onto the main line itself lands as a no-op instea
 });
 
 // The other road: the branch itself gets merged into main. Ancestry says everything is merged, so land applies nothing,
-// but must still advance landedTip, or the review counts every file as unlanded forever.
-test("work that reached main by merging the branch advances landedTip as a real outcome", async () => {
+// but must still advance landedTip, or the review counts every file as unlanded forever. It writes nothing, so it is an
+// advance of the books and never `changed`: a door reading `changed` as "it is in the tree now" would say so of nothing.
+test("work that reached main by merging the branch advances landedTip without reading as written", async () => {
     const { work, worktrees, conversation } = await setup();
     const recorded = isolatedAgent(conversation.repos);
     await writeFile(join(conversation.cwd, "agent.ts"), "agent work\n");
@@ -255,9 +256,8 @@ test("work that reached main by merging the branch advances landedTip as a real 
     const result = await landAgent(worktrees, recorded);
 
     expect(result.conflicts).toBeUndefined();
-    expect(result.landed).toBe(true);
-    // changed:true is a real outcome: it tells the caller to persist the tip and clear any old conflicts.
-    expect(result.changed).toBe(true);
+    // `advanced` tells every caller to persist the tip and clear any old conflicts, as a net-zero delta does.
+    expect(result).toMatchObject({ landed: true, changed: false, advanced: true });
     expect(result.repos[0]?.landedTip).toBe(tip);
     expect(await sh(work, "status", "--porcelain")).toBe("");
 
@@ -335,17 +335,23 @@ test("merge mode lands every clean path and leaves the diverged one with conflic
     expect(result.resolving).toEqual([{ repo: "root", paths: ["app.ts"] }]);
 });
 
-test("merge mode declines when the clash is with uncommitted work, because git cannot merge through it", async () => {
+// The merge is made against a snapshot of the tree as it stands (patch/three-way.ts), so an uncommitted edit is one side of
+// it. `git apply --3way`, which merge mode used until 2026-10-20, refused an unstaged path outright and wrote nothing.
+test("merge mode merges through uncommitted work, keeping the user's edit inside the markers and their index as it was", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), "line one AGENT\nline two\nline three\n");
     await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
 
     const result = await landAgent(worktrees, isolatedAgent(conversation.repos), "merge");
 
-    // `--3way` goes through the index and refuses outright on an unstaged path, applying nothing at all.
-    expect(result.resolving).toBeUndefined();
-    expect(result.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
-    expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one USER\nline two\nline three\n");
+    expect({ landed: result.landed, conflicts: result.conflicts, resolving: result.resolving }).toEqual({
+        landed: true,
+        conflicts: undefined,
+        resolving: [{ repo: "root", paths: ["app.ts"] }],
+    });
+    const merged = await readFile(join(work, "app.ts"), "utf8");
+    expect([merged.includes("<<<<<<<"), merged.includes("line one USER"), merged.includes("line one AGENT")]).toEqual([true, true, true]);
+    expect(await sh(work, "diff", "--cached", "--name-only")).toBe("");
 });
 
 test("a user edit ELSEWHERE in the same file still lands (patch context, not path sets)", async () => {

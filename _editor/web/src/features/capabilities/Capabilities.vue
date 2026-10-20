@@ -81,7 +81,7 @@ const route = useRoute();
 const router = useRouter();
 
 const { recommendationFor, capabilities, error: listError, add, remove, rename, refetch, dismissRecommendation } = useCapabilities();
-const { contributionOf, manifestOf, enabled: enabledExtensions, settled: extensionsSettled } = useExtensions();
+const { contributionOf, manifestOf, enabled: enabledExtensions, loaded: extensionsRead } = useExtensions();
 // A tunnel's live address for the Connected slice; the VPN tile reads the same query, so the two can't disagree.
 const { links: vpnLinks } = useLiveLinks(`vpn`);
 // Same for a disk's mount point and whether it takes writes; the disk tile reads the same query.
@@ -114,7 +114,8 @@ const syncOnly = computed(() => deviceConnections(fleet.value, fleetReadAt.value
 // What this page's own actions were refused, shown before the list's failure; a freshly opened form clears it.
 const error = ref<NoticeModel | null>(null);
 
-const page = useCapabilityRoute({ route, router, entries, capabilities, settled: extensionsSettled });
+// Only an answered list can say a tile slug is unknown: a failed read leaves the address where it is.
+const page = useCapabilityRoute({ route, router, entries, capabilities, settled: computed(() => extensionsRead.value.state === `ready`) });
 const { selected, selectedInstances, soleInstance, editing, search, walking, pick, back, openEdit, stopEditing, openConnection } = page;
 
 const catalog = useCapabilityCatalog({ entries, capabilities, recommendationFor, scope: page.scope, search, sources, syncOnly, contributionOf });
@@ -158,7 +159,7 @@ const { name, nameEdited, savedName, namePreview, nameCollision, nameProblem, va
 const { probeResult, finishName, finishField, onFieldInput, onFieldPaste, fieldAlarm, fieldQuiet, fieldChecked, fieldUrlFix, applyUrlFix } = form;
 const { fieldConfSummary, fieldPlaceholder, mainFields, advancedFields, versionToken, formSummary, liveEffects, hostPresetOptions } = form;
 const { applyHostPreset, applyRegistryPick, pickForticlient, pickLinked, auditable, updateFrom, submitLabel, keptSecrets } = form;
-const { probing, canProbe, runProbe, failure: probeFailure, startedAt: probeStartedAt } = useCapabilityProbe({ selected, form });
+const { probing, canProbe, runProbe, failure: probeFailure, meter: probeMeter } = useCapabilityProbe({ selected, form });
 // Has an agent read the pinned code, or what an update changes, before the install is approved.
 const startAudit = (): void => void startAgent(auditPrompt(name.value, values, updateFrom.value));
 
@@ -167,7 +168,7 @@ const { profileVisible, profileCapability, profileLabel, profileMode, openBrowse
 const { connectVisible, connectId, connectPlatform, connectPermissions, connectUnnamed, onHostConnected, onHostRenamed } = pairing;
 const { browserConnectVisible, browserConnectId, browserInstall, browserPermissions, onBrowserExtConnected, handOff } = pairing;
 const { phoneConnectVisible, phoneConnectId, phoneInstall, phonePermissions, phonePlatform, onPhoneConnected } = pairing;
-const { submit, submitting, failure: saveFailure, startedAt: submitStartedAt } = useCapabilitySubmit({
+const { submit, submitting, failure: saveFailure, meter: submitMeter } = useCapabilitySubmit({
     hosted,
     selected,
     editing,
@@ -576,7 +577,7 @@ onBeforeUnmount(() => {
 
                         <!-- Submit stays stuck to the pane's foot: some tiles (VPN, a device's permissions) are long. -->
                         <!-- What the probe said, and the save or test still running, above the submit (CapabilityFormStatus). -->
-                        <CapabilityFormStatus :probe-result="probeResult" :submit-started-at="submitStartedAt" :probe-started-at="probeStartedAt" />
+                        <CapabilityFormStatus :probe-result="probeResult" :submit-meter="submitMeter" :probe-meter="probeMeter" />
 
                         <div
                             :class="[

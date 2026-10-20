@@ -7,6 +7,7 @@ import {
     isDerivedMachineId,
     type DeviceFacts,
     type HostSummary,
+    type MachineIdentity,
     parseHostConnection,
 } from "@intentic/sandbox-contract/schemas/hosts";
 import { HOST_HEARTBEAT_MS, type HostHello, HostHelloSchema } from "@intentic/sandbox-contract/protocol/doors/host-protocol";
@@ -172,13 +173,42 @@ export const hostConnections = (summaries: readonly HostSummary[]): HostSummary[
         })),
     );
 
+// WHICH COMPUTER AN ENROLLMENT IS ON, as its agent says it: redeeming the pairing (the enroll request) or connecting
+// (`describe`'s facts), the one rule for both. Only a real machine id is learned, never a derived placeholder
+// (`card:<name>`), so an id an agent said is never replaced by one standing in for it. An agent naming its environment
+// must name the enrollment's own: its machine id under another install's record would join, and supersede, that
+// install's keys. Nothing learned leaves the enrollment as it was, learning its id at the next connect.
+export const machineIdLearned = (
+    said: MachineIdentity,
+    enrollment: { readonly environment: string } | undefined,
+): Pick<HostEnrollmentFields, "machineId"> | undefined => {
+    const { machineId, environment } = said;
+    if (machineId === undefined || isDerivedMachineId(machineId)) {
+        return undefined;
+    }
+    return environment === undefined || environment === enrollment?.environment ? { machineId } : undefined;
+};
+
 // The machine id an enrollment records, from what its agent said at connect: one write, and none when it already
-// says so or the agent is too old to say.
+// says so, the agent is too old to say, or what it said is not an id to learn (machineIdLearned).
 export const identifyMachine = async (services: Pick<Services, "hosts">, id: string, facts: Pick<DeviceFacts, "machineId">): Promise<void> => {
-    if (facts.machineId !== undefined) {
-        await services.hosts.amend(id, { machineId: facts.machineId });
+    const learned = machineIdLearned(facts, undefined);
+    if (learned !== undefined) {
+        await services.hosts.amend(id, learned);
     }
 };
+
+// The enroll request's half: the record is written with the machine id its agent said (machineIdLearned), so it joins
+// that computer's card from its first write; and once it holds one, the keys that computer's install held before it
+// go at once (host-dedupe.ts), as they do when it connects.
+const hostEnrollment = (services: Services) => ({
+    learn: (said: MachineIdentity, pairing: HostEnrollmentFields): Partial<HostEnrollmentFields> => machineIdLearned(said, pairing) ?? {},
+    enrolled: async (enrollment: { readonly id: string } & HostEnrollmentFields): Promise<void> => {
+        if (!isDerivedMachineId(enrollment.machineId)) {
+            await revokeSuperseded(services, enrollment.id);
+        }
+    },
+});
 
 // Every device enrollment no card holds, for the Devices screen to list beside a Withdraw button (2026-10-15): a key into
 // this sandbox that no board draws, since a machine is drawn from its card. Not withdrawn here, nor at boot: the cards
@@ -212,6 +242,7 @@ export const hostPeerRoutes = (services: Services, guards: HostGuardDeps) =>
         hub: services.hostHub,
         summaries: () => hostSummaries(services),
         codes: "device",
+        enrollment: hostEnrollment(services),
         // One install connects the whole computer: whichever side the owner ran it on, the daemon puts an agent in
         // the rest from here (environment-bootstrap.ts). And the enrollment learns which computer it is on, replacing
         // the id it was derived with, the first time its agent says.

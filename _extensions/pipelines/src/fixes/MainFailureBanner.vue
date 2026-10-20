@@ -316,7 +316,7 @@ onBeforeUnmount(() => {
                         v-if="pill !== undefined"
                         v-bind="pill.link ? fixerLink : {}"
                         data-fixer
-                        class="ui-chip inline-flex shrink-0 items-center gap-1.5 rounded bg-card px-2 py-1 text-xs font-medium"
+                        class="ui-chip inline-flex shrink-0 items-center bg-card font-medium"
                         :class="[pill.ink, pill.link ? pill.chip : `border-line`]"
                         v-tooltip.top="
                             pill.link

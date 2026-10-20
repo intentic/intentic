@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { browserOwnsClick, SearchBar, type Tip, useDevice, useListNavigation } from "@intentic/ui";
+import { browserOwnsClick, SearchBar, SectionHeader, type Tip, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
@@ -440,29 +440,25 @@ onMounted(() => {
             >
                 <template v-for="section in sections" :key="section.key">
                     <!-- Group header doubles as the access line (cost + way out); absent once connected, since a usable provider needs no annotation. -->
-                    <div
-                        v-if="section.label !== undefined"
-                        class="flex items-center gap-1.5 px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle"
-                        role="presentation"
-                    >
-                        <span>{{ section.label }}</span>
-                        <template v-if="section.provider !== undefined">
-                            <Icon
-                                v-if="providerNeedsReauth(section.provider)"
-                                name="exclamation-triangle"
-                                class="text-2xs text-warning"
-                                v-tooltip.top="t(`chat.words.reconnectNeeded`)"
-                            />
-                            <!-- A provider whose own loop its vendor forbids, said quietly: the full note sits in the picker footer once picked. -->
-                            <Icon
-                                v-if="forbiddenNote(section.provider) !== undefined"
-                                name="exclamation-circle"
-                                class="text-2xs text-subtle"
-                                v-tooltip.top="forbiddenNote(section.provider)"
-                            />
-                            <template v-if="section.badge !== undefined">
+                    <SectionHeader v-if="section.label !== undefined" :label="section.label" density="dense" class="px-3 pb-1 pt-2" role="presentation">
+                        <template #info>
+                            <template v-if="section.provider !== undefined">
+                                <Icon
+                                    v-if="providerNeedsReauth(section.provider)"
+                                    name="exclamation-triangle"
+                                    class="text-2xs text-warning"
+                                    v-tooltip.top="t(`chat.words.reconnectNeeded`)"
+                                />
+                                <!-- A provider whose own loop its vendor forbids, said quietly: the full note sits in the picker footer once picked. -->
+                                <Icon
+                                    v-if="forbiddenNote(section.provider) !== undefined"
+                                    name="exclamation-circle"
+                                    class="text-2xs text-subtle"
+                                    v-tooltip.top="forbiddenNote(section.provider)"
+                                />
                                 <span
-                                    class="rounded px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal"
+                                    v-if="section.badge !== undefined"
+                                    class="rounded px-1 py-px text-[0.6rem] font-medium"
                                     :class="
                                         promoteFree && accessStateFor(section.provider).access?.kind === `free`
                                             ? `bg-primary-500/15 text-accent`
@@ -470,22 +466,18 @@ onMounted(() => {
                                     "
                                     >{{ section.badge }}</span
                                 >
-                                <RouterLink
-                                    :to="connectTo(section.provider)"
-                                    class="ml-auto text-2xs normal-case tracking-normal text-link"
-                                    @click="closeOnPlainClick"
-                                >
-                                    {{ t(`ui.action.connect`) }}
-                                </RouterLink>
                             </template>
+                            <!-- The trial's count; no Connect beside it, since this provider already works. -->
+                            <span v-if="section.trial !== undefined" class="rounded bg-primary-500/15 px-1 py-px text-[0.6rem] font-medium text-accent">{{
+                                section.trial
+                            }}</span>
                         </template>
-                        <!-- The trial's count; no Connect beside it, since this provider already works. -->
-                        <span
-                            v-if="section.trial !== undefined"
-                            class="rounded bg-primary-500/15 px-1 py-px text-[0.6rem] font-medium normal-case tracking-normal text-accent"
-                            >{{ section.trial }}</span
-                        >
-                    </div>
+                        <template v-if="section.provider !== undefined && section.badge !== undefined" #actions>
+                            <RouterLink :to="connectTo(section.provider)" class="text-2xs text-link" @click="closeOnPlainClick">
+                                {{ t(`ui.action.connect`) }}
+                            </RouterLink>
+                        </template>
+                    </SectionHeader>
                     <template v-for="block in section.blocks" :key="block.key">
                         <!-- Family header, shown only for older-version blocks; the latest band needs none, since the section header above already names the group. -->
                         <p v-if="block.label !== undefined" class="px-3 pb-0.5 pt-1.5 pl-8 text-2xs text-subtle" role="presentation">

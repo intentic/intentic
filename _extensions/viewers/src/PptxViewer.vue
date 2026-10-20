@@ -151,7 +151,7 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
             <button
                 v-if="hasNotes"
                 type="button"
-                class="ui-chip gap-1 rounded-md px-1.5 py-0.5"
+                class="ui-chip ui-chip-sm"
                 :aria-pressed="notesShown"
                 @click="notesShown = !notesShown"
             >

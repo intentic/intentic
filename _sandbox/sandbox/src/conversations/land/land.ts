@@ -1,10 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { errorMessage, stderrOf } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import type { AgentSpan, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
-import type { GitChange } from "@intentic/sandbox-contract/schemas/git/git";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { headSha } from "../../git/changes/changes.js";
 import { pruneEmptiedDirs } from "../../git/changes/changes-index.js";
@@ -13,9 +11,11 @@ import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { agentRepoChanges, anchorOf } from "./agent-changes.js";
 import { branchSha, mainBranchOf } from "../../git/agent-refs.js";
 import { withConversationTrailer } from "../../git-identity.js";
-import { writeChangesPatch, writePatch } from "./land-patch.js";
+import { writeChangesPatch, writePatch } from "./patch/land-patch.js";
 import { reconcileLockfile } from "./lockfile-reconcile.js";
+import { applies, changesByPath, changesNamedIn, type DeltaChange, deltaChangeOf, deltaChanges, gitSaid, refusal } from "./patch/apply-refusal.js";
 import { type Rederived, rederiveAll, UNDERIVED } from "./rederive.js";
+import { planThreeWay, type ThreeWay, unwrittenThreeWay, writeThreeWay } from "./patch/three-way.js";
 import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -26,6 +26,12 @@ import { assertLinked } from "../worktrees/checkout-link.js";
 // preflights clean. Content that already reached main another way is never a conflict. A spawned child's work lands
 // the same way into its parent's own checkout instead (`into`, land-target.ts): the tree written into is the parent's,
 // and what the delta is measured against stays the child's own anchor.
+//
+// A WRITE IS LANDED ONLY ONCE THE TREE IS READ BACK HOLDING IT (2026-10-20). Every door a land goes through (a turn's
+// close, a press, a parent's `merge`, a wake that went away, a runner child) ends in `writePlans`, and there a repo's
+// landed tip moves only on a proof read off the tree by content: the written patch now un-applies (its post-image is
+// there), or the merge's result is what the tree holds, markers included. A write the tree did not take is that repo's
+// conflict, with its tip where it was, so the branch keeps the work and no later catch-up can let it go as landed.
 
 // Wire LandResult plus registry state: `repos` carries advanced landedTips, `diff` is the cumulative anchor->tip stat
 // the review itself reads.
@@ -50,38 +56,6 @@ export interface LockfileFailure {
     readonly reason: string;
 }
 
-// `git apply --check`, the exit code as a throw: undefined when the patch applies, else the stderr, which names every
-// file patch that failed since git checks the whole list before giving up. `reverse` tells a clash from content main
-// already has: a patch un-applies cleanly exactly when its post-image is already there.
-const refusal = async (main: string, patch: string, direction: "forward" | "reverse", git: GitRunner): Promise<string | undefined> => {
-    try {
-        await git(main, ["apply", "--check", ...(direction === "reverse" ? ["--reverse"] : []), patch]);
-        return undefined;
-    } catch (error) {
-        return gitSaid(error);
-    }
-};
-
-const applies = async (main: string, patch: string, direction: "forward" | "reverse", git: GitRunner): Promise<boolean> =>
-    (await refusal(main, patch, direction, git)) === undefined;
-
-// What git said, off the runner's rejection; the message itself when the throw carries no stderr.
-const gitSaid = (error: unknown): string => {
-    const stderr = stderrOf(error);
-    return stderr !== undefined && stderr !== "" ? stderr : errorMessage(error);
-};
-
-// One change of a delta with the complete path set its diff spans: a rename is one change across two paths, so naming
-// only the destination breaks `-M` pairing and creates instead of renaming.
-interface DeltaChange {
-    // Destination path: what a conflict report names, since it's the path the user goes looking for.
-    readonly path: string;
-    // Every path this change's own diff spans: the destination, plus a rename's source.
-    readonly paths: readonly string[];
-    // What must not exist once this change has applied: a deletion's own path, a rename's source.
-    readonly removes: readonly string[];
-}
-
 // Beyond this, a refusal is a workspace-sized decision. Thousands of per-file git probes would hold the repo lock
 // for minutes; keep the paths (and therefore their count) in the existing conflict contract for the user to clear.
 const MAX_REFUSED_FILES = 3_000;
@@ -93,72 +67,6 @@ interface DeltaReport {
     readonly clean: DeltaChange[];
 }
 
-// A `--name-status` row's path set; `from` is git's rename source. A copy carries none (parseNameStatusZ reports it as
-// a plain add).
-const deltaChangeOf = (change: GitChange): DeltaChange => ({
-    path: change.path,
-    paths: change.from === undefined ? [change.path] : [change.from, change.path],
-    removes: change.status === "deleted" ? [change.path] : change.from === undefined ? [] : [change.from],
-});
-
-// How `git apply` names the file a refusal or a failed write is about, one line each, the path as the capture. A line
-// none of these place is scanned for a known path instead, so an unknown wording still names what it names.
-// allow(dependency-text): git apply, run untranslated by the base runner; a refusal naming nothing placeable is probed change by change (probeEach), a failed write naming nothing is rethrown.
-const REFUSAL_LINES: readonly RegExp[] = [
-    /^error: patch failed: (.+):\d+$/,
-    /^error: (.+): (?:patch does not apply|already exists in (?:working directory|index)|does not (?:exist|match) in index|No such file or directory|wrong type|has type \d+, expected \d+)$/,
-    /^error: cannot apply binary patch to '(.+)' without full index line$/,
-    /^error: (?:binary patch does not apply to|binary patch to) '(.+)'/,
-    /^error: the patch applies to '(.+)' \(/,
-    /^error: unable to (?:write|add|remove) file '(.+)'/,
-    /^error: (?:cannot|could not) (?:open|read|stat) '(.+)'/,
-];
-
-// Where a path may sit in a message: after the start, a space or a quote, and before a colon, a quote, a space, a
-// bracket or the end. Keeps `a.ts` from matching inside `ba.ts`.
-const boundedAt = (line: string, path: string, at: number): boolean => {
-    const before = at === 0 ? " " : line[at - 1];
-    const after = at + path.length >= line.length ? " " : line[at + path.length];
-    return (
-        (before === " " || before === "'" || before === '"') && (after === " " || after === "'" || after === '"' || after === ":" || after === ")")
-    );
-};
-
-// The changes a refusal names, matched by any of their paths (a rename is named on either leg). Empty when the message
-// held nothing this reader could place, which callers treat as unknown, never as nothing.
-// allow(dependency-text): git apply's stderr (REFUSAL_LINES, then its `error:` verdict lines); unplaced reads as unknown, as above.
-const changesNamedIn = (stderr: string, byPath: ReadonlyMap<string, DeltaChange>): Set<DeltaChange> => {
-    const named = new Set<DeltaChange>();
-    for (const line of stderr.split("\n")) {
-        const captured = REFUSAL_LINES.map((pattern) => pattern.exec(line)?.[1]).find((path) => path !== undefined && byPath.has(path));
-        const placed = captured === undefined ? undefined : byPath.get(captured);
-        if (placed !== undefined) {
-            named.add(placed);
-            continue;
-        }
-        if (!line.startsWith("error:")) {
-            continue;
-        }
-        for (const [path, change] of byPath) {
-            const at = line.indexOf(path);
-            if (at !== -1 && boundedAt(line, path, at)) {
-                named.add(change);
-            }
-        }
-    }
-    return named;
-};
-
-// Every path of a change set, each pointing back at its change; a rename answers on either leg.
-const changesByPath = (changes: readonly DeltaChange[]): Map<string, DeltaChange> => {
-    const byPath = new Map<string, DeltaChange>();
-    for (const change of changes) {
-        for (const path of change.paths) {
-            byPath.set(path, change);
-        }
-    }
-    return byPath;
-};
 
 // Every path main's own tree has something uncommitted on, a rename's source leg included: a staged copy is as much at
 // risk as an unstaged one. One status read; no line counts, which changedFiles would spend a read per untracked file on.
@@ -271,13 +179,13 @@ const applyChanges = async (
     patchDir: string,
     repo: string,
     git: GitRunner,
-): Promise<void> => {
+): Promise<string | undefined> => {
     if (changes.length === 0) {
-        return;
+        return undefined;
     }
     const patchPath = join(patchDir, `${repo.replaceAll("/", "_")}.remainder.patch`);
     if ((await writeChangesPatch(main, patchPath, from, tip, changes, git)) === 0) {
-        return;
+        return undefined;
     }
     const removes = changes.flatMap((change) => change.removes);
     // `git apply` prunes what a patch removes itself; an explicit `rm` below leaves its parents for this.
@@ -287,6 +195,7 @@ const applyChanges = async (
         removes.map(async (path) => await rm(join(main, path), { force: true })),
     );
     await pruneEmptiedDirs(main, removes);
+    return patchPath;
 };
 
 // Re-derives the stored conflict report live against today's tree, read-only: the stored report rots once the user
@@ -360,7 +269,7 @@ interface RepoLandTarget {
 type RepoLandWrite =
     | (RepoLandTarget & { readonly kind: "whole"; readonly patchPath: string })
     | (RepoLandTarget & { readonly kind: "subset"; readonly changes: readonly DeltaChange[] })
-    | (RepoLandTarget & { readonly kind: "merge"; readonly patchPath: string; readonly paths: readonly string[] });
+    | (RepoLandTarget & { readonly kind: "merge"; readonly merge: ThreeWay });
 
 interface RepoLandPlan {
     next: RepoRecord;
@@ -389,38 +298,43 @@ const advancedRepo = async (target: RepoLandTarget, git: GitRunner): Promise<Rep
     };
 };
 
-const applyRepoWrite = async (
-    write: RepoLandWrite,
-    patchDir: string,
-    resolving: { repo: string; paths: string[] }[],
-    git: GitRunner,
-): Promise<void> => {
+// Writes one repo's plan, answering the patch a `whole` or `subset` write applied (what its proof un-applies).
+const applyRepoWrite = async (write: RepoLandWrite, patchDir: string, git: GitRunner): Promise<string | undefined> => {
     switch (write.kind) {
         case "whole":
             await git(write.main, ["apply", write.patchPath]);
-            return;
+            return write.patchPath;
         case "subset":
-            await applyChanges(write.main, write.from, write.tip, write.changes, patchDir, write.repo, git);
-            return;
+            return applyChanges(write.main, write.from, write.tip, write.changes, patchDir, write.repo, git);
         case "merge":
-            // `--3way` exits non-zero exactly because it left markers; that throw is the expected result here.
-            try {
-                await git(write.main, ["apply", "--3way", write.patchPath]);
-            } catch {
-                // The preflight report already names every path the three-way apply leaves open.
-            }
-            resolving.push({ repo: write.repo, paths: [...write.paths] });
+            await writeThreeWay(write.main, write.merge, join(patchDir, `${write.repo.replaceAll("/", "_")}.merge.patch`), git);
+            return undefined;
     }
+};
+
+// The paths of a written plan the tree does not hold, read back by content; empty is the proof the land is there. A
+// patch is there exactly when it un-applies, and a merge exactly when the tree reads as its result.
+const unwrittenPaths = async (write: RepoLandWrite, applied: string | undefined, patchDir: string, git: GitRunner): Promise<string[]> => {
+    if (write.kind === "merge") {
+        return unwrittenThreeWay(write.main, write.merge, patchDir, write.repo.replaceAll("/", "_"), git);
+    }
+    const changes = write.kind === "subset" ? write.changes : await deltaChanges(write.main, write.from, write.tip, git);
+    const gone = (
+        await Promise.all(changes.flatMap((change) => change.removes).map(async (path) => ((await pathExists(join(write.main, path))) ? [path] : [])))
+    ).flat();
+    const reversed = applied === undefined ? undefined : await refusal(write.main, applied, "reverse", git);
+    if (reversed === undefined) {
+        return gone;
+    }
+    const named = changesNamedIn(reversed, changesByPath(changes));
+    return [...new Set([...gone, ...(named.size === 0 ? changes : changes.filter((change) => named.has(change))).map((change) => change.path)])];
 };
 
 // The conflict a failed write amounts to, read off git's own message. `workspace`: the tree itself stood in the way
 // (a directory where the patch puts a symlink), the one reason a person clears by hand. A message naming no path of the
 // delta is nothing this can explain, and is rethrown.
 const refusedWrite = async (write: RepoLandWrite, error: unknown, git: GitRunner): Promise<LandConflict> => {
-    const changes =
-        write.kind === "subset"
-            ? write.changes
-            : parseNameStatusZ((await git(write.main, ["diff", "--name-status", "-z", "-M", write.from, write.tip, ...UNDERIVED])).stdout).map(deltaChangeOf);
+    const changes = write.kind === "subset" ? write.changes : await deltaChanges(write.main, write.from, write.tip, git);
     const named = changesNamedIn(gitSaid(error), changesByPath(changes));
     if (named.size === 0) {
         throw error;
@@ -544,13 +458,20 @@ const judgeRepo = async (
     if (report.blocked.length === 0) {
         return { plan: { next: composed, write: { ...target, kind: "subset", changes: report.clean } } };
     }
-    // Three-way apply refuses outright on any workspace-dirty path; merge needs none of those. `check` promises a
-    // refusal leaves the workspace untouched; only `blocked` is reported.
-    if (mode === "check" || report.blocked.some((conflict) => conflict.reason === "workspace")) {
+    // `check` promises a refusal leaves the workspace untouched; only `blocked` is reported.
+    if (mode === "check") {
         return { plan: { next: composed }, conflict: await conflictOf(main, repo, report, git) };
     }
+    // A merge through the tree as it stands, uncommitted edits and renames included (patch/three-way.ts). What it cannot hand a
+    // person as markers holds the repo off whole, named where the merge put it.
+    const merged = await planThreeWay(main, from, tip, patchDir, repo.replaceAll("/", "_"), git);
+    if (merged.kind === "held") {
+        const reasons = new Map(report.blocked.map((conflict) => [conflict.path, conflict.reason]));
+        const blocked = merged.paths.map((path) => ({ path, reason: reasons.get(path) ?? ("diverged" as const) }));
+        return { plan: { next: composed }, conflict: await conflictOf(main, repo, { blocked, clean: report.clean }, git) };
+    }
     // Queued: written only once every other repo also proves it can apply or produce markers.
-    return { plan: { next: composed, write: { ...target, kind: "merge", patchPath, paths: report.blocked.map((conflict) => conflict.path) } } };
+    return { plan: { next: composed, write: { ...target, kind: "merge", merge: merged.merge } } };
 };
 
 // Phase one for one repo: read-only, decides what phase two writes.
@@ -574,9 +495,13 @@ const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlannin
     const diff = await cumulativeDiff(run, composed);
     const from = await anchorOf(run.entry.placement, refDir, mainLine, tip, run.span === "cumulative" ? undefined : composed.landedTip, base, git);
     if (tip === from) {
-        // Ancestry alone can mean landed; still persisted, or the review re-offers this delta forever.
-        const landed = (composed.landedTip ?? base) !== tip;
-        return { plan: { next: landed ? { repo, base, landedTip: tip } : composed }, changed: landed, diff };
+        // Ancestry alone can mean landed; still persisted, or the review re-offers this delta forever. Nothing is written
+        // by this land, so it is an advance of the books and never `changed`: a door that reads `changed` as "it is in
+        // the tree now" would say so of a land that wrote nothing (a parent's second `merge`, 2026-10-20).
+        const moved = (composed.landedTip ?? base) !== tip;
+        return moved
+            ? { plan: { next: { repo, base, landedTip: tip } }, changed: false, advanced: true, diff }
+            : { plan: { next: composed }, changed: false, diff };
     }
     const target = { main, repo, base, tip, from } satisfies RepoLandTarget;
     const patchPath = join(run.patchDir, `${repo.replaceAll("/", "_")}.patch`);
@@ -588,9 +513,31 @@ const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlannin
     return { ...judged, changed: true, diff };
 };
 
-// Phase two: preflight passed under held locks; every plan written, then every tip stamped as one outcome. A write its
-// preflight passed and the tree still refused ends the pass as that repo's conflict, the repos already written keeping
-// their advance, rather than as a throw that names nothing.
+// One planned write, then the proof it is there: the only place a repo's landed tip moves for something written. A
+// write the tree refused, or took and does not hold, is that repo's conflict instead, its tip unmoved.
+const landWrite = async (
+    write: RepoLandWrite,
+    patchDir: string,
+    git: GitRunner,
+): Promise<{ readonly landed: RepoRecord; readonly resolving?: string[] } | { readonly conflict: LandConflict }> => {
+    let applied: string | undefined;
+    try {
+        applied = await applyRepoWrite(write, patchDir, git);
+    } catch (error) {
+        return { conflict: await refusedWrite(write, error, git) };
+    }
+    const unwritten = await unwrittenPaths(write, applied, patchDir, git);
+    if (unwritten.length > 0) {
+        const blocked = unwritten.map((path) => ({ path, reason: "workspace" as const }));
+        return { conflict: await conflictOf(write.main, write.repo, { blocked, clean: [] }, git) };
+    }
+    const landed = await advancedRepo(write, git);
+    return write.kind === "merge" && write.merge.conflicted.length > 0 ? { landed, resolving: [...write.merge.conflicted] } : { landed };
+};
+
+// Phase two: preflight passed under held locks; every plan written and proven, then every tip stamped as one outcome.
+// A write that did not land ends the pass as that repo's conflict, the repos already landed keeping their advance,
+// rather than as a throw that names nothing.
 const writePlans = async (
     plans: readonly RepoLandPlan[],
     patchDir: string,
@@ -603,13 +550,15 @@ const writePlans = async (
         if (plan.write === undefined) {
             continue;
         }
-        try {
-            await applyRepoWrite(plan.write, patchDir, resolving, git);
-        } catch (error) {
-            conflicts.push(await refusedWrite(plan.write, error, git));
+        const written = await landWrite(plan.write, patchDir, git);
+        if ("conflict" in written) {
+            conflicts.push(written.conflict);
             break;
         }
-        plan.next = await advancedRepo(plan.write, git);
+        plan.next = written.landed;
+        if (written.resolving !== undefined) {
+            resolving.push({ repo: plan.write.repo, paths: written.resolving });
+        }
     }
     return { repos: plans.map(({ next }) => next), conflicts, resolving };
 };

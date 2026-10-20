@@ -3,7 +3,7 @@ import { DETACHED_AFTER_MS } from "../overview/availability";
 import type { ConnectionFailure } from "../../../client/sandbox/connection";
 import { RESTART_PATIENCE_MS, type RestartQuiet } from "../../../models/sandbox/live/sandboxRestart";
 import { t } from "@intentic/ui/i18n";
-import type { WaitExpectation } from "../../../components/waitProgress";
+import type { Progress } from "../../../components/progress/progress";
 
 // What the connecting gate says, as a pure function of the classified failure and what the platform knows, so setup,
 // reconnect, sign-in, removal and blocked causes each get their own words and action instead of one generic screen.
@@ -29,7 +29,7 @@ export const JUST_SET_UP_PATIENCE_MS = 2 * 60_000;
 // A detached sandbox's verdict is held for DETACHED_AFTER_MS (availability.ts) before it is spoken: a container that
 // restarts is detached for a few seconds, and the gate's words and the switcher's dot change their mind together.
 
-// How long the waits this file names usually take, told beside how long they have run (components/WaitProgress.vue).
+// How long the waits this file names usually take, told beside how long they have run (components/progress/ProgressMeter.vue).
 // A reconnect to a sandbox that is up answers within seconds; a fresh one routes through its edge in under a minute.
 export const USUAL_RECONNECT_MS = 20_000;
 // A swap of the container, which every restart this browser asked for ends in (sandboxRestart.ts): about half a minute.
@@ -52,7 +52,7 @@ export interface ConnectionNotice {
     readonly waiting: boolean;
     // A wait's own clock, drawn under the sentence: how long it has run, how long it usually takes, and when the gate
     // stops waiting. Only a waiting notice has one.
-    readonly wait?: WaitExpectation | undefined;
+    readonly wait?: Progress | undefined;
 }
 
 export interface ConnectionNoticeInput {
@@ -89,7 +89,7 @@ export interface ConnectionNoticeInput {
 
 // The patient wait, in the three shapes the browser can observe; split out since the caller now has a decision to
 // make first.
-const waitingNotice = (kind: "timeout" | "closed" | "network" | "detached", name: string, wait: WaitExpectation): ConnectionNotice => {
+const waitingNotice = (kind: "timeout" | "closed" | "network" | "detached", name: string, wait: Progress): ConnectionNotice => {
     if (kind === `timeout`) {
         return {
             title: t(`sandbox.connectionNotice.stillOpening`, { name }),
@@ -279,7 +279,7 @@ const restartNotice = (input: ConnectionNoticeInput): ConnectionNotice | undefin
               body: input.restart.detail,
               action: undefined,
               waiting: true,
-              wait: { elapsedMs: input.outageMs, typicalMs: USUAL_RESTART_MS, giveUpMs: RESTART_PATIENCE_MS },
+              wait: { elapsedMs: input.outageMs, expectedMs: USUAL_RESTART_MS, giveUpMs: RESTART_PATIENCE_MS },
           };
 
 // The network-shaped causes read as one thing (a wait) while waiting can still fix them, then as the most specific
@@ -293,7 +293,7 @@ const networkNotice = (input: ConnectionNoticeInput, kind: "timeout" | "closed" 
     stuckNotice(input, name) ??
     waitingNotice(kind, name, {
         elapsedMs: input.outageMs,
-        typicalMs: USUAL_RECONNECT_MS,
+        expectedMs: USUAL_RECONNECT_MS,
         // The edge's verdict on a sandbox of somebody's own machine is spoken sooner than any silence (detachedNotice).
         giveUpMs: kind === `detached` && !input.hostedMachine ? DETACHED_AFTER_MS : stuckPatience(input),
     });
@@ -349,7 +349,7 @@ export const connectionNotice = (input: ConnectionNoticeInput): ConnectionNotice
             body: t(`sandbox.connectionNotice.sandboxReportedInOpening`),
             action: undefined,
             waiting: true,
-            wait: failure === undefined ? undefined : { elapsedMs: input.outageMs, typicalMs: USUAL_RECONNECT_MS, giveUpMs },
+            wait: failure === undefined ? undefined : { elapsedMs: input.outageMs, expectedMs: USUAL_RECONNECT_MS, giveUpMs },
         };
     }
     // Ahead of every arm below, including `unaddressed`: a removed sandbox has no address precisely BECAUSE it was

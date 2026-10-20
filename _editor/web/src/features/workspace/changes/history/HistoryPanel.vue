@@ -4,7 +4,7 @@ import { computed, ref } from "vue";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
 import { diffRawUrls } from "../../../../models/workspace/changes/diffRaw";
 import { useHistory } from "../../../../models/changes/useHistory";
-import { Button, ChangeStatusMark, ui, type IconName, Notice, timeAgo } from "@intentic/ui";
+import { Button, ChangeStatusMark, ui, type IconName, Notice, SectionHeader, timeAgo } from "@intentic/ui";
 import { useWorkspaceTabs } from "../../../../models/workspace/tabs/useWorkspaceTabs";
 import type { DiffPayload } from "@intentic/extension-api";
 import type { OpenMode } from "../../../../models/workspace/tabs/workspaceTabs";
@@ -86,20 +86,20 @@ const confirmRestore = (id: string): void => {
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
-        <div class="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
-            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ words.restorePoints }}</span>
-            <span class="flex-1"></span>
-            <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin :aria-label="t(`workspace.words.working`)" />
-            <button
-                type="button"
-                :class="ui.iconButton()"
-                @click="refetch()"
-                v-tooltip.right="t(`ui.action.refresh`)"
-                :aria-label="t(`workspace.historyPanel.refresh`, { toLowerCase: words.restorePoints.toLowerCase() })"
-            >
-                <Icon name="refresh" class="text-xs" :spin="isLoading" />
-            </button>
-        </div>
+        <SectionHeader :label="words.restorePoints" density="dense" class="shrink-0 border-b border-line px-2 py-1.5">
+            <template #actions>
+                <Icon name="spinner" v-if="busy" class="text-xs text-muted" spin :aria-label="t(`workspace.words.working`)" />
+                <button
+                    type="button"
+                    :class="ui.iconButton()"
+                    @click="refetch()"
+                    v-tooltip.right="t(`ui.action.refresh`)"
+                    :aria-label="t(`workspace.historyPanel.refresh`, { toLowerCase: words.restorePoints.toLowerCase() })"
+                >
+                    <Icon name="refresh" class="text-xs" :spin="isLoading" />
+                </button>
+            </template>
+        </SectionHeader>
 
         <p v-if="error" class="shrink-0 truncate px-2 py-1 text-2xs text-danger" v-tooltip.right.overflow="error">{{ error }}</p>
         <Notice v-if="actionError" :of="actionError" class="mx-2 shrink-0" />

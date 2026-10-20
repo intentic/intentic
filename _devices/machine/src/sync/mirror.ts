@@ -31,7 +31,7 @@ import { readSwaps } from "../device/sandbox-rounds/ic-swaps.js";
 import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
 import { realBridgeExec, runGitBridge } from "./git-bridge.js";
-import { holdSessions, holdsSync, recordOf, RELEASE_FORWARDS_MS, shouldReleaseForwards, swapStep, syncHeld, syncHolds, UNREACHABLE_HOLD_MS } from "./holds.js";
+import { holdSessions, holdsSync, recordOf, RELEASE_FORWARDS_MS, shouldReleaseForwards, swapBegan, swapStep, syncHeld, syncHolds, UNREACHABLE_HOLD_MS } from "./holds.js";
 import { guardDisks } from "./low-disk.js";
 import {
     ensureSyncSession,
@@ -898,7 +898,8 @@ const retryPendingSessions = async (
 };
 
 // File sync held still for every pairing whose sandbox ic is swapping on this machine (holds.ts `holdsSync`): the swap's fact
-// written as it begins and cleared once it has held, so a restarted agent reads the swap off the record and ic alike.
+// written as it begins and cleared once it has held, so a restarted agent, and a pass after ic let the swap's record go,
+// read the swap off the pairing.
 // Answers the pairings held this pass, whose git bridge and heal wait too: both would read a sandbox mid-swap.
 export const holdSyncDuringSwaps = async (
     pairings: readonly Pairing[],
@@ -911,14 +912,16 @@ export const holdSyncDuringSwaps = async (
     const now = Date.now();
     const held = new Set<string>();
     for (const pairing of pairings) {
-        const holds = holdsSync(recordOf(pairing, records), now, !unreachable.has(pairing.sandboxId));
+        const swap = recordOf(pairing, records);
+        const holds = holdsSync(swap, pairing.swapSince, now, !unreachable.has(pairing.sandboxId));
         if (holds) {
             held.add(pairing.sandboxId);
         }
-        const step = swapStep(pairing, holds);
+        const began = swapBegan(swap, pairing.swapSince, now);
+        const step = swapStep(pairing, holds, began);
         if (step !== undefined) {
             // state is a single file; serial keeps the writes ordered
-            await record(pairingKey(pairing), step === "began" ? now : undefined);
+            await record(pairingKey(pairing), step === "began" ? began : undefined);
             say(
                 step === "began"
                     ? `  ${pairingKey(pairing)}: its sandbox is being swapped on this machine; file sync holds still until the new version has held.`

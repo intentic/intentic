@@ -167,8 +167,8 @@ describe("the verdict every door asks", () => {
         for (const provider of ["claude", "codex", "gemini", "cursor"]) {
             expect([provider, await privacyShield.refusal(turn(provider, "native", "vivid-rowan-moks"))]).toEqual([provider, undefined]);
         }
-        expect(await privacyShield.refusal(turn("my-acp-agent", "native"))).toEqual(expect.any(String));
-        expect(await privacyShield.refusal(turn("pi", "native"))).toEqual(expect.any(String));
+        expect(await privacyShield.refusal(turn("my-acp-agent", "native"))).toEqual({ sentence: expect.any(String), route: "runtime" });
+        expect(await privacyShield.refusal(turn("pi", "native"))).toEqual({ sentence: expect.any(String), route: "runtime" });
         const trusting = privacySliceFake({ policy: { mode: "on", trusted: ["pi"] } });
         expect(await trusting.privacyShield.refusal(turn("pi", "native"))).toBeUndefined();
     });
@@ -177,16 +177,19 @@ describe("the verdict every door asks", () => {
     // looking for personal data in a message that held none (2026-10-02), and a runner's did again (2026-10-11).
     test("a refusal says nothing was read, why the route is the reason, and where the way on is", async () => {
         const { privacyShield } = privacySliceFake({ policy: { mode: "on" } });
-        const reason = (await privacyShield.refusal(turn("pi", "native", "vivid-rowan-moks"))) ?? "";
+        const reason = (await privacyShield.refusal(turn("pi", "native", "vivid-rowan-moks")))?.sentence ?? "";
         expect(reason).toContain("before reading anything");
         expect(reason).toContain("nothing in what you sent was flagged");
         expect(reason).toContain("agent reads files and command output on its own");
         expect(reason).toContain("read this conversation as it is");
-        const runner = (await privacyShield.refusal({ provider: "cursor", conversationId: "vivid-rowan-moks", route: "runner" })) ?? "";
+        const refusedRunner = await privacyShield.refusal({ provider: "cursor", conversationId: "vivid-rowan-moks", route: "runner" });
+        // Typed as well as worded: the route the verdict refused rides with the sentence.
+        expect(refusedRunner?.route).toBe("runner");
+        const runner = refusedRunner?.sentence ?? "";
         expect(runner).toContain("a runner would call Cursor from its own machine");
         expect(runner).toContain("nothing in what you sent was flagged");
         // A turn with no conversation has none to grant, so it is not offered one.
-        expect(await privacyShield.refusal(turn("pi", "native"))).not.toContain("this conversation");
+        expect((await privacyShield.refusal(turn("pi", "native")))?.sentence).not.toContain("this conversation");
     });
 
     test("a policy that can't be read refuses at every door rather than letting anything past", async () => {
@@ -194,7 +197,8 @@ describe("the verdict every door asks", () => {
         const { privacyShield } = privacySliceFake({ policyStore: torn });
         await expect(privacyShield.decide({ provider: "cursor", route: "hooks" })).rejects.toThrow("the file is torn");
         for (const route of ["gateway", "hooks", "sealed", "runtime", "runner", "own-key", "shared-server"] as const) {
-            expect([route, await privacyShield.refusal({ provider: "cursor", route })]).toEqual([route, expect.stringContaining("the file is torn")]);
+            // No verdict was reached, so no route is claimed for it.
+            expect([route, await privacyShield.refusal({ provider: "cursor", route })]).toEqual([route, { sentence: expect.stringContaining("the file is torn") }]);
         }
     });
 
@@ -204,10 +208,10 @@ describe("the verdict every door asks", () => {
         });
         expect(await privacyShield.refusal(turn("pi", "native", "vivid-rowan-moks"))).toBeUndefined();
         expect(await privacyShield.refusal({ provider: "pi", conversationId: "vivid-rowan-moks", route: "runner" })).toBeUndefined();
-        expect(await privacyShield.refusal(turn("pi", "native", "smart-moth-pq04"))).toEqual(expect.any(String));
-        expect(await privacyShield.refusal(turn("pi", "native"))).toEqual(expect.any(String));
+        expect(await privacyShield.refusal(turn("pi", "native", "smart-moth-pq04"))).toMatchObject({ route: "runtime" });
+        expect(await privacyShield.refusal(turn("pi", "native"))).toMatchObject({ route: "runtime" });
         // Granted to one provider, not to whatever the conversation switches to.
-        expect(await privacyShield.refusal(turn("my-acp-agent", "native", "vivid-rowan-moks"))).toEqual(expect.any(String));
+        expect(await privacyShield.refusal(turn("my-acp-agent", "native", "vivid-rowan-moks"))).toMatchObject({ route: "runtime" });
         // The gateway reads the same grant, so a shieldable provider granted there is relayed unmasked in it alone.
         expect(await passes(privacyShield, "pi", "vivid-rowan-moks")).toBe(true);
         expect(await passes(privacyShield, "pi", "smart-moth-pq04")).toBe(false);

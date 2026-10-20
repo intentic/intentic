@@ -210,7 +210,7 @@ const STATE_FILES = [
         portability: "carry",
     },
     // Where releases before 2026-10-12 kept the wakes automations held for a person. They now sit on the history volume
-    // (`automation-holds/`, history-state.ts), off the workspace every turn writes, and nothing reads this directory; a
+    // (`automation-holds/`, the daemon's held-wakes-store.ts), off the workspace every turn writes, and nothing reads this directory; a
     // build that read it is only ever rolled back to. Declared still, since the extension that listed them binds it.
     {
         path: ".intentic/records/approvals/",

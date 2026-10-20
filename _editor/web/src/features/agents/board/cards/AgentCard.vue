@@ -47,7 +47,7 @@ import { reachLine } from "../../../../models/fleet/board/reachLine";
 import KeepWarmPanel from "../../../../parts/fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
-import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { sessionCategory } from "../../../../app/sessionCategory";
 import IdentityTile from "../../../../parts/capabilities/IdentityTile.vue";
@@ -673,7 +673,7 @@ const grab = (event: PointerEvent): void => {
                 <span
                     v-if="chip !== undefined"
                     v-tooltip.top="chipHint"
-                    class="ui-status-pill shrink-0 gap-1 text-2xs font-semibold"
+                    class="ui-status-pill shrink-0 font-semibold"
                     :class="chip.tone"
                     ><Icon v-if="chip.family" name="subagents" class="shrink-0 text-2xs" />{{ chip.label }}</span
                 >
@@ -710,7 +710,7 @@ const grab = (event: PointerEvent): void => {
                 <span
                     v-if="idMatch.exact"
                     v-tooltip.top="{ title: t(`ui.action.open`), keys: enterKey }"
-                    class="ui-status-pill shrink-0 bg-primary-600/20 py-px font-semibold text-link"
+                    class="ui-status-pill ui-status-pill-inline shrink-0 bg-primary-600/20 font-semibold text-link"
                     >{{ t(`agents.agentCard.exactId`) }}</span
                 >
             </p>

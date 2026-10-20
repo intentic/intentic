@@ -13,9 +13,9 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-const { text, custom, save, isSaving, saveError, isLoading, error } = useSafetyPolicy();
+const { text, custom, save, isSaving, saveError, answered, error } = useSafetyPolicy();
 
-const draft = useDraft(() => (isLoading.value ? undefined : text.value));
+const draft = useDraft(() => (answered.value ? text.value : undefined));
 // A refused save keeps the owner's text on screen as "Not saved yet"; said here, or the press reads as doing nothing.
 const refused = computed<NoticeModel | undefined>(() =>
     saveError.value === null ? undefined : noticeFrom(saveError.value, t(`sandbox.agentSafetyPolicy.couldntSave`)),
@@ -28,12 +28,12 @@ const refused = computed<NoticeModel | undefined>(() =>
         <MarkdownDocument
             v-model="draft"
             frame="section"
-            :editable="!isLoading"
-            :stored="isLoading ? undefined : text"
+            :editable="answered"
+            :stored="answered ? text : undefined"
             :saving="isSaving"
             save="explicit"
             :label="t(`sandbox.agentSafetyPolicy.safetyPolicy`)"
-            :placeholder="isLoading ? t(`ui.status.loading`) : t(`sandbox.agentSafetyPolicy.whatAssistantShouldStop`)"
+            :placeholder="answered ? t(`sandbox.agentSafetyPolicy.whatAssistantShouldStop`) : error === undefined ? t(`ui.status.loading`) : ``"
             @save="save"
         >
             <template #note>

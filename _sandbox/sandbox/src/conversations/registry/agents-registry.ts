@@ -887,7 +887,7 @@ export const createFleet = (
         abandon: (id, failure, now) => {
             const entry = entryOf(id);
             if (entry !== undefined) {
-                replace({ ...entry, ending: { kind: "failed", ...opt("failure", failure) }, updatedAt: now });
+                replace({ ...entry, ending: { kind: "failed", ...opt("failure", failure), own: true }, updatedAt: now });
             }
         },
         // Written through at once, not only at the settle: a daemon killed mid-turn otherwise loses the only key into the

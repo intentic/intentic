@@ -38,7 +38,17 @@ export interface ReportedProject {
     machine?: string;
 }
 
-export const attachedProjectsDocument = defineDocument({ root: "history", path: "projects.json", schema: AttachedProjectSchema, granularity: "entries" });
+export const attachedProjectsDocument = defineDocument({
+    root: "history",
+    path: "projects.json",
+    // The folders attached to this computer's own sandbox, by name: which of the computer's folders sync in, so it
+    // stays with the sandbox that runs beside them. The folders' copies and repos travel with /work and gits/; a moved
+    // sandbox treats them as ordinary repos.
+    portability: "identity",
+    note: "Attach the folders again from the desktop app on the computer that holds them.",
+    schema: AttachedProjectSchema,
+    granularity: "entries",
+});
 
 // One entry per name. One whose name is no project folder's (a hand edit) is set aside like an entry the schema refuses,
 // so nothing downstream ever joins it onto the workspace root.

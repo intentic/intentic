@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { dataOf } from "@intentic/extension-api";
-import { Await, Icon, Notice, noticeOf, openForwardedPort, RowGroup, SkeletonRows } from "@intentic/extension-ui";
+import { Await, Icon, Notice, noticeOf, openForwardedPort, RowGroup, RowNote, SkeletonRows } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { host } from "./host";
 import PortRow from "./PortRow.vue";
@@ -59,18 +59,20 @@ const openTerminal = (session: string): void => host().terminal.open(session);
                 <RowGroup :label="t(`portsView.services`)">
                     <div role="status" aria-busy="true">
                         <span class="sr-only">{{ t(`portsView.scanningListeningPorts`) }}</span>
-                        <SkeletonRows :rows="3" density="compact" description control />
+                        <SkeletonRows :rows="3" description control />
                     </div>
                 </RowGroup>
             </template>
             <!-- Spaced as the column it sits in. -->
             <div class="flex flex-col gap-4">
                 <RowGroup :label="t(`portsView.services`)">
-                    <div v-if="workspacePorts.length === 0" class="flex flex-col items-center gap-2 py-10 text-center">
-                        <Icon name="ports" class="text-2xl text-subtle" />
-                        <p class="text-sm text-muted">{{ t(`portsView.nothingYoursListeningYet`) }}</p>
-                        <p class="text-2xs text-subtle">{{ t(`portsView.startDevServerIn`) }}</p>
-                    </div>
+                    <RowNote v-if="workspacePorts.length === 0" variant="empty">
+                        <span class="flex flex-col items-center gap-2">
+                            <Icon name="ports" class="text-2xl text-subtle" />
+                            <span class="text-sm">{{ t(`portsView.nothingYoursListeningYet`) }}</span>
+                            <span class="text-2xs text-subtle">{{ t(`portsView.startDevServerIn`) }}</span>
+                        </span>
+                    </RowNote>
 
                     <PortRow
                         v-for="entry in workspacePorts"

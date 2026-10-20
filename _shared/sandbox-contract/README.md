@@ -34,11 +34,14 @@ flowchart LR
   sidecar sends the same frame with `surface: "folder"` and only the few routes it serves, which the browser offers
   and never reads as out of date.
 - Every file the daemon keeps says whether it travels in an environment bundle (`carry`, `secret`, `identity` or
-  `derived`, `src/state/state-portability.ts`). There are three tables, one per root: `WORKSPACE_STATE_FILES`,
-  `HISTORY_STATE_FILES`, and `AUTH_STATE_FILES` for the auth root of provider logins, secret vaults and trust
-  files. In the auth root, the owner's restrictions (credential gates, host guards, the privacy shield) travel without
-  secrets, and this sandbox's own keys, pairings and the yeses its owner gave never travel. A path no entry names keeps
-  the directory's own class: `carry` on the workspace, `derived` on `/history`, `secret` in the auth root.
+  `derived`, `src/state/state-portability.ts`). The contract holds the tables for the two roots other programs read:
+  `WORKSPACE_STATE_FILES`, and `AUTH_STATE_FILES` for the auth root of provider logins, secret vaults and trust files.
+  `/history` is the daemon's alone, so its table lives there: each stored document declares its class on its own
+  definition, and the daemon lists the paths no document claims (`src/store/evolution/history-state.ts` in
+  `_sandbox/sandbox`). In the auth root, the owner's restrictions (credential gates, host guards, the privacy shield)
+  travel without secrets, and this sandbox's own keys, pairings and the yeses its owner gave never travel. A path no
+  entry names keeps the directory's own class: `carry` on the workspace, `derived` on `/history`, `secret` in the auth
+  root.
 - The oldest daemon the editor supports is declared here, `OLDEST_SUPPORTED_DAEMON` in `src/state/daemon-floor.ts`,
   with a dated line for why it is that release. The editor reads a daemon's version off the head of the hello's
   `build` (`<version>:<mtime>`) and draws a single "needs an update" page below it. The floor's test freezes the fields
@@ -72,6 +75,10 @@ flowchart LR
   (`src/state/update-probation.ts`), the one shape of `restart-intent.json` (`src/schemas/restart-intent.ts`), the
   answer of `ic sandbox swaps --json` (`src/schemas/device-swaps.ts`), and what `ic os status --json` and
   `ic os update --check --json` answer, with the argv of every `ic os` verb (`src/schemas/intentic-os.ts`).
+- Which build a sandbox is, and every comparison between two of them, is `src/state/sandbox-build.ts`: a pending
+  rebuild, runner parity, and (2026-10-20) whether a swap landed. `/info` reports what answers (`running`: the build
+  and when its daemon started), and `swapVerdict` says landed, came back unmoved, or still waiting. A page used to
+  tell an update by the version moving, which a checkout build (always 0.0.0) never does.
 - What a credential looks like is decided here too: `CREDENTIAL_ISSUERS` in `src/policy/credential-material.ts` (each
   issuer's prefix and token body, as data) and `SECRET_REFERENCE` in `src/schemas/needs.ts` (the `{{secret:name}}`
   pattern, non-global, so each site that scans derives its own `/g` copy). The terminal output filter

@@ -87,6 +87,25 @@ const card = (draft: Draft, key: string): MachineCard => ({
     key,
 });
 
+// Why a paused copy waits, by the machine agent's first hold: the reader's own pause, which Devices lifts, or one that
+// passes by itself, which no press of the reader's can (2026-10-20: every pause used to send the reader to Devices).
+const heldDetail = (heldBy: readonly string[] | undefined): string => {
+    switch (heldBy?.[0]) {
+        case `low-disk`:
+            return t(`local.machine.folder.heldLowDisk`);
+        case `swap`:
+            return t(`local.machine.folder.heldSwap`);
+        case `unreachable`:
+            return t(`local.machine.folder.heldUnreachable`);
+        case `gone`:
+        case `container-missing`:
+        case `container-trashed`:
+            return t(`local.machine.folder.heldAway`);
+        default:
+            return t(`local.machine.folder.pausedDetail`);
+    }
+};
+
 // This window's folder once the sandbox is up: being added, its first copy, in, or turned down.
 const folderCard = (folder: LocalFolderSandbox, justIn: boolean): MachineCard | undefined => {
     const name = folder.name;
@@ -102,7 +121,7 @@ const folderCard = (folder: LocalFolderSandbox, justIn: boolean): MachineCard | 
                         tone: `waiting`,
                         stage: `lit`,
                         title: t(`local.machine.folder.paused`, { name }),
-                        detail: t(`local.machine.folder.pausedDetail`),
+                        detail: heldDetail(folder.heldBy),
                         actions: [`open`],
                     },
                     `folder:paused`,

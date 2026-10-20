@@ -4,6 +4,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { defaultGit, type GitRunner } from "@intentic/base/git";
+import { droppedRef } from "../../../git/agent-refs.js";
 import type { RepoRecord } from "../../registry/agents-store.js";
 import { isolatedAgent } from "../../registry/agents-store.testing.js";
 import { noIsolation } from "../../worktrees/isolation.testing.js";
@@ -162,4 +164,139 @@ test("leaves a child where it stands when its upstream is none: rebased onto mai
 
     expect(await syncConversation(worktrees, "c1", [{ repo: "root", base: cut }], "port checkout", { kind: "none" })).toEqual([]);
     expect(await sh(child, "rev-parse", "HEAD")).toBe(before);
+});
+
+// THE 2026-10-20 INCIDENT, end to end: the parent renamed a file the child then edited, and the child also moved a file
+// the repository derives. A `merge` reported "conflict markers to resolve" and wrote nothing, the child read landed, and
+// its next catch-up rebased every commit away. Each step is now held to what the tree actually holds.
+const FRAMES = "src/run/error-frames.ts";
+const RENAMED = "src/run/frames/error-frames.ts";
+const frames = (five: string): string => `${Array.from({ length: 10 }, (_, index) => (index === 4 ? five : `line ${index + 1}`)).join("\n")}\n`;
+
+// A family whose parent has committed a derived lock and the file about to be renamed, with the child standing on it.
+const renameFamily = async (): Promise<Awaited<ReturnType<typeof family>> & { base: string }> => {
+    const kin = await family();
+    await sh(kin.work, "config", "merge.derived.driver", "true");
+    await mkdir(join(kin.parent, "src/run"), { recursive: true });
+    await writeFile(join(kin.parent, ".gitattributes"), "lock.json merge=derived\n");
+    await writeFile(join(kin.parent, "lock.json"), "{ \"v\": 1 }\n");
+    await writeFile(join(kin.parent, FRAMES), frames("line 5"));
+    const base = await commit(kin.parent, "Agent: before c1 caught up");
+    await sh(kin.child, "merge", "-q", "--ff-only", base);
+    return { ...kin, base };
+};
+
+// The child edits the file and the derived lock; the parent renames the file, and, where asked, edits the same line.
+const clash = async (kin: { parent: string; child: string }, parentLine: string | undefined): Promise<string> => {
+    await writeFile(join(kin.child, FRAMES), frames("five CHILD"));
+    await writeFile(join(kin.child, "lock.json"), "{ \"v\": 2 }\n");
+    const tip = await commit(kin.child, "Agent: the child's turn");
+    await mkdir(join(kin.parent, "src/run/frames"), { recursive: true });
+    await sh(kin.parent, "mv", FRAMES, RENAMED);
+    if (parentLine !== undefined) {
+        await writeFile(join(kin.parent, RENAMED), frames(parentLine));
+    }
+    await writeFile(join(kin.parent, "lock.json"), "{ \"v\": 3 }\n");
+    return tip;
+};
+
+test("a check land of a child that edited a file its parent renamed is held, naming it, with nothing written", async () => {
+    const kin = await renameFamily();
+    await clash(kin, "five PARENT");
+    await commit(kin.parent, "Agent: the parent renames");
+
+    const held = await landAgent(kin.worktrees, childEntry([{ repo: "root", base: kin.base }]), "check", "outstanding", "p1");
+
+    expect({ landed: held.landed, paths: held.conflicts?.flatMap(({ paths }) => paths), tip: held.repos[0]?.landedTip }).toEqual({
+        landed: false,
+        paths: [{ path: FRAMES, reason: "diverged" }],
+        tip: undefined,
+    });
+    expect(await sh(kin.parent, "status", "--porcelain")).toBe("");
+});
+
+test("a merge writes the clash as markers in the file under its new name, never the derived lock, and only then reads landed", async () => {
+    const kin = await renameFamily();
+    const tip = await clash(kin, "five PARENT");
+    await commit(kin.parent, "Agent: the parent renames");
+
+    const merged = await landAgent(kin.worktrees, childEntry([{ repo: "root", base: kin.base }]), "merge", "outstanding", "p1");
+
+    expect({ landed: merged.landed, resolving: merged.resolving, tip: merged.repos[0]?.landedTip }).toEqual({
+        landed: true,
+        resolving: [{ repo: "root", paths: [RENAMED] }],
+        tip,
+    });
+    const written = await readFile(join(kin.parent, RENAMED), "utf8");
+    expect([written.includes("<<<<<<<"), written.includes("five PARENT"), written.includes("five CHILD")]).toEqual([true, true, true]);
+    expect(existsSync(join(kin.parent, FRAMES))).toBe(false);
+    expect(await readFile(join(kin.parent, "lock.json"), "utf8")).toBe('{ "v": 3 }\n');
+
+    // Merged again, nothing is outstanding and nothing is written: never "in your checkout now" twice.
+    const again = await landAgent(kin.worktrees, childEntry(merged.repos), "merge", "outstanding", "p1");
+    expect({ landed: again.landed, changed: again.changed, resolving: again.resolving }).toEqual({ landed: true, changed: false, resolving: undefined });
+});
+
+test("a merge follows a rename the parent has not committed, through its uncommitted edits, with no markers where nothing clashes", async () => {
+    const kin = await renameFamily();
+    await clash(kin, undefined);
+
+    const merged = await landAgent(kin.worktrees, childEntry([{ repo: "root", base: kin.base }]), "merge", "outstanding", "p1");
+
+    expect({ landed: merged.landed, resolving: merged.resolving }).toEqual({ landed: true, resolving: undefined });
+    expect(await readFile(join(kin.parent, RENAMED), "utf8")).toBe(frames("five CHILD"));
+    // The parent's own staged rename is still what its index holds: the merge writes the working tree alone.
+    expect(await sh(kin.parent, "diff", "--cached", "--name-status", "-M")).toContain(RENAMED);
+});
+
+// A tree that takes a write and does not hold it afterwards (what `git apply --3way` did with a renamed file) is
+// stood in for by a runner whose `apply` writes nothing.
+const applyWritesNothing: GitRunner = async (dir, args, env) =>
+    args[0] === "apply" && !args.includes("--check") ? { stdout: "", stderr: "" } : defaultGit(dir, args, env);
+
+test.each(["check", "merge"] as const)("a %s land whose write the tree does not hold is a conflict, and its tip does not move", async (mode) => {
+    const kin = await renameFamily();
+    await writeFile(join(kin.parent, FRAMES), frames("five PARENT"));
+    await commit(kin.parent, "Agent: the parent edits");
+    await writeFile(join(kin.child, "checkout.ts"), "export const checkout = true;\n");
+    if (mode === "merge") {
+        await writeFile(join(kin.child, FRAMES), frames("five CHILD"));
+    }
+    const entry = childEntry([{ repo: "root", base: kin.base }]);
+
+    const landed = await landAgent(kin.worktrees, entry, mode, "outstanding", "p1", applyWritesNothing);
+
+    expect({ landed: landed.landed, resolving: landed.resolving, repos: landed.repos }).toEqual({ landed: false, resolving: undefined, repos: entry.placement.repos });
+    expect(landed.conflicts?.flatMap(({ paths }) => paths)).toContainEqual({ path: "checkout.ts", reason: "workspace" });
+});
+
+test("a child's catch-up keeps every commit its parent does not hold, whatever its landed tip says", async () => {
+    const kin = await renameFamily();
+    // The rung the old merge left: the child's whole tip recorded landed, though nothing of it reached the parent.
+    const tip = await clash(kin, undefined);
+    const head = await commit(kin.parent, "Agent: the parent renames");
+
+    const [root] = await syncConversation(kin.worktrees, "c1", [{ repo: "root", base: kin.base, landedTip: tip }], "t", { kind: "parent", parent: "p1" });
+
+    expect({ onto: root?.onto, blocked: root?.blocked }).toEqual({ onto: head, blocked: undefined });
+    // Replayed, not dropped: the child's edit followed the rename onto the parent's newest commit.
+    expect(await sh(kin.child, "rev-list", "--count", `${head}..HEAD`)).toBe("1");
+    expect(await readFile(join(kin.child, RENAMED), "utf8")).toBe(frames("five CHILD"));
+    expect(await sh(kin.work, "for-each-ref", droppedRef("c1"))).toBe("");
+});
+
+test("a child's catch-up drops what it landed once the parent holds it, pinning the tip it had", async () => {
+    const kin = await renameFamily();
+    await writeFile(join(kin.child, "checkout.ts"), "export const checkout = true;\n");
+    const landed = await landAgent(kin.worktrees, childEntry([{ repo: "root", base: kin.base }]), "check", "outstanding", "p1");
+    expect(landed.landed).toBe(true);
+    await writeFile(join(kin.child, "more.ts"), "export const more = true;\n");
+    const before = await commit(kin.child, "Agent: the child's next turn");
+
+    const [root] = await syncConversation(kin.worktrees, "c1", landed.repos, "t", { kind: "parent", parent: "p1" });
+
+    const head = await sh(kin.parent, "rev-parse", "HEAD");
+    expect({ onto: root?.onto, blocked: root?.blocked }).toEqual({ onto: head, blocked: undefined });
+    expect(await sh(kin.child, "log", "--format=%s", `${head}..HEAD`)).toBe("Agent: the child's next turn");
+    expect(await sh(kin.work, "rev-parse", droppedRef("c1"))).toBe(before);
 });

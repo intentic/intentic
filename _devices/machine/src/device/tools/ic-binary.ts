@@ -8,6 +8,8 @@ import {
     DEVICE_FEATURE_BACKGROUND_PREPARE,
     DEVICE_FEATURE_SLEEP,
     type DeviceFeature,
+    DeviceFeatureSchema,
+    IcFeaturesAnswerSchema,
 } from "@intentic/sandbox-contract/schemas/hosts";
 import { archToken, downloadAsset, exe, osToken, releaseAssetUrl } from "../../release.js";
 import { verifyReleaseFiles } from "../../release/release-verify.js";
@@ -193,8 +195,9 @@ const ensureForFile = checkPerIcFile(icSignature, async () => {
 });
 export const ensureCurrentIc = (): Promise<void> => ensureForFile();
 
-/* WHAT THIS DEVICE CAN BE ASKED TO DO, derived from the `ic` it drives rather than written down beside the code: every
-   optional op runs through ic, so an agent is only as capable as the ic under it. */
+/* WHAT THIS DEVICE CAN BE ASKED TO DO, said by the `ic` it drives rather than written down beside the code: every optional
+   op runs through ic, so an agent is only as capable as the ic under it. A current ic says it (`ic features --json`);
+   an older one's help is read for the flags its features ride. */
 
 // A verb's help, from the first `ic` that answers; undefined when none does or this one does not know the verb (clap
 // refuses an unknown subcommand with a usage error).
@@ -232,12 +235,50 @@ export const featuresFrom = (shapeHelp: string | undefined, rollbackHelp?: strin
     ...(helpLists(sleepHelp, "--idle") ? [DEVICE_FEATURE_SLEEP] : []),
 ];
 
+// (2026-10-20) What `ic features --json` says this ic implements, the contract's words it knows; undefined for an ic from
+// before the verb (clap refuses it), or an answer that is not the list. ic says it itself, so a feature no flag shows (a
+// listing whose meaning changed, `reachable-ways-back`) is advertised too; help is read only for an older ic. Pure.
+export const icFeaturesFrom = (answer: string | undefined): DeviceFeature[] | undefined => {
+    const line = answer
+        ?.split(/\r?\n/)
+        .map((text) => text.trim())
+        .findLast((text) => text.startsWith("{"));
+    let json: unknown;
+    try {
+        json = line === undefined ? undefined : JSON.parse(line);
+    } catch {
+        // allow(silent-catch): a line that is not JSON is no list, the same answer as an ic from before the verb
+        json = undefined;
+    }
+    const read = IcFeaturesAnswerSchema.safeParse(json);
+    return read.success ? read.data.features.flatMap((feature) => DeviceFeatureSchema.safeParse(feature).data ?? []) : undefined;
+};
+
+// ic's own answer, from the first `ic` that answers; undefined when none does or it predates the verb.
+const icFeatures = async (): Promise<DeviceFeature[] | undefined> => {
+    for (const candidate of icCandidates(process.platform, homeDir())) {
+        // candidates are tried in order; the first that answers wins
+        const answer = await execBounded(candidate, ["features", "--json"], { timeoutMs: 30_000 }).then(
+            ({ stdout }) => stdout,
+            (error: NodeJS.ErrnoException) => (error.code === "ENOENT" ? undefined : ""),
+        );
+        if (answer !== undefined) {
+            return icFeaturesFrom(answer);
+        }
+    }
+    return undefined;
+};
+
 // Asked once per process when it answers: the agent keeps its ic current before asking (ensureCurrentIc), so the answer
 // holds until the agent itself is replaced.
 let features: Promise<DeviceFeature[]> | undefined;
 export const deviceFeatures = async (): Promise<DeviceFeature[]> => {
     features ??= (async () => {
         await ensureCurrentIc();
+        const said = await icFeatures();
+        if (said !== undefined) {
+            return said;
+        }
         const [shapeHelp, rollbackHelp, prepareHelp, sleepHelp] = await Promise.all([
             helpOf(["sandbox", "shape"]),
             helpOf(["sandbox", "rollback"]),

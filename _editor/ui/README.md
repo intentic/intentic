@@ -38,6 +38,21 @@ flowchart LR
   never an override; the `recipes` check refuses one passed as a class. The old one-argument shape (`ui.x("classes")`)
   and the retired names (`linkButton`, `textAction`, `inputSm`, `inputInline`, `sectionLabelSm`) still work, because
   installed extensions call them through the host.
+- **Chips and pills.** Their sizes are decided once, in `utilities.css`. A chip presses: `ui.chip({ size })` is `sm`
+  20px (a list header's fold, a viewer toolbar's toggle, a token in a field), `md` 26px by default (the dense control's
+  height, as `<Button size="small">` and the `sm` field are, so the three share a toolbar's line) or `lg` 32px (a phone
+  bar's filter, a chip floating over content). `lead` is a chip that opens on a mark (an avatar, a face) and `trail`
+  one that ends in its own ×. A pill only says: `ui-status-pill` is 20px, a step under the chip beside it, so size
+  alone tells which one answers a press; `ui-status-pill-md` is 24px in the badge's larger type and
+  `ui-status-pill-inline` 16px inside a line of text. A call site states no padding, height, gap, type size or radius
+  on either (the `recipes` check). _2026-10-20: about sixty call sites each re-spelled a chip's box, from `px-2 py-px`
+  at a lane's tail to a 36px quick-bar pill, and a pill's `text-2xs` was written at every one of them._
+- **Primitives, never their copies.** The section label's look (uppercase, tracked) is `SectionHeader`'s alone: a
+  menu's group heading, a drawer's sub-label and a card's eyebrow are `<SectionHeader density="dense">` (or a
+  `Section` around what they head), and words inside a row take no uppercase. A tab strip is `SegmentedControl`, a
+  search field `SearchBar` (whose `focus("end")` puts the caret after a prefix), an expanding row `DisclosureRow`. The
+  `substitutes` check refuses each drawn by hand; a place the primitive cannot draw (a browser's page tabs, a commit
+  graph's rows) says why with `allow(substitutes)`.
 - **Tones.** `src/lib/tone.ts` is the one tone vocabulary (`success`, `warning`, `danger`, `info`, `neutral`,
   `primary`) and the only file that spells a tone at a strength: `toneInk`, `toneDot`, `toneWash` (a pill),
   `toneTint(tone, "strong" | "soft")` (a tinted box's rim and fill), `tonePlate` (a count), `toneHover`, and
@@ -57,8 +72,9 @@ flowchart LR
   carry a count, a caption or a fill, and the room under it is the tier's. A sentence a reader needs goes on the
   group's surface as a `RowNote`. `ui.sectionLabel()` is its look, called by nothing else in this repository. `RowGroup`'s `lead` slot holds something about the whole group that is none of its rows (the
   Pipelines board's failing-branch card), drawn between the label and the rows so it never reads as one more row. On phones, rows grow with their own content. `ColorPicker size="sm"` fits a settings row.
-  `DisclosureRow` uses `ui-row-open` for one quiet surface behind its header and details. Handwritten expanded rows
-  use the same class; `ui-row-select-on` is reserved for selection. The translucent `--ui-row-open-wash` token uses
+  `DisclosureRow` uses `ui-row-open` for one quiet surface behind its header and details, and nothing else wears it:
+  an expanding row is a `DisclosureRow`. `ui-row-select-on` is reserved for selection, the icon rail's current tile
+  included (with `ui-row-select-horizontal`, which keeps a tile's or a strip's mark to its tint). The translucent `--ui-row-open-wash` token uses
   the theme's text color at 3%, preserving the enclosing surface and its texture rather than painting over them.
 - **One signal colour.** Each look has one colour for emphasis, and it is the accent ramp (`primary-*`, `text-accent`,
   `primary-fill`). That colour marks where you are (the current nav row's edge, the active tab's underline, the
@@ -131,7 +147,11 @@ flowchart LR
   sandbox (its `#fallback` until it has been seen once), then the answer. It takes that look only from the answer on
   screen, and remembers an answer that shows nothing as nothing. It holds the look while reads made inside the region
   as it first draws are still out (for 2.5 s at most), says a wait that has run past five seconds with a way to ask
-  again, and says a failure in words. Every daemon read (`useSandboxQuery`, `api.sandbox.query`, an extension's own
+  again, and says a failure in words. A region that has drawn waits again only when it is about something else: a new
+  `imprint` with a new answer. A new name alone (a hub's route view, remembered per path, moving to another section)
+  only changes what its look is remembered under, so the hub's rail and title stay while the section waits in its own
+  body. _2026-10-20: re-holding there drew the whole hub outline over the mounted hub on every move to a section not yet
+  seen._ Every daemon read (`useSandboxQuery`, `api.sandbox.query`, an extension's own
   `useQuery`) joins the region it is read in, and the route, hub-section and extension-view hosts are `<Await>`s, so a
   view's first load is covered without the view asking. The editor's `viewWait.guard.test.ts` refuses a view that wires
   the parts below itself. _2026-10-20: each view used to wire them with a loading flag of its own. Every one it got

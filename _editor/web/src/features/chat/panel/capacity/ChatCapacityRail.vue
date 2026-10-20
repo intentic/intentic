@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useLoaded } from "@intentic/extension-api";
-import { Await, type Tip, type TipRow, ui } from "@intentic/ui";
+import { Await, Section, SectionHeader, type Tip, type TipRow, ui } from "@intentic/ui";
 import { useRowReveal } from "@intentic/ui/motion";
 import { computed, onMounted, ref } from "vue";
 import ChatCapacityLane from "./ChatCapacityLane.vue";
@@ -195,29 +195,32 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
     <!-- Placed and sized by ChatSideRail, which owns the strip this shares with the chat's checklist. -->
     <section class="flex min-h-0 flex-col" :aria-label="t(`chat.chatCapacityRail.planHeadroom`)">
         <!-- The refresh control stays at the edge; the heading beside it names what the figures are. -->
-        <div class="flex shrink-0 items-center justify-end gap-2 px-3 py-2">
-            <!-- Says once what every figure below is, in the row the refresh control already takes, so it costs no height:
-                 the lanes then carry bare figures, and a word repeated on every lane was width taken from the bars. -->
-            <span v-if="measuredProviders.length > 0" class="mr-auto min-w-0 truncate text-2xs font-medium uppercase tracking-wide text-subtle">{{
-                t(`chat.chatCapacityRail.allowanceLeft`)
-            }}</span>
-            <!-- Readings the age leaves out: a quiet mark by the number it qualifies, the reasons on hover. -->
-            <span v-if="staleNote !== undefined" v-tooltip.left="staleTip" class="flex shrink-0 items-center gap-0.5 text-2xs text-warning">
-                <Icon name="exclamation-circle" class="text-[0.6rem]" />
-                <span class="tabular-nums" aria-hidden="true">{{ staleNote.count }}</span>
-                <span class="sr-only">{{ staleNote.detail }}</span>
-            </span>
-            <button
-                type="button"
-                :class="ui.textButton({ tone: `subtle`, size: `xs` })"
-                :disabled="measuring"
-                :aria-label="remeasureLabel"
-                @click="remeasure"
-            >
-                <Icon name="refresh" class="text-[0.6rem]" :spin="measuring" />
-                <span v-if="capacity.measuredAt !== undefined">{{ formatAge(capacity.measuredAt) }}</span>
-            </button>
-        </div>
+        <!-- Says once what every figure below is, in the row the refresh control already takes, so it costs no height:
+             the lanes then carry bare figures, and a word repeated on every lane was width taken from the bars. -->
+        <SectionHeader
+            :label="measuredProviders.length > 0 ? t(`chat.chatCapacityRail.allowanceLeft`) : undefined"
+            density="dense"
+            class="shrink-0 px-3 py-2"
+        >
+            <template #actions>
+                <!-- Readings the age leaves out: a quiet mark by the number it qualifies, the reasons on hover. -->
+                <span v-if="staleNote !== undefined" v-tooltip.left="staleTip" class="flex shrink-0 items-center gap-0.5 text-2xs text-warning">
+                    <Icon name="exclamation-circle" class="text-[0.6rem]" />
+                    <span class="tabular-nums" aria-hidden="true">{{ staleNote.count }}</span>
+                    <span class="sr-only">{{ staleNote.detail }}</span>
+                </span>
+                <button
+                    type="button"
+                    :class="ui.textButton({ tone: `subtle`, size: `xs` })"
+                    :disabled="measuring"
+                    :aria-label="remeasureLabel"
+                    @click="remeasure"
+                >
+                    <Icon name="refresh" class="text-[0.6rem]" :spin="measuring" />
+                    <span v-if="capacity.measuredAt !== undefined">{{ formatAge(capacity.measuredAt) }}</span>
+                </button>
+            </template>
+        </SectionHeader>
 
         <!-- Drawn as the shape that's coming while the accounts are read, not stated in words. -->
         <Await :of="reading" imprint="chat.capacity" :label="t(`sandbox.words.readingConnections`)">
@@ -292,27 +295,34 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
                 </div>
 
                 <!-- Provider rows distinguish spent capacity from an unconnected provider. -->
-                <div v-if="capacity.out.length > 0 || capacity.blocked.length > 0" class="flex flex-col gap-1 border-t border-line pt-3" data-reveal>
-                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`chat.chatCapacityRail.unavailable`) }}</span>
-                    <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2">
-                        <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ entry.label }}</span>
-                        <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
-                    </div>
-                    <!-- Counted, not listed, one line per condition, shaped like the rows above it. Which accounts, the provider's
-                         own words and the fix ride the hover: this rail says what can't run, the Agent tab is where it's fixed. -->
-                    <div v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="blockedTip(entry)">
-                        <div class="flex items-baseline gap-2" aria-hidden="true">
-                            <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{
-                                t(`chat.chatCapacityRail.cantServe`, { count: entry.count })
-                            }}</span>
-                            <span class="shrink-0 text-2xs text-warning">{{ entry.reason }}</span>
+                <Section
+                    v-if="capacity.out.length > 0 || capacity.blocked.length > 0"
+                    :label="t(`chat.chatCapacityRail.unavailable`)"
+                    density="dense"
+                    class="border-t border-line pt-3"
+                    data-reveal
+                >
+                    <div class="flex flex-col gap-1">
+                        <div v-for="entry in capacity.out" :key="entry.provider" class="flex items-baseline gap-2">
+                            <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{ entry.label }}</span>
+                            <span class="shrink-0 text-2xs text-subtle">{{ outNote(entry) }}</span>
                         </div>
-                        <span class="sr-only"
-                            >{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }} · {{ entry.reason }} ·
-                            {{ blockedDetail(entry) }}</span
-                        >
+                        <!-- Counted, not listed, one line per condition, shaped like the rows above it. Which accounts, the provider's
+                             own words and the fix ride the hover: this rail says what can't run, the Agent tab is where it's fixed. -->
+                        <div v-for="entry in capacity.blocked" :key="entry.fix" v-tooltip.left="blockedTip(entry)">
+                            <div class="flex items-baseline gap-2" aria-hidden="true">
+                                <span class="min-w-0 flex-1 truncate text-2xs text-muted">{{
+                                    t(`chat.chatCapacityRail.cantServe`, { count: entry.count })
+                                }}</span>
+                                <span class="shrink-0 text-2xs text-warning">{{ entry.reason }}</span>
+                            </div>
+                            <span class="sr-only"
+                                >{{ t(`chat.chatCapacityRail.cantServe`, { count: entry.count }) }} · {{ entry.reason }} ·
+                                {{ blockedDetail(entry) }}</span
+                            >
+                        </div>
                     </div>
-                </div>
+                </Section>
             </div>
         </Await>
     </section>

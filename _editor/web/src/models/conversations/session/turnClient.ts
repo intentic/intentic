@@ -21,6 +21,7 @@ import { bookContinue, chipOf, heldRouting, newerQueue, queueRefusal, repeatsNud
 import { accountIntent, type ForkLink, type SessionRef, type TurnSettings, turnRequestBody } from "../run/turnRequest";
 import type { TurnBooking } from "../drafts/sendLater";
 import { bookingOfMessage, holdOfQueue, perMessage, unbookedOf } from "../drafts/bookings";
+import { sentFrom } from "../drafts/composerDrafts";
 import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { accountsOutdated } from "../../providers/accountsOutdated";
 import { type ContinueOptions, withHandoffChosen } from "../endings/pickUp";
@@ -567,6 +568,8 @@ export class TurnClient {
             errand: occasion.errand,
             booking: occasion.booking,
             conversationAutoLand: host.autoLandDraft.value,
+            // Read as the words leave: the draft they were typed into, which the daemon clears with them.
+            draft: sentFrom(host.conversationId),
         });
     }
 

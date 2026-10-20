@@ -20,7 +20,12 @@ const ForwardCursorSchema = z.object({
 });
 type ForwardCursor = z.infer<typeof ForwardCursorSchema>;
 
-export const auditForwardDocument = defineDocument({ root: "history", path: "audit/forward.json", schema: ForwardCursorSchema });
+export const auditForwardDocument = defineDocument({
+    root: "history",
+    path: "audit/forward.json",
+    portability: "carry",
+    schema: ForwardCursorSchema,
+});
 
 const BATCH = 50;
 const FIRST_BACKOFF_MS = 5000;

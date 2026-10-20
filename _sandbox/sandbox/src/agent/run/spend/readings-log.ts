@@ -30,6 +30,8 @@ export type ReadingLine = z.infer<typeof ReadingLineSchema>;
 export const readingsLogDocument = defineDocument({
     root: "history",
     path: "usage-readings.jsonl",
+    // The history behind account-usage.json's latest readings, which carries: travels with it.
+    portability: "carry",
     schema: ReadingLineSchema,
     granularity: "entries",
     boot: false,

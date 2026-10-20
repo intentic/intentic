@@ -430,9 +430,9 @@ useGettingStarted();
                         <RouterLink
                             v-else
                             :to="tile.to"
-                            class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
+                            class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg text-muted hover:text-content"
                             :class="{
-                                'bg-primary-600/15 text-link': isNavActive(tile.to),
+                                'ui-row-select-on text-link': isNavActive(tile.to),
                                 'opacity-40 outline-1 -outline-offset-1 outline-dashed outline-primary-500': tile.id === `chat` && chatDrag.dragging.value,
                             }"
                             :draggable="chatCarriable(tile) ? `false` : undefined"
@@ -483,8 +483,8 @@ useGettingStarted();
                 v-if="!isGuest"
                 ref="moreTrigger"
                 type="button"
-                class="icon-rail-tile flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-                :class="{ 'bg-primary-600/15 text-link': moreOpen }"
+                class="icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center rounded-lg text-muted hover:text-content"
+                :class="{ 'ui-row-select-on text-link': moreOpen }"
                 aria-haspopup="menu"
                 :aria-expanded="moreOpen"
                 :aria-label="moreLabel"
@@ -507,8 +507,8 @@ useGettingStarted();
                     <div
                         v-for="tile in moreTiles"
                         :key="tile.to"
-                        class="group flex items-center rounded-md text-xs transition-colors"
-                        :class="isNavActive(tile.to) ? 'bg-primary-600/15 text-link' : 'text-content hover:bg-content/5'"
+                        class="ui-row-select group flex items-center rounded-md text-xs"
+                        :class="isNavActive(tile.to) ? 'ui-row-select-on text-link' : 'text-content'"
                     >
                         <RouterLink
                             :to="tile.to"
@@ -551,8 +551,8 @@ useGettingStarted();
                     <RouterLink
                         v-if="maker && !isGuest"
                         to="/capabilities"
-                        class="flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-xs transition-colors"
-                        :class="isNavActive('/capabilities') ? 'bg-primary-600/15 text-link' : 'text-content hover:bg-content/5'"
+                        class="ui-row-select flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-xs"
+                        :class="isNavActive('/capabilities') ? 'ui-row-select-on text-link' : 'text-content'"
                         @click="dismissMore"
                     >
                         <span class="flex h-5 w-5 shrink-0 items-center justify-center">
@@ -581,7 +581,7 @@ useGettingStarted();
                 to="/capabilities"
                 :class="[
                     ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
-                    { 'border-link bg-primary-600/15 text-link': isNavActive('/capabilities') },
+                    { 'ui-row-select-on text-link': isNavActive('/capabilities') },
                 ]"
                 :aria-label="t(`shell.words.addCapability`)"
                 v-tooltip.right="t(`shell.words.addCapability`)"

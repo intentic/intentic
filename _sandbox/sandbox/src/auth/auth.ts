@@ -14,7 +14,6 @@ import { GrantedRoleSchema, roleAtLeast } from "@intentic/sandbox-contract/schem
 import { isIdentityAssertion, verifyIdentityAssertion } from "@intentic/sandbox-contract/identity-assertion";
 import { isOwnerTicket, verifyOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
@@ -23,12 +22,6 @@ import { tokenEquals } from "./token-equals.js";
 import type { Listener } from "./proofs/listener.js";
 import { assertChannel, meetsPasskeyPolicy } from "./proofs/proof-methods.js";
 import { spentOnce } from "./proofs/spent-once.js";
-
-// The sandbox authenticates the end user directly against Google; the platform never holds that credential. A person
-// whose address no identity provider vouches for comes in on the platform's identity assertion instead, which this
-// daemon accepts only where its owner opted that person in (or on a hosted machine the platform holds anyway).
-const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
-const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
 
 export interface VerifiedIdentity {
     readonly email: string;
@@ -48,25 +41,6 @@ export interface Proof extends VerifiedIdentity {
 
 // Verifies a Google ID token and returns its identity; throws on any signature/issuer/audience/email failure.
 export type IdTokenVerifier = (idToken: string) => Promise<VerifiedIdentity>;
-
-export const createGoogleVerifier = (audience: string): IdTokenVerifier => {
-    const jwks = createRemoteJWKSet(new URL(GOOGLE_JWKS_URL));
-    return async (idToken) => {
-        // clockTolerance guards clock drift after host sleep; algorithms is pinned so the verifier decides the shape.
-        const { payload } = await jwtVerify(idToken, jwks, { issuer: GOOGLE_ISSUERS, audience, clockTolerance: 60, algorithms: ["RS256"] });
-        const email = payload["email"];
-        if (typeof email !== "string" || payload["email_verified"] !== true) {
-            throw new Error("google id token has no verified email");
-        }
-        const name = payload["name"];
-        const picture = payload["picture"];
-        return {
-            email,
-            ...(typeof name === "string" ? { name } : {}),
-            ...(typeof picture === "string" ? { picture } : {}),
-        };
-    };
-};
 
 // What a bind writes beside the email: whether the owner may open this sandbox with the platform's identity assertion,
 // true when they bound with one (they sign in by email, so it is the only way the platform can let them back in).
@@ -89,7 +63,17 @@ const OwnerFileSchema = z.object({ email: z.string(), emailSignIn: z.boolean().o
 // On the history volume, off the workspace every turn writes: who owns the sandbox is the daemon's to decide, never a file
 // a member's agent could edit. Until 2026-10-06 it sat at `.intentic/identity/owner.json`; identity-off-workspace.ts
 // brings it over.
-export const ownerDocument = defineDocument({ root: "history", path: "identity/owner.json", schema: OwnerFileSchema });
+export const ownerDocument = defineDocument({
+    root: "history",
+    path: "identity/owner.json",
+    // Who owns this sandbox, who else may reach it and at what tier, and the hashed control tokens programs present:
+    // the daemon's to decide, so kept off the workspace every turn writes (auth/members/identity-off-workspace.ts moved
+    // them from `.intentic/identity/` on 2026-10-06). An access list that traveled would let a source sandbox hand
+    // itself the target's ownership, and a token authenticates against the sandbox that minted it.
+    portability: "identity",
+    note: "The target is bound by its own owner's first sign-in.",
+    schema: OwnerFileSchema,
+});
 
 // The reason a refused request gives when the owner file is what stands in the way: nobody can sign in until a person
 // on the host moves it aside. Machine-readable, so a client can say so instead of asking for another sign-in; nothing
@@ -210,6 +194,8 @@ const MembersFileSchema = z.object({ members: z.array(z.unknown()) });
 export const membersDocument = defineDocument({
     root: "history",
     path: "identity/members.json",
+    portability: "identity",
+    note: "Re-invite collaborators from the Access tab, a grant is the platform's record, and the target enforces its own copy.",
     schema: z.object({ members: z.array(MemberSchema) }),
 });
 

@@ -1,3 +1,4 @@
+import type { SwapVerdict } from "@intentic/sandbox-contract/state/sandbox-build";
 import { usePoll } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { effectScope, watch } from "vue";
@@ -36,15 +37,15 @@ export type SwapEnd = { readonly said: string } | { readonly landed: true };
 /** A follow that stopped waiting, carrying the words for not knowing at that point. */
 export class SwapGaveUp extends Error {}
 
-type GiveUp = `capabilities.hostRecreate.lostBeforeRestart` | `capabilities.hostRecreate.returnTimedOut`;
+type GiveUp = `capabilities.hostRecreate.lostBeforeRestart` | `capabilities.hostRecreate.returnTimedOut` | `capabilities.hostRecreate.cameBackUnmoved`;
 
 export interface SwapFollowOptions {
     /** Whether the sandbox serving this page answers. */
     readonly reachable: () => boolean;
     /** Whether the sandbox on screen is still the one being swapped: another one's answers say nothing about this swap. */
     readonly here: () => boolean;
-    /** Whether what answers now is what the swap aimed at, given where the follow is. */
-    readonly landed: (now: SwapProgress) => Promise<boolean>;
+    /** Where the swap stands by what answers now (swapLanding.ts swapStanding), given where the follow is. */
+    readonly verdict: (now: SwapProgress) => Promise<SwapVerdict>;
     /** A press reads the device's stream from the start; a rebuild the sandbox started has none. */
     readonly streaming: boolean;
     readonly progress: (now: SwapProgress) => void;
@@ -61,6 +62,16 @@ export interface SwapFollow {
     readonly stop: () => void;
 }
 
+// How a verdict ends a follow, if it does. Back on the build it was pressed on is the swap come back without taking, but
+// not while the device still streams: a daemon that restarted mid-download is not the swap's ending.
+type Ending = `landed` | GiveUp;
+const endOf = (verdict: SwapVerdict, now: SwapProgress): Ending | undefined => {
+    if (verdict === `landed`) {
+        return verdict;
+    }
+    return verdict === `unmoved` && !now.streaming ? `capabilities.hostRecreate.cameBackUnmoved` : undefined;
+};
+
 // Every follow still watching, so a test can end the ones its case left behind.
 const live = new Set<() => void>();
 
@@ -70,11 +81,9 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
     let watching = true;
     let asking = false;
     let deadline: ReturnType<typeof setTimeout> | undefined;
-    let settle: () => void = () => undefined;
-    let giveUp: (error: SwapGaveUp) => void = () => undefined;
+    let finish: (how: Ending) => void = () => undefined;
     const landed = new Promise<void>((resolve, reject) => {
-        settle = resolve;
-        giveUp = reject;
+        finish = (how) => (how === `landed` ? resolve() : reject(new SwapGaveUp(t(how))));
     });
     // allow(silent-catch): a deadline can run out before anybody awaits this (while the stream still races it); whoever awaits it hears the refusal, and that is no unhandled one.
     landed.catch(() => undefined);
@@ -89,15 +98,17 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
         scope.stop();
         live.delete(stop);
     };
+    // Ends the follow, landed or with the words for why not; one already let go hears nothing more.
+    const end = (how: Ending): void => {
+        if (watching) {
+            stop();
+            finish(how);
+        }
+    };
     // One deadline at a time, each saying what not knowing means at that point.
     const giveUpIn = (ms: number, said: GiveUp): void => {
         clearTimeout(deadline);
-        deadline = setTimeout(() => {
-            if (watching) {
-                stop();
-                giveUp(new SwapGaveUp(t(said)));
-            }
-        }, ms);
+        deadline = setTimeout(() => end(said), ms);
     };
     const check = async (): Promise<void> => {
         if (!watching || !options.here() || !options.reachable() || asking) {
@@ -105,11 +116,10 @@ export const followSwap = (options: SwapFollowOptions): SwapFollow => {
         }
         asking = true;
         // allow(silent-catch): a sandbox still coming up refuses its reads; that is "not landed yet", and the next poll asks again
-        const yes = await options.landed(now).catch(() => false);
+        const how = endOf(await options.verdict(now).catch((): SwapVerdict => `waiting`), now);
         asking = false;
-        if (yes && watching) {
-            stop();
-            settle();
+        if (how !== undefined) {
+            end(how);
         }
     };
 

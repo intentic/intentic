@@ -590,7 +590,7 @@ const setProvider = (provider: string): void => {
                                 {{ option.label }}
                             </button>
                             <!-- Not a choice: the moment this automation already names, which nothing sends any more. -->
-                            <span v-if="retiredEvent !== undefined" data-retired-trigger :class="ui.chip({ on: true }, `gap-1.5 text-subtle`)">
+                            <span v-if="retiredEvent !== undefined" data-retired-trigger :class="ui.chip({ on: true }, `text-subtle`)">
                                 <span class="line-through">{{ retiredEvent.label }}</span>
                                 <span class="text-2xs">{{ t(`automationFields.retired`) }}</span>
                             </span>

@@ -502,7 +502,7 @@ const confirmHandOver = async (): Promise<void> => {
             <!-- Which sandbox this agent is in, not decoration: every number below (diff, file count, what Land applies) is about a workspace on another machine. -->
             <span
                 v-if="remoteName !== undefined"
-                class="ui-status-pill inline-flex shrink-0 items-center gap-1 bg-overlay text-2xs text-muted"
+                class="ui-status-pill inline-flex shrink-0 items-center bg-overlay text-muted"
                 v-tooltip.bottom="{ title: t(`agents.words.otherSandbox`), rows: [{ label: t(`agents.words.sandbox`), value: remoteName }] }"
             >
                 <Icon name="server" class="text-2xs" />

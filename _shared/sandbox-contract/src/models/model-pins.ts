@@ -1,4 +1,5 @@
 import type { AgentProvider, ModelPin } from "../schemas/agent.js";
+import type { FleetCapacity, ModelRef } from "./plan-pools.js";
 
 // The order to try models in for a job's setup (model-setups.ts), shared by daemon and browser so both agree what a job
 // will spend before it runs. An empty list resolves to nothing: the caller decides what that means (a helper is off; a
@@ -50,3 +51,19 @@ export const readyChain = (sources: readonly ModelSource[], pinned: readonly Mod
     }
     return chain;
 };
+
+// The model a rung asks capacity about (plan-pools.ts fleetCapacity): an ACP agent's empty id asks about the provider's
+// accounts as a whole.
+export const rungModel = (choice: ModelChoice): ModelRef | undefined => (choice.model === `` ? undefined : { id: choice.model });
+
+// The rung a ready chain opens on: the first whose capacity no connected account is spent on and that `steppedOver`
+// (what else the caller knows, the daemon's failing streaks) lets through, else the head, since every reading that
+// stepped one over is a snapshot that may already be stale. The daemon's run roles open on it (run-role-model.ts) and
+// the editor names it on the job's button (roleModel.ts), each over the same capacity verdict, so the button never
+// names a rung the run would step over. 2026-10-20: the editor took the head by readiness alone, and named a spent
+// account's model while the run opened on the next.
+export const openingRung = <T extends ModelChoice>(
+    chain: readonly T[],
+    capacityOf: (rung: T) => FleetCapacity | undefined,
+    steppedOver: (rung: T) => boolean = () => false,
+): T | undefined => chain.find((rung) => capacityOf(rung)?.kind !== `spent` && !steppedOver(rung)) ?? chain[0];

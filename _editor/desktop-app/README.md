@@ -506,11 +506,23 @@ flowchart LR
   folder around one already attached, or one still in line, is refused, so no file is ever synced twice.
 
   Once it is ready, each folder in line is attached by the machine agent (`intentic-machine sync attach --sandbox-url
-  https://<hostname> --dir <folder> --name <name> --json`, which only records the pairing), remembered in
-  `projects.json` with this computer's sandbox, and every window on it hears so (`intentic:sandbox`). The app then
-  follows the folder's first copy in `intentic-machine status --json` until the agent's word for its Mutagen session is
-  `watching`. A paused session stays followed, with the copy card and folder button saying it is paused instead of
-  showing progress; the card offers the sandbox, where Devices can resume file syncing. _(2026-10-19)_ Only a session
+  https://<hostname> --dir <folder> --name <name> --json`, which only records the pairing), and every window on it hears
+  so (`intentic:sandbox`) once the app reads that pairing back. The app then follows the folder's first copy in
+  `intentic-machine status --json` until the agent's word for its Mutagen session is `watching`. A held session stays
+  followed, with the copy card and folder button saying it is paused instead of showing progress, and why: the agent's
+  `heldBy`, owner first. The reader's own pause sends them to the sandbox, where Devices resumes file syncing; a hold
+  that passes by itself (the drive filling up, the sandbox being updated, not answering, or away) says that it will.
+
+  _(2026-10-20)_ **The agent's pairings are the one record of which folder is in which sandbox** (`src-tauri/src/bindings.rs`).
+  The app reads them through the agent (`intentic-machine status --json`) at launch, every round of this computer's
+  sandbox while it is up or a folder is on its way, and after each write it makes through the agent (attach, detach,
+  uninstall, forget, a project's sync script), and keeps what it read in memory only. Before, the same fact was also in
+  the app's `projects.json` and in `machine-sandbox.json`'s folders: a reinstall lost both while the agent went on
+  syncing, so a folder that had a sandbox was offered a new one, and a pairing the agent retired by itself left a button
+  opening a sandbox that no longer had the folder. `machine-sandbox.json` keeps only what the agent cannot know yet: a
+  folder waiting for the sandbox, its failure, and how far its first copy is. Whether a copy is held is the agent's
+  `heldBy`, not Mutagen's `paused`, which says only whether Mutagen has caught up with the agent and nothing of why: read
+  that way, a session the agent was about to resume looked like one paused before the folder was asked in. _(2026-10-19)_ Only a session
   the app has seen running since the folder was asked in (`ran`): one it finds paused before that was paused before the
   ask, so the folder was synced in before (asked in again after a reinstall took the app's record with it), and it is
   in (`copy_seen`). Followed as a first copy, such a folder said "Copying … is paused" in every window for good, about a
@@ -536,8 +548,8 @@ flowchart LR
   the folder this app parked. A hosted sandbox's project, asked for by name, is enrolled with
   `intentic://sync?…&project=<name>&sandbox=<id>`, whose sync script runs here on the parked folder with the same three
   values (a folder is asked for in a system dialog when none is parked). Either way the folder is the window's own or
-  the one this app parked (never a path on a link or a command), and `projects.json` remembers it so opening the folder
-  again reaches the same sandbox; every window on the folder hears so at once (`intentic:sandbox`). A project whose
+  the one this app parked (never a path on a link or a command), and the pairing the sync makes is what opening the folder
+  again reaches the same sandbox by; every window on the folder hears so once the app reads it (`intentic:sandbox`). A project whose
   sandbox the account no longer lists (the workspace's last roster, which a new row joins the moment it is made) is a
   folder with none: its button asks again, and putting it in line first has the machine agent let go of the dead one's
   sync of the folder (`intentic-machine sync uninstall --sandbox <id>`), since the agent keeps one sync per folder. The
@@ -549,9 +561,9 @@ flowchart LR
 
   _(2026-10-05)_ A paths file older than a day is swept at launch: only a run that ended removed its own, so a crash mid
   bring-back left one naming the reader's files for good. When the workspace's roster no longer lists a sandbox (a
-  roster that names who is signed in, compared with the same account's last one), the folders remembered with it leave
-  `projects.json`, and this machine's sync lets go of it (`intentic-machine sync forget <slug>`, falling back to `sync
-  uninstall --sandbox <id>` on an agent older than the verb), but only for a sandbox the agent syncs. This computer's own
+  roster that names who is signed in, compared with the same account's last one), this machine's sync lets go of it
+  (`intentic-machine sync forget <slug>`, falling back to `sync uninstall --sandbox <id>` on an agent older than the
+  verb), but only for a sandbox the agent syncs, and its folders' pairings go with it. This computer's own
   sandbox is left to its supervisor, which says for itself when that one is gone. Before, `projects.json` was never
   pruned, and the agent let go of a folder's dead sandbox only when a new one was made for that folder.
 
@@ -701,8 +713,8 @@ since it draws documents nobody vouched for (`Source::Files` in `setup_link.rs`)
 held to its shape before it reaches a folder or a command line: paths are root-relative with forward slashes, never
 absolute, never `..`, never starting with `-`, and never holding a `:` (a drive, `C:/x` or `C:x`, or an alternate data
 stream); a `paths` that is not a non-empty JSON array of such paths, a restore point that is not a plain token, or a
-direction other than the two drops the link. A project verb is answered only for a folder window whose folder is in
-`projects.json`. A `sync` link naming a `project` that is not a project folder's name, or naming one beside `mirror`,
+direction other than the two drops the link. A project verb is answered only for a folder window whose folder the
+machine agent has a pairing for (`bindings.rs`). A `sync` link naming a `project` that is not a project folder's name, or naming one beside `mirror`,
 is dropped whole: read without its project it would sync the folder with the sandbox's whole `/work`.
 
 ## What the app tells pages

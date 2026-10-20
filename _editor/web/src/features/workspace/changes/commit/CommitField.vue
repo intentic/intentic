@@ -7,7 +7,8 @@ import { computed, ref, watch } from "vue";
 import { useLayout } from "../../../../workbench/window/useLayout";
 import { draftReport, draftRunning, type DraftReportRow } from "../changeOrigins";
 import { t } from "@intentic/ui/i18n";
-import { draftPace, paceSamples } from "./draftPace";
+import { overdue, progressShare } from "../../../../components/progress/progress";
+import { draftProgress, paceSamples } from "./draftPace";
 
 // The field at the top of the Changes sidebar, shared by both halves of it: the developer's commit message
 // (ReviewPanel.vue) and the maker's version name (save/SavePanel.vue). The two used to grow apart, one a field with
@@ -16,8 +17,9 @@ import { draftPace, paceSamples } from "./draftPace";
 //
 // The field reports a message being drafted for it inside itself: the newest step's glyph and clock sit at its right
 // edge, the whole report rides that mark's hover, and the placeholder (the caller's words) names who is writing. While
-// a model is out, the glyph is a ring filling against how long drafts usually take (draftPace.ts), so the wait has an
-// end in sight; past that, it stops promising and turns into a slow arc. A list
+// a model is out, the glyph is a ring filling against how long drafts usually take (draftPace.ts learns that; the fill is
+// the one progress model's, components/progress/progress.ts), so the wait has an end in sight; past that, it stops
+// promising and turns into a slow arc. A list
 // of steps under the field used to grow a row per model asked and vanish with the message, so whatever sat under it
 // jumped as it was reached.
 
@@ -45,15 +47,19 @@ const rows = computed<readonly DraftReportRow[]>(() => {
 });
 const line = computed<DraftReportRow | undefined>(() => rows.value.at(-1));
 // Undefined until a draft has been timed, or between a refusal and the next ask: the step's own glyph says it then.
-const pace = computed(() =>
-    line.value?.status === `reading` || line.value?.status === `asking` ? draftPace(props.draft, clock.value, paceSamples.value) : undefined,
-);
+const pace = computed(() => {
+    const progress =
+        line.value?.status === `reading` || line.value?.status === `asking` ? draftProgress(props.draft, clock.value, paceSamples.value) : undefined;
+    return progress?.expectedMs === undefined
+        ? undefined
+        : { share: progressShare(progress) ?? 0, overdue: overdue(progress), expectedMs: progress.expectedMs };
+});
 const seconds = (ms: number): string => `~${Math.max(1, Math.round(ms / 1000))}s`;
 // The mark's words for a screen reader, which gets neither its glyph nor its hover.
 const spoken = computed<string>(() =>
     line.value === undefined
         ? ``
-        : [line.value.model, line.value.detail, line.value.elapsed, pace.value === undefined || pace.value.overdue ? undefined : `${Math.round(pace.value.fraction * 100)}%`]
+        : [line.value.model, line.value.detail, line.value.elapsed, pace.value === undefined || pace.value.overdue ? undefined : `${Math.round(pace.value.share * 100)}%`]
               .filter((part) => part !== undefined)
               .join(` `),
 );
@@ -68,7 +74,7 @@ const tip = computed((): Tip | undefined =>
                       value: [row.model === undefined ? undefined : row.detail, row.elapsed].filter((part) => part !== undefined).join(` · `),
                       tone: row.status === `failed` ? (`warning` as const) : undefined,
                   })),
-                  ...(pace.value === undefined ? [] : [{ label: t(`workspace.changeOrigins.usually`), value: seconds(pace.value.typicalMs), tone: undefined }]),
+                  ...(pace.value === undefined ? [] : [{ label: t(`workspace.changeOrigins.usually`), value: seconds(pace.value.expectedMs), tone: undefined }]),
               ],
           },
 );
@@ -168,7 +174,7 @@ defineExpose({ focus: (): void => box.value?.focus() });
                     stroke-width="2"
                     stroke-linecap="round"
                     :stroke-dasharray="RING"
-                    :stroke-dashoffset="RING * (1 - pace.fraction)"
+                    :stroke-dashoffset="RING * (1 - pace.share)"
                     class="transition-[stroke-dashoffset] duration-1000 ease-linear"
                 />
             </svg>

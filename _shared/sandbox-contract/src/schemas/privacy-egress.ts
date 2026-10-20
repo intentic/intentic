@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { type PrivacyShieldPolicy, trustedInConversation } from "./privacy.js";
 
 // THE ONE DECISION about bytes bound for a model provider: pass them as they are, watch them, mask them, or refuse them.
@@ -13,7 +14,8 @@ import { type PrivacyShieldPolicy, trustedInConversation } from "./privacy.js";
 // provider from its own machine, a key the provider is called with directly (Codex on the container's OpenAI key), a
 // shared server started before the shield was on.
 export type PrivacySeam = "gateway" | "hooks" | "sealed";
-export type PrivacyBypass = "runtime" | "runner" | "own-key" | "shared-server";
+export const PrivacyBypassSchema = z.enum(["runtime", "runner", "own-key", "shared-server"]);
+export type PrivacyBypass = z.infer<typeof PrivacyBypassSchema>;
 export type PrivacyRoute = PrivacySeam | PrivacyBypass;
 
 const SEAMS: ReadonlySet<PrivacyRoute> = new Set<PrivacySeam>(["gateway", "hooks", "sealed"]);
@@ -70,5 +72,15 @@ export const ownerTrusted = (verdict: ShieldVerdict): boolean =>
 
 // The failure codes a turn the shield turned away ends with: refused by its verdict (`privacy-unshielded`), or for what
 // it found where it could not mask (`privacy-instructions`). The way through both is the same grant.
-const REFUSAL_CODES: ReadonlySet<string> = new Set(["privacy-unshielded", "privacy-instructions"]);
-export const isPrivacyRefusal = (code: string | undefined): boolean => code !== undefined && REFUSAL_CODES.has(code);
+const REFUSAL_CODES = ["privacy-unshielded", "privacy-instructions"] as const;
+export type PrivacyRefusalCode = (typeof REFUSAL_CODES)[number];
+const REFUSAL_CODE_SET: ReadonlySet<string> = new Set(REFUSAL_CODES);
+export const isPrivacyRefusal = (code: string | undefined): code is PrivacyRefusalCode => code !== undefined && REFUSAL_CODE_SET.has(code);
+
+// A refusal as the shield both words and types it: the sentence a turn ends with, and the route its verdict refused,
+// which rides the turn's error frame (`privacyRoute`) so a reader acts on the route rather than on the sentence. Absent
+// for a policy that could not be read, which refuses whatever the route.
+export interface PrivacyRefusal {
+    readonly sentence: string;
+    readonly route?: PrivacyBypass;
+}

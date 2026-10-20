@@ -468,7 +468,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             <button
                 v-if="errandSubject !== undefined"
                 type="button"
-                class="ui-chip shrink-0 gap-1 rounded-md px-1.5 py-0.5 text-2xs font-medium"
+                class="ui-chip ui-chip-sm shrink-0 font-medium"
                 v-tooltip.top="t(`chat.chatMessageView.openBeside`)"
                 @click="openClaimed(errandSubject, $event.currentTarget as Element)"
             >

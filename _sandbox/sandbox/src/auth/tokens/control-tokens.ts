@@ -39,7 +39,13 @@ type StoredTokens = z.infer<typeof StoredTokensSchema>;
 
 // On the history volume beside the roster: a token file in the workspace let a turn plant a token of its own. Until
 // 2026-10-06 it sat at `.intentic/identity/control-tokens.json`.
-export const controlTokensDocument = defineDocument({ root: "history", path: "identity/control-tokens.json", schema: StoredTokensSchema });
+export const controlTokensDocument = defineDocument({
+    root: "history",
+    path: "identity/control-tokens.json",
+    portability: "identity",
+    note: "Mint fresh control tokens, the old ones authenticate against the source sandbox.",
+    schema: StoredTokensSchema,
+});
 
 export type ControlTokenSummary = Omit<StoredToken, "hash">;
 

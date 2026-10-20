@@ -15,7 +15,14 @@ const LedgerSchema = z.object({
     approved: z.record(z.string(), z.object({ digest: z.string(), powers: z.record(z.string(), z.string()), approvedAt: z.number() })),
 });
 
-export const extensionApprovalsDocument = defineDocument({ root: "history", path: "extension-approvals.json", schema: LedgerSchema });
+export const extensionApprovalsDocument = defineDocument({
+    root: "history",
+    path: "extension-approvals.json",
+    // The owner's yes to each workspace extension's declared powers, decided again by the target's owner.
+    portability: "identity",
+    note: "Approve the extensions written in this workspace again from Extensions.",
+    schema: LedgerSchema,
+});
 
 // Keyed by extension id; the pin carries the digest, since one id is approved again for new powers.
 const ledgerOf = (historyRoot: string) => openApprovalLedger(extensionApprovalsDocument, join(historyRoot, extensionApprovalsDocument.path));

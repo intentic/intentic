@@ -66,7 +66,7 @@ const clock = computed(() =>
             <div class="flex min-w-0 items-center gap-2">
                 <span class="min-w-0 flex-1 truncate text-sm font-medium text-content" v-tooltip.top="look.titleHint">{{ look.title }}</span>
                 <span
-                    class="ui-status-pill flex shrink-0 items-center gap-1.5 text-2xs tabular-nums"
+                    class="ui-status-pill flex shrink-0 items-center tabular-nums"
                     :class="look.working ? 'bg-link/10 font-medium text-link' : 'bg-content/5 text-subtle'"
                     v-tooltip.top="look.working ? look.doing : undefined"
                 >

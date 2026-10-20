@@ -162,7 +162,7 @@ const forget = (origin: KeyringOrigin): Promise<void> =>
         <Section v-if="settings" :label="t(`app.settings.neverSave`)" :heading="3">
             <p v-if="settings.neverSave.length === 0" class="text-xs text-muted">{{ t(`app.settings.neverSaveEmpty`) }}</p>
             <div v-else class="flex flex-wrap gap-1.5">
-                <span v-for="origin in settings.neverSave" :key="originKey(origin)" :class="ui.chip(`gap-1 pr-1`)">
+                <span v-for="origin in settings.neverSave" :key="originKey(origin)" :class="ui.chip({ trail: true })">
                     {{ originLabel(origin) }}
                     <button
                         type="button"

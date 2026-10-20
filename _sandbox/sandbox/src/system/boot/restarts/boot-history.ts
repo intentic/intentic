@@ -20,7 +20,14 @@ const BootHistorySchema = z.object({
     // Epoch ms of each recent boot, oldest first; pruned to KEPT_MS.
     boots: z.array(z.number()),
 });
-export const bootHistoryDocument = defineDocument({ root: "history", path: "boot-history.json", schema: BootHistorySchema });
+export const bootHistoryDocument = defineDocument({
+    root: "history",
+    path: "boot-history.json",
+    // When this machine's daemon booted, for telling a restart storm from a restart: about
+    // this machine's restarts, so a moved sandbox starts without it.
+    portability: "derived",
+    schema: BootHistorySchema,
+});
 
 export const RESTART_STORM = { boots: 3, windowMs: 30 * 60_000 } as const;
 // Long enough to read a storm in, short enough that the file stays a handful of numbers.

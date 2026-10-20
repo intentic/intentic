@@ -12,7 +12,7 @@ import { forgetConversations } from "../../../conversations/registry/archive.js"
 import { conversationProfile, type PersistedAgent, worktreeOf } from "../../../conversations/registry/agents-store.js";
 import type { Services } from "../../../composition.js";
 import { opt } from "../../../opt.js";
-import type { Said, Steer, TurnInput, TurnStarter, Unqueued, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
+import type { Steer, TurnInput, TurnStarter, Unqueued, Unsaid, Unsteered } from "../../../seams/turn-starter.js";
 import { conversationIdentity, unpairedRunner } from "../placement/turn-placement.js";
 import { recordConversationPrompt, recordPrompt } from "../../../sessions/transcript-search.js";
 import { checkpointSteeredMessage } from "../../checkpoints/steer-checkpoints.js";
@@ -20,6 +20,7 @@ import { keepReceipt, receiptOf } from "./message-receipts.js";
 import { steerComposed } from "./turn-interactions.js";
 import { bookingFor, bookingOfAsk, unbookable } from "./booking-ask.js";
 import { bookContinuation, continueQueued } from "./continuation.js";
+import { queuedMessageOf, requestOf } from "./queued-message.js";
 
 // Every message to a conversation comes through here, whoever sends it: said into the live turn where that turn takes
 // words, started as a turn of its own when nothing runs, and otherwise queued on the conversation's actor until one of
@@ -86,35 +87,6 @@ export const steerPerson = async (services: Services, conversationId: string, st
     }
     return true;
 };
-
-// The message as the queue keeps it, named: a sender that gave no id gets one, since the queue and a rewind name it.
-const named = (said: Said): Omit<QueuedItem, "revision"> => {
-    // The booking is the admission's to act on (bookingFor), never a field the started turn carries.
-    const { actor, owner, areas, unseenRuns: _unseen, speaker, sendAt: _at, sendAfter: _after, sendAtReopen: _reopen, ...turn } = said.turn;
-    const id = turn.messageId ?? randomUUID();
-    return {
-        id,
-        voice: said.voice,
-        ...opt("actor", actor),
-        // The sandbox's own words are the sandbox's whoever queued them, so the row they open never reads as the owner's.
-        ...opt("speaker", speaker ?? (said.voice === "sandbox" ? { kind: "sandbox" as const } : undefined)),
-        ...opt("owner", owner),
-        ...opt("areas", areas),
-        ...opt("outside", said.outside),
-        queuedAt: Date.now(),
-        turn: { ...turn, messageId: id },
-    };
-};
-
-// The request a queued message makes, with whoever sent it attributed again, and the taint its outside words carry.
-const requestOf = (item: Omit<QueuedItem, "revision">): Turn => ({
-    ...item.turn,
-    ...opt("speaker", item.speaker),
-    ...opt("actor", item.actor),
-    ...opt("owner", item.owner),
-    ...opt("areas", item.areas),
-    ...opt("outsideWake", item.outside),
-});
 
 // A wake (a watch's report, a finished background job, a child's report, a land follow-up) continues the conversation as
 // it runs when the wake goes out, never as it ran when the wake was armed or queued: the routing it captured then goes
@@ -494,7 +466,7 @@ export const createAdmission = (
                 if (earlier !== undefined) {
                     return earlier;
                 }
-                const item = named(said);
+                const item = queuedMessageOf(said);
                 // A scheduled send is booked, not delivered: it waits in the queue, where every window draws it as
                 // scheduled, and the resume pass lets it go when what it waits for comes (turn-resume.ts, releaseBooked).
                 const booking = bookingFor(services(), said, Date.now());

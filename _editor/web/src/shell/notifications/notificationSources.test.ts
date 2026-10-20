@@ -79,7 +79,7 @@ describe(`the card for a sandbox that isn't answering`, () => {
     });
 
     it(`says how long a wait with a clock has run and usually takes, beneath its sentence`, () => {
-        const card = diagnosisCard(notice({ title: `Waking acme`, wait: { elapsedMs: 5_000, typicalMs: 60_000, giveUpMs: 180_000 } }), false, () => undefined);
+        const card = diagnosisCard(notice({ title: `Waking acme`, wait: { elapsedMs: 5_000, expectedMs: 60_000, giveUpMs: 180_000 } }), false, () => undefined);
         expect(card).toMatchObject({ tone: `info`, spin: true, body: OutageWait });
         expect(card.wide).toBeUndefined();
     });

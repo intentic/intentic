@@ -40,7 +40,12 @@ const AuditCheckpointSchema = z.object({
 
 // Written before the month file it describes is deleted, so a crash between the two leaves a file the verifier skips,
 // never a chain that starts nowhere.
-export const auditCheckpointDocument = defineDocument({ root: "history", path: "audit/checkpoint.json", schema: AuditCheckpointSchema });
+export const auditCheckpointDocument = defineDocument({
+    root: "history",
+    path: "audit/checkpoint.json",
+    portability: "carry",
+    schema: AuditCheckpointSchema,
+});
 
 export interface AuditLog {
     // Queues one record; never throws and never waits for the disk. What could not be written is logged, not raised:

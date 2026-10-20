@@ -2,30 +2,30 @@
 import { DeviceRunLog, formatElapsed, type IconName, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
-import { type ProgressStatus, type ProgressStep, type StepState, stepFill, stepSeconds, stepState } from "./stagedProgress";
+import { type Progress, progressShare } from "./progress";
+import { type ProgressStatus, type ProgressStep, type StepState, stepFill, stepSeconds, stepState } from "./stagedSteps";
 import { useT } from "@intentic/ui/i18n";
 
 // A LONG RUN DRAWN AS THE FEW THINGS IT DOES, not as a wall of somebody else's output. The log is what a reader
 // reaches for when something has gone wrong, and the rest of the time it is noise that hides the one fact they came
 // for — so it sits behind a toggle the caller opens on a failure. One moving part on screen: the bar and the step list
 // share a single spinner, on whichever step is running. What is particular to one kind of run (its cost to the reader,
-// its verdict, where its ending is written) goes in the default slot, between the steps and the log.
+// its verdict, where its ending is written) goes in the default slot, between the steps and the log. How far along it is
+// and how long it has run are the one progress model's (progress.ts): the run's own count fills the steps' segments.
 
 const t = useT();
 
 const props = defineProps<{
     /** One line for the whole run: what it is. */
     heading: string;
-    /** Seconds this run has been going; undefined for one adopted mid-flight, whose start nothing here saw. */
-    elapsed: number | undefined;
+    /** How long it has run and how far its own count says it is (`measured`, never decreasing). */
+    progress: Progress;
     steps: readonly ProgressStep[];
     /** The step the run is on, or the last it reached once it has ended. */
     stage: string;
     /** When each step was first seen, so the card can time a step it watched begin. */
     stageAt: Partial<Record<string, number>>;
     endedAt: number | undefined;
-    /** How far along, 0–1, never decreasing. */
-    fraction: number;
     status: ProgressStatus;
     /** Still going on the machine, as far as this page knows: a step gone unheard-from may be either. */
     live: boolean;
@@ -53,7 +53,7 @@ const steps = computed(() => {
         ...step,
         state: stepState(props.steps, step.key, props.stage, props.status),
         seconds: stepSeconds(props.steps, step.key, props.stageAt, end),
-        fill: stepFill(props.steps, step.key, props.fraction),
+        fill: stepFill(props.steps, step.key, progressShare(props.progress) ?? 0),
     }));
 });
 
@@ -72,7 +72,7 @@ const TONES: Record<StepState, string> = {
     unheard: `text-warning`,
 };
 
-const elapsedLabel = computed(() => (props.elapsed === undefined ? undefined : formatElapsed(props.elapsed)));
+const elapsedLabel = computed(() => (props.progress.elapsedMs === undefined ? undefined : formatElapsed(Math.round(props.progress.elapsedMs / 1000))));
 </script>
 
 <template>

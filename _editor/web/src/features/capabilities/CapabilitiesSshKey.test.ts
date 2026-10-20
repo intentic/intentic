@@ -39,7 +39,7 @@ jest.mock(`../../models/capabilities/useCapabilities`, () => ({
 }));
 jest.mock(`../../models/capabilities/generateSshKey`, () => ({ generateSshKey: () => generateSshKey() }));
 jest.mock(`../../models/extensions/useExtensions`, () => ({
-    useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
+    useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), loaded: ref({ state: `ready`, data: {}, refreshing: false, refreshError: undefined }) }),
 }));
 jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({

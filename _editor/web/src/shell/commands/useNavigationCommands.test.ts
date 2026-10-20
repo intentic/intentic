@@ -19,10 +19,10 @@ await startAppI18n();
 const state = { canShip: true, planOffered: true };
 
 jest.mock(`../../models/extensions/usePanels`, () => {
-    return { usePanels: () => ({ panels: ref([]), allPanels: ref([]), isLoading: ref(false), settled: ref(true) }) };
+    return { usePanels: () => ({ panels: ref([]), allPanels: ref([]), isLoading: ref(false), loaded: ref({ state: `ready`, data: {}, refreshing: false, refreshError: undefined }) }) };
 });
 jest.mock(`../../models/capabilities/useCapabilities`, () => {
-    return { useCapabilities: () => ({ capabilities: ref([]), settled: ref(true) }) };
+    return { useCapabilities: () => ({ capabilities: ref([]), loaded: ref({ state: `ready`, data: {}, refreshing: false, refreshError: undefined }) }) };
 });
 jest.mock(`../../client/sandbox/useRole`, () => {
     return { useRole: () => ({ canShip: ref(state.canShip), isGuest: ref(false) }) };

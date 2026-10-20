@@ -25,6 +25,7 @@ import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-reque
 import { applyReply } from "../run/turn/turn-interactions.js";
 import { carryOnTurn } from "../run/turn/turn-resume.js";
 import { freshRefusal } from "../context/fresh-session.js";
+import { answeredAfterDraft } from "../../conversations/drafts/composer-drafts.js";
 
 // What the audit trail keeps of an answer to a card: which card, what kind, and for a permission the decision itself.
 const replyNote = (input: AgentReply): AuditNote => ({
@@ -97,7 +98,7 @@ export const createAgentRoutes = (services: Services) => {
             // A client composes only the land-conflict errand (the editor's own words); every other errand is the sandbox's,
             // so a request naming one would pass its sender's words off as the sandbox's. The opening answer to whether
             // work lands by itself is a maintainer's alone, as `agents.autoLand` is: a collaborator's work waits for a land.
-            const { errand, continues, conversationAutoLand, ...asked } = input;
+            const { errand, continues, conversationAutoLand, draft, ...asked } = input;
             const opensLanding = operatorHere(services, context) ? conversationAutoLand : undefined;
             // A Continue carries no words, so it skips the queue, which holds words: it starts the turn or is refused.
             if (continues === true) {
@@ -129,7 +130,7 @@ export const createAgentRoutes = (services: Services) => {
             if ("why" in receipt) {
                 throw new ORPCError("CONFLICT", { message: receipt.why });
             }
-            return receipt;
+            return answeredAfterDraft(services.drafts, context, { conversationId, draft }, receipt);
         }),
         // Re-runs a turn a spent allowance refused or a dead runtime cut short, with everything but who serves it,
         // renamed by the press. NOT_FOUND when nothing is held; never CONFLICT, since a running turn already cleared

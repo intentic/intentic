@@ -449,12 +449,13 @@ test("a turn held to a tool list is turned away on a runtime that cannot keep on
 // The privacy shield's refusal is a fact gathered before the decision; deciding on it sends nothing and holds the words.
 test("a turn the privacy shield cannot cover is turned away at the door, before any context is composed", () => {
     const decision = decideTurn(
-        { ...FACTS, privacyRefusal: "The privacy shield is on, and cursor runs on a loop the shield can't stand in front of." },
+        { ...FACTS, privacyRefusal: { sentence: "The privacy shield is on, and cursor runs on a loop the shield can't stand in front of.", route: "runtime" } },
         turn({ agent: "cursor" }),
         context,
     );
 
-    expect(decision).toMatchObject({ ok: false, code: "privacy-unshielded", message: expect.stringContaining("privacy shield"), spawn: false });
+    // The route the shield refused rides the refusal, onto the frame the chat and the strip read it from.
+    expect(decision).toMatchObject({ ok: false, code: "privacy-unshielded", message: expect.stringContaining("privacy shield"), privacyRoute: "runtime", spawn: false });
     expect(decision.warnings).toEqual([
         {
             fields: { provider: "cursor", harness: "native" },

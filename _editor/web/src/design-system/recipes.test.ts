@@ -39,6 +39,15 @@ describe(`ui recipes`, () => {
         expect(ui.chip({ on: false })).toBe(`ui-chip`);
         expect(ui.tab(true)).toBe(ui.tab({ active: true }));
     });
+
+    it(`sizes a chip by name, with the default drawing no size class of its own`, () => {
+        expect(ui.chip()).toBe(`ui-chip`);
+        expect(ui.chip({ size: `md` })).toBe(`ui-chip`);
+        expect(ui.chip({ size: `sm` })).toBe(`ui-chip ui-chip-sm`);
+        expect(words(ui.chip({ size: `lg`, lead: true, trail: true, on: true }))).toEqual(
+            words(`ui-chip ui-chip-lg ui-chip-lead ui-chip-trail ui-chip-on`),
+        );
+    });
 });
 
 describe(`tone`, () => {

@@ -32,6 +32,10 @@ const StoredSchema = z.record(z.string(), RunOutSchema);
 export const runOutsDocument = defineDocument({
     root: "history",
     path: "run-outs.json",
+    // When each provider's allowance last ran out and under how many agents, which the spawn listing quotes beside the
+    // figure left. Carried like the refusals (provider-refusals.ts): it describes the subscription's windows, not the
+    // machine that spent them.
+    portability: "carry",
     schema: RunOutSchema,
     granularity: "record",
 });

@@ -7,6 +7,9 @@ import { openDocument } from "../store/open-document.js";
 export const memberAiLiteracyDocument = defineDocument({
     root: "history",
     path: "member-ai-literacy.json",
+    // Who confirmed the AI notice, and which wording. Carried: it is the record an office
+    // shows for the AI Act's literacy duty, and a move must not make everyone confirm again or lose who already did.
+    portability: "carry",
     schema: z.object({ records: z.array(AiLiteracyRecordSchema) }),
 });
 

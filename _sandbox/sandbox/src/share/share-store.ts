@@ -13,7 +13,13 @@ export type StoredShare = z.infer<typeof StoredShareSchema>;
 
 const FileSchema = z.object({ shares: z.array(StoredShareSchema) });
 
-export const sharesDocument = defineDocument({ root: "history", path: "shares.json", schema: FileSchema });
+export const sharesDocument = defineDocument({
+    root: "history",
+    path: "shares.json",
+    // Index of published-page conversations; the pages travel with /work anyway, this makes one withdrawable.
+    portability: "carry",
+    schema: FileSchema,
+});
 
 export interface ShareStore {
     readonly all: () => Promise<StoredShare[]>;

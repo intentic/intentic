@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { KeyringSource } from "@intentic/sandbox-contract/schemas/keyring";
-import { CopyButton } from "@intentic/ui";
+import { CopyButton, Section } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import type { SecretRow } from "../../../sandbox/secrets/secretRows";
@@ -46,19 +46,20 @@ const rules = computed(() => {
 </script>
 
 <template>
-    <div v-if="device" class="mt-3 flex flex-col gap-1 border-t border-line pt-2" data-device-panel>
-        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`capabilities.secretDevice.heading`) }}</span>
-        <p class="text-xs text-content">{{ t(`capabilities.secretDevice.keptOn`, { machine, mode: keyringModeWords(device.mode) }) }}</p>
-        <p class="text-2xs text-muted">{{ standing }}</p>
+    <Section v-if="device" :label="t(`capabilities.secretDevice.heading`)" density="dense" class="mt-3 border-t border-line pt-2" data-device-panel>
+        <div class="flex flex-col gap-1">
+            <p class="text-xs text-content">{{ t(`capabilities.secretDevice.keptOn`, { machine, mode: keyringModeWords(device.mode) }) }}</p>
+            <p class="text-2xs text-muted">{{ standing }}</p>
 
-        <!-- The keyring's own list: the sandbox can show it and never widen it. -->
-        <p class="pt-1 text-2xs text-muted">{{ rules }}</p>
-        <p v-if="hosts.length > 0" class="text-2xs text-muted">{{ t(`capabilities.secretDevice.hosts`, { hosts: hosts.join(`, `) }) }}</p>
+            <!-- The keyring's own list: the sandbox can show it and never widen it. -->
+            <p class="pt-1 text-2xs text-muted">{{ rules }}</p>
+            <p v-if="hosts.length > 0" class="text-2xs text-muted">{{ t(`capabilities.secretDevice.hosts`, { hosts: hosts.join(`, `) }) }}</p>
 
-        <p class="pt-1 text-2xs text-muted">{{ t(`capabilities.secretDevice.changeOn`, { machine }) }}</p>
-        <div class="flex min-w-0 items-center gap-1.5">
-            <code class="min-w-0 flex-1 truncate rounded-md border border-line bg-canvas px-2 py-1 font-mono text-2xs text-content">{{ command }}</code>
-            <CopyButton :text="command" :aria-label="t(`capabilities.secretDevice.copyCommand`)" />
+            <p class="pt-1 text-2xs text-muted">{{ t(`capabilities.secretDevice.changeOn`, { machine }) }}</p>
+            <div class="flex min-w-0 items-center gap-1.5">
+                <code class="min-w-0 flex-1 truncate rounded-md border border-line bg-canvas px-2 py-1 font-mono text-2xs text-content">{{ command }}</code>
+                <CopyButton :text="command" :aria-label="t(`capabilities.secretDevice.copyCommand`)" />
+            </div>
         </div>
-    </div>
+    </Section>
 </template>

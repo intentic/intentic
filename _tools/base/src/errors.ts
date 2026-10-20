@@ -19,12 +19,16 @@ const fieldOf = (value: unknown, key: string): unknown =>
     // SAFETY: a non-null object is indexable by string; a missing key reads undefined, which every caller handles.
     typeof value === `object` && value !== null ? (value as Record<string, unknown>)[key] : undefined;
 
+// A captured stream as the process runners hang it: a string, or nothing.
+const textOf = (value: unknown): string | undefined => (typeof value === `string` ? value : undefined);
+
 // What a failed child process wrote to stderr, as execFile, `ProcessError` (@intentic/base/process) and the git runner
 // hang it on what they throw; undefined for anything that is not a process's failure.
-export const stderrOf = (error: unknown): string | undefined => {
-    const stderr = fieldOf(error, `stderr`);
-    return typeof stderr === `string` ? stderr : undefined;
-};
+export const stderrOf = (error: unknown): string | undefined => textOf(fieldOf(error, `stderr`));
+
+// What a failed child process wrote to stdout, hung on its rejection the same way: a command whose non-zero exit is an
+// answer (`git merge-tree` on a conflict) still printed it.
+export const stdoutOf = (error: unknown): string | undefined => textOf(fieldOf(error, `stdout`));
 
 // The status a failed child process exited with: execFile and ProcessError carry it as a numeric `code`, where a
 // string `code` is the errno its spawn failed with. Undefined for a signal, a spawn failure and anything else; a

@@ -151,7 +151,7 @@ flowchart LR
   (`lib/skeletonPersistence.ts`). The active sandbox's imprints are read before the first route mounts, and every
   other sandbox's at the first idle moment, so a switch draws them on its first frame. They survive a new build,
   which the query cache does not, and a sign-out clears both, along with everything else the account left in this
-  browser: the keys `app/storage/browserStorage.ts` declares as the account's (open chat tabs, closed drafts, recent prompts,
+  browser: the keys `app/storage/browserStorage.ts` declares as the account's (open chat tabs, the copy of unsent drafts, recent prompts,
   question and commit drafts, which sandbox was open), the transcript mirror in IndexedDB, and the sandbox scope's
   module state. Device preferences (theme, language, layout) stay. One `/events` stream per active sandbox
   (`useSandboxLiveness.ts`) invalidates what each frame makes stale (`systemEvents.ts`). Push refreshes let an
@@ -161,6 +161,18 @@ flowchart LR
   edge serves one (`features/terminal/channel/`). Each of them, and a connected account's browser window, rides one
   live socket (`client/session/liveSocket.ts`): minted, pinged, closed when silent, and redialled on one
   ladder that starts over when the sandbox answers again.
+- **Unsent words are the sandbox's.** What a composer holds (words, finished files, the model picked) is the
+  conversation's draft, kept by the sandbox per person (`agents.drafts`), so every window and device opens the same
+  composer and the board shows a draft card for words typed on another device. This browser keeps one optimistic copy
+  per sandbox (`models/conversations/drafts/composerDrafts.ts`): composers write it at once and bind to it
+  (`composerBinding.ts`), the other windows hear each change over the chat channel, and it is written to the sandbox
+  once typing pauses, naming the revision it was edited from. When that revision has moved on, both sets of words are
+  kept rather than one written over the other (`heldDraft.ts`). A send names the revision its words came from, and the
+  sandbox clears that draft as it takes the message, so the words go exactly once. Closing a chat moves nothing: its
+  words stay its draft. Against a sandbox older than drafts, and while one cannot be reached, the copy is all there is,
+  and it is written once the sandbox is back. (2026-10-20) Before, the words lived in each window's tab snapshot, moved
+  into a per-browser "closed drafts" set on close and back out on reopen, and travelled between windows as previews:
+  each move could drop or double them, and no other device ever saw them. The old set is read into the copy once.
 - **Work a person starts outlives the view that started it.** Adding a runner on a laptop, cloning a repo, landing an
   agent or moving a hosted plan keeps running on the server whatever the reader opens next. So its state (running or
   not, the lines it streamed, the answer, the refusal) is kept in the operations ledger
@@ -171,7 +183,8 @@ flowchart LR
   been seen. A view inside a hub also marks that hub's row while the work runs. `useAsyncAction()` and
   `useConcurrentActions()` keep their state per caller, so `viewWork.guard.test.ts` refuses them anywhere they would
   die with a view. Questions (a confirm dialog, a form's inputs) stay the view's own. A commit from the Changes
-  panels is the changes model's record (`commitPress` in `models/changes/useChanges.ts`), and the press bar's one
+  panels is a ledger run too (`COMMIT_RUN` in `models/changes/useChanges.ts`, the press as pressed kept as its
+  progress), so a second press while one runs is refused rather than clearing the first one's record, and the press bar's one
   line is picked from every source that wants it by one function (`changes/commit/commitBar.ts`), so a panel opened
   again mid-commit draws the press as it was pressed and says it once.
 - **Data that is not here yet is drawn by `<Await>`.** A region draws a read's `Loaded` (`@intentic/extension-api`)
@@ -180,6 +193,16 @@ flowchart LR
   `useSandboxQuery` returns `loaded` beside the query, and every such read joins the region it is read in, whose host
   (a route, a hub section, an extension view) is an `<Await>` too. `viewWait.guard.test.ts` refuses a view that
   wires its own wait from `SkeletonSnapshot`, `v-skeleton-source` or `useLoadingReveal`.
+  A failed read is said as a failure, never as an absence or a default. Only a `ready` read can say something is not
+  there: the read models (`usePanels`, `useCapabilities`, `useExtensions`, `usePublicOutbox`) hand out their `loaded`,
+  not a "fetched or failed" flag, so the rail keeps the tiles it remembers, an extension page and Preview say the read
+  failed with a retry, and Capabilities leaves an address alone while its list is unread. A page that would otherwise
+  draw schema defaults (Retention, Guardrails) or an empty drawing (Map) sits behind an `<Await>` of its read. A try a
+  failed read makes by itself (an interval, a push) keeps the failure on screen; only a retry the person presses is a
+  wait again (`useLoaded`, with `useSandboxQuery` keeping the failure through vue-query's reset). The same guard test
+  refuses `isFetched || isError` read as an answer. _2026-10-20: under failing reads, four extension pages said their
+  view was "no longer in the workspace", Retention showed "0 · forever" for every record, and the safety policy was an
+  empty document with a Save that would have wiped the real one._
 - **When the sandbox stops answering.** A failed `/events` stream starts a diagnosis (`features/sandbox/diagnosis/`):
   bounded probes of the sandbox's address (netd's own `/system/vitals`, which answers whatever state Node is in,
   plus an opaque reach check), the platform, a hosted machine's power state, this computer's loopback where no
@@ -192,12 +215,19 @@ flowchart LR
   (or `intentic://fix` in the desktop app). The recovery panel (`gates/SandboxRecovery.vue`) shows when the diagnosis
   found a way back, never on a timer: inside the connecting gate on a screen with nothing to paint yet, and as a card
   in the notification lane everywhere else. Both read one answer to which screen that is (`gates/established.ts`).
-  Every wait that ends by itself carries its own clock (`components/WaitProgress.vue`, `waitProgress.ts`): an estimated
+  Every wait that ends by itself carries its own clock (`components/progress/ProgressMeter.vue`): an estimated
   bar drawn from how long that kind of wait usually takes (`USUAL_MS` in `presentation.ts`), how long it has run, and
   when the screen stops waiting, which is the diagnosis's own patience constant, so the time the words promise is the
   time the way back appears. The raw facts behind the sentence (`diagnosis/details.ts`: the failure, the probes, the
-  machine's report check by check) sit behind "Technical details". The same component times other long presses
-  (`components/useWaitClock.ts`).
+  machine's report check by check) sit behind "Technical details".
+- **One progress model.** Everything that shows how far along work is reads `components/progress/progress.ts`: how
+  long it has run, how long it should take (`expectedMs`), when the screen gives up (`giveUpMs`), and, where the work
+  counts for itself, how much is done (`measured`: docker's layers, the steps a rebuild has passed). The bar is that
+  count when there is one and an estimate from `expectedMs` otherwise, and the estimate never reaches full. A gate's
+  wait, a long press (`<ProgressMeter>`), a rebuild or update drawn as its steps (`<StagedProgress>`) and the commit
+  field's drafting ring all read it; none keeps its own curve. A ledger run declares its expectation where it starts
+  (`RunOptions.expectedMs`/`giveUpMs`) and is drawn through `useOperationProgress` (`OperationView.meter`), and the
+  ledger keeps the give-up: at that moment the run's signal aborts and it ends as failed.
   _2026-09-30: replaced a panel that appeared after two minutes of silence with three commands (restart, rollback,
   doctor) for the reader to choose between. It was shown to sandboxes that were only busy, and the choice was the
   reader's to get right._
@@ -367,6 +397,9 @@ flowchart LR
   [extension-ui](../../_shared/extension-ui) instances. Before linking a bundle the loader checks the names it imports
   from extension-api and extension-ui against what those shims export (`bundleLinks.ts`), and an extension asking for
   one the app lacks is shown as incompatible, needing an update, rather than failing with the browser's link error.
+  The shims are derived files, written again by the fixers whenever the kit's `names.mjs` or the API's exports move
+  (2026-10-20: `Await`, `Section` and `useLoaded` had joined the kit and the API with no shim exporting them, so an
+  extension using them would have failed to link).
 - **Session replay and events.** A browser whose time zone is in the EEA, the UK or Switzerland is asked first, on a question card in the notification lane (`analytics-consent` in `shell/notifications/notificationSources.ts`), and records nothing until it answers; everywhere else analytics is on unless this browser was switched off. Settings → Data & privacy (`/settings/data`) holds the one switch alongside account export and deletion, away from the default Profile page, and the answer is stored locally (`app/analyticsConsent.ts`). An active sandbox needs loaded settings with `productAnalytics: true` before any event or recording runs. `POSTHOG_UI_HOST` chooses the dashboard host for replay links (default `https://us.posthog.com`), while `POSTHOG_API_HOST` and `POSTHOG_ASSETS_HOST` choose the proxy targets.
   _2026-10-13: the consent popup is gone and the default is on; switching it off still sends no cookieless counts, since off should make no analytics request._
   _2026-10-15: European browsers are asked again, by time zone, before anything is recorded; the rest of the world keeps the 10-13 default. Chosen over asking everyone (it costs the analytics no law asks us to ask for) and over the platform's `cf-ipcountry` (a request before the first screen, and absent on a self-hosted platform)._

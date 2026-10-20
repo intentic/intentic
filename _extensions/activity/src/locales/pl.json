@@ -1,7 +1,6 @@
 {
     "activityTimeline": {
         "activityFeed": "Strumień aktywności",
-        "entries": "{count} wpis | {count} wpisy | {count} wpisów",
         "idleNoEnabledListener": "Bezczynnie: dla {label} nie ma jeszcze włączonej automatyzacji nasłuchu, więc niczego nie nasłuchujemy.",
         "loadingActivity": "Wczytywanie aktywności",
         "nothingEntriesAppearMessage": "Nic {window}. Wpisy pojawiają się, gdy wiadomość budzi agenta, gdy wywołuje on podłączonego dostawcę i przy każdej turze, którą wykonuje.",

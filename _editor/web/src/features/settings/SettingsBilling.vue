@@ -19,8 +19,7 @@ import { dismissOperation, useOperation, useOperations } from "../../workbench/o
 import { onScreen } from "../../workbench/window/onScreen";
 import type { HostedMigration, HostedPlanState } from "@intentic/api-contract";
 import { useT } from "@intentic/ui/i18n";
-import WaitProgress from "../../components/WaitProgress.vue";
-import { useWaitClock } from "../../components/useWaitClock";
+import ProgressMeter from "../../components/progress/ProgressMeter.vue";
 
 // The one page about money: what plan this account is on and the one action to take, the hosted sandboxes and the hours
 // each one spends, the machines a slot buys, and the door to Stripe. Managed on Stripe, but consequences are said here
@@ -202,7 +201,7 @@ const move = useOperation<HostedMigration>(`account/billing/tier`);
 const moving = computed(() => (move.busy.value ? move.operation.value?.tag : undefined));
 const moveError = computed(() => move.failure.value?.detail ?? move.failure.value?.title);
 // How long the move has run, under the machine it moves: minutes with the sandbox unreachable read as a fault without it.
-const moveWait = useWaitClock(() => (move.busy.value ? move.operation.value?.startedAt : undefined));
+const moveWait = move.meter;
 
 // Whether this machine could move to that rung right now: a slot there, not already there, nothing in flight.
 const canMoveTo = (machine: { sandboxId: string; tier: string }, rung: { id: string; held: number; standing: number }): boolean =>
@@ -465,9 +464,9 @@ const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
                                                 @click="moveTo(machine.sandboxId, rung.id)"
                                             />
                                         </span>
-                                        <WaitProgress
+                                        <ProgressMeter
                                             v-if="moving === machine.sandboxId && moveWait"
-                                            :wait="moveWait"
+                                            :progress="moveWait"
                                             :what="t(`settings.settingsBilling.movingNote`)"
                                             :details="move.lines.value"
                                             class="max-w-sm"

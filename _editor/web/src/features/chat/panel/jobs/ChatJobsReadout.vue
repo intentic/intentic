@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, formatElapsed, ui } from "@intentic/ui";
+import { AnchoredOverlay, formatElapsed, SectionHeader, ui } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useAgents } from "../../../../models/fleet/useAgents";
@@ -44,9 +44,7 @@ const watchJob = (session: string): void => {
 
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="top" cross="end">
         <div class="flex w-80 max-w-[calc(100vw-1rem)] flex-col p-1">
-            <div class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
-                {{ t(`chat.chatJobsReadout.title`) }}
-            </div>
+            <SectionHeader :label="t(`chat.chatJobsReadout.title`)" density="dense" class="px-2 py-1.5" />
             <div v-for="job in jobs" :key="job.id" class="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-overlay">
                 <Icon name="spinner" spin class="shrink-0 text-2xs text-link" />
                 <span class="min-w-0 flex-1 truncate text-xs text-content">{{ job.label }}</span>

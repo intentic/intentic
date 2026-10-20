@@ -273,7 +273,7 @@ const expandable = (item: EnvironmentItem): boolean =>
                                         :key="item.id"
                                         type="button"
                                         :disabled="item.purpose === undefined"
-                                        :class="ui.chip({ on: picked === item.id }, `py-1 pl-1 pr-2.5`)"
+                                        :class="ui.chip({ on: picked === item.id, lead: true })"
                                         @click="pick(item.id)"
                                     >
                                         <BrandMark

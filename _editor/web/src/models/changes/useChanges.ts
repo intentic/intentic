@@ -1,6 +1,6 @@
 import { invalidatePushedQueries } from "../../lib/pushInvalidation";
-import { sandboxRef, sandboxScopeGuard, sandboxShallowRef } from "@intentic/extension-api";
-import { messageOr } from "@intentic/ui/async";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
+import { messageOr, type NoticeModel } from "@intentic/ui/async";
 import type {
     PushRun,
     CommitResult,
@@ -30,6 +30,7 @@ import { usePushRun } from "../workspace/push/usePushRun";
 import { runIndexJob } from "./indexRuns";
 import { agentReviewPrefixes, GIT_LOG, rpcKey, rpcPrefix, workingReviewKeys } from "../../lib/queryKeys";
 import { t } from "@intentic/ui/i18n";
+import { dismissOperation, operationAt, startOperation } from "../../workbench/operations/operations";
 
 // VSCode's SCM model over real repos: `staged` is index-vs-HEAD, `unstaged` is worktree-vs-index; a path can be on
 // both.
@@ -100,15 +101,22 @@ export interface PressFace {
 }
 
 /**
- * A commit this tab pressed, from before the request leaves until it ends: which repos, and the press as pressed. The
- * one record of it, so the repos dimmed, the bar's line and the button's face are all read from here, never held apart
- * (a face held by a computed's previous value, a line suppressed by a flag another component emitted).
+ * A commit this tab pressed, from before the request leaves until it ends: which repos, and the press as pressed. It is
+ * a run in the operations ledger like every other press whose work outlives a glance (COMMIT_RUN), carried as that
+ * run's progress, so the repos dimmed, the bar's line and the button's face are all read from the one record, never
+ * held apart (a face held by a computed's previous value, a line suppressed by a flag another component emitted), and a
+ * second press while one runs is refused by the ledger instead of clearing the first one's record when it ends.
  */
 export interface CommitPress {
     readonly repos: readonly string[];
     readonly face: PressFace;
 }
-const commitPress = sandboxShallowRef<CommitPress | undefined>(() => undefined);
+// The ledger's key for this sandbox's commit; the ledger stamps it with the sandbox it began on.
+export const COMMIT_RUN = `changes/commit`;
+const commitPress = (): CommitPress | undefined => {
+    const run = operationAt<void, NoticeModel, CommitPress>(COMMIT_RUN);
+    return run?.state === `running` ? run.progress : undefined;
+};
 
 const dismissFailure = (scope: string): void => {
     if (!failures.value.has(scope)) {
@@ -231,28 +239,36 @@ const applyCommitResult = async (repo: string, result: CommitResult): Promise<vo
 // Answers whether any repo recorded a commit: a "Commit all" over nothing but scratch stages nothing, and git's
 // `committed: false` is then the only sign the typed message went nowhere.
 const commitRepos = async (groups: readonly RepoTarget[], message: string, stageFirst: boolean, face: PressFace): Promise<boolean> => {
-    commitPress.value = { repos: groups.map((group) => group.repo), face };
     let recorded = false;
-    try {
-        await runBatch(
-            groups.map((group) => ({
-                scope: COMMIT_SCOPE,
-                action: t(`workspace.useChanges.commitFailed`),
-                run: async (): Promise<void> => {
-                    const run = await runIndexJob(
-                        group.repo,
-                        stageFirst ? { op: `commit`, message, target: targetBody(group) } : { op: `commit`, message },
-                    );
-                    // A passed commit run carries the commit route's own answer.
-                    const result = run.result ?? { committed: false };
-                    recorded ||= result.committed;
-                    await applyCommitResult(group.repo, result);
-                },
-            })),
-            () => (failures.value.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
-        );
-    } finally {
-        commitPress.value = undefined;
+    const ended = await startOperation<void, NoticeModel, CommitPress>(COMMIT_RUN, {
+        what: t(`workspace.useChanges.committing`),
+        progress: { repos: groups.map((group) => group.repo), face },
+        // runBatch files a commit's failure under COMMIT_SCOPE, where the panel draws it; the run itself never throws.
+        failed: t(`workspace.useChanges.commitFailed`),
+        // The panel is where a commit ends, and its rows say so: no receipt.
+        quiet: true,
+        task: () =>
+            runBatch(
+                groups.map((group) => ({
+                    scope: COMMIT_SCOPE,
+                    action: t(`workspace.useChanges.commitFailed`),
+                    run: async (): Promise<void> => {
+                        const run = await runIndexJob(
+                            group.repo,
+                            stageFirst ? { op: `commit`, message, target: targetBody(group) } : { op: `commit`, message },
+                        );
+                        // A passed commit run carries the commit route's own answer.
+                        const result = run.result ?? { committed: false };
+                        recorded ||= result.committed;
+                        await applyCommitResult(group.repo, result);
+                    },
+                })),
+                () => (failures.value.has(COMMIT_SCOPE) ? invalidateChanges() : Promise.resolve()),
+            ),
+    });
+    // Put away once read here: the press is over. Only this run, should another sandbox be on screen by now.
+    if (ended !== undefined && operationAt(COMMIT_RUN) === ended) {
+        dismissOperation(COMMIT_RUN);
     }
     return recorded;
 };
@@ -429,7 +445,7 @@ export function useChanges() {
         enabled: computed(() => !landingNow.value),
         // Reads the cached response rather than closing over the query it configures.
         refetchInterval: (cached) =>
-            commitPress.value === undefined && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : false,
+            commitPress() === undefined && (cached.state.data?.committing?.length ?? 0) > 0 ? COMMIT_WATCH_MS : false,
     });
 
     // Also includes repos git couldn't scan (empty lists plus an `error`) and repos that are merely out of sync;
@@ -451,7 +467,7 @@ export function useChanges() {
     const outgoing = computed(() => outgoingWork(repos.value));
     // Union of this tab's own in-flight commits and the daemon's; a repo in either is still being recorded.
     // Committing rows stay listed (dimmed, verbs disabled) rather than assumed gone before the commit returns.
-    const committing = computed<readonly string[]>(() => [...new Set([...(commitPress.value?.repos ?? []), ...(query.data.value?.committing ?? [])])]);
+    const committing = computed<readonly string[]>(() => [...new Set([...(commitPress()?.repos ?? []), ...(query.data.value?.committing ?? [])])]);
 
     return {
         repos,
@@ -459,7 +475,7 @@ export function useChanges() {
         count,
         committing,
         // This tab's commit while it runs, the press as pressed included.
-        press: computed(() => commitPress.value),
+        press: computed(() => commitPress()),
         stagedCount,
         outgoing,
         // A read is in flight: what the refresh control spins on. True for background refreshes too, so nothing that

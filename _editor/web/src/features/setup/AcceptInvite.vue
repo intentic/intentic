@@ -183,7 +183,7 @@ const switchAccount = async (): Promise<void> => {
                 </Button>
                 <!-- The invited address, locked: the platform accepts this invite for no other, so no other is offered. -->
                 <template v-if="options.email && invitedEmail !== undefined">
-                    <span v-if="options.google" class="my-3 block text-center text-2xs uppercase tracking-wide text-subtle">{{
+                    <span v-if="options.google" class="my-3 block text-center text-2xs text-subtle">{{
                         t(`auth.login.or`)
                     }}</span>
                     <EmailCodeSignIn :class="options.google ? `` : `mt-6`" :locked-email="invitedEmail" :in-app="inApp" />

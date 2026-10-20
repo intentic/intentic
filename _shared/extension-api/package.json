@@ -61,7 +61,8 @@
                 "@intentic/src": "./src/testing.ts",
                 "default": "./dist/testing.js"
             }
-        }
+        },
+        "./surface.json": "./src/surface.json"
     },
     "scripts": {
         "build": "tsgo",

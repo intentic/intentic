@@ -1,6 +1,7 @@
 pub mod at_rest;
 pub mod attention;
 pub mod backup;
+pub mod composition;
 pub mod connect;
 pub mod desired;
 pub mod doctor;
@@ -34,6 +35,7 @@ pub mod sleep;
 pub mod staged;
 pub mod storage;
 pub mod swaps;
+pub mod target_probe;
 pub mod tidy;
 pub mod trash;
 pub mod versions;

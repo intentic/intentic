@@ -37,6 +37,7 @@ mod cloudflare;
 mod contract;
 mod docker;
 mod engine;
+mod features;
 mod fetch;
 mod health;
 mod image_cache;
@@ -102,6 +103,12 @@ enum Command {
     Engine {
         #[command(subcommand)]
         command: Option<EngineCommand>,
+    },
+    /// The optional operations this ic implements, in the sandbox contract's words (what the machine agent advertises)
+    Features {
+        /// One line of JSON, `{"features": [...]}` (the machine agent reads this)
+        #[arg(long)]
+        json: bool,
     },
     /// Intentic OS, the Linux that boots straight into Intentic: its image, updates, boot health and first-boot
     /// pairing. Exit 3 on any machine that is not Intentic OS
@@ -1436,6 +1443,7 @@ fn main() {
             Some(EngineCommand::Wsl { action, distro }) => engine::run_wsl(action, distro),
         },
         Command::Os(command) => run_os(command),
+        Command::Features { json } => features::run(json),
         Command::Uninstall {
             keep_sandboxes,
             delete_data,
@@ -1480,7 +1488,7 @@ fn allowed_during_a_move(command: &Command) -> bool {
             command,
             None | Some(EngineCommand::Status { .. }) | Some(EngineCommand::Fetch)
         ),
-        Command::Image(_) => true,
+        Command::Image(_) | Command::Features { .. } => true,
         // Reading what is here changes nothing; an uninstall waits for the move like every other change.
         Command::Uninstall { dry_run, .. } => *dry_run,
         Command::Docker(DockerCommand::Prepare { dry_run, .. }) => *dry_run,

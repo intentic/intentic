@@ -2,25 +2,26 @@
 import { DeviceRunLog, Meter, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { estimatedShare, type WaitExpectation, waitWords } from "./waitProgress";
+import { type Progress, progressShare, progressWords } from "./progress";
 
-// A WAIT THAT ENDS BY ITSELF, said in full under the sentence that names it: an estimated bar, how long it has run,
-// how long it usually takes, and when the screen stops waiting and offers something to do (waitProgress.ts). The raw
-// facts behind the sentence stay behind one press, for a reader who wants them, and are never shown unasked.
+// WORK THAT ENDS BY ITSELF, said in full under the sentence that names it: a bar (the work's own count, else an
+// estimate), how long it has run, how long it should take, and when the screen stops waiting and offers something to
+// do (progress.ts). The raw facts behind the sentence stay behind one press, for a reader who wants them, and are never
+// shown unasked.
 
-const { wait, details = [], what } = defineProps<{
-    readonly wait: WaitExpectation;
+const { progress, details = [], what } = defineProps<{
+    readonly progress: Progress;
     // What was observed, verbatim (probe results, the machine's report, the work's own output). Shown only on request.
     readonly details?: readonly string[];
-    // What is happening, in one short sentence with a spinner, for a wait that has no sentence of its own above it
+    // What is happening, in one short sentence with a spinner, for work that has no sentence of its own above it
     // (a press whose work runs for minutes). A gate or a card that already names the wait leaves this out.
     readonly what?: string | undefined;
 }>();
 
 const t = useT();
 
-const share = computed(() => estimatedShare(wait));
-const words = computed(() => waitWords(wait));
+const share = computed(() => progressShare(progress));
+const words = computed(() => progressWords(progress));
 const open = ref(false);
 </script>
 
@@ -31,7 +32,7 @@ const open = ref(false);
             <span>{{ what }}</span>
         </p>
         <Meter v-if="share !== undefined" :value="share" :label="t(`common.waitProgress.estimate`)" :valuetext="words.usual ?? words.elapsed" />
-        <p class="flex flex-wrap justify-between gap-x-3 text-2xs text-muted" aria-live="off">
+        <p v-if="words.elapsed || words.usual" class="flex flex-wrap justify-between gap-x-3 text-2xs text-muted" aria-live="off">
             <span class="tabular-nums">{{ words.elapsed }}</span>
             <span v-if="words.usual">{{ words.usual }}</span>
         </p>

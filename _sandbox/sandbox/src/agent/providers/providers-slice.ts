@@ -1,4 +1,5 @@
 import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import { AgentProviderSchema } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import type { OauthAccount } from "@intentic/sandbox-contract/schemas/providers/provider-oauth";
@@ -23,6 +24,7 @@ import { fileModelRefusalStore, modelRefusalsDocument, type ModelRefusalStore } 
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import { fileProviderRefusalStore, providerRefusalsDocument, type ProviderRefusalStore } from "../../usage/provider-refusals.js";
 import { fileRunOutStore, runOutsDocument, type RunOutStore } from "../../usage/run-outs.js";
+import { accountFactsOf } from "../../usage/serviceability/serviceability.js";
 import { fileUsageStore, type UsageStore, usageLedgerDocument } from "../../usage/usage-store.js";
 import { type BurnRates, burnRatesDocument, createBurnRates } from "../run/spend/burn-rates.js";
 import { fileReadingsLog, readingsLogDocument } from "../run/spend/readings-log.js";
@@ -138,7 +140,13 @@ export const createProvidersSlice = ({ historyRoot, conversations, whole, ...bui
     return {
         ...built,
         usage: fileUsageStore(join(historyRoot, usageLedgerDocument.path)),
-        providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path), { log }),
+        providerRefusals: fileProviderRefusalStore(join(historyRoot, providerRefusalsDocument.path), {
+            log,
+            accountsOf: async (provider) => {
+                const known = AgentProviderSchema.safeParse(provider);
+                return known.success ? accountFactsOf(whole(), known.data) : [];
+            },
+        }),
         modelRefusals: fileModelRefusalStore(join(historyRoot, modelRefusalsDocument.path), { log }),
         runOuts: fileRunOutStore(join(historyRoot, runOutsDocument.path)),
         burnRates: createBurnRates({ path: join(historyRoot, burnRatesDocument.path), log: fileReadingsLog(join(historyRoot, readingsLogDocument.path)) }),

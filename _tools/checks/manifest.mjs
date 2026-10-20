@@ -308,7 +308,8 @@ export const CHECKS = [
     { id: "rows", file: "row-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "every list draws at its RowGroup's tier, and every section header is the kit's" },
     { id: "buttons", file: "button-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "every action button is <Button>" },
     { id: "inputs", file: "input-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "every field is ui-field-box" },
-    { id: "recipes", file: "recipe-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, ratchet: true, about: "a kit recipe's variant is chosen by name, never by overriding its classes, and a selection is marked one way" },
+    { id: "substitutes", file: "kit-substitutes.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a section label, a tab strip, a search field and an open row are drawn by the kit's own primitive" },
+    { id: "recipes", file: "recipe-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a kit recipe's variant is chosen by name, never by overriding its classes, and a selection is marked one way" },
     { id: "tones", file: "tone-tiers.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a tone at a strength is named in tone.ts, never written as an opacity" },
     { id: "run-settings", file: "run-settings-tier.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "effort, extended thinking and speed are one control" },
     { id: "model-labels", file: "model-labels.mjs", needs: "checkout", gate: "tidy", scoped: true, about: "a model is named by its catalog's label, never by falling back to its raw id" },
@@ -316,5 +317,12 @@ export const CHECKS = [
     { id: "bun-check-scripts", file: "bun-check-scripts.mjs", needs: "checkout", gate: "tidy", about: "no `check` script where `bun check` runs, or it runs instead of the type checker" },
     { id: "vue-templates", file: "vue-templates.mjs", needs: "node_modules", gate: "code", about: "every .vue template compiles (attempted where vue is installed)" },
     { id: "submit-guards", file: "submit-guards.mjs", needs: "node_modules", gate: "code", about: "an Enter-bound async handler drops the second press" },
+    {
+        id: "extension-kit",
+        file: "extension-kit.mjs",
+        needs: "checkout",
+        gate: "code",
+        about: "every extension, in this repo and beside it, uses the kit as it stands and imports nothing its engines.intentic floor lacks",
+    },
     { id: "extension-siblings", file: "extension-siblings.mjs", needs: "checkout", gate: "code", about: "workspace extensions/ holds only logs, scrub and intentic-saldeo" },
 ];

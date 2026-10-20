@@ -2,12 +2,14 @@ import { ladderPins, roleLadder } from "@intentic/sandbox-contract/models/model-
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
-import { readyChain } from "@intentic/sandbox-contract/models/model-pins";
+import { openingRung, readyChain, rungModel } from "@intentic/sandbox-contract/models/model-pins";
+import { useNow } from "@intentic/ui/async";
 import { computed, type ComputedRef } from "vue";
 import { useSandboxSettings } from "../sandbox/useSandboxSettings";
 import { providerReady } from "./access";
 import { modelChoiceLabel } from "./modelPins";
 import { demandCatalog, endpointProviders, providerModels } from "./providerCatalog";
+import { modelCapacity } from "./usageStatus";
 
 // Which models one job will run, and in what order, mirroring the daemon's own rule (contract
 // model-pins.ts) for naming the model on a button, drawing settings rows, and showing fallbacks. One
@@ -36,13 +38,19 @@ export const readConnectedCatalogs = (): void => {
     }
 };
 
+// The pin a ready chain opens on, judged over this browser's account rows, readings and refusals by the same verdict the
+// daemon routes by (contract openingRung over fleetCapacity), so the job's button names the model its run will use.
+export const openingPin = (chain: readonly ModelPin[], now: number): ModelPin | undefined =>
+    openingRung(chain, (rung) => modelCapacity(rung.provider, rungModel(rung), now));
+
 export interface RoleModel {
     // Pins this job may run, in daemon try-order, minus gone accounts; empty is a real state, not an error.
     readonly chain: ComputedRef<readonly ModelPin[]>;
-    // The pin used when nothing goes wrong; undefined means the caller's own floor answers instead.
+    // The pin the job opens on: the first rung the capacity verdict does not call spent, as the daemon routes it
+    // (contract openingRung), else the head. Undefined means the caller's own floor answers instead.
     readonly choice: ComputedRef<ModelPin | undefined>;
     readonly label: ComputedRef<string | undefined>;
-    // The rest of the chain, for the line describing what happens if the first account is out.
+    // The rest of the chain, for the line describing what happens if that one is out.
     readonly fallbackLabels: ComputedRef<readonly string[]>;
     // The list the job's setup runs on, as written or as a preset is worked out today. Empty while settings load.
     readonly pinned: ComputedRef<readonly ModelPin[]>;
@@ -62,12 +70,15 @@ export function useRoleModel(role: ModelRole): RoleModel {
     });
     // Settings not loaded yet means no answer, not a guess, since a wrong name would flash on every button.
     const chain = computed<readonly ModelPin[]>(() => (settings.value === undefined ? [] : readyChain(roleSources.value, pinned.value)));
-    const choice = computed(() => chain.value[0]);
+    // A minute clock, so a spent rung's reopening moves the choice back when the daemon's verdict moves it, not at the
+    // next unrelated change.
+    const now = useNow(true, 60_000);
+    const choice = computed(() => openingPin(chain.value, now.value));
     return {
         chain,
         choice,
         label: computed(() => (choice.value === undefined ? undefined : modelChoiceLabel(choice.value))),
-        fallbackLabels: computed(() => chain.value.slice(1).map(modelChoiceLabel)),
+        fallbackLabels: computed(() => chain.value.filter((rung) => rung !== choice.value).map(modelChoiceLabel)),
         pinned,
     };
 }

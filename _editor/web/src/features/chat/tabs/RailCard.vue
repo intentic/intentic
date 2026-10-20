@@ -1,7 +1,7 @@
 <!-- Shared session-card shell for every rail. -->
 <script setup lang="ts">
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
 import { formatElapsed, type IconName, SegmentRing, timeAgo, type Tip } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
@@ -135,7 +135,7 @@ const chipHint = computed((): Tip | undefined =>
                 <!-- THE CORNER SAYS IT IN WORDS WHEN THERE ARE WORDS, exactly as the board's card does: a glyph in this seat can say
      "something ended" but never "Usage limit", and the two surfaces drawing the same standing differently was the
      whole complaint. The resting glyph gets the seat back the moment there is nothing to say. -->
-                <span v-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="chip.tone">{{
+                <span v-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 font-semibold" :class="chip.tone">{{
                     chip.label
                 }}</span>
                 <!-- Fixed-height box so a row's title never shifts between a spinning glyph and a resting one. -->

@@ -18,6 +18,8 @@ const StoredRefusalsSchema = z.record(z.string(), StoredModelRefusalSchema);
 export const modelRefusalsDocument = defineDocument({
     root: "history",
     path: "model-refusals.json",
+    // Models refused to this sandbox's credentials; expires daily, same subscriptions apply elsewhere.
+    portability: "carry",
     schema: StoredModelRefusalSchema,
     granularity: "record",
 });

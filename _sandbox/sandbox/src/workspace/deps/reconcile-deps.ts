@@ -36,7 +36,13 @@ interface RequestState {
     readonly projects: Record<string, DependencyRequestOrigin>;
 }
 
-export const dependencyRequestsDocument = defineDocument({ root: "history", path: "dependency-requests.json", schema: RequestStateSchema });
+export const dependencyRequestsDocument = defineDocument({
+    root: "history",
+    path: "dependency-requests.json",
+    // First-time dependency setup requests; carried so an interrupted queue survives export, entries self-remove.
+    portability: "carry",
+    schema: RequestStateSchema,
+});
 
 // The schema's value as this store holds it: each origin spelled for exact optional types.
 const requestState = (parsed: z.output<typeof RequestStateSchema>): RequestState => ({

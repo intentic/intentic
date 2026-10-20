@@ -9,7 +9,8 @@ import type { ChatRunView } from "../run/chatRun";
 import { forgetWindowState, readWindowState, writeWindowState } from "../../../workbench/window/windowStore";
 import { chatTabsKey } from "../../../app/storage/browserStorage";
 
-// Where a sandbox's open chat tabs persist between page loads: identity, title, and composer draft, one JSON
+// Where a sandbox's open chat tabs persist between page loads: identity, title and picks (never the words, which are the
+// conversation's draft, drafts/composerDrafts.ts), one JSON
 // blob per sandbox, seeded from the last window's (windowStore has the store mechanics). Transcript content
 // lives in IndexedDB instead (transcriptCache), so a restored tab paints from disk and useChat's rehydration
 // then reconciles it with the daemon.
@@ -66,10 +67,11 @@ export interface StoredTab {
     // still lanes it the way the board does (Conversation.standing).
     readonly standing?: AgentStanding;
     readonly title?: string;
-    readonly draft: string;
-    // When the draft first went unsent, so its age survives reload instead of resetting to "just now".
+    // A composer's words, as tabs stored them before the sandbox held drafts (drafts/composerDrafts.ts): read once into
+    // the conversation's draft when such a tab is restored, and never written again.
+    readonly draft?: string;
     readonly draftAt?: number;
-    readonly attachments: { name: string; path: string }[];
+    readonly attachments?: { name: string; path: string }[];
 }
 
 // The one place a Conversation folds into its portable shape (StoredTab), read by both the tab-snapshot watch
@@ -100,9 +102,6 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     standIn: conversation.standIn.value,
     standing: conversation.standing.value,
     title: conversation.title.value ?? undefined,
-    draft: conversation.draft.value,
-    draftAt: conversation.draftAt.value,
-    attachments: conversation.attachments.value.filter((file) => file.status === `done`).map((file) => ({ name: file.name, path: file.path })),
 });
 
 // A sandbox's whole strip: open tabs, the focused one, and which are on screen (panes, column order). Coherent
@@ -130,7 +129,7 @@ const SessionSchema = z
 // Composite fields read back whole or not at all: a partial session, fork or displaced pick names nothing usable.
 const StoredTabSchema: z.ZodType<StoredTab> = z.object({
     conversationId: z.string().min(1),
-    draft: z.string(),
+    draft: maybe(z.string()),
     // No worktree named means isolated, the default a fresh tab gets; registered waits for a roster frame.
     isolated: z
         .unknown()
@@ -142,8 +141,9 @@ const StoredTabSchema: z.ZodType<StoredTab> = z.object({
         .transform((raw) => raw === true),
     attachments: z
         .array(z.unknown())
-        .catch([])
-        .transform((entries) => entries.flatMap((entry) => AttachmentSchema.safeParse(entry).data ?? [])),
+        .optional()
+        .catch(undefined)
+        .transform((entries) => entries?.flatMap((entry) => AttachmentSchema.safeParse(entry).data ?? [])),
     box: text,
     provider: maybe(AgentProviderSchema),
     movedFrom: maybe(z.object({ provider: AgentProviderSchema, value: z.string() })),
@@ -183,11 +183,11 @@ const readStrip = (raw: string): z.infer<typeof StoredStripSchema> | undefined =
 };
 
 // Readable tabs only, each conversation once: a duplicate id renders as two tabs sharing one key, mixing up
-// names and closes. Shared with closedDrafts.ts, so both parse the identical stored shape the same way.
+// names and closes. Also how composerDrafts.ts reads, once, the set of closed chats drafts used to be kept in.
 export const readStoredTabs = (raw: string): StoredTab[] => {
     const seen = new Set<string>();
     return (readStrip(raw)?.tabs ?? []).flatMap((entry) => {
-        // An entry with no usable identity or draft is skipped: one bad tab must not cost every other open chat.
+        // An entry with no usable identity is skipped: one bad tab must not cost every other open chat.
         const tab = StoredTabSchema.safeParse(entry).data;
         if (tab === undefined || seen.has(tab.conversationId)) {
             return [];

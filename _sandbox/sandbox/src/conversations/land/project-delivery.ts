@@ -76,7 +76,7 @@ const ProjectDeliveriesSchema = z.object({
 });
 type ProjectDeliveries = z.infer<typeof ProjectDeliveriesSchema>;
 
-export const projectDeliveriesDocument = defineDocument({ root: "history", path: "project-deliveries.json", schema: ProjectDeliveriesSchema });
+export const projectDeliveriesDocument = defineDocument({ root: "history", path: "project-deliveries.json", portability: "identity", schema: ProjectDeliveriesSchema });
 
 // What delivery reads off the daemon, narrowed so a test hands it a hub, a registry and a repository of its own. Built
 // in the boot wiring (bootstrap/boot-schedulers.ts), which sits above hosts/ and this subsystem both.

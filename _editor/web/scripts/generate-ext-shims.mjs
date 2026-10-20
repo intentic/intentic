@@ -6,9 +6,10 @@ import { packageRoot } from "@intentic/constants/node";
 import { extensionUiNames } from "../../../_shared/extension-ui/names.mjs";
 
 // Generates public/ext-shims/*.js: ESM shims re-exporting the host's module instances (globalThis.__intenticHost,
-// populated by src/extension-host/hostModules.ts) so bundles share the app's one instance of each. Regenerate with
-// `node scripts/generate-ext-shims.mjs` after any package's export surface changes; extShims.test.ts checks the
-// committed output against this script. @intentic/extension-ui's export names come from names.mjs, since its
+// populated by src/extension-host/hostModules.ts) so bundles share the app's one instance of each. A derived file
+// (.gitattributes `merge=derived`): the fixers write it again whenever names.mjs or the API's or manifest's sources
+// move (_tools/scripts/verify/fixers.mjs DERIVED), here and where the work lands; extShims.test.ts checks the committed
+// output against this script. @intentic/extension-ui's export names come from names.mjs, since its
 // runtime (a .vue graph) can't be imported in node.
 const targets = [
     { specifier: "vue", file: "vue.js" },

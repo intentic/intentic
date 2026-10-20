@@ -113,7 +113,7 @@ const doPair = async (): Promise<void> => {
                         v-for="keyring of online"
                         :key="keyring.machine"
                         type="button"
-                        :class="ui.chip({ on: chosen.includes(keyring.machine) }, `gap-1 py-1 px-2 text-2xs`)"
+                        :class="ui.chip({ on: chosen.includes(keyring.machine) })"
                         :aria-pressed="chosen.includes(keyring.machine)"
                         :disabled="waiting"
                         @click="toggle(keyring.machine)"

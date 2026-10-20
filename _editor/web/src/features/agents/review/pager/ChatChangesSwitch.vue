@@ -31,6 +31,7 @@ defineExpose({ thumb });
 
 <template>
     <!-- Track and thumb are the stretch SegmentedControl's (canvas well, pill-on plate), at a header's size. -->
+    <!-- allow(substitutes): the pager moves this thumb mid-swipe (SwipePages' follower), which <SegmentedControl>'s own thumb cannot follow -->
     <div role="tablist" :aria-label="t(`agents.agentDetail.pages`)" class="relative inline-flex shrink-0 items-center rounded-full border border-line bg-canvas p-0.5">
         <!-- Moved by the pager, never by a class: its place is the pages' place, mid-swipe included. -->
         <span ref="thumb" class="ui-pill-on pointer-events-none absolute left-0.5 top-0.5 h-10 w-11 rounded-full" aria-hidden="true"></span>

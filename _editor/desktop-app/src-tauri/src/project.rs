@@ -11,7 +11,8 @@
 //! it cannot have one, how far this computer's sandbox is), and [`project_attach`] puts the folder in line for it and
 //! answers at once. The supervisor attaches it the moment the sandbox is ready (`intentic-machine sync attach`) and
 //! follows its first copy; the window's card and button draw both. A folder that already has a sandbox of its own (a
-//! per-folder one from before, `projects.json`) keeps opening that one: nothing is moved. A hosted sandbox's project is
+//! per-folder one from before) keeps opening that one: nothing is moved. Which folder is in which sandbox is the machine
+//! agent's pairings alone (bindings.rs). A hosted sandbox's project is
 //! enrolled as `intentic://sync?…&project=<name>` ([`sync_project`]), and the workspace's own `/setup` page can still
 //! hand a project's setup back as `intentic://setup?…&project=<name>` ([`bind`]). The path never rides a link or a
 //! command, so no page can point a sandbox at a folder the user did not pick: it is always the folder of the window
@@ -662,19 +663,13 @@ pub fn bind(app: &AppHandle, mut args: SetupArgs) -> SetupArgs {
     args
 }
 
-/// A project's setup finished: the folder has its sandbox, opening it again reaches that one, and every window on the
-/// folder hears so (its button becomes the way to the sandbox, its bring-back appears).
-pub fn remember(app: &AppHandle, args: &SetupArgs, slug: Option<String>) {
-    let (Some(dir), Some(folder)) = (args.project.clone(), args.sync_dir.clone()) else {
-        return;
-    };
-    app.state::<AppState>().remember_project(Project {
-        path: folder.clone(),
-        dir,
-        sandbox_id: args.sandbox_id.clone(),
-        slug,
-    });
-    crate::local::mark_sandbox(app, Path::new(&folder));
+/// A project's setup finished: its sync script paired the folder with the sandbox, so the agent is read again, and every
+/// window on the folder hears so once its pairing is there (its button becomes the way to the sandbox, its bring-back
+/// appears; bindings.rs).
+pub fn remember(app: &AppHandle, args: &SetupArgs) {
+    if args.project.is_some() && args.sync_dir.is_some() {
+        crate::bindings::refresh_soon(app);
+    }
 }
 
 /* THE FOLDER'S OWN DIALOG — what it draws, and the sandbox it makes (the web's local/LocalProjectDialog.vue). */
@@ -804,7 +799,8 @@ pub async fn project_attach(
     }
     if stale {
         let folder = root.clone();
-        let _ = tauri::async_runtime::spawn_blocking(move || release_folder(&folder)).await;
+        let held = app.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || release_folder(&held, &folder)).await;
     }
     let alternatives: Vec<String> = ask
         .alternatives
@@ -838,7 +834,7 @@ pub fn attach_named(
         ));
     }
     if stale {
-        release_folder(root);
+        release_folder(app, root);
     }
     let name = crate::machine_sandbox::queue(app, root, project, alternatives);
     Ok(Attached::Queued { name })
@@ -919,17 +915,17 @@ pub(crate) fn pairings_of<'a>(
 
 /// A folder whose sandbox was removed, let go by this machine's sync: the agent keeps one sync per folder, so the dead
 /// sandbox's pairing would turn the new one's away and leave its copy of the folder empty. Best effort: a folder this
-/// fails for is said by the setup's own folder-sync step, as before.
-pub(crate) fn release_folder(folder: &Path) {
-    let status = match crate::scripts::sync_report() {
-        Ok(Some(report)) => serde_json::from_str::<serde_json::Value>(&report).unwrap_or_default(),
-        Ok(None) => return,
-        Err(error) => {
-            eprintln!("intentic: {error}");
-            return;
-        }
+/// fails for is said by the setup's own folder-sync step, as before. The agent is read before and after, so the folder's
+/// binding is what it holds (bindings.rs).
+pub(crate) fn release_folder(app: &AppHandle, folder: &Path) {
+    let Some(status) = crate::bindings::refresh(app) else {
+        return;
     };
-    for sandbox in pairings_on(&status, folder, cfg!(windows)) {
+    let held = pairings_on(&status, folder, cfg!(windows));
+    if held.is_empty() {
+        return;
+    }
+    for sandbox in held {
         match crate::scripts::agent_unpair(&sandbox) {
             Ok(said) => eprintln!(
                 "intentic: {} let go of {}: {said}",
@@ -942,16 +938,18 @@ pub(crate) fn release_folder(folder: &Path) {
             ),
         }
     }
+    crate::bindings::refresh(app);
 }
 
 /* WHEN A SANDBOX IS GONE, its folders' records and this machine's sync of it go too (2026-10-05).
  *
  * Neither went before. A sandbox removed from This device lost only its display name (commands.rs `sandbox_remove`),
  * the machine agent kept syncing its folder until a NEW sandbox was made for that same folder (`release_folder`), and
- * `projects.json` kept every folder's entry for good. Now the agent is told to let go whenever a sandbox goes: removed
- * here, or dropped from the account's own listing (the workspace's roster, read from the platform, for the same
- * account as before). A folder's entry goes once the account no longer lists its sandbox. The account listing a sandbox
- * no more is the platform's record of it, not an absence guessed here; a roster with nobody signed in decides nothing. */
+ * this app's own list of folders kept every entry for good. Now the agent is told to let go whenever a sandbox goes:
+ * removed here, or dropped from the account's own listing (the workspace's roster, read from the platform, for the same
+ * account as before). A folder's binding is its pairing (bindings.rs), so it goes when the agent lets go of the sandbox,
+ * and nothing of this app's is left to say otherwise (2026-10-20). The account listing a sandbox no more is the
+ * platform's record of it, not an absence guessed here; a roster with nobody signed in decides nothing. */
 
 /// The projects whose sandbox the account no longer lists, read off a roster that names who is signed in. Never the
 /// sandbox this computer's own supervisor keeps (`kept`, machine_sandbox.rs), which says for itself when that one is
@@ -1039,27 +1037,22 @@ pub(crate) fn forget_sandbox(slug: Option<&str>, sandbox_id: Option<&str>) {
 }
 
 /// The sandboxes this machine's agent syncs (`intentic-machine status --json`, `sync.pairings`): only those are told
-/// to let go, since the account's other sandboxes (hosted, shared) were never synced here. None when the agent could
-/// not be read.
-fn paired_sandboxes() -> Option<HashSet<String>> {
-    let report = crate::scripts::sync_report().ok()??;
-    let status: serde_json::Value = serde_json::from_str(&report).ok()?;
-    Some(
-        status["sync"]["pairings"]
-            .as_array()
-            .map(|pairings| {
-                pairings
-                    .iter()
-                    .filter_map(|pairing| pairing["sandboxId"].as_str().map(str::to_string))
-                    .collect()
-            })
-            .unwrap_or_default(),
-    )
+/// to let go, since the account's other sandboxes (hosted, shared) were never synced here. Pure.
+fn paired_sandboxes(status: &serde_json::Value) -> HashSet<String> {
+    status["sync"]["pairings"]
+        .as_array()
+        .map(|pairings| {
+            pairings
+                .iter()
+                .filter_map(|pairing| pairing["sandboxId"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
-/// The workspace said again which sandboxes the account has (windows.rs, `intentic://roster`): folders whose sandbox
-/// is no longer listed are forgotten, and this machine's sync lets go of every sandbox that went. Off the calling
-/// thread, since the agent is asked.
+/// The workspace said again which sandboxes the account has (windows.rs, `intentic://roster`): this machine's sync lets
+/// go of every sandbox that went, whose folders' pairings are their bindings, and the agent is read again. Off the
+/// calling thread, since the agent is asked.
 pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
     if after.account.is_none() {
         return;
@@ -1068,13 +1061,14 @@ pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
     tauri::async_runtime::spawn_blocking(move || {
         let kept = crate::machine_sandbox::kept_sandbox_id(&app);
         let stale = stale_projects(&app.state::<AppState>().projects(), &after, kept.as_deref());
-        let forgotten = app
-            .state::<AppState>()
-            .forget_projects(|project| stale.contains(project));
-        let mut gone: Vec<(Option<String>, String)> = forgotten
-            .into_iter()
-            .filter_map(|project| Some((project.slug, project.sandbox_id?)))
-            .collect();
+        let mut gone: Vec<(Option<String>, String)> = Vec::new();
+        for project in stale {
+            if let Some(id) = project.sandbox_id {
+                if !gone.iter().any(|(_, held)| *held == id) {
+                    gone.push((project.slug, id));
+                }
+            }
+        }
         for id in dropped_sandboxes(&before, &after) {
             if Some(&id) != kept.as_ref() && !gone.iter().any(|(_, held)| *held == id) {
                 gone.push((slug_of_sandbox(&app, &id), id));
@@ -1083,11 +1077,16 @@ pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
         if gone.is_empty() {
             return;
         }
-        let Some(paired) = paired_sandboxes() else {
+        let Some(report) = crate::bindings::refresh(&app) else {
             return;
         };
-        for (slug, id) in gone.iter().filter(|(_, id)| paired.contains(id)) {
+        let paired = paired_sandboxes(&report);
+        let forgotten: Vec<_> = gone.iter().filter(|(_, id)| paired.contains(id)).collect();
+        for (slug, id) in &forgotten {
             forget_sandbox(slug.as_deref(), Some(id));
+        }
+        if !forgotten.is_empty() {
+            crate::bindings::refresh(&app);
         }
     });
 }
@@ -1389,7 +1388,7 @@ impl Drop for Working {
 }
 
 /// A project verb from the window showing `root` (local.rs): only for a folder that IS a project of this machine's
-/// (`projects.json`), run off the main thread, and answered into that window as `intentic:project` whatever
+/// (bindings.rs), run off the main thread, and answered into that window as `intentic:project` whatever
 /// happens, so the page is never left waiting on a button it pressed.
 pub fn work(app: &AppHandle, label: &str, root: &Path, verb: &LocalVerb) {
     let Some(name) = project_verb(verb) else {
@@ -1561,8 +1560,8 @@ pub fn sync_project(app: &AppHandle, args: SyncArgs) {
         });
 }
 
-/// The sync script for `folder` as the project `args` names, off the main thread; on success the project is
-/// remembered with its sandbox, so the folder's window reaches it from then on. A failure is said in a dialog: the
+/// The sync script for `folder` as the project `args` names, off the main thread; on success the agent, which paired the
+/// folder, is read again, so the folder's window reaches its sandbox from then on. A failure is said in a dialog: the
 /// page that sent the link is waiting for an enrollment, and has no other way to hear this one will not come.
 fn run_project_sync(app: &AppHandle, args: SyncArgs, folder: PathBuf) {
     let app = app.clone();
@@ -1578,12 +1577,9 @@ fn run_project_sync(app: &AppHandle, args: SyncArgs, folder: PathBuf) {
             crate::commands::VERSION,
         );
         match crate::scripts::run(&app, &format!("project-sync:{dir}"), run) {
-            Ok(()) => app.state::<AppState>().remember_project(Project {
-                path,
-                dir,
-                sandbox_id: args.sandbox_id.clone(),
-                slug: None,
-            }),
+            Ok(()) => {
+                crate::bindings::refresh(&app);
+            }
             Err(error) => {
                 eprintln!("the sync for {path} did not start: {error}");
                 app.dialog()

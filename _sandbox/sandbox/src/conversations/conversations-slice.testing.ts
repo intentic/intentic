@@ -16,6 +16,7 @@ import { noIsolation } from "./worktrees/isolation.testing.js";
 import { parkedCards } from "./actor/parked-cards.js";
 import { sqliteAgentsStore } from "./registry/agents-store.js";
 import type { ConversationsSlice } from "./conversations-slice.js";
+import { registryDrafts } from "./drafts/composer-drafts.js";
 
 // The conversations slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
 
@@ -80,6 +81,10 @@ export const conversationsSliceFake = (context: SliceFakeContext) => {
             clearFire: async () => {},
         },
         agentWorktrees: absentWorktrees(),
+        // The real store under the suite's own history root, telling the same registry as the daemon's does.
+        drafts: registryDrafts(context.historyRoot, agents, (error) => {
+            throw error;
+        }),
         // Composed from the same two lookups the daemon uses, so an unscoped read is the shared tree just as in
         // production. Read through the finished services, so redirecting `workspace` moves the file routes with it.
         workspaceScope: {

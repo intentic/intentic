@@ -89,7 +89,7 @@ onBeforeUnmount(close);
         <button
             ref="trigger"
             type="button"
-            class="inline-flex shrink-0 items-center gap-1 ui-status-pill font-mono text-2xs font-medium"
+            class="ui-status-pill shrink-0 font-mono font-medium"
             :class="toneWash(`success`)"
             :aria-expanded="placement !== undefined"
             :aria-label="heading"

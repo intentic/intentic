@@ -16,7 +16,14 @@ const ChoreClockSchema = z.object({
     // Epoch ms each chore last started, by its name.
     ran: z.record(z.string(), z.number()),
 });
-export const choreClockDocument = defineDocument({ root: "history", path: "chore-clock.json", schema: ChoreClockSchema });
+export const choreClockDocument = defineDocument({
+    root: "history",
+    path: "chore-clock.json",
+    // When each housekeeping chore last ran, so a restart does not run a daily one again; a moved
+    // sandbox runs each once at its first boot.
+    portability: "derived",
+    schema: ChoreClockSchema,
+});
 type ChoreClockFile = z.infer<typeof ChoreClockSchema>;
 
 // A clock nothing has run on yet, which is also what an unreadable one reads as.

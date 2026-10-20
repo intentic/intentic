@@ -17,7 +17,14 @@ const RestartResumeSchema = z.object({
     // When the ask was made; absent once the boot it was for has read it, or the swap ended without a restart.
     askedAt: z.number().optional(),
 });
-export const restartResumeDocument = defineDocument({ root: "history", path: "restart-resume.json", schema: RestartResumeSchema });
+export const restartResumeDocument = defineDocument({
+    root: "history",
+    path: "restart-resume.json",
+    // A rebuild's ask that the next boot resume the turns it cuts: about this machine's next boot only,
+    // read once by it, so a moved sandbox starts without one.
+    portability: "derived",
+    schema: RestartResumeSchema,
+});
 
 // How long an ask stands: a rebuild builds for many minutes before its restart, and one that died before restarting
 // must not make an unrelated restart hours later resume whatever it cuts.

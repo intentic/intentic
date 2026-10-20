@@ -152,7 +152,8 @@ describe(`a resume the sandbox promised`, () => {
 
         failures.apply(STOPPED);
         expect(failures.credentialRenewal.value).toBeUndefined();
-        expect(failures.resumeWithdrawn.value).toBe(`Claude Code returned an error result: 401`);
+        // The failure as the board draws it: its words, and that nobody coded or worded them as the sandbox.
+        expect(failures.resumeWithdrawn.value).toEqual({ message: `Claude Code returned an error result: 401`, error: undefined, own: undefined });
         // The stop's own way on is what the chat shows.
         expect(host.pickUp.value).toEqual({ reason: `stopped` });
         failures.armRenewalProbe();

@@ -141,6 +141,7 @@ const onFieldKey = (event: KeyboardEvent): void => {
             <Icon name="book" :class="compact ? `text-xs` : ``" />
         </button>
         <!-- The chosen name, lit, as the one state the home is in that its tiles would not explain; × goes back to them. -->
+        <!-- allow(recipes): the chip is a container for two inner buttons (name, ×) that fill its height and own its padding -->
         <span v-else :class="ui.chip({ on: true }, `h-6 cursor-default gap-0 p-0`)" v-tooltip.bottom="tip">
             <!-- The anchor is this button, not the chip: a chooser closed without a choice hands the keyboard back to it. -->
             <button

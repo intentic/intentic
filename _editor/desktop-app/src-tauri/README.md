@@ -40,7 +40,10 @@ flowchart LR
 - **State on disk.** `state.rs` keeps `settings.json` (`appUrl`, `platformUrl`), the install id, the close choice,
   the colour mode, a setup parked across a Windows restart or sign-out, the face last in use (`last-face.json`), the folder the
   main window opens on (`home-folder.json`, `~/intentic/local` until it is pointed elsewhere), whether an account was
-  ever seen (`account-seen.json`), the recents and the folders that have a sandbox of their own (`projects.json`).
+  ever seen (`account-seen.json`) and the recents. Which folder is in which sandbox is not among them: it is the machine
+  agent's pairing of the folder, read through the agent (`bindings.rs`) and held in memory only. _(2026-10-20)_ The app
+  kept it in `projects.json` as well, which a reinstall lost while the agent went on syncing, and which outlived a
+  pairing the agent retired; a launch now removes that file.
 - **Local windows.** `local.rs` owns the windows on the user's own folders and documents, the main one among them, and
   pointing one at another folder; `sidecar.rs` owns the
   `intentic-files` process that serves them; `project.rs` is a folder becoming a sandbox's project and the machine

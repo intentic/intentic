@@ -3,24 +3,24 @@ import type { CapabilityProbe } from "@intentic/sandbox-contract/schemas/capabil
 import { toneTint } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import WaitProgress from "../../components/WaitProgress.vue";
-import { useWaitClock } from "../../components/useWaitClock";
+import ProgressMeter from "../../components/progress/ProgressMeter.vue";
+import type { Progress } from "../../components/progress/progress";
 
 // What stands above a tile's Save: what its test said, since "will this work" belongs before the commitment, and the
 // save or the test still running, with how long it has run. A save that installs something runs for minutes, its
 // commands in a terminal of their own, and a bare spinner on Save read as a hang.
 
-const { probeResult, submitStartedAt, probeStartedAt } = defineProps<{
+const { probeResult, submitMeter, probeMeter } = defineProps<{
     readonly probeResult: CapabilityProbe | undefined;
-    // When the save or the test still running began (capabilitySubmit.ts, capabilityProbe.ts); undefined when none runs.
-    readonly submitStartedAt: number | undefined;
-    readonly probeStartedAt: number | undefined;
+    // How far along the save or the test still running is (capabilitySubmit.ts, capabilityProbe.ts); undefined when none runs.
+    readonly submitMeter: Progress | undefined;
+    readonly probeMeter: Progress | undefined;
 }>();
 
 const t = useT();
 
-const wait = useWaitClock(() => submitStartedAt ?? probeStartedAt);
-const what = computed(() => (submitStartedAt !== undefined ? t(`capabilities.capabilities.savingWhat`) : t(`capabilities.capabilities.testingWhat`)));
+const wait = computed(() => submitMeter ?? probeMeter);
+const what = computed(() => (submitMeter !== undefined ? t(`capabilities.capabilities.savingWhat`) : t(`capabilities.capabilities.testingWhat`)));
 </script>
 
 <template>
@@ -42,5 +42,5 @@ const what = computed(() => (submitStartedAt !== undefined ? t(`capabilities.cap
         />
         {{ probeResult.message }}
     </p>
-    <WaitProgress v-if="wait" :wait="wait" :what="what" />
+    <ProgressMeter v-if="wait" :progress="wait" :what="what" />
 </template>

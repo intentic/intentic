@@ -11,13 +11,14 @@
 //   <NavRail> (each was a prop once, and each was removed view by view before it left the component)
 // 5 a literal `:size` on a mark inside `#lead`, where the tier already hands one out
 // 6 a row component (relying on its group for density) mounted outside any <RowGroup>
-// 7 a section header drawn by hand: an `<h1>`–`<h6>` in the section label's look (uppercase, tracked)
+// 7 (moved) a section header drawn by hand is the `substitutes` check's (kit-substitutes.mjs), on every element
 // 8 a group among another group's rows, which nests one card in another: groups side by side are a stack
 // 9 sections side by side with nothing spacing them: a parent holding two or more <RowGroup>/<Section>s states the gap
 //   between them (`gap-*`, `space-y-*`), and a component whose template is several of them at its root is wrapped
 // 10 a height on a row: a row is as tall as its tier makes it, and a settings group's one floor is `equal-rows`
-// Rules 4 and 7–10 are lib/kit-decisions.mjs's `sectionFindings`, where their tests read them.
-import { sectionFindings } from "./lib/kit-decisions.mjs";
+// Rules 4 and 7–10 are the kit's own `sectionFindings` (_shared/extension-ui/check/kit-decisions.mjs), which its published
+// checker runs over extensions built outside this repository; their tests are kit-decisions.test.mjs.
+import { sectionFindings } from "../../_shared/extension-ui/check/kit-decisions.mjs";
 import { at, blank, classesOf, finishFindings, tags, templateSource, templatesUnder, VOID } from "./lib/templates.mjs";
 
 // Any Tailwind padding utility, at any breakpoint; `p-0`/`py-0` are a deliberate reset, not geometry.
@@ -26,11 +27,9 @@ const PADDING = /(?:^|\s)(?:sm:|md:|lg:|xl:|2xl:|@\w+:|max-\w+:)?(?:p|px|py|pt|p
 const ROW_LIKE = (name) => name === `Row` || name === `DisclosureRow` || name === `SkeletonRows` || name === `RowNote` || /.Row$/.test(name);
 const MARKS = new Set([`BrandMark`, `Avatar`, `PersonaFace`]);
 
-// Every surface a view is drawn on: the web app, the desktop app, the kit, and every extension in this repository. The
-// section rules (4, 7–10) hold on all of them; the tier rules (1–3, 5, 6) hold on the editor's own surfaces, where they
-// were introduced, and reach the extensions as their own rows are redrawn.
+// Every surface a view is drawn on: the web app, the desktop app, the kit, and every extension in this repository. Every
+// rule holds on all of them: an extension's list is the same list, mounted through `@intentic/extension-ui`.
 const tracked = templatesUnder(`_editor/web/src`, `_editor/desktop-app/src`, `_editor/ui/src`, `_shared/extension-ui/src`, `_extensions`);
-const TIERED = /^(?:_editor\/(?:web|desktop-app|ui)\/src|_shared\/extension-ui\/src)\//u;
 const findings = [];
 
 // Components whose root is a bare <Row>/<DisclosureRow> with no density: they expect a group to size them.
@@ -41,9 +40,6 @@ const usages = new Map();
 for (const path of tracked) {
     const scan = blank(templateSource(path));
     findings.push(...sectionFindings(path, scan));
-    if (!TIERED.test(path)) {
-        continue;
-    }
     const stack = [];
     // `<template v-if>`/`v-for` draw nothing, so a row inside one is still the group's child; `<template #slot>` is
     // somebody else's content, owned by its own component.

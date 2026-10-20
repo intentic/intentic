@@ -746,7 +746,7 @@
     background: rgba(201, 160, 92, 0.2) !important;
 }
 /* The picked tile — the page the user is on — carries the gold at rest, so it reads as the one lit niche. */
-[data-skin="sanctum"] .icon-rail-tile.bg-primary-600\/15 {
+[data-skin="sanctum"] .icon-rail-tile.ui-row-select-on {
     background: rgba(201, 160, 92, 0.15) !important;
 }
 [data-skin="sanctum"] .icon-rail-tile:focus-visible {

@@ -142,7 +142,7 @@ const remove = (path: string): void => {
                 v-for="path in picked"
                 :key="path"
                 type="button"
-                :class="ui.chip({ on: true }, `group py-0.5 pl-1.5 pr-1 text-xs hover:border-danger`)"
+                :class="ui.chip({ on: true, size: `sm` }, `group hover:border-danger`)"
                 :aria-label="t(`sandbox.folderPicker.remove`, { path })"
                 @click="remove(path)"
             >

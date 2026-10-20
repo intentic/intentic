@@ -26,7 +26,7 @@ const PhoneWakeFileSchema = z.object({ phones: z.record(z.string(), WakeEntrySch
 type PhoneWakeFile = z.infer<typeof PhoneWakeFileSchema>;
 
 // The relay channel holds a send secret, so the file is the owner's alone, like push.json.
-export const phoneWakeDocument = defineDocument({ root: "history", path: "phone-wake.json", schema: PhoneWakeFileSchema });
+export const phoneWakeDocument = defineDocument({ root: "history", path: "phone-wake.json", portability: "identity", schema: PhoneWakeFileSchema });
 
 // What a wake says. The relay requires a title; nothing here is ever shown, since a wake is data-only on the phone.
 export const WAKE_NOTIFICATION: PushNotification = { title: "wake", body: "", tag: "intentic-phone-wake", silent: true };

@@ -36,7 +36,7 @@ const hint = computed((): Tip => ({
     <button
         v-if="project !== undefined"
         type="button"
-        :class="ui.chip({ on: true }, `h-6 shrink-0 px-1.5`)"
+        :class="ui.chip({ on: true }, `shrink-0`)"
         :aria-label="tipText(hint)"
         v-tooltip.bottom="hint"
         @click="emit(`clear`)"

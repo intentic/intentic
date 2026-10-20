@@ -3,6 +3,7 @@ import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
 import { PEER_TRY_AGAIN, PEER_UNAUTHORIZED } from "@intentic/sandbox-contract/peer-dial";
 import { converterReadable, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract/peer-mcp-server";
+import { type PeerEnrollmentRequest, PeerEnrollmentRequestSchema } from "@intentic/sandbox-contract/schemas/hosts";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
 import type { Context } from "hono";
@@ -86,6 +87,16 @@ export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announc
     // Whether a pairing minted here also gets a short code its install command carries instead of the token
     // (peers/redeem-codes.ts): the device door's, whose install script redeems one. Absent, the answer is the token alone.
     readonly codes?: "device";
+    // What a redeeming peer says about itself in its enroll request (PeerEnrollmentRequestSchema), and what follows once
+    // its record is written. Only the hosts door has one: its agent says which computer it is on, so the enrollment is
+    // written with that machine's id rather than learning it at the first connect (hosts/host-peer.ts). `learn` is never
+    // asked about a body the schema refuses, since an older peer sends none, and saying nothing never refuses a redeem.
+    // `enrolled` runs before the answer, and a throw from it is logged: the pairing is spent by then, so the token is
+    // answered regardless.
+    readonly enrollment?: {
+        readonly learn: (said: PeerEnrollmentRequest, pairing: { readonly id: string } & Extra) => Partial<Extra>;
+        readonly enrolled: (enrollment: { readonly id: string } & Extra) => Promise<void>;
+    };
 }
 
 // Grant pushed on connect: the capability's own config, for kinds whose config is the grant. Narrowed by kind before
@@ -246,6 +257,37 @@ const forwarded = async (
     } catch (error) {
         return { jsonrpc: "2.0", id: request.id ?? null, error: { code: -32000, message: failed(error instanceof Error ? error : new Error(errorMessage(error)), tool) } };
     }
+};
+
+// What a redeeming peer said about itself, when its door asks and the body reads as a request; otherwise nothing.
+const saidOnEnroll = async (c: Context<AppEnv>, asked: boolean): Promise<PeerEnrollmentRequest | undefined> => {
+    if (!asked) {
+        return undefined;
+    }
+    // allow(silent-catch): no body, or one that is not JSON, is a peer older than the request that said nothing
+    return PeerEnrollmentRequestSchema.safeParse(await c.req.json().catch(() => undefined)).data;
+};
+
+// POST /system/<slug>/enroll's work: the pairing redeemed into a record written with whatever the peer said about itself.
+const enrollPeer = async <Extra>(
+    c: Context<AppEnv>,
+    services: Pick<Services, "logger">,
+    door: Pick<PeerDoor<{ token: string }, unknown, Record<never, never>>, "slug" | "noun" | "expired">,
+    deps: Pick<PeerRouteDeps<never, unknown, unknown, unknown, Extra>, "store" | "enrollment">,
+): Promise<Response> => {
+    const { store, enrollment } = deps;
+    const said = await saidOnEnroll(c, enrollment !== undefined);
+    const enrolled = await store.enroll(
+        c.req.header("x-intentic-pair") ?? "",
+        enrollment === undefined || said === undefined ? undefined : (pairing) => enrollment.learn(said, pairing),
+    );
+    if (enrolled === undefined) {
+        return c.json({ error: door.expired }, 401);
+    }
+    await enrollment?.enrolled(enrolled).catch((err: Error) => {
+        services.logger.warn({ err, id: enrolled.id }, `${door.slug}: enrolled a ${door.noun}, but what follows its enrollment failed`);
+    });
+    return c.json(enrolled);
 };
 
 export const createPeerRoutes = <
@@ -417,11 +459,7 @@ export const createPeerRoutes = <
         // POST /system/<slug>/enroll: authorized by the pairing alone, exempt from the bearer middleware. A manifest
         // this build cannot read refuses the enrollment with the pairing left unspent (peer-store.ts), answered as the
         // doors' 503 rather than a 500.
-        enroll: async (c: Context<AppEnv>): Promise<Response> =>
-            unavailableIfUnreadable(c, async () => {
-                const enrolled = await store.enroll(c.req.header("x-intentic-pair") ?? "");
-                return enrolled === undefined ? c.json({ error: door.expired }, 401) : c.json(enrolled);
-            }),
+        enroll: async (c: Context<AppEnv>): Promise<Response> => unavailableIfUnreadable(c, async () => await enrollPeer(c, services, door, deps)),
         /** GET /system/<slug> */
         list: async (c: Context<AppEnv>): Promise<Response> => c.json({ [door.listKey]: await deps.summaries() }),
         // Drops the enrollment and the live socket; the software itself stays until removed at the keyboard. Maintainer

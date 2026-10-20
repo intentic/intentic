@@ -1,4 +1,4 @@
-import { type ProgressStep, stepStart, stepWeight } from "../../progress/stagedProgress";
+import { type ProgressStep, stepStart, stepWeight } from "../../../../components/progress/stagedSteps";
 import { t } from "@intentic/ui/i18n";
 
 // WHAT AN UPDATE OR A ROLLBACK IS DOING, READ OFF THE LINES `ic` STREAMS. Unlike the checkout rebuild's log tail, a

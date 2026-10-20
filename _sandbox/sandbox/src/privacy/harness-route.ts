@@ -1,4 +1,5 @@
 import type { HarnessCredential } from "../agent/providers/agent-request.js";
+import type { PrivacyRefusal } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import type { PrivacyShield } from "./privacy-shield.js";
 
 // Puts a Claude Code harness credential behind the privacy shield's gateway: the harness then sends every model request,
@@ -34,7 +35,7 @@ export const sharedServerRefusal = async (
     shielded: () => Promise<boolean>,
     provider: string,
     conversationId: string | undefined,
-): Promise<string | undefined> => {
+): Promise<PrivacyRefusal | undefined> => {
     // allow(silent-catch): a server whose standing can't be read is taken to be in front of no gateway, which refuses an
     // untrusted provider while the shield masks and nothing else.
     const behind = await shielded().catch(() => false);

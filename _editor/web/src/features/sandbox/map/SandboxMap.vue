@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SegmentedControl } from "@intentic/ui";
+import { Await, SegmentedControl } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { deviceKey, storedValue, storeValue } from "@intentic/ui/storage";
 import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
@@ -25,7 +25,7 @@ const { models } = defineProps<{
     /** What the sandbox runs models on, as the hub already reads it for its Models row. */
     models: readonly ModelSource[];
 }>();
-const { map, input } = useReachMap(() => models);
+const { map, input, drawnFrom } = useReachMap(() => models);
 const { active } = useSandbox();
 
 const hovered = shallowRef<Focus>();
@@ -111,30 +111,32 @@ const views = computed(() => [
 </script>
 
 <template>
-    <div class="flex flex-col gap-3" :style="look">
-        <!-- One line, kept in view while the drawing scrolls: what the focus means, and how much the drawing shows. -->
-        <div class="sticky top-0 z-10 -mx-1 flex min-w-0 items-center gap-3 bg-canvas px-1 py-1">
-            <MapCaption :map :focus :lighting :pinned="pinned !== undefined" :persona-name @clear="clear" />
-            <SegmentedControl
-                class="shrink-0"
-                size="xs"
-                :model-value="view"
-                :options="views"
-                :aria-label="t(`sandbox.sandboxMap.viewLabel`)"
-                @update:model-value="setView"
+    <Await :of="drawnFrom">
+        <div class="flex flex-col gap-3" :style="look">
+            <!-- One line, kept in view while the drawing scrolls: what the focus means, and how much the drawing shows. -->
+            <div class="sticky top-0 z-10 -mx-1 flex min-w-0 items-center gap-3 bg-canvas px-1 py-1">
+                <MapCaption :map :focus :lighting :pinned="pinned !== undefined" :persona-name @clear="clear" />
+                <SegmentedControl
+                    class="shrink-0"
+                    size="xs"
+                    :model-value="view"
+                    :options="views"
+                    :aria-label="t(`sandbox.sandboxMap.viewLabel`)"
+                    @update:model-value="setView"
+                />
+            </div>
+            <MapStage
+                :map
+                :lighting
+                :focus
+                :pinned
+                :name="active?.name ?? t(`sandbox.sandboxMap.theSandbox`)"
+                :persona-name
+                :compact="view === `compact`"
+                @point="point"
+                @press="press"
+                @clear="clear"
             />
         </div>
-        <MapStage
-            :map
-            :lighting
-            :focus
-            :pinned
-            :name="active?.name ?? t(`sandbox.sandboxMap.theSandbox`)"
-            :persona-name
-            :compact="view === `compact`"
-            @point="point"
-            @press="press"
-            @clear="clear"
-        />
-    </div>
+    </Await>
 </template>

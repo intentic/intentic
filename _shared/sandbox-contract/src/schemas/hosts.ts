@@ -21,6 +21,22 @@ export const MachineIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,1
 export const derivedMachineId = (card: string): string => `card:${card}`;
 export const isDerivedMachineId = (machineId: string): boolean => machineId.startsWith("card:");
 
+// Which computer and which OS install on it is enrolling (`environmentKeyOf`), as the machine agent says it when it
+// redeems a pairing. Both optional, since an agent older than either says nothing.
+export const MachineIdentitySchema = z.object({
+    machineId: MachineIdSchema.optional(),
+    environment: z.string().min(1).optional(),
+});
+export type MachineIdentity = z.infer<typeof MachineIdentitySchema>;
+
+// (2026-10-20) The body of POST /system/hosts/enroll: the redeeming agent's identity, so the enrollment is written with
+// its real machine id instead of the card's derived one and joins that machine's sync row from its first write. Before
+// this the route took no body and the id was learned only at the agent's first connect, which left a freshly paired
+// computer as two machine cards until then. An agent older than it sends none, and the daemon reads one it cannot parse
+// as none. Kept here rather than beside the answer (peer-enrollment.ts), which the browser extension bundles.
+export const PeerEnrollmentRequestSchema = MachineIdentitySchema;
+export type PeerEnrollmentRequest = MachineIdentity;
+
 // How many skipped lines an agent sends in its upkeep summary at most; the counts cover the rest.
 export const UPKEEP_SKIPPED_SHOWN = 10;
 
@@ -115,6 +131,9 @@ export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 //   type a secret.
 // - `sleep`: the `sleep` op, a sandbox put to sleep now (`ic sandbox sleep <slug>`): stopped, and started again by
 //   itself when somebody opens it; advertised only when the agent's `ic` has `sandbox sleep`.
+// - `reachable-ways-back`: not an op but what a listing means: a sandbox's `rollbackTargets` are only the ways back a
+//   rollback can reach (ic 2026-10-19 on). Said by ic itself (`ic features`, golden/ic-features.json); without it the
+//   rows are an older ic's, which also listed pruned dev builds no download can bring back (state/ways-back.ts).
 export const DeviceFeatureSchema = z.enum([
     "reshape-later",
     "set-shape",
@@ -125,6 +144,7 @@ export const DeviceFeatureSchema = z.enum([
     "programs",
     "keyring",
     "sleep",
+    "reachable-ways-back",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -136,6 +156,11 @@ export const DEVICE_FEATURE_PROJECT_DELIVERY: DeviceFeature = "project-delivery"
 export const DEVICE_FEATURE_PROGRAMS: DeviceFeature = "programs";
 export const DEVICE_FEATURE_KEYRING: DeviceFeature = "keyring";
 export const DEVICE_FEATURE_SLEEP: DeviceFeature = "sleep";
+export const DEVICE_FEATURE_REACHABLE_WAYS_BACK: DeviceFeature = "reachable-ways-back";
+// What `ic features --json` answers (_sandbox/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
+// implements, as strings, since a newer ic's word means nothing to an older agent.
+export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });
+
 // The features an agent advertised that this build knows; an unknown one is a newer agent's and means nothing here.
 export const deviceFeatures = (facts: Pick<DeviceFacts, "features"> | undefined): DeviceFeature[] =>
     (facts?.features ?? []).flatMap((feature) => {

@@ -5,7 +5,17 @@ import { type EffectScope, effectScope, nextTick, ref } from "vue";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
 import { forgetHubWork, hubWorkRunning } from "../hub/hubWork";
 import { useNotifications } from "../notifications/notifications";
-import { dismissOperation, forgetOperations, operationAt, operationRunning, startOperation, useOperation, useOperations } from "./operations";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import {
+    dismissOperation,
+    forgetOperations,
+    OperationGaveUp,
+    operationAt,
+    operationRunning,
+    startOperation,
+    useOperation,
+    useOperations,
+} from "./operations";
 
 const KEY = `devices/omen/runner`;
 
@@ -29,6 +39,7 @@ const mount = <V>(setup: () => V): { view: V; scope: EffectScope } => {
 const sandboxBefore = activeSandboxId.value;
 
 afterEach(() => {
+    jest.useRealTimers();
     forgetOperations();
     forgetHubWork();
     useNotifications().dismissReceipt();
@@ -231,4 +242,59 @@ it(`files the account's own work once for every sandbox, so any of them reads it
     expect(await startOperation(`account/billing/tier`, { what: `Moving`, failed: `No`, task: async () => {} })).toBeUndefined();
     work.resolve();
     await started;
+});
+
+// Every long run says how long it should take and when it gives up, declared once where it starts, and the give-up is
+// kept rather than merely said: a readout promising "we'll show you what you can do after 3 minutes" over work the
+// ledger would wait on forever was the bug this pins.
+it(`keeps a run's expected length and give-up, and draws them through the one progress readout while it runs`, async () => {
+    jest.useFakeTimers();
+    const work = deferred<void>();
+    const view = mount(() => useOperation(KEY));
+    const ended = view.view.run({ what: `Cloning`, failed: `No`, expectedMs: 60_000, giveUpMs: 600_000, task: () => work.promise });
+    expect(operationAt(KEY)).toMatchObject({ expectedMs: 60_000, giveUpMs: 600_000 });
+    await advanceTimersByTimeAsync(2_000);
+    expect(view.view.meter.value).toEqual({ elapsedMs: 2_000, expectedMs: 60_000, giveUpMs: 600_000, measured: undefined });
+    work.resolve();
+    await ended;
+    expect(view.view.meter.value).toBeUndefined();
+    view.scope.stop();
+});
+
+it(`ends a run as failed at its give-up time, aborting its signal, and never hears the task after`, async () => {
+    jest.useFakeTimers();
+    const work = deferred<string>();
+    let aborted: unknown;
+    const view = mount(() => useOperation<string>(KEY));
+    const ended = view.view.run({
+        what: `Publishing`,
+        failed: (error) => ({ tone: `warning`, title: error instanceof OperationGaveUp ? `gave up after ${error.afterMs}` : `other` }),
+        giveUpMs: 30_000,
+        task: (report) => {
+            report.signal.addEventListener(`abort`, () => (aborted = report.signal.reason));
+            return work.promise;
+        },
+    });
+    await advanceTimersByTimeAsync(29_999);
+    expect(view.view.busy.value).toBe(true);
+    await advanceTimersByTimeAsync(1);
+    const run = await ended;
+    expect(run?.state).toBe(`failed`);
+    expect(view.view.failure.value?.title).toBe(`gave up after 30000`);
+    expect(aborted).toBeInstanceOf(OperationGaveUp);
+    work.resolve(`late`);
+    await advanceTimersByTimeAsync(0);
+    expect(operationAt(KEY)?.state).toBe(`failed`);
+    expect(operationAt(KEY)?.value).toBeUndefined();
+    view.scope.stop();
+});
+
+it(`never gives up on a run that declared no give-up`, async () => {
+    jest.useFakeTimers();
+    const work = deferred<void>();
+    const ended = startOperation(KEY, { what: `Waiting`, failed: `No`, task: () => work.promise });
+    await advanceTimersByTimeAsync(24 * 60 * 60_000);
+    expect(operationRunning(KEY)).toBe(true);
+    work.resolve();
+    await ended;
 });

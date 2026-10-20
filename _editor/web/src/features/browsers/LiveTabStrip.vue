@@ -104,6 +104,7 @@ const items = computed(() => stripItems(tabs));
 <template>
     <!-- The tabs scroll on their own once even their narrowest no longer fit, so the + after them never scrolls away. -->
     <div class="@container/strip flex min-w-0 flex-1 items-end">
+        <!-- allow(substitutes): a browser's page tabs, each closable, dragged and lifted onto the page: documents, not the parts of one view -->
         <div ref="stripEl" role="tablist" class="scrollbar-none relative flex min-w-0 items-end overflow-x-auto overflow-y-hidden px-2">
             <div
                 v-if="indicator"

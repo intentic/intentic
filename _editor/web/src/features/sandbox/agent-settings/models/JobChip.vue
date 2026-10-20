@@ -26,7 +26,7 @@ const note = computed(() => state?.note(role));
 <template>
     <button
         type="button"
-        :class="ui.chip({ on: active }, `cursor-grab touch-manipulation select-none gap-1 px-2 py-1 active:cursor-grabbing`, note?.dim === true && `opacity-60`)"
+        :class="ui.chip({ on: active }, `cursor-grab touch-manipulation select-none active:cursor-grabbing`, note?.dim === true && `opacity-60`)"
         :disabled="disabled"
         aria-haspopup="dialog"
         :aria-expanded="active"

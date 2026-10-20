@@ -23,8 +23,8 @@ const { badge, active } = defineProps<{
 <template>
     <RouterLink
         :to="to"
-        class="icon-rail-tile relative flex items-center justify-center rounded-lg text-muted transition-colors hover:bg-overlay hover:text-content"
-        :class="{ 'bg-primary-600/15 text-link': active }"
+        class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg text-muted hover:text-content"
+        :class="{ 'ui-row-select-on text-link': active }"
         :aria-label="label"
         v-tooltip.right="label"
     >

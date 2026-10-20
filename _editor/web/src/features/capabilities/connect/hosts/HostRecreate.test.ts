@@ -12,6 +12,9 @@ import { useOsPreference } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import * as useDevicesOriginal from "../../../../models/sandbox/devices/useDevices";
 import { oneLiner } from "../../../../app/environments/scriptCommand";
+import { DEV_SANDBOX_IMAGE } from "@intentic/sandbox-contract/policy/overlay-lint";
+import type { RunningSandbox } from "@intentic/sandbox-contract/state/sandbox-build";
+import * as swapLandingOriginal from "./swapLanding";
 
 const reachable = ref(true);
 const fleet = ref<{ id: string; title: string; status: string }[]>([]);
@@ -20,13 +23,18 @@ const autoResume = ref(false);
 jest.mock(`../../../../models/sandbox/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings: computed(() => ({ autoResumeOnRestart: autoResume.value })) }),
 }));
-// What the sandbox answering right now runs: the version an update moves, the overlay a rebuild aims at.
-interface Answering {
-    version?: string;
-    hash?: string;
-}
-const answering: Answering = { version: `1.316.0` };
-jest.mock(`./swapLanding`, () => ({ appliedHash: async () => answering.hash, runningVersion: async () => answering.version }));
+// What the sandbox answering right now runs (/info `running`): a checkout build, whose version reads 0.0.0 before and
+// after every swap, so only its build and its boot can say one landed.
+const checkout = (bootedAt: number, overlay?: string): RunningSandbox => ({
+    build: { base: DEV_SANDBOX_IMAGE, overlay },
+    bootedAt,
+});
+let answering: RunningSandbox | undefined = checkout(1);
+// A container swapped in: a new boot, on the overlay given.
+const swappedOnto = (overlay?: string): void => {
+    answering = checkout((answering?.bootedAt ?? 0) + 1, overlay);
+};
+jest.mock(`./swapLanding`, () => ({ ...swapLandingOriginal, answering: async () => answering }));
 const swapServingSandbox = jest.fn(async (_hostId: string, _slug: string, _op: string, _payload?: unknown): Promise<string | undefined> => undefined);
 // Imported statically and spread: a module loaded inside a mock factory deadlocks bun's link of the graph naming it.
 // The machine this page can ask directly; undefined is one it cannot reach, where the command is the way.
@@ -115,8 +123,7 @@ afterEach(() => {
     reachable.value = true;
     fleet.value = [];
     autoResume.value = false;
-    answering.version = `1.316.0`;
-    delete answering.hash;
+    answering = checkout(1);
     swapServingSandbox.mockClear();
     idleWait.value = undefined;
     waitsForAgents.value = false;
@@ -136,7 +143,7 @@ it(`waits out the cutover as the restart it is, and steps aside once the sandbox
     // Every other surface reads the silence by this until the sandbox answers again.
     expect(restartExpected(`sb1`)?.untilAnswered).toBe(true);
 
-    answering.version = `1.317.0`;
+    swappedOnto();
     await cutover();
     expect(backs).toBe(1);
     expect(shown()).not.toContain(`Restarting onto the update`);
@@ -160,7 +167,7 @@ it(`ends a rebuild once the sandbox answers on the approved overlay, though the 
     expect(shown()).toContain(`Rebuild running…`);
     expect(shown()).not.toContain(`Restarting onto the rebuilt environment`);
 
-    answering.hash = `approved`;
+    swappedOnto(`approved`);
     await cutover();
     expect(backs).toBe(1);
     expect(shown()).not.toContain(`Rebuild running…`);
@@ -172,19 +179,34 @@ it(`sees a rebuild land by asking, even with no drop in this page's connection`,
     jest.useFakeTimers();
     neverEnds();
     await press({ flush: settleFaked, hash: `approved` });
-    answering.hash = `approved`;
+    swappedOnto(`approved`);
     await advanceTimersByTimeAsync(5_000);
     await nextTick();
     expect(backs).toBe(1);
 });
 
-// A blink mid-download is not the swap landing: the sandbox answers on the version the press was made on.
-it(`keeps waiting when the sandbox answers again on the same version`, async () => {
+// A blink mid-download is not the swap landing: the very daemon the press was made on answers again.
+it(`keeps waiting when the sandbox the press was made on answers again`, async () => {
     neverEnds();
     await press();
     await cutover();
     expect(backs).toBe(0);
     expect(shown()).toContain(`Update running…`);
+});
+
+// A release build is told by its digest: a new boot on the digest it was pressed on is the swap come back without taking,
+// said at once rather than waited out as a sandbox that never returned.
+it(`says a swap came back unmoved when a new boot answers on the build it was pressed on`, async () => {
+    const release = (bootedAt: number): RunningSandbox => ({
+        build: { base: `ghcr.io/intentic/sandbox:stable`, baseDigest: `sha256:${`a`.repeat(64)}` },
+        bootedAt,
+    });
+    answering = release(1);
+    await press();
+    answering = release(2);
+    await cutover();
+    expect(shown()).toContain(`The sandbox came back on the build it ran before, so the swap didn't take.`);
+    expect(backs).toBe(0);
 });
 
 it(`stops waiting with words to refresh when the sandbox went quiet and never came back`, async () => {
@@ -324,7 +346,7 @@ it(`watches a rebuild the sandbox started by itself land, as it does one pressed
     expect(shown()).toContain(`Rebuilding now that no agent is working.`);
     expect(restartExpected(`sb1`)?.untilAnswered).toBe(true);
 
-    answering.hash = `approved`;
+    swappedOnto(`approved`);
     await cutover();
     expect(backs).toBe(1);
 });
@@ -354,7 +376,7 @@ it(`keeps the restart named when the page is left mid-swap, and ends it once the
     await settle();
     expect(restartExpected(`sb1`)?.id).toBe(`recreate`);
 
-    answering.version = `1.317.0`;
+    swappedOnto();
     await cutover();
     expect(restartExpected(`sb1`)).toBeUndefined();
 });

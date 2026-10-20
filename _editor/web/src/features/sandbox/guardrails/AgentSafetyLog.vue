@@ -11,6 +11,7 @@ import {
     Notice,
     RowGroup,
     RowNote,
+    Section,
     SegmentedControl,
     SkeletonRows,
     StatusBadge,
@@ -239,19 +240,13 @@ const commandSummary = (program: string): string => {
 
                         <template #below>
                             <div class="flex flex-col gap-3 py-1 text-xs">
-                                <div>
-                                    <div class="text-2xs font-medium uppercase tracking-wider text-subtle">
-                                        {{ t(`sandbox.agentSafetyLog.judgeAssessment`) }}
-                                    </div>
-                                    <p class="mt-1 leading-relaxed text-content/90">{{ entry.sentence }}</p>
-                                </div>
+                                <Section :label="t(`sandbox.agentSafetyLog.judgeAssessment`)" density="dense">
+                                    <p class="leading-relaxed text-content/90">{{ entry.sentence }}</p>
+                                </Section>
 
-                                <div>
-                                    <div class="mb-1 text-2xs font-medium uppercase tracking-wider text-subtle">
-                                        {{ t(`sandbox.agentSafetyLog.programCommand`) }}
-                                    </div>
+                                <Section :label="t(`sandbox.agentSafetyLog.programCommand`)" density="dense">
                                     <Code :code="entry.program" lang="bash" :wrap="true" />
-                                </div>
+                                </Section>
 
                                 <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1 text-2xs text-muted">
                                     <span class="inline-flex items-center gap-1.5">

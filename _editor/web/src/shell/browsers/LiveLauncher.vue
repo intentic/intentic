@@ -39,7 +39,7 @@ const shown = computed(() => (variant === `page` ? groups.filter((group) => grou
     <div v-if="variant === `menu`" class="flex w-72 flex-col gap-0.5 p-1" role="menu">
         <template v-for="(group, index) in shown" :key="group.label">
             <div v-if="index > 0" class="mx-2 my-0.5 h-px bg-line" />
-            <div v-if="group.label !== ``" class="px-2 pb-0.5 pt-1 text-3xs font-medium uppercase tracking-wide text-subtle">{{ group.label }}</div>
+            <SectionHeader v-if="group.label !== ``" :label="group.label" density="dense" class="px-2 pb-0.5 pt-1" />
             <button
                 v-for="item in group.items"
                 :key="item.key"

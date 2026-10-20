@@ -1,6 +1,5 @@
 import { onChatNote, postChatNote } from "./chatChannel";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { claimClosedDrafts } from "../drafts/closedDrafts";
 import { drawsChat } from "./chatEcho";
 import { floatingWindowPanel, raiseFloating } from "../../../workbench/window/floating";
 import { Conversation } from "../session/conversation";
@@ -20,11 +19,10 @@ export type Summons =
     // Carries only the run's id; each window's panel follows it from its own ledger reads.
     | { readonly kind: `run`; readonly runId: string }
     // Closes the conversation a card stands for, everywhere, words included — the board's × is the card itself going,
-    // unlike the panel's own × which only narrows a pane and sets words aside.
+    // unlike the panel's own × which only narrows a pane and leaves the words their draft.
     | { readonly kind: `close`; readonly conversationIds: readonly string[] }
     // Takes the chats of cards the board filed away (an archive) off every window's panel, the floating one included,
-    // as the panel's own × would: the conversation survives in the archive, so words left unsent are set aside to come
-    // back with it rather than dropped.
+    // as the panel's own × would: the conversation survives in the archive, and words left unsent stay its draft.
     | { readonly kind: `retire`; readonly conversationIds: readonly string[] }
     // Lets go of the chats whose work a person just landed by hand (agentActions.landAgent), in every window, since the
     // panel holding them is very often another window's. Not a retire: a landed card stays in Finished and its chat can
@@ -109,18 +107,11 @@ export const relaySummons = (summons: Summons): void => {
     postChatNote({ kind: `summons`, summons: wireSummons(summons) });
 };
 
-// Claims closed-chat drafts once, here, for both the local apply and the broadcast to share: the drafts store answers
-// only the first window to ask, so claiming separately in each left the actual conversation (often in another window)
-// claiming nothing.
-export const claimedSummons = (summons: Summons): Summons =>
-    summons.kind === `reveal` ? { ...summons, unsent: claimClosedDrafts(summons.entries.map((entry) => entry.conversationId)) } : summons;
-
 // A BroadcastChannel never delivers to its own poster, so the local apply plus the broadcast are what make every
-// window, this one included, run the identical reveal.
+// window, this one included, run the identical reveal. Words travel on no summons: a reopened chat's are its draft's.
 export const summonChat = (summons: Summons): void => {
-    const carrying = claimedSummons(summons);
-    apply(carrying);
-    relaySummons(carrying);
+    apply(summons);
+    relaySummons(summons);
 };
 
 /**

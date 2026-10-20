@@ -273,7 +273,7 @@ const removeLogo = async (): Promise<void> => {
                                  StatusBadge: that one lowercases, and this says a brand and a hostname. -->
                             <span
                                 v-if="placement"
-                                class="ui-status-pill inline-flex shrink-0 items-center gap-1 bg-content/5 text-2xs font-medium text-muted"
+                                class="ui-status-pill shrink-0 bg-content/5 font-medium text-muted"
                                 v-tooltip.top="placement.tip.rows === undefined ? undefined : placement.tip"
                             >
                                 <Icon :name="placement.icon" class="text-2xs text-subtle" />{{ placement.label }}

@@ -200,7 +200,7 @@ const restingLine = computed(() => {
                 <button
                     ref="pill"
                     type="button"
-                    class="chat-quick-pill ui-chip h-9 max-w-[22rem] py-0 pr-3.5 pl-1 text-left"
+                    class="chat-quick-pill ui-chip ui-chip-lg ui-chip-lead max-w-[22rem] text-left"
                     :inert="open || undefined"
                     :aria-expanded="standing === `asking` ? undefined : open"
                     :aria-label="standing === `asking` ? t(`chat.chatQuickBar.openChatAgentWaiting`) : t(`chat.chatQuickBar.writeToAgentHere`)"

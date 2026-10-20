@@ -30,7 +30,7 @@ class FakeChannel {
 stubGlobal(`BroadcastChannel`, FakeChannel);
 jest.useFakeTimers();
 
-const { drawsChat, elsewherePreviews, elsewhereStrip, publishPreviews, publishStrip } = await import("./chatEcho");
+const { drawsChat, elsewhereStrip, publishStrip } = await import("./chatEcho");
 const { receiveChatNote } = await import("./chatChannel");
 const { EMPTY_STRIP } = await import("../tabs/tabFacts");
 const { claimFloating, receiveFloatingNote } = await import("../../../workbench/window/floating");
@@ -42,7 +42,7 @@ const popOut = (): void => receiveFloatingNote({ kind: `here`, panel: `chat`, id
 const dock = (): void => receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
 
 // A draft tab holding the given words, as the drawing window's tabFacts would describe it. The strip says only that
-// words are waiting; the words themselves travel as a `previews` note.
+// words are waiting; the words themselves are the conversation's draft (drafts/composerDrafts.ts).
 const draftTab = (id: string, words?: string): TabFacts => ({
     id,
     registered: false,
@@ -244,44 +244,3 @@ describe(`strip publisher ownership`, () => {
     });
 });
 
-// The composer's words, which move per character, kept off the strip the board rebuilds its cards from.
-describe(`elsewherePreviews`, () => {
-    it(`takes the words on their own note, leaving the strip the board reads identical`, () => {
-        popOut();
-        hear(strip(draftTab(`c1`, `fix the`)));
-        const before = elsewhereStrip.value;
-
-        receiveChatNote({ sandbox: `sb1`, note: { kind: `previews`, previews: { c1: `fix the login redirect` } } });
-
-        expect(elsewherePreviews.value).toEqual({ c1: `fix the login redirect` });
-        // Identity, not equality: this is the whole point. `useAgents-fleet.fleet` reads the strip, and every surface
-        // that asks `agentById` anything reads `fleet`, so a strip that moved per keystroke rebuilt all of it.
-        expect(elsewhereStrip.value).toBe(before);
-    });
-
-    it(`forgets another owner's words rather than lending them to its replacement`, async () => {
-        popOut();
-        receiveChatNote({ sandbox: `sb1`, note: { kind: `previews`, previews: { c1: `half a thought` } } });
-        expect(elsewherePreviews.value).toEqual({ c1: `half a thought` });
-
-        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
-        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w2`, since: 2 });
-        await nextTick();
-
-        expect(elsewherePreviews.value).toEqual({});
-    });
-
-    it(`answers a roll-call with its words as well as its strip`, async () => {
-        const scope = effectScope();
-        scope.run(() => claimFloating(`chat`, jest.fn()));
-        await nextTick();
-        publishStrip(strip(draftTab(`c1`, `what the holder shows`)), `sb1`);
-        publishPreviews({ c1: `what the holder shows` }, `sb1`);
-        posted.length = 0;
-
-        receiveChatNote({ sandbox: `sb1`, note: { kind: `roll` } });
-
-        expect(posted.map((envelope) => envelope.note.kind)).toEqual([`strip`, `previews`]);
-        scope.stop();
-    });
-});

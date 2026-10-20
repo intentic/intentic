@@ -4,8 +4,9 @@
      verbs (start, stop, its terminal) go into the Browsers toolbar while it is in front; the address bar, reload and the
      phone frame are the toolbar's, steering this tab through what it exposes. -->
 <script setup lang="ts">
-import { Button, EmptyState, Notice, type NoticeModel, probePreview, probePreviewOnce, type PreviewProbe, type Tip, ui } from "@intentic/ui";
+import { Await, Button, EmptyState, Notice, type NoticeModel, probePreview, probePreviewOnce, type PreviewProbe, type Tip, ui } from "@intentic/ui";
 import { useNow, usePoll } from "@intentic/ui/async";
+import type { Loaded } from "@intentic/extension-api";
 import { computed, onUnmounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import type { PanelLaunch } from "@intentic/sandbox-contract/schemas/panels";
@@ -29,7 +30,7 @@ export interface PreviewActions {
 
 const {
     target,
-    settled,
+    listed,
     active,
     toolsTo,
     phone,
@@ -38,8 +39,8 @@ const {
 } = defineProps<{
     // The app this tab is of, as the live list has it now; undefined while the list reads, or once the app is gone.
     target: PreviewTarget | undefined;
-    // Whether the live list has answered, so "gone" is a fact rather than a guess.
-    settled: boolean;
+    // Where the live list stands: only its answer makes "gone" a fact; a wait or a failure is drawn as one.
+    listed: Loaded<unknown>;
     // In front and on screen: what puts this tab's verbs into the toolbar.
     active: boolean;
     // Where those verbs go: the toolbar's slot for the tab in front.
@@ -410,17 +411,27 @@ watch(
         <!-- Errors stay beside the app whose controls caused them. -->
         <Notice v-if="actionError" :of="actionError" class="mx-3 mt-3" />
 
-        <div v-if="!target && !settled" class="flex flex-1 items-center justify-center" role="status" aria-busy="true">
-            <span class="sr-only">{{ t(`preview.previewPanel.readingWhatPreviewed`) }}</span>
-            <Icon name="spinner" spin class="text-2xl text-subtle" aria-hidden="true" />
+        <div v-if="!target" class="flex min-h-0 flex-1 flex-col">
+            <Await :of="listed" :label="t(`preview.previewPanel.readingWhatPreviewed`)">
+                <!-- The list has answered and this app is not on it: a repo removed, a port taken back. -->
+                <EmptyState icon="eye-slash" :title="t(`browsers.preview.gone`)" :line="t(`browsers.preview.goneLine`)" class="flex-1">
+                    <template #actions>
+                        <Button :label="t(`browsers.browsers.closeTab`)" size="small" tier="boring" @click="emit(`close`)" />
+                    </template>
+                </EmptyState>
+                <template #failed="{ error, retry }">
+                    <Notice
+                        :of="{
+                            tone: `danger`,
+                            title: t(`ui.await.couldntLoad`),
+                            detail: error,
+                            action: retry === undefined ? undefined : { label: t(`ui.action.tryAgain`), run: retry },
+                        }"
+                        class="mx-3 mt-3"
+                    />
+                </template>
+            </Await>
         </div>
-
-        <!-- The list has answered and this app is not on it: a repo removed, a port taken back. -->
-        <EmptyState v-else-if="!target" icon="eye-slash" :title="t(`browsers.preview.gone`)" :line="t(`browsers.preview.goneLine`)" class="flex-1">
-            <template #actions>
-                <Button :label="t(`browsers.browsers.closeTab`)" size="small" tier="boring" @click="emit(`close`)" />
-            </template>
-        </EmptyState>
 
         <!-- Sandbox preview responses admit this editor as a frame ancestor; mounting still waits for the hostname probe. -->
         <PreviewStage v-else-if="frameSrc" :phone="phone">

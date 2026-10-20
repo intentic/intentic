@@ -1,17 +1,17 @@
 import { cachedAsync } from "@intentic/base/held";
 import { sdk } from "../engines/claude-sdk.js";
-import { AskQuestionSchema, type TodoItem, type ToolCallContent } from "@intentic/sandbox-contract/events/requests";
-import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
-import { settledRequests } from "@intentic/sandbox-contract/policy/request-status";
-import type { TranscriptQuestion, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import { AskQuestionSchema, type TodoItem } from "@intentic/sandbox-contract/events/requests";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
+import type { TranscriptQuestion, TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
 import { unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
 import { z } from "zod";
-import { compactedRow } from "@intentic/sandbox-contract/transcript-fold";
+import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
 import { ASK_TOOL_NAMES, parseAnswers } from "./vocabulary/question-answers.js";
 import { TaskChecklist } from "./vocabulary/task-checklist.js";
-import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { type CalledTool, editDiffContent, mayShowPicture, resultContent, resultText, toolLocations } from "./vocabulary/tool-calls.js";
+import { resultText } from "./vocabulary/tool-calls.js";
+import { SdkCallFrames } from "./vocabulary/sdk-call-frames.js";
 import { browserOutputDir } from "../browser/cast/browser-artifacts.js";
 import { rootRelative } from "./turn-transcript.js";
 import type { SearchIndex } from "./search-index.js";
@@ -252,190 +252,107 @@ const TaskNotification = z.object({ origin: z.object({ kind: z.literal("task-not
 // The CLI's summary opening a compacted chain, stored as a user message; the live stream draws a compaction notice.
 const CompactSummary = z.object({ isCompactSummary: z.literal(true) });
 
-// The stored-message reducer, shared with a subagent's transcript so both assemble by identical rules. The bubble
-// boundary is the prose block (`text_end`), exactly as the live stream draws it.
+// What the store kept of each turn it ran: the rows its prompt reads as, then the frames the live stream would have sent
+// for what came after (no clock, no deltas: a stored block is whole).
+interface StoredTurn {
+    readonly opening: TranscriptRow[];
+    readonly frames: AgentEvent[];
+}
+
+/* A STORED SESSION READ BACK THROUGH THE ONE FOLD. The provider's store keeps whole messages, not frames, so they are
+   turned back into the frames the live stream sends for them (sdk-stream.ts, through the same SdkCallFrames for every
+   card) and folded by the fold the live run and the record use (transcript-fold.ts). Grouping is the fold's alone: which
+   bubble a thought, a run of calls or a card lands in is decided in one place, so a turn read back from here is grouped
+   as it was drawn live. Each prompt opens a turn of its own, and each turn ends as a settled one does: a card nobody
+   answered is frozen. Shared with a subagent's transcript and the tail of a turn the daemon died under. */
 export const restoredSessionMessages = (
     messages: readonly { readonly type?: string; readonly message?: unknown }[],
     dir: string,
     options: RestoreOptions = { carried: "bubbles" },
-): TranscriptRow[] => {
-    const out: TranscriptRow[] = [];
-    // The open bubble; stays open across tool_result messages between calls, since closing on one would split one run
-    // into a card apiece.
-    let bubble: { text: string; thinking: string; tools: TranscriptTool[]; question?: TranscriptQuestion; todos?: TodoItem[] } | undefined;
-    const open = (): NonNullable<typeof bubble> => (bubble ??= { text: "", thinking: "", tools: [] });
-    // Mirrors the daemon's own `flush`: a bubble that produced nothing at all is not a row.
-    const flush = (): void => {
-        const current = bubble;
-        bubble = undefined;
-        if (
-            current === undefined ||
-            (current.text.length === 0 &&
-                current.thinking.length === 0 &&
-                current.tools.length === 0 &&
-                current.question === undefined &&
-                (current.todos === undefined || current.todos.length === 0))
-        ) {
-            return;
+): TranscriptRow[] => storedTurns(messages, dir, options).flatMap((turn) => foldTurn(turn.opening, turn.frames));
+
+const storedTurns = (messages: readonly { readonly type?: string; readonly message?: unknown }[], dir: string, options: RestoreOptions): StoredTurn[] => {
+    const turns: StoredTurn[] = [];
+    // Frames before any prompt (a tail cut mid-turn, a subagent's record) open on no rows.
+    const frames = (): AgentEvent[] => {
+        const open = turns.at(-1) ?? { opening: [], frames: [] };
+        if (turns.length === 0) {
+            turns.push(open);
         }
-        out.push({
-            role: "assistant",
-            text: current.text,
-            ...(current.thinking.length > 0 ? { thinking: current.thinking } : {}),
-            ...(current.tools.length > 0 ? { tools: current.tools } : {}),
-            ...(current.todos !== undefined && current.todos.length > 0 ? { todos: current.todos } : {}),
-            ...(current.question === undefined ? {} : { question: current.question }),
-        });
+        return open.frames;
     };
-    // The working checklist reassembled from the Task tool family, matching the live sdk-stream.
+    const calls = new SdkCallFrames(dir, browserOutputDir(dir));
+    // The working checklist reassembled from the Task tool family, as the live stream reassembles it.
     const checklist = new TaskChecklist();
     const checklistToolIds = new Set<string>();
-    // Renders onto the open bubble only when the checklist actually moved; an unrecognised patch or result leaves the
-    // last list standing.
-    const showTodos = (items: TodoItem[] | undefined): void => {
-        if (items !== undefined) {
-            open().todos = items;
+    // tool_use id to the questions its ask asked, read against the answer its result carries.
+    const asked = new Map<string, TranscriptQuestion["questions"]>();
+    const todos = (items: TodoItem[] | undefined): AgentEvent[] => (items === undefined ? [] : [{ kind: "todos", items }]);
+
+    const answered = (block: StoredBlock & { readonly tool_use_id: string }): AgentEvent[] => {
+        if (checklistToolIds.delete(block.tool_use_id)) {
+            const content = resultText(block.content);
+            return todos(checklist.resolved(block.tool_use_id, content) ?? checklist.listed(content));
         }
+        const result = calls.result({ id: block.tool_use_id, content: block.content, failed: block.is_error === true });
+        const questions = asked.get(block.tool_use_id);
+        // Unparsed text leaves the card unanswered, not wearing a decision.
+        const reply = questions === undefined ? undefined : parseAnswers(questions, block.tool_use_id, resultText(block.content));
+        if (reply === undefined) {
+            return [result];
+        }
+        // The answer names its files absolute; the card shows them as the composer does, root-relative.
+        const attachments =
+            reply.attachments === undefined ? undefined : Object.fromEntries(Object.entries(reply.attachments).map(([question, paths]) => [question, rootRelative(paths, dir)]));
+        return [result, { kind: "resolved", requestId: block.tool_use_id, reply: attachments === undefined ? reply : { ...reply, attachments } }];
     };
-    // A create renders only from its result (where it learns its task id); an update names the id in its input, so the
-    // list moves at call time; a TaskList renders from its result alone.
-    const checklistCall = (id: string, name: string, input: unknown): void => {
-        checklistToolIds.add(id);
-        if (name === "TaskCreate") {
-            checklist.created(id, input);
-            return;
+
+    const said = (block: StoredBlock): AgentEvent[] => {
+        if (block.type === "text" && typeof block.text === "string") {
+            return block.text.length === 0 ? [] : [{ kind: "delta", text: block.text }, { kind: "text_end" }];
         }
-        if (name === "TaskUpdate") {
-            showTodos(checklist.updated(input));
+        if (block.type === "thinking" && typeof block.thinking === "string") {
+            return [{ kind: "thinking", text: block.thinking }];
         }
+        if (block.type !== "tool_use" || typeof block.id !== "string" || typeof block.name !== "string") {
+            return [];
+        }
+        if (block.name === "TaskCreate" || block.name === "TaskList" || block.name === "TaskUpdate") {
+            checklistToolIds.add(block.id);
+            if (block.name === "TaskCreate") {
+                checklist.created(block.id, block.input);
+            }
+            return block.name === "TaskUpdate" ? todos(checklist.updated(block.input)) : [];
+        }
+        // The store never saw the live question frame: the ask's call carries the questions, and its card lands one frame
+        // ahead of the call, as it does live.
+        const ask = ASK_TOOL_NAMES.has(block.name) ? AskInputSchema.safeParse(block.input) : undefined;
+        const question: AgentEvent[] = ask?.success === true ? [{ kind: "question", requestId: block.id, questions: ask.data.questions }] : [];
+        if (ask?.success === true) {
+            asked.set(block.id, ask.data.questions);
+        }
+        return [...question, calls.call({ id: block.id, name: block.name, input: block.input })];
     };
-    // tool_use id to its card, mutated in place on result, whether still open or already flushed to `out`.
-    const awaiting = new Map<string, TranscriptTool>();
-    // tool_use id to the question it asked, rebuilt since the store never saw the live question/reply frames.
-    const asked = new Map<string, TranscriptQuestion>();
-    // Cards with a call-time diff; a successful result is a redundant confirmation, an error replaces it instead.
-    const diffed = new Set<string>();
-    // Calls whose answer can be a picture, read against their result exactly as the live stream reads them.
-    const pictureCalls = new Map<string, CalledTool>();
-    const remember = (id: string, name: string, input: unknown): void => {
-        if (mayShowPicture(name)) {
-            pictureCalls.set(id, { name, input });
-        }
-    };
-    const answerOf = (id: string, content: unknown, failed: boolean): ToolCallContent[] =>
-        resultContent(content, dir, browserOutputDir(dir), failed ? undefined : pictureCalls.get(id));
 
     for (const message of messages) {
         if (message.type !== "user" && message.type !== "assistant") {
             continue;
         }
         const blocks = blocksOf(message);
-
-        if (message.type === "user" && CompactSummary.safeParse(message).success) {
-            flush();
-            out.push(compactedRow());
+        if (message.type === "assistant") {
+            frames().push(...blocks.flatMap(said));
             continue;
         }
-        if (message.type === "user") {
-            let text = "";
-            for (const block of blocks) {
-                if (block.type === "text" && typeof block.text === "string") {
-                    text += block.text;
-                    continue;
-                }
-                if (block.type !== "tool_result" || block.tool_use_id === undefined) {
-                    continue;
-                }
-                if (checklistToolIds.has(block.tool_use_id)) {
-                    checklistToolIds.delete(block.tool_use_id);
-                    const content = resultText(block.content);
-                    showTodos(checklist.resolved(block.tool_use_id, content) ?? checklist.listed(content));
-                    continue;
-                }
-                const tool = awaiting.get(block.tool_use_id);
-                if (tool === undefined) {
-                    continue;
-                }
-                awaiting.delete(block.tool_use_id);
-                const failed = block.is_error === true;
-                tool.status = failed ? "failed" : "completed";
-                if (failed || !diffed.has(tool.id)) {
-                    tool.content = answerOf(tool.id, block.content, failed);
-                }
-                // The ask's result is the user's answer; unparsed text leaves the card unanswered, not wearing a
-                // decision.
-                const question = asked.get(block.tool_use_id);
-                const reply = question === undefined ? undefined : parseAnswers(question.questions, block.tool_use_id, resultText(block.content));
-                if (question !== undefined && reply !== undefined) {
-                    // The answer names its files absolute; the card shows them as the composer does, root-relative.
-                    const attachments =
-                        reply.kind === "question" && reply.attachments !== undefined
-                            ? Object.fromEntries(Object.entries(reply.attachments).map(([asked, paths]) => [asked, rootRelative(paths, dir)]))
-                            : undefined;
-                    Object.assign(question, settledRequests({ question }, attachments === undefined ? reply : { ...reply, attachments }).question);
-                }
-            }
-            // Tool-results-only and injected notes aren't user words; chips resolve against `dir`, always the root.
-            if (text.length === 0 || TaskNotification.safeParse(message).success) {
-                continue;
-            }
-            // Real words close whatever bubble was still open above them; a tool_results-only message never reaches
-            // here.
-            flush();
-            out.push(...storedPromptRows(text, dir, options));
+        if (CompactSummary.safeParse(message).success) {
+            frames().push({ kind: "compact", trigger: "stored" });
             continue;
         }
-
-        for (const block of blocks) {
-            if (block.type === "text" && typeof block.text === "string") {
-                const current = open();
-                current.text += block.text;
-                // A block that wrote something closes its bubble; an empty one does not, so a bare tool call doesn't
-                // strand it.
-                if (current.text.length > 0) {
-                    flush();
-                }
-            } else if (block.type === "thinking" && typeof block.thinking === "string") {
-                open().thinking += block.thinking;
-            } else if (block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string") {
-                if (block.name === "TaskCreate" || block.name === "TaskList" || block.name === "TaskUpdate") {
-                    checklistCall(block.id, block.name, block.input);
-                    continue;
-                }
-                // The ask's card lands one frame ahead of its call, closing the bubble so the call sits beneath the
-                // prose.
-                const ask = ASK_TOOL_NAMES.has(block.name) ? AskInputSchema.safeParse(block.input) : undefined;
-                if (ask?.success === true) {
-                    const question: TranscriptQuestion = { requestId: block.id, questions: ask.data.questions, status: "pending" };
-                    open().question = question;
-                    flush();
-                    asked.set(block.id, question);
-                }
-                const target = toolTarget(block.input);
-                const locations = toolLocations(block.input, dir);
-                const diff = editDiffContent(block.name, block.input, dir);
-                if (diff !== undefined) {
-                    diffed.add(block.id);
-                }
-                remember(block.id, block.name, block.input);
-                const tool: TranscriptTool = {
-                    id: block.id,
-                    // Same normalization the live stream applies, so a restored card doesn't revert to the raw MCP tool
-                    // id.
-                    name: displayNameOf(block.name),
-                    category: toolCategoryOf(block.name),
-                    // No result in the file means the turn was interrupted mid-call, not completed.
-                    status: "in_progress",
-                    ...(target !== undefined ? { target } : {}),
-                    ...(locations !== undefined ? { locations } : {}),
-                    ...(diff !== undefined ? { content: [diff] } : {}),
-                };
-                open().tools.push(tool);
-                awaiting.set(block.id, tool);
-            }
+        frames().push(...blocks.flatMap((block) => (block.type === "tool_result" && block.tool_use_id !== undefined ? answered({ ...block, tool_use_id: block.tool_use_id }) : [])));
+        const text = blocks.flatMap((block) => (block.type === "text" && typeof block.text === "string" ? [block.text] : [])).join("");
+        // Tool-results-only and injected notes aren't user words; real words open the next turn.
+        if (text.length > 0 && !TaskNotification.safeParse(message).success) {
+            turns.push({ opening: storedPromptRows(text, dir, options), frames: [] });
         }
     }
-    // Closes the last bubble: a turn that ended on (or was interrupted at) a tool call never wrote closing prose.
-    flush();
-    return out;
+    return turns;
 };

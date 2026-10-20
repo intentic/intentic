@@ -21,6 +21,7 @@ import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
 import { needRowText } from "../events/need-wake.js";
 import { noticeCode, sandboxNoticeOf } from "../events/sandbox-notice.js";
+import { installRow, landedRow, syncLine } from "./land-rows.js";
 
 // Folds a turn's frames into rows once, live and for the settled record alike, so a reopened chat matches what was on
 // screen. The main turn's frames are its rows; a frame a subagent produced (tagged with the call that spawned it) nests
@@ -88,111 +89,6 @@ const empty = (row: TranscriptRow): boolean =>
     (row.todos?.length ?? 0) === 0 &&
     row.usage === undefined &&
     !holdsRequest(row);
-
-// Clause appended to the landed notice for a workspace dependency change, or empty when there is none. Reports the
-// install as already started, or as on its way: the daemon starts it within seconds, in the install lane, behind any
-// install already running; never as a request.
-const dependencyLine = (deps: { missing: number; started: string[]; deferred: boolean } | undefined): string => {
-    if (deps === undefined || deps.missing === 0) {
-        return ``;
-    }
-    // `missing` counts versions the turn bumped as well as names it added, so the sentence names both.
-    const what = `${deps.missing} ${deps.missing === 1 ? `dependency` : `dependencies`} it added or changed`;
-    return deps.deferred
-        ? ` ${what} ${deps.missing === 1 ? `is` : `are`} being installed in your tree: the install waits for any other install to finish, appears in Work terminals, and its outcome lands in Activity.`
-        : ` Installing ${what}; the project's checks run when that finishes, and the outcome lands in Activity.`;
-};
-
-// Said as an agent's own install starts: where it writes and what outlasts it. Names up to three projects, the workspace
-// root first; an install the gate could not place in a project says only where it writes. Coded like every sandbox
-// notice (sandbox-notice.ts `installing`), so the chat can say it in the reader's language.
-const INSTALL_NAMED = 3;
-const installRow = (event: { readonly reach: "own-copy" | "main-tree"; readonly projects: readonly string[] }): TranscriptRow => {
-    const root = event.projects.includes(``);
-    const dirs = event.projects.filter((dir) => dir !== ``).map((dir) => `${dir}/`);
-    const shownDirs = dirs.slice(0, INSTALL_NAMED - (root ? 1 : 0));
-    const more = dirs.length - shownDirs.length;
-    const named = [...(root ? [`the workspace root`] : []), ...shownDirs].join(`, `);
-    const list = more > 0 ? `${named} and ${more} more` : named;
-    const where = list === `` ? `` : ` in ${list}`;
-    const ownCopy = event.reach === `own-copy`;
-    return {
-        role: "notice",
-        text: ownCopy
-            ? `Installing packages${where} into this conversation's own copy. The manifest and lockfile land with the work, and the review lists what it adds.`
-            : `Installing packages${where} in the main tree, one install at a time.`,
-        noticeCode: noticeCode({
-            code: "installing",
-            params: {
-                ownCopy,
-                root: root || undefined,
-                projects: shownDirs.length === 0 ? undefined : shownDirs.join(`, `),
-                more: more > 0 ? more : undefined,
-            },
-        }),
-    };
-};
-
-// One line reporting the daemon's rebase of this agent's branch onto the current workspace; `blocked` names repos it
-// couldn't rebase, where the turn ran from an older base.
-const syncLine = (sync: { commits: number; blocked: readonly string[] }): string => {
-    const moved =
-        sync.commits > 0
-            ? `Your workspace moved on while this agent waited, its branch was rebased onto your latest ${sync.commits} commit${sync.commits === 1 ? `` : `s`}.`
-            : undefined;
-    const blocked =
-        sync.blocked.length > 0
-            ? `Couldn't rebase onto your workspace in ${sync.blocked.join(`, `)}: the turn is running from the older base, so its land may need a resolve.`
-            : undefined;
-    return [moved, blocked].filter((line) => line !== undefined).join(` `);
-};
-
-// Row for a spawned child's work gone into its parent's checkout, or held off it by a clash with the parent's edits.
-const intoParentRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRow => {
-    if (event.landed) {
-        return {
-            role: "notice",
-            text: `Changes went into the parent agent's checkout, as its in-process subagents' edits do: they reach your workspace with its land.`,
-            noticeCode: noticeCode({ code: "intoParent" }),
-        };
-    }
-    const files = (event.conflicts ?? []).flatMap((conflict) => conflict.paths).length;
-    return {
-        role: "notice",
-        text: `${files} file(s) clash with the parent agent's own edits, so nothing was written into its checkout. The parent was told, and can bring the changes in to resolve.`,
-        noticeCode: noticeCode({ code: "intoParentClash", params: { files } }),
-    };
-};
-
-// Row for a finished turn: held on its branch, landed automatically, or conflicted. A landed turn that changed
-// dependencies appends dependencyLine, since the Changes diff can't show that.
-const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRow => {
-    if (event.into !== undefined) {
-        return intoParentRow(event);
-    }
-    if (event.held === true) {
-        return { role: "notice", text: `Finished: the work is on this agent's branch, ready to land from its review.`, noticeCode: noticeCode({ code: "landHeld" }) };
-    }
-    if (!event.landed) {
-        // Per-file cause (your edits, a moved main line, a binary) is spelled out in the review, not named here.
-        const conflicts = event.conflicts ?? [];
-        const files = conflicts.flatMap((conflict) => conflict.paths).length;
-        const repos = conflicts.map((conflict) => conflict.repo).join(`, `);
-        return {
-            role: "notice",
-            text: `${files} file(s) couldn't land automatically in ${repos}. Open the agent's review to see what blocked them and land from there.`,
-            noticeCode: noticeCode({ code: "landConflict", params: { files, repos } }),
-        };
-    }
-    // noticeAction fires only here, right as the auto-behavior ran; an active install takes the slot instead.
-    const deps = event.deps === undefined || event.deps.missing === 0 ? undefined : event.deps;
-    return {
-        role: "notice",
-        text: `Changes landed in your workspace: review them in the Changes panel.${dependencyLine(event.deps)}`,
-        noticeAction: (event.deps?.started.length ?? 0) > 0 ? "depsInstall" : "landHold",
-        noticeCode: noticeCode({ code: "landed", params: deps === undefined ? undefined : { deps: deps.missing, queued: deps.deferred || undefined } }),
-    };
-};
 
 // The turn's opening user row: text, timestamp, attachments, the message's id, and whatever the daemon later stamps onto
 // it (checkpoint, notes).
@@ -815,36 +711,49 @@ export const foldTurn = (opening: readonly TranscriptRow[], events: readonly Age
     return fold.rows;
 };
 
+// A patch that changes the row it names, rather than adding one or taking one away.
+export type RowPatch = Exclude<TranscriptPatch, { op: "append" | "drop" }>;
+
 /**
- * Applies one patch to a row list; only what the patch names moves. `tool` upserts by id anywhere in the tree,
- * top-level or nested alike.
+ * What one patch makes of the row it names: the one rule every copy of a run's rows follows (a window drawing the run,
+ * the run log a restart folds back, this module's own replay), so no copy can draw a change its own way. `tool` upserts
+ * by id anywhere in the tree, top-level or nested alike. Every field the patch does not name is kept, a window's own
+ * marks on the row included; `replace` is the row whole.
  */
+export const patchedRow = <R extends TranscriptRow>(row: R, patch: RowPatch): R | TranscriptRow => {
+    switch (patch.op) {
+        case "replace":
+            return patch.row;
+        case "text":
+            return { ...row, text: `${row.text}${patch.text}` };
+        case "thinking":
+            return { ...row, thinking: `${row.thinking ?? ""}${patch.text}` };
+        case "toolThinking":
+            return { ...row, tools: [...appendToolThinking(row.tools ?? [], patch.id, patch.text)] };
+        case "tool":
+            return { ...row, tools: upsertTool(row.tools ?? [], patch.tool, patch.parent) };
+    }
+};
+
+/** Applies one patch to a row list; only what the patch names moves (patchedRow). */
 export const applyTranscriptPatch = (rows: readonly TranscriptRow[], patch: TranscriptPatch): TranscriptRow[] => {
     switch (patch.op) {
         case "append":
             return [...rows, patch.row];
-        case "replace":
-            return rows.map((row, index) => (index === patch.index ? patch.row : row));
         case "drop":
             return rows.filter((_row, index) => index !== patch.index);
-        case "text":
-            return rows.map((row, index) => (index === patch.index ? { ...row, text: `${row.text}${patch.text}` } : row));
-        case "thinking":
-            return rows.map((row, index) => (index === patch.index ? { ...row, thinking: `${row.thinking ?? ""}${patch.text}` } : row));
-        case "toolThinking":
-            return rows.map((row, index) => (index === patch.index ? { ...row, tools: [...appendToolThinking(row.tools ?? [], patch.id, patch.text)] } : row));
-        case "tool":
-            return rows.map((row, index) => (index === patch.index ? { ...row, tools: upsertTool(row.tools ?? [], patch.tool, patch.parent) } : row));
+        default:
+            return rows.map((row, index) => (index === patch.index ? patchedRow(row, patch) : row));
     }
 };
 
 // Appends a delegated subagent's reasoning onto the card with this id, wherever it nests.
-export const appendToolThinking = (tools: readonly TranscriptTool[], id: string, text: string): readonly TranscriptTool[] =>
+const appendToolThinking = (tools: readonly TranscriptTool[], id: string, text: string): readonly TranscriptTool[] =>
     mapTool(tools, id, (card) => ({ ...card, thinking: `${card.thinking ?? ""}${text}` }));
 
 // Replaces the tool with this id anywhere in the tree, keeping the nested calls and thinking it already holds, or appends
 // it under `parent`, or at top level with no parent or no match.
-export const upsertTool = (tools: readonly TranscriptTool[], tool: TranscriptTool, parent: string | undefined): TranscriptTool[] => {
+const upsertTool = (tools: readonly TranscriptTool[], tool: TranscriptTool, parent: string | undefined): TranscriptTool[] => {
     const replaced = mapTool(tools, tool.id, (current) => ({
         ...tool,
         ...(current.children === undefined ? {} : { children: current.children }),

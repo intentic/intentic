@@ -1,5 +1,5 @@
 import type { FleetCapacity } from "@intentic/sandbox-contract/models/plan-pools";
-import type { ModelChoice } from "@intentic/sandbox-contract/models/model-pins";
+import { type ModelChoice, rungModel } from "@intentic/sandbox-contract/models/model-pins";
 import { renewsInWords } from "@intentic/sandbox-contract/models/model-offer";
 import type { Services } from "../../composition.js";
 import { fleetCapacityOf } from "../../usage/serviceability/serviceability.js";
@@ -24,7 +24,7 @@ const spentSentence = (subject: string, pool: string | undefined, reopensAt: num
 /** A rung's capacity on file, or undefined where the read failed: a failed lookup never fails the helper, it asks. */
 export const rungCapacity = async (services: Services, choice: ModelChoice, now: number = Date.now()): Promise<FleetCapacity | undefined> =>
     // allow(silent-catch): a failed quota lookup should not fail the helper; it falls through to asking normally.
-    fleetCapacityOf(services, choice.provider, choice.model === "" ? undefined : { id: choice.model }, now).catch(() => undefined);
+    fleetCapacityOf(services, choice.provider, rungModel(choice), now).catch(() => undefined);
 
 // Whether a rung is known-spent; undefined means ask it.
 export const spentRung = async (services: Services, choice: ModelChoice, now: number = Date.now()): Promise<SpentRung | undefined> => {

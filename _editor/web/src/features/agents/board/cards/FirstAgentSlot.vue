@@ -24,7 +24,7 @@ const { starters } = defineProps<{ starters: readonly Starter[] }>();
             <button v-for="starter in starters" :key="starter.label" type="button" class="ui-chip" @click="composeAgent(starter.prompt)">
                 {{ starter.label }}
             </button>
-            <button type="button" class="ui-chip gap-1" @click="startAgent()">
+            <button type="button" class="ui-chip" @click="startAgent()">
                 <Icon name="pencil" class="text-2xs" />{{ t(`agents.firstAgentSlot.writeYourOwn`) }}
             </button>
         </div>

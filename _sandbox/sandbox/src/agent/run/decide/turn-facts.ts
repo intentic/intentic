@@ -31,6 +31,7 @@ import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
 import type { RoutedTurn, TurnInput } from "../../../seams/turn-starter.js";
 import { retrieveTurnContext, type TurnContextOutcome } from "../turn/turn-context.js";
 import type { TurnContext } from "../../providers/adapter.js";
+import type { PrivacyRefusal } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import { opt } from "../../../opt.js";
 import { EXPERIMENTS } from "./experiments.js";
 import { type ConversationEntry, type TurnPremise, type TurnRuntime, premiseOf, turnRuntime } from "./turn-premise.js";
@@ -59,7 +60,7 @@ export interface AdmittedTurnFacts {
     readonly helperOnly?: { readonly label: string; readonly reason: HelperOnly };
     // Why the privacy shield refuses this turn: it is on, the provider is untrusted, and the runtime is one the gateway
     // cannot stand in front of. Absent: it may run.
-    readonly privacyRefusal?: string;
+    readonly privacyRefusal?: PrivacyRefusal;
     // Everything the owner installed, before any persona or gate narrows it.
     readonly installed: readonly Capability[];
     // Dependency readiness of the main checkout; empty where the probe was skipped.
@@ -235,7 +236,7 @@ export type TurnFactsDeps = ServiceabilityDeps &
 
 // Asked of every turn, since a policy can change between two of them: the shield's verdict on the route the turn's runtime
 // reaches its provider by (privacy-trust.ts runtimeRoute).
-const privacyRefusalOf = (services: Pick<Services, "privacyShield" | "perf">, runtime: TurnRuntime, conversationId: string | undefined): Promise<string | undefined> =>
+const privacyRefusalOf = (services: Pick<Services, "privacyShield" | "perf">, runtime: TurnRuntime, conversationId: string | undefined): Promise<PrivacyRefusal | undefined> =>
     services.perf.track("turn.plan.privacy", { provider: runtime.provider }, () =>
         services.privacyShield.refusal({ provider: runtime.provider, conversationId, route: runtimeRoute(runtime.provider, runtime.harness) }),
     );

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, timeAgo, ui } from "@intentic/ui";
+import { AnchoredOverlay, SectionHeader, timeAgo, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { KINDS } from "../../models/terminal/terminalMeta";
 import { openWorkTerminal, useWorkTerminals, type WorkTerminalRow } from "../../models/terminal/useWorkTerminals";
@@ -46,9 +46,7 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
 
     <AnchoredOverlay v-model="panelOpen" :anchor="trigger ?? undefined" side="bottom" cross="end">
         <div class="flex w-80 flex-col p-1">
-            <div v-if="live" class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
-                {{ t(`shared.running`) }}
-            </div>
+            <SectionHeader v-if="live" :label="t(`shared.running`)" density="dense" class="px-2 py-1.5" />
             <button
                 v-for="row in rows"
                 :key="row.session"
@@ -69,13 +67,13 @@ const endedAt = (row: WorkTerminalRow): string => (row.activityAt > 0 ? `finishe
                 What just ran: kept out of the strip, kept within reach. The row goes when the daemon reaps the session, so what is offered here can
                 always still be opened.
             -->
-            <div
+            <SectionHeader
                 v-if="finished.length > 0"
-                class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted"
+                :label="t(`terminal.workTerminals.finished`)"
+                density="dense"
+                class="px-2 py-1.5"
                 :class="live ? 'mt-1 border-t border-line-subtle pt-2' : undefined"
-            >
-                {{ t(`terminal.workTerminals.finished`) }}
-            </div>
+            />
             <button
                 v-for="row in finished"
                 :key="row.session"

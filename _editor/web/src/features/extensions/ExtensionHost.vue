@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { allLoaded } from "@intentic/extension-api";
 import { Button, EmptyState } from "@intentic/ui";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { computed } from "vue";
@@ -16,8 +17,8 @@ const t = useT();
 /* Hosts one extension activation (/ext/:ext/:key?): re-runs the registry's detection over the live repo facts and capability manifest. */
 
 const route = useRoute();
-const { panels, settled: panelsSettled } = usePanels();
-const { capabilities, settled: capabilitiesSettled } = useCapabilities();
+const { panels, loaded: panelsRead } = usePanels();
+const { capabilities, loaded: capabilitiesRead } = useCapabilities();
 const { extensions } = useExtensions();
 
 const ext = computed(() => String(route.params[`ext`]));
@@ -35,10 +36,12 @@ const found = computed(() =>
     ),
 );
 
-// Until every extension has run and the repos and capabilities it detects from have answered, a view not found yet is
-// only late: the rail's own test for a missing tile (ShellDesktop's railSettled), so this page never says "nothing
-// here" about a view whose bundle is still on its way.
-const settled = computed(() => extensionsLoaded.value && panelsSettled.value && capabilitiesSettled.value);
+// The repos and capabilities views are detected from, as one read. Only its answer, with every extension run, can say a
+// view is not here: before that a view not found yet is only late (the rail's own test for a missing tile, ShellDesktop's
+// railSettled), and a read that failed is said as a failure, never as "nothing here" about a view it could not look for.
+const facts = computed(() => allLoaded([panelsRead.value, capabilitiesRead.value]));
+const factsFailed = computed(() => (facts.value.state === `failed` ? facts.value : undefined));
+const settled = computed(() => extensionsLoaded.value && facts.value.state === `ready`);
 // Named from the address before the activation is found, the same name ExtensionView defaults to after, so the
 // remembered page is drawn from the first frame of the wait to the view's own.
 const imprint = computed(() => `ext:${ext.value}/${key.value}`);
@@ -48,12 +51,17 @@ const imprint = computed(() => `ext:${ext.value}/${key.value}`);
     <!-- Mounted through the whole wait, found or not yet, so its placeholder is one wait rather than two that each
          restart their reveal delay. -->
     <ExtensionView
-        v-if="found || (!settled && !disabledOwner)"
+        v-if="found || (!settled && !disabledOwner && !factsFailed)"
         :extension="found?.extension"
         :activation="found?.activation"
         :imprint="imprint"
         :waiting="!settled"
     />
+    <EmptyState v-else-if="factsFailed" tone="danger" :title="t(`extensions.extensionHost.couldntFindViews`)" :line="factsFailed.error" class="h-full">
+        <template v-if="factsFailed.retry" #actions>
+            <Button size="small" tier="boring" :label="t(`ui.action.tryAgain`)" @click="factsFailed.retry()" />
+        </template>
+    </EmptyState>
     <EmptyState
         v-else-if="disabledOwner"
         icon="extensions"

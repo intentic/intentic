@@ -1,5 +1,5 @@
 import { sdk } from "../engines/claude-sdk.js";
-import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agents";
+import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agent-search";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { oneLine } from "@intentic/base/one-line";
 import { parsePromptEnvelope } from "./vocabulary/prompt-envelope.js";

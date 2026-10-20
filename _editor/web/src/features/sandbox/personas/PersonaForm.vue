@@ -212,7 +212,7 @@ const configure = (pin: ModelPin): void => {
                             v-for="mark in pickedMarks"
                             :key="mark.id"
                             type="button"
-                            :class="ui.chip({ on: true }, `group py-1 pl-1.5 pr-2 text-xs hover:border-danger`)"
+                            :class="ui.chip({ on: true, lead: true }, `group hover:border-danger`)"
                             :aria-label="t(`sandbox.personaForm.stopSpeakingThrough`, { id: mark.id })"
                             @click="toggleAccount(mark.id)"
                         >

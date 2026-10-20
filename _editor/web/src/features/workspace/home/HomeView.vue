@@ -482,7 +482,7 @@ const onBackgroundMenu = (event: MouseEvent): void => {
                 </button>
             </template>
             <!-- Says why there is no New File here and why a drop bounces; the menu's own note only shows on a right-click. -->
-            <span v-if="archiveHere" class="ui-chip ml-2 h-5 shrink-0 gap-1 px-1.5 text-2xs text-muted">
+            <span v-if="archiveHere" class="ui-chip ui-chip-sm ml-2 shrink-0 text-muted">
                 <Icon name="box" aria-hidden="true" />
                 {{ t(`workspace.words.readOnly`) }}
             </span>

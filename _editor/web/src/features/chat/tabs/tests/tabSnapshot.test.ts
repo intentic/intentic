@@ -81,10 +81,10 @@ describe(`reading a tab snapshot`, () => {
     });
 
     it(`skips an unreadable entry and keeps the rest`, () => {
-        // No conversationId names nothing; a missing draft isn't bindable either.
-        session.set(KEY, blob(`b`, [{ draft: `` }, tab(`b`), { conversationId: `c` }]));
+        // No conversationId names nothing; an identity alone is a tab, since its words are its draft's, not the tab's.
+        session.set(KEY, blob(`b`, [{ draft: `` }, tab(`b`), { conversationId: `c` }, { conversationId: 7 }]));
 
-        expect(readTabSnapshot(`sb1`)?.tabs.map((entry) => entry.conversationId)).toEqual([`b`]);
+        expect(readTabSnapshot(`sb1`)?.tabs.map((entry) => entry.conversationId)).toEqual([`b`, `c`]);
     });
 
     it(`points the focus at the first tab when the stored one names nothing`, () => {

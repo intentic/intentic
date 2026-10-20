@@ -125,11 +125,18 @@ export const declareOwnerPauses = async (keys: ReadonlySet<string>, now: number)
 // FILE SYNC HOLDS STILL WHILE ITS SANDBOX IS SWAPPED ON THIS MACHINE. Two-way sync against a container that is parked,
 // half started, or a new version that may yet be rolled back reads the sandbox's side as whatever that moment shows, and
 // writes the answer into this machine's folder: the pairing is held (`swapSince`) from the cutover through the
-// first quarter hour of probation, and past that for as long as the sandbox is not answering. The decisions are pure;
-// mirror.ts keeps the fact each pass.
+// first quarter hour after it, and past that for as long as ic still watches the swap and the sandbox is not answering.
+// The decisions are pure; mirror.ts keeps the fact each pass.
+//
+// THE HOLD OUTLIVES IC'S RECORD OF THE SWAP (2026-10-20). ic keeps a swap on its record only while the swap is in flight
+// or on probation, and a swap with no probation (the dev loop, a probation of 0, the watch going back) leaves no record
+// seconds after its cutover: a hold read off the record alone let go after about thirty seconds, while the new version
+// it was holding for had not proven anything yet. So the quarter hour is measured from the pairing's own fact, the
+// cutover's start as ic recorded it, kept on the pairing when the swap is first seen; the record only begins a hold (or
+// a new one, for a later swap) and keeps it while it is cutting over.
 
-// How long into a swap sync stays paused however well the new version looks: the probation watch's first verdicts land
-// inside it. Measured from the cutover's start, which is the one time ic records.
+// How long after a swap's cutover began sync stays paused however well the new version looks: the probation watch's
+// first verdicts land inside it.
 export const PROBATION_HOLD_MS = 15 * 60_000;
 
 // This pairing's sandbox's record, when this machine runs it and ic has one naming a phase.
@@ -138,26 +145,32 @@ export const recordOf = (pairing: Pairing, records: readonly SwapRecord[]): Swap
     return records.find((record) => slugs.includes(record.slug));
 };
 
-// Whether a record holds file sync still: the whole cutover, the first quarter hour of probation, and after that while
-// the sandbox does not answer. A phase this agent does not know is read as probation; a probation with no time as
-// fresh, since there is nothing to measure it from.
-export const holdsSync = (record: SwapRecord | undefined, now: number, answering: boolean): boolean => {
-    if (record?.phase === undefined) {
-        return false;
-    }
-    if (record.phase === "cutover") {
+// When the swap a pairing's hold measures from began: the cutover ic's record names while it keeps one, else the start
+// the pairing kept (`since`). A record with no time begins at `now`, the moment it was first seen.
+export const swapBegan = (record: SwapRecord | undefined, since: number | undefined, now: number): number | undefined =>
+    record?.phase === undefined ? since : (record.at ?? since ?? now);
+
+// Whether a swap holds file sync still: the whole cutover, the first quarter hour after it began, and after that while
+// ic still watches it and the sandbox does not answer. A phase this agent does not know is read as probation.
+export const holdsSync = (record: SwapRecord | undefined, since: number | undefined, now: number, answering: boolean): boolean => {
+    if (record?.phase === "cutover") {
         return true;
     }
-    return record.at === undefined || now - record.at < PROBATION_HOLD_MS || !answering;
+    const began = swapBegan(record, since, now);
+    if (began === undefined) {
+        return false;
+    }
+    return now - began < PROBATION_HOLD_MS || (record?.phase !== undefined && !answering);
 };
 
-// What this pass writes about one pairing's swap: that it began, that it settled, or nothing when the record already
-// says what is so. The hold itself is read off the fact (holds.ts), so nothing here decides who resumes what.
-export const swapStep = (pairing: Pick<Pairing, "swapSince">, holds: boolean): "began" | "settled" | undefined => {
-    if (holds === (pairing.swapSince !== undefined)) {
-        return undefined;
+// What this pass writes about one pairing's swap: that it began (`began`, the start to keep, also for a later swap that
+// begins while one is held), that it settled, or nothing when the pairing already says what is so. The hold itself is
+// read off the fact (syncHolds), so nothing here decides who resumes what.
+export const swapStep = (pairing: Pick<Pairing, "swapSince">, holds: boolean, began: number | undefined): "began" | "settled" | undefined => {
+    if (!holds) {
+        return pairing.swapSince === undefined ? undefined : "settled";
     }
-    return holds ? "began" : "settled";
+    return pairing.swapSince === began ? undefined : "began";
 };
 
 // How long a sandbox has to stop answering before its forwarded ports are taken off this machine's localhost: a port

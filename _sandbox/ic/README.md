@@ -184,7 +184,21 @@ flowchart LR
   machine pulls it. The environment build the sandbox ran on that base is pinned beside it
   (`intentic-sandbox-rollback-<slug>:env-<id>`, with its hash in the record), and a rollback runs that build as it is.
   It rebuilds today's approved recipe on the old base only when that build is gone, so a recipe that no longer builds
-  does not block the way back (2026-10-07).
+  does not block the way back (2026-10-07). `ic sandbox list --json` lists only the ways back a rollback can reach
+  (2026-10-19), and `ic features` says so (`reachable-ways-back`), so the editor offers an older ic's rows less what that
+  ic could never reach, and a current ic's rows as they are.
+- **The overlay a swap builds is the target's composition** (`composition.rs`, 2026-10-20). An update, a rollback that
+  rebuilds and the dev loop ask the image they move onto to compose the sandbox's environment: its own
+  `compose-overlay.js` runs like the state pre-flight (`target_probe.rs`: read-only data mounts, no network, the
+  container's runner-set environment and its at-rest key, read-only), and ic builds and stamps exactly what it prints.
+  So a release or a dev rebuild that changed the daemon's own pack steps (a pack the new base bakes, a pack's steps
+  edited) leaves nothing pending: the new daemon composes the same overlay on its first boot. Before, ic built the
+  overlay the running daemon had composed for its own base, and the Environment card asked for one more rebuild after
+  every such swap. An image from before the composer gets the running daemon's overlay rebased onto it, as every swap
+  did before; a composer that fails says why and does the same. A prepared update is taken only while its base still
+  composes what it was built from. A plain rebuild still builds the approved file by its reviewed hash, since the
+  running daemon is the target. `ic features [--json]` lists the optional ops this ic implements in the contract's words
+  (`features.rs`, golden `ic-features.json`), which the machine agent advertises in its facts.
 - **One record, one run at a time.** The channel record is fsynced, and copied onto the sandbox's own `/history`
   volume so every `ic` that drives the same Docker engine (the Windows side and a WSL distro, `sudo`) reads the same one
   (`mirror.rs`). A per-sandbox lock (`lock.rs`) orders ic runs from a terminal, the desktop app and the machine agent;

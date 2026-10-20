@@ -39,7 +39,9 @@ export function useSafetyPolicy() {
         isSaving: computed<boolean>(() => save.isPending.value),
         // A refused write, which the page must say: the document stays "Not saved yet" and nothing else tells why.
         saveError: computed<Error | null>(() => save.error.value),
-        isLoading: query.isLoading,
+        // Whether the daemon has answered with the policy. Not "not loading": a read that failed is not loading either, and
+        // the page drew it as an empty, editable policy whose Save would have replaced the real one with nothing.
+        answered: computed<boolean>(() => policy.value !== undefined),
         error,
     };
 }

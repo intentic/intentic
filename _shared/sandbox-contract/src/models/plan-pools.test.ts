@@ -9,6 +9,7 @@ import {
     readingHeadroom,
     preferredAccount,
     refusalVerdict,
+    refusedPoolReset,
     roomiestAccount,
     scopedWindow,
     uncoveredModels,
@@ -312,6 +313,53 @@ test("a spent allowance with the provider's own reset stands until that instant,
     expect(refusalVerdict(refusal(until), [{ account: "a", usage: room }, { account: "b", usage: room }], 9_999)).toBe("answered");
     // Spent until the instant the provider named, not the pool's own reset.
     expect(serviceStates([{ account: "a", usage: room }], [refusal({ ...until, account: "a" })], undefined, 9_999).get("a")).toEqual({ kind: "spent", reopensAt: 10 });
+});
+
+// 2026-10-20: a spent allowance the provider gave no instant for stood past the reset of the pool it was refused in, the
+// "back at" every surface showed, until the next reading landed (up to the daemon's 15-minute idle sweep).
+test("a spent allowance with no instant named is stamped with its pool's reset, and ends there everywhere at once", () => {
+    const reset = 10;
+    const filling = at(500, window({ kind: "five_hour", utilization: 96, resetsAt: reset }), window({ kind: "seven_day", utilization: 40, resetsAt: 900 }));
+    const accounts = [{ account: "a", usage: filling }];
+    const spent = refusal({ kind: "limit", account: "a", model: "gpt-6.1-sol" });
+    expect(refusedPoolReset(spent, accounts)).toBe(reset);
+    const filed = { ...spent, poolResetsAt: reset };
+    expect(refusalVerdict(filed, accounts, reset * 1000 - 1)).toBe("standing");
+    expect(serviceStates(accounts, [filed], undefined, reset * 1000 - 1).get("a")).toEqual({ kind: "spent", reopensAt: reset });
+    expect(refusalVerdict(filed, accounts, reset * 1000)).toBe("answered");
+    // Even once the reading has lapsed that pool, so the weekly one binds: the stamp, not the reading, says when.
+    const lapsed = at(500, window({ kind: "five_hour", utilization: 0, lapsedAt: reset }), window({ kind: "seven_day", utilization: 40, resetsAt: 900 }));
+    expect(refusedPoolReset(spent, [{ account: "a", usage: lapsed }])).toBe(900);
+    expect(refusalVerdict(filed, [{ account: "a", usage: lapsed }], reset * 1000)).toBe("answered");
+    expect(serviceStates([{ account: "a", usage: lapsed }], [filed], undefined, reset * 1000).get("a")).toEqual({ kind: "ready", room: 60 });
+});
+
+test("the stamp is the refused account's pool, or the soonest of any where the refusal named none", () => {
+    const soon = at(500, window({ kind: "five_hour", utilization: 96, resetsAt: 10 }));
+    const later = at(500, window({ kind: "five_hour", utilization: 96, resetsAt: 50 }));
+    const accounts = [{ account: "b", usage: later }, { account: "a", usage: soon }];
+    expect(refusedPoolReset(refusal({ kind: "limit" }), accounts)).toBe(10);
+    expect(refusedPoolReset(refusal({ kind: "limit", account: "b" }), accounts)).toBe(50);
+    // The pool the model spends, not the account's fullest.
+    const opus = at(500, window({ kind: "five_hour", utilization: 20, resetsAt: 10 }), window({ kind: "model:Opus", label: "Opus", utilization: 99, resetsAt: 70, gates: { models: ["Opus"] } }));
+    expect(refusedPoolReset(refusal({ kind: "limit", model: "claude-opus-4-6" }), [{ account: "a", usage: opus }])).toBe(70);
+    expect(refusedPoolReset(refusal({ kind: "limit", model: "claude-haiku-4-5" }), [{ account: "a", usage: opus }])).toBe(10);
+});
+
+test("nothing is stamped where a pool's reset cannot speak for the refusal", () => {
+    const reopening = at(500, window({ kind: "five_hour", utilization: 96, resetsAt: 10 }));
+    // A reading older than the window it was refused in: that reset was over before the refusal came.
+    expect(refusedPoolReset(refusal({ kind: "limit", at: 20_000 }), [{ account: "a", usage: reopening }])).toBeUndefined();
+    expect(refusedPoolReset(refusal({ kind: "limit" }), [{ account: "a", usage: at(500, window({ kind: "monthly", utilization: 96 })) }])).toBeUndefined();
+    expect(refusedPoolReset(refusal({ kind: "limit" }), [{ account: "a" }])).toBeUndefined();
+    expect(refusedPoolReset(refusal({ kind: "limit", account: "gone" }), [{ account: "a", usage: reopening }])).toBeUndefined();
+    // The provider's own instant, an allowance no reading measures, a person's mark, and any refusal but a spent allowance.
+    expect(refusedPoolReset(refusal({ kind: "limit", resetsAt: 5 }), [{ account: "a", usage: reopening }])).toBeUndefined();
+    expect(refusedPoolReset(refusal({ kind: "limit", unmetered: true }), [{ account: "a", usage: reopening }])).toBeUndefined();
+    expect(refusedPoolReset(refusal({ kind: "limit", byHand: true }), [{ account: "a", usage: reopening }])).toBeUndefined();
+    expect(refusedPoolReset(refusal({ kind: "entitlement" }), [{ account: "a", usage: reopening }])).toBeUndefined();
+    // And a refusal filed unstamped keeps standing until a reading answers it, as before.
+    expect(refusalVerdict(refusal({ kind: "limit", account: "a" }), [{ account: "a", usage: reopening }], 9e12)).toBe("standing");
 });
 
 test("a provider's accounts are judged together: a standing refusal lands only on the account it names", () => {

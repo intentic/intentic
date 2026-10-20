@@ -342,6 +342,8 @@ export interface LocalFolderSandbox {
     readonly reason: string | undefined;
     /** The first copy's status: paused, or the sync's word while it runs. */
     readonly status: string | undefined;
+    /** While it is paused, why the machine agent holds its sync still (its `heldBy`), the reader's own pause first. */
+    readonly heldBy?: readonly string[];
 }
 
 /** What the folder's dialog draws. */

@@ -50,7 +50,7 @@ import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
 import { resumedLine as resumedLineFor, setupProjectOf } from "./setupArrival";
 import { probeDaemon } from "./setupAttach";
-import WaitProgress from "../../components/WaitProgress.vue";
+import ProgressMeter from "../../components/progress/ProgressMeter.vue";
 import { useSetupWaits } from "./flow/useSetupWaits";
 import { lockedReasonOf } from "./flow/commandHandoff";
 import { DEV_SANDBOX_IMAGE } from "@intentic/sandbox-contract/policy/overlay-lint";
@@ -592,7 +592,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             >
                             <span v-else class="text-xs text-muted">{{ t(`setup.setup.httpsAddressSandboxAlready`) }}</span>
                         </label>
-                        <WaitProgress v-if="attachWait" :wait="attachWait" :what="attachNote" />
+                        <ProgressMeter v-if="attachWait" :progress="attachWait" :what="attachNote" />
                         <!-- Each probe failure names the one thing the user can do about it. -->
                         <!-- Two checks anyone can make, then the one that needs a variable they may never have set: a
                              reader who has not heard of WEB_ORIGIN reads it as a fourth thing wrong with their setup. -->
@@ -984,7 +984,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                     <p class="text-xs text-muted">{{ hostedWait.note }}</p>
                                 </template>
                             </template>
-                            <WaitProgress v-else-if="hostedBusy && provisionWait" :wait="provisionWait" :what="t(`setup.setup.startingMachine`)" />
+                            <ProgressMeter v-else-if="hostedBusy && provisionWait" :progress="provisionWait" :what="t(`setup.setup.startingMachine`)" />
                             <!-- The action states the no-backup commitment at the decision point. -->
                             <!-- A full fleet offers only a capacity recheck. -->
                             <template v-else-if="hostedFull">

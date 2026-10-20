@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { recordingLogger } from "../../../harness/route-fakes.testing.js";
 import { DAY_MS } from "../../../system/chore-clock.js";
 import { workspacePaths } from "../../../workspace/workspace.js";
-import { carriedRef, parkedRefOf } from "../../../git/agent-refs.js";
+import { carriedRef, droppedRef, parkedRefOf } from "../../../git/agent-refs.js";
 import {
     deleteRefsAtomically,
     PARKED_REF_RETENTION_MS,
@@ -65,16 +65,19 @@ const deps = (work: string, entries: Record<string, { archivedAt?: number }>, ov
     return { retention, lines };
 };
 
-test("deletes the parked refs and carry markers of conversations archived past the retention, and nothing else", async () => {
+test("deletes the parked refs and markers of conversations archived past the retention, and nothing else", async () => {
     const { work, tips } = await workspaceWith(["old", "recent", "live", "stranger"]);
-    // A carry marker of the old conversation, and a live branch of it that was never parked: only the shelf is in scope.
+    // The old conversation's carry and dropped-prefix markers, and a live branch of it that was never parked: only the
+    // shelf and its markers are in scope. A recent conversation's marker stays with its shelf.
     await sh(work, "update-ref", carriedRef("agent/old"), tips.get("old") ?? "");
+    await sh(work, "update-ref", droppedRef("agent/old"), tips.get("old") ?? "");
+    await sh(work, "update-ref", droppedRef("agent/recent"), tips.get("recent") ?? "");
     await sh(work, "update-ref", "refs/heads/agent/old", tips.get("old") ?? "");
     const { retention, lines } = deps(work, { old: { archivedAt: LONG_AGO }, recent: { archivedAt: NOW - DAY_MS }, live: {} });
 
     await runParkedRefRetention(retention);
 
-    expect(await refsIn(work)).toEqual(["refs/agent/live", "refs/agent/recent", "refs/agent/stranger", "refs/heads/agent/old"]);
+    expect(await refsIn(work)).toEqual(["refs/agent/live", "refs/agent/recent", "refs/agent/stranger", "refs/heads/agent/old", "refs/intentic/dropped/recent"]);
     expect(lines.find((line) => line["repo"] === "root")).toMatchObject({ parked: 4, dropped: 1, kept: 2, unknown: 1, failed: 0, retentionDays: 90 });
 });
 

@@ -1,5 +1,6 @@
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import type { PrivacyBypass, PrivacyRefusal } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import type { AgentProvider, RoutedAgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
@@ -52,7 +53,17 @@ export type TurnRefusal = {
     readonly memory?: Extract<AgentEvent, { kind: "error" }>["memory"];
     // The account the refusal is about, where the arm resolved one; rides onto the error frame.
     readonly account?: string;
+    // A privacy refusal only: the route the shield refused (PrivacyRefusal.route); rides onto the error frame.
+    readonly privacyRoute?: PrivacyBypass;
 };
+
+/** The privacy shield's refusal as a turn's: coded as the shield's, its route carried, in the shield's own sentence. */
+export const privacyTurnRefusal = (refusal: PrivacyRefusal): TurnRefusal => ({
+    ok: false,
+    code: "privacy-unshielded",
+    message: refusal.sentence,
+    ...opt("privacyRoute", refusal.route),
+});
 
 // What one runtime's arm answers when it serves: the request it planned, and its loop bound to everything in that request
 // but the words, which are all the route may still change. Nothing about experiments or the preamble.

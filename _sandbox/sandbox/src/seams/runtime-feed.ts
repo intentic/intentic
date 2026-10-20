@@ -40,6 +40,8 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     update: 1000,
     // A yes is one click, but a purge forgets a conversation's grants and releases in the same moment.
     grants: 250,
+    // A draft is written every few hundred milliseconds while somebody types; each frame makes their windows read it back.
+    drafts: 250,
 };
 
 // Each subscriber, with where its own failure is reported: the /events connection's logger, or none.

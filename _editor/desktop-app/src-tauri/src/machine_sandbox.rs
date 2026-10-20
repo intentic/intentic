@@ -14,7 +14,8 @@
 //!
 //! Folders wait in the record (`folders`) until it is ready, then `intentic-machine sync attach` records each one's
 //! pairing and the agent starts copying; the supervisor follows the first copy in `intentic-machine status --json`
-//! until Mutagen says it is watching for changes.
+//! until Mutagen says it is watching for changes. The record holds only the ask and how far its copy is: which folder IS
+//! in the sandbox is the agent's pairing of it (bindings.rs), read again every round.
 //!
 //! Every decision is a plain function of the record and what was found ([`decide`], [`Progress::hear`],
 //! [`enqueue`]…), so the state machine is tested without a window, a platform or a docker.
@@ -195,6 +196,10 @@ pub struct Folder {
     /// The first copy's status: paused, or Mutagen's word while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    /// While it is paused, why the agent holds its file sync still (`heldBy`, the agent's holds.ts), owner's word first:
+    /// the one pause the reader lifts, or one that passes by itself.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub held_by: Vec<String>,
     /// Its first copy's session has been seen running since it was asked in ([`copy_seen`]). One found paused before
     /// that was paused before the folder was asked in, so it is a folder synced into the sandbox before.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -784,6 +789,7 @@ pub fn reset_for(record: &Record, account: &str) -> Record {
                 state: FolderState::Queued,
                 reason: None,
                 status: None,
+                held_by: Vec::new(),
                 ran: false,
                 ..folder.clone()
             })
@@ -908,6 +914,7 @@ pub fn enqueue(
             folder.state = FolderState::Queued;
             folder.reason = None;
             folder.status = None;
+            folder.held_by = Vec::new();
             folder.ran = false;
         }
         return folder.name.clone();
@@ -921,6 +928,7 @@ pub fn enqueue(
         state: FolderState::Queued,
         reason: None,
         status: None,
+        held_by: Vec::new(),
         ran: false,
     });
     name
@@ -967,48 +975,63 @@ pub fn copy_state(status: &str) -> FolderState {
     }
 }
 
-/// The status a paused session is said with.
+/// The status a held session is said with.
 const PAUSED: &str = "paused";
+/// The hold that is the reader's own pause (the agent's `DeviceSyncHold`), the one a press lifts.
+const OWNER: &str = "owner";
 
-/// Mutagen reports a paused session as disconnected. Keep following its first copy, but tell the window it is
-/// paused so it does not promise progress until the session resumes. The pause wins over a stale watching status.
-fn copy_status(pairing: &serde_json::Value) -> Option<&str> {
-    if pairing["paused"].as_bool() == Some(true) {
-        Some(PAUSED)
-    } else {
-        pairing["mutagenStatus"].as_str()
+/// Why the agent holds a pairing's file sync still, owner's word first; empty while it runs. `heldBy` is the agent's one
+/// answer to whether the sync runs (its holds.ts), read off facts it keeps, where Mutagen's own `paused` is only whether
+/// Mutagen has caught up with it yet, and says nothing of why (2026-10-20). An agent older than holds says `paused`
+/// alone: read as the drive's hold where it reports a low disk, else as a pause nobody explained, which is the owner's.
+fn holds_of(pairing: &serde_json::Value) -> Vec<String> {
+    if let Some(held) = pairing["heldBy"].as_array() {
+        return held
+            .iter()
+            .filter_map(|hold| hold.as_str().map(str::to_string))
+            .collect();
     }
+    if pairing["paused"].as_bool() != Some(true) {
+        return Vec::new();
+    }
+    let low_disk = pairing.get("lowDisk").is_some_and(|low| !low.is_null());
+    vec![if low_disk { "low-disk" } else { OWNER }.to_string()]
 }
 
 /// A folder whose first copy is followed, as its pairing's report (`intentic-machine status --json`) finds it; none
-/// while the report says nothing of its session yet. A session seen running is followed to `watching` ([`copy_state`]).
-/// One found paused BEFORE it was ever seen running was paused before the folder was asked in: a session starts running
-/// when the agent makes it, so this is a folder synced into the sandbox before, asked in again (a reinstall of the app,
-/// whose record went with it). It is in. Followed as a copy, it said "Copying … is paused" for good on a sandbox that
-/// had had the folder for days, since nothing lifts a pause the agent no longer knows it made (2026-10-19). A pause
-/// after the copy was seen running is said as one, and so is the drive's own (`lowDisk`), which holds a new session
-/// still from the start. Pure.
+/// while the report says nothing of its session yet and nothing holds it. A session seen running is followed to
+/// `watching` ([`copy_state`]). A HELD one is said as paused, with why ([`holds_of`]): the reader's own pause, or one
+/// that passes by itself (the drive filling up, the sandbox being swapped or not answering). Only the reader's pause found
+/// BEFORE the copy was ever seen running is no copy waiting: a session starts running when the agent makes it, so that
+/// pause is from before the ask, on a folder synced into the sandbox before and asked in again (a reinstall took the
+/// app's record), and it is in. Followed as a copy, such a folder said "Copying … is paused" for good on a sandbox that
+/// had had it for days (2026-10-19). Read off Mutagen's `paused` instead of the agent's holds, a session the agent was
+/// about to resume (its move off Mutagen's shared directory loads every session paused) read as one paused before the
+/// ask, and a hold that lifts by itself was said as the reader's to lift. Pure.
 pub fn copy_seen(folder: &Folder, pairing: &serde_json::Value) -> Option<Folder> {
-    let said = copy_status(pairing)?;
-    if said != PAUSED {
+    let held = holds_of(pairing);
+    if held.is_empty() {
+        let said = pairing["mutagenStatus"].as_str()?;
         return Some(Folder {
             state: copy_state(said),
             status: Some(said.to_string()),
+            held_by: Vec::new(),
             ran: true,
             ..folder.clone()
         });
     }
-    let held_for_room = pairing.get("lowDisk").is_some_and(|low| !low.is_null());
-    if folder.ran || held_for_room {
+    if !folder.ran && held.iter().all(|hold| hold == OWNER) {
         return Some(Folder {
-            state: FolderState::Copying,
-            status: Some(PAUSED.to_string()),
+            state: FolderState::Ready,
+            status: None,
+            held_by: Vec::new(),
             ..folder.clone()
         });
     }
     Some(Folder {
-        state: FolderState::Ready,
-        status: None,
+        state: FolderState::Copying,
+        status: Some(PAUSED.to_string()),
+        held_by: held,
         ..folder.clone()
     })
 }
@@ -1349,6 +1372,8 @@ pub fn start(app: &AppHandle) {
 }
 
 fn supervise(app: &AppHandle) {
+    // The agent first: which folders are in a sandbox is its pairings' to say (bindings.rs), and nothing else holds it.
+    crate::bindings::refresh(app);
     let projects = app.state::<AppState>().projects();
     update(app, |record| settle_on_launch(record, &projects));
     let mut launch = true;
@@ -1400,7 +1425,13 @@ fn round(app: &AppHandle, launch: bool, asked: Option<Ask>) {
         rename_old_name(app);
     }
     attach_queued(app);
-    follow_copies(app);
+    // The agent's pairings read again while this computer's sandbox is up or a folder is on its way: what each folder
+    // is in, and how far each first copy is, off one report.
+    let looked = status(app);
+    if looked.standing == Standing::Ready || !looked.folders.is_empty() {
+        let report = crate::bindings::refresh(app);
+        follow_copies(app, report.as_ref());
+    }
 }
 
 /// What a round finds: who is signed in, and Docker and the container only when they can change anything.
@@ -1995,7 +2026,7 @@ fn follow_live_run(app: &AppHandle) -> bool {
 }
 
 /// The platform id of this computer's own sandbox while the app is making it or keeps it (not one the account no longer
-/// has): what the folders of `projects.json` are never pruned against (project.rs), and what counts as a sandbox this
+/// has): whose folders are never let go of for a roster that misses it (project.rs), and what counts as a sandbox this
 /// machine hosts (commands.rs `sandbox_list`).
 pub fn kept_sandbox_id(app: &AppHandle) -> Option<String> {
     let record = status(app);
@@ -2372,6 +2403,7 @@ fn failed(app: &AppHandle, reason: String) {
 /// them.
 fn recreate(app: &AppHandle) {
     let old = status(app);
+    crate::bindings::refresh(app);
     let moved: Vec<Project> = app
         .state::<AppState>()
         .projects()
@@ -2390,6 +2422,7 @@ fn recreate(app: &AppHandle) {
             eprintln!("intentic: {} was not let go of: {silence:?}", project.path);
         }
     }
+    crate::bindings::refresh(app);
     update(app, |record| {
         let account = record.account.clone();
         let mut fresh = recreated(record, account.as_deref().unwrap_or_default());
@@ -2402,7 +2435,7 @@ fn recreate(app: &AppHandle) {
     create(app, false);
 }
 
-/// The names already taken in this computer's sandbox: its folders, as projects.json remembers them.
+/// The names already taken in this computer's sandbox: its folders, as the agent's pairings say (bindings.rs).
 fn attached_names(app: &AppHandle, sandbox_id: Option<&str>) -> Vec<String> {
     app.state::<AppState>()
         .projects()
@@ -2437,12 +2470,13 @@ fn set_folder(
             folder.state = state;
             folder.reason = reason;
             folder.status = said;
+            folder.held_by = Vec::new();
         }
     });
 }
 
-/// Every folder waiting, attached now that the sandbox is ready: its pairing recorded by the machine agent, the folder
-/// remembered as this sandbox's project, and its windows told.
+/// Every folder waiting, attached now that the sandbox is ready: its pairing recorded by the machine agent, which is the
+/// folder's binding from then on, and its windows told once the round reads the agent again (bindings.rs).
 fn attach_queued(app: &AppHandle) {
     let record = status(app);
     if record.standing != Standing::Ready {
@@ -2471,24 +2505,18 @@ fn attach_queued(app: &AppHandle) {
             ATTACH_LIMIT,
         );
         match attach_answer(answer) {
-            Ok(()) => {
-                app.state::<AppState>().remember_project(Project {
-                    path: folder.path.clone(),
-                    dir: folder.name.clone(),
-                    sandbox_id: record.sandbox_id.clone(),
-                    slug: record.slug.clone(),
-                });
-                crate::local::mark_sandbox(app, Path::new(&folder.path));
-                set_folder(app, &folder.path, FolderState::Copying, None, None);
-            }
+            Ok(()) => set_folder(app, &folder.path, FolderState::Copying, None, None),
             Err(reason) => set_folder(app, &folder.path, FolderState::Failed, Some(reason), None),
         }
     }
 }
 
-/// Each folder's first copy, as the machine agent reports its pairing: done once Mutagen watches for changes
-/// ([`copy_seen`]).
-fn follow_copies(app: &AppHandle) {
+/// Each folder's first copy, as the machine agent reports its pairing (`report`, the round's): done once Mutagen watches
+/// for changes ([`copy_seen`]). Nothing while the agent could not be read.
+fn follow_copies(app: &AppHandle, report: Option<&serde_json::Value>) {
+    let Some(report) = report else {
+        return;
+    };
     let record = status(app);
     let copying: Vec<Folder> = record
         .folders
@@ -2496,19 +2524,8 @@ fn follow_copies(app: &AppHandle) {
         .filter(|folder| folder.state == FolderState::Copying)
         .cloned()
         .collect();
-    if copying.is_empty() {
-        return;
-    }
-    let report = match crate::scripts::sync_report() {
-        Ok(Some(report)) => serde_json::from_str::<serde_json::Value>(&report).unwrap_or_default(),
-        Ok(None) => return,
-        Err(error) => {
-            eprintln!("intentic: {error}");
-            return;
-        }
-    };
     for folder in copying {
-        let pairings = crate::project::pairings_of(&report, Path::new(&folder.path), cfg!(windows));
+        let pairings = crate::project::pairings_of(report, Path::new(&folder.path), cfg!(windows));
         let ours = pairings
             .iter()
             .find(|pairing| pairing["sandboxId"].as_str() == record.sandbox_id.as_deref())
@@ -2658,6 +2675,7 @@ mod tests {
             state,
             reason: None,
             status: None,
+            held_by: Vec::new(),
             ran: false,
         }
     }
@@ -2726,6 +2744,7 @@ mod tests {
             state: FolderState::Queued,
             reason: None,
             status: None,
+            held_by: Vec::new(),
             ran: false,
         });
         let wire = serde_json::to_value(&held).unwrap();
@@ -3004,6 +3023,7 @@ mod tests {
                 state: FolderState::Copying,
                 reason: None,
                 status: None,
+                held_by: Vec::new(),
                 ran: false,
             },
             Folder {
@@ -3012,6 +3032,7 @@ mod tests {
                 state: FolderState::Failed,
                 reason: Some("x".into()),
                 status: None,
+                held_by: Vec::new(),
                 ran: false,
             },
         ];
@@ -3028,6 +3049,7 @@ mod tests {
                 state: FolderState::Queued,
                 reason: None,
                 status: None,
+                held_by: Vec::new(),
                 ran: false,
             }]
         );
@@ -3575,6 +3597,7 @@ mod tests {
             state,
             reason: None,
             status: None,
+            held_by: Vec::new(),
             ran: false,
         };
         held.folders = vec![
@@ -3654,29 +3677,100 @@ mod tests {
         }
     }
 
+    /// Whether a copy is held is the agent's `heldBy`, never Mutagen's `paused`: a session Mutagen still has paused while
+    /// nothing holds it is one the agent is about to resume, and a pause somebody meant shows in `heldBy` before Mutagen
+    /// has caught up. An agent older than holds says `paused` alone, read as before.
     #[test]
-    fn a_paused_first_copy_is_said_as_paused_and_keeps_being_followed() {
-        for status in ["disconnected", "watching"] {
-            let pairing = serde_json::json!({ "paused": true, "mutagenStatus": status });
-            assert_eq!(copy_status(&pairing), Some("paused"));
-            assert_eq!(
-                copy_state(copy_status(&pairing).unwrap()),
-                FolderState::Copying
-            );
-        }
+    fn a_copy_is_held_by_the_agents_holds_and_not_by_mutagens_pause() {
+        let holds = |pairing: serde_json::Value| holds_of(&pairing);
         assert_eq!(
-            copy_status(&serde_json::json!({ "paused": true })),
-            Some("paused")
+            holds(serde_json::json!({ "heldBy": ["owner", "swap"], "paused": false })),
+            vec!["owner", "swap"]
         );
-        assert_eq!(copy_status(&serde_json::json!({})), None);
-        for paused in [None, Some(false)] {
-            let pairing = serde_json::json!({ "paused": paused, "mutagenStatus": "watching" });
-            assert_eq!(copy_status(&pairing), Some("watching"));
-            assert_eq!(
-                copy_state(copy_status(&pairing).unwrap()),
-                FolderState::Ready
-            );
-        }
+        assert_eq!(
+            holds(serde_json::json!({ "heldBy": [], "paused": true })),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            holds(serde_json::json!({ "mutagenStatus": "watching" })),
+            Vec::<String>::new()
+        );
+        // The older agent's word.
+        assert_eq!(holds(serde_json::json!({ "paused": true })), vec![OWNER]);
+        assert_eq!(
+            holds(
+                serde_json::json!({ "paused": true, "lowDisk": { "since": 1, "freeBytes": 1, "totalBytes": 2 } })
+            ),
+            vec!["low-disk"]
+        );
+        assert_eq!(
+            holds(serde_json::json!({ "paused": false })),
+            Vec::<String>::new()
+        );
+        let asked_in = asked("app", FolderState::Copying);
+        // Paused in Mutagen with nothing holding it (the move off its shared directory loads every session paused, and
+        // the agent resumes it next pass): not a pause from before the ask, so not "in" yet; followed on.
+        let resuming = copy_seen(
+            &asked_in,
+            &serde_json::json!({ "paused": true, "heldBy": [], "mutagenStatus": "disconnected" }),
+        )
+        .unwrap();
+        assert_eq!(
+            (resuming.state, resuming.status.as_deref()),
+            (FolderState::Copying, Some("disconnected"))
+        );
+        // Held by what passes by itself, before it ever ran: a copy waiting, said with why, whatever Mutagen says yet.
+        let swapped = copy_seen(
+            &asked_in,
+            &serde_json::json!({ "heldBy": ["swap"], "paused": false, "mutagenStatus": "watching" }),
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                swapped.state,
+                swapped.status.as_deref(),
+                swapped.held_by.clone()
+            ),
+            (FolderState::Copying, Some(PAUSED), vec!["swap".to_string()])
+        );
+        assert_eq!(
+            serde_json::to_value(&swapped).unwrap()["heldBy"],
+            serde_json::json!(["swap"])
+        );
+        // The reader's own pause found before it ever ran is from before the ask: the folder is in. With the drive's
+        // beside it, the copy has not happened and waits.
+        let owners = copy_seen(
+            &asked_in,
+            &serde_json::json!({ "heldBy": ["owner"], "paused": true }),
+        )
+        .unwrap();
+        assert_eq!((owners.state, owners.status), (FolderState::Ready, None));
+        let both = copy_seen(
+            &asked_in,
+            &serde_json::json!({ "heldBy": ["owner", "low-disk"] }),
+        )
+        .unwrap();
+        assert_eq!(
+            (both.state, both.held_by.clone()),
+            (
+                FolderState::Copying,
+                vec!["owner".to_string(), "low-disk".to_string()]
+            )
+        );
+        // Once nothing holds it, the copy goes on and the reason goes with the pause.
+        let going = copy_seen(
+            &swapped,
+            &serde_json::json!({ "mutagenStatus": "scanning" }),
+        )
+        .unwrap();
+        assert_eq!(
+            (going.status.as_deref(), going.held_by.len()),
+            (Some("scanning"), 0)
+        );
+        assert!(serde_json::to_value(&going)
+            .unwrap()
+            .get("heldBy")
+            .is_none());
     }
 
     /// A first copy is followed to `watching` once its session is seen running; a session found paused before it ever
@@ -3932,6 +4026,7 @@ mod tests {
             state: FolderState::Queued,
             reason: None,
             status: None,
+            held_by: Vec::new(),
             ran: false,
         });
         let found = Adoptable {
@@ -4290,6 +4385,7 @@ mod tests {
             state: FolderState::Copying,
             reason: None,
             status: None,
+            held_by: Vec::new(),
             ran: false,
         });
         assert_eq!(pause_for(&held), Duration::from_secs(4));

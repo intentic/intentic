@@ -14,7 +14,7 @@ import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 export function usePanels() {
     const queryClient = useQueryClient();
 
-    const { query, error } = useSandboxQuery(rpcQuery(`panels.list`));
+    const { query, error, loaded } = useSandboxQuery(rpcQuery(`panels.list`));
 
     const invalidate = async (): Promise<void> => {
         await queryClient.invalidateQueries({ queryKey: rpcKey(`panels.list`) });
@@ -35,8 +35,9 @@ export function usePanels() {
         panels: computed<PanelSummary[]>(() => allPanels.value.filter((panel) => withinScope(panel.repo))),
         // Every repository, for the surfaces about the sandbox itself rather than the work in it.
         allPanels,
-        // List has arrived or failed for good; the rail waits on this before calling a tile absent rather than late.
-        settled: computed(() => query.isFetched.value || query.isError.value),
+        // Where the list stands: only an answer says a repo is absent; a wait or a failure says nothing about it, so the
+        // rail and the extension host branch on this, never on "fetched or failed" (a failure is not an empty list).
+        loaded,
         error,
         isLoading: query.isLoading,
         start,

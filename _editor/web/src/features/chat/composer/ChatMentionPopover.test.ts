@@ -70,7 +70,7 @@ const words = (row: Element): string =>
         .filter((text) => text !== ``)
         .join(` `);
 const rowTexts = (element: HTMLElement): string[] => [...element.querySelectorAll(`button`)].map(words);
-const header = (element: HTMLElement): string => (element.querySelector(`p`)?.textContent ?? ``).trim();
+const header = (element: HTMLElement): string => (element.querySelector(`[data-popover-header]`)?.textContent ?? ``).trim();
 const highlighted = (element: HTMLElement): string => {
     const row = element.querySelector(`.ui-row-select-on`);
     return row === null ? `` : words(row);

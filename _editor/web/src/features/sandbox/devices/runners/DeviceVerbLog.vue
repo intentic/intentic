@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { DeviceRunLog } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import WaitProgress from "../../../../components/WaitProgress.vue";
-import { useWaitClock } from "../../../../components/useWaitClock";
+import ProgressMeter from "../../../../components/progress/ProgressMeter.vue";
+import { useProgress } from "../../../../components/progress/useProgress";
 
 // A container verb's live output on a device row, with how long it has run above it: `ic` and docker on somebody's
 // own computer can go quiet for minutes, and a log that had stopped printing read as a press that had stopped working.
@@ -15,12 +15,12 @@ const { lines, running, startedAt } = defineProps<{
 }>();
 
 const t = useT();
-const wait = useWaitClock(() => (running ? startedAt : undefined));
+const wait = useProgress(() => (running ? startedAt : undefined));
 </script>
 
 <template>
     <div class="flex flex-col gap-1.5">
-        <WaitProgress v-if="wait" :wait="wait" />
+        <ProgressMeter v-if="wait" :progress="wait" />
         <DeviceRunLog :lines="lines" :running="running" :empty="t(`sandbox.devicePage.startingOnDevice`)" :note="t(`sandbox.words.runningOnDeviceKeeps`)" />
     </div>
 </template>

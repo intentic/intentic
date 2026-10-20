@@ -1451,6 +1451,7 @@
             "workingRollBack": "Rolling this sandbox back",
             "workingUpdate": "Updating this sandbox",
             "comingBack": "{what}. This page picks it up again by itself once it's back.",
+            "cameBackUnmoved": "The sandbox came back on the build it ran before, so the swap didn't take. Its update card says why when the machine told it.",
             "lostBeforeRestart": "Lost contact with that device before this sandbox restarted. It may still finish: refresh in a minute to see where it got to.",
             "returnTimedOut": "Stopped waiting for the sandbox to come back. The restart may still be finishing: refresh in a minute to see where it got to.",
             "interruptsAgents": "This stops the agent that is working now: {names}. Its work is kept, and it waits for you to continue it once the sandbox is back. | This stops the {count} agents that are working now: {names}. Their work is kept, and each waits for you to continue it once the sandbox is back.",
@@ -4806,6 +4807,7 @@
         },
         "extensionHost": {
             "nothingHereViewsContent": "Nothing here: this view's content is no longer in the workspace.",
+            "couldntFindViews": "Couldn't find out which views this sandbox has.",
             "switchedOff": "{manifest} is switched off.",
             "turnBackOnIn": "Turn it back on in Sandbox → Extensions"
         },
@@ -5104,6 +5106,10 @@
                 "copyingDetail": "Agents can start once the first copy is in. Changes you make here keep going over.",
                 "paused": "Copying {name} is paused",
                 "pausedDetail": "Open the sandbox's Devices page to resume file syncing.",
+                "heldLowDisk": "The drive this folder is on is nearly full. Copying carries on by itself once there's room.",
+                "heldSwap": "This computer's sandbox is being updated. Copying carries on by itself once it's back.",
+                "heldUnreachable": "This computer's sandbox hasn't answered for an hour. Copying carries on by itself once it does.",
+                "heldAway": "This computer's sandbox isn't running on this computer right now. Copying carries on once it's back.",
                 "preparing": "Getting the sandbox ready for this folder…",
                 "failed": "{name} couldn't be added",
                 "ready": "{name} is in this computer's sandbox",
@@ -10776,7 +10782,8 @@
         },
         "operations": {
             "finished": "{what} — done",
-            "show": "Show"
+            "show": "Show",
+            "gaveUp": "Stopped waiting after {seconds} seconds."
         },
         "mobileMenu": {
             "away": " · away",
@@ -12132,6 +12139,7 @@
             "abortFailed": "Abort failed",
             "accessToSandboxRead": "Your access to this sandbox is read-only: this needs maintainer access.",
             "commitFailed": "Commit failed",
+            "committing": "Committing",
             "discardFailed": "Discard failed",
             "fetchFailed": "Fetch failed",
             "gitGaveNoReason": "git gave no reason.",

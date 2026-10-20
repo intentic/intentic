@@ -27,6 +27,10 @@ type Vocabulary = z.infer<typeof VocabularySchema>;
 export const providerAnswersDocument = defineDocument({
     root: "history",
     path: "provider-answers.json",
+    // What each provider's usage answers have been made of (their paths, and one redacted sample), so an answer that
+    // changes is noticed. Carried: the provider answers the same wherever the sandbox runs, and a fresh record would
+    // take the next changed answer as the first one.
+    portability: "carry",
     schema: VocabularySchema,
     granularity: "record",
 });

@@ -301,7 +301,7 @@ const backToSetup = async (): Promise<void> => {
                     </template>
                     <!-- The email road: the platform vouches for the address, so it works the same in every window. -->
                     <template v-if="emailRoad?.kind === `offered` && !waitingInBrowser">
-                        <span v-if="!withoutGoogle" class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
+                        <span v-if="!withoutGoogle" class="text-2xs text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
                         <Button
                             :label="t(`sandbox.signInWall.continueAsEmail`, { email: emailRoad.address })"
                             :tier="withoutGoogle ? `accent` : `boring`"
@@ -317,7 +317,7 @@ const backToSetup = async (): Promise<void> => {
                         {{ outdatedNote }}
                     </p>
                     <template v-if="passkeyOffered && !waitingInBrowser">
-                        <span class="text-2xs uppercase tracking-wide text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
+                        <span class="text-2xs text-subtle">{{ t(`sandbox.signInWall.or`) }}</span>
                         <Button
                             :label="t(`sandbox.signInWall.usePasskey2`)"
                             tier="boring"

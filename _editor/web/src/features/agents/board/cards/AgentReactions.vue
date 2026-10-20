@@ -103,6 +103,8 @@ defineExpose({ open });
 // On a page (not a card) the two quick answers stand beside the chips; one already worn is a chip, and drawing it
 // twice would offer the same press in two places.
 const quick = computed(() => QUICK_EMOJI.filter((emoji) => !chips.value.some((chip) => chip.emoji === emoji)));
+// On a card the mark is a bare stat among stats, not a chip: its gap and radius are its own.
+const STAT_MARK = `touch-target inline-flex cursor-pointer items-center gap-1 rounded transition-colors`;
 </script>
 
 <template>
@@ -113,9 +115,7 @@ const quick = computed(() => QUICK_EMOJI.filter((emoji) => !chips.value.some((ch
             :key="chip.emoji"
             type="button"
             :class="[
-                dense
-                    ? `touch-target inline-flex cursor-pointer items-center gap-1 rounded transition-colors`
-                    : ui.chip({ on: chip.mine }, `gap-1 px-2`),
+                dense ? STAT_MARK : ui.chip({ on: chip.mine }),
                 /* On the card the mark is a stat among stats, so its own tint says it is yours; on a page with room the chip wears the kit's lit plate. */
                 dense ? (chip.mine ? `font-medium text-link` : `hover:text-content`) : ``,
             ]"
@@ -134,7 +134,7 @@ const quick = computed(() => QUICK_EMOJI.filter((emoji) => !chips.value.some((ch
                 v-for="emoji in quick"
                 :key="emoji"
                 type="button"
-                class="ui-chip px-2 opacity-70 hover:opacity-100"
+                class="ui-chip opacity-70 hover:opacity-100"
                 :aria-label="t(`agents.agentReactions.markWith`, { emoji })"
                 v-tooltip.top="t(`agents.agentReactions.react`)"
                 :disabled="pending !== undefined"

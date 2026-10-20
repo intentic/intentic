@@ -117,8 +117,8 @@ function useDevicesTile(): ComputedRef<SectionTile> {
 // extra (the desktop's docked Chat tile), ranked with the rest. Which of these a rail draws is the rail's business: the
 // desktop's keeps only what is pinned, permanent or badging (onRail), a phone's draws them all.
 export function useSectionTiles(leading: () => readonly SectionTile[] = () => []) {
-    const { panels, settled: panelsSettled } = usePanels();
-    const { capabilities, settled: capabilitiesSettled } = useCapabilities();
+    const { panels, loaded: panelsRead } = usePanels();
+    const { capabilities, loaded: capabilitiesRead } = useCapabilities();
     // Devices is ship-tier only: the hub withholds the section below maintainer, where the daemon refuses what it is for.
     const { canShip } = useRole();
     // The audience's words for the core tiles that have maker names (Files); Agents keeps its own.
@@ -152,7 +152,8 @@ export function useSectionTiles(leading: () => readonly SectionTile[] = () => []
                 .toSorted((left, right) => railRank(left.id) - railRank(right.id))
         );
     });
-    // True once extensions, panels, and capabilities have all loaded; before that a missing tile is only late.
-    const settled = computed(() => extensionsLoaded.value && panelsSettled.value && capabilitiesSettled.value);
+    // True once extensions have run and panels and capabilities have answered; before that, and while either read has
+    // failed, a missing tile is only not known, so the rail keeps the tiles it remembers (useRailMemory).
+    const settled = computed(() => extensionsLoaded.value && panelsRead.value.state === `ready` && capabilitiesRead.value.state === `ready`);
     return { tiles, settled };
 }

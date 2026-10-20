@@ -2,11 +2,14 @@ import { rm } from "node:fs/promises";
 import { pollUntil } from "@intentic/base/async";
 import { plural } from "@intentic/base/format";
 import { explain, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
+import { environmentKeyOf, type PeerEnrollmentRequest } from "@intentic/sandbox-contract/schemas/hosts";
 import { PeerEnrollmentAnswerSchema } from "@intentic/sandbox-contract/schemas/peer-enrollment";
 import type { CommandContext } from "@stricli/core";
 import { buildCommand, machineUi, type Narration, sandboxUrlOf } from "../cli-ui.js";
 import { postWhileWarming } from "../daemon-base.js";
+import { wslEnvironment } from "../environments/wsl.js";
 import { completeSetup, prepareSetup } from "../install.js";
+import { machineId } from "../machine-id.js";
 import { ensureResident } from "../resident/resident.js";
 import { auditPath, configPath, type HostLink, readLinks, readLinkStates, removeLinks, unreachableIn, upsertLink } from "./config.js";
 
@@ -14,11 +17,20 @@ import { auditPath, configPath, type HostLink, readLinks, readLinkStates, remove
 
 const NOT_CONNECTED = "This device was not connected.";
 
-export const enroll = async (sandboxUrl: string, pairToken: string, say?: Log): Promise<{ id: string; token: string }> => {
+// `identity` is which computer and which OS install on it is redeeming, the same pair the sync key's enrollment sends, so
+// the sandbox writes the enrollment onto this machine's card from the start; an older sandbox ignores the body.
+export const enroll = async (
+    sandboxUrl: string,
+    pairToken: string,
+    { identity, say }: { readonly identity?: PeerEnrollmentRequest; readonly say?: Log } = {},
+): Promise<{ id: string; token: string }> => {
     const response = await postWhileWarming(
         sandboxUrl,
         "/system/hosts/enroll",
-        { headers: { "x-intentic-pair": pairToken } },
+        {
+            headers: { "content-type": "application/json", "x-intentic-pair": pairToken },
+            body: JSON.stringify({ ...identity } satisfies PeerEnrollmentRequest),
+        },
         {
             doing: "connecting",
             expired: explain(NOT_CONNECTED, "that pairing has expired.", "click Connect again on the device's card in your sandbox for a fresh command."),
@@ -81,7 +93,10 @@ const SETUP_PLAN: readonly PlanStep[] = [
 
 const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     ui.step("device-enrolling", "enrolling this device with your sandbox…");
-    const { id, token } = await enroll(flags.url, flags.pair, out);
+    const { id, token } = await enroll(flags.url, flags.pair, {
+        identity: { machineId: machineId(), environment: environmentKeyOf({ wsl: await wslEnvironment() }) },
+        say: out,
+    });
     // The cached grant starts at nothing; the sandbox pushes real scopes within a second of connecting.
     const link: HostLink = {
         sandboxUrl: flags.url,

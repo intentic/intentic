@@ -5,7 +5,8 @@ import type { Services } from "../../composition.js";
 import { spawnBlocked, spawnCatalogText, type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
 import { mentionsSpentAllowance } from "../../engines/failure-sentences.js";
 import { spentRung } from "../models/role-model-quota.js";
-import type { ChildSpawnSpec } from "./children.js";
+import type { LandResult } from "@intentic/sandbox-contract/schemas/agents";
+import type { ChildActionResult, ChildSpawnSpec } from "./children.js";
 
 // What the records say a child can still run on, and what a failed one leaves behind: the spawn preflight against a
 // spent model, and the words that name a child's work and the doors that keep it.
@@ -97,7 +98,7 @@ export const spentAsked = async (services: Services, asked: ChildSpawnSpec): Pro
 };
 
 // A path list as a parent reads it: the first few named, the rest counted.
-export const namedPaths = (paths: readonly string[]): string =>
+const namedPaths = (paths: readonly string[]): string =>
     [
         paths
             .slice(0, 5)
@@ -105,3 +106,26 @@ export const namedPaths = (paths: readonly string[]): string =>
             .join(", "),
         ...(paths.length > 5 ? [`and ${paths.length - 5} more`] : []),
     ].join(" ");
+
+// What a parent hears of a merge into `where`: in, in with markers to resolve, already there, or nothing written.
+export const mergeOutcome = (result: LandResult, where: string, childId: string): ChildActionResult => {
+    // Asked first: a land that wrote nothing is never "in your checkout now", whatever its books say.
+    if (result.landed && !result.changed) {
+        return { ok: true, note: `Nothing of it is outstanding: ${where} already holds its work.` };
+    }
+    if (result.landed) {
+        const open = (result.resolving ?? []).flatMap(({ repo, paths }) => paths.map((path) => (repo === "root" ? path : `${repo}/${path}`)));
+        return {
+            ok: true,
+            note:
+                open.length === 0
+                    ? `Its changes are in ${where} now.`
+                    : `Its changes are in ${where} now, with conflict markers to resolve in ${namedPaths(open)}.`,
+        };
+    }
+    const blocked = (result.conflicts ?? []).flatMap(({ repo, paths }) => paths.map(({ path }) => (repo === "root" ? path : `${repo}/${path}`)));
+    return {
+        ok: false,
+        message: `Nothing was written: ${blocked.length === 0 ? "the merge could not run" : `${namedPaths(blocked)} could not take conflict markers (a binary, or uncommitted edits that keep changing)`}. Its work stays on its branch \`agent/${childId}\`.`,
+    };
+};

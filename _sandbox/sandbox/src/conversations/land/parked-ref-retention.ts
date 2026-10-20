@@ -5,7 +5,7 @@ import { type Chore, DAY_MS } from "../../system/chore-clock.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
-import { carriedRef, parkedAgentRefs, parkedRefOf } from "../../git/agent-refs.js";
+import { carriedRef, droppedRef, parkedAgentRefs, parkedRefOf } from "../../git/agent-refs.js";
 
 // HOW LONG AN ARCHIVED CONVERSATION'S BRANCH IS KEPT (2026-10-05). Archiving parks `agent/<id>` on `refs/agent/<id>`
 // (agent-refs.ts) so the work survives, and until now only the owner's Purge dropped it: this sandbox held 3,301 of
@@ -114,11 +114,12 @@ const dropBatch = async (repo: string, batch: readonly string[], deps: ParkedRef
         if (drop.length === 0) {
             return;
         }
-        // Each with its carry marker where it has one (stray-work.ts), which would hold the same commits alive.
+        // Each with its markers where it has them (stray-work.ts's carry, sync.ts's dropped prefix), which would hold the
+        // same commits alive.
         const markers = await refTips(
             main,
             git,
-            drop.map((id) => carriedRef(`agent/${id}`)),
+            drop.flatMap((id) => [carriedRef(`agent/${id}`), droppedRef(`agent/${id}`)]),
         );
         const doomed = [...parked].filter(([id]) => drop.includes(id)).map(([id, sha]) => ({ ref: parkedRefOf(id), sha }));
         for (const [ref, sha] of markers) {

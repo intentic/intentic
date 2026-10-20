@@ -58,7 +58,7 @@ watch(
         <div v-if="book !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line-subtle px-3 py-1.5 text-2xs">
             <button
                 type="button"
-                :class="ui.chip({ on: showContents }, `shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium`)"
+                :class="ui.chip({ on: showContents, size: `sm` }, `shrink-0 font-medium`)"
                 :aria-pressed="showContents"
                 @click="showContents = !showContents"
             >

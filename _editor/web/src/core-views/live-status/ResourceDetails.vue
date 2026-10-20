@@ -47,8 +47,8 @@ const logoFailed = reactive(new Set<string>());
                 <div class="flex min-w-0 flex-wrap items-center gap-2">
                     <span class="truncate font-medium text-content">{{ resource.id }}</span>
                     <StatusBadge :variant="statusVariant(resource.status)" :label="statusLabel(resource.status)" size="xs" dot />
-                    <span class="ui-status-pill bg-subtle/10 text-2xs font-medium text-subtle">{{ resource.type }}</span>
-                    <span class="ui-status-pill text-2xs font-medium" :class="groupAccent(resource.group).frame">{{ resource.group }}</span>
+                    <span class="ui-status-pill bg-subtle/10 font-medium text-subtle">{{ resource.type }}</span>
+                    <span class="ui-status-pill font-medium" :class="groupAccent(resource.group).frame">{{ resource.group }}</span>
                 </div>
             </div>
             <div class="flex shrink-0 items-center gap-2">

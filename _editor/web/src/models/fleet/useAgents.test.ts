@@ -55,7 +55,8 @@ import { AgentsListSchema } from "@intentic/sandbox-contract/schemas/agents-list
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import { nextTick, ref } from "vue";
-import { forgetClosedDraft, keepClosedDraft } from "../conversations/drafts/closedDrafts";
+import { discardDraft, heldDrafts, writeDraft } from "../conversations/drafts/composerDrafts";
+import type { ChatNote } from "../conversations/run/chatChannel";
 import { previewOf } from "../conversations/panel/useChat-strip";
 import { Conversation } from "../conversations/session/conversation";
 import type { Strip, TabFacts } from "../conversations/tabs/tabFacts";
@@ -698,7 +699,8 @@ describe("draft cards", () => {
     const activeIds = (): string[] => useAgents().lanes.value.active.map((entry) => entry.id);
 
     // One tab of a popped-out chat's strip, as the drawing window would publish it (tabFacts). The words themselves
-    // ride their own note (`previews`), so a case that wants them posts both.
+    // are the conversation's draft, which that window's store tells this one of (`drafts`), so a case wanting them
+    // posts both.
     const draftTab = (id: string, words?: string, at?: number): TabFacts => ({
         id,
         registered: false,
@@ -713,13 +715,29 @@ describe("draft cards", () => {
         ...(at === undefined ? {} : { draftAt: at }),
     });
     let stripRevision = 0;
+    type DraftsNote = Extract<ChatNote, { kind: `drafts` }>;
     const strip = (...tabs: TabFacts[]): Strip => ({ active: tabs[0]?.id, panes: tabs.slice(0, 1).map((tab) => tab.id), tabs });
+    // A draft as another window of this browser writes it, heard over the chat channel.
+    const draftNote = (id: string, text: string): DraftsNote => ({
+        kind: `drafts`,
+        changed: [{ conversationId: id, text, attachments: [], since: 1_700, editedAt: Date.now(), pending: true }],
+        gone: [],
+    });
+    // The same window letting it go: sent there, or closed for good.
+    const goneNote = (id: string): DraftsNote => ({
+        kind: `drafts`,
+        changed: [],
+        gone: [{ id, editedAt: Date.now() + 1 }],
+    });
 
     beforeEach(() => {
         // These cases drive the real open path, firing the daemon's best-effort side calls (the read marker among them),
         // stubbed to resolve, since an undefined return isn't something they know how to survive.
         resetDaemon({});
         resetSandboxScope();
+        for (const draft of heldDrafts.value) {
+            discardDraft(draft.conversationId);
+        }
         useAgents().archived.value = [];
         // One open tab per case, installed by the case itself; this registered placeholder keeps useChat's
         // always-one-active-conversation invariant without acting as another draft under test.
@@ -760,20 +778,14 @@ describe("draft cards", () => {
         expect(activeIds()).toEqual([blank.conversationId]);
     });
 
-    // A chat closed with its message still in it has no tab and no roster row, so this card is the only way the words
-    // stay visible; it stands where the tab stood, named by the message.
-    it("cards a draft whose chat was closed with the message still in it", () => {
-        keepClosedDraft({
-            conversationId: `set-aside`,
-            isolated: true,
-            registered: false,
-            provider: `claude`,
-            harness: `native`,
-            model: `claude-opus-5`,
-            draft: `fix the login redirect`,
-            draftAt: 1_700,
-            attachments: [],
-        });
+    // A draft with no chat open for it (closed with the message still in it, or written on another device) has no tab
+    // and no roster row, so this card is the only way the words stay visible, named by the message.
+    it("cards a draft no chat is open for", () => {
+        writeDraft(
+            `set-aside`,
+            { text: `fix the login redirect`, attachments: [], serves: { agent: `claude`, harness: `native`, model: `claude-opus-5` } },
+            { since: 1_700 },
+        );
 
         expect(
             useAgents().lanes.value.active.map((card) => ({
@@ -790,7 +802,7 @@ describe("draft cards", () => {
             {
                 id: `set-aside`,
                 status: `draft`,
-                // No tab holds it, which is what the card is for; its × forgets it rather than closing it.
+                // No tab holds it, which is what the card is for; its × discards it rather than closing a chat.
                 open: false,
                 unsent: true,
                 preview: `fix the login redirect`,
@@ -800,24 +812,17 @@ describe("draft cards", () => {
                 updatedAt: 0,
             },
         ]);
-
-        forgetClosedDraft(`set-aside`);
     });
 
     // It gives way to the tab the instant one exists; drawing both would show the same message twice.
     it("draws one card, not two, when the chat is open again", () => {
-        keepClosedDraft({
-            conversationId: `set-aside`,
-            isolated: true,
-            registered: false,
-            draft: `fix the login redirect`,
-            attachments: [],
-        });
+        writeDraft(`set-aside`, { text: `fix the login redirect`, attachments: [] });
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`set-aside`)];
 
         expect(activeIds()).toEqual([`set-aside`]);
-
-        forgetClosedDraft(`set-aside`);
+        expect(useChat().conversations.value.find((conversation) => conversation.conversationId === `set-aside`)?.draft.value).toBe(
+            `fix the login redirect`,
+        );
     });
 
     it("cards a workspace conversation by the same rule", () => {
@@ -887,9 +892,9 @@ describe("draft cards", () => {
             sandbox: undefined,
             note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) },
         });
-        receiveChatNote({ sandbox: undefined, note: { kind: `previews`, previews: { fresh: `fix the login redirect` } } });
+        receiveChatNote({ sandbox: undefined, note: draftNote(`fresh`, `fix the login redirect`) });
 
-        // The age comes off the strip too; guessing here would report this window's own boot time instead.
+        // The age is the draft's; guessing here would report this window's own boot time instead.
         expect(
             useAgents().lanes.value.active.map((card) => ({
                 id: card.id,
@@ -926,7 +931,8 @@ describe("draft cards", () => {
         });
         expect(useAgents().lanes.value.finished.map((card) => card.unsent)).toEqual([true]);
 
-        // Sent out there: the holder's next strip carries the tab without words; this window's own copy was stale.
+        // Sent out there: the draft goes, and the holder's next strip carries the tab without words.
+        receiveChatNote({ sandbox: undefined, note: goneNote(`a1`) });
         receiveChatNote({
             sandbox: undefined,
             note: {
@@ -938,13 +944,16 @@ describe("draft cards", () => {
         });
 
         expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, unsent: card.unsent }))).toEqual([{ id: `a1`, unsent: false }]);
+        await nextTick();
+        // And this window's frozen composer, which held the same words, lets them go with it rather than writing them back.
+        expect(conversation.draft.value).toBe(``);
 
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
-    // The rail's × removes the chat from that surface only; the floating window sets the message aside, then drops
-    // the tab, and the board reads both as one continuous card.
-    it("turns a draft card into a set-aside card in one step when the popped-out chat closes it", async () => {
+    // The rail's × removes the chat from that surface only, and moves nothing: the words were the draft before the close
+    // and are after it, so the card is one continuous card that only stops being open.
+    it("keeps a draft card in place when the popped-out chat closes its tab", async () => {
         const { receiveChatNote } = await import("../conversations/run/chatChannel");
         const { receiveFloatingNote } = await import("../../workbench/window/floating");
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
@@ -952,7 +961,7 @@ describe("draft cards", () => {
             sandbox: undefined,
             note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) },
         });
-        receiveChatNote({ sandbox: undefined, note: { kind: `previews`, previews: { fresh: `fix the login redirect` } } });
+        receiveChatNote({ sandbox: undefined, note: draftNote(`fresh`, `fix the login redirect`) });
         const card = (): { id: string; open: boolean; unsent: boolean; preview: string | undefined; updatedAt: number }[] =>
             useAgents().lanes.value.active.map((entry) => ({
                 id: entry.id,
@@ -963,77 +972,36 @@ describe("draft cards", () => {
             }));
         expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
 
-        // First the words are set aside (closeTabs), before the tab itself is dropped.
-        receiveChatNote({
-            sandbox: undefined,
-            note: {
-                kind: `closed-drafts`,
-                tabs: [
-                    {
-                        conversationId: `fresh`,
-                        isolated: true,
-                        registered: false,
-                        provider: `claude`,
-                        harness: `native`,
-                        draft: `fix the login redirect`,
-                        draftAt: 1_700,
-                        attachments: [],
-                    },
-                ],
-            },
-        });
-        expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
-
-        // Then the tab is gone from the strip: the card stands for the message alone, undated.
         receiveChatNote({ sandbox: undefined, note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip() } });
-        expect(card()).toEqual([{ id: `fresh`, open: false, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
 
-        forgetClosedDraft(`fresh`);
+        expect(card()).toEqual([{ id: `fresh`, open: false, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
-    // The opposite trip, and the one a reader clicks: the press claims the words here at once, while the popped-out chat
-    // shows its tab back a round trip later. The card used to drop off the board for the frames between and come back,
-    // nameless until the words' own note landed.
-    it("holds a set-aside card in place while a click hands its words to the popped-out chat", async () => {
+    // The opposite trip, and the one a reader clicks. The card used to drop off the board while its words were handed to
+    // the popped-out chat and come back nameless a round trip later; nothing is handed now, so it never moves.
+    it("holds a draft card in place while a click opens its chat in the popped-out window", async () => {
         const { receiveChatNote } = await import("../conversations/run/chatChannel");
         const { receiveFloatingNote } = await import("../../workbench/window/floating");
         const { open } = await import("./useAgents-actions");
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
         receiveChatNote({ sandbox: undefined, note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip() } });
-        keepClosedDraft({
-            conversationId: `fresh`,
-            isolated: true,
-            registered: false,
-            provider: `claude`,
-            harness: `native`,
-            draft: `fix the login redirect`,
-            draftAt: 1_700,
-            attachments: [],
-        });
+        receiveChatNote({ sandbox: undefined, note: draftNote(`fresh`, `fix the login redirect`) });
         const card = (): { id: string; open: boolean; unsent: boolean; preview: string | undefined }[] =>
             useAgents().lanes.value.active.map((entry) => ({ id: entry.id, open: entry.open, unsent: entry.unsent, preview: previewOf(entry.id) }));
-        const setAside = [{ id: `fresh`, open: false, unsent: true, preview: `fix the login redirect` }];
-        expect(card()).toEqual(setAside);
+        expect(card()).toEqual([{ id: `fresh`, open: false, unsent: true, preview: `fix the login redirect` }]);
 
         open(useAgents().lanes.value.active[0]!, `peek`);
+        expect(card()).toEqual([{ id: `fresh`, open: false, unsent: true, preview: `fix the login redirect` }]);
 
-        // Claimed out of the set, not yet shown back: still the same card.
-        expect(card()).toEqual(setAside);
-
-        // The tab arrives before its words, which travel as a note of their own.
         receiveChatNote({
             sandbox: undefined,
             note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) },
         });
         expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect` }]);
 
-        receiveChatNote({ sandbox: undefined, note: { kind: `previews`, previews: { fresh: `fix the login redirect` } } });
-        await nextTick();
-        expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect` }]);
-
-        // Arrived, so nothing stands in for it any more: the chat closing with an empty composer leaves no card behind.
-        receiveChatNote({ sandbox: undefined, note: { kind: `previews`, previews: {} } });
+        // Sent out there, and the tab closed: nothing is left to card.
+        receiveChatNote({ sandbox: undefined, note: goneNote(`fresh`) });
         receiveChatNote({ sandbox: undefined, note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip() } });
         await nextTick();
         expect(activeIds()).toEqual([]);

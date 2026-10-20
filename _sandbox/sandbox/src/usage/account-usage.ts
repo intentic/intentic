@@ -15,6 +15,7 @@ const StoredUsageSchema = z.record(z.string(), AccountUsageSchema);
 export const accountUsageDocument = defineDocument({
     root: "history",
     path: "account-usage.json",
+    portability: "carry",
     schema: AccountUsageSchema,
     granularity: "record",
     // A window measured before gates existed applied to every model.

@@ -38,6 +38,7 @@ import { extensionEnablementDocument } from "../capabilities/extension-inventory
 import { dismissalsDocument } from "../capabilities/offers/dismissals-store.js";
 import { choreLedgerDocument, choreProbesDocument } from "../chores/chores-store.js";
 import { ciDocument } from "../ci/ci-store.js";
+import { composerDraftsDocument } from "../conversations/drafts/composer-drafts.js";
 import { projectDeliveriesDocument } from "../conversations/land/project-delivery.js";
 import { conversationRecordDocument } from "../conversations/registry/agents-store.js";
 import { pre1308ImportStep } from "../conversations/registry/pre-1308-import.js";
@@ -161,15 +162,16 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     choreLedgerDocument,
     choreProbesDocument,
     ciDocument,
+    composerDraftsDocument,
     projectDeliveriesDocument,
     conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
-    runtimeInstallsDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
+    runtimeInstallsDocument,
     extensionSettingsDocument,
     extensionUpdatePolicyDocument,
     extensionUpdatesDocument,
@@ -213,10 +215,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
-    keyringCopiesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    keyringCopiesDocument,
     keyringDevicesDocument,
     keyringSyncMailboxDocument,
     secretHostGuardsDocument,

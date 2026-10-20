@@ -485,7 +485,7 @@ const onPick = (event: Event): void => {
                     <span class="flex-1"></span>
                     <button
                         type="button"
-                        :class="ui.chip({ on: search.includeIgnored.value }, `h-8 shrink-0 gap-1 px-2 font-medium`)"
+                        :class="ui.chip({ on: search.includeIgnored.value, size: `lg` }, `shrink-0 font-medium`)"
                         :aria-pressed="search.includeIgnored.value"
                         @click="search.includeIgnored.value = !search.includeIgnored.value"
                     >
@@ -583,7 +583,7 @@ const onPick = (event: Event): void => {
                             <!-- What the sandbox does with this entry (specialPaths.ts). No hover on touch, so the chip alone names it. -->
                             <span
                                 v-if="specialChip(node.path, words)"
-                                class="ui-status-pill shrink-0 text-2xs font-medium"
+                                class="ui-status-pill shrink-0 font-medium"
                                 :class="toneWash(specialChip(node.path, words)?.tone === `warning` ? `warning` : `neutral`)"
                                 >{{ specialChip(node.path, words)?.label }}</span
                             >

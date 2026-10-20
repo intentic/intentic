@@ -221,4 +221,13 @@
 // shell's one rename. `RowGroup` stops taking `caption` and `flat`: words beside a header and a group told by hand that
 // it sits on a card were the two decisions a view kept making for itself, and an older bundle passing either now has
 // it ignored as an attribute. Additive: every name an older bundle links is still there.
+// What an author must change is recorded from 2.33.0 on as the `uiKitDeprecated` grain: every deprecated kit name and
+// every retired prop or recipe member as `<what> → <use instead>`, read off names.mjs (`extensionUiDeprecated`,
+// `extensionUiRetired`, each with the version it arrived in). Under 2.34.0 that is the three wait-wiring names
+// (`SkeletonSnapshot`, `vSkeletonSource`, `useLoadingReveal` → `Await`), `RowGroup`'s `count`, `caption` and `flat`,
+// `NavRail`'s `stickyHeadings`, and `ui.sectionLabel` drawn by hand (→ `Section`/`SectionHeader`). Nothing links
+// differently, so no other grain sees it, and the extensions shipped from their own repositories kept the retired looks
+// with nothing saying so. The kit now publishes the check that does (`intentic-kit-check`, check/cli.mjs in
+// extension-ui), which also refuses an `engines.intentic` floor below the version that brought a name the extension
+// imports; this package exports `./surface.json` for it.
 export const extensionApiVersion = "2.34.0";

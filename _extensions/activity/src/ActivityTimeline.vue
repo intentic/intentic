@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Loaded } from "@intentic/extension-api";
-import { ui, Await, Icon, Notice, noticeOf, ScrollFrame, SkeletonRows, timeWindowWords, type TimeWindow } from "@intentic/extension-ui";
+import { ui, Await, Icon, Notice, noticeOf, ScrollFrame, SectionHeader, SkeletonRows, timeWindowWords, type TimeWindow } from "@intentic/extension-ui";
 import { computed } from "vue";
 import { byDay, type Episode, type Source } from "./episodes";
 import EpisodeRow from "./EpisodeRow.vue";
@@ -40,12 +40,8 @@ const days = computed(() => byDay(episodes, Date.now()));
                     <div v-if="days.length > 0">
                         <!-- Day labels are sticky signposts, not dividers, and they stick to the PAGE now that the card has no scroller of its own. -->
                         <div v-for="(day, dayIndex) in days" :key="day.label" :class="dayIndex > 0 ? `mt-2` : ``">
-                            <div class="sticky top-0 z-1 flex items-center justify-between bg-card px-4 py-2 shadow-none">
-                                <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ day.label }}</span>
-                                <span class="text-2xs tabular-nums text-subtle">
-                                    {{ t(`activityTimeline.entries`, { count: day.episodes.length }, day.episodes.length) }}
-                                </span>
-                            </div>
+                            <!-- The kit's header, pinned over the card it lies on; no count beside it, since the rows under it are the tally. -->
+                            <SectionHeader :label="day.label" density="dense" class="sticky top-0 z-1 bg-card px-4 py-2" />
                             <div class="flex flex-col divide-y divide-line-subtle/50">
                                 <EpisodeRow v-for="episode in day.episodes" :key="episode.key" :episode="episode" />
                             </div>

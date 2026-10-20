@@ -9,8 +9,8 @@ export type { StatusVariant };
 // The pill and its dot as one recipe: the tone is the kit's (tone.ts), so a badge saying "danger" is the same red as
 // a notice saying it, and the size is the pill's own.
 const badge = tv({
-    slots: { root: `ui-status-pill whitespace-nowrap font-medium lowercase`, dot: `h-1.5 w-1.5 rounded-full` },
-    variants: { size: { sm: { root: `gap-1.5 text-xs` }, xs: { root: `gap-1 text-2xs` } } },
+    slots: { root: `ui-status-pill font-medium lowercase`, dot: `h-1.5 w-1.5 rounded-full` },
+    variants: { size: { sm: { root: `ui-status-pill-md` }, xs: { root: `` } } },
     defaultVariants: { size: `sm` },
 });
 </script>

@@ -1,13 +1,13 @@
 import { type AgentProvider, DEFAULT_PROVIDER, type ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { endpointProvider } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
-import { type ModelSource, readyChain } from "@intentic/sandbox-contract/models/model-pins";
+import { type ModelSource, openingRung, readyChain } from "@intentic/sandbox-contract/models/model-pins";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { roleLadder } from "@intentic/sandbox-contract/models/model-setups";
 import type { Services } from "../../composition.js";
 import { failingStreak } from "./role-model-health.js";
 import { ladderPinsNow } from "./role-model.js";
-import { spentRung } from "./role-model-quota.js";
+import { rungCapacity } from "./role-model-quota.js";
 
 // Resolves which of a `run` role's pinned models this sandbox can actually start; read once before the session starts,
 // since a refusal mid-turn cannot be replayed like the one-shot helper chain. Checks readiness and the recorded quota
@@ -62,18 +62,20 @@ export const personaRunModel = async (services: Services, actsAs: string | undef
     return pinnedRunModel(services, (await services.personas.get(actsAs))?.models ?? []);
 };
 
-// First rung neither the recorded quota calls spent nor the turn ledger shows dying in a row, or the head of the chain
-// if every rung is: it runs anyway, since both readings are snapshots that may already be stale.
+// The rung the run opens on (the contract's openingRung, which the editor names on the job's button too): the first
+// neither the capacity on file calls spent nor the turn ledger shows dying in a row, else the head.
 const headOf = async (services: Services, chain: readonly ModelPin[]): Promise<ModelPin | undefined> => {
-    for (const choice of chain) {
-        if ((await spentRung(services, choice)) !== undefined) {
-            continue;
+    const now = Date.now();
+    const read = await Promise.all(
+        chain.map(async (choice) => ({ capacity: await rungCapacity(services, choice, now), streak: await failingStreak(services.usage, choice) })),
+    );
+    const of = (choice: ModelPin): (typeof read)[number] | undefined => read[chain.indexOf(choice)];
+    const head = openingRung(chain, (choice) => of(choice)?.capacity, (choice) => of(choice)?.streak !== undefined);
+    for (const choice of chain.slice(0, head === undefined ? 0 : chain.indexOf(head))) {
+        const streak = of(choice)?.streak;
+        if (streak !== undefined) {
+            services.logger.info({ provider: choice.provider, model: choice.model, streak }, "run role: rung stepped over for a failing streak");
         }
-        const streak = await failingStreak(services.usage, choice);
-        if (streak === undefined) {
-            return choice;
-        }
-        services.logger.info({ provider: choice.provider, model: choice.model, streak }, "run role: rung stepped over for a failing streak");
     }
-    return chain[0];
+    return head;
 };

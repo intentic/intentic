@@ -78,10 +78,16 @@ const rearm = (): void => {
     budget = undefined;
     released.value = false;
 };
+// "About something else" is a new name AND a new answer. A region whose answer stays the one it drew (a route's view,
+// whose sections are different pages remembered apart) has insides that own their waits, so a new name alone only
+// changes what its look is remembered under: re-holding it there drew the hub's whole outline, rail and title, over a
+// mounted hub on every move to a section not yet seen. A new answer under the same name is a refresh (a poll), which
+// never takes the region back either.
+const answer = (): T | undefined => (of.state === `ready` ? of.data : undefined);
 watch(
-    () => [imprint, of.state === `ready`] as const,
-    ([, ready], previous) => {
-        if (previous !== undefined && (previous[0] !== imprint || !ready)) {
+    () => [imprint, answer(), of.state === `ready`] as const,
+    ([name, data, ready], previous) => {
+        if (previous !== undefined && (!ready || (previous[0] !== name && previous[1] !== data))) {
             rearm();
         }
     },

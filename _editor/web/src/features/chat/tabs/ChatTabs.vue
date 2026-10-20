@@ -497,7 +497,7 @@ onBeforeUnmount(() => {
                 </span>
                 <span
                     v-if="attentionCount > 0"
-                    class="ui-status-pill flex shrink-0 items-center gap-1 font-semibold"
+                    class="ui-status-pill shrink-0 font-semibold"
                     :class="toneWash(`warning`)"
                     :aria-label="t(`chat.chatTabs.need`, { attentionCount })"
                 >

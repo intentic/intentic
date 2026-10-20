@@ -1,7 +1,6 @@
 <!-- Where the framed app sits: full bleed, or at a phone's own CSS viewport inside a drawn handset. -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { ui } from "@intentic/ui";
 import { phoneOuterSize, phoneScale, type PhoneModel } from "./phoneModels";
 
 // One DOM shape serves both modes because the slot holds a LIVE iframe: moving it between two v-if branches would
@@ -209,8 +208,8 @@ const ROSETTE = { height: `11px`, width: `11px` };
                     :style="[step, STONE]"
                     aria-hidden="true"
                 ></span>
-                <!-- allow(recipes): the caption under the stage wears the label's type; it heads nothing, so it is no section header -->
-                <p :class="ui.sectionLabel({ size: `xs` }, `mt-2 truncate px-3 text-center`)">{{ caption }}</p>
+                <!-- The device's name under the stage: it heads nothing, so it is plain words, not a section label. -->
+                <p class="mt-2 truncate px-3 text-center text-2xs text-subtle">{{ caption }}</p>
             </template>
         </div>
     </div>

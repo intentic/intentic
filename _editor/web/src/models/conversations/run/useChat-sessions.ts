@@ -1,5 +1,5 @@
 import { type Backoff, createBackoff } from "@intentic/base/async";
-import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
 import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { messageOr } from "@intentic/ui/async";

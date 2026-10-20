@@ -121,8 +121,9 @@ export interface Pairing {
     readonly unreachableSince?: number | undefined;
     // (2026-10-20) When the owner paused this folder's file sync (`sync pause`), the one hold a person lifts (`sync resume`).
     readonly ownerPausedAt?: number | undefined;
-    // (2026-10-20) Since when this machine's ic is swapping the sandbox (holds.ts `holdsSync`), written and cleared by
-    // the watcher's reading of ic's swaps each pass.
+    // (2026-10-20) When the cutover of the swap this machine's ic is doing on the sandbox began (holds.ts `holdsSync`),
+    // written and cleared by the watcher's reading of ic's swaps each pass. The hold is measured from it, so it lasts its
+    // quarter hour after ic's record of the swap is gone.
     readonly swapSince?: number | undefined;
     // (2026-10-20) The container a docker pairing reaches is no longer on this machine's engine, or sits in ic's trash, and
     // the sandbox is not answering (gone.ts `dockerStep`). The sandbox's, so written on every pairing of it; cleared once

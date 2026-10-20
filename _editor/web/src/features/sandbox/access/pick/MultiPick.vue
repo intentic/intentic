@@ -283,9 +283,7 @@ const optionNote = (option: PickOption, inFamily: boolean): string | undefined =
                     class="min-h-0 overflow-y-auto py-1 md:max-h-80"
                 >
                     <template v-for="row in rows" :key="row.key">
-                        <p v-if="row.kind === `label`" role="presentation" class="px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle">
-                            {{ row.text }}
-                        </p>
+                        <SectionHeader v-if="row.kind === `label`" :label="row.text" density="dense" class="px-3 pb-1 pt-2" role="presentation" />
                         <button
                             v-else
                             :id="optionId(row)"
@@ -313,7 +311,7 @@ const optionNote = (option: PickOption, inFamily: boolean): string | undefined =
                                 <Icon v-else-if="stateOfRow(row) === `some`" name="minus" class="text-4xs" />
                             </span>
                             <template v-if="row.kind === `section`">
-                                <span class="min-w-0 flex-1 truncate text-2xs font-medium uppercase tracking-wide text-subtle">{{ row.section.label }}</span>
+                                <span class="min-w-0 flex-1 truncate text-2xs font-medium text-subtle">{{ row.section.label }}</span>
                                 <span class="shrink-0 text-2xs tabular-nums text-subtle">{{ stateOfRow(row) === `none` ? row.values.length : `${row.values.filter((value) => held.has(value)).length}/${row.values.length}` }}</span>
                             </template>
                             <template v-else-if="row.kind === `family`">

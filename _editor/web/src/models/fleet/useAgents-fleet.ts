@@ -4,12 +4,11 @@ import { useNow } from "@intentic/ui/async";
 import { computed, effectScope, watch } from "vue";
 import { attentionCards, type FleetLane, laneOf, NO_ATTENTION } from "../agent-status/agentStatus-lanes";
 import { awaitingUser, blocked, type ClientAgentStatus, goesBySelf, heardByParent, turnInFlight, unregistered } from "../agent-status/agentStatus-standing";
-import { closedDrafts } from "../conversations/drafts/closedDrafts";
+import { draftFacts, type DraftFacts, sandboxKeepsDrafts } from "../conversations/drafts/composerDrafts";
 import { type TabFacts, unasked } from "../conversations/tabs/tabFacts";
-import type { StoredTab } from "../conversations/tabs/tabSnapshot";
 import { rememberedProviderFor } from "../conversations/run/turnDefaults";
 import { useChat } from "../conversations/run/useChat";
-import { chatStrip, draftsInTransit } from "../conversations/panel/useChat-strip";
+import { chatStrip } from "../conversations/panel/useChat-strip";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { onScreen } from "../../workbench/window/onScreen";
 import { asStarted, endedHere, overlaid, withdrawnHere } from "./useAgents-provisional";
@@ -28,7 +27,7 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly sandboxId?: string;
     readonly open: boolean;
     readonly unread: boolean;
-    // Unsent words in this open tab (any window of this browser); false for a draft written on another device.
+    // Unsent words for it: its draft (written in any window, on any device), or words this browser waits to send.
     // Says only THAT there are words. The words themselves are `chatPreviews`, looked up by id where they are
     // drawn: a field here would rebuild this whole list on every character typed anywhere.
     readonly unsent: boolean;
@@ -87,27 +86,33 @@ export const windowFinished = <T>(
     return { shown, hidden: finished.length - shown.length };
 };
 
-// Built from the stored tab alone, since no daemon row or open tab exists for it; carries its origin sandbox so
-// actions address the right daemon. `updatedAt` is 0, since being set aside isn't activity.
-const closedCard = (tab: StoredTab): FleetAgent => ({
-    id: tab.conversationId,
-    status: tab.session === undefined ? `draft` : `resumed`,
-    // Falls back the same as a fresh conversation, so a tab persisted before picking anything can still open.
-    provider: tab.provider ?? rememberedProviderFor(),
-    harness: tab.harness ?? `native`,
-    updatedAt: 0,
-    attention: NO_ATTENTION,
-    // No tab anywhere for this card; its × forgets it rather than closing it.
-    open: false,
-    unread: false,
-    unsent: true,
-    draftAt: tab.draftAt,
-    // Model the composer held when closed: queued work whose spend is already decided.
-    ...(tab.model === undefined ? {} : { model: tab.model }),
-    ...(tab.title === undefined ? {} : { title: tab.title }),
-    ...(tab.session === undefined ? {} : { sessionId: tab.session.id }),
-    ...(tab.box === undefined ? {} : { sandboxId: tab.box }),
-});
+// Built from the draft alone, since no daemon row or open tab exists for it: a chat closed with only its unsent message,
+// in any window or on another device. Carries its sandbox so actions address the right daemon, and who the message is
+// for, so reopening it opens on that pick. `updatedAt` is 0, since a draft isn't activity.
+const closedCard = (id: string, draft: DraftFacts): FleetAgent => {
+    const card: FleetAgent = {
+        id,
+        status: `draft`,
+        // Falls back the same as a fresh conversation, so a draft written before picking anything can still open.
+        provider: draft.serves?.agent ?? rememberedProviderFor(),
+        harness: draft.serves?.harness ?? `native`,
+        updatedAt: 0,
+        attention: NO_ATTENTION,
+        // No tab anywhere for this card; its × discards the draft rather than closing a chat.
+        open: false,
+        unread: false,
+        unsent: true,
+        draftAt: draft.since,
+        // The pick the message is to go on: work whose spend is already decided.
+        ...(draft.serves?.model === undefined ? {} : { model: draft.serves.model }),
+        ...(draft.serves?.effort === undefined ? {} : { effort: draft.serves.effort }),
+        ...(draft.serves?.account === undefined ? {} : { account: draft.serves.account }),
+        ...(draft.box === undefined ? {} : { sandboxId: draft.box }),
+    };
+    // A fresh session not sent yet hangs under the work it opens on, as an open one does (linkedDraft).
+    const of = draft.freshOf;
+    return of === undefined ? card : { ...card, startedBy: `agent:${of.conversationId}`, fresh: { of: of.conversationId, kind: of.kind, at: 0 } };
+};
 
 // That one composer holds something unsent, and when it first did; the instant is optional (a pre-stamp snapshot
 // restore has none). The words are not here — see FleetAgent.unsent.
@@ -190,14 +195,6 @@ export const forgetFleet = (): void => {
     stableFleet.value = [];
 };
 
-// Chats closed with the message still in them, plus those whose words a click here just handed to a composer the
-// chat's own window has not yet shown back (draftsInTransit): drawn as they were until it does, so the card the click
-// landed on stays put. One entry per conversation, the set's own first.
-const setAsideTabs = computed<readonly StoredTab[]>(() => {
-    const kept = new Set(closedDrafts.value.map((tab) => tab.conversationId));
-    return [...closedDrafts.value, ...draftsInTransit.value.filter((tab) => !kept.has(tab.conversationId))];
-});
-
 // A conversation that never ran, leaving with the last message it waited to send, which this window has taken back into
 // its composer: from the press its card is that composer's draft, where it stood (Active), and never the sandbox's row
 // on its way out. That row goes idle with an empty queue first and is forgotten only once the conversation's records
@@ -213,12 +210,13 @@ export const leavesWithItsMessage = (
     (row === undefined ||
         ((row.turns ?? 0) === 0 && row.sessionId === undefined && (row.queue?.items ?? []).every((item) => item.id === tab.takingBack)));
 
-// Unsent words in this browser: open composers plus chats closed with the message still in them; composers win any race.
+// Unsent words: every draft (any window, any device), and a composer's words this browser still waits to send (its
+// outbox). A draft's own instant wins, since it is the one every device reads.
 const unsentTabs = computed<ReadonlyMap<string, UnsentTab>>(
     () =>
         new Map([
-            ...setAsideTabs.value.map((tab): [string, UnsentTab] => [tab.conversationId, { at: tab.draftAt }]),
             ...chatStrip.value.tabs.filter((tab) => tab.unsent).map((tab): [string, UnsentTab] => [tab.id, { at: tab.draftAt }]),
+            ...[...draftFacts.value].map(([id, draft]): [string, UnsentTab] => [id, { at: draft.since }]),
         ]),
 );
 
@@ -242,11 +240,10 @@ export const fleet = computed<FleetAgent[]>(() => {
         .map((tab): FleetAgent => endedHere(draftCard(tab, unsent.get(tab.id)), tab));
     // An archived agent stays off the board whatever its composer held; the words wait with it (withKeptWords).
     const archivedIds = new Set(archived.value.map((agent) => agent.id));
-    // Chats closed with nothing but their unsent message: no roster row, archive entry, or open tab draws them
-    // otherwise. Stands as `draft` unless the closed chat had a session, in which case reopening resumes it.
-    const setAside = setAsideTabs.value
-        .filter((tab) => !openIds.has(tab.conversationId) && !carded.has(tab.conversationId) && !archivedIds.has(tab.conversationId))
-        .map((tab): FleetAgent => closedCard(tab));
+    // Drafts with nothing else to draw them: no roster row, archive entry, or open tab.
+    const setAside = [...draftFacts.value]
+        .filter(([id]) => !openIds.has(id) && !carded.has(id) && !archivedIds.has(id))
+        .map(([id, draft]): FleetAgent => closedCard(id, draft));
     const built = [
         ...registry.value.flatMap((agent): FleetAgent[] => {
             if (leaving.has(agent.id)) {
@@ -285,12 +282,11 @@ export const fleet = computed<FleetAgent[]>(() => {
     return next;
 });
 
-// Words a closed chat left behind, by conversation, for an archived card to wear without rejoining the board.
-const keptWords = computed(() => new Map(closedDrafts.value.map((tab) => [tab.conversationId, tab.draftAt] as const)));
-
-/** An archived card as the archive view draws it: marked when a closed composer still holds its words. */
-export const withKeptWords = (agent: FleetAgent): FleetAgent =>
-    keptWords.value.has(agent.id) ? { ...agent, unsent: true, draftAt: keptWords.value.get(agent.id) } : agent;
+/** An archived card as the archive view draws it: marked when a draft still holds words for it. */
+export const withKeptWords = (agent: FleetAgent): FleetAgent => {
+    const draft = draftFacts.value.get(agent.id);
+    return draft === undefined ? agent : { ...agent, unsent: true, draftAt: draft.since };
+};
 
 // Two headline counts, kept apart since the header renders both: blocked-on-user vs. merely unread.
 export const blocking = computed(() => fleet.value.filter(blocked).length);
@@ -317,16 +313,20 @@ watch(
     },
 );
 
-// Tells the daemon which registered conversations this browser holds unsent words for, since the words never leave it:
-// without that, the unattended sweep archived a chat whose message was still waiting in a composer (archive.ts). Clears
-// only what this browser watched go, so one device with an empty composer cannot unmark another device's words.
+// For a sandbox older than drafts of its own, which never hears the words: tells it which registered conversations this
+// browser holds unsent words for, without which the unattended sweep archived a chat whose message was still waiting
+// in a composer (archive.ts). Clears only what this browser watched go, so one device with an empty composer cannot
+// unmark another device's words. A sandbox that holds the drafts derives this itself.
 // Which conversations this browser has seen holding words: plain, not reactive, and as per-sandbox as the ids themselves.
 const heldHere = new Set<string>();
 // What was last asked of the daemon per conversation, so a roster frame landing before its answer does not ask again.
 const asked = new Map<string, boolean>();
 watch(
-    [unsentTabs, registry] as const,
-    ([tabs, agents]) => {
+    [unsentTabs, registry, sandboxKeepsDrafts] as const,
+    ([tabs, agents, kept]) => {
+        if (kept) {
+            return;
+        }
         for (const agent of agents) {
             const tab = tabs.get(agent.id);
             const holds = tab !== undefined;

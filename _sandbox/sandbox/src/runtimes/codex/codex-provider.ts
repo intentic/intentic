@@ -14,6 +14,7 @@ import {
     healthReady,
     healthUnavailable,
     healthUnknown,
+    privacyTurnRefusal,
     type TurnArmPlan,
     type TurnContext,
 } from "../../agent/providers/adapter.js";
@@ -114,7 +115,7 @@ const codexRoute = async (services: CodexPlanDeps, input: AgentTurn): Promise<Co
         }
         const refused = await services.privacyShield.refusal({ provider: "codex", conversationId: input.conversationId, route: "own-key" });
         if (refused !== undefined) {
-            return { ok: false, message: refused };
+            return privacyTurnRefusal(refused);
         }
     } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : "the privacy shield's policy could not be read" };

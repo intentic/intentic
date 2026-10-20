@@ -1,7 +1,7 @@
 import type { HostCheck, HostReport } from "@intentic/api-contract";
 import type { SandboxVitals } from "@intentic/sandbox-contract/netd/generated/browser-wire";
 import { t } from "@intentic/ui/i18n";
-import type { WaitExpectation } from "../../../components/waitProgress";
+import type { Progress } from "../../../components/progress/progress";
 import {
     ASLEEP_WAKE_PATIENCE_MS,
     type Diagnosis,
@@ -23,7 +23,7 @@ export const BUSY_RESTART_AFTER_MS = 5 * 60_000;
 // Pressure above this share of the last ten seconds is worth naming as the reason it is slow.
 const PRESSURE_WORTH_NAMING = 40;
 
-// HOW LONG EACH WAIT USUALLY TAKES, told to the reader beside how long it has run (components/WaitProgress.vue). Each is
+// HOW LONG EACH WAIT USUALLY TAKES, told to the reader beside how long it has run (components/progress/ProgressMeter.vue). Each is
 // what a healthy case takes, given what the machinery behind it does. Its patience, the point where the screen stops
 // waiting and offers a way back, is diagnose.ts's own constant, so the time the words promise is the time it happens.
 export const USUAL_MS = {
@@ -77,7 +77,7 @@ export interface DiagnosisNotice {
     readonly sayAtOnce: boolean;
     // A wait's own clock: how long it has run, how long it usually takes, and when it stops being a wait. Absent where
     // nothing is expected to happen by itself, or where it waits on the reader.
-    readonly wait?: WaitExpectation | undefined;
+    readonly wait?: Progress | undefined;
 }
 
 export interface PresentationInput {
@@ -182,7 +182,7 @@ const machineNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, {
                 findings,
                 // The machine's own word, current: waking it (`ic sandbox wakes`) or mending it.
                 sayAtOnce: true,
-                wait: { elapsedMs: input.outageMs, typicalMs: USUAL_MS.mending },
+                wait: { elapsedMs: input.outageMs, expectedMs: USUAL_MS.mending },
             },
             chainOf([`ok`, `ok`, `working`, `unknown`], machine),
         );
@@ -194,7 +194,7 @@ const machineNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, {
                 body: t(`sandbox.diagnosis.machineFixedBody`),
                 waiting: true,
                 // On the report's clock, not the outage's: the sandbox has this long from the word "fixed" to dial in.
-                wait: { elapsedMs: Math.max(0, input.now - reportTime(report)), typicalMs: USUAL_MS.fixed, giveUpMs: FIXED_PATIENCE_MS },
+                wait: { elapsedMs: Math.max(0, input.now - reportTime(report)), expectedMs: USUAL_MS.fixed, giveUpMs: FIXED_PATIENCE_MS },
             },
             chainOf([`ok`, `ok`, `ok`, `working`], machine),
         );
@@ -220,7 +220,7 @@ const notDialledNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis
                 title: t(`sandbox.diagnosis.redialTitle`, { name: input.name }),
                 body: t(`sandbox.diagnosis.redialBody`),
                 waiting: true,
-                wait: { elapsedMs: input.outageMs, typicalMs: USUAL_MS.redial, giveUpMs: OWN_REDIAL_PATIENCE_MS },
+                wait: { elapsedMs: input.outageMs, expectedMs: USUAL_MS.redial, giveUpMs: OWN_REDIAL_PATIENCE_MS },
             },
             chainOf([`ok`, `ok`, `unknown`, `unknown`], machine),
         );
@@ -247,7 +247,7 @@ const asleepNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis, { 
                 body: t(`sandbox.diagnosis.asleepBody`, { machine }),
                 waiting: true,
                 sayAtOnce: true,
-                wait: { elapsedMs: input.outageMs, typicalMs: USUAL_MS.asleep, giveUpMs: ASLEEP_WAKE_PATIENCE_MS },
+                wait: { elapsedMs: input.outageMs, expectedMs: USUAL_MS.asleep, giveUpMs: ASLEEP_WAKE_PATIENCE_MS },
             },
             chainOf([`ok`, `ok`, `working`, `unknown`], machine),
         );
@@ -270,7 +270,7 @@ const silentNotice = (input: PresentationInput, patient: boolean, machine: strin
                 title: t(`sandbox.diagnosis.silentTitle`, { name: input.name }),
                 body: t(`sandbox.diagnosis.silentBody`),
                 waiting: true,
-                wait: { elapsedMs: input.outageMs, typicalMs: USUAL_MS.silent, giveUpMs: SILENT_PATIENCE_MS },
+                wait: { elapsedMs: input.outageMs, expectedMs: USUAL_MS.silent, giveUpMs: SILENT_PATIENCE_MS },
             },
             chainOf([`ok`, `ok`, `unknown`, `unknown`], machine),
         );
@@ -309,10 +309,10 @@ const hostedDownNotice = (input: PresentationInput, diagnosis: Extract<Diagnosis
 };
 
 // A hosted wake: about twenty seconds from the warm pool, a few minutes for a machine built to order.
-const wakingWait = (input: PresentationInput): WaitExpectation =>
+const wakingWait = (input: PresentationInput): Progress =>
     input.warm === false
-        ? { elapsedMs: input.outageMs, typicalMs: USUAL_MS.wakingCold, giveUpMs: HOSTED_COLD_PATIENCE_MS }
-        : { elapsedMs: input.outageMs, typicalMs: USUAL_MS.wakingWarm, giveUpMs: HOSTED_WARM_PATIENCE_MS };
+        ? { elapsedMs: input.outageMs, expectedMs: USUAL_MS.wakingCold, giveUpMs: HOSTED_COLD_PATIENCE_MS }
+        : { elapsedMs: input.outageMs, expectedMs: USUAL_MS.wakingWarm, giveUpMs: HOSTED_WARM_PATIENCE_MS };
 
 export const presentDiagnosis = (input: PresentationInput): DiagnosisNotice => {
     const { diagnosis, name } = input;
@@ -326,7 +326,7 @@ export const presentDiagnosis = (input: PresentationInput): DiagnosisNotice => {
                     title: t(`sandbox.diagnosis.checkingTitle`, { name }),
                     body: t(`sandbox.diagnosis.checkingBody`),
                     waiting: true,
-                    wait: { elapsedMs: input.outageMs, typicalMs: USUAL_MS.checking },
+                    wait: { elapsedMs: input.outageMs, expectedMs: USUAL_MS.checking },
                 },
                 [],
             );
@@ -359,7 +359,7 @@ export const presentDiagnosis = (input: PresentationInput): DiagnosisNotice => {
                     title: t(`sandbox.diagnosis.restartingTitle`, { name }),
                     body: t(`sandbox.diagnosis.restartingBody`),
                     waiting: true,
-                    wait: { elapsedMs: input.outageMs, typicalMs: USUAL_MS.restarting, giveUpMs: RESTARTING_PATIENCE_MS },
+                    wait: { elapsedMs: input.outageMs, expectedMs: USUAL_MS.restarting, giveUpMs: RESTARTING_PATIENCE_MS },
                 },
                 chainOf([`ok`, `ok`, `ok`, `working`], machine),
             );

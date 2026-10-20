@@ -32,8 +32,8 @@ watch(
         <button
             ref="trigger"
             type="button"
-            class="icon-rail-tile flex items-center justify-center rounded-lg text-accent transition-colors hover:bg-overlay"
-            :class="{ 'bg-primary-600/15': open }"
+            class="icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center rounded-lg text-accent"
+            :class="{ 'ui-row-select-on': open }"
             aria-haspopup="dialog"
             :aria-expanded="open"
             :aria-label="label"

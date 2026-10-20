@@ -8,3 +8,5 @@
 /_sandbox/sandbox/src/bootstrap/state-registry.ts merge=derived
 /_sandbox/sandbox/src/bootstrap/slices/slice-registry.ts merge=derived
 /_sandbox/sandbox/src/app-raw-routes.ts merge=derived
+/_sandbox/sandbox/src/store/evolution/history-documents.generated.ts merge=derived
+/_editor/web/public/ext-shims/*.js merge=derived

@@ -7,8 +7,10 @@ import {
     type NoticeModel,
     RowGroup,
     RowNote,
+    SectionHeader,
     StatusBadge,
     toneDot,
+    toneWash,
     ui,
     useOsPreference,
 } from "@intentic/ui";
@@ -375,30 +377,31 @@ const finePrint = computed(
                         <Icon name="sparkles" />
                     </span>
                     <div class="flex min-w-0 flex-col gap-1">
-                        <p
-                            class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider"
-                            :class="updateStaged ? `text-success` : `text-link`"
-                        >
-                            <Icon v-if="updateStaged" name="check-circle" aria-hidden="true" />
-                            {{
+                        <!-- The card's eyebrow is the kit's header over the offer: a ready update heads itself in the done state's ink. -->
+                        <SectionHeader
+                            density="dense"
+                            :tone="updateStaged ? `success` : `neutral`"
+                            :label="
                                 updateStaged
                                     ? t(`sandbox.sandboxUpdateCard.updateReady`)
                                     : isDownloading
                                       ? t(`sandbox.sandboxUpdateCard.updateDownloading`)
                                       : t(`sandbox.sandboxUpdateCard.updateAvailable`)
-                            }}
-                        </p>
+                            "
+                        >
+                            <template v-if="updateStaged" #mark><Icon name="check-circle" class="text-2xs text-success" aria-hidden="true" /></template>
+                        </SectionHeader>
                         <h2 class="text-xl font-semibold leading-tight tracking-tight text-content [overflow-wrap:anywhere]">
                             {{ t(`sandbox.sandboxUpdateCard.offerTitle`, { version: latest }) }}
                         </h2>
                         <p class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted">
                             <span class="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 font-mono text-2xs">
-                                <span class="min-w-0 max-w-full break-all rounded bg-content/5 px-1.5 py-0.5 text-subtle">{{
+                                <span class="ui-status-pill ui-status-pill-inline min-w-0 max-w-full break-all whitespace-normal" :class="toneWash(`neutral`)">{{
                                     installed ?? `?`
                                 }}</span>
                                 <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
                                     <Icon name="arrow-right" class="shrink-0 text-subtle" aria-hidden="true" />
-                                    <span class="min-w-0 break-all rounded bg-primary-500/10 px-1.5 py-0.5 font-medium text-link">{{ latest }}</span>
+                                    <span class="ui-status-pill ui-status-pill-inline min-w-0 break-all whitespace-normal font-medium" :class="toneWash(`primary`)">{{ latest }}</span>
                                 </span>
                             </span>
                             <span v-if="improvements > 0">{{

@@ -25,7 +25,14 @@ const LedgerSchema = z.object({
     approved: z.record(z.string(), z.object({ approvedAt: z.number(), hooks: z.array(SettingsHookSchema) })),
 });
 
-export const hookApprovalsDocument = defineDocument({ root: "history", path: "hook-approvals.json", schema: LedgerSchema });
+export const hookApprovalsDocument = defineDocument({
+    root: "history",
+    path: "hook-approvals.json",
+    // The owner's yes to a workspace's hooks, pinned to their bytes: a trust decision the target's owner makes again.
+    portability: "identity",
+    note: "Approve the workspace's Claude Code hooks again from Approvals.",
+    schema: LedgerSchema,
+});
 
 const StoredRequestSchema = z.object({
     seenAt: z.number(),
@@ -40,7 +47,13 @@ const StoredRequestSchema = z.object({
 const RequestsSchema = z.object({ requests: z.record(z.string(), StoredRequestSchema) });
 type Requests = z.infer<typeof RequestsSchema>;
 
-export const hookRequestsDocument = defineDocument({ root: "history", path: "hook-requests.json", schema: RequestsSchema });
+export const hookRequestsDocument = defineDocument({
+    root: "history",
+    path: "hook-requests.json",
+    // The hook sets waiting for the owner's yes; the next turn that finds them lists them again.
+    portability: "derived",
+    schema: RequestsSchema,
+});
 
 // Newest kept: an older set nobody answered is one the workspace has since moved past.
 const REQUESTS_KEPT = 20;

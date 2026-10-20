@@ -189,6 +189,7 @@ watch(
             @wheel="onWheel"
             @contextmenu="emit('contextmenu', undefined, $event)"
         >
+            <!-- allow(substitutes): open files' tabs, each closable and middle-clickable: documents, not the parts of one view -->
             <div
                 v-for="tab in tabs"
                 :key="tab.id"

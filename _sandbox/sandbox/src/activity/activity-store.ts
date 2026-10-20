@@ -14,6 +14,7 @@ import { openLedger } from "../store/open-document.js";
 export const activityLogDocument = defineDocument({
     root: "history",
     path: "activity.jsonl",
+    portability: "carry",
     schema: ActivityEventSchema,
     granularity: "entries",
     boot: false,

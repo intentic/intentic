@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { FREE_TIER, PAID_TIERS } from "@intentic/constants";
-import { Button, Card, Icon } from "@intentic/ui";
+import { Button, Card, Icon, SectionHeader } from "@intentic/ui";
 import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -77,10 +77,9 @@ const assurances = computed(() => [
     <Card class="border-primary-fill/25 bg-primary-fill/[0.07]">
         <div class="flex flex-col gap-5 @2xl:flex-row @2xl:items-center @2xl:gap-8">
             <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                    <Icon name="star" class="text-base text-link" />
-                    <span class="text-2xs font-semibold uppercase tracking-wider text-link">{{ t(`settings.hostedPlanOffer.hosted`) }}</span>
-                </div>
+                <SectionHeader :label="t(`settings.hostedPlanOffer.hosted`)" density="dense">
+                    <template #mark><Icon name="star" class="text-base text-link" /></template>
+                </SectionHeader>
                 <h2 class="mt-3 text-2xl font-semibold leading-tight text-content">{{ t(`settings.hostedPlanOffer.biggerMachineOwnHours`) }}</h2>
                 <p class="mt-2 text-sm text-muted">
                     {{ t(`settings.hostedPlanOffer.freeSharesSlotOwns`, hours) }}

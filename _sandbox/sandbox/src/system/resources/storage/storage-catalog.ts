@@ -1,7 +1,7 @@
 import { dirname, relative, sep } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
-import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
+import { HISTORY_STATE_FILES } from "../../../store/evolution/history-state.js";
 import { LOOP_DIR } from "@intentic/sandbox-contract/schemas/loops";
 import { STORAGE_CLEANABILITY, type StorageCategoryId } from "@intentic/sandbox-contract/schemas/metrics";
 import { stateFileFor } from "@intentic/sandbox-contract/state/state-portability";

@@ -29,8 +29,23 @@ const workspaceEntry = z.object({ id: z.string(), automationId: z.string(), even
 export type ListenerEntry = z.infer<typeof listenerEntry>;
 export type WorkspaceEntry = z.infer<typeof workspaceEntry>;
 
-export const listenerInboxDocument = defineDocument({ root: "history", path: "automation-listener-inbox.json", granularity: "entries", schema: listenerEntry });
-export const workspaceInboxDocument = defineDocument({ root: "history", path: "automation-workspace-inbox.json", granularity: "entries", schema: workspaceEntry });
+export const listenerInboxDocument = defineDocument({
+    root: "history",
+    path: "automation-listener-inbox.json",
+    // What waits for an automation fire not journalled yet: a channel message in its debounce or behind a running fire,
+    // a workspace event behind its chore. Travels with the turn journal in conversations.db, which names the rows a
+    // fire already took.
+    portability: "carry",
+    granularity: "entries",
+    schema: listenerEntry,
+});
+export const workspaceInboxDocument = defineDocument({
+    root: "history",
+    path: "automation-workspace-inbox.json",
+    portability: "carry",
+    granularity: "entries",
+    schema: workspaceEntry,
+});
 
 type Deps = Pick<Services, "config">;
 

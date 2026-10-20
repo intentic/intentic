@@ -4,6 +4,7 @@ mod agents;
 mod auth;
 mod autostart;
 mod badge;
+mod bindings;
 mod cli_path;
 mod commands;
 mod drop_copy;

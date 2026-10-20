@@ -1,7 +1,8 @@
 import { sandboxRef, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
 import { computed, ref, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { forgetClosedDraft, keepClosedDraft } from "../drafts/closedDrafts";
+import { bindComposer, seedComposer } from "../drafts/composerBinding";
+import { discardDraft } from "../drafts/composerDrafts";
 import { drawsChat } from "../run/chatEcho";
 import { chatRun } from "../run/chatRun";
 import { traceFocus } from "../run/focusTrace";
@@ -12,7 +13,6 @@ import { untouchedDraft } from "./tabFacts";
 import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, type TabSnapshot, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "../transcript/transcriptCache";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { uuid } from "../../../lib/uuid";
 
 const { activeSandboxId } = useSandbox();
 
@@ -192,21 +192,6 @@ export const active = computed<Conversation>(() => {
     return list.find((conversation) => conversation.conversationId === activeId.value) ?? list[0]!;
 });
 
-// Everything waiting to be sent, back in the composer: message, age, staged files. Its own function since two arrivals
-// restore a composer (a snapshot restore, a reopened closed draft).
-export const restoreComposer = (conversation: Conversation, tab: StoredTab): void => {
-    conversation.draft.value = tab.draft;
-    // The stamping watch only fills an empty stamp, so this keeps the restored instant, not a fresh one.
-    conversation.draftAt.value = tab.draftAt;
-    conversation.attachments.value = tab.attachments.map((file) => ({
-        id: uuid(),
-        name: file.name,
-        path: file.path,
-        status: `done` as const,
-        progress: 1,
-    }));
-};
-
 // How the next turn runs, restored per tab: these describe THIS chat, never picks made in another tab since. The
 // stopped-turn offer itself doesn't restore here; only the daemon knows if it's still held (useChat-sessions).
 const restoredPicks = (tab: StoredTab, isolated: boolean): Partial<Picks> => ({
@@ -251,7 +236,6 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     conversation.standIn.value = tab.standIn === true;
     // The card's account of the agent, so a restored tab lanes the way its board card does before the roster lands.
     conversation.standing.value = tab.standing;
-    restoreComposer(conversation, tab);
     conversation.title.value = tab.title ?? null;
     if (tab.session !== undefined) {
         // Restored exactly as stored: filling gaps from the tab's own picks could resume or retire the wrong session.
@@ -264,6 +248,8 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     if (tab.freshOf !== undefined) {
         conversation.pendingFreshOf.value = tab.freshOf;
     }
+    // Its words are its draft's, in the composer before anything asks whether the tab is an untouched blank.
+    seedComposer(conversation, tab);
     return conversation;
 };
 
@@ -283,6 +269,26 @@ export const conversations = sandboxShallowRef<Conversation[]>(
 );
 // `stored.active` names one of the tabs, the reader guarantees it; the blank is the only tab when nothing was stored.
 export const activeId = sandboxRef<string>(() => opening.value?.active ?? conversations.value[0]!.conversationId);
+
+// Every open chat's composer is its conversation's draft (composerBinding.ts), from the moment it opens until it closes.
+const bound = new Map<Conversation, () => void>();
+watch(
+    conversations,
+    (open) => {
+        for (const [conversation, unbind] of bound) {
+            if (!open.includes(conversation)) {
+                unbind();
+                bound.delete(conversation);
+            }
+        }
+        for (const conversation of open) {
+            if (!bound.has(conversation)) {
+                bound.set(conversation, bindComposer(conversation));
+            }
+        }
+    },
+    { immediate: true, flush: `sync` },
+);
 
 // Chats on screen at once, in the order they were opened, not the rail's lane order (which would reshuffle
 // columns mid-read). The focused pane (activeId) is always a member; the stored order comes back with the tabs,
@@ -459,18 +465,15 @@ export const setPanes = (ids: readonly string[]): void => {
 };
 
 // Two closes, chosen by which surface pressed it:
-// - the panel's x (row, menu): takes the chat off this surface only; unsent words are set aside (closedDrafts)
-//   since the conversation survives on the board and in History
+// - the panel's x (row, menu): takes the chat off this surface only; its unsent words stay its draft
+//   (composerDrafts.ts), so the board keeps a card for them and reopening it finds them where they were
 // - the board's x (closeConversations): closes the conversation everywhere, tab and words together
-// Both soft-abort the turn and drop the cached transcript; only the window drawing the chat sets words aside.
+// Both soft-abort the turn and drop the cached transcript.
 const closing = (ids: ReadonlySet<string>, unsent: `keep` | `drop`): void => {
     traceFocus(`close`, { ids: [...ids], active: activeId.value, unsent });
     rememberClosed(conversations.value.filter((conversation) => ids.has(conversation.conversationId)));
     for (const conversation of conversations.value) {
         if (ids.has(conversation.conversationId)) {
-            if (unsent === `keep` && conversation.unsent.value && drawsChat.value) {
-                keepClosedDraft(snapshotTab(conversation));
-            }
             conversation.turn.abort();
             void dropTranscript(conversation.conversationId);
         }
@@ -481,18 +484,18 @@ const closing = (ids: ReadonlySet<string>, unsent: `keep` | `drop`): void => {
     setConversations(next, activeId.value, `close`);
 };
 
-/** The panel's close: these chats leave this surface, and whatever was unsent in them is set aside. */
+/** The panel's close: these chats leave this surface, and whatever was unsent in them stays their draft. */
 export const closeTabs = (ids: ReadonlySet<string>): void => {
     closing(ids, `keep`);
 };
 
 /**
  * The board's close: these conversations go everywhere, tab and unsent words alike. Applied by every window
- * from the summons, idempotently (the first empties the shared store).
+ * from the summons, idempotently (the first discards the draft; the rest find none).
  */
 export const closeConversations = (ids: ReadonlySet<string>): void => {
     for (const id of ids) {
-        forgetClosedDraft(id);
+        discardDraft(id);
     }
     closing(ids, `drop`);
 };

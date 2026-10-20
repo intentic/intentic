@@ -180,6 +180,7 @@ export const asStarted = <T extends FleetAgent>(card: T, startedAt: number): T =
     conflictCauses: undefined,
     failure: undefined,
     failureCode: undefined,
+    failureOwn: undefined,
     limitResetsAt: undefined,
     limitHeld: undefined,
     next: keptSends(card.next),
@@ -210,7 +211,7 @@ export const endedHere = <T extends FleetAgent>(card: T, tab: TabFacts | undefin
 // minutes beside the chat's own "stopped short": drawn instead as the failure the sandbox now holds, as its card will
 // read once it stops saying resuming. Only over `resuming`: any later word from the roster is newer than this.
 export const withdrawnHere = <T extends FleetAgent>(card: T, tab: TabFacts | undefined): T =>
-    tab?.resumeWithdrawn === undefined || card.status !== `resuming` ? card : { ...card, status: `error`, failure: tab.resumeWithdrawn };
+    tab?.resumeWithdrawn === undefined || card.status !== `resuming` ? card : { ...card, status: `error`, failure: tab.resumeWithdrawn.message, failureCode: tab.resumeWithdrawn.error, failureOwn: tab.resumeWithdrawn.own };
 
 // A land between turns: the conflict and failure a settled status carried go with it; only a running turn hides
 // `unfinished`, so it stays.
@@ -221,6 +222,7 @@ const asLanding = <T extends FleetAgent>(card: T): T => ({
     conflictCauses: undefined,
     failure: undefined,
     failureCode: undefined,
+    failureOwn: undefined,
     limitResetsAt: undefined,
     limitHeld: undefined,
     next: keptSends(card.next),

@@ -5,8 +5,8 @@ import { Button, Icon, Notice, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, useId, useTemplateRef } from "vue";
 import ConnectFlow from "../secrets/ConnectFlow.vue";
-import WaitProgress from "../../../components/WaitProgress.vue";
-import { useBusySince, useWaitClock } from "../../../components/useWaitClock";
+import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
+import { useBusySince, useProgress } from "../../../components/progress/useProgress";
 
 // A provider's sign-in, inside its own panel in Sandbox ▸ Models, under the accounts it is adding to. Not a card of its
 // own: it is a step of the panel it sits in, and a card inside that card read as a second, unrelated thing. A reader sent
@@ -44,7 +44,7 @@ const heading = computed(() =>
 
 // How long the press has been on its way to the sandbox, under "Opening the sign-in…": a sandbox that is busy or still
 // waking answers late, and a line that never changed read as a press that went nowhere.
-const startWait = useWaitClock(useBusySince(() => phase === `starting`));
+const startWait = useProgress(useBusySince(() => phase === `starting`));
 
 const headingId = useId();
 const block = useTemplateRef<HTMLElement>(`block`);
@@ -73,7 +73,7 @@ defineExpose({ reveal });
                 <h3 :id="headingId" ref="headingEl" tabindex="-1" class="text-sm font-medium leading-tight outline-none">{{ heading }}</h3>
                 <template v-if="phase === `starting`">
                     <p class="text-xs text-subtle" role="status">{{ t(`connect.connectAttempt.opening`) }}</p>
-                    <WaitProgress v-if="startWait" :wait="startWait" />
+                    <ProgressMeter v-if="startWait" :progress="startWait" />
                 </template>
                 <p v-else-if="phase === `failed`" class="whitespace-pre-line break-words text-xs text-muted">{{ problem }}</p>
             </div>

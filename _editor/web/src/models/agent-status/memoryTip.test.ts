@@ -1,5 +1,5 @@
 import { judge, type MemoryReading } from "@intentic/constants/memory-room";
-import { memoryReading } from "../../../features/chat/transcript/held/heldQueue";
+import { memoryReading } from "../../features/chat/transcript/held/heldQueue";
 import { memoryShare, memoryTip } from "./memoryTip";
 
 // The card is read out of the daemon's own sentence, so every case here asks the daemon's `judge` for that sentence

@@ -21,13 +21,13 @@ export const reportedFailure = (
     ending: Ending,
     status: AgentStatus,
     hold: HeldRecord | undefined,
-): Partial<Pick<AgentSummary, "failure" | "failureCode" | "limitResetsAt" | "limitHeld">> => {
+): Partial<Pick<AgentSummary, "failure" | "failureCode" | "failureOwn" | "limitResetsAt" | "limitHeld">> => {
     if (status !== "error") {
         return {};
     }
     switch (ending.kind) {
         case "failed":
-            return { ...opt("failure", ending.failure), ...opt("failureCode", ending.code) };
+            return { ...opt("failure", ending.failure), ...opt("failureCode", ending.code), ...opt("failureOwn", ending.own) };
         case "limited":
             return {
                 ...opt("failure", ending.failure),

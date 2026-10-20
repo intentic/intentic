@@ -58,7 +58,7 @@ const rowTitle = (label: string) => label.charAt(0).toUpperCase() + label.slice(
             <span
                 v-for="machine in MACHINES"
                 :key="machine.locus"
-                class="flex shrink-0 items-center justify-center py-2.5 text-center text-3xs font-medium uppercase tracking-wide text-subtle"
+                class="flex shrink-0 items-center justify-center py-2.5 text-center text-3xs font-medium text-subtle"
                 :class="COLUMN"
             >
                 {{ machine.label }}

@@ -17,7 +17,13 @@ const RunnerIdentitySchema = z.object({
 export type RunnerIdentity = z.infer<typeof RunnerIdentitySchema>;
 
 // One document for the two handles below, which open the same file.
-export const runnerIdentityDocument = defineDocument({ root: "history", path: "runner-identity.json", schema: RunnerIdentitySchema });
+export const runnerIdentityDocument = defineDocument({
+    root: "history",
+    path: "runner-identity.json",
+    // This container's own identity and reconnect token; elsewhere it would dial the parent as this runner.
+    portability: "identity",
+    schema: RunnerIdentitySchema,
+});
 
 export const runnerIdentityPath = (historyRoot: string): string => join(historyRoot, runnerIdentityDocument.path);
 

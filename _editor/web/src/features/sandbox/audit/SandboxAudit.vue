@@ -199,7 +199,7 @@ const rowTone = (entry: AuditEntry): `default` | `warning` | `danger` => {
             <span class="inline-flex items-center gap-0.5">
                 <InfoHint :label="t(`sandbox.sandboxAudit.integrityTitle`)">
                     <template #trigger>
-                        <span class="ui-status-pill gap-1.5 text-2xs font-medium" :class="toneWash(integrity.tone)">
+                        <span class="ui-status-pill font-medium" :class="toneWash(integrity.tone)">
                             <Icon :name="integrity.icon" class="text-xs" />{{ integrity.label }}
                         </span>
                     </template>

@@ -30,7 +30,13 @@ const EngineStateSchema = z.object({
 
 // One per engine (`engines/<id>/state.json` on the daemon volume, or under INTENTIC_ENGINES_DIR): declared for its shape
 // and its conversions, which its reader runs; the boot step does not look for it, since the directory can move.
-export const engineStateDocument = defineDocument({ root: "history", path: "engines/<engine>/state.json", boot: false, schema: EngineStateSchema });
+export const engineStateDocument = defineDocument({
+    root: "history",
+    path: "engines/<engine>/state.json",
+    portability: "derived",
+    boot: false,
+    schema: EngineStateSchema,
+});
 
 // Refusals remembered per engine; enough to show a pattern on the card, bounded against a runaway upstream.
 const QUARANTINE_KEPT = 6;

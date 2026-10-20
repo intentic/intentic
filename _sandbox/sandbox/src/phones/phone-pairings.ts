@@ -12,7 +12,14 @@ const PairingSchema = z.object({ phone: z.string(), keyring: z.string(), fingerp
 const PhonePairingsFileSchema = z.object({ pairings: z.array(PairingSchema) });
 type PhonePairingsFile = z.infer<typeof PhonePairingsFileSchema>;
 
-export const phonePairingsDocument = defineDocument({ root: "history", path: "phone-pairings.json", schema: PhonePairingsFileSchema });
+export const phonePairingsDocument = defineDocument({
+    root: "history",
+    path: "phone-pairings.json",
+    // Which computers' keyrings each phone paired with for Passwords: a shortcut over the keyrings' own pinned keys,
+    // keyed by phones paired to this sandbox, so it stays with the pairings (peers/enrollment.ts).
+    portability: "identity",
+    schema: PhonePairingsFileSchema,
+});
 
 export interface PhonePairings {
     // The computers this phone is paired with.

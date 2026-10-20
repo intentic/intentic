@@ -4,6 +4,7 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { useListNavigation } from "../../composables/useListNavigation.js";
 import { FACE_SIZES } from "../brand/personaFace.js";
 import PersonaFace from "../brand/PersonaFace.vue";
+import SectionHeader from "../rows/SectionHeader.vue";
 import SearchBar from "./SearchBar.vue";
 import { nextPickerId, normalizePickerGroups, type PickerOption, type PickerOptions } from "./picker.js";
 import { useT } from "../../i18n/index.js";
@@ -139,13 +140,7 @@ onMounted(() => {
             class="max-h-72 min-w-0 overflow-y-auto py-1 focus:outline-none"
         >
             <template v-for="group in shown" :key="group.key">
-                <p
-                    v-if="group.label !== undefined"
-                    class="px-3 pb-1 pt-2 text-2xs font-medium uppercase tracking-wide text-subtle"
-                    role="presentation"
-                >
-                    {{ group.label }}
-                </p>
+                <SectionHeader v-if="group.label !== undefined" :label="group.label" density="dense" class="px-3 pb-1 pt-2" role="presentation" />
                 <button
                     v-for="row in group.rows"
                     :id="`${panelId}-opt-${row.index}`"

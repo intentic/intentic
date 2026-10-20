@@ -53,7 +53,13 @@ export const setupHostCard = (config: { readonly hostPairToken: string; readonly
 
 const SeededSchema = z.object({ ids: z.array(z.string()) });
 
-export const hostSetupSeededDocument = defineDocument({ root: "history", path: "host-setup-seeded.json", schema: SeededSchema });
+export const hostSetupSeededDocument = defineDocument({
+    root: "history",
+    path: "host-setup-seeded.json",
+    // Which device cards were already offered; carry, not identity, since it holds ids, never a token.
+    portability: "carry",
+    schema: SeededSchema,
+});
 
 // Which setup cards this sandbox has already offered, not whether the machine is connected or the token spent
 // (host-peer.ts); its own file since it outlives both of those.

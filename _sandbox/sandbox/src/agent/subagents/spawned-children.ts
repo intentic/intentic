@@ -123,7 +123,16 @@ export const specFromFile = (onFile: ChildSpecOnFile): ChildSpawnSpec => ({
     ),
 });
 
-export const spawnedChildrenDocument = defineDocument({ root: "history", path: "spawned-children/", directory: true, schema: SpawnedChildSchema });
+export const spawnedChildrenDocument = defineDocument({
+    root: "history",
+    path: "spawned-children/",
+    // One file per agent a conversation spawned: what its parent supervises it by
+    // (its run, session, last report and result), read back at boot so a restart does not orphan it. Part of the
+    // conversations' own record, so it goes where they go.
+    portability: "carry",
+    directory: true,
+    schema: SpawnedChildSchema,
+});
 
 // The longest report kept on file: what a wait hands over whole before it points at a retrieval handle.
 export const KEPT_REPORT_CHARS = 12_000;

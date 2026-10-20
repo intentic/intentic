@@ -6,7 +6,7 @@ import { retryHydrate } from "../../../../models/conversations/run/useChat-sessi
 import { useHeldQueue } from "../../transcript/held/heldQueue";
 import { useReopenPress } from "../../transcript/held/heldPresses";
 import { useLimitResend } from "./scheduledSend";
-import { memoryShare, sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
+import { memoryShare, sendAnywayTip } from "../../../../models/agent-status/memoryTip";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import { useHeldLineSeen } from "./heldLineSeen";
 import { pendingCardReader, pendingDecisionOf, type WaitKind } from "../../../../models/conversations/panel/pendingDecision";

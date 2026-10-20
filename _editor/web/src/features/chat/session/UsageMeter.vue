@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { placeAnchored, type Placement, type Side, useHoverIntent } from "@intentic/ui";
+import { placeAnchored, type Placement, Section, SectionHeader, type Side, useHoverIntent } from "@intentic/ui";
 import { computed, type CSSProperties, nextTick, onBeforeUnmount, ref } from "vue";
 import {
     formatAge,
@@ -161,12 +161,11 @@ onBeforeUnmount(hide);
             >
                 <div class="ui-anchored-surface w-60 gap-3 px-3 py-2.5 text-left">
                     <!-- Age sits in the header, not the footer: every figure below is a floor once stale, qualifying the whole card. -->
-                    <div class="flex items-baseline justify-between gap-2">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`shared.planLimits`) }}</span>
-                        <span class="shrink-0 text-2xs text-subtle">{{
-                            t(`common.usageRing.measured`, { measuredAt: formatAge(headroom.measuredAt) })
-                        }}</span>
-                    </div>
+                    <SectionHeader :label="t(`shared.planLimits`)" density="dense">
+                        <template #actions>
+                            <span class="text-2xs text-subtle">{{ t(`common.usageRing.measured`, { measuredAt: formatAge(headroom.measuredAt) }) }}</span>
+                        </template>
+                    </SectionHeader>
 
                     <!-- One line per pool: pools are independently gated, so which is about to bite can't come from one number.
                          A pool inside another hangs off it on an elbow, one step in per level, same as the chat rail. -->
@@ -208,10 +207,9 @@ onBeforeUnmount(hide);
                     </div>
 
                     <!-- Kept apart from the pools above: those are the plan's allowances, this is spend against them. -->
-                    <div v-if="activity" class="mt-1 flex flex-col gap-1">
-                        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`shared.thisSandbox`) }}</span>
-                        <span class="text-xs leading-relaxed text-muted">{{ activity }}</span>
-                    </div>
+                    <Section v-if="activity" :label="t(`shared.thisSandbox`)" density="dense" class="mt-1">
+                        <p class="text-xs leading-relaxed text-muted">{{ activity }}</p>
+                    </Section>
 
                     <!-- What this reading cannot vouch for: models with no pool at all, and a model that served after it read spent. -->
                     <p v-if="headroom.uncovered.length > 0" class="text-2xs leading-relaxed text-warning">

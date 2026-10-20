@@ -327,7 +327,9 @@ test("rebuilds the question a turn asked, and the picks that answered it, from t
     expect(messages[3]?.tools?.map((tool) => [tool.name, tool.status])).toEqual([["mcp__ui__ask", "completed"]]);
 });
 
-test("reads a dismissed question back as cancelled, and one with no result as unanswered", async () => {
+// A question nobody answered is nobody's decision once its turn is over, read back as the live fold froze it when that turn
+// ended (TranscriptFold.finish): offered as still open, it would take an answer that goes nowhere.
+test("reads a dismissed question back as cancelled, and one with no result as frozen like a settled turn's", async () => {
     const questions = [{ question: "Which?", header: "Pick", multiSelect: false, options: [{ label: "A", description: "a" }] }];
     const dismissed =
         "The user dismissed the questions without answering and stopped the turn. STOP what you are doing and wait for them to say how to proceed.";
@@ -341,7 +343,7 @@ test("reads a dismissed question back as cancelled, and one with no result as un
     const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s0");
 
     const asked = messages.flatMap((message) => (message.question === undefined ? [] : [message.question]));
-    expect(asked.map((question) => question.status)).toEqual(["cancelled", "pending"]);
+    expect(asked.map((question) => question.status)).toEqual(["cancelled", "cancelled"]);
     expect(messages.at(-1)?.tools?.[0]?.status).toBe("in_progress");
 });
 

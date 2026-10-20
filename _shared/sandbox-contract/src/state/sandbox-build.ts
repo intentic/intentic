@@ -35,3 +35,62 @@ export const buildParity = (parent: SandboxBuild, other: SandboxBuild | undefine
         parent.baseDigest !== undefined && other.baseDigest !== undefined ? parent.baseDigest === other.baseDigest : parent.base === other.base;
     return sameBase && (parent.overlay ?? "") === (other.overlay ?? "") ? "current" : "outdated";
 };
+
+// WHAT ANSWERS: the build a daemon runs and the moment it started, as /info reports it (`running`). A swap (a rebuild, an
+// update, a rollback) replaces the container, so the sandbox answering afterwards is a different boot; whether it is the
+// build the swap aimed at is the build's to say. A daemon's version cannot: every build from a checkout is 0.0.0, so a
+// swap told by "the version moved" never landed for one (2026-10).
+export interface RunningSandbox {
+    readonly build: SandboxBuild;
+    // Epoch ms this daemon started: a container swapped in is a new boot even where its build reads the same.
+    readonly bootedAt: number;
+}
+
+// Whether two builds are the same image and overlay: false when either differs, true when both bases carry a digest and
+// they and the overlays agree, undefined when nothing can tell (a checkout build, or one tag with no digest read on
+// either side, which two pulls a release apart both are).
+export const sameBuild = (a: SandboxBuild, b: SandboxBuild): boolean | undefined => {
+    if ((a.overlay ?? "") !== (b.overlay ?? "")) {
+        return false;
+    }
+    if (builtFromCheckout(a) || builtFromCheckout(b)) {
+        return undefined;
+    }
+    if (a.baseDigest !== undefined && b.baseDigest !== undefined) {
+        return a.baseDigest === b.baseDigest;
+    }
+    return a.base === b.base ? undefined : false;
+};
+
+// What a swap is aiming at, read when it was pressed: the sandbox answering then, and for a rebuild the overlay it builds.
+export interface SwapAim {
+    readonly from: RunningSandbox | undefined;
+    readonly overlay?: string | undefined;
+}
+
+// Where a swap stands by what answers now. `landed`: the sandbox runs what it aimed at (the overlay a rebuild built; for
+// an update or a rollback, a build other than the one pressed on, or a new boot where the builds cannot tell). `unmoved`:
+// a new boot answers on the very build it was pressed on, so the swap came back without taking. `waiting`: the sandbox
+// pressed on still answers, or nothing here can tell yet.
+export type SwapVerdict = "landed" | "unmoved" | "waiting";
+
+export const swapVerdict = (aim: SwapAim, now: RunningSandbox): SwapVerdict => {
+    const rebooted = aim.from !== undefined && now.bootedAt !== aim.from.bootedAt;
+    if (aim.overlay !== undefined) {
+        if (now.build.overlay === aim.overlay) {
+            return "landed";
+        }
+        return rebooted ? "unmoved" : "waiting";
+    }
+    if (aim.from === undefined) {
+        return "waiting";
+    }
+    const same = sameBuild(aim.from.build, now.build);
+    if (same === false) {
+        return "landed";
+    }
+    if (!rebooted) {
+        return "waiting";
+    }
+    return same === true ? "unmoved" : "landed";
+};

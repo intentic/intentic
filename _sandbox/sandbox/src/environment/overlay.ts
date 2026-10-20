@@ -102,7 +102,10 @@ const materialize = async (services: Services, content: string, fragments: reado
     return { content, hash };
 };
 
-const composeNow = async (services: Services): Promise<ComposedOverlay | undefined> => {
+// The overlay these inputs compose, read and never written: its content and the capability fragments in it, or
+// undefined when this sandbox wants none. What composeNow materializes, and what the image's own composer prints for
+// `ic` before a swap onto it (compose-overlay.ts), so the two can never compose differently.
+export const composedOverlay = async (services: Services): Promise<{ readonly content: string; readonly fragments: readonly string[] } | undefined> => {
     const capabilities = await services.capabilities.list();
     const contributed = [
         ...new Set([
@@ -120,15 +123,20 @@ const composeNow = async (services: Services): Promise<ComposedOverlay | undefin
     // The base this container was built from, so a rebuild is version-preserving rather than a silent rollback.
     const base = baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image);
     if (fragments.length === 0 && custom === "") {
-        if (runningBuild(services.config.sandbox).overlay === undefined) {
-            await services.files.remove(approvedPath(services));
-            return undefined;
-        }
         // Built from an overlay now empty; keep a bare one so the owner has a hash-pinned path back to stock.
-        return await materialize(services, `${HEADER}\n\nFROM ${base}\n`, []);
+        return runningBuild(services.config.sandbox).overlay === undefined ? undefined : { content: `${HEADER}\n\nFROM ${base}\n`, fragments: [] };
     }
     const sections = [HEADER, `FROM ${base}`, ...fragments, ...(custom === "" ? [] : [CUSTOM_MARKER, custom])];
-    return await materialize(services, `${sections.join("\n\n")}\n`, fragments);
+    return { content: `${sections.join("\n\n")}\n`, fragments };
+};
+
+const composeNow = async (services: Services): Promise<ComposedOverlay | undefined> => {
+    const composed = await composedOverlay(services);
+    if (composed === undefined) {
+        await services.files.remove(approvedPath(services));
+        return undefined;
+    }
+    return await materialize(services, composed.content, composed.fragments);
 };
 
 // THE OVERLAY THIS SANDBOX WANTS, composed from its inputs now: the base it runs, every capability's fragment and the

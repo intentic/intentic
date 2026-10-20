@@ -20,7 +20,15 @@ export interface PeerToolMemory {
 const PeerToolsFileSchema = z.object({ peers: z.record(z.string(), z.unknown()) });
 type PeerToolsFile = z.infer<typeof PeerToolsFileSchema>;
 
-export const peerToolsDocument = defineDocument({ root: "history", path: "peer-tools.json", schema: PeerToolsFileSchema });
+export const peerToolsDocument = defineDocument({
+    root: "history",
+    path: "peer-tools.json",
+    // What each connected machine and browser publishes as its tools, so one that is asleep still appears in a turn.
+    // Re-asked of every peer the moment it reconnects, and about software that stayed behind on somebody else's
+    // computer, so it is not worth carrying.
+    portability: "derived",
+    schema: PeerToolsFileSchema,
+});
 
 export const peerToolsFile = (historyRoot: string): string => join(historyRoot, peerToolsDocument.path);
 

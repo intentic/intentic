@@ -27,7 +27,7 @@ import { viewingIn } from "./paneSurface";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
 import FileRefPeek from "../../../../parts/workspace/FileRefPeek.vue";
 import { retryHydrate } from "../../../../models/conversations/run/useChat-sessions";
-import { useBusySince, useElapsedWords } from "../../../../components/useWaitClock";
+import { useBusySince, useElapsedWords } from "../../../../components/progress/useProgress";
 
 // A pane's turns: rows grouped by prompt, the marks between them, each turn's pictures and the one viewer walking them.
 

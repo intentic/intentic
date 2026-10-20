@@ -111,7 +111,7 @@ const storedElsewhere = async (): Promise<void> => {
                         v-for="keyring of online"
                         :key="keyring.machine"
                         type="button"
-                        :class="ui.chip({ on: device === keyring.machine }, `gap-1 py-1 px-2 text-2xs`)"
+                        :class="ui.chip({ on: device === keyring.machine })"
                         :aria-pressed="device === keyring.machine"
                         @click="device = keyring.machine"
                     >

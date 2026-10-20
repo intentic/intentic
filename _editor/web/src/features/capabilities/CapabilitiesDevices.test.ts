@@ -60,7 +60,7 @@ jest.mock(`../../models/extensions/useExtensions`, () => ({
         contributionOf: () => undefined,
         enabled: ref([devicesExtension]),
         extensions: ref([devicesExtension]),
-        settled: ref(true),
+        loaded: ref({ state: `ready`, data: {}, refreshing: false, refreshError: undefined }),
     }),
 }));
 jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));

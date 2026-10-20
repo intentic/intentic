@@ -18,7 +18,14 @@ const KeptJobSchema = z.object({
 type KeptJob = z.infer<typeof KeptJobSchema>;
 
 // A kept command cannot safely be replayed after a container loss. Keep enough outside /tmp to name its loss instead.
-export const keptJobRecordsDocument = defineDocument({ root: "history", path: "kept-jobs/", directory: true, schema: KeptJobSchema });
+export const keptJobRecordsDocument = defineDocument({
+    root: "history",
+    path: "kept-jobs/",
+    // Receipts name kept commands lost with container-local capture storage; never replay arbitrary commands.
+    portability: "derived",
+    directory: true,
+    schema: KeptJobSchema,
+});
 const recordsDir = (historyRoot: string): string => join(historyRoot, keptJobRecordsDocument.path);
 
 // `keep` is synchronous; its durable receipt is written before the tool acknowledges the decision.

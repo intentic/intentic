@@ -205,3 +205,35 @@ test("logs each refusal recorded, and a settle only when one was on file", async
     expect(lines[0]?.fields).toMatchObject({ provider: "claude", account: "first", resetsAt: "2033-05-18T03:33:20.000Z" });
     expect(lines[2]?.fields).toMatchObject({ settledBy: "second" });
 });
+
+// 2026-10-20: a spent allowance the provider gave no time for stood past its pool's reset until the next reading landed.
+// The ledger files it with that pool's reset, read while the reading still shows the pool, so every verdict ends it there.
+test("files a spent allowance that named no instant with the reset of the pool it was refused in", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "provider-refusals-")), "provider-refusals.json");
+    const inAnHour = Math.floor(Date.now() / 1000) + 3_600;
+    const reading = { measuredAt: Date.now() - 60_000, windows: [{ kind: "five_hour", utilization: 97, gates: "all" as const, resetsAt: inAnHour }] };
+    const asked: string[] = [];
+    const store = fileProviderRefusalStore(path, {
+        accountsOf: async (provider) => {
+            asked.push(provider);
+            return [{ account: "team.json", usage: reading }];
+        },
+    });
+    const spent = refusal({ model: "gpt-6.1-sol" });
+    await store.record("codex", spent);
+    expect((await fileProviderRefusalStore(path).onFile())[`codex`]).toEqual([{ ...spent, poolResetsAt: inAnHour }]);
+    // The provider's own instant needs no stamp, and a refused sign-in has no pool: neither reads the accounts.
+    const stated = refusal({ model: "gpt-6-luna", resetsAt: inAnHour + 60 });
+    await store.record("codex", stated);
+    await store.record("codex", refusal({ kind: "auth", account: "team.json" }));
+    expect(asked).toEqual(["codex"]);
+    expect((await store.onFile())[`codex`]).toEqual(expect.arrayContaining([stated]));
+});
+
+test("files a refusal unstamped when the accounts cannot be read, to stand until a reading answers it", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "provider-refusals-")), "provider-refusals.json");
+    const store = fileProviderRefusalStore(path, { accountsOf: async () => { throw new Error("translator down"); } });
+    const spent = refusal({ model: "gpt-6.1-sol" });
+    await store.record("codex", spent);
+    expect((await store.onFile())[`codex`]).toEqual([spent]);
+});

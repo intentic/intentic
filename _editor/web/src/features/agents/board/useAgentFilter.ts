@@ -1,4 +1,4 @@
-import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agents";
+import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agent-search";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import { useSettled } from "@intentic/ui/async";
 import { computed, ref } from "vue";

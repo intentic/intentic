@@ -14,7 +14,8 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import { signalConnection } from "../../../client/sandbox/useSandbox";
 import { registry } from "../../../models/fleet/useAgents-registry";
-import { changesKey } from "../../../models/changes/useChanges";
+import { changesKey, COMMIT_RUN, useChanges } from "../../../models/changes/useChanges";
+import { operationAt } from "../../../workbench/operations/operations";
 import { followedRuns } from "../../../models/changes/indexRuns";
 import { commitMessage, nameCommitAfter } from "./commit/commitMessage";
 import * as actualSandboxRpc from "../../../client/sandbox/sandboxRpc";
@@ -521,4 +522,45 @@ it(`draws a commit still running in a panel opened again, as it was pressed`, as
     await settle();
     await settle();
     expect(face(again)).toBe(`Commit 1`);
+});
+
+// The press is a run in the operations ledger, like every press whose work outlives a glance. A second press while one
+// runs is refused there: as a module record, the second one's ending cleared the first one's while it still ran.
+it(`files a commit as a ledger run, refuses a second while it runs, and puts it away once it ends`, async () => {
+    const tree = (staged: number): GitChanges => ({
+        repos: [
+            {
+                repo: `root`,
+                branch: `main`,
+                conflicted: [],
+                staged: Array.from({ length: staged }, (_, index) => ({ path: `f${index}.ts`, status: `modified` as const })),
+                unstaged: [],
+            },
+        ],
+    });
+    const el = await mount();
+    await answer(tree(2));
+    commitMessage.value = `fix: both`;
+    await settle();
+    let finish!: () => void;
+    commit.mockImplementationOnce(
+        () =>
+            new Promise<CommitResult>((resolve) => {
+                finish = () => resolve({ committed: true, changes: tree(0).repos[0] });
+            }),
+    );
+    buttonNamed(el, `Commit`)?.click();
+    await settle();
+    expect(operationAt(COMMIT_RUN)?.state).toBe(`running`);
+    expect(useChanges().press.value?.face.count).toBe(2);
+
+    expect(await useChanges().commitRepos([{ repo: `root` }], `again`, false, { label: `Commit`, count: 9 })).toBe(false);
+    expect(useChanges().press.value?.face.count).toBe(2);
+    expect(useChanges().committing.value).toEqual([`root`]);
+
+    finish();
+    await settle();
+    await settle();
+    expect(operationAt(COMMIT_RUN)).toBeUndefined();
+    expect(useChanges().press.value).toBeUndefined();
 });

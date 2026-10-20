@@ -211,6 +211,7 @@ export const UNSERVED = {
     "agents.place": UNSIMULATED_WRITE,
     "agents.purge": UNSIMULATED_WRITE,
     "agents.requestLand": UNSIMULATED_WRITE,
+    "agents.settle": UNSIMULATED_WRITE,
     "agents.stopWatching": UNSIMULATED_WRITE,
     "agents.toolChildren": UNFILLED_VIEW,
     "approvals.approveHooks": UNSIMULATED_WRITE,

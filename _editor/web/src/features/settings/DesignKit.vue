@@ -349,7 +349,7 @@ const pickedTier = ref(`collaborator`);
                                 <td class="font-medium text-content">{{ tone }}</td>
                                 <td><span :class="toneInk(tone)">a status word</span></td>
                                 <td><span :class="toneDot(tone, `block size-2 rounded-full`)"></span></td>
-                                <td><span :class="toneWash(tone, `ui-status-pill text-2xs`)">a pill</span></td>
+                                <td><span :class="toneWash(tone, `ui-status-pill`)">a pill</span></td>
                                 <td><span :class="toneTint(tone, `strong`, `block rounded-md border px-2 py-1 text-content`)">to be read</span></td>
                                 <td><span :class="toneTint(tone, `soft`, `block rounded-md border px-2 py-1 text-content`)">belongs to it</span></td>
                                 <td><span :class="tonePlate(tone, `inline-block min-w-4 rounded-full px-1 text-center text-2xs`)">3</span></td>
@@ -740,6 +740,22 @@ const pickedTier = ref(`collaborator`);
                     <button type="button" :class="ui.chip()" disabled><Icon name="filter" />disabled</button>
                     <button type="button" :class="ui.addTile(`px-3 py-1.5`)">ui.addTile</button>
                     <button type="button" :class="ui.overlayChip()"><Icon name="copy" class="text-2xs" />ui.overlayChip</button>
+                </div>
+                <!-- The chip's and the pill's sizes, decided once in utilities.css: a call site names one and passes layout only. -->
+                <div class="flex flex-wrap items-center gap-3" data-kit="chip-sizes">
+                    <button type="button" :class="ui.chip({ size: `sm` })"><Icon name="chevron-up" />size: "sm" · 20px</button>
+                    <button type="button" :class="ui.chip()"><Icon name="filter" />md · 26px</button>
+                    <button type="button" :class="ui.chip({ size: `lg` })"><Icon name="filter" />size: "lg" · 32px</button>
+                    <span :class="ui.chip({ on: true, lead: true })"><Avatar :size="20" name="Ada Lovelace" />lead</span>
+                    <span :class="ui.chip({ on: true, trail: true })" class="font-mono">
+                        github.com
+                        <button type="button" :class="ui.iconButton({ size: `xs`, round: true })" :aria-label="t(`ui.action.remove`)">
+                            <Icon name="times" class="text-3xs" />
+                        </button>
+                    </span>
+                    <span class="ui-status-pill" :class="toneWash(`neutral`)">pill · 20px</span>
+                    <span class="ui-status-pill ui-status-pill-md" :class="toneWash(`success`)">-md · 24px</span>
+                    <span class="text-sm text-content">in a line <span class="ui-status-pill ui-status-pill-inline" :class="toneWash(`warning`)">-inline · 16px</span></span>
                 </div>
                 <!-- A group's heading: the size follows the tier, the tone only when the group IS a state; no count, caption or fill. -->
                 <div class="flex flex-wrap items-baseline gap-x-6 gap-y-2">

@@ -9,6 +9,7 @@ import {
     Modal,
     Notice,
     SandboxLogo,
+    SectionHeader,
     StatusBadge,
     type Tip,
     type CommandOs,
@@ -460,7 +461,7 @@ const confirmRemove = async (): Promise<void> => {
                 <div class="my-1 border-t border-line-subtle"></div>
             </template>
 
-            <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</div>
+            <SectionHeader :label="t(`shared.sandboxes`)" density="dense" class="px-2 py-1.5" />
 
             <!-- Two lines a row: the name, and where it runs with whatever else is true of it (rowNote). The logo is the
                  row's height, so a reader finds a box by its picture before reading a word. -->
@@ -471,8 +472,8 @@ const confirmRemove = async (): Promise<void> => {
                 data-menu-row
                 :data-current="isActive(option) || undefined"
                 :aria-current="isActive(option) || undefined"
-                class="group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors"
-                :class="isActive(option) ? 'bg-primary-600/15' : 'hover:bg-content/5'"
+                class="ui-row-select group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs"
+                :class="{ 'ui-row-select-on': isActive(option) }"
                 @click="pick(option)"
             >
                 <SandboxLogo :size="28" :image="option.image ?? null" :name="option.name" />
@@ -554,9 +555,7 @@ const confirmRemove = async (): Promise<void> => {
             <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
             <template v-if="unfinished.length > 0">
                 <div class="my-1 border-t border-line-subtle"></div>
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
-                    {{ t(`shared.unfinishedSetup`) }}
-                </div>
+                <SectionHeader :label="t(`shared.unfinishedSetup`)" density="dense" class="px-2 py-1.5" />
                 <RouterLink
                     v-for="option in unfinished"
                     :key="option.id"
@@ -587,7 +586,7 @@ const confirmRemove = async (): Promise<void> => {
                  needs never moves where the others are. -->
             <!-- The badge's detail: one row per pending item, routing to the hub tab that resolves it. -->
             <template v-if="attention.length > 0">
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.needs`) }}</div>
+                <SectionHeader :label="t(`shared.needs`)" density="dense" class="px-2 py-1.5" />
                 <RouterLink
                     v-for="item in attention"
                     :key="item.message"
@@ -606,9 +605,7 @@ const confirmRemove = async (): Promise<void> => {
 
             <!-- Things simply true (a contended port, a newer image): found on arrival, not advertised by the badge. -->
             <template v-if="attentionNotes.length > 0">
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
-                    {{ t(`shared.worthKnowing`) }}
-                </div>
+                <SectionHeader :label="t(`shared.worthKnowing`)" density="dense" class="px-2 py-1.5" />
                 <RouterLink
                     v-for="item in attentionNotes"
                     :key="item.message"

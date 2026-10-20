@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { Await } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { activityPart } from "../activity/activityParts";
 import SectionLink from "../SectionLink.vue";
 import AgentProjectInstalls from "./AgentProjectInstalls.vue";
@@ -15,16 +17,21 @@ import GuardrailAdmission from "./GuardrailAdmission.vue";
 // until 2026-10-16: two questions with different stakes under one word.
 
 const t = useT();
+const { loaded: settingsRead } = useSandboxSettings();
 </script>
 
 <template>
-    <div class="@container flex flex-col gap-6">
-        <AgentSafetyJudge />
-        <!-- Beside the judge: the other answer to whether a person is asked before an agent's command runs. -->
-        <AgentProjectInstalls />
-        <AgentSafetyPolicy />
-        <GuardrailActions />
-        <GuardrailAdmission />
-        <SectionLink :text="t(`sandbox.guardrails.record`)" :to="activityPart(`commands`)" :label="t(`sandbox.guardrails.recordLink`)" />
-    </div>
+    <!-- Four of these groups draw the sandbox's settings: never their defaults standing in for a read that has not
+         answered or failed ("On" and "Automatic" were shown as this sandbox's choices under a failing read). -->
+    <Await :of="settingsRead">
+        <div class="@container flex flex-col gap-6">
+            <AgentSafetyJudge />
+            <!-- Beside the judge: the other answer to whether a person is asked before an agent's command runs. -->
+            <AgentProjectInstalls />
+            <AgentSafetyPolicy />
+            <GuardrailActions />
+            <GuardrailAdmission />
+            <SectionLink :text="t(`sandbox.guardrails.record`)" :to="activityPart(`commands`)" :label="t(`sandbox.guardrails.recordLink`)" />
+        </div>
+    </Await>
 </template>

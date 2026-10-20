@@ -31,7 +31,16 @@ import { stateRelPath } from "../state-paths.js";
 // rest, present on a countdown hold only and never on the wire.
 const HoldBodySchema = AutomationApprovalSchema.omit({ id: true }).extend({ mint: z.string().optional() });
 
-export const heldWakesDocument = defineDocument({ root: "history", path: "automation-holds/", directory: true, schema: HoldBodySchema });
+export const heldWakesDocument = defineDocument({
+    root: "history",
+    path: "automation-holds/",
+    // The wakes automations hold for a person, one file each: daemon-minted, so kept where no turn writes. They travel
+    // with the workspace as they always did; a countdown hold arrives waiting for a person, since the key that signed
+    // it stays behind.
+    portability: "carry",
+    directory: true,
+    schema: HoldBodySchema,
+});
 
 declare const releasedBy: unique symbol;
 

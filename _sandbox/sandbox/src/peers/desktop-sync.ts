@@ -51,6 +51,8 @@ const enrollmentsPath = (historyRoot: string): string => join(historyRoot, syncE
 export const syncEnrollmentsDocument = defineDocument({
     root: "history",
     path: "sync-enrollments.json",
+    portability: "identity",
+    note: "Re-pair desktop sync from the Sync tab.",
     schema: SyncEnrollmentSchema,
     granularity: "entries",
 });

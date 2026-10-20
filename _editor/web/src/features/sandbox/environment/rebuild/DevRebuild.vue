@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { devRebuildLogPath } from "@intentic/sandbox-contract/schemas/devices";
-import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, type IconName, Notice, useHoverIntent } from "@intentic/ui";
+import { AnchoredOverlay, Button, Code, commandLang, ConfirmDialog, type IconName, Notice, Section, useHoverIntent } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import ConnectDeviceHint from "../../../../parts/sandbox/ConnectDeviceHint.vue";
 import DevRebuildProgress from "./DevRebuildProgress.vue";
@@ -182,13 +182,12 @@ const checkout = computed(() => {
                         {{ t(`sandbox.devRebuild.checkoutNotPublishedRelease`) }}
                     </p>
 
-                    <div class="flex flex-col gap-1">
-                        <div class="flex items-baseline justify-between gap-2">
-                            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`sandbox.devRebuild.hostCommand`) }}</span>
+                    <Section :label="t(`sandbox.devRebuild.hostCommand`)" density="dense">
+                        <template #actions>
                             <span class="truncate font-mono text-2xs text-subtle">{{ root }}</span>
-                        </div>
+                        </template>
                         <Code :code="command" :lang="commandLang(`unix`)" :wrap="true" />
-                    </div>
+                    </Section>
 
                     <p class="text-2xs leading-relaxed text-subtle">{{ cost }}</p>
                     <p class="text-2xs leading-relaxed text-subtle">{{ insteadOfRestart }}</p>

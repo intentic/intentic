@@ -3,7 +3,6 @@ import { formatWhen } from "@intentic/ui/format";
 import { useAudience } from "../../../../app/useAudience";
 import { attentionReason, drillTarget, landFailure, retryLand, reviewAction, workspaceOverlap } from "../../../../models/agent-status/agentStatus-attention";
 import { cardFailure, standingChip, unfinishedMark } from "../../../../models/agent-status/agentStatus-chips";
-import { failureGist } from "../../../../models/agent-status/agentStatus-failure";
 import { attentionCalls, attentionCards, callsOwner, laneOf, type RimAgent, tileRim } from "../../../../models/agent-status/agentStatus-lanes";
 import { agentStandingMeta, agentStatusMeta, activityLine, currentAction } from "../../../../models/agent-status/agentStatus-meta";
 import { type AgentStanding, awaitingUser, blocked, heardByParent, type ClientAgentStatus, conflictIsYours, goesBySelf, standingFrom, memoryHeld, onlyOwnerCanAnswer, promptHeldJob, turnInFlight, unregistered, watching } from "../../../../models/agent-status/agentStatus-standing";
@@ -1039,15 +1038,24 @@ describe("a failure the daemon classified", () => {
         expect(drillTarget(failed(undefined))).toBe(`review`);
     });
 
-    // One line at rest, the words whole in the hover, which the corner's chip opens too.
-    it("says the first sentence on the card and the whole of it in the hover the chip shares", () => {
+    // One line at rest, the words whole in the hover, which the corner's chip opens too. The line is the chat's for the
+    // same failure (failureView): never the provider's words, which only the hover quotes (2026-10-20: the card still led
+    // with their first sentence after the chat had stopped doing so).
+    it("says the chat's line for the failure on the card and the provider's words whole in the hover the chip shares", () => {
         const refused = failed(`claude-not-entitled`, REFUSAL);
         expect(cardFailure(refused)).toEqual({
             title: `No access`,
-            gist: `Your organization has disabled Claude subscription access for Claude Code`,
+            gist: `The provider refused this account: its plan or organization does not allow it`,
             tone: `warning`,
             tip: { title: `No access`, tone: `warning`, quote: REFUSAL },
         });
+        // The sandbox's own sentence is the line, as it is in the chat.
+        const own = `The protected execution-domain policy could not be read, so nothing ran.`;
+        expect(cardFailure({ ...failed(`agent-domain-refused`, own), failureOwn: true })?.gist).toBe(own.replace(/\.$/u, ``));
+        // An ending recorded before authorship was kept reads as the provider's: its kind's line, the words in the hover.
+        expect(cardFailure(failed(`agent-domain-refused`, own))?.gist).toBe(`The sandbox held this turn back`);
+        // Nothing coded: the chat's unclassified line, never the raw words.
+        expect(cardFailure(failed(undefined, `API Error: 500 {"type":"error"}`))?.gist).toBe(`The agent stopped on an error this app does not recognize`);
         expect(standingChip({ ...refused, unread: false })?.hint).toEqual(cardFailure(refused)?.tip);
         // A crash is a fault, and says so in its glyph's ink.
         expect(cardFailure(failed(undefined, `Claude Code process exited with code 143`))).toMatchObject({ title: `Error`, tone: `danger` });
@@ -1060,23 +1068,6 @@ describe("a failure the daemon classified", () => {
     it("keeps a chip that names something else from opening the failure", () => {
         const asked = { ...failed(`provider-outage`), attention: { ...none, question: true }, unread: false };
         expect(standingChip(asked)?.hint).toBeUndefined();
-    });
-});
-
-// The first sentence of a provider's words, as the card's one line says it.
-describe("failureGist", () => {
-    it("ends at the first sentence, or at the middle dot a refusal joins its advice with", () => {
-        expect(failureGist(`Failed to authenticate. API Error: 403 You've reached your limit.`)).toBe(`Failed to authenticate`);
-        expect(failureGist(`Timed out waiting for response headers`)).toBe(`Timed out waiting for response headers`);
-        expect(failureGist(`Model not found: x/y. Did you mean: a, b?`)).toBe(`Model not found: x/y`);
-        expect(failureGist(`first line\n    at frame (file.js:1)`)).toBe(`first line`);
-    });
-
-    it("does not break inside an abbreviation, a version or a path", () => {
-        expect(failureGist(`Resource has been exhausted (e.g. check quota).`)).toBe(`Resource has been exhausted (e.g. check quota)`);
-        expect(failureGist(`Claude Code 2.1.233 does not support this model; version 2.1.251 or newer is required.`)).toBe(
-            `Claude Code 2.1.233 does not support this model; version 2.1.251 or newer is required`,
-        );
     });
 });
 

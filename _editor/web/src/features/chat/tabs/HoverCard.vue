@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
+import { SectionHeader } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
 import { attachmentQuickLook } from "../drafts/attachmentQuickLooks";
 import { attachmentPreview } from "../drafts/attachmentPreviews";
@@ -187,7 +188,7 @@ defineExpose({ show, hide });
                 ...(placement.bottom !== undefined ? { bottom: `${placement.bottom}px` } : {}),
             }"
         >
-            <p v-if="placement.content.label" class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ placement.content.label }}</p>
+            <SectionHeader v-if="placement.content.label" :label="placement.content.label" density="dense" class="shrink-0" />
             <p v-if="placement.content.title" class="shrink-0 break-words whitespace-pre-wrap text-xs font-medium leading-relaxed text-content">
                 {{ placement.content.title }}
             </p>
@@ -200,7 +201,7 @@ defineExpose({ show, hide });
                 :class="index > 0 || placement.content.title || placement.content.label ? 'mt-3' : ''"
             >
                 <!-- Which end of the conversation this is, when there is more than one end on the card. -->
-                <p v-if="message.label" class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ message.label }}</p>
+                <SectionHeader v-if="message.label" :label="message.label" density="dense" class="shrink-0" />
                 <p v-if="message.text" class="line-clamp-[8] shrink-0 break-words whitespace-pre-wrap text-xs leading-relaxed text-muted">
                     {{ message.text }}
                 </p>

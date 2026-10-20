@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { SectionHeader } from "@intentic/ui";
 import { computed, toRef } from "vue";
 import { type RunSettingsPatch, usePickerRunSettings } from "../../../../models/providers/pickerRunSettings";
 import EffortMeter from "../../composer/EffortMeter.vue";
@@ -56,10 +57,11 @@ const chipsShown = computed(() => props.settings && (thinkingOffered.value || fa
 
 <template>
     <!-- REASONING EFFORT, the app's own meter, the same control the composer draws beside its model pill. -->
-    <div v-if="effortShown" class="flex items-center justify-between gap-2">
-        <span class="text-2xs font-medium uppercase tracking-wide text-muted">{{ t(`chat.words.reasoningEffort`) }}</span>
-        <EffortMeter :efforts="efforts" :effort="level" class="shrink-0" @pick="emit(`update`, { effort: $event })" />
-    </div>
+    <SectionHeader v-if="effortShown" :label="t(`chat.words.reasoningEffort`)" density="dense">
+        <template #actions>
+            <EffortMeter :efforts="efforts" :effort="level" class="shrink-0" @pick="emit(`update`, { effort: $event })" />
+        </template>
+    </SectionHeader>
 
     <!-- THE TOOLBAR: the same shape for every provider, so the eye finds each control where it was on the last one. -->
     <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">

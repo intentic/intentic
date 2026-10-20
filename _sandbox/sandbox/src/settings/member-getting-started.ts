@@ -10,6 +10,9 @@ import { openDocument } from "../store/open-document.js";
 export const memberGettingStartedDocument = defineDocument({
     root: "history",
     path: "member-getting-started.json",
+    // Each person's own answers to the editor's getting-started checklist (put away, a step passed over), keyed by
+    // sign-in address. Carried: a checklist someone put away should not come back after a move.
+    portability: "carry",
     schema: z.object({ members: z.record(z.string(), GettingStartedSchema) }),
 });
 

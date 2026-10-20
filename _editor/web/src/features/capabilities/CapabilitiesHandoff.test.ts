@@ -24,7 +24,7 @@ jest.mock(`../../models/extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
         extensions: ref([]),
-        settled: ref(true),
+        loaded: ref({ state: `ready`, data: {}, refreshing: false, refreshError: undefined }),
         enabled: ref([
             {
                 id: `intentic.devices`,

@@ -1,7 +1,7 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
 import { DeviceBridgeHoldSchema, DeviceConflictSchema, DeviceLowDiskSchema } from "./device-folder.js";
-import { parseHostConnection, type DeviceFacts, DeviceFactsSchema, MachineIdSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
+import { parseHostConnection, type DeviceFacts, DeviceFactsSchema, MachineIdentitySchema, MachineIdSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
 import { RollbackTargetSchema, UpdateOutcomeSchema } from "./updates.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by the agent's own `deviceReport`.
@@ -323,8 +323,7 @@ export * from "./device-folder.js";
 // One paired sandbox as the local agent holds it; `localDir` is which folder on that device holds this sandbox's /work.
 export const DevicePairingSchema = z.object({
     sandboxId: z.string(),
-    // The account's name for the sandbox, stamped by the editor that reads the report (withSandboxNames), as a
-    // container's `name` is. A machine never sends one: all it knows is the folder, named once at setup.
+    // The account's name for the sandbox, stamped by the editor that reads the report (withSandboxNames); never a machine's.
     name: z.string().optional(),
     mode: z.enum(["sync", "mirror"]),
     // Set only for mode "sync", and only for the sandbox being reported to.
@@ -332,12 +331,13 @@ export const DevicePairingSchema = z.object({
     // Which sandbox folder `localDir` holds when it is not /work itself: a project pairing's `/work/<name>`, the
     // owner's own folder, which carries no state backup and no git bridge. Absent means /work.
     remoteDir: z.string().optional(),
-    // The folderless pairing that holds this machine's sync token for its own local sandbox, which project folders
-    // attach to (`intentic-machine sync attach`). Absent on every other pairing.
+    // The folderless pairing holding the sync token of this machine's own sandbox, which folders attach to (`sync attach`).
     projectsHost: z.boolean().optional(),
     // Whether landed work in this project folder is delivered to `localDir` by itself (`deliverProject`). Only a
     // folder attached to the machine's own sandbox says "auto"; absent means Bring back by hand, as before.
     deliver: z.enum(["auto", "off"]).optional(),
+    // (2026-10-20) The slug this machine's ic knows the sandbox by: how the desktop app starts or forgets a folder's sandbox.
+    slug: z.string().optional(),
     // Machine-owned switch (agent's own `sync mirror off`); absent reads as "on", not merely unknown.
     mirroring: z.enum(["on", "off"]).optional(),
     // Mutagen's own status word, kept verbatim rather than reduced to a traffic light.
@@ -490,12 +490,11 @@ export const SshHostKeySchema = z
 
 // POST /system/authorized-key: a machine's agent enrolling its SSH key for desktop sync, redeeming a pairing token.
 // Every field past `key` is optional: an older agent sends none of them and is still enrolled.
-export const SyncEnrollmentRequestSchema = z.object({
+// The key, and the computer and environment enrolling it (the same identity a device redeem sends), so the
+// enrollment joins that machine's card.
+export const SyncEnrollmentRequestSchema = MachineIdentitySchema.extend({
     // One authorized_keys line; its comment is the name the enrollment goes by (`DeviceSync.machine`).
     key: z.string(),
-    // The computer and the environment on it that are enrolling, so the enrollment joins that machine's card.
-    machineId: MachineIdSchema.optional(),
-    environment: z.string().min(1).optional(),
 });
 export type SyncEnrollmentRequest = z.infer<typeof SyncEnrollmentRequestSchema>;
 

@@ -136,7 +136,7 @@ const save = async (): Promise<void> => {
         <div class="flex flex-col gap-1.5">
             <label :for="`${id}-place`" class="text-xs font-medium text-muted">{{ item === undefined ? t(`app.edit.site`) : t(`app.edit.worksOn`) }}</label>
             <div v-if="origins.length > 0" class="flex flex-wrap gap-1.5">
-                <span v-for="origin in origins" :key="originKey(origin)" :class="ui.chip(`gap-1 pr-1`)">
+                <span v-for="origin in origins" :key="originKey(origin)" :class="ui.chip({ trail: true })">
                     {{ originLabel(origin) }}
                     <button
                         type="button"

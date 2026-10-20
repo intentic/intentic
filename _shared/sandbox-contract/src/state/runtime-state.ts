@@ -73,6 +73,11 @@ const RUNTIME_DOMAINS = [
     // A standing yes written or taken back outside a need's answer: a permission card's pass, a release, a purge. They
     // live under the auth root, which no file push watches, and the Allowed list must move with the card that wrote one.
     { domain: "grants", invalidates: [["grants"]] },
+
+    // Somebody's composer draft was written, cleared or sent. The frame names no conversation and carries no words, since
+    // every member hears it: each window reads back its own caller's drafts (agents.drafts). The key is the editor's draft
+    // store's, which reads them back itself rather than through a cached query (models/conversations/drafts/).
+    { domain: "drafts", invalidates: [["drafts"]] },
 ] as const satisfies readonly RuntimeDomainBinding[];
 
 export const RUNTIME_DOMAIN_BINDINGS: readonly RuntimeDomainBinding[] = RUNTIME_DOMAINS;

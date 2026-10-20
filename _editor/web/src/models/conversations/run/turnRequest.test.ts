@@ -150,6 +150,13 @@ describe(`turnRequestBody`, () => {
         });
     });
 
+    // The daemon clears the draft the words were sent from as it takes them, so the send and the clear are one step.
+    it(`names the draft revision the words were sent from, and only to this sandbox, which alone holds it`, () => {
+        expect(wire(turnRequestBody({ ...base, draft: 7 }))).toMatchObject({ draft: 7 });
+        expect(wire(turnRequestBody(base))).not.toHaveProperty(`draft`);
+        expect(wire(turnRequestBody({ ...base, draft: 7, box: `sb-other` }))).not.toHaveProperty(`draft`);
+    });
+
     it(`sends no account of this box's when the turn runs in another sandbox`, () => {
         const settingsWithAccount = { ...settings, account: `acct-here` };
         expect(wire(turnRequestBody({ ...base, settings: settingsWithAccount }))).toMatchObject({ account: `acct-here` });

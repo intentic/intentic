@@ -274,6 +274,7 @@ const onClockKey = (event: KeyboardEvent): void => {
                 />
             </span>
             <span class="flex min-w-0 flex-1 gap-1">
+                <!-- allow(recipes): equal cells sharing one row: each clock chip takes its share of the width, so no inline padding of its own -->
                 <button
                     v-for="minutes in CLOCK_CHIPS"
                     :key="minutes"

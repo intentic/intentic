@@ -8,7 +8,7 @@ import { memoryNext } from "../../../../models/conversations/endings/turnBreak";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatHeldStatus from "../held/ChatHeldStatus.vue";
 import { memoryReading, useHeldQueue, useKeptTurn } from "../held/heldQueue";
-import { memoryTip, sendAnywayTip } from "../../../../models/conversations/transcript/memoryTip";
+import { memoryTip, sendAnywayTip } from "../../../../models/agent-status/memoryTip";
 import MemoryRaise from "./MemoryRaise.vue";
 import { useReopenPress } from "../held/heldPresses";
 

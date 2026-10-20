@@ -18,6 +18,7 @@ import {
     formatTimestamp,
     Icon,
     Modal,
+    Section,
     StatusBadge,
     timeAgo,
     toneTint,
@@ -342,10 +343,10 @@ const openStartOver = (): void => {
     <!-- @container: the chip's content is measured against this row, not the window, which the chat panel can halve. -->
     <!-- No status stripe down the left edge: the lead glyph and the badge beside the headline already carry the status. -->
     <DisclosureRow class="@container" hit="pair" body="drawer" wide-control v-model:open="expanded">
-        <template #lead="{ iconClass }">
+        <template #lead="{ iconClass, mark }">
             <!-- `data-lane-node`: inside a failing-main block, the lane drawn from its header ends on this glyph. -->
             <Icon data-lane-node :name="tone.icon" :spin="tone.spin" class="shrink-0" :class="[iconClass, tone.text]" />
-            <Avatar :size="24" :name="run.authorName" :src="run.authorAvatarUrl" />
+            <Avatar :size="mark" :name="run.authorName" :src="run.authorAvatarUrl" />
         </template>
 
         <template #title>
@@ -447,7 +448,7 @@ const openStartOver = (): void => {
                             <a
                                 v-if="fixState !== undefined && !fixState.retry"
                                 v-bind="fixState.link"
-                                class="ui-chip shrink-0 rounded px-2 py-1 text-xs font-medium"
+                                class="ui-chip shrink-0 font-medium"
                                 :class="[fixState.ink, fixState.chip]"
                                 v-tooltip.top="fixDetail"
                                 :aria-label="fixAria"
@@ -538,8 +539,7 @@ const openStartOver = (): void => {
                     @expand="fullscreen = true"
                 />
 
-                <div v-else-if="run.failedJobs?.length">
-                    <div class="mb-2 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`pipelineRunRow.failedJobs`) }}</div>
+                <Section v-else-if="run.failedJobs?.length" :label="t(`pipelineRunRow.failedJobs`)" density="dense">
                     <div class="flex flex-wrap gap-1.5">
                         <span
                             v-for="job in run.failedJobs"
@@ -552,7 +552,7 @@ const openStartOver = (): void => {
                             {{ job }}
                         </span>
                     </div>
-                </div>
+                </Section>
 
                 <p v-else class="py-2 text-xs text-muted">{{ t(`pipelineRunRow.noJobDetailsAvailable`) }}</p>
             </Await>

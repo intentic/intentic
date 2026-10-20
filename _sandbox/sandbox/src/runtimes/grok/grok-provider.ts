@@ -8,6 +8,7 @@ import {
     healthReady,
     healthUnavailable,
     healthUnknown,
+    privacyTurnRefusal,
     type TurnArmPlan,
     type TurnContext,
 } from "../../agent/providers/adapter.js";
@@ -68,7 +69,7 @@ export const planGrokTurn = async (
     }
     const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "grok", input.conversationId);
     if (refused !== undefined) {
-        return { ok: false, message: refused };
+        return privacyTurnRefusal(refused);
     }
     // OpenCode's own default is a retired id xAI rejects, so this resolves from the daemon's catalog instead (never
     // empty): keeps the pinned model if valid, else the catalog default. A stale id self-heals mid-turn via xAI's "Did

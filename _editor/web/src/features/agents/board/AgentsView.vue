@@ -385,29 +385,31 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                             >
                                 <Icon name="arrow-left" class="text-2xs" />
                             </button>
-                            <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`shared.archived`) }}</span>
-                            <Icon v-if="archiveLoading" name="spinner" spin class="text-2xs text-muted" />
+                        </template>
+                        <template v-if="lane.key === 'finished' && view.archive" #label>{{ t(`shared.archived`) }}</template>
+                        <template v-if="lane.key === 'finished' && view.archive && archiveLoading" #info>
+                            <Icon name="spinner" spin class="text-2xs text-muted" />
                         </template>
                         <template #actions>
                             <template v-if="lane.key === 'finished' && !view.archive">
                                 <!-- The expanded lane's fold, pinned with the header: the tail row's twin sits a long scroll down. Sized as the
-                                     archive counter beside it (20px), so the header's chips read as one set. -->
+                                     archive counter beside it (sm, 20px), so the header's chips read as one set. -->
                                 <button
                                     v-if="view.all && !filtering && hiddenFinished > 0"
                                     type="button"
-                                    :class="ui.chip({}, `shrink-0 gap-1 px-2 py-px`)"
+                                    :class="ui.chip({ size: `sm` }, `shrink-0`)"
                                     :aria-label="t(`ui.action.showFewer`)"
                                     @click="toggleFinished"
                                 >
                                     <Icon name="chevron-up" class="text-2xs" />{{ t(`ui.action.showFewer`) }}
                                 </button>
-                                <!-- Archive feedback highlights the destination counter. 20px, not the chip's 26: in the header's 32px row that leaves 6px above the first card, where 26 left 3. -->
+                                <!-- Archive feedback highlights the destination counter. sm (20px), not the md chip's 26: in the header's 32px row that leaves 6px above the first card, where 26 left 3. -->
                                 <button
                                     v-if="archiveSize > 0"
                                     type="button"
                                     :aria-label="t(`agents.agentsView.openArchive`, { archiveSize })"
                                     v-tooltip.bottom="{ title: t(`shared.archived`), rows: [{ label: words.agents, value: archiveSize }], note: t(`agents.words.allKept`) }"
-                                    :class="ui.chip({ on: pulsing }, `shrink-0 gap-1 px-2 py-px`, pulsing && `ring-1 ring-primary-500/50`)"
+                                    :class="ui.chip({ on: pulsing, size: `sm` }, `shrink-0`, pulsing && `ring-1 ring-primary-500/50`)"
                                     @click="toggleArchive"
                                 >
                                     <Icon name="history" class="text-2xs" />{{ archiveSize }}

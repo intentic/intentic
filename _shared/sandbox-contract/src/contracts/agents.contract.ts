@@ -2,35 +2,14 @@ import { z } from "zod";
 import { procedure } from "../protocol/route-meta.js";
 import { AgentToolChildrenSchema, SessionTranscriptSchema } from "../events/transcript.js";
 import { AgentTranscriptSchema } from "../events/agent-transcript.js";
-import {
-    AgentAssignSchema,
-    AgentAutoLandSchema,
-    AgentBreakPolicySchema,
-    AgentFileDiffQuerySchema,
-    AgentIdSchema,
-    AgentToolChildrenQuerySchema,
-    AgentTranscriptQuerySchema,
-    AgentIdsSchema,
-    AgentLandSchema,
-    AgentReactSchema,
-    AgentRenameSchema,
-    AgentStopJobSchema,
-    AgentStopWatchingSchema,
-    AgentSubagentQuerySchema,
-    AgentsArchivedSchema,
-    AgentSearchQuerySchema,
-    AgentSearchResultSchema,
-    AgentsMovedSchema,
-    AgentsRemovedSchema,
-    AgentSummarySchema,
-    AgentUnsentSchema,
-    LandResultSchema,
-} from "../schemas/agents.js";
+import { AgentAssignSchema, AgentAutoLandSchema, AgentBreakPolicySchema, AgentFileDiffQuerySchema, AgentIdSchema, AgentToolChildrenQuerySchema, AgentTranscriptQuerySchema, AgentIdsSchema, AgentLandSchema, AgentReactSchema, AgentRenameSchema, AgentStopJobSchema, AgentStopWatchingSchema, AgentSubagentQuerySchema, AgentsArchivedSchema, AgentsMovedSchema, AgentsRemovedSchema, AgentSummarySchema, AgentUnsentSchema, LandResultSchema } from "../schemas/agents.js";
+import { AgentSearchQuerySchema, AgentSearchResultSchema } from "../schemas/agent-search.js";
 import { AgentsAttentionSchema, AgentsListSchema } from "../schemas/agents-list.js";
 import { AgentChangesSchema, AgentConflictsSchema, AgentIgnoredSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 import { AgentPlacedSchema, AgentPlaceSchema } from "../schemas/agent-place.js";
+import { ComposerDraftsSchema, DraftClearSchema, DraftWriteSchema, DraftWrittenSchema } from "../schemas/composer-drafts.js";
 import { AgentKeepWarmSchema } from "../schemas/keep-warm.js";
 import { ConversationPromptSchema } from "../schemas/system-prompt.js";
 
@@ -212,11 +191,44 @@ export const agentsContract = {
             path: "/agents/{id}/unsent",
             summary: "Report that a composer holds an unsent message for a conversation",
             description:
-                "The words stay in the browser; the sandbox only records since when some composer has held them, so a conversation waiting on a message nobody has sent yet is never archived for being idle. Null clears it once the message is sent or deleted. Does not count as activity.",
+                "For a client that keeps its drafts to itself rather than writing them with `writeDraft`: the sandbox only records since when some composer has held them, so a conversation waiting on a message nobody has sent yet is never archived for being idle. Null clears it once the message is sent or deleted. Does not count as activity. A draft written with `writeDraft` already counts.",
         })
         .meta({ floor: "collaborator" })
         .input(AgentUnsentSchema)
         .output(AgentSummarySchema),
+    // The person's own unsent words, held here so every window and device opens the same composer (composer-drafts.ts).
+    // Writes publish the `drafts` runtime domain, which carries no words: each window reads back only its caller's own.
+    drafts: procedure
+        .route({
+            method: "GET",
+            path: "/agents/drafts",
+            summary: "Your unsent composer drafts",
+            description:
+                "Every message you have started writing in this sandbox and not sent, one per conversation, newest first. Only yours: another member's drafts are never listed. A conversation a draft names may not exist yet.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .output(ComposerDraftsSchema),
+    writeDraft: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/draft",
+            summary: "Write your unsent message for a conversation",
+            description:
+                "Replaces your draft for the conversation with these words and files; empty words and no files clear it. Name the revision you edited from as `base`, and a draft written since elsewhere comes back as a conflict instead of being overwritten. Sending the message clears it (`agent.run` `draft`). Does not count as activity, and a conversation holding a draft is never archived for being idle.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .input(DraftWriteSchema)
+        .output(DraftWrittenSchema),
+    clearDraft: procedure
+        .route({
+            method: "POST",
+            path: "/agents/{id}/draft/clear",
+            summary: "Clear your unsent message for a conversation",
+            description: "Deletes your draft for the conversation, only while it is still the revision named, when one is. Clearing a draft that is already gone does nothing.",
+        })
+        .meta({ floor: "collaborator", guest: true })
+        .input(DraftClearSchema)
+        .output(DraftWrittenSchema),
     // A finer-grained ask (watch this, not that) goes through the chat, not a per-watch id here.
     stopWatching: procedure
         .route({

@@ -1448,6 +1448,7 @@
             "workingRollBack": "Cofanie tego sandboxa",
             "workingUpdate": "Aktualizacja tego sandboxa",
             "comingBack": "{what}. Ta strona sama połączy się ponownie, gdy sandbox wróci.",
+            "cameBackUnmoved": "Sandbox wrócił na kompilację, na której działał wcześniej, więc zamiana się nie powiodła. Jego karta aktualizacji podaje powód, jeśli maszyna go przekazała.",
             "lostBeforeRestart": "Kontakt z tamtym urządzeniem urwał się, zanim ten sandbox się zrestartował. Może się to jeszcze zakończyć: odśwież stronę za minutę, żeby zobaczyć, jak daleko doszło.",
             "returnTimedOut": "Przestaliśmy czekać na powrót sandboxa. Restart może jeszcze trwać: odśwież stronę za minutę, aby zobaczyć, jak poszło.",
             "interruptsAgents": "To zatrzyma agenta, który teraz pracuje: {names}. Jego praca zostanie zachowana, a po powrocie sandboxa poczeka, aż każesz mu kontynuować. | To zatrzyma {count} agentów, którzy teraz pracują: {names}. Ich praca zostanie zachowana, a po powrocie sandboxa każdy poczeka, aż każesz mu kontynuować. | To zatrzyma {count} agentów, którzy teraz pracują: {names}. Ich praca zostanie zachowana, a po powrocie sandboxa każdy poczeka, aż każesz mu kontynuować.",
@@ -4806,6 +4807,7 @@
         },
         "extensionHost": {
             "nothingHereViewsContent": "Nic tu nie ma: treści tego widoku nie ma już w przestrzeni roboczej.",
+            "couldntFindViews": "Nie udało się ustalić, jakie widoki ma ten sandbox.",
             "switchedOff": "{manifest} jest wyłączone.",
             "turnBackOnIn": "Włącz je z powrotem w Sandbox → Rozszerzenia"
         },
@@ -10497,7 +10499,8 @@
         },
         "operations": {
             "finished": "{what} — gotowe",
-            "show": "Pokaż"
+            "show": "Pokaż",
+            "gaveUp": "Przestano czekać po {seconds} s."
         },
         "statusBar": {
             "portsPublic": "Port {port} publiczny | {count} porty publiczne | {count} portów publicznych",
@@ -11643,6 +11646,7 @@
             "abortFailed": "Nie udało się przerwać",
             "accessToSandboxRead": "Twój dostęp do tego sandboxa jest tylko do odczytu: to wymaga dostępu opiekuna.",
             "commitFailed": "Commit się nie udał",
+            "committing": "Zatwierdzanie",
             "discardFailed": "Nie udało się odrzucić zmian",
             "fetchFailed": "Fetch się nie udał",
             "gitGaveNoReason": "git nie podał przyczyny.",
@@ -12476,6 +12480,10 @@
                 "copyingDetail": "Agenci mogą zacząć, gdy pierwsza kopia będzie gotowa. Zmiany wprowadzane tutaj są przenoszone na bieżąco.",
                 "paused": "Kopiowanie {name} jest wstrzymane",
                 "pausedDetail": "Otwórz stronę Urządzenia w sandboxie, aby wznowić synchronizację plików.",
+                "heldLowDisk": "Na dysku z tym folderem prawie brakuje miejsca. Kopiowanie wznowi się samo, gdy miejsce się zwolni.",
+                "heldSwap": "Sandbox tego komputera jest aktualizowany. Kopiowanie wznowi się samo, gdy wróci.",
+                "heldUnreachable": "Sandbox tego komputera nie odpowiada od godziny. Kopiowanie wznowi się samo, gdy odpowie.",
+                "heldAway": "Sandbox tego komputera nie działa teraz na tym komputerze. Kopiowanie wznowi się, gdy wróci.",
                 "preparing": "Przygotowywanie sandboxa na ten folder…",
                 "failed": "Nie udało się dodać {name}",
                 "ready": "{name} jest w sandboxie tego komputera",

@@ -247,7 +247,7 @@ const panes = computed(() =>
             >
                 <!-- Side label, picture dimensions, and file size; dimensions matter most, since that's what tells two same-sized screenshots apart. -->
                 <div class="flex h-7 shrink-0 items-center gap-1.5 border-b border-line/60 px-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide" :class="pane.key === 'before' ? 'text-danger' : 'text-success'">
+                    <span class="text-2xs font-medium" :class="pane.key === 'before' ? 'text-danger' : 'text-success'">
                         {{ pane.label }}
                     </span>
                     <span v-if="pane.side.natural" class="text-2xs tabular-nums text-subtle">

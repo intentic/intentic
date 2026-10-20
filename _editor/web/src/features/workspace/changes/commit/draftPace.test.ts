@@ -1,5 +1,6 @@
 import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
-import { draftPace, mergeSamples, paceSample, type PaceSample } from "./draftPace";
+import { overdue, progressShare } from "../../../../components/progress/progress";
+import { draftProgress, mergeSamples, paceSample, type PaceSample } from "./draftPace";
 
 // The commit field's ring fills against how long drafts usually take. What is pinned: which drafts teach it, which of
 // them a running draft is measured against, and that a wait past the usual time stops promising instead of sitting
@@ -36,14 +37,17 @@ test(`a running draft fills against the median of recent drafts, preferring the 
         steps: [{ provider: `claude`, model: `sonnet`, status: `asking`, at: 10_400 }],
     };
     // claude/sonnet's own drafts: 4s, 6s, 8s → 6s.
-    expect(draftPace(running, 13_000, samples)).toEqual({ fraction: 0.5, overdue: false, typicalMs: 6000 });
+    expect(draftProgress(running, 13_000, samples)).toEqual({ elapsedMs: 3000, expectedMs: 6000, giveUpMs: undefined, measured: undefined });
     // Still reading the diff, no model yet: every recent draft counts (4, 30, 6, 8 → 7s).
-    expect(draftPace({ startedAt: 10_000, steps: [] }, 13_500, samples)).toEqual({ fraction: 0.5, overdue: false, typicalMs: 7000 });
+    expect(draftProgress({ startedAt: 10_000, steps: [] }, 13_500, samples)?.expectedMs).toBe(7000);
 });
 
-test(`past the usual time the ring stops promising`, () => {
-    const pace = draftPace({ startedAt: 0, steps: [] }, 9000, [sample(1, 6000)]);
-    expect(pace).toEqual({ fraction: 1, overdue: true, typicalMs: 6000 });
+test(`the ring is the shared estimate: short of full at the usual time, and past it no longer a promise`, () => {
+    const atUsual = draftProgress({ startedAt: 0, steps: [] }, 6000, [sample(1, 6000)]);
+    expect(atUsual === undefined ? undefined : overdue(atUsual)).toBe(false);
+    expect(atUsual && progressShare(atUsual)).toBeLessThan(0.95);
+    const late = draftProgress({ startedAt: 0, steps: [] }, 9000, [sample(1, 6000)]);
+    expect(late === undefined ? undefined : overdue(late)).toBe(true);
 });
 
 test(`time spent on a model that refused is added, so the fallback starts its own stretch`, () => {
@@ -54,12 +58,12 @@ test(`time spent on a model that refused is added, so the fallback starts its ow
             { provider: `claude`, model: `sonnet`, status: `asking`, at: 6000 },
         ],
     };
-    // Expected 4s usual + 5s detour = 9s; 4.5s in is half.
-    expect(draftPace(draft, 4500, [sample(1, 4000)])?.fraction).toBe(0.5);
+    // Expected 4s usual + 5s detour = 9s.
+    expect(draftProgress(draft, 4500, [sample(1, 4000)])?.expectedMs).toBe(9000);
 });
 
 test(`nothing learned yet, or nothing running, leaves the mark to spin`, () => {
-    expect(draftPace({ startedAt: 0, steps: [] }, 1000, [])).toBeUndefined();
-    expect(draftPace(written(0, 1000), 2000, [sample(1, 4000)])).toBeUndefined();
-    expect(draftPace(undefined, 2000, [sample(1, 4000)])).toBeUndefined();
+    expect(draftProgress({ startedAt: 0, steps: [] }, 1000, [])).toBeUndefined();
+    expect(draftProgress(written(0, 1000), 2000, [sample(1, 4000)])).toBeUndefined();
+    expect(draftProgress(undefined, 2000, [sample(1, 4000)])).toBeUndefined();
 });

@@ -15,7 +15,14 @@ const HOUR_MS = 3_600_000;
 const StartsSchema = z.object({ starts: z.record(z.string(), z.array(z.number())) });
 type Starts = z.infer<typeof StartsSchema>;
 
-export const turnStartsDocument = defineDocument({ root: "history", path: "turn-starts.json", schema: StartsSchema });
+export const turnStartsDocument = defineDocument({
+    root: "history",
+    path: "turn-starts.json",
+    // The last hour's turns `agents message` and each link started, so a restart does
+    // not reopen their hourly ceilings; a moved sandbox starts its hour afresh.
+    portability: "derived",
+    schema: StartsSchema,
+});
 
 export interface StartWindow {
     // Books one start against `key` when fewer than `max` fell inside the window; false, and nothing booked, when it is

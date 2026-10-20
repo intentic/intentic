@@ -20,7 +20,15 @@ const LedgerSchema = z.object({
     approved: z.record(z.string(), z.object({ digest: z.string(), approvedAt: z.number(), approver: z.string().optional() })),
 });
 
-export const approvalDecisionsDocument = defineDocument({ root: "history", path: "approval-decisions.json", schema: LedgerSchema });
+export const approvalDecisionsDocument = defineDocument({
+    root: "history",
+    path: "approval-decisions.json",
+    // The owner's yes to each item in the approvals queue, pinned to what it will do: the queue travels with /work, and
+    // an item that arrives approved without its yes is not carried out until the target's owner gives it again.
+    portability: "identity",
+    note: "Approve again from Approvals anything that was approved and had not run yet.",
+    schema: LedgerSchema,
+});
 
 export interface ApprovalRoots {
     readonly historyRoot: string;

@@ -80,6 +80,16 @@ export * from "./conversation-links.js";
 // batch rather than build a turn past this (turn-admission.ts, together): a turn the daemon makes must parse back.
 export const ATTACHMENT_LIMIT = 20;
 
+// Where a fork is cut from, as the client that cut it names it (its first turn, or a draft no turn has started yet).
+export const ForkOfSchema = z.object({
+    conversationId: ConversationIdSchema.describe("The conversation this one was cut from."),
+    keep: z.number().int().nonnegative().describe("How many of that conversation's messages to copy in before this turn runs."),
+    files: z
+        .enum(["then", "now"])
+        .describe(
+            'Which files the fork opens on: "now" is the workspace as it stands, "then" is the files as they were at the cut, which needs a private copy.',
+        ),
+});
 const AgentTurnFieldsSchema = z.object({
     prompt: z.string().describe("What to say to the agent. May be empty if you are only attaching files."),
     errand: TurnErrandSchema.optional().describe(
@@ -189,18 +199,7 @@ const AgentTurnFieldsSchema = z.object({
     // the new session from its own conversationId-keyed record.
     // Where a fork was cut from, on its first turn only; requires conversationId, and files:"then" implies
     // isolated.
-    forkOf: z
-        .object({
-            conversationId: ConversationIdSchema.describe("The conversation this one was cut from."),
-            keep: z.number().int().nonnegative().describe("How many of that conversation's messages to copy in before this turn runs."),
-            files: z
-                .enum(["then", "now"])
-                .describe(
-                    'Which files the fork opens on: "now" is the workspace as it stands, "then" is the files as they were at the cut, which needs a private copy.',
-                ),
-        })
-        .optional()
-        .describe("Where this conversation was cut from, on its first turn only. Only the client knows this, so only the client can say it."),
+    forkOf: ForkOfSchema.optional().describe("Where this conversation was cut from, on its first turn only. Only the client knows this, so only the client can say it."),
     // A fresh session's origin, on its first turn only; requires an isolated conversationId the registry has never seen.
     freshOf: FreshOfSchema.optional().describe(FRESH_OF_DESCRIPTION),
     // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
@@ -323,6 +322,16 @@ export type AgentTurn = z.infer<typeof AgentTurnSchema>;
 // What `agent.run` takes: a turn, plus the one field only a request carries and no stored turn keeps. A daemon from before
 // `continues` reads past it and takes `prompt` as the words, which is why a client still sends some.
 export const AgentRunSchema = AgentTurnSchema.safeExtend({
+    // Request-only like `continues`: the draft goes in the same step that takes the message, so it is cleared exactly
+    // once, by the send itself, and a window that closes before its own clear arrives leaves no ghost of sent words.
+    draft: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+            "The revision of your composer draft for this conversation these words were sent from (`agents.drafts`). The sandbox clears that draft as it takes the message, unless it has been written again since. Leave it out to leave your draft as it is.",
+        ),
     continues: z
         .literal(true)
         .optional()

@@ -65,7 +65,7 @@ const autoRunLabel = computed(() => {
                 :class="dense ? 'truncate text-xs' : 'line-clamp-2 break-words text-sm leading-snug'"
                 >{{ entry.title ?? entry.automationId }}</span
             >
-            <span class="ui-status-pill shrink-0 text-2xs font-semibold" :class="toneWash(`warning`)">{{ t(`agents.heldWakeCard.held`) }}</span>
+            <span class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`warning`)">{{ t(`agents.heldWakeCard.held`) }}</span>
         </div>
         <div v-if="snippet !== undefined" class="truncate text-2xs text-muted">{{ snippet }}</div>
         <div class="flex items-center gap-2.5">

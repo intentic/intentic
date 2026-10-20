@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// The daemon's generated indexes (src/bootstrap/state-registry.ts, src/app-raw-routes.ts and
-// src/bootstrap/slices/slice-registry.ts) read back exactly what
+// The daemon's generated indexes (src/bootstrap/state-registry.ts, src/app-raw-routes.ts,
+// src/bootstrap/slices/slice-registry.ts and src/store/evolution/history-documents.generated.ts) read back exactly what
 // _sandbox/sandbox/scripts/write-indexes.mjs writes from the source: a definition added, moved or removed without
-// regenerating is caught here, and `--fix` rewrites them. Plain node over the source text: no install, no network.
+// regenerating is caught here, and so is a document on the history volume that does not declare its `portability`; `--fix`
+// rewrites them. Plain node over the source text: no install, no network.
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { cannotMeasure, finish } from "./lib/report.mjs";

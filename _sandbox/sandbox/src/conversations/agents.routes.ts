@@ -34,6 +34,7 @@ import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scop
 import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import { subagentTranscriptOf } from "../agent/subagents/subagent-transcript.js";
 import { cancelFamily, familyOf } from "../agent/subagents/children.js";
+import { draftRoutes } from "./drafts/drafts.routes.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
@@ -376,15 +377,7 @@ export const createAgentsRoutes = (services: Services) => {
             return summary;
         }),
         // Daemon-side read marker: the unread badge survives a browser cache wipe and clears on other devices too.
-        // Not activity and legal mid-turn: a message typed while the agent works is exactly the one waiting to go.
-        unsent: i.unsent.handler(async ({ input, context }) => {
-            entryFor(input.id, context);
-            const summary = await services.agents.setUnsent(input.id, input.at);
-            if (summary === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
-            }
-            return summary;
-        }),
+        ...draftRoutes(i, services),
         seen: i.seen.handler(async ({ input, context }) => {
             entryFor(input.id, context);
             const summary = await services.agents.markSeen(input.id, Date.now());

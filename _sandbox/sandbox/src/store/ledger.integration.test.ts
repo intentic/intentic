@@ -27,6 +27,7 @@ afterEach(async () => {
 const ledgerDocument = defineDocument({
     root: "history",
     path: "test.jsonl",
+    portability: "carry",
     schema: z.object({ amount: z.number() }),
     granularity: "entries",
     boot: false,
@@ -81,6 +82,7 @@ test("the money ledger and the activity log are stored documents the boot and th
 const wideDocument = defineDocument({
     root: "history",
     path: "wide.jsonl",
+    portability: "carry",
     schema: z.object({ amount: z.number(), pad: z.string() }),
     granularity: "entries",
     boot: false,

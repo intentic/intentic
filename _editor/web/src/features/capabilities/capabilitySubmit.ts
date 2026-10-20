@@ -5,7 +5,7 @@ import type { AddCapabilityInput, CapabilityCatalogEntry } from "@intentic/capab
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { computed, getCurrentScope, onScopeDispose, type Ref } from "vue";
+import { getCurrentScope, onScopeDispose, type Ref } from "vue";
 import { dismissOperation, operationsUnder, useOperation } from "../../workbench/operations/operations";
 import { sshKeyScope } from "../../models/capabilities/sshKey";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
@@ -178,7 +178,7 @@ export const useCapabilitySubmit = (host: SubmitHost) => {
         submit,
         submitting: save.busy,
         failure: save.failure,
-        // When the write still running began, for the form's clock (components/WaitProgress.vue): an install takes minutes.
-        startedAt: computed(() => (save.busy.value ? save.operation.value?.startedAt : undefined)),
+        // How far along the write still running is, for the form's <ProgressMeter>: an install takes minutes.
+        meter: save.meter,
     };
 };

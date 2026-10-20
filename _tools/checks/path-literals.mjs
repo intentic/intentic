@@ -52,7 +52,7 @@ const SPELLED_STATE = /(["'`])\.intentic(\/[^"'`${\n]*)?\1/;
 // and `${STATE_DIR}/…` would throw that guarantee away. The table's declaring files are exempt, since they are the
 // union.
 const TYPED_STATE_PATH = /state(?:Rel)?Path\(/;
-const STATE_TABLE_FILES = new Set([`_shared/sandbox-contract/src/state/workspace-state.ts`, `_shared/sandbox-contract/src/state/history-state.ts`]);
+const STATE_TABLE_FILES = new Set([`_shared/sandbox-contract/src/state/workspace-state.ts`]);
 // Position claims only: `..` counted past the file's own directory, not a single `..` to a sibling.
 const COUNTED_JS = [
     /new URL\(\s*(["'`])\.\.\/\.\./,

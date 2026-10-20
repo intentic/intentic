@@ -139,3 +139,14 @@ test("the worktree entry refuses without a tree and one change list, and answers
         rmSync(root, { recursive: true, force: true });
     }
 });
+
+// The import map's shims are the host's half of every name a bundle links: a name joining the kit (names.mjs) or the API
+// writes them again, where Await, Section and useLoaded once joined with no shim exporting them.
+test("a name joining the kit or the API writes the extension shims again", () => {
+    const shims = DERIVED.find((writer) => writer.id === "extension shims");
+    assert.ok(shims !== undefined);
+    for (const source of ["_shared/extension-ui/names.mjs", "_shared/extension-api/src/loaded.ts", "_shared/extension-manifest/src/index.ts"]) {
+        assert.equal(shims.wants(".", source), true, source);
+    }
+    assert.equal(shims.wants(".", "_shared/extension-ui/README.md"), false);
+});

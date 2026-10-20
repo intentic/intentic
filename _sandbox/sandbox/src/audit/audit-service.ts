@@ -25,7 +25,12 @@ const TICK_MS = 60_000;
 
 // The audit settings the trail last saw in force, kept beside it: settings.json lives in the workspace, where an agent or
 // a hand edit can change it without passing a route, so the tick compares and records what changed that way.
-export const auditSettingsSeenDocument = defineDocument({ root: "history", path: "audit/settings-seen.json", schema: AuditSettingsSchema });
+export const auditSettingsSeenDocument = defineDocument({
+    root: "history",
+    path: "audit/settings-seen.json",
+    portability: "carry",
+    schema: AuditSettingsSchema,
+});
 
 export interface AuditService {
     readonly record: (event: AuditEvent) => void;

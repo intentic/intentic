@@ -56,7 +56,7 @@ import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
 import { childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
 import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
-import { elsewhereFor, namedPaths, spentAsked } from "./child-listing.js";
+import { elsewhereFor, mergeOutcome, spentAsked } from "./child-listing.js";
 import { seatLine } from "./child-admission.js";
 import { resultContract, type ResultSchema, type ResultValue, turnResult } from "./child-result.js";
 import { CHILDREN, childResultOf, closeUnstarted, keepChild, SEATS, settleChild } from "./child-records.js";
@@ -1525,25 +1525,7 @@ export const mergeChild = async (services: Services, parent: ChildParent, childI
         };
     }
     const result = await landByHandLeased(services, entry, "merge", "outstanding");
-    const where = target.kind === "parent" ? "your checkout" : "the main tree";
-    if (result.landed) {
-        const open = (result.resolving ?? []).flatMap(({ repo, paths }) => paths.map((path) => (repo === "root" ? path : `${repo}/${path}`)));
-        return {
-            ok: true,
-            note:
-                open.length === 0
-                    ? `Its changes are in ${where} now.`
-                    : `Its changes are in ${where} now, with conflict markers to resolve in ${namedPaths(open)}.`,
-        };
-    }
-    if (!result.changed) {
-        return { ok: true, note: `Nothing of it is outstanding: ${where} already holds its work.` };
-    }
-    const blocked = (result.conflicts ?? []).flatMap(({ repo, paths }) => paths.map(({ path }) => (repo === "root" ? path : `${repo}/${path}`)));
-    return {
-        ok: false,
-        message: `Nothing was written: ${blocked.length === 0 ? "the merge could not run" : `${namedPaths(blocked)} could not take conflict markers (a binary, or uncommitted edits that keep changing)`}. Its work stays on its branch \`agent/${childId}\`.`,
-    };
+    return mergeOutcome(result, target.kind === "parent" ? "your checkout" : "the main tree", childId);
 };
 
 // What a cancel reaches a child through: its conversation's actor, and the turn port's stop.

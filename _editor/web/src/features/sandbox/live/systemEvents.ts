@@ -12,6 +12,7 @@ import { desyncAgents } from "../../../models/fleet/useAgents";
 import { auditRoster, refreshAgents, setAgents } from "../../../models/fleet/useAgents-registry";
 import { providerRefusals, setAccountUsage } from "../../../models/providers/providerAccounts";
 import { useChat } from "../../../models/conversations/run/useChat";
+import { draftsMoved } from "../../../models/conversations/drafts/composerDrafts";
 import { agentReviewPrefixes, pushedKeys, rpcPrefix } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
@@ -104,6 +105,9 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     setDaemonVersion(event.build, event.surface);
     // Daemon boot state, needed before other daemon queries are allowed to fire this tick.
     setDaemonBoot(event.boot);
+    // Drafts written on another device while this browser was away, and this browser's own written while it could not
+    // reach the sandbox, meet here.
+    draftsMoved();
     // Between events a cached read is taken as true (staleTime, queryPersistence), which makes a (re)connect the one
     // moment that has to distrust every one of them: frames that landed while this browser was away are gone, and a
     // cache hydrated from disk can be hours old. What is on screen refetches now; the rest is marked for its next
@@ -181,6 +185,11 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // No roster in the frame: invalidation only reaches queries someone is observing, so an idle tab pays
             // nothing.
             for (const key of staleRuntimeQueryKeys(event.domains).flatMap(pushedKeys)) {
+                // Drafts are no cached query: the store this browser keeps them in reads its own back (composerDrafts.ts).
+                if (key.join(`/`) === `drafts`) {
+                    draftsMoved();
+                    continue;
+                }
                 void invalidatePushedQueries(queryClient, { queryKey: key });
             }
             return;

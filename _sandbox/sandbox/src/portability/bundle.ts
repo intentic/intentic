@@ -5,7 +5,7 @@ import { pipeline, Readable } from "node:stream";
 import { isInside } from "@intentic/base/contained";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { BundleManifest } from "@intentic/sandbox-contract/state/definition";
-import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
+import { HISTORY_STATE_FILES } from "../store/evolution/history-state.js";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore";
 import { pack, type Pack } from "tar-stream";

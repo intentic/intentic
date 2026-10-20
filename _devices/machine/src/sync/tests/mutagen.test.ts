@@ -625,6 +625,7 @@ const fakeMutagen = (
 ) => {
     const calls: string[] = [];
     const asked = new Map<string, number>();
+    let sighted: readonly string[] | undefined;
     const ok: MutagenCall = { ok: true, stdout: "", stderr: "" };
     const ran = (line: string): void => {
         calls.push(line);
@@ -665,6 +666,11 @@ const fakeMutagen = (
             ran("settle");
             await Promise.resolve();
         },
+        pausedBefore: async (names) => {
+            // The first try's sighting, kept as the disk keeps it (mutagen-move.ts `firstSighting`).
+            sighted ??= names;
+            return await Promise.resolve(sighted);
+        },
         declarePaused: async (names) => {
             ran(`declare paused ${names.join(" ")}`);
             await Promise.resolve();
@@ -692,20 +698,39 @@ describe("moveSessions", () => {
         expect(moved).toMatchObject({ ended: true, remade: [] });
         expect(moved.carried.map((session) => session.name)).toEqual(["intentic-a", "intentic-a-state"]);
         expect(calls).toEqual([
+            // The backup was paused before the move, so its pause is the owner's; the main session's is the move's own.
+            // Declared before the move pauses anything, so no cut-short move can leave it unsaid.
+            "declare paused intentic-a-state",
             "shared sync pause sync_a",
             "own daemon start",
             "carry sync_a",
             "carry sync_b",
             "shared sync terminate sync_a sync_b",
             "shared forward terminate fwd_a",
-            // The backup was paused before the move, so its pause is the owner's; the main session's is the move's own.
-            "declare paused intentic-a-state",
             "own daemon stop",
             // Gone at the first look.
             "own sync list",
             "own daemon start",
         ]);
         expect(calls.some((line) => line.startsWith("own sync resume"))).toBe(false);
+    });
+
+    // A move cut short after its own pause (the old daemon refused the terminate) is tried again at the next start, and
+    // then lists the session it paused itself as paused. Read off that listing, its pause was declared the owner's and
+    // the folder's sync stayed paused for good; the first look's sighting is what the retry declares.
+    it("declares on a retry only the pauses its first look found, never the ones it made itself", async () => {
+        const { calls, seams } = fakeMutagen({ "shared sync terminate": { ok: false, stdout: "", stderr: "Error" } }, [], ["sync_a", "sync_b"]);
+        expect((await moveSessions(seams, plan)).ended).toBe(false);
+        const retried = movePlan(
+            [
+                { name: "intentic-a", identifier: "sync_a", labels: { "intentic-owner": owner }, paused: true },
+                { name: "intentic-a-state", identifier: "sync_b", paused: true },
+            ],
+            [],
+            owner,
+        );
+        await moveSessions(seams, retried);
+        expect(calls.filter((line) => line.startsWith("declare paused"))).toEqual(["declare paused intentic-a-state", "declare paused intentic-a-state"]);
     });
 
     it("waits out a daemon still stopping before it starts this agent's own", async () => {

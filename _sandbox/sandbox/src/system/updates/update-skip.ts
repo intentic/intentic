@@ -12,7 +12,12 @@ const SkippedUpdateSchema = z.object({
     // Absent once the owner asked for the newest release to be offered again.
     version: z.string().optional(),
 });
-export const skippedUpdateDocument = defineDocument({ root: "history", path: "update-skipped.json", schema: SkippedUpdateSchema });
+export const skippedUpdateDocument = defineDocument({
+    root: "history",
+    path: "update-skipped.json",
+    portability: "derived",
+    schema: SkippedUpdateSchema,
+});
 
 export interface UpdateSkip {
     readonly skipped: () => Promise<string | undefined>;

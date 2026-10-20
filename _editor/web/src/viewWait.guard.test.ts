@@ -73,3 +73,25 @@ test(`no view wires its own wait`, () => {
         });
     expect(findings).toEqual([]);
 });
+
+// Refuses a read's failure counted as its answer. "Fetched or failed" was each read model's own `settled` (panels,
+// capabilities, extensions, the public outbox), and every caller took it to mean "the list has answered": under failing
+// reads an extension page said its view was "no longer in the workspace", the rail forgot its tiles, Preview called an
+// app gone and Capabilities sent a valid tile's address back to the grid as unknown. A read's standing is its `loaded`
+// (useSandboxQuery): `ready` is the only state that may say something is absent, `failed` is said as a failure.
+const FAILURE_AS_ANSWER = /\bisFetched\.value\s*\|\|[^;\n]*\bisError\.value|\bisError\.value\s*\|\|[^;\n]*\bisFetched\.value/;
+
+test(`no read counts its failure as its answer`, () => {
+    const findings = scanned.flatMap(({ path, text }) => {
+        const lines = text.split(`\n`);
+        return lines.flatMap((line, at) =>
+            FAILURE_AS_ANSWER.test(line) && !COMMENT.test(line) && !allowedAt(lines, at + 1, CHECK) ? [`${path}:${at + 1}: ${line.trim()}`] : [],
+        );
+    });
+    expect(findings).toEqual([]);
+});
+
+test(`the failure-as-answer pattern is the one the read models had`, () => {
+    expect(FAILURE_AS_ANSWER.test(`settled: computed(() => query.isFetched.value || query.isError.value),`)).toBe(true);
+    expect(FAILURE_AS_ANSWER.test(`starterStateOf({ failed: log.isError.value }, changes.data.value)`)).toBe(false);
+});

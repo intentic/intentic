@@ -163,10 +163,11 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [tailwind](tailwind-bypass.mjs) | arbitrary colours or pixel sizes in class attributes |
 | [display](display-descenders.mjs) | clipped display type without descender clearance |
 | [marks](mark-alignment.mjs) | a mark or an `<Icon>` placed by a hand-tuned offset instead of `.mark` / `.ui-icon` |
-| [rows](row-tiers.mjs) | a list row that sets its own density, padding or height; a section header drawn or decorated by hand; a card in a card; sections with nothing spacing them |
+| [rows](row-tiers.mjs) | a list row that sets its own density, padding or height; a section header decorated at its call site; a card in a card; sections with nothing spacing them |
+| [substitutes](kit-substitutes.mjs) | a kit primitive drawn by hand: the section label's look (uppercase, tracked) on anything but `<SectionHeader>` or a table's column head, a tab strip outside `<SegmentedControl>`, a search field outside `<SearchBar>`, the open row's wash outside `<DisclosureRow>` |
 | [buttons](button-tiers.mjs) | a hand-styled action button instead of `<Button>` |
 | [inputs](input-tiers.mjs) | a hand-styled field instead of `ui-field-box` |
-| [recipes](recipe-tiers.mjs) | a kit recipe (`ui.iconButton`, `ui.textButton`, …) handed a size, an ink or a radius its variants own, a retired recipe name (`ui.sectionLabel` outside the kit), `ui-chip-on` by hand, or a selection marked a second way (ratcheted: `baselines/selection-tints.json`) |
+| [recipes](recipe-tiers.mjs) | a kit recipe (`ui.iconButton`, `ui.textButton`, …) handed a size, an ink or a radius its variants own, a retired recipe name (`ui.sectionLabel` outside the kit), `ui-chip-on` by hand, or a selection marked a second way (a hand tint on a picked thing included) |
 | [tones](tone-tiers.mjs) | a status colour at an opacity (`bg-danger/10`) written outside `_editor/ui/src/lib/tone.ts` |
 | [run-settings](run-settings-tier.mjs) | effort, thinking or speed controls drawn outside `PickerRunSettings.vue` |
 | [model-labels](model-labels.mjs) | a model named by its raw id |

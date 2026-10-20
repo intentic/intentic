@@ -12,7 +12,7 @@ import { type ConnectionNotice, connectionNotice, stalledBody } from "./connecti
 import SandboxRecovery from "./SandboxRecovery.vue";
 import { useDiagnosisNotice, useRecoveryDue, useVisibleOutage } from "./useVisibleOutage";
 import { useOutageDetails } from "../diagnosis/useOutageDetails";
-import WaitProgress from "../../../components/WaitProgress.vue";
+import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
 import { stalledPaths } from "../../../app/perf/perf";
 import { DEADLINE_MS } from "../../../client/sandbox/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
@@ -108,7 +108,7 @@ const signIn = async (): Promise<void> => {
     <!-- The spinner follows what the notice says is still expected, not whether there's a button. -->
     <GateCard icon="box" :title="notice.title" :spinner="notice.waiting">
         <p class="text-sm text-muted">{{ notice.body }}</p>
-        <WaitProgress v-if="notice.waiting && notice.wait" :wait="notice.wait" :details="details" class="mt-3" />
+        <ProgressMeter v-if="notice.waiting && notice.wait" :progress="notice.wait" :details="details" class="mt-3" />
         <template #actions>
             <Button
                 v-if="notice.action?.kind === `setup`"

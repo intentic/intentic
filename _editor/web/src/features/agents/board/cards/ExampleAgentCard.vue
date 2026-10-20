@@ -5,7 +5,7 @@
      reads as work someone did here. It goes once the reader's own first agent finishes (AgentsView) or the checklist is
      put away. -->
 <script setup lang="ts">
-import { Button, Code, DiffStat, Modal, StatusBadge } from "@intentic/ui";
+import { Button, Code, DiffStat, Modal, Section, StatusBadge } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import IdentityTile from "../../../../parts/capabilities/IdentityTile.vue";
@@ -48,34 +48,32 @@ const startOwn = (): void => {
     <Modal v-model:open="open" size="lg" :header="t(`agents.exampleCard.reviewTitle`)" :description="t(`agents.exampleCard.reviewIntro`)">
         <div class="flex flex-col gap-4">
             <!-- 1. What was asked. -->
-            <section class="flex flex-col gap-1.5">
-                <p class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`agents.exampleCard.asked`) }}</p>
-                <p class="self-start rounded-2xl bg-overlay px-3 py-2 text-xs text-content">{{ t(`agents.exampleCard.prompt`) }}</p>
-            </section>
+            <Section :label="t(`agents.exampleCard.asked`)" density="dense">
+                <p class="w-fit rounded-2xl bg-overlay px-3 py-2 text-xs text-content">{{ t(`agents.exampleCard.prompt`) }}</p>
+            </Section>
 
             <!-- 2. What it did, in its own words, as its last message says. -->
-            <section class="flex flex-col gap-1.5">
-                <p class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`agents.exampleCard.did`) }}</p>
+            <Section :label="t(`agents.exampleCard.did`)" density="dense">
                 <p class="text-xs leading-relaxed text-content">{{ t(`agents.exampleCard.reply`) }}</p>
-            </section>
+            </Section>
 
             <!-- 3. What changed: the files and the diff, which is what a review is of. -->
-            <section class="flex flex-col gap-1.5">
-                <p class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`agents.exampleCard.changed`) }}</p>
-                <ul class="flex flex-col gap-0.5">
-                    <li v-for="file in EXAMPLE_FILES" :key="file.path" class="flex items-center gap-2 font-mono text-2xs text-content">
-                        <span class="min-w-0 flex-1 truncate">{{ file.path }}</span>
-                        <DiffStat :additions="file.additions" :deletions="file.deletions" />
-                    </li>
-                </ul>
-                <Code :code="EXAMPLE_DIFF" lang="diff" :scroll-lines="14" />
-            </section>
+            <Section :label="t(`agents.exampleCard.changed`)" density="dense">
+                <div class="flex flex-col gap-1.5">
+                    <ul class="flex flex-col gap-0.5">
+                        <li v-for="file in EXAMPLE_FILES" :key="file.path" class="flex items-center gap-2 font-mono text-2xs text-content">
+                            <span class="min-w-0 flex-1 truncate">{{ file.path }}</span>
+                            <DiffStat :additions="file.additions" :deletions="file.deletions" />
+                        </li>
+                    </ul>
+                    <Code :code="EXAMPLE_DIFF" lang="diff" :scroll-lines="14" />
+                </div>
+            </Section>
 
             <!-- 4. What landing is: the one press this whole board leads to. -->
-            <section class="flex flex-col gap-1.5">
-                <p class="text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`agents.exampleCard.landTitle`) }}</p>
+            <Section :label="t(`agents.exampleCard.landTitle`)" density="dense">
                 <p class="text-xs leading-relaxed text-content">{{ t(`agents.exampleCard.landLine`) }}</p>
-            </section>
+            </Section>
         </div>
         <template #footer>
             <Button tier="quiet" @click="open = false">{{ t(`agents.exampleCard.close`) }}</Button>

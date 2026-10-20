@@ -1,13 +1,18 @@
-// THE KIT'S DECIDED LOOKS, read off one template: the rules row-tiers and mark-alignment judge every view by, in one
-// place so their tests read the same functions the checks run. Each refuses a decision the owner made once, and had
-// re-made view by view while a view could still state it: a header's count, caption, fill or spacing; a card laid in a
-// card; rows of different heights; an icon nudged onto its line by a pixel that is right for one type size only.
-import { at, classWordsOf, tags, VOID } from "./templates.mjs";
+// THE KIT'S DECIDED LOOKS, read off one template: the rules row-tiers, mark-alignment, kit-substitutes and recipe-tiers
+// judge every view by, in one place so their tests read the same functions the checks run. Each refuses a decision the
+// owner made once, and had re-made view by view while a view could still state it: a header's count, caption, fill or
+// spacing; a card laid in a card; rows of different heights; an icon nudged onto its line by a pixel that is right for
+// one type size only; a section label, a tab strip, a search field or an open row drawn by hand; a chip's own box.
+import { extensionUiRetired } from "../names.mjs";
+import { at, classWordsOf, tags, VOID } from "./scan.mjs";
 
 // ── Sections ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// The look the header owns (`ui.sectionLabel`, drawn only by <SectionHeader>): an uppercase, tracked label.
-const HEADER_LOOK = (words) => /(?:^|\s)uppercase(?:\s|$)/u.test(words) && /(?:^|\s)tracking-(?:wide|wider|widest)(?:\s|$)/u.test(words);
+// The look the header owns (`ui.sectionLabel`, drawn only by <SectionHeader>): an uppercase, tracked label, spelled out or
+// called for by the recipe's own name.
+const HEADER_LOOK = (words) =>
+    /\bui\.sectionLabel(?:Sm)?\b/u.test(words) ||
+    (/(?:^|\s)uppercase(?:\s|$)/u.test(words) && /(?:^|\s)tracking-(?:wide|wider|widest)(?:\s|$)/u.test(words));
 const SECTIONS = new Set([`RowGroup`, `Section`]);
 // A parent that spaces what it holds: a gap, a vertical rhythm, or hairlines between them.
 const SPACED = /(?:^|\s)(?:[\w@-]+:)*(?:gap-(?:y-)?[\d.[]|space-y-|divide-y)/u;
@@ -15,18 +20,18 @@ const SPACED = /(?:^|\s)(?:[\w@-]+:)*(?:gap-(?:y-)?[\d.[]|space-y-|divide-y)/u;
 const ROW_HEIGHT = /(?:^|\s)(?:[\w@-]+:)*(?:min-h|max-h|h)-(?!0(?:\s|$))[\w.[\]/-]+/u;
 const ELSE = /(?:^|\s)v-else(?:-if)?(?:[\s=>]|$)/u;
 
-// What each removed header prop was for, said where a call site still passes it.
-const RETIRED_PROPS = {
-    RowGroup: {
-        count: `the rows below are the tally, and a count beside a header is what a dozen views had removed one at a time`,
-        caption: `words beside a header were removed view by view as useless; a sentence a reader needs is a <RowNote> on the group's surface`,
-        flat: `a group draws no card on a surface (a dialog, a <Card>, another group's card, an overlay) by itself; a label over things that are not rows is a <Section>`,
-    },
-    NavRail: {
-        "sticky-headings": `a pinned header needs a fill to scroll under, and that band is the dark box the documentation rail was fixed for three times`,
-        stickyHeadings: `a pinned header needs a fill to scroll under, and that band is the dark box the documentation rail was fixed for three times`,
-    },
-};
+// What each removed prop was for, said where a call site still passes it: `extensionUiRetired` in names.mjs, the one
+// record of them, whose `Component.prop` entries are read here under both spellings a template may use.
+const kebab = (name) => name.replace(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`);
+const RETIRED_PROPS = {};
+for (const { name, why } of extensionUiRetired) {
+    const [component, prop] = name.split(`.`);
+    if (/^[A-Z]/u.test(component) && prop !== undefined) {
+        RETIRED_PROPS[component] ??= {};
+        RETIRED_PROPS[component][prop] = why;
+        RETIRED_PROPS[component][kebab(prop)] = why;
+    }
+}
 
 // One walk over a template's open tags, with the stack of elements each sits in: `open` judges a tag (and says whether to
 // push it as a frame), `close` judges a frame as it closes, the SFC's own `<template>` included.
@@ -59,13 +64,9 @@ const retiredProps = (name, attrs) => {
         .map((match) => `<${name}> takes no \`${match[1]}\`: ${retired[match[1]]}`);
 };
 
-// ── 7, 8, 10 · a header drawn by hand, a group among another group's rows, a row's own height
+// ── 8, 10 · a group among another group's rows, a row's own height (a header drawn by hand, once rule 7 here, is
+// `substituteFindings`' first rule, on every element rather than only on `<h1>`–`<h6>`)
 const redecidedLooks = (name, words, parent) => [
-    ...(/^h[1-6]$/u.test(name) && HEADER_LOOK(words)
-        ? [
-              `<${name}> is drawn in the section label's look by hand, so its size, spacing and what sits beside it are this view's to drift: use <Section :label> (or <RowGroup :label> over rows), or <SectionHeader :heading> for a header alone`,
-          ]
-        : []),
     ...(name === `RowGroup` && parent?.name === `RowGroup`
         ? [
               `a <RowGroup> laid straight among another group's rows nests one card in another: put groups side by side in a stack, or the inner one in a <RowNote variant="block"> where it lies on the outer card`,
@@ -98,8 +99,8 @@ const unspaced = (frame) => {
 };
 
 /**
- * A blanked template's section findings: a header decision taken at the call site (4), a header drawn by hand (7), a
- * group among another group's rows (8), sections side by side with nothing spacing them (9), a row given a height (10).
+ * A blanked template's section findings: a header decision taken at the call site (4), a group among another group's
+ * rows (8), sections side by side with nothing spacing them (9), a row given a height (10).
  */
 export const sectionFindings = (path, scan) => {
     const findings = [];
@@ -184,4 +185,94 @@ export const glyphFindings = (path, scan) => {
         return { name, words, line: /(?:^|\s)items-start(?:\s|$)/u.test(words) };
     });
     return findings;
+};
+
+// ── Substitutes ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+// Each kit primitive below was drawn by hand in a view before it existed, and was drawn by hand again after, by a view
+// that did not know it did. Where a rule's primitive is defined, the rule does not apply: it is that primitive's own
+// markup. `<th>`/`<tr>` are a table's column heads, which InfoTable draws in the label's type on purpose.
+const OWNERS = {
+    label: /(?:^|\/)_editor\/ui\/src\/components\/rows\/SectionHeader\.vue$/u,
+    tabs: /(?:^|\/)_editor\/ui\/src\/components\/forms\/SegmentedControl\.vue$/u,
+    search: /(?:^|\/)_editor\/ui\/src\/components\/forms\/SearchBar\.vue$/u,
+    open: /(?:^|\/)_editor\/ui\/src\/components\/rows\/DisclosureRow\.vue$/u,
+};
+const TABLE_HEAD = new Set([`th`, `tr`, `thead`]);
+const word = (name) => new RegExp(`(?:^|\\s)${name}(?:\\s|$)`, `u`);
+const SEARCH_DRESS = /(?:^|\s)ui-search(?:-band|-icon)?(?:\s|$)/u;
+const FIELD = new Set([`input`, `InputText`]);
+
+const SAYS = {
+    label: (name) =>
+        `<${name}> wears the section label's look (uppercase, tracked) by hand, so its size, spacing and what sits beside it are this view's to drift: a label over a part is <SectionHeader> (\`density="dense"\` in a menu, a drawer or a card), or <Section :label> around what it heads; words inside a row are not a heading and take no uppercase`,
+    tabs: `a tab strip drawn by hand: <SegmentedControl> owns the roving tab stop, the arrow keys and the selected mark (\`variant="underline"\` for tabs that switch the parts of a page)`,
+    search: `a search field drawn by hand: <SearchBar> (\`variant="panel"\` as a popover's first band, \`field\` above a list) owns the magnifier, the clear, Escape and the busy spin`,
+    open: `the open row's wash put on by hand: an expanding row is <DisclosureRow>, which owns \`ui-row-open\` behind its header and drawer as one surface`,
+};
+
+/**
+ * A blanked template's hand-drawn substitutes for a kit primitive, each as `{ index, rule, why }`: the section label's
+ * look on any element (`label`), a tab strip (`tabs`), a search field (`search`), and the open row's wash (`open`).
+ * The caller turns `index` into a line and reads `allow(substitutes)` there.
+ */
+export const substituteFindings = (path, scan) => {
+    const findings = [];
+    const owned = (rule) => OWNERS[rule].test(path);
+    const add = (index, rule, why) => {
+        if (!owned(rule)) {
+            findings.push({ index, rule, why });
+        }
+    };
+    // The open tag before this one, for a field that a magnifier glyph leads.
+    let previous;
+    for (const { closing, name, attrs, index } of tags(scan)) {
+        if (closing !== ``) {
+            previous = undefined;
+            continue;
+        }
+        const words = classWordsOf(attrs);
+        if (HEADER_LOOK(words) && !TABLE_HEAD.has(name)) {
+            add(index, `label`, SAYS.label(name));
+        }
+        if (/(?:^|\s)role="tablist"/u.test(attrs) || /\bui\.tab\(/u.test(attrs)) {
+            add(index, `tabs`, SAYS.tabs);
+        }
+        const ledByMagnifier = previous?.name === `Icon` && /(?:^|\s)name="search"/u.test(previous.attrs);
+        if (SEARCH_DRESS.test(words) || (FIELD.has(name) && (/(?:^|\s)type="search"/u.test(attrs) || ledByMagnifier))) {
+            add(index, `search`, SAYS.search);
+        }
+        if (word(`ui-row-open`).test(words)) {
+            add(index, `open`, SAYS.open);
+        }
+        previous = { name, attrs };
+    }
+    return findings;
+};
+
+// ── Chips and pills ──────────────────────────────────────────────────────────────────────────────────────────────
+
+// What a chip's or a pill's size owns: a padding, a height, a gap, a type size, a line height, a radius, at any variant.
+const BOX_WORD =
+    /^(?:p[xytblrse]?-|(?:min-|max-)?h-|size-|gap(?:-[xy])?-|leading-|rounded(?:-|$)|text-(?:4xs|3xs|2xs|xs|sm|base|lg|xl|2xl|\[[\d.]+r?em\]))/u;
+const bareWord = (token) => token.replace(/^!/u, ``).replace(/^(?:[\w@[\]&>*/-]+:)+/u, ``).replace(/^!/u, ``);
+
+/**
+ * The words of a class list that restate a chip's or a status pill's box, which utilities.css decides once per size
+ * (`ui.chip({ size, lead, trail })`, `ui-status-pill[-md|-inline]`): `kind` is which of the two the list draws, if
+ * either. A `ui.chip(…)` call's own arguments are left out, since the recipe check reads those on their own.
+ */
+export const boxOverrides = (classes) => {
+    const words = classes.replace(/ui\.chip\((?:[^()]|\([^()]*\))*\)/gu, ` ui-chip `);
+    const kind = /(?:^|\s)ui-chip(?=\s|$)/u.test(words) ? `chip` : /(?:^|\s)ui-status-pill(?=\s|$)/u.test(words) ? `pill` : undefined;
+    if (kind === undefined) {
+        return { kind, words: [] };
+    }
+    return {
+        kind,
+        words: words
+            .split(/\s+/u)
+            .map((token) => token.replace(/^[`'"([{]+|[`'")\]},]+$/gu, ``))
+            .filter((token) => BOX_WORD.test(bareWord(token))),
+    };
 };

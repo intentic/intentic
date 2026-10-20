@@ -4,8 +4,8 @@ import { join, relative } from "node:path";
 
 // Which modules define a stored document, a structural boot step, a raw route table or a leaf slice, read from the source
 // text rather than from what a process happened to load: the one discovery scripts/write-indexes.mjs writes
-// src/bootstrap/state-registry.ts, src/app-raw-routes.ts and src/bootstrap/slices/slice-registry.ts from, and the
-// registry's test checks it against. Never
+// src/bootstrap/state-registry.ts, src/app-raw-routes.ts, src/bootstrap/slices/slice-registry.ts and
+// src/store/evolution/history-documents.generated.ts from, and the registry's test checks it against. Never
 // shipped. Node imports and erasable types only: scripts/write-indexes.mjs and scripts/conversion-checks-fresh.mjs run it
 // with plain `node`, before any tsx starts.
 
@@ -16,8 +16,22 @@ export interface Definition {
     readonly name: string;
 }
 
+// What a document on the history volume says of itself at its definition, read off the source text: its path (a
+// directory's with its trailing slash), whether it travels in a bundle, and the instruction the bundle report gives the
+// owner when it does not.
+export interface HistoryDeclaration {
+    readonly path: string;
+    readonly portability: string;
+    readonly note?: string;
+}
+
+export interface DocumentDefinition extends Definition {
+    // Undefined for a document on any other root.
+    readonly history?: HistoryDeclaration;
+}
+
 export interface StateModules {
-    readonly documents: readonly Definition[];
+    readonly documents: readonly DocumentDefinition[];
     readonly steps: readonly Definition[];
 }
 
@@ -61,48 +75,65 @@ const CALL = /\bdefine(Document|Step|RawRoutes|Slice)\s*[<(]/g;
 // A slice names its members' type as its one type argument, which the slice registry reads it under.
 const EXPORTED = /^export const (\w+) = define(Document|Step|RawRoutes|Slice)\s*(?:<(\w+)>\s*\(|[<(])/gm;
 
-// Every definition under `source` (the package's src/), each kind in module then name order. A definition in any other
-// form than `export const name = defineDocument(…)` (or defineStep, defineRawRoutes, defineSlice<Members>) at a module's
-// top level throws: an index imports it by that name, and one it cannot name would be a document the boot step never
-// sees, a route no table serves, or a slice nothing builds.
-export const sourceDefinitions = async (source: string): Promise<SourceDefinitions> => {
-    const documents: Definition[] = [];
-    const steps: Definition[] = [];
-    const rawRoutes: Definition[] = [];
-    const slices: SliceDefinition[] = [];
-    const listOf = (kind: string): Definition[] => {
-        if (kind === "Document") {
-            return documents;
-        }
-        return kind === "Step" ? steps : rawRoutes;
-    };
-    const unnamed: string[] = [];
-    for (const file of (await sourceFiles(source)).toSorted()) {
-        const module = relative(source, file).split("\\").join("/");
-        if (SKIPPED.has(module)) {
-            continue;
-        }
-        const text = await readFile(file, "utf8");
-        const calls = [...text.matchAll(CALL)].length;
-        const exported = [...text.matchAll(EXPORTED)];
-        if (calls !== exported.length) {
-            unnamed.push(module);
-        }
-        for (const [, name = "", kind = "", members] of exported) {
-            if (kind !== "Slice") {
-                listOf(kind).push({ module, name });
-            } else if (members === undefined) {
-                unnamed.push(module);
-            } else {
-                slices.push({ module, name, members });
-            }
+// What the scan has found so far, and the modules it could not read a definition of.
+interface Found {
+    readonly documents: DocumentDefinition[];
+    readonly steps: Definition[];
+    readonly rawRoutes: Definition[];
+    readonly slices: SliceDefinition[];
+    readonly unnamed: string[];
+    readonly undeclared: string[];
+}
+
+const scanModule = (module: string, text: string, found: Found): void => {
+    const exported = [...text.matchAll(EXPORTED)];
+    if ([...text.matchAll(CALL)].length !== exported.length) {
+        found.unnamed.push(module);
+    }
+    for (const match of exported) {
+        const [whole, name = "", kind = "", members] = match;
+        const document = kind === "Document" ? declaredDocument({ module, name }, text, (match.index ?? 0) + whole.length) : undefined;
+        if (document === "undeclared") {
+            found.undeclared.push(`${module} ${name}`);
+        } else if (document !== undefined) {
+            found.documents.push(document);
+        } else if (kind !== "Slice") {
+            (kind === "Step" ? found.steps : found.rawRoutes).push({ module, name });
+        } else if (members === undefined) {
+            found.unnamed.push(module);
+        } else {
+            found.slices.push({ module, name, members });
         }
     }
+};
+
+const refuseUnreadable = ({ unnamed, undeclared }: Found): void => {
     if (unnamed.length > 0) {
         throw new Error(
             `define each stored document, boot step, raw route table and leaf slice as \`export const name = defineDocument(…)\` (or defineStep, defineRawRoutes, defineSlice<Members>) at the top level of its module: ${unnamed.join(", ")}`,
         );
     }
+    if (undeclared.length > 0) {
+        throw new Error(
+            `a document on the history volume says whether it travels in a bundle, as a string literal \`portability\` (and \`note\`, if any) beside its literal \`path\` in its defineDocument: ${undeclared.join(", ")}`,
+        );
+    }
+};
+
+// Every definition under `source` (the package's src/), each kind in module then name order. A definition in any other
+// form than `export const name = defineDocument(…)` (or defineStep, defineRawRoutes, defineSlice<Members>) at a module's
+// top level throws: an index imports it by that name, and one it cannot name would be a document the boot step never
+// sees, a route no table serves, or a slice nothing builds.
+export const sourceDefinitions = async (source: string): Promise<SourceDefinitions> => {
+    const found: Found = { documents: [], steps: [], rawRoutes: [], slices: [], unnamed: [], undeclared: [] };
+    for (const file of (await sourceFiles(source)).toSorted()) {
+        const module = relative(source, file).split("\\").join("/");
+        if (!SKIPPED.has(module)) {
+            scanModule(module, await readFile(file, "utf8"), found);
+        }
+    }
+    refuseUnreadable(found);
+    const { documents, steps, rawRoutes, slices } = found;
     const byName = (a: Definition, b: Definition): number => a.module.localeCompare(b.module) || a.name.localeCompare(b.name);
     return {
         documents: documents.toSorted(byName),
@@ -110,6 +141,85 @@ export const sourceDefinitions = async (source: string): Promise<SourceDefinitio
         rawRoutes: rawRoutes.toSorted(byName),
         slices: slices.toSorted(byName),
     };
+};
+
+// A property's value as its source spells it: a string literal or a boolean, and "" for anything else.
+type Spelled = string;
+
+// The index just past the comment, string or template literal opening at `at`, or undefined when none opens there. A
+// template's `${…}` is passed over as text.
+const skipped = (text: string, at: number): number | undefined => {
+    const char = text[at];
+    if (char === "/" && text[at + 1] === "/") {
+        return text.indexOf("\n", at);
+    }
+    if (char === "/" && text[at + 1] === "*") {
+        return text.indexOf("*/", at) + 2;
+    }
+    if (char !== '"' && char !== "'" && char !== "`") {
+        return undefined;
+    }
+    let next = at + 1;
+    while (next < text.length && text[next] !== char) {
+        next += text[next] === "\\" ? 2 : 1;
+    }
+    return next + 1;
+};
+
+const PROPERTY = /^([A-Za-z_$][\w$]*)\s*(?::\s*("(?:[^"\\]|\\.)*"|true|false)?)?\s*[,}:]/;
+
+// The top-level keys of the object literal the call whose arguments start at `from` opens with, each with its value as
+// spelled. A scan, not a parse: it skips strings, template literals and comments, and counts brackets, which is all a
+// definition's literal needs.
+const literalKeys = (text: string, from: number): ReadonlyMap<string, Spelled> => {
+    const keys = new Map<string, Spelled>();
+    let depth = 0;
+    // The last character that was neither space nor comment: a key follows the brace or a comma.
+    let previous = "";
+    let at = text.indexOf("{", from);
+    while (at !== -1 && at < text.length) {
+        const past = skipped(text, at);
+        const char = text[at] ?? "";
+        if (past !== undefined) {
+            previous = char === "/" ? previous : char;
+            at = past;
+            continue;
+        }
+        depth += Number("([{".includes(char)) - Number(")]}".includes(char));
+        if (depth === 0) {
+            return keys;
+        }
+        const property = depth === 1 && (previous === "{" || previous === ",") ? PROPERTY.exec(text.slice(at, at + 4096)) : null;
+        const [, key = "", value = ""] = property ?? [];
+        if (key !== "") {
+            keys.set(key, value);
+        }
+        previous = /\s/.test(char) ? previous : char;
+        at += Math.max(1, key.length);
+    }
+    return keys;
+};
+
+// The string a spelled value holds, undefined when it is not a string literal.
+const stringOf = (spelled: Spelled | undefined): string | undefined =>
+    // SAFETY: a value PROPERTY spelled with a double quote is a JSON string literal.
+    spelled?.startsWith('"') === true ? (JSON.parse(spelled) as string) : undefined;
+
+// A document's definition with what it declares on the history volume, its arguments starting at `from` in its module's
+// text: "undeclared" for one there that does not say whether it travels, as literals beside a literal path.
+export const declaredDocument = (definition: Definition, text: string, from: number): DocumentDefinition | "undeclared" => {
+    const keys = literalKeys(text, from);
+    if (stringOf(keys.get("root")) !== "history") {
+        return definition;
+    }
+    const path = stringOf(keys.get("path"))?.replace(/\/$/, "");
+    const portability = stringOf(keys.get("portability"));
+    const note = stringOf(keys.get("note"));
+    if (path === undefined || portability === undefined || (keys.has("note") && note === undefined)) {
+        return "undeclared";
+    }
+    const declared = { path: keys.get("directory") === "true" ? `${path}/` : path, portability };
+    return { ...definition, history: note === undefined ? declared : { ...declared, note } };
 };
 
 // The stored documents and structural boot steps alone, which the shape generator and the registry's test read.

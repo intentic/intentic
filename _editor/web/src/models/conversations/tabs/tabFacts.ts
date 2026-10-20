@@ -1,3 +1,4 @@
+import type { FailureSaid } from "@intentic/sandbox-contract/events/sandbox-notice";
 import type { FreshLink } from "../run/turnRequest";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { type AgentStanding, type ClientAgentStatus, type EndingByHand, endingOf } from "../../agent-status/agentStatus-standing";
@@ -43,9 +44,10 @@ export interface TabFacts {
     // the press until the turn's stream closes. The daemon's own `stopping` is a round trip behind the press, and the
     // stream a few seconds behind that: this is what every card and this chat read in the press's own frame.
     readonly ending?: EndingByHand;
-    // The words of a failure that took back a resume the sandbox had promised in the same turn (TurnFailures
-    // .resumeWithdrawn): the chat shows that stop, while the roster keeps reading `resuming`. Until the next turn starts.
-    readonly resumeWithdrawn?: string;
+    // The failure that took back a resume the sandbox had promised in the same turn (TurnFailures.resumeWithdrawn): its
+    // words, code and who worded them. The chat shows that stop, while the roster keeps reading `resuming`. Until the
+    // next turn starts.
+    readonly resumeWithdrawn?: FailureSaid;
     // The waiting message this chat is taking back, from the press until the sandbox answers (TurnClient.takingBack):
     // when it is the last thing in a conversation that never ran, the conversation goes with it, and the board draws
     // the card as this composer's draft (useAgents-fleet.leavesWithItsMessage) instead of the row on its way out.

@@ -445,10 +445,10 @@ defineExpose({ focusTree });
                                     v-tooltip.right="linkTooltip(row.entry.link)"
                                 />
                                 <!-- What the sandbox does with this entry, which its name doesn't say (specialPaths.ts); hover gives the rule.
-                                     Tighter than the stock pill so its wash keeps clear of the row's edge and the next row's highlight. -->
+                                     The inline pill, so its wash keeps clear of the row's edge and the next row's highlight. -->
                                 <span
                                     v-if="specialChip(row.entry.path, words)"
-                                    class="ui-status-pill shrink-0 px-1.5 py-0 text-2xs leading-4 font-medium"
+                                    class="ui-status-pill ui-status-pill-inline shrink-0 font-medium"
                                     :class="toneWash(specialChip(row.entry.path, words)?.tone === `warning` ? `warning` : `neutral`)"
                                     v-tooltip.right="specialChip(row.entry.path, words)?.tooltip"
                                     >{{ specialChip(row.entry.path, words)?.label }}</span

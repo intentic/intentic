@@ -1,9 +1,9 @@
 import { type ProviderRefusal, ProviderRefusalSchema } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { z } from "zod";
+import { refusedPoolReset, type ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 
 /* EVERY TIME A PROVIDER SAID NO, IN ONE LEDGER, at <historyRoot>/provider-refusals.json, outside the agent's reach.
    account-usage.ts holds polled headroom; this holds the moments a plan actually refused, which polling can't produce: a
@@ -18,11 +18,10 @@ import { jsonFile } from "../store/json-file.js";
    rule, and each reader judged by its own subset, so one surface greyed a model another spawned onto. Every verdict now
    reads this ledger whole (plan-pools.ts serviceStates), the daemon's and the editor's alike. */
 
-const StoredRefusalsSchema = z.record(z.string(), ProviderRefusalSchema);
-
 export const providerRefusalsDocument = defineDocument({
     root: "history",
     path: "provider-refusals.json",
+    portability: "carry",
     schema: ProviderRefusalSchema,
     granularity: "record",
 });
@@ -119,6 +118,10 @@ const settledBy = (refusal: ProviderRefusal, answer: RefusalAnswer): boolean =>
 // and settled. A settle that finds nothing, the case on nearly every answered turn, writes nothing.
 export interface ProviderRefusalStoreOptions {
     readonly log?: (fields: Record<string, unknown>, message: string) => void;
+    // A provider's accounts as the verdict reads them, for stamping a spent allowance that named no instant with the
+    // reset of the pool it was refused in (refusedPoolReset). Without it nothing is stamped, and such a refusal stands
+    // until a reading answers it.
+    readonly accountsOf?: (provider: string) => Promise<readonly ServiceFacts[]>;
 }
 
 const described = (refusal: ProviderRefusal): Record<string, unknown> => ({
@@ -127,6 +130,7 @@ const described = (refusal: ProviderRefusal): Record<string, unknown> => ({
     ...(refusal.account === undefined ? {} : { account: refusal.account }),
     ...(refusal.model === undefined ? {} : { model: refusal.model }),
     ...(refusal.resetsAt === undefined ? {} : { resetsAt: new Date(refusal.resetsAt * 1000).toISOString() }),
+    ...(refusal.poolResetsAt === undefined ? {} : { poolResetsAt: new Date(refusal.poolResetsAt * 1000).toISOString() }),
     ...(refusal.byHand === true ? { byHand: true } : {}),
 });
 
@@ -139,27 +143,42 @@ interface LedgerBacking {
 }
 
 export const fileProviderRefusalStore = (path: string, options: ProviderRefusalStoreOptions = {}): ProviderRefusalStore =>
-    refusalStoreOver(
-        jsonFile<Stored>(path, { parse: (raw) => StoredRefusalsSchema.safeParse(raw).data, fallback: () => ({}), document: providerRefusalsDocument }),
-        options,
-    );
+    refusalStoreOver(openDocument(providerRefusalsDocument, path, { fallback: (): Stored => ({}) }), options);
 
 /** The same ledger over a record in memory, seeded with what each provider has on file: a test harness, the demo daemon. */
-export const memoryProviderRefusalStore = (seed: Readonly<Record<string, readonly ProviderRefusal[]>> = {}): ProviderRefusalStore => {
+export const memoryProviderRefusalStore = (
+    seed: Readonly<Record<string, readonly ProviderRefusal[]>> = {},
+    options: ProviderRefusalStoreOptions = {},
+): ProviderRefusalStore => {
     let held: Stored = Object.fromEntries(Object.entries(seed).flatMap(([provider, filed]) => filed.map((refusal) => [scopeOf(provider, refusal), refusal])));
-    return refusalStoreOver({
-        read: async () => held,
-        update: async (change) => {
-            held = change(held);
-            return held;
+    return refusalStoreOver(
+        {
+            read: async () => held,
+            update: async (change) => {
+                held = change(held);
+                return held;
+            },
         },
-    });
+        options,
+    );
 };
 
 const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOptions = {}): ProviderRefusalStore => {
     const log = options.log ?? (() => undefined);
 
     const listeners = new Set<(provider: string, refusals: readonly ProviderRefusal[]) => void>();
+    // A spent allowance naming no instant, filed with the reset of the pool it was refused in, read now while the
+    // readings still show that pool open: past its reset a reading lapses it and another binds, so the instant is never
+    // read back later. The verdict ends the refusal there (plan-pools.ts refusalVerdict), in the daemon and every open
+    // window at once, rather than when the next reading lands.
+    const stamped = async (provider: string, refusal: ProviderRefusal): Promise<ProviderRefusal> => {
+        if (options.accountsOf === undefined || refusal.kind !== "limit" || refusal.resetsAt !== undefined) {
+            return refusal;
+        }
+        // allow(silent-catch): accounts that cannot be read file the refusal unstamped, standing until a reading answers it
+        const poolResetsAt = refusedPoolReset(refusal, await options.accountsOf(provider).catch((): readonly ServiceFacts[] => []));
+        return poolResetsAt === undefined ? refusal : { ...refusal, poolResetsAt };
+    };
     const onFile = async (): Promise<Record<string, readonly ProviderRefusal[]>> => {
         const now = Date.now();
         const byProvider: Record<string, ProviderRefusal[]> = {};
@@ -198,7 +217,8 @@ const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOpti
 
     return {
         onFile,
-        record: async (provider, refusal) => {
+        record: async (provider, asFiled) => {
+            const refusal = await stamped(provider, asFiled);
             await file.update((current) => ({ ...Object.fromEntries(scoped(current)), [scopeOf(provider, refusal)]: refusal }));
             log({ provider, ...described(refusal), said: refusal.message }, `provider refusal: recorded ${provider} ${refusal.kind}${refusal.account === undefined ? "" : ` for ${refusal.account}`}`);
             await announce(provider);

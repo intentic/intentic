@@ -174,6 +174,8 @@ export const ProviderRefusalSchema = z.object({
         .describe(
             "When the provider said to try again, in epoch seconds, for a spent allowance where it named one. Until then the refusal stands whatever a reading says; after it, it is over.",
         ),
+    // Stamped by the daemon's ledger as it files a spent allowance naming no instant (plan-pools.ts refusedPoolReset).
+    poolResetsAt: z.number().optional().describe("Epoch seconds the refused pool reopens, for a spent allowance naming no time: it ends then."),
     // Cursor's "ask your admin to increase your limit": a team's spend limit, which no usage endpoint reads. Not Codex's
     // "send a request to your admin", which names a window its reading measures (failure-sentences.ts ADMIN_GRANTED).
     unmetered: z

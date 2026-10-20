@@ -7,6 +7,10 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 // The published version behind `ghcr.io/intentic/sandbox:stable`, set by the release flow before the image builds.
 export const { version } = createRequire(import.meta.url)(join(packageRoot(import.meta.url), "package.json")) as { version: string };
 
+// When this daemon started, as /info's `running` reports it: a container swapped in is a new boot, which is how a page
+// tells a swap landed where the build cannot (a checkout build reads 0.0.0 and the same base before and after).
+export const bootedAt = Date.now();
+
 // True only for the repo's unpublished 0.0.0 sentinel version; every non-release build (local, CI sha/latest) keeps it.
 export const isDevBuild = version === "0.0.0";
 

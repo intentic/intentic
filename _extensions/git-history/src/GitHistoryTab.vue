@@ -11,6 +11,7 @@ import {
     Modal,
     Notice,
     SearchBar,
+    SectionHeader,
     SegmentedControl,
     timeAgo,
     toneWash,
@@ -530,7 +531,7 @@ const runPending = async (): Promise<void> => {
             <!-- Checked-out branch with its switch/create/delete popover; detached HEAD shows no pill but keeps the switcher. -->
             <BranchSwitcher :repo="repoRef" />
             <!-- Rows drawn, and while searching, out of how many are loaded; scoped to fetched pages, not the whole history. -->
-            <span class="ui-status-pill shrink-0 bg-overlay text-2xs text-muted">{{
+            <span class="ui-status-pill shrink-0 bg-overlay text-muted">{{
                 searching ? t(`gitHistoryTab.of`, { count: matched.length, count2: commits.length }) : commits.length
             }}</span>
             <SearchBar
@@ -615,6 +616,7 @@ const runPending = async (): Promise<void> => {
                 <div v-if="graphRows.length > 0">
                     <!-- A @container per row: which columns fit depends on this panel's width, which the reader controls. -->
                     <div v-for="{ row, commit } in graphRows" :key="commit.sha" class="@container">
+                        <!-- allow(substitutes): a commit graph's row: its lanes run through the row at a fixed height (ROW_H) the graph is drawn to, which <DisclosureRow>'s header and drawer cannot hold -->
                         <button
                             type="button"
                             class="ui-row-select flex w-full items-center gap-2 py-0 pl-3 pr-3 text-left"
@@ -726,6 +728,7 @@ const runPending = async (): Promise<void> => {
                         </button>
 
                         <!-- Inline detail: commit metadata and its changed files; click a file for a diff at that commit. -->
+                        <!-- allow(substitutes): the drawer of the graph row above, washed as one surface with it -->
                         <div v-if="commit.sha === openSha" class="ui-row-open border-y border-line px-3 py-2">
                             <!-- Row zero has no sha, parents, author or date; it opens straight to its file list, the rest lives in Changes. -->
                             <dl v-if="commit.sha !== WORKING" class="grid grid-cols-facts gap-x-3 gap-y-0.5 text-2xs">
@@ -758,9 +761,7 @@ const runPending = async (): Promise<void> => {
                                 <p v-if="filesError" class="text-2xs text-danger">{{ filesError }}</p>
                                 <p v-else-if="filesLoading" class="text-2xs text-subtle">{{ t(`gitHistoryTab.loadingChangedFiles`) }}</p>
                                 <template v-else>
-                                    <p class="mb-1 text-2xs font-medium uppercase tracking-wide text-subtle">
-                                        {{ t(`gitHistoryTab.changedFiles`, { count: files.length }, files.length) }}
-                                    </p>
+                                    <SectionHeader :label="t(`gitHistoryTab.changedFiles`, { count: files.length }, files.length)" density="dense" class="mb-1" />
                                     <!-- Changed files form a collapsible tree beside the diff. -->
                                     <div class="max-h-64 overflow-auto">
                                         <template v-for="row in fileRows" :key="`${row.kind}:${row.path}`">

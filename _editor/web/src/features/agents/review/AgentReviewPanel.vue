@@ -760,14 +760,14 @@ const seamWidth = computed<number>({
                                     <Icon class="shrink-0 text-2xs text-subtle" :name="collapsed.has(group.key) ? 'chevron-right' : 'chevron-down'" />
                                     <Icon v-if="group.conflicts" :name="CONFLICT_ICON" class="shrink-0 text-2xs text-warning" />
                                     <span
-                                        class="min-w-0 truncate text-2xs font-semibold uppercase tracking-wide"
+                                        class="min-w-0 truncate text-2xs font-semibold"
                                         :class="group.conflicts ? `text-warning` : `text-muted`"
                                         >{{ group.title }}</span
                                     >
-                                    <span class="shrink-0 ui-status-pill bg-overlay text-2xs text-muted">{{ groupLabel(group.files) }}</span>
+                                    <span class="shrink-0 ui-status-pill bg-overlay text-muted">{{ groupLabel(group.files) }}</span>
                                     <span
                                         v-if="group.blocked > 0 && !group.conflicts"
-                                        class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
+                                        class="inline-flex shrink-0 items-center ui-status-pill font-medium"
                                         :class="toneWash(`warning`)"
                                     >
                                         <Icon name="exclamation-triangle" class="text-2xs" />{{ group.blocked }}
@@ -802,7 +802,7 @@ const seamWidth = computed<number>({
                                             <!-- A folded package can't hide a refusal either: same badge, same glyph, one scope down. -->
                                             <span
                                                 v-if="bucket.blocked > 0"
-                                                class="inline-flex shrink-0 items-center gap-0.5 ui-status-pill text-2xs font-medium"
+                                                class="inline-flex shrink-0 items-center ui-status-pill font-medium"
                                                 :class="toneWash(`warning`)"
                                             >
                                                 <Icon name="exclamation-triangle" class="text-2xs" />{{ bucket.blocked }}
@@ -952,7 +952,7 @@ const seamWidth = computed<number>({
                             <template #badges>
                                 <span
                                     v-if="selected.blocked !== undefined"
-                                    class="inline-flex shrink-0 items-center gap-1 ui-status-pill text-2xs font-medium"
+                                    class="inline-flex shrink-0 items-center ui-status-pill font-medium"
                                     :class="toneWash(`warning`)"
                                     v-tooltip.bottom="reasonCopy()[selected.blocked].row"
                                 >
@@ -970,7 +970,7 @@ const seamWidth = computed<number>({
                                 />
                                 <span
                                     v-else-if="mixedLanding && !selected.change.landed"
-                                    class="shrink-0 ui-status-pill text-2xs font-medium"
+                                    class="shrink-0 ui-status-pill font-medium"
                                     :class="toneWash(`warning`)"
                                     v-tooltip.bottom="t(`agents.agentReviewPanel.awaitingLand`)"
                                 >

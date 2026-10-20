@@ -117,6 +117,7 @@ const pageNotice = computed<NoticeModel | undefined>(() =>
         </p>
         <Notice v-if="pageNotice" :of="pageNotice" />
 
+        <!-- allow(substitutes): a wizard's steps, each a tile of several lines with its done state, which a segment cannot hold -->
         <div role="tablist" :aria-label="t(`sandbox.dataProtection.steps`)" class="grid grid-cols-1 gap-2 @md:grid-cols-3">
             <button
                 v-for="(tile, index) in tiles"

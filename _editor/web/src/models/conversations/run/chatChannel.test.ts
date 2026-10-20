@@ -45,12 +45,12 @@ describe(`the chat channel`, () => {
 
     it(`hands a note to the reader of its kind, and to that reader alone`, () => {
         const heard: ChatNote[] = [];
-        onChatNote(`closed-drafts`, (note) => heard.push(note));
+        onChatNote(`drafts`, (note) => heard.push(note));
         onChatNote(`roll`, () => heard.push({ kind: `roll` }));
 
-        receiveChatNote({ sandbox: `sb1`, note: { kind: `closed-drafts`, tabs: [] } });
+        receiveChatNote({ sandbox: `sb1`, note: { kind: `drafts`, changed: [], gone: [] } });
 
-        expect(heard).toEqual([{ kind: `closed-drafts`, tabs: [] }]);
+        expect(heard).toEqual([{ kind: `drafts`, changed: [], gone: [] }]);
     });
 
     it(`drops a note about another sandbox's chats before any reader hears it`, () => {
@@ -82,16 +82,16 @@ describe(`the chat channel`, () => {
             session: { id: `sess-1`, provider: `claude`, harness: `native`, account: `acct-1` },
             movedFrom: { provider: `codex`, value: `gpt-5-codex` },
             title: undefined,
-            draft: ``,
-            attachments: [],
         });
 
-        expect(() => postChatNote({ kind: `closed-drafts`, tabs: [tab] })).not.toThrow();
+        expect(() => postChatNote({ kind: `summons`, summons: { kind: `subagent`, parent: tab, id: `sub-1` } })).not.toThrow();
 
         expect(posted[0]?.note).toStrictEqual({
-            kind: `closed-drafts`,
-            tabs: [
-                {
+            kind: `summons`,
+            summons: {
+                kind: `subagent`,
+                id: `sub-1`,
+                parent: {
                     conversationId: `cnv-1`,
                     isolated: true,
                     registered: true,
@@ -99,10 +99,8 @@ describe(`the chat channel`, () => {
                     harness: `native`,
                     session: { id: `sess-1`, provider: `claude`, harness: `native`, account: `acct-1` },
                     movedFrom: { provider: `codex`, value: `gpt-5-codex` },
-                    draft: ``,
-                    attachments: [],
                 },
-            ],
+            },
         });
     });
 });

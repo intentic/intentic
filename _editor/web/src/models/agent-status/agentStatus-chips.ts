@@ -4,7 +4,8 @@ import { t } from "@intentic/ui/i18n";
 import { toneWash } from "@intentic/ui/tone";
 import { useVocabulary } from "../../workbench/views/vocabulary";
 import { attentionReason, endingReason, landFailure } from "./agentStatus-attention";
-import { failureGist, failureKind, failureTone, failureWord } from "./agentStatus-failure";
+import { failureKind, failureTone, failureWord } from "./agentStatus-failure";
+import { failureView } from "./failureView";
 import { laneOf } from "./agentStatus-lanes";
 import { agentDisplayTitle } from "./agentStatus-meta";
 import { type AgentStanding, limited, memoryHeld, turnInFlight, watching } from "./agentStatus-standing";
@@ -154,13 +155,14 @@ export const familyChip = (calls: readonly (AgentStanding & { readonly title?: s
 // WHAT A CARD SAYS OF THE FAILURE IT ENDED ON. The corner already names the kind (attentionReason), so the body spends
 // one line on the gist and keeps the rest for a hover: a red paragraph of the provider's English, clamped at two lines
 // beside the corner's "Error", said the same thing twice and neither time what the reader could do. The line is the
-// first sentence of the words the turn died on, in the card's own ink behind one tinted glyph; the hover is the kind
-// over those words whole. A spent allowance and a memory hold draw none: nothing failed, and the corner and the clock say
-// all there is.
+// chat's line for the same failure (failureView): the sandbox's own sentence where it worded it, else this build's line
+// for the failure's kind, never the provider's words, which the hover keeps whole under the kind. Before 2026-10-20 the
+// line was the first sentence of the provider's words, the one place a raw headline outlived the chat's. A spent
+// allowance and a memory hold draw none: nothing failed, and the corner and the clock say all there is.
 export interface CardFailure {
     // The kind, in the corner's word: the hover's headline.
     readonly title: string;
-    // The line at rest: the first sentence of what it failed with.
+    // The line at rest: the failure's own line, as the chat says it.
     readonly gist: string;
     // The glyph's ink and the hover's dot: a fault, or a refusal to decide about.
     readonly tone: `danger` | `warning`;
@@ -186,5 +188,6 @@ export const cardFailure = (agent: AgentStanding): CardFailure | undefined => {
     const kind = failureKind(agent);
     const title = kind === undefined ? (endingReason(agent.status) ?? t(`agents.agentStatus.error`)) : failureWord(kind);
     const tone = failureTone(kind);
-    return { title, gist: failureGist(words), tone, tip: { title, tone, quote: words } };
+    const gist = failureView({ message: words, error: agent.failureCode, own: agent.failureOwn }).line.replace(/\.$/u, ``);
+    return { title, gist, tone, tip: { title, tone, quote: words } };
 };

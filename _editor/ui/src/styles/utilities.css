@@ -195,19 +195,51 @@
         box-shadow: inset 0 0 0 1px var(--color-primary-500);
     }
 
-/* A compact HORIZONTAL strip keeps selection to its tint and icon colour. */
+/* A compact HORIZONTAL strip, and a tile (the icon rail's), keep selection to its tint and icon colour: the edge a skin
+   draws marks a row in a column of rows, which neither is. */
     .ui-row-select-horizontal.ui-row-select-on,
     .ui-row-select-horizontal.ui-row-select-on:hover:not(:disabled) {
         box-shadow: none;
     }
 
-    /* Status pills are read-only and share chip geometry. */
+    /* THE CHIP AND PILL SIZES, decided once (2026-10-20). A chip presses and a pill only says, so a pill sits a step
+       under the chip it would stand beside: the size alone tells a reader which one answers a press. The default chip
+       is the dense control's height, 26px, as `<Button size="small">` and `ui.input({ size: "sm" })` are, so a chip,
+       a small button and a small field on one toolbar share a line. Heights are floors with no block padding, so a
+       chip's box is its size whatever its border, its font weight or a glyph inside it; a call site never states a
+       padding, a height, a gap, a type size or a radius (`recipes` check). Before this, ~60 call sites each re-spelled
+       one: `px-2 py-px` chips at a lane's tail, `h-6` chips in toolbars, `rounded-md` toggles, a 36px quick-bar pill.
+       - chip `sm` 20px: a lane or list header's fold, a viewer toolbar's toggle, a token in a field.
+       - chip `md` 26px, the default: a filter, a pick, a toolbar's labelled control.
+       - chip `lg` 32px: the phone bar's filter, a chip floating over content, a chip that is a pane's main control.
+       - `lead`: it opens on a mark (an avatar, a face, a glyph plate), so the start padding is the curve's own.
+       - `trail`: it ends in its own small button (a token's ×), so the end padding is the curve's own.
+       - pill (`.ui-status-pill`) 20px; `-md` 24px in the badge's larger type; `-inline` 16px inside a line of
+         text (a tree row, an id line), where a taller pill would grow the line. */
     .ui-status-pill {
         display: inline-flex;
         align-items: center;
+        gap: var(--spacing);
+        min-height: calc(var(--spacing) * 5);
         border-radius: 9999px;
-        padding-block: var(--spacing);
+        padding-inline: calc(var(--spacing) * 2);
+        font-size: var(--text-2xs);
+        line-height: var(--text-2xs--line-height);
+        white-space: nowrap;
+    }
+
+    .ui-status-pill-md {
+        gap: calc(var(--spacing) * 1.5);
+        min-height: calc(var(--spacing) * 6);
         padding-inline: calc(var(--spacing) * 2.5);
+        font-size: var(--text-xs);
+        line-height: var(--text-xs--line-height);
+    }
+
+    .ui-status-pill-inline {
+        min-height: calc(var(--spacing) * 4);
+        padding-inline: calc(var(--spacing) * 1.5);
+        line-height: calc(var(--spacing) * 4);
     }
 
     /* Chips carry state; buttons carry actions. */
@@ -215,9 +247,9 @@
         display: inline-flex;
         align-items: center;
         gap: calc(var(--spacing) * 1.5);
+        min-height: calc(var(--spacing) * 6.5);
         border: 1px solid transparent;
         border-radius: 9999px;
-        padding-block: var(--spacing);
         padding-inline: calc(var(--spacing) * 2.5);
         font-size: var(--text-2xs);
         line-height: var(--text-2xs--line-height);
@@ -230,6 +262,35 @@
             color var(--motion-hover),
             border-color var(--motion-hover),
             opacity var(--motion-hover);
+    }
+
+    .ui-chip-sm {
+        gap: var(--spacing);
+        min-height: calc(var(--spacing) * 5);
+        padding-inline: calc(var(--spacing) * 2);
+    }
+
+    .ui-chip-lg {
+        min-height: calc(var(--spacing) * 8);
+        padding-inline: calc(var(--spacing) * 3);
+        font-size: var(--text-xs);
+        line-height: var(--text-xs--line-height);
+    }
+
+    .ui-chip-lead {
+        padding-inline-start: calc(var(--spacing) * 0.5);
+    }
+
+    .ui-chip-trail {
+        padding-inline-end: calc(var(--spacing) * 0.5);
+    }
+
+    .ui-chip-lg.ui-chip-lead {
+        padding-inline-start: var(--spacing);
+    }
+
+    .ui-chip-lg.ui-chip-trail {
+        padding-inline-end: var(--spacing);
     }
 
 /* NOT the accent wash the rail and the rows take in light, and the reason is the chip's own resting plate: it already carries 6% of the ink. */

@@ -1,6 +1,6 @@
 import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
 import { REQUEST_FIELDS, type TranscriptPatch, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
-import { appendToolThinking, upsertTool } from "@intentic/sandbox-contract/transcript-fold";
+import { patchedRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { ChatMessage } from "./transcript";
 
 // The transcript as a value, with every transition as a pure function. Sources are the daemon's already-folded rows
@@ -223,69 +223,29 @@ export const attachRun = (state: TranscriptState, head: AttachHead, drawn?: numb
     return { messages: [...kept, ...rows], nextId, pending: undefined, attached: { run: head.run, base: kept.length } };
 };
 
-/** Applies one daemon change to the attached run's rows. */
+/** Applies one daemon change to the attached run's rows. What it makes of a row is the contract's (patchedRow), the rule
+ * the daemon's own fold and record follow; this decides only which row it names, and paces prose for the typewriter. */
 export const applyPatch = (state: TranscriptState, patch: TranscriptPatch, typewriter: boolean): TranscriptState => {
-    const base = state.attached?.base ?? state.messages.length;
+    if (patch.op === `append`) {
+        return appendMessage(state, patch.row);
+    }
     // The row the patch names: by its id where the sandbox names rows (no counting, so a row this window holds above or
     // within the run cannot shift it), else by its index from where the run's rows start. Searched from the end, where
     // a live run writes.
-    const at = (index: number): ChatMessage | undefined => {
-        const named = `rowId` in patch && patch.rowId !== undefined ? state.messages.findLast((message) => message.rowId === patch.rowId) : undefined;
-        return named ?? state.messages[base + index];
-    };
-    switch (patch.op) {
-        case `append`:
-            return appendMessage(state, patch.row);
-        case `replace`: {
-            const target = at(patch.index);
-            if (target === undefined) {
-                return state;
-            }
-            // The daemon's row already has its full text; drop any buffer still revealing prose for it.
-            return {
-                ...mapMessage(state, target.id, () => ({ ...patch.row, id: target.id })),
-                pending: state.pending?.id === target.id ? undefined : state.pending,
-            };
-        }
-        case `drop`: {
-            const target = at(patch.index);
-            if (target === undefined) {
-                return state;
-            }
-            return {
-                ...state,
-                messages: state.messages.filter((message) => message.id !== target.id),
-                pending: state.pending?.id === target.id ? undefined : state.pending,
-            };
-        }
-        case `text`: {
-            const target = at(patch.index);
-            if (target === undefined) {
-                return state;
-            }
-            return typewriter
-                ? enqueueText(state, target.id, patch.text)
-                : mapMessage(state, target.id, (message) => ({ ...message, text: `${message.text}${patch.text}` }));
-        }
-        case `thinking`: {
-            const target = at(patch.index);
-            return target === undefined
-                ? state
-                : mapMessage(state, target.id, (message) => ({ ...message, thinking: `${message.thinking ?? ``}${patch.text}` }));
-        }
-        case `toolThinking`: {
-            const target = at(patch.index);
-            return target === undefined
-                ? state
-                : mapMessage(state, target.id, (message) => ({ ...message, tools: [...appendToolThinking(message.tools ?? [], patch.id, patch.text)] }));
-        }
-        case `tool`: {
-            const target = at(patch.index);
-            return target === undefined
-                ? state
-                : mapMessage(state, target.id, (message) => ({ ...message, tools: upsertTool(message.tools ?? [], patch.tool, patch.parent) }));
-        }
+    const named = `rowId` in patch && patch.rowId !== undefined ? state.messages.findLast((message) => message.rowId === patch.rowId) : undefined;
+    const target = named ?? state.messages[(state.attached?.base ?? state.messages.length) + patch.index];
+    if (target === undefined) {
+        return state;
     }
+    // A row replaced or dropped already holds its full text: no buffer may go on revealing prose into it.
+    const pending = (patch.op === `replace` || patch.op === `drop`) && state.pending?.id === target.id ? undefined : state.pending;
+    if (patch.op === `drop`) {
+        return { ...state, messages: state.messages.filter((message) => message.id !== target.id), pending };
+    }
+    if (patch.op === `text` && typewriter) {
+        return enqueueText(state, target.id, patch.text);
+    }
+    return { ...mapMessage(state, target.id, (message) => ({ ...patchedRow(message, patch), id: message.id })), pending };
 };
 
 // Typewriter is pure: the caller drives the clock, this only decides what a tick means.

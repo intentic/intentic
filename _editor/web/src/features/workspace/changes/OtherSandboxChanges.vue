@@ -126,7 +126,7 @@ const detail = (row: LedgerRow): string => {
                  glyph on the repo names' column, so this heading reads as one more block of that list. -->
             <span :class="LEAD"><Icon :name="open ? 'chevron-down' : 'chevron-right'" class="text-2xs text-subtle" /></span>
             <span :class="LEAD"><Icon name="server" class="text-2xs text-subtle" /></span>
-            <span class="min-w-0 flex-1 truncate text-2xs font-medium uppercase tracking-wide text-muted">{{
+            <span class="min-w-0 flex-1 truncate text-2xs font-medium text-muted">{{
                 t(`workspace.otherSandboxChanges.inOtherSandboxes`)
             }}</span>
             <span v-if="summary" class="shrink-0 text-2xs text-warning">{{ summary }}</span>

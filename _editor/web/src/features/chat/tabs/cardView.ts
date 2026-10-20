@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
 import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
 import { sessionCategory } from "../../../app/sessionCategory";
 import { type StandingChip, standingChip } from "../../../models/agent-status/agentStatus-chips";

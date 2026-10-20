@@ -56,7 +56,7 @@ const fill = computed(() => `${((galleryHeight.value - GALLERY_HEIGHT_MIN) / (GA
         </span>
         <button
             type="button"
-            :class="ui.chip({ on }, `h-6 px-2.5 text-xs`)"
+            :class="ui.chip({ on })"
             :aria-pressed="on"
             v-tooltip.bottom="on ? t(`workspace.homeView.galleryOffHint`) : t(`workspace.homeView.galleryOnHint`)"
             @click="emit('toggle')"

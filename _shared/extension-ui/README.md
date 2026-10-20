@@ -27,7 +27,22 @@ flowchart LR
   `engines.intentic` range the host satisfies then finds every name it was built with. One that asks for a name anyway
   is stopped before it links: the editor's loader reads the bundle's imports and says which name is missing and that
   the extension needs updating, where the browser would only say the module "does not provide an export named …".
-- `RepoRail` and `errorMessage` are deprecated and stay until 3.0.0 (`RepoPicker` and `messageOr` replace them).
+- What an extension may no longer take from the kit is recorded once, in `names.mjs`: `extensionUiDeprecated` for
+  names that still link (`RepoRail` → `RepoPicker`, `errorMessage` → `messageOr`, and from 2.33.0 `SkeletonSnapshot`,
+  `vSkeletonSource` and `useLoadingReveal` → `Await`, all removable in 3.0.0), and `extensionUiRetired` for props and
+  recipe members that no longer do anything a view should rely on (from 2.34.0 `RowGroup`'s `count`, `caption` and
+  `flat`, `NavRail`'s `stickyHeadings`, and `ui.sectionLabel` drawn by hand → `Section`/`SectionHeader`). Each entry
+  carries the extension API version it arrived in, and `surface.json` records the list per version (`uiKitDeprecated`).
+- `check/` is the kit's own judgement of an extension, published with it. `intentic-kit-check` (check/cli.mjs) reads an
+  extension's `src/` and fails on a deprecated name imported, a retired prop or member used, the decided looks the
+  editor is held to (check/kit-decisions.mjs: no header decision at a call site, no header drawn by hand, no card in a
+  card, no unspaced sections, no row height, no icon nudged by hand), and an `engines.intentic` floor below the version
+  that brought a name the extension imports, read off the installed extension-api's `surface.json`. Every extension
+  runs it in its `typecheck`; the monorepo's `extension-kit` check runs the same code over `_extensions/*` and the
+  standalone checkouts beside this repository, and `row-tiers`/`mark-alignment` read the same rules. A finding that is
+  right to keep says so in place with `allow(kit-check): <reason>`. (2026-10-20: the extensions shipped from their own
+  repositories still wired their waits by hand and wrote captions beside headers after the kit had decided both,
+  because these rules reached only this repository's templates.)
   (2026-10-15: `RepoRail` left the kit on 2026-10-12 with no version moving, and every installed extension still
   importing it stopped loading. It is back unchanged, and nothing recorded the kit's names before this.)
 - `./diff`, `./format`, `./i18n` and `./worker` skip the component barrel, for extension tests that run without a Vue
@@ -41,11 +56,14 @@ flowchart LR
 
 - [src/index.ts](src/index.ts) — the kit: every name an extension may import, with usage notes.
 - [scripts/build.mjs](scripts/build.mjs) — builds the published types and the host bridge from `_editor/ui`.
-- [names.mjs](names.mjs) — the runtime export names the shims and the host check read, and the deprecated ones.
+- [names.mjs](names.mjs) — the runtime export names the shims and the host check read, the deprecated ones and the retired props.
+- [check/extension.mjs](check/extension.mjs) — what an extension must change for the kit it builds against; [check/cli.mjs](check/cli.mjs) is `intentic-kit-check`.
 - [../../_editor/web/src/extension-host/hostModules.ts](../../_editor/web/src/extension-host/hostModules.ts) — where the shell publishes its instances to extension bundles.
 
 ## Commands
 
 ```sh
 pnpm --filter @intentic/extension-ui build
+node _tools/checks/extension-kit.mjs          # every workspace extension against the kit as it stands
+npx intentic-kit-check                        # inside an extension's own repository
 ```

@@ -6,13 +6,12 @@ import { computed, watch } from "vue";
 import ActionLink from "../../../components/ActionLink.vue";
 import { startAgent } from "../../../models/fleet/agentActions";
 import { useAgents } from "../../../models/fleet/useAgents";
-import { useOperation } from "../../../workbench/operations/operations";
+import { useOperation, useOperationProgress } from "../../../workbench/operations/operations";
 import { navigation } from "../../../workbench/navigation/navigation";
 import { updateBrief } from "../../../models/sandbox/extensionBrief";
 import { drawerScope, extensionBusy, latestFailure } from "./extensionWork";
 import { useExtensionUpdates } from "./useExtensionUpdates";
-import WaitProgress from "../../../components/WaitProgress.vue";
-import { useWaitClock } from "../../../components/useWaitClock";
+import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // What an open row says about its installed version before anything else, so it leads the drawer: a registry advisory,
@@ -126,11 +125,11 @@ const rebuildNote = computed(() => applying.value.value?.rebuildNeeded === true)
 // the new code to compare, and the apply fetches and builds it, which on a big extension takes minutes.
 const step = computed(() => {
     if (applying.busy.value) {
-        return { at: applying.operation.value?.startedAt, what: t(`sandbox.extensionUpdateOffer.applyingWhat`) };
+        return { run: applying.operation.value, what: t(`sandbox.extensionUpdateOffer.applyingWhat`) };
     }
-    return staging.busy.value ? { at: staging.operation.value?.startedAt, what: t(`sandbox.extensionUpdateOffer.reviewingWhat`) } : undefined;
+    return staging.busy.value ? { run: staging.operation.value, what: t(`sandbox.extensionUpdateOffer.reviewingWhat`) } : undefined;
 });
-const stepWait = useWaitClock(() => step.value?.at);
+const stepWait = useOperationProgress(() => step.value?.run);
 
 const revert = async (): Promise<void> => {
     if (busy.value) {
@@ -299,7 +298,7 @@ const shown = computed(
                     <template #icon><Icon name="sparkles" /></template>
                 </Button>
             </div>
-            <WaitProgress v-if="stepWait && step" :wait="stepWait" :what="step.what" class="mt-2.5" />
+            <ProgressMeter v-if="stepWait && step" :progress="stepWait" :what="step.what" class="mt-2.5" />
         </div>
 
         <Notice v-if="rebuildNote" tone="warning" size="sm">{{ t(`sandbox.extensionUpdateOffer.updateExtendsSandboxImage`) }}</Notice>

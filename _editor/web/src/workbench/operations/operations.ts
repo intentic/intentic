@@ -2,6 +2,8 @@ import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
 import { computed, type ComputedRef, getCurrentInstance, hasInjectionContext, type MaybeRefOrGetter, onScopeDispose, shallowReactive, toValue, watch } from "vue";
 import { activeSandboxId } from "../../app/storage/activeSandbox";
+import type { Expectation, Progress } from "../../components/progress/progress";
+import { useProgress } from "../../components/progress/useProgress";
 import { beginHubWork, injectHubSection } from "../hub/hubWork";
 import { useNotifications } from "../notifications/notifications";
 
@@ -19,6 +21,11 @@ import { useNotifications } from "../notifications/notifications";
 // An outcome is kept until somebody has had it on screen and left: a run that ends while its view is open is read
 // there and goes when the view does, as it always did; one that ends while nobody watches raises a receipt with a way
 // back, and waits in its view until it has been seen. A view mounted in a hub also marks that hub's row while it runs.
+//
+// A run also says how long it should take and when it gives up (`expectedMs`, `giveUpMs`), declared once where it starts,
+// so every surface drawing it reads the same promise through the one progress model (`useOperationProgress`,
+// components/progress). The give-up is the ledger's to keep, not a sentence: at that moment the task's signal aborts and
+// the run ends as failed with the starter's own failure, whatever the task does afterwards.
 
 export type OperationState = `running` | `done` | `failed`;
 
@@ -40,8 +47,19 @@ export interface Operation<T = unknown, F extends OperationFailure = NoticeModel
     readonly failure: F | undefined;
     readonly startedAt: number;
     readonly endedAt: number | undefined;
+    /** How long it should take, as its starter declared; undefined where nothing can say. */
+    readonly expectedMs: number | undefined;
+    /** When the ledger stops waiting on it and ends it as failed; undefined for work that never gives up by itself. */
+    readonly giveUpMs: number | undefined;
     /** Start order across the ledger: two runs begun in one millisecond still have a newer one. */
     readonly order: number;
+}
+
+/** The error a run's `failed` is handed when the ledger gave up on it: its message says after how long. */
+export class OperationGaveUp extends Error {
+    constructor(readonly afterMs: number) {
+        super(t(`shell.operations.gaveUp`, { seconds: Math.round(afterMs / 1000) }));
+    }
 }
 
 interface Entry extends Operation<unknown, OperationFailure, unknown> {
@@ -60,9 +78,11 @@ export interface OperationReport<P = string> {
     readonly progress: (next: P | ((previous: P | undefined) => P)) => void;
     /** The lines heard so far. */
     readonly lines: () => readonly string[];
+    /** Aborted when the ledger gives up on the run (RunOptions.giveUpMs): work that can stop, stops. */
+    readonly signal: AbortSignal;
 }
 
-export interface RunOptions<T, F extends OperationFailure, P = string> {
+export interface RunOptions<T, F extends OperationFailure, P = string> extends Expectation {
     /** Present tense, for the hub row while it runs and the receipt after: "Adding runner omen". */
     readonly what: string;
     readonly tag?: string;
@@ -166,6 +186,8 @@ export const startOperation = async <T, F extends OperationFailure = NoticeModel
         failure: undefined,
         startedAt: Date.now(),
         endedAt: undefined,
+        expectedMs: options.expectedMs,
+        giveUpMs: options.giveUpMs,
         order: started,
         sandboxId,
         seen: false,
@@ -180,11 +202,13 @@ export const startOperation = async <T, F extends OperationFailure = NoticeModel
             entries.set(address, entry);
         }
     };
+    const abort = new AbortController();
     const report: OperationReport<P> = {
         line: (text) => update({ lines: [...entry.lines, text].slice(-LINES_KEPT) }),
         progress: (next) =>
             update({ progress: typeof next === `function` ? (next as (previous: P | undefined) => P)(entry.progress as P | undefined) : next }),
         lines: () => entry.lines,
+        signal: abort.signal,
     };
     const unmark = context.hub === undefined ? undefined : beginHubWork(context.hub, options.what);
     const settle = (patch: Partial<Entry>): Operation<T, F, P> => {
@@ -195,13 +219,27 @@ export const startOperation = async <T, F extends OperationFailure = NoticeModel
         }
         return entry as Operation<T, F, P>;
     };
+    // The give-up races the task: whichever ends first is the run's outcome, and the other is never heard.
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const givenUp =
+        options.giveUpMs === undefined
+            ? undefined
+            : new Promise<never>((_, reject) => {
+                  const after = options.giveUpMs ?? 0;
+                  deadline = setTimeout(() => {
+                      const error = new OperationGaveUp(after);
+                      abort.abort(error);
+                      reject(error);
+                  }, after);
+              });
     try {
-        const value = await options.task(report);
+        const value = await (givenUp === undefined ? options.task(report) : Promise.race([options.task(report), givenUp]));
         return settle({ state: `done`, value });
     } catch (error) {
         const failure = typeof options.failed === `string` ? noticeFrom(error, options.failed) : options.failed(error, entry.lines);
         return settle({ state: `failed`, failure });
     } finally {
+        clearTimeout(deadline);
         unmark?.();
     }
 };
@@ -310,9 +348,29 @@ export const useOperations = <T = void, F extends OperationFailure = NoticeModel
     };
 };
 
+/**
+ * How far along a run is, in the one progress model, while it runs: its own clock, and the expectation and give-up its
+ * starter declared. Undefined once it has ended, or with none. The only way a ledger run reaches a progress readout.
+ */
+export const useOperationProgress = (
+    operation: MaybeRefOrGetter<Pick<Operation, `state` | `startedAt` | `expectedMs` | `giveUpMs`> | undefined>,
+): ComputedRef<Progress | undefined> =>
+    useProgress(
+        () => {
+            const run = toValue(operation);
+            return run?.state === `running` ? run.startedAt : undefined;
+        },
+        () => {
+            const run = toValue(operation);
+            return { expectedMs: run?.expectedMs, giveUpMs: run?.giveUpMs };
+        },
+    );
+
 export interface OperationView<T, F extends OperationFailure, P = string> {
     readonly operation: ComputedRef<Operation<T, F, P> | undefined>;
     readonly busy: ComputedRef<boolean>;
+    /** How far along it is while it runs (useOperationProgress), for a <ProgressMeter>. */
+    readonly meter: ComputedRef<Progress | undefined>;
     readonly lines: ComputedRef<readonly string[]>;
     readonly progress: ComputedRef<P | undefined>;
     readonly failure: ComputedRef<F | undefined>;
@@ -331,6 +389,7 @@ export const useOperation = <T = void, F extends OperationFailure = NoticeModel,
     return {
         operation,
         busy: computed(() => operation.value?.state === `running`),
+        meter: useOperationProgress(operation),
         lines: computed(() => operation.value?.lines ?? []),
         progress: computed(() => operation.value?.progress),
         failure: computed(() => operation.value?.failure),

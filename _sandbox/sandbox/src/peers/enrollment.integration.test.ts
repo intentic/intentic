@@ -17,6 +17,7 @@ const burnsIn = (historyRoot: string): Burns => ({ document: syncPairConsumedDoc
 const thingsDocument = defineDocument({
     root: "history",
     path: "enrollments.json",
+    portability: "carry",
     schema: z.object({ things: z.array(z.object({ id: z.string(), hash: z.string(), enrolledAt: z.number(), host: z.string().optional() })) }),
 });
 

@@ -6,7 +6,6 @@ import { onScreen } from "../../../workbench/window/onScreen";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { type ChatNote, onChatNote, postChatNote } from "./chatChannel";
 import { traceFocus } from "./focusTrace";
-import { type DraftPreviews, NO_PREVIEWS } from "../drafts/draftPreview";
 import { EMPTY_STRIP, type Strip } from "../tabs/tabFacts";
 
 const { activeSandboxId } = useSandbox();
@@ -20,15 +19,7 @@ export const elsewhereStrip: ComputedRef<Strip> = computed(() =>
     !drawsChat.value && heard.value?.owner === owner.value ? (heard.value?.strip ?? EMPTY_STRIP) : EMPTY_STRIP,
 );
 
-// Composer words for the same tabs, held apart from the strip because they move per character: a window that is
-// only listening rebuilds nothing when they land. Unowned and unrevisioned — the strip decides which cards have
-// unsent words at all, so a preview no card asks about is never drawn.
-const heardPreviews = sandboxShallowRef<DraftPreviews>(() => NO_PREVIEWS);
-
-export const elsewherePreviews: ComputedRef<DraftPreviews> = computed(() => (drawsChat.value ? NO_PREVIEWS : heardPreviews.value));
-
 let published: { sandbox: string | undefined; strip: Strip; revision: number } | undefined;
-let publishedPreviews: { sandbox: string | undefined; previews: DraftPreviews } | undefined;
 let revision = 0;
 
 // This window is the one drawing the chat, and what it last published describes the sandbox it is still pointed at.
@@ -43,43 +34,21 @@ const speakStrip = (): void => {
     postChatNote({ kind: `strip`, owner: holder, revision: published.revision, strip: published.strip });
 };
 
-const speakPreviews = (): void => {
-    if (publishedPreviews === undefined || !speaks(publishedPreviews.sandbox)) {
-        return;
-    }
-    postChatNote({ kind: `previews`, previews: publishedPreviews.previews });
-};
-
-const speak = (): void => {
-    speakStrip();
-    speakPreviews();
-};
-
 // The tab store supplies its restored scope; reading the selected sandbox here could mislabel outgoing state.
 export const publishStrip = (strip: Strip, sandbox: string | undefined): void => {
     published = { sandbox, strip, revision: ++revision };
     speakStrip();
 };
 
-export const publishPreviews = (previews: DraftPreviews, sandbox: string | undefined): void => {
-    publishedPreviews = { sandbox, previews };
-    speakPreviews();
-};
-
 const reconcile = (): void => {
     if (floatingWindowPanel.value === `chat`) {
-        speak();
+        speakStrip();
         return;
     }
     postChatNote({ kind: `roll` });
 };
 
-onChatNote(`roll`, speak);
-onChatNote(`previews`, (note) => {
-    if (!drawsChat.value) {
-        heardPreviews.value = note.previews;
-    }
-});
+onChatNote(`roll`, speakStrip);
 onChatNote(`strip`, (note) => {
     if (drawsChat.value || note.owner !== owner.value || (heard.value?.owner === note.owner && note.revision <= heard.value.revision)) {
         return;
@@ -92,7 +61,6 @@ watch(
     owner,
     (holder) => {
         heard.value = undefined;
-        heardPreviews.value = NO_PREVIEWS;
         traceFocus(`chat-owner`, { sandbox: activeSandboxId.value, owner: holder, draws: drawsChat.value });
     },
     { flush: `sync` },

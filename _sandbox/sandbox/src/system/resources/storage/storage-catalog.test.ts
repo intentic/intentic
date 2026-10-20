@@ -1,4 +1,4 @@
-import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
+import { HISTORY_STATE_FILES } from "../../../store/evolution/history-state.js";
 import { STORAGE_CLEANABILITY, StorageCategoryIdSchema } from "@intentic/sandbox-contract/schemas/metrics";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 import { categoryFolders, classifyStoragePath, isProtectedStoragePath, locateStoragePath, type StorageRootKind } from "./storage-catalog.js";

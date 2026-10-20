@@ -608,11 +608,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         v-if="editorChip"
                                         type="button"
                                         :class="
-                                            ui.chip(
-                                                { on: includeEditorContext },
-                                                `rounded-lg px-2 py-1.5 text-xs`,
-                                                !includeEditorContext && `border-dashed border-line`,
-                                            )
+                                            ui.chip({ on: includeEditorContext }, !includeEditorContext && `border-dashed border-line`)
                                         "
                                         @click="includeEditorContext = !includeEditorContext"
                                         :aria-pressed="includeEditorContext"

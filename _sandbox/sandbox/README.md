@@ -108,6 +108,13 @@ flowchart LR
   it at the public `POST /system/redeem/<code>`, which is rate-limited, and gets back what the command used to carry.
   A server's code stands for a single-use enroll token, so the sandbox's long-lived connect token stays here. Codes live
   in memory only, so a restart voids them and the person copies a new command.
+- A device's enrollment is written with the machine id its agent sends when it redeems the pairing
+  (`POST /system/hosts/enroll`, `PeerEnrollmentRequestSchema`), so the computer joins its sync row as one machine card
+  from that moment, and older keys of the same computer and environment go at once (`hosts/host-dedupe.ts`). One rule
+  decides what is learned, there and at connect (`machineIdLearned` in `hosts/host-peer.ts`): a real id only, never a
+  stand-in `card:<name>` one, and only for the environment the pairing is for. An agent that sends nothing is recorded
+  under the card's stand-in id and says its own at connect. (2026-10-20: the id used to be learned only at connect,
+  which drew a freshly paired computer as two machine cards until its agent came up.)
 - One turn: `agent/run/turn/turn-admission.ts` admits it, `turn-plan.ts` picks a runtime, it runs in the
   conversation's worktree (or the main tree, or a remote runner), and `conversations/land/land.ts` lands the result as
   uncommitted changes. When an isolated Claude Code turn is about to stop, each repository's own `turn` checks run
@@ -146,7 +153,9 @@ flowchart LR
   `fleetCapacity` per model), which lays every standing refusal on the reading it covers (`judgedReading`). The daemon
   reads it through `usage/serviceability/serviceability.ts` for placement, holds, the role ladder, the spawn listing and
   gate, and Auto. The editor runs the same rule on the same rows and the whole ledger (`/agent/refusals`, then each
-  change pushed whole), for the rail, the picker's rows and accounts, and the composer's offers. Nothing publishes or
+  change pushed whole), for the rail, the picker's rows and accounts, the composer's offers, and the model a job's
+  button names: the first rung of its ladder no account is spent on, as the run opens on it (the contract's
+  `openingRung`, read by `agent/models/run-role-model.ts` and the editor's `roleModel.ts`). Nothing publishes or
   keeps a judged copy. Before, one refusal was filed three times (the provider's last refusal, a routed model's bench in
   `model-cooldowns.json`, a Cursor account's run-out in `observed-limits.json`), each with its own horizon and settle
   rule, and every surface judged by a different subset. So the picker greyed a model the spawn listing offered, the rail
@@ -162,7 +171,10 @@ flowchart LR
   again at 5:46 PM"). A loop's retry and the translator's bench only set the earliest re-run, and a pool the sentence
   names by length ("your 5-hour usage limit") reopens when the reading says that pool does. A refusal that names no
   instant takes the sandbox's standing word on the same pool: the refusals on file for the model
-  (`agent/models/limit-reset.ts` `standingReopensAt`). A spent allowance in a
+  (`agent/models/limit-reset.ts` `standingReopensAt`). The ledger files such a refusal with the reset of the pool it was
+  refused in, read off the account's reading as it files it (`poolResetsAt`, the contract's `refusedPoolReset`), and the
+  verdict ends it there, in the daemon and every open window at the same instant. (2026-10-20) Before, it stood past
+  that reset until the next reading landed, up to the 15-minute idle sweep, while the picker already said "back at". A spent allowance in a
   routed refusal envelope stays a spent allowance, not a model off the plan. An admin-granted credit ("send a request to
   your admin") is filed `unmetered`, so no usage reading answers it.
 - What carries a conversation on with nobody pressing anything is one derived value on its card, `next`
@@ -176,6 +188,13 @@ flowchart LR
   itself" from its own subset of fields, so a card said "sends when memory frees" in its corner while waiting in
   Attention. The pass still times a hold refused with no instant once the records know its reopen, and withdraws a
   "resuming" whose answer is now to wait (`agent/run/turn/holds/held-standing.ts`).
+- A person's unsent message is a draft the sandbox holds, one per person and conversation, in
+  `/history/composer-drafts.json` (`conversations/drafts/composer-drafts.ts`). `agents.drafts` lists only the caller's
+  own. A write names the revision it was edited from, and is answered with the newer draft instead of overwriting it
+  when another window or device wrote since. `agent.run` carrying `draft` clears exactly that revision as it takes the
+  message. Every change pushes the `drafts` domain, which names nobody and carries no words, and sets the card's
+  `unsentAt`, so the idle archive leaves a conversation somebody is still writing to. A draft never goes by itself
+  (`next` never names one), and no model reads it until it is sent, when the privacy shield judges it as the message.
 - Nothing the resume pass sends goes into an allowance the records call spent. Before it fires any hold, it asks the
   allowance wall in front of the account the turn would go on (`allowanceWall` in `usage/serviceability/`, the one
   answer the allowance gate and an account pick read too). A spent allowance's booking is read with that wall on every
@@ -392,8 +411,12 @@ flowchart LR
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
   snapshot, taken by the formula in `@intentic/constants/memory-room`.
 - Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
-  the conversions its shape has had, its path (the contract's state-file tables are found from it, `stateFile`) and
-  its layout; a store opens it with `store/open-document.ts` (`openDocument`, `openEntries`, `openIdList`,
+  the conversions its shape has had, its path and its layout. A document on `/history` also says whether it travels in
+  a bundle (`portability`, and the `note` the bundle report shows when it does not); a workspace or auth one is found by
+  its path in the contract's state-file tables (`stateFile`). The bundle's `/history` table
+  (`store/evolution/history-state.ts`) is those declarations plus a short list of the paths no document claims (git
+  dirs, the database, logs, keys the image writes). (2026-10-20) Before, the documents were listed there too, by hand,
+  in the contract, and a document added without its line broke CI twice; a store opens it with `store/open-document.ts` (`openDocument`, `openEntries`, `openIdList`,
   `openDirectory`), which parses with the document's own schema through the contract's one `readDocument`, runs its
   conversions on every read and keeps what this build does not know on writes, so a store's next save is what
   persists a converted shape. Families of files with one shape (the doors' enrollment and burn files, the two vaults,
@@ -403,12 +426,14 @@ flowchart LR
   rolled-back build undoes, committed once boot converges; it runs each document's conversions without writing, so one
   that would fail is named first. A step or write that throws partway is put back at once, `/health` reports the
   journal `failed` for the rest of that boot (a host takes it as the update not having taken), and the stores go on
-  converting on read; nothing of that boot commits. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight. Both
+  converting on read; nothing of that boot commits. `src/state-plan.ts` is the same plan, read-only, for `ic`'s pre-flight, and `src/environment/compose-overlay.ts` prints, read-only, the environment overlay this image's daemon composes for a sandbox, which `ic` builds on a swap onto it (`composedOverlay`, the same function the daemon materializes). Both
   take every document and structural step from `bootstrap/state-registry.ts` (`main.ts` hands it to the boot step),
   never from what a process loaded; it sits in the boot wiring, above every subsystem, because it imports them all.
   `scripts/write-indexes.mjs` (`pnpm indexes`, run before this package's typecheck, test, dev and build, and by the
   fixers in the tree a land writes into: `conversations/land/rederive.ts`) writes it from every
-  `export const name = defineDocument(…)` (or `defineStep`) in the source, failing on a definition in any other form.
+  `export const name = defineDocument(…)` (or `defineStep`) in the source, failing on a definition in any other form,
+  and writes `store/evolution/history-documents.generated.ts` from what each `/history` document declares, failing on
+  one that does not say whether it travels, as literals.
   `store/shapes/write-state-shapes.ts --freeze` (which the fixers run next, when the change reached a daemon or
   contract source) reads it and records each document's shape in `store/generated/state-shapes.json` by the release
   that first shipped it.
@@ -553,8 +578,8 @@ flowchart LR
 - Housekeeping runs on one clock that remembers across restarts (`system/chore-clock.ts`, `/history/chore-clock.json`,
   wired in `bootstrap/boot-chores.ts`; 2026-10-05): git maintenance hourly (a stale `maintenance.lock` is now named
   and cleared instead of skipping silently), stale git locks and temp packs at boot and hourly with no git running,
-  `gc --prune=2.weeks.ago` daily while idle, parked `refs/agent/*` of conversations archived over 90 days ago daily
-  (`conversations/land/parked-ref-retention.ts`), `/history/trash` past 14 days hourly, checkouts and overlays no
+  `gc --prune=2.weeks.ago` daily while idle, parked `refs/agent/*` of conversations archived over 90 days ago daily, with their
+  `refs/intentic/carried` and `refs/intentic/dropped` markers (`conversations/land/parked-ref-retention.ts`), `/history/trash` past 14 days hourly, checkouts and overlays no
   conversation owns daily (`conversations/worktrees/orphan-checkouts.ts`), and the agents' dockerd's stopped
   containers and dangling images daily when it already runs (`capabilities/handlers/docker-prune.ts`).
 - Held conversations (`ready`, `error`, `interrupted`, `conflict`) release their checkout and overlay after

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agents";
+import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";

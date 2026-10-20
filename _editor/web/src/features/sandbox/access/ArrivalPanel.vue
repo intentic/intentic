@@ -9,8 +9,7 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useOperation } from "../../../workbench/operations/operations";
 import { helpTopics, SOURCE_GUIDES } from "../overview/assistantGuide";
 import { useT } from "@intentic/ui/i18n";
-import WaitProgress from "../../../components/WaitProgress.vue";
-import { useWaitClock } from "../../../components/useWaitClock";
+import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
 
 // Body of <ImportCard>: one picker, one checklist, one report for all four arrival sources. The daemon detects
 // the source from the file itself, so the picker never asks; every source becomes a plan first, and only Apply writes.
@@ -45,8 +44,8 @@ const adopted = computed(() => applyOp.value.value?.adopted);
 const planError = computed(() => planOp.failure.value ?? discardOp.failure.value);
 const applyError = applyOp.failure;
 // How long the read and the bringing-in have run: both can take minutes, and a held button alone said nothing of it.
-const planWait = useWaitClock(() => (planOp.busy.value ? planOp.operation.value?.startedAt : undefined));
-const applyWait = useWaitClock(() => (applying.value ? applyOp.operation.value?.startedAt : undefined));
+const planWait = planOp.meter;
+const applyWait = applyOp.meter;
 
 // Which rows to bring and whether secrets ride along are the reader's answers, so they stay here; a plan found again on
 // coming back starts from the adapter's own recommendation, as it did when it was first read.
@@ -260,7 +259,7 @@ const cancel = async (): Promise<void> => {
                     <Button :label="t(`sandbox.arrivalPanel.openclaw`)" size="small" tier="quiet" @click="picked = `openclaw`" />
                 </template>
             </div>
-            <WaitProgress v-if="planWait" :wait="planWait" :what="t(`sandbox.arrivalPanel.readingNote`)" :details="planOp.lines.value" />
+            <ProgressMeter v-if="planWait" :progress="planWait" :what="t(`sandbox.arrivalPanel.readingNote`)" :details="planOp.lines.value" />
 
             <!-- One command only: the reader already named which assistant is theirs. -->
             <div v-if="guide" class="flex flex-col gap-3">
@@ -364,7 +363,7 @@ const cancel = async (): Promise<void> => {
                 />
                 <Button :label="t(`ui.action.cancel`)" size="small" tier="quiet" @click="cancel" />
             </div>
-            <WaitProgress v-if="applyWait" :wait="applyWait" :what="t(`sandbox.arrivalPanel.applyingNote`)" :details="applyOp.lines.value" />
+            <ProgressMeter v-if="applyWait" :progress="applyWait" :what="t(`sandbox.arrivalPanel.applyingNote`)" :details="applyOp.lines.value" />
         </template>
 
         <!-- One shared report for all four sources. -->

@@ -57,3 +57,17 @@ it(`offers one row per image ic listed, each sent as that image`, () => {
     ]);
     expect(rollbackChoices(takesTo, { rollbackTargets: [release, release, release] })).toEqual([]);
 });
+
+// 2026-10-20: a host whose ic predates the reachable listing still lists a pruned dev build as a download of 0.0.0. Its
+// facts lack `reachable-ways-back`, so that row goes; a current ic's rows are offered as it listed them.
+it(`leaves out what an older ic listed and could never reach, and nothing a current ic listed`, () => {
+    const gone = { image: `intentic-sandbox-rollback-s1:c6cc76cfeece`, version: `0.0.0`, download: true };
+    const release = { image: `ghcr.io/intentic/sandbox:1.2.0`, version: `1.2.0`, download: true };
+    const local = { image: `intentic-sandbox-rollback-s1:aaaaaaaaaaaa`, version: `1.3.0` };
+    expect(rollbackChoices(takesTo, { rollbackTargets: [local, gone, release] })).toEqual([
+        { version: `1.3.0`, to: undefined },
+        { version: `1.2.0`, to: `ghcr.io/intentic/sandbox:1.2.0` },
+    ]);
+    const current = { features: [`rollback-to`, `reachable-ways-back`] };
+    expect(rollbackChoices(current, { rollbackTargets: [local, gone] }).map((choice) => choice.version)).toEqual([`1.3.0`, `0.0.0`]);
+});

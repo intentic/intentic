@@ -23,6 +23,7 @@ import { postTurnControl } from "../../client/sandbox/streams/turnStream";
 import { useOperation, useOperations } from "../../workbench/operations/operations";
 import { loopbackPreviewTarget, pickTarget, type PreviewTarget } from "../../models/preview/previewModel";
 import { usePreviewTargets } from "../../features/preview/usePreviewTargets";
+import { noAppsLine, stateOf, tintOf } from "../../features/preview/targetWords";
 import PreviewTab from "../../features/preview/PreviewTab.vue";
 import PreviewStage from "../../features/preview/PreviewStage.vue";
 import { phoneById, phonePickerGroups, phoneUserAgent, storePhoneId, storedPhoneId } from "../../features/preview/phoneModels";
@@ -208,7 +209,9 @@ const windowList = computed(() => [
 
 // ===== The live apps =====
 
-const { targets, settled, start, stop, forward, refresh } = usePreviewTargets(browsersOpened);
+const { targets, listed: appsRead, start, stop, forward, refresh } = usePreviewTargets(browsersOpened);
+// Only the list's answer can say which apps there are; until then (or while it fails) nothing is picked or promised.
+const settled = computed(() => appsRead.value.state === `ready`);
 const previewActions = { start, stop, forward, refresh };
 
 // The app a pin is of, exactly: a `repo:` pin whose repo now runs as apps lands on its first app, as the old picker did,
@@ -221,19 +224,6 @@ const targetOf = (id: string): PreviewTarget | undefined => {
     const repo = id.slice(`repo:`.length);
     return targets.value.find((target) => target.repo === repo);
 };
-
-const stateOf = (target: PreviewTarget): string =>
-    target.kind === `repo` || target.kind === `app`
-        ? target.healthy
-            ? t(`preview.previewPanel.stateRunning`)
-            : target.running
-              ? t(`preview.previewPanel.stateStarting`)
-              : t(`preview.previewPanel.stateStopped`)
-        : t(`preview.previewPanel.stateLive`);
-// The colour an app's glyph wears: answering, on its way, or down. Anything without a process (a port, the outbox page)
-// is answering by being listed.
-const tintOf = (target: PreviewTarget | undefined): string =>
-    target === undefined ? `text-subtle` : target.healthy ? `text-success` : target.running ? `text-info` : `text-subtle`;
 
 // "The live app", asked for without naming one (the palette, the status bar's chip): the app most worth seeing, once the
 // list has answered, preferring one already pinned.
@@ -855,7 +845,7 @@ const launchGroups = computed<readonly LaunchGroup[]>(() => [
     {
         label: t(`browsers.launcher.apps`),
         items: appItems.value,
-        empty: settled.value ? t(`preview.previewPanel.startDevServerIn`) : t(`preview.previewPanel.readingWhatPreviewed`),
+        empty: noAppsLine(appsRead.value),
     },
     ...(deskItems.value.length === 0 ? [] : [{ label: t(`shared.desktop`), items: deskItems.value }]),
 ]);
@@ -1171,7 +1161,7 @@ const { floats } = useBrowsersFloating();
                         <button
                             ref="switcherTrigger"
                             type="button"
-                            :class="ui.chip({ on: switcherOpen }, `mb-1 mr-1.5 shrink-0 self-center px-2 py-1 text-content`)"
+                            :class="ui.chip({ on: switcherOpen }, `mb-1 mr-1.5 shrink-0 self-center text-content`)"
                             aria-haspopup="menu"
                             :aria-expanded="switcherOpen"
                             :aria-label="t(`browsers.browsers.switchWindow`)"
@@ -1193,8 +1183,8 @@ const { floats } = useBrowsersFloating();
                                     v-for="session in windowList"
                                     :key="session.name"
                                     type="button"
-                                    class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-content/5"
-                                    :class="{ 'bg-primary-600/15': session.name === selected && webInFront }"
+                                    class="ui-row-select flex items-center gap-2 rounded-md px-2 py-1.5 text-left"
+                                    :class="{ 'ui-row-select-on': session.name === selected && webInFront }"
                                     @click="
                                         switcherOpen = false;
                                         showWindow(session.name);
@@ -1216,7 +1206,7 @@ const { floats } = useBrowsersFloating();
                     <button
                         v-else-if="helpBehind && current"
                         type="button"
-                        class="ui-chip mb-1 mr-1.5 shrink-0 self-center px-2 py-1 text-content"
+                        class="ui-chip mb-1 mr-1.5 shrink-0 self-center text-content"
                         :aria-label="t(`browsers.browsers.help`)"
                         v-tooltip.bottom="current.help?.message"
                         @click="showWindow(current.name)"
@@ -1304,7 +1294,7 @@ const { floats } = useBrowsersFloating();
                     <button
                         v-if="steppedIn"
                         type="button"
-                        :class="ui.chip({ on: true }, `ml-1 shrink-0 px-2.5 py-1 font-medium`)"
+                        :class="ui.chip({ on: true }, `ml-1 shrink-0 font-medium`)"
                         v-tooltip.bottom="{ title: t(`browsers.browsers.handBack`), note: t(`browsers.browsers.agentCarriesOn`) }"
                         @click="handBack"
                     >
@@ -1318,7 +1308,7 @@ const { floats } = useBrowsersFloating();
                         </span>
                         <button
                             type="button"
-                            class="ui-chip ml-1 shrink-0 px-2.5 py-1 font-medium text-content"
+                            class="ui-chip ml-1 shrink-0 font-medium text-content"
                             v-tooltip.bottom="{ title: t(`browsers.browsers.takeOver`), note: t(`browsers.browsers.sendsYourInput`) }"
                             @click="takeOver"
                         >
@@ -1506,6 +1496,7 @@ const { floats } = useBrowsersFloating();
                         <Icon name="browsers" class="text-3xl text-subtle" />
                         <form class="ui-field-shell flex h-11 w-full items-center gap-3 rounded-full px-4" @submit.prevent="submitStart">
                             <Icon name="search" class="shrink-0 text-xs text-subtle" />
+                            <!-- allow(substitutes): a browser's address field (a URL, or words to search the web for on Enter), not a filter over a list -->
                             <input
                                 ref="startField"
                                 v-model="startText"
@@ -1585,7 +1576,7 @@ const { floats } = useBrowsersFloating();
                     <div v-if="watchHint && !interactive" class="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3">
                         <div class="pointer-events-auto flex items-center gap-3 rounded-full border border-line bg-card py-1 pl-3.5 pr-1 shadow-lg">
                             <span class="text-xs text-content">{{ t(`browsers.browsers.watchingOnly`) }}</span>
-                            <button type="button" :class="ui.chip({ on: true }, `shrink-0 px-2.5 py-1 font-medium`)" @click="takeOver">
+                            <button type="button" :class="ui.chip({ on: true }, `shrink-0 font-medium`)" @click="takeOver">
                                 {{ t(`browsers.browsers.takeOver`) }}
                             </button>
                         </div>
@@ -1630,7 +1621,7 @@ const { floats } = useBrowsersFloating();
                         <button
                             v-if="!helpOpen"
                             type="button"
-                            class="ui-chip pointer-events-auto gap-2 border-warning-600/40 bg-card px-3 py-1.5 text-xs text-content shadow-lg hover:bg-overlay"
+                            class="ui-chip ui-chip-lg pointer-events-auto border-warning-600/40 bg-card text-content shadow-lg hover:bg-overlay"
                             @click="helpOpen = true"
                         >
                             <Icon name="exclamation-triangle" class="shrink-0 text-2xs text-warning" />
@@ -1705,7 +1696,7 @@ const { floats } = useBrowsersFloating();
                         </div>
                         <button
                             type="button"
-                            class="ui-chip gap-2 border-line bg-card px-3 py-1 text-content shadow-lg hover:bg-overlay"
+                            class="ui-chip ui-chip-lg border-line bg-card text-content shadow-lg hover:bg-overlay"
                             :aria-expanded="queueOpen"
                             @click="queueOpen = !queueOpen"
                         >
@@ -1722,7 +1713,7 @@ const { floats } = useBrowsersFloating();
                 <PreviewTab
                     :ref="previewRef(tabKey(pin))"
                     :target="targetOf(pin.id)"
-                    :settled="settled"
+                    :listed="appsRead"
                     :active="live(pin)"
                     :tools-to="toolsEl"
                     :phone="framesPhone(pin) ? phone : undefined"

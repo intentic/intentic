@@ -130,7 +130,7 @@ const dirty = computed(() => {
             <p class="pt-1 text-2xs text-muted">{{ t(`capabilities.secretHosts.explain`) }}</p>
             <p v-if="stored?.source === `connector`" class="pt-0.5 text-2xs text-subtle">{{ t(`capabilities.secretHosts.fromConnector`) }}</p>
             <div v-if="draft.length > 0" class="flex flex-wrap gap-1 pt-1">
-                <span v-for="host of draft" :key="host" :class="ui.chip({ on: true }, `gap-1 py-1 pl-2 pr-1 font-mono text-2xs`)">
+                <span v-for="host of draft" :key="host" :class="ui.chip({ on: true, trail: true }, `font-mono`)">
                     {{ host }}
                     <button
                         type="button"

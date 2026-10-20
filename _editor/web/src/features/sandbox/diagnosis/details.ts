@@ -3,7 +3,7 @@ import { formatElapsed, formatTime } from "@intentic/ui";
 import type { ConnectionState } from "../../../client/sandbox/connection";
 import type { Diagnosis, Evidence, NetdProbe } from "./diagnose";
 
-// THE RAW FACTS BEHIND AN OUTAGE'S SENTENCE, for the reader who presses "Technical details" (components/WaitProgress).
+// THE RAW FACTS BEHIND AN OUTAGE'S SENTENCE, for the reader who presses "Technical details" (components/progress/ProgressMeter.vue).
 // The sentence above them is the diagnosis in the reader's words. These lines are what it was made of: how the
 // connection failed and how often it has retried, what each probe found, and the machine's own report, check by check.
 // Verbatim and untranslated, like any log, because that is what someone asks for when the sentence was not enough

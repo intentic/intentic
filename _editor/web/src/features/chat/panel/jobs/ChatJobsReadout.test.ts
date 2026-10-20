@@ -20,6 +20,8 @@ jest.mock("@intentic/ui", async () => {
                 () =>
                     props.modelValue ? vue.h(`div`, { class: `overlay` }, slots[`default`]?.()) : undefined,
         }),
+        // The panel's title line: its label, as the kit's header draws it.
+        SectionHeader: vue.defineComponent({ props: { label: String }, setup: (props) => () => vue.h(`div`, props.label) }),
         ui: { iconButton: (extra: string) => extra },
     };
 });

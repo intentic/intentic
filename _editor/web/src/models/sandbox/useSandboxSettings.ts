@@ -40,7 +40,7 @@ const droppedFieldsReason = (sent: SandboxSettings, stored: SandboxSettings): st
 };
 
 export function useSandboxSettings() {
-    const { query, error } = useSandboxQuery(rpcQuery(`settings.get`));
+    const { query, error, loaded } = useSandboxQuery(rpcQuery(`settings.get`));
 
     const save = useMutation(
         {
@@ -96,6 +96,9 @@ export function useSandboxSettings() {
         isLoading: query.isLoading,
         // Every control is disabled until `settings` arrives; render this so a failed read isn't left unexplained.
         error,
+        // Where the read stands, for a page that draws values only the answer holds (<Await>): until then, and when it
+        // fails, a page drawing schema defaults would show settings the sandbox does not have.
+        loaded,
         // Set when the last successful save came back missing a field: the daemon is older than this app.
         dropped,
         refusal,

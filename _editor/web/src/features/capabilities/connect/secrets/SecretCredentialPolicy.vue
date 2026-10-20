@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { parseJsonOr } from "@intentic/base/json";
-import { Notice, type NoticeModel, ui, vAction } from "@intentic/ui";
+import { Notice, type NoticeModel, Section, ui, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import type { BrokerRule } from "@intentic/extension-manifest";
@@ -75,10 +75,8 @@ const ruleLine = (rule: BrokerRule): string =>
 </script>
 
 <template>
-    <div v-if="policy !== undefined" class="mt-3 border-t border-line pt-2">
-        <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`capabilities.secretCredentialPolicy.heading`) }}</span>
-
-        <div class="flex items-center justify-between gap-2 pt-1.5">
+    <Section v-if="policy !== undefined" :label="t(`capabilities.secretCredentialPolicy.heading`)" density="dense" class="mt-3 border-t border-line pt-2">
+        <div class="flex items-center justify-between gap-2">
             <span class="text-xs text-content">{{
                 policy.delivery === `gateway`
                     ? t(`capabilities.secretCredentialPolicy.heldByGateway`)
@@ -154,5 +152,5 @@ const ruleLine = (rule: BrokerRule): string =>
             </template>
         </template>
         <Notice v-if="error" :of="error" class="mt-2" />
-    </div>
+    </Section>
 </template>

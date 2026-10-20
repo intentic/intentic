@@ -18,7 +18,7 @@ import { applyTrim, promptTrim, trimState, type TurnTrim, type TurnTrimState, tu
 import { spawnNote } from "../../subagents/spawn-note.js";
 import type { TurnBase } from "../../providers/agent-request.js";
 import { opt } from "../../../opt.js";
-import type { TurnContext, TurnRefusal } from "../../providers/adapter.js";
+import { privacyTurnRefusal, type TurnContext, type TurnRefusal } from "../../providers/adapter.js";
 import type { TurnExperimentStamps } from "../turn/turn-plan.js";
 import { experimentStamps, type TurnFieldNotes } from "./experiments.js";
 import { honoured } from "./honoured.js";
@@ -220,7 +220,7 @@ export const decideTurn = (facts: TurnFacts, input: RoutedAgentTurn, context: Tu
     if (facts.privacyRefusal !== undefined) {
         const said = { provider: runtime.provider, harness: runtime.harness };
         const warning = { fields: said, message: "privacy: the shield can't cover this runtime and the provider is untrusted, refused before sending" };
-        return { ok: false, code: "privacy-unshielded", message: facts.privacyRefusal, warnings: [warning], spawn: false };
+        return { ...privacyTurnRefusal(facts.privacyRefusal), warnings: [warning], spawn: false };
     }
     const unkept = toolListRefusal(input, runtime);
     if (unkept !== undefined) {

@@ -122,7 +122,7 @@ const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } })
                             :class="isActive(option) ? availabilityVisual.inkClass : 'text-subtle'"
                             :aria-label="isActive(option) ? `${placementFor(option).detail} · ${availabilityVisual.label}` : placementFor(option).detail"
                         />
-                        <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{
+                        <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 font-medium text-subtle">{{
                             t(`shared.shared`)
                         }}</span>
                     </template>

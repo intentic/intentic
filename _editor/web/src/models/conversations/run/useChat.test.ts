@@ -165,7 +165,7 @@ const newChat = () => {
     return conversation;
 };
 
-const { closedDrafts } = await import("../drafts/closedDrafts");
+const { draftOf, heldDrafts } = await import("../drafts/composerDrafts");
 // Asserts the projection the board reads (tabFacts.unasked, over a live conversation), not an internal flag.
 const { unaskedDraft } = await import("../tabs/tabFacts");
 const { usageByAccount } = await import("../../providers/providerAccounts");
@@ -1427,9 +1427,9 @@ describe(`closing tabs`, () => {
         expect(chat.draft.value).toBe(``);
     });
 
-    // A closed tab's unsent text exists nowhere else, so it's set aside in closedDrafts; the board keeps a card for it
-    // and reopening restores the words.
-    it(`sets a closing chat's unsent message aside, and puts it back when the chat is opened again`, async () => {
+    // A closed tab's unsent text is its conversation's draft, before and after the close: nothing moves, so the board
+    // keeps a card for it and reopening finds the words where they were.
+    it(`keeps a closing chat's unsent message as its draft, and shows it again when the chat is opened again`, async () => {
         const chat = useChat();
         const ids = openFour();
         const closing = chat.conversations.value.find((c) => c.conversationId === ids[1]!)!;
@@ -1439,17 +1439,17 @@ describe(`closing tabs`, () => {
         chat.closeTabs(new Set([ids[1]!]));
 
         expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[2], ids[3]]);
-        expect(closedDrafts.value.find((tab) => tab.conversationId === ids[1]!)?.draft).toBe(`the half-written message`);
+        expect(draftOf(ids[1]!)?.text).toBe(`the half-written message`);
 
         const back = openAgentConversation({ id: ids[1]!, provider: `claude`, harness: `native`, registered: false });
 
         expect(back.draft.value).toBe(`the half-written message`);
-        expect(back.draftAt.value).toBeGreaterThan(0);
-        // Removed, not copied: a leftover copy in closedDrafts would go stale on the board.
-        expect(closedDrafts.value.some((tab) => tab.conversationId === ids[1]!)).toBe(false);
+        expect(back.draftAt.value).toBe(draftOf(ids[1]!)?.since);
+        // One draft, whatever the tab did: a second copy is how words went stale on the board, or came back sent.
+        expect(heldDrafts.value.filter((draft) => draft.conversationId === ids[1]!)).toHaveLength(1);
     });
 
-    it(`sets nothing aside for a chat closed with an empty composer`, async () => {
+    it(`keeps no draft for a chat closed with an empty composer`, async () => {
         const chat = useChat();
         const ids = openFour();
         const closing = chat.conversations.value.find((c) => c.conversationId === ids[1]!)!;
@@ -1458,7 +1458,7 @@ describe(`closing tabs`, () => {
 
         chat.closeTabs(new Set([ids[1]!]));
 
-        expect(closedDrafts.value.some((tab) => tab.conversationId === ids[1]!)).toBe(false);
+        expect(draftOf(ids[1]!)).toBeUndefined();
     });
 
     it(`ignores ids that aren't open`, () => {

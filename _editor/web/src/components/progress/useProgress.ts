@@ -1,23 +1,26 @@
-import { formatElapsed } from "@intentic/ui/format";
 import { useNow } from "@intentic/ui/async";
 import { computed, type ComputedRef, type MaybeRefOrGetter, ref, type Ref, toValue, watch } from "vue";
-import type { WaitExpectation } from "./waitProgress";
+import { elapsedWords, type Expectation, type Progress, progressAt } from "./progress";
 
-// THE CLOCK BEHIND A <WaitProgress>, for a wait that is not a sandbox outage: a press whose work runs for a while (a
-// clone, an install, a move). The wait starts at `startedAt` (the operation ledger's own `startedAt`, or the moment
-// a busy flag turned on, from `useBusySince`) and is shown only while that is defined. The clock ticks only while
-// something is waiting, on the shared one-second clock every live readout uses.
+// THE CLOCK BEHIND A PROGRESS READOUT (progress.ts). The work starts at `startedAt` (an operation's own, through
+// useOperationProgress in the ledger, or the moment a busy flag turned on, from `useBusySince`) and is read only while
+// that is defined. The clock ticks only while the work runs, on the shared one-second clock every live readout uses.
 
-type Expectation = Omit<WaitExpectation, `elapsedMs`>;
+export interface ProgressFacts extends Expectation {
+    /** When it ended, for a readout that stays on screen after the work (a stage card's total); the clock stops there. */
+    readonly endedAt?: number | undefined;
+    /** The work's own count, 0 to 1, where it keeps one. */
+    readonly measured?: number | undefined;
+}
 
-export const useWaitClock = (
+export const useProgress = (
     startedAt: MaybeRefOrGetter<number | undefined>,
-    expect: MaybeRefOrGetter<Expectation> = {},
-): ComputedRef<WaitExpectation | undefined> => {
-    const now = useNow(() => toValue(startedAt) !== undefined);
+    facts: MaybeRefOrGetter<ProgressFacts> = {},
+): ComputedRef<Progress | undefined> => {
+    const now = useNow(() => toValue(startedAt) !== undefined && toValue(facts).endedAt === undefined);
     return computed(() => {
         const since = toValue(startedAt);
-        return since === undefined ? undefined : { ...toValue(expect), elapsedMs: Math.max(0, now.value - since) };
+        return since === undefined ? undefined : progressAt({ ...toValue(facts), startedAt: since }, now.value);
     });
 };
 
@@ -33,18 +36,10 @@ export const useBusySince = (busy: MaybeRefOrGetter<boolean>): Readonly<Ref<numb
     return since;
 };
 
-// A wait most cases of which end in a moment (a reconnect, a first frame) says how long it has run only once it has
-// outlasted one: "Reconnecting…" read the same after five seconds as after five minutes, and only the second is worth a
-// look, while a counter on every blip would be noise.
-export const SAY_ELAPSED_AFTER_MS = 5_000;
-
 /** How long a wait has run ("1m 5s"), once it has outlasted a blip; undefined before then and while none runs. */
 export const useElapsedWords = (startedAt: MaybeRefOrGetter<number | undefined>): ComputedRef<string | undefined> => {
-    const clock = useWaitClock(startedAt);
-    return computed(() => {
-        const wait = clock.value;
-        return wait === undefined || wait.elapsedMs < SAY_ELAPSED_AFTER_MS ? undefined : formatElapsed(wait.elapsedMs / 1000);
-    });
+    const progress = useProgress(startedAt);
+    return computed(() => elapsedWords(progress.value));
 };
 
 /** A status line with that time after it ("Reconnecting… · 1m 5s"); the line alone until then. */

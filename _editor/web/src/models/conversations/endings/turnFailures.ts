@@ -1,5 +1,7 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { TurnFact } from "@intentic/sandbox-contract/events/agent-events";
+import type { FailureSaid } from "@intentic/sandbox-contract/events/sandbox-notice";
+import { isPrivacyRefusal } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import { t } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import { cooledPickUp, type PickUp, warmedPickUp } from "./pickUp";
@@ -51,15 +53,9 @@ export type FailureHost = Pick<Conversation, "session" | "error" | "pickUp"> & {
 // own rules hold personal data) until another is picked or it is let through, low memory until the person says go ahead,
 // a workspace the sandbox was too loaded to set up until it has room again. The privacy strip says why above the
 // composer; the transcript's own row says the rest, so no error line repeats it.
-const HELD_AT_THE_DOOR: ReadonlySet<string> = new Set([
-    `unknown-command`,
-    `context-window-too-small`,
-    `model-helper-only`,
-    `privacy-unshielded`,
-    `privacy-instructions`,
-    `sandbox-memory-low`,
-    `workspace-setup`,
-]);
+// The shield's own refusals are the contract's to name (isPrivacyRefusal), so a code it adds is held here too.
+const HELD_AT_THE_DOOR: ReadonlySet<string> = new Set([`unknown-command`, `context-window-too-small`, `model-helper-only`, `sandbox-memory-low`, `workspace-setup`]);
+const heldAtTheDoor = (code: string | undefined): boolean => code !== undefined && (HELD_AT_THE_DOOR.has(code) || isPrivacyRefusal(code));
 export class TurnFailures {
     // The outage this conversation is waiting out; cleared when the next turn starts (resume or user send).
     readonly outageResume = ref<OutageResume | undefined>();
@@ -70,7 +66,7 @@ export class TurnFailures {
     // The words of a failure that took back what an earlier one in the same turn promised (to come back by itself): the
     // sandbox keeps one hold per turn, so the later failure is the one it acts on. Its roster keeps reading `resuming`
     // regardless, so the board draws the stop this chat shows from this (TabFacts.resumeWithdrawn). Cleared as a turn starts.
-    readonly resumeWithdrawn = ref<string | undefined>();
+    readonly resumeWithdrawn = ref<FailureSaid | undefined>();
 
     // Whether this turn ended on a failure this window cannot fix itself and nothing brings back by itself: the tab reads
     // it as failed. A wait (a spent allowance, an outage being retried, a renewal, a fresh session) is not one, nor is a
@@ -110,11 +106,11 @@ export class TurnFailures {
         const { message, code } = error;
         const comingBack = error.autoResume === `scheduled` && code !== `rate_limit`;
         if (this.promised && !comingBack) {
-            this.withdrawResume(message);
+            this.withdrawResume({ message, error: code, own: error.own });
         }
         this.promised = comingBack;
         this.failed = true;
-        if (code !== undefined && HELD_AT_THE_DOOR.has(code)) {
+        if (heldAtTheDoor(code)) {
             return;
         }
         switch (code) {
@@ -340,12 +336,12 @@ export class TurnFailures {
     // A later failure replaced the hold an earlier one armed, so nothing comes back by itself: no renewal spinner, no
     // outage countdown, and no probe that would give up minutes later and blame the credential. The transcript's row
     // says so itself (transcript-fold's withdrawRenewal); the stop's own pick-up is the way on.
-    private withdrawResume(message: string): void {
+    private withdrawResume(failure: FailureSaid): void {
         this.credentialRenewal.value = undefined;
         this.outageResume.value = undefined;
         this.freshSession = false;
         this.cancelProbe();
-        this.resumeWithdrawn.value = message;
+        this.resumeWithdrawn.value = failure;
     }
 
     // Called as a turn's stream ends. One that ended on no failure ran on an account that signs in, so a reconnect this

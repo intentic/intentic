@@ -1,9 +1,8 @@
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import type { Summons } from "./summon";
-import type { DraftPreviews } from "../drafts/draftPreview";
+import type { HeldDraft } from "../drafts/heldDraft";
 import type { Strip } from "../tabs/tabFacts";
-import type { StoredTab } from "../tabs/tabSnapshot";
 
 // All chat messages share a sandbox guard and delivery order; snapshots additionally require the current owner's identity.
 
@@ -12,13 +11,14 @@ export type ChatNote =
     | { readonly kind: `summons`; readonly summons: Summons }
     // What the drawing window is showing, for windows that aren't; a full snapshot, never a patch.
     | { readonly kind: `strip`; readonly owner: string; readonly revision: number; readonly strip: Strip }
-    // The words standing in those composers, on their own note because they change per character while the strip
-    // does not. Needs no owner or revision: it is a lookup the strip's `unsent` decides whether to draw from.
-    | { readonly kind: `previews`; readonly previews: DraftPreviews }
     // Asks "what are you showing" on boot or sandbox switch, since asking is cheaper than waiting for the next change.
     | { readonly kind: `roll` }
-    // The whole set of chats closed with a message still in them.
-    | { readonly kind: `closed-drafts`; readonly tabs: readonly StoredTab[] };
+    // Unsent messages this window changed (composerDrafts.ts): each window keeps the copy a window edited last.
+    | {
+          readonly kind: `drafts`;
+          readonly changed: readonly HeldDraft[];
+          readonly gone: readonly { readonly id: string; readonly editedAt: number }[];
+      };
 
 // Which sandbox's chats the note is about, then the note; undefined means unresolved, matching only another such
 // window.

@@ -20,6 +20,7 @@ import { createLandedPresences } from "./land/landed-presence.js";
 import { type AgentOrigins, createAgentOrigins } from "./land/origins.js";
 import { createLandStandings } from "./land/standing.js";
 import { type AgentsRegistry, createFleet } from "./registry/agents-registry.js";
+import { type ComposerDrafts, registryDrafts } from "./drafts/composer-drafts.js";
 import { sqliteAgentsStore } from "./registry/agents-store.js";
 import { createExpiryTracker } from "./registry/expiry.js";
 import { createTurnIsolation, type TurnIsolation } from "./worktrees/isolation.js";
@@ -59,6 +60,8 @@ export interface ConversationsSlice {
     readonly turnIsolation: TurnIsolation;
     // Which copy of the workspace a file read means: the shared tree or one conversation's checkout.
     readonly workspaceScope: WorkspaceScopeDeps;
+    // Every member's unsent composer words, per conversation; a card's `unsentAt` follows from them.
+    readonly drafts: ComposerDrafts;
 }
 
 export interface ConversationsDeps {
@@ -125,6 +128,10 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
             },
         },
     );
+    // A conversation's card says since when anybody holds a draft for it (drafts/composer-drafts.ts).
+    const drafts = registryDrafts(historyRoot, agents, (error, conversationId) =>
+        logger.warn({ err: error, conversationId }, "drafts: the card could not be told it holds unsent words"),
+    );
     // Its attribution caches report into the resource series, like the presences above.
     const agentOrigins = createAgentOrigins({ agents, logger, expiry: landingExpiry });
     return {
@@ -167,6 +174,7 @@ export const createConversationsSlice = ({ historyRoot, workspace, logger, perf,
             // the same way what it said does.
             promptRecord: filePromptRecord(historyRoot),
             agentOrigins,
+            drafts,
             turnIsolation,
             workspaceScope: {
                 main: workspace.root,

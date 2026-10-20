@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { formatElapsed } from "@intentic/ui";
-import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
-import StagedProgress from "../../progress/StagedProgress.vue";
-import type { ProgressStatus } from "../../progress/stagedProgress";
+import StagedProgress from "../../../../components/progress/StagedProgress.vue";
+import type { ProgressStatus } from "../../../../components/progress/stagedSteps";
+import { useProgress } from "../../../../components/progress/useProgress";
 import { type DeviceUpdateRun, stagedSteps, updateDetail } from "./deviceUpdateStages";
 import { useT } from "@intentic/ui/i18n";
 
@@ -29,7 +29,6 @@ const props = defineProps<{
 defineEmits<{ dismiss: [] }>();
 
 const live = computed(() => props.run.phase === `running`);
-const now = useNow(() => live.value);
 const steps = computed(() => stagedSteps(props.run.verb));
 const lastStep = computed(() => steps.value.at(-1)?.key);
 
@@ -41,7 +40,12 @@ const STATUS: Record<DeviceUpdateRun[`phase`], ProgressStatus> = {
     severed: `unheard`,
 };
 
-const elapsed = computed(() => Math.max(0, Math.round(((props.run.endedAt ?? now.value) - props.run.startedAt) / 1000)));
+// The run's own count fills the bar; the clock stops where the run ended.
+const progress = useProgress(
+    () => props.run.startedAt,
+    () => ({ endedAt: props.run.endedAt, measured: props.run.fraction }),
+);
+const elapsed = computed(() => Math.round((progress.value?.elapsedMs ?? 0) / 1000));
 const heading = computed(() =>
     props.run.verb === `update`
         ? t(`sandbox.deviceUpdateProgress.updating`, { name: props.name })
@@ -99,12 +103,11 @@ watch(
     <StagedProgress
         v-model:log="showLog"
         :heading="heading"
-        :elapsed="elapsed"
+        :progress="progress ?? { elapsedMs: undefined, measured: run.fraction }"
         :steps="steps"
         :stage="run.stage"
         :stage-at="run.stageAt"
         :ended-at="run.endedAt"
-        :fraction="run.fraction"
         :status="STATUS[run.phase]"
         :live="live"
         :detail="updateDetail(run)"

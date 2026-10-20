@@ -166,6 +166,9 @@ export const turnRequestBody = (input: {
     readonly conversationAutoLand?: boolean | undefined;
     // A Continue: the daemon carries the conversation on without the words, which only a daemon from before reads.
     readonly continues?: boolean | undefined;
+    // The revision of this conversation's draft the words were sent from (composerDrafts.sentFrom), which the daemon
+    // clears as it takes them. Only this sandbox's: another box was never told of the draft.
+    readonly draft?: number | undefined;
 }): ProcedureInput<`agent.run`> => {
     // Whether this body targets this sandbox; fields scoped to another box's store are dropped otherwise.
     const here = input.box === undefined;
@@ -213,6 +216,9 @@ export const turnRequestBody = (input: {
     stateOccasions(body, input, here);
     if (input.continues === true) {
         body.continues = true;
+    }
+    if (here && input.draft !== undefined) {
+        body.draft = input.draft;
     }
     return body;
 };

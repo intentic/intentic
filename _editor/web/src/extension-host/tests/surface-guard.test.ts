@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import * as sdkModule from "@intentic/extension-api";
 import { extensionApiVersion } from "@intentic/extension-api";
-import { extensionUiDeprecated, extensionUiNames } from "@intentic/extension-ui/names";
+import { extensionUiDeprecated, extensionUiNames, extensionUiRetired } from "@intentic/extension-ui/names";
 import {
     CONTRIBUTION_POINTS,
     ExtensionManifestSchema,
@@ -56,6 +56,10 @@ interface RecordedSurface {
     // What @intentic/extension-ui exports (names.mjs, the list its shim re-exports), recorded from 2.31.0 on: a bundle
     // links these by name as it does the package's own, and RepoRail left them on 2026-10-12 with nothing recording it.
     readonly uiKitExports?: readonly string[];
+    // What an extension author must change, as of that version: every kit name deprecated and every prop or recipe member
+    // retired (names.mjs), each as `<what> → <use instead>`, recorded from 2.33.0 on. Nothing links differently, so no
+    // other grain sees it, and a bundle built against an older kit keeps the retired look with nothing saying so.
+    readonly uiKitDeprecated?: readonly string[];
 }
 
 const recorded: Record<string, RecordedSurface> = JSON.parse(readFileSync(resolve(sdkRoot, `src/surface.json`), `utf8`));
@@ -127,6 +131,7 @@ const liveSurface = (): RecordedSurface => ({
         })
         .toSorted(),
     uiKitExports: [...extensionUiNames].toSorted(),
+    uiKitDeprecated: kitChangesAt(extensionApiVersion),
 });
 
 test(`the surface this version promises is the surface it has`, () => {
@@ -152,6 +157,7 @@ interface Deprecation {
     readonly removableIn: string;
 }
 
+
 const semver = (version: string): readonly [number, number, number] => {
     const [major = 0, minor = 0, patch = 0] = version.split(`.`).map(Number);
     return [major, minor, patch];
@@ -160,6 +166,13 @@ const byVersion = (a: string, b: string): number => {
     const [x, y] = [semver(a), semver(b)];
     return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
 };
+// Every deprecation and retirement an author reads at `version`: those whose `since` it has reached.
+const kitChangesAt = (version: string): string[] =>
+    [...extensionUiDeprecated, ...extensionUiRetired]
+        .filter((entry) => byVersion(entry.since, version) <= 0)
+        .map((entry) => `${entry.name} → ${entry.use}`)
+        .toSorted();
+
 const majorStep = (from: string, to: string): boolean => semver(to)[0] > semver(from)[0];
 const minorStep = (from: string, to: string): boolean =>
     majorStep(from, to) || (semver(to)[0] === semver(from)[0] && semver(to)[1] > semver(from)[1]);
@@ -231,6 +244,18 @@ test(`the names a bundle links against move only as semver allows`, () => {
     const live = liveSurface();
     expect(linkedNameProblems(grain(`uiKitExports`), extensionApiVersion, live.uiKitExports ?? [], extensionUiDeprecated)).toEqual([]);
     expect(linkedNameProblems(grain(`moduleExports`), extensionApiVersion, live.moduleExports ?? [], apiDeprecated)).toEqual([]);
+});
+
+test(`each version records what an author must change as of it, and no change is dated to a version nobody recorded`, () => {
+    // A failure means a deprecation or retirement landed without the version moving (give it the new version as its
+    // \`since\` in names.mjs, and record it), or an old record was rewritten after the fact.
+    const tracked = Object.keys(recorded).filter((version) => recorded[version]?.uiKitDeprecated !== undefined);
+    for (const version of tracked) {
+        expect({ version, changes: recorded[version]?.uiKitDeprecated }).toEqual({ version, changes: kitChangesAt(version) });
+    }
+    const since = [...extensionUiDeprecated, ...extensionUiRetired].map((entry) => entry.since);
+    expect(since.filter((version) => recorded[version] === undefined)).toEqual([]);
+    expect(tracked.length).toBeGreaterThan(0);
 });
 
 describe(`the linked-name rule`, () => {

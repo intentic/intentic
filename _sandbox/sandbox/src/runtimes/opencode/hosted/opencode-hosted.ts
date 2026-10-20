@@ -7,6 +7,7 @@ import {
     healthReady,
     healthUnavailable,
     healthUnknown,
+    privacyTurnRefusal,
     type TurnArmPlan,
     type TurnContext,
 } from "../../../agent/providers/adapter.js";
@@ -43,7 +44,7 @@ export const planOpenCodeRouteTurn = async (
     // The shared server fixes its providers' base URLs at spawn, so a shield turned on since may not be in front yet.
     const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, route.shield, input.conversationId);
     if (refused !== undefined) {
-        return { ok: false, message: refused };
+        return privacyTurnRefusal(refused);
     }
     const credential: OpenCodeCredential = { kind: "opencode-route", providerID: openCodeRouteId(route.provider, route.account) };
     const spec = { ...context.base.spec, model: route.model };

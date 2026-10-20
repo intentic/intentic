@@ -6,7 +6,7 @@ import { runPidPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../environments/wsl.js";
-import { deliversByItself, isProjectPairing, mirrorHeartbeatPath, type Pairing, pairingKey, readState, type SyncState } from "./config.js";
+import { deliversByItself, isProjectPairing, mirrorHeartbeatPath, type Pairing, pairingKey, pairingSlugs, readState, type SyncState } from "./config.js";
 import { syncHolds } from "./holds.js";
 import { backupSessionName, type LiveSession, readAllSessions, sessionName, sessionsByName, sessionStateOf } from "./mutagen.js";
 import { ensureMutagen } from "./binary/mutagen-binary.js";
@@ -54,6 +54,14 @@ const withHolds = (row: DevicePairing, pairing: Pairing, now: number): DevicePai
     return row;
 };
 
+// The slug this machine's ic knows the pairing's sandbox by: the one it listed (`icSlug`), else the one its address
+// carries (config.ts `pairingSlugs`). The desktop app reads a folder's sandbox off the pairing alone, so it starts or
+// forgets that sandbox by this.
+const slugOf = (pairing: Pairing): { readonly slug?: string } => {
+    const slug = pairing.icSlug ?? pairingSlugs(pairing.sandboxUrl)[0];
+    return slug === undefined ? {} : { slug };
+};
+
 const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing, now: number): DevicePairing => {
     // Stated on every pairing rather than inferred from an empty port list: "nothing is listening" and "this device
     // was told not to" look identical otherwise, and only one has anything for a reader to do.
@@ -64,6 +72,7 @@ const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing, now
     // The machine's own sandbox, which folders attach to and which has no folder of its own, and whether an attached
     // folder takes landed work by itself; each stated only where it is so, as the remote dir is.
     const kind = {
+        ...slugOf(pairing),
         ...(pairing.projectsHost === true ? { projectsHost: true } : {}),
         ...(pairing.deliver === undefined ? {} : { deliver: deliversByItself(pairing) ? ("auto" as const) : ("off" as const) }),
     };

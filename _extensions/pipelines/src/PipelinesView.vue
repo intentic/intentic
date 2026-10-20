@@ -14,6 +14,7 @@ import {
     RepoPicker,
     type RepoPickerAll,
     RowGroup,
+    RowNote,
     SplitView,
     toneTint,
     useNarrow,
@@ -388,10 +389,10 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                 </template>
 
                                 <!-- Everyone sees warnings; only maintainers see the signing recipe. -->
-                                <Notice v-if="standing.repo.hookWarning" tone="warning" class="px-4 py-2.5 break-words">
+                                <RowNote v-if="standing.repo.hookWarning" icon="exclamation-circle" tone="warning" class="break-words">
                                     {{ standing.repo.hookWarning }}
                                     <template v-if="standing.repo.hookRecipe"> {{ standing.repo.hookRecipe }}</template>
-                                </Notice>
+                                </RowNote>
 
                                 <PipelineRunRow
                                     v-for="run in boardOf(standing).rest"
@@ -402,9 +403,7 @@ const fixRun = async (run: PipelineRun, pick: AgentRunChoice | undefined, resume
                                     @fix="fixRun"
                                 />
 
-                                <p v-if="standing.runs.length === 0" class="py-4 text-center text-sm text-muted">
-                                    {{ t(`pipelinesView.noRunsYetRepo`) }}
-                                </p>
+                                <RowNote v-if="standing.runs.length === 0" variant="empty" :label="t(`pipelinesView.noRunsYetRepo`)" />
                             </RowGroup>
 
                             <p v-if="repos.length === 0" class="py-8 text-center text-sm text-muted">

@@ -81,7 +81,7 @@ const menu = (event: MouseEvent): void => {
                  review's or a test's row already), told apart from a child the parent spawned. -->
             <span
                 v-if="look.fresh !== undefined && (look.fresh.label !== undefined || look.fresh.result !== undefined)"
-                class="ui-status-pill shrink-0 gap-1 text-2xs"
+                class="ui-status-pill shrink-0"
                 :class="look.fresh.tone === `warning` ? toneWash(`warning`) : `bg-content/7 text-muted`"
                 v-tooltip.top="{ title: t(`agents.childRows.freshTitle`), note: t(`agents.childRows.kindTip`) }"
                 data-fresh-kind
@@ -94,7 +94,7 @@ const menu = (event: MouseEvent): void => {
                 <RunFacts :run="look.run" columns />
             </span>
             <!-- The card's own pill and tone for an ask, so the reader meets the same word here as on any card that asks. -->
-            <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="toneWash(`warning`)">{{
+            <span v-if="look.ask !== undefined" class="ui-status-pill shrink-0 font-semibold" :class="toneWash(`warning`)">{{
                 look.ask
             }}</span>
             <span v-if="look.working && look.since !== undefined" v-tooltip.top="look.doing" class="min-w-12 shrink-0 text-right text-2xs font-medium tabular-nums text-link">{{

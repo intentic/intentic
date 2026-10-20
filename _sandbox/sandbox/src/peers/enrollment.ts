@@ -19,13 +19,38 @@ const PAIR_TTL_MS = 10 * 60 * 1000;
 // Digests, never tokens: records that something was spent, without holding anything that could spend it.
 const BurnedSchema = z.object({ digests: z.array(z.string()) });
 
-// Each door's burn file, one family: the same shape under four names on /history.
-const burnFile = (path: string) => ({ root: "history" as const, path, schema: BurnedSchema });
-export const syncPairConsumedDocument = defineDocument(burnFile("sync-pair-consumed.json"));
-export const hostPairConsumedDocument = defineDocument(burnFile("host-pair-consumed.json"));
-export const webextPairConsumedDocument = defineDocument(burnFile("webext-pair-consumed.json"));
-export const runnerPairConsumedDocument = defineDocument(burnFile("runner-pair-consumed.json"));
-export const phonePairConsumedDocument = defineDocument(burnFile("phone-pair-consumed.json"));
+// Each door's burn file, one family: the same shape under five names on /history. Each stays with the sandbox: carrying
+// one would mark another sandbox's fresh pairing as spent, and a redeemed pairing must not read as fresh wherever it went.
+export const syncPairConsumedDocument = defineDocument({
+    root: "history",
+    path: "sync-pair-consumed.json",
+    portability: "identity",
+    schema: BurnedSchema,
+});
+export const hostPairConsumedDocument = defineDocument({
+    root: "history",
+    path: "host-pair-consumed.json",
+    portability: "identity",
+    schema: BurnedSchema,
+});
+export const webextPairConsumedDocument = defineDocument({
+    root: "history",
+    path: "webext-pair-consumed.json",
+    portability: "identity",
+    schema: BurnedSchema,
+});
+export const runnerPairConsumedDocument = defineDocument({
+    root: "history",
+    path: "runner-pair-consumed.json",
+    portability: "identity",
+    schema: BurnedSchema,
+});
+export const phonePairConsumedDocument = defineDocument({
+    root: "history",
+    path: "phone-pair-consumed.json",
+    portability: "identity",
+    schema: BurnedSchema,
+});
 export type BurnDocument = typeof syncPairConsumedDocument;
 
 // Where a door records the pairings it burned: its document, and the file it opens (under /history, or a test's own).
@@ -260,6 +285,7 @@ type LegacyHostEnrollment = JsonObject & { readonly id: string; readonly hash: s
 export const hostEnrollmentsDocument = defineDocument({
     root: "history",
     path: "host-enrollments.json",
+    portability: "identity",
     schema: enrollmentsSchema("hosts", HostEnrollmentFieldsSchema.shape),
     history: [
         // 2026-09-25: an enrollment's card and environment were spelled only in its id (`<card>::<environment>`), and no
@@ -285,16 +311,24 @@ export const hostEnrollmentsDocument = defineDocument({
 export const webextEnrollmentsDocument = defineDocument({
     root: "history",
     path: "webext-enrollments.json",
+    // A connected browser's enrollment, paired to this sandbox; carrying it elsewhere is dead weight or worse.
+    portability: "identity",
+    note: "Pair your browser again from its card: the extension is still installed.",
     schema: enrollmentsSchema("browsers", {}),
 });
 export const phoneEnrollmentsDocument = defineDocument({
     root: "history",
     path: "phone-enrollments.json",
+    // A phone's enrollment and its wake channel, paired to this sandbox; the app on the phone stays installed.
+    portability: "identity",
+    note: "Pair your phone again from its card: the app is still installed.",
     schema: enrollmentsSchema("phones", {}),
 });
 export const runnerEnrollmentsDocument = defineDocument({
     root: "history",
     path: "runner-enrollments.json",
+    // A runner's enrollment names this sandbox as parent; elsewhere its digest would dial the old parent.
+    portability: "identity",
     schema: enrollmentsSchema("runners", { host: z.string().optional() }),
 });
 // Any door's enrollments document.

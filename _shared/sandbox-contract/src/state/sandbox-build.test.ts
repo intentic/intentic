@@ -1,5 +1,5 @@
 import { DEV_SANDBOX_IMAGE } from "../policy/overlay-lint.js";
-import { buildParity, builtFromCheckout, rebuildPending, type SandboxBuild } from "./sandbox-build.js";
+import { buildParity, builtFromCheckout, rebuildPending, type RunningSandbox, type SandboxBuild, sameBuild, swapVerdict } from "./sandbox-build.js";
 
 // Every "which build" question is one of these, asked of two SandboxBuild records; a surface that compares fields of its
 // own choosing is how "pending rebuild" outlived a rebuild and a runner read outdated for good (2026-10).
@@ -54,4 +54,42 @@ test("only the dogfood base is a build from a checkout", () => {
     expect(builtFromCheckout({ base: stable })).toBe(false);
     expect(builtFromCheckout({ base: "intentic-sandbox-rollback-demo:f6e917ce9b90" })).toBe(false);
     expect(builtFromCheckout({ base: "" })).toBe(false);
+});
+
+// A swap is told landed by what answers, never by the version: a checkout build is 0.0.0 before and after, and an update
+// of one followed by "the version moved" waited out its deadline and said the sandbox never came back (2026-10).
+const running = (build: SandboxBuild, bootedAt: number): RunningSandbox => ({ build, bootedAt });
+
+test("two builds are the same only when something can tell, and differ the moment the overlay or digest does", () => {
+    expect(sameBuild({ base: stable, baseDigest: digest("a") }, { base: stable, baseDigest: digest("a") })).toBe(true);
+    expect(sameBuild({ base: stable, baseDigest: digest("a") }, { base: stable, baseDigest: digest("b") })).toBe(false);
+    expect(sameBuild({ base: stable, overlay: "h1" }, { base: stable, overlay: "h2" })).toBe(false);
+    expect(sameBuild({ base: stable }, { base: "ghcr.io/intentic/sandbox:beta" })).toBe(false);
+    expect(sameBuild({ base: stable }, { base: stable })).toBeUndefined();
+    expect(sameBuild({ base: DEV_SANDBOX_IMAGE }, { base: DEV_SANDBOX_IMAGE })).toBeUndefined();
+});
+
+test("an update of a checkout build lands on the new boot, though every version reads 0.0.0", () => {
+    const from = running({ base: DEV_SANDBOX_IMAGE }, 1000);
+    expect(swapVerdict({ from }, from)).toBe("waiting");
+    expect(swapVerdict({ from }, running({ base: DEV_SANDBOX_IMAGE }, 2000))).toBe("landed");
+});
+
+test("an update of a release lands when the digest moves, and a new boot on the old digest came back unmoved", () => {
+    const from = running({ base: stable, baseDigest: digest("a") }, 1000);
+    expect(swapVerdict({ from }, running({ base: stable, baseDigest: digest("b") }, 2000))).toBe("landed");
+    expect(swapVerdict({ from }, running({ base: stable, baseDigest: digest("a") }, 2000))).toBe("unmoved");
+    expect(swapVerdict({ from }, from)).toBe("waiting");
+    // A rollback names another tag: moved, digest or not.
+    expect(swapVerdict({ from: running({ base: stable }, 1000) }, running({ base: "ghcr.io/intentic/sandbox:0.9.0" }, 1000))).toBe("landed");
+});
+
+test("a rebuild lands on its overlay, and a new boot on any other overlay came back without it", () => {
+    const from = running({ base: stable, overlay: "old" }, 1000);
+    expect(swapVerdict({ from, overlay: "new" }, running({ base: stable, overlay: "new" }, 2000))).toBe("landed");
+    expect(swapVerdict({ from, overlay: "new" }, running({ base: stable, overlay: "old" }, 2000))).toBe("unmoved");
+    expect(swapVerdict({ from, overlay: "new" }, from)).toBe("waiting");
+    // Pressed with nothing read: only the overlay can say.
+    expect(swapVerdict({ from: undefined, overlay: "new" }, running({ base: stable, overlay: "new" }, 2000))).toBe("landed");
+    expect(swapVerdict({ from: undefined }, running({ base: stable }, 2000))).toBe("waiting");
 });

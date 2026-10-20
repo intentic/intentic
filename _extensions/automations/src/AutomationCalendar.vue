@@ -330,7 +330,7 @@ const HOUR_LINES = {
                     <div class="grid border-b border-line-subtle" :style="GRID">
                         <div></div>
                         <div v-for="column in columns" :key="column.day" class="flex flex-col items-center gap-0.5 border-l border-line-subtle py-2">
-                            <span class="text-3xs font-semibold tracking-wide uppercase" :class="column.today ? `text-link` : `text-subtle`">
+                            <span class="text-3xs font-semibold" :class="column.today ? `text-link` : `text-subtle`">
                                 {{ weekdayFormat.format(column.day) }}
                             </span>
                             <span

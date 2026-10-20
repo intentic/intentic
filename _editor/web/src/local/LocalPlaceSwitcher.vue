@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
-import { AnchoredOverlay, Notice, SandboxLogo, useHoverMenu } from "@intentic/ui";
+import { AnchoredOverlay, Notice, SandboxLogo, SectionHeader, useHoverMenu } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { localFace } from "../app/environments/local";
@@ -164,7 +164,7 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
             </div>
             <div class="my-1 border-t border-line-subtle"></div>
             <!-- The account's sandboxes, where agents work, each opening the workspace on itself. -->
-            <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shared.sandboxes`) }}</div>
+            <SectionHeader :label="t(`shared.sandboxes`)" density="dense" class="px-2 py-1.5" />
             <template v-if="facts?.accountSeen === true">
                 <template v-for="(box, at) in sandboxes" :key="box.id">
                     <button type="button" data-menu-row :class="rowClass" @click="pickSandbox(box)">
@@ -181,7 +181,7 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
                             v-tooltip.top="placementOfKind(box.place).tip"
                             :aria-label="placementOfKind(box.place).detail"
                         />
-                        <span v-if="box.shared" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{ t(`shared.shared`) }}</span>
+                        <span v-if="box.shared" class="ui-status-pill shrink-0 bg-content/10 font-medium text-subtle">{{ t(`shared.shared`) }}</span>
                         <!-- The same chord as the workspace's row for this sandbox, the only place it can be learned here. -->
                         <kbd v-if="slotLabel(at)" class="shrink-0 rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle">{{
                             slotLabel(at)

@@ -13,11 +13,15 @@
 //    `<Row selected>`, `ui.chip({ on })`), so /sandbox/models and /sandbox/personas cannot mark a pick two ways again.
 // 5. `ui.sectionLabel()` outside the kit: the section header is <SectionHeader> (drawn by <Section>, <RowGroup> and
 //    <NavRail>), which owns its size, its spacing and what may sit beside it; the recipe stays for installed extensions.
+// 6. A chip or a status pill given its own box: a padding, a height, a gap, a type size, a line height or a radius on a
+//    `ui.chip()`, a `ui-chip` or a `ui-status-pill`. Their sizes are decided once (utilities.css): the chip's
+//    `{ size: "sm" | "md" | "lg" }` with `{ lead }`/`{ trail }`, the pill's `-inline`/`-md`. ~60 call sites had each
+//    spelled one, the "Show fewer" chip at a lane's tail among them.
 // Exceptions: `allow(recipes): <reason>` at the site, saying why the geometry is the place's own.
 import { readFileSync } from "node:fs";
-import { blank, excusedAt, finishFindings } from "./lib/templates.mjs";
+import { boxOverrides } from "../../_shared/extension-ui/check/kit-decisions.mjs";
+import { blank, classWordsOf, excusedAt, finishFindings, tags } from "./lib/templates.mjs";
 import { root, subjectFiles } from "./lib/repo.mjs";
-import { ratchet } from "./lib/ratchet.mjs";
 
 // The variant prefixes a token may carry (`hover:`, `max-md:`, `group-hover/row:`), stripped before judging.
 const bare = (token) =>
@@ -64,6 +68,11 @@ const OWNS = {
     ],
 };
 
+// Rule 6: what a chip's or a pill's size owns (lib/kit-decisions.mjs's `boxOverrides`, where its tests read it).
+const CHIP_SAYS = `the chip's box is its size variant: \`ui.chip({ size: "sm" | "md" | "lg" })\` (20, 26, 32px), with \`{ lead: true }\` when it opens on a mark and \`{ trail: true }\` when it ends in its own ×`;
+const PILL_SAYS = `the pill's box is the kit's: \`ui-status-pill\` (20px), \`ui-status-pill-md\` (24px), \`ui-status-pill-inline\` (16px, inside a line of text)`;
+OWNS.chip = [{ test: (t) => boxOverrides(`ui-chip ${t}`).words.length > 0, say: CHIP_SAYS }];
+
 const RETIRED = {
     linkButton: `\`ui.textButton()\` (tone \`link\`, the default)`,
     textAction: `\`ui.textButton({ tone: "quiet" })\``,
@@ -80,13 +89,11 @@ const SELECTION_EXTRA = /(?:^|\s)(?:[\w@-]+:)*(?:border-(?:primary|link|accent)|
 // A hand tint of the selection's own hue.
 const HAND_TINT = /(?:^|[\s`'"])bg-(?:link|primary-\d{3})\/\d+(?=[\s`'"]|$)/u;
 // What a condition reads like when it decides that a thing is the picked one.
-const PICKED = /select|pick|chosen/iu;
+const PICKED = /select|pick|chosen|active|current/iu;
 const tracked = subjectFiles(`_editor`, `_extensions`).filter(
     (path) => /\.(?:vue|ts|mts)$/u.test(path) && !HOME.has(path) && !/\.(?:test|spec)\.ts$/u.test(path) && !path.includes(`/dist/`),
 );
 const findings = [];
-// Rule 4's hand tints, per file: held by baselines/selection-tints.json, which may only shrink (lib/ratchet.mjs).
-const tints = new Map();
 
 // The balanced argument list after `ui.name(`, as written; a recipe call never spans an unbalanced string.
 const argsAt = (code, open) => {
@@ -146,17 +153,45 @@ for (const path of tracked) {
         }
     }
     // Rule 4: a tint of the selection's hue, put on whatever a picked-sounding condition chooses (ternary or object).
+    // A bound attribute's own quotes are markup, not a string: read the expression inside them, or `:class="{ 'x': on }"`
+    // is one literal and the tint in it is never seen.
+    const bound = code.replace(/(\s(?::|v-bind:)[\w.-]+=)"([^"]*)"/gu, (_, name, value) => `${name} ${value} `);
     const picks = [
-        ...code.matchAll(/([^?:{},(\n]*)\?\s*(`[^`]*`|'[^'\n]*'|"[^"\n]*")/gu),
-        ...code.matchAll(/(`[^`]*`|'[^'\n]*'|"[^"\n]*")\s*:\s*([^,}\n]*)/gu),
+        ...bound.matchAll(/([^?:{},\n]*)\?\s*(`[^`]*`|'[^'\n]*'|"[^"\n]*")/gu),
+        ...bound.matchAll(/(`[^`]*`|'[^'\n]*'|"[^"\n]*")[ \t]*:[ \t]*([^,}\n]*)/gu),
     ];
     for (const pick of picks) {
         const [condition, literal] = pick[0].trimStart().startsWith(pick[1]) && /\?/u.test(pick[0]) ? [pick[1], pick[2]] : [pick[2], pick[1]];
         if (PICKED.test(condition ?? ``) && HAND_TINT.test(literal ?? ``) && !excused(pick.index)) {
-            (tints.get(path) ?? tints.set(path, []).get(path)).push({
+            findings.push({
                 at: lineOf(pick.index),
                 why: `a picked thing tinted by hand (\`${(literal ?? ``).replace(/[`'"]/gu, ``).trim()}\`): the selected mark is \`ui-row-select-on\` (or \`<Row selected>\`, \`ui.chip({ on })\`)`,
             });
+        }
+    }
+
+    // Rule 6: a chip's or a pill's box restated, in one class literal or across one tag's `class` and `:class`.
+    const boxed = new Set();
+    const boxFinding = (index, words) => {
+        const { kind, words: restated } = boxOverrides(words);
+        for (const word of restated) {
+            const where = lineOf(index);
+            if (!boxed.has(`${where} ${word}`) && !excused(index)) {
+                boxed.add(`${where} ${word}`);
+                findings.push({ at: where, why: `\`${word}\` on a ${kind} restates its box: ${kind === `chip` ? CHIP_SAYS : PILL_SAYS}; pass layout only` });
+            }
+        }
+    };
+    // In an SFC the literal pass reads the script only; its markup is the tag pass's, which sees a tag whole.
+    const scripted = scan === undefined ? code : code.replace(/(^|<\/script>)([\s\S]*?)(<script\b|$)/gu, (_, open, between, close) => open + between.replace(/[^\n]/gu, ` `) + close);
+    for (const lit of scripted.matchAll(/`([^`]*)`|'([^'\n]*)'|"([^"\n]*)"/gu)) {
+        const words = (lit[1] ?? lit[2] ?? lit[3] ?? ``).replace(/\$\{[^}]*\}/gu, ` `);
+        boxFinding(lit.index, words);
+    }
+    if (scan !== undefined) {
+        for (const { attrs, index } of tags(scan)) {
+            // A `ui.chip(…)` call's own arguments are rule 1's; here, the words beside it on the same tag.
+            boxFinding(index, classWordsOf(attrs));
         }
     }
 
@@ -168,11 +203,6 @@ for (const path of tracked) {
             });
         }
     }
-}
-
-const { grown } = ratchet(`recipes`, `selection-tints`, new Map([...tints].map(([path, list]) => [path, list.length])));
-for (const { key } of grown) {
-    findings.push(...tints.get(key));
 }
 
 finishFindings(

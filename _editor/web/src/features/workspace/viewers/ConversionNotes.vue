@@ -34,7 +34,7 @@ watch(
         </button>
         <ul v-if="open" class="mt-1 space-y-0.5 pl-7">
             <li v-for="note of notes" :key="`${note.side ?? ``}:${note.text}`" class="flex items-start gap-2">
-                <span v-if="note.side" class="mt-px shrink-0 rounded-sm bg-muted/30 px-1 font-medium uppercase tracking-wide text-subtle">
+                <span v-if="note.side" class="mt-px shrink-0 rounded-sm bg-muted/30 px-1 font-medium text-subtle">
                     {{ note.side === `before` ? t(`workspace.conversionNotes.before`) : t(`workspace.conversionNotes.after`) }}
                 </span>
                 <span>{{ note.text }}</span>

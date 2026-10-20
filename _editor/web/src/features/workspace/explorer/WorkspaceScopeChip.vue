@@ -50,7 +50,7 @@ const pick = (agent: string | undefined): void => {
         <button
             ref="anchor"
             type="button"
-            :class="ui.chip({ on: !broken }, `h-6 shrink-0 px-1.5`, broken && toneWash(`warning`))"
+            :class="ui.chip({ on: !broken }, `shrink-0`, broken && toneWash(`warning`))"
             aria-haspopup="listbox"
             :aria-expanded="open"
             :aria-label="ariaLabel"

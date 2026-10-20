@@ -10,6 +10,9 @@ import { openDocument } from "../store/open-document.js";
 export const memberAudienceDocument = defineDocument({
     root: "history",
     path: "member-audience.json",
+    // Each person's own answer to which words their editor uses here (developer or maker), keyed by sign-in address.
+    // Carried: it is theirs, and asking again after a move would be a question already answered.
+    portability: "carry",
     schema: z.object({ members: z.record(z.string(), AudienceSchema) }),
 });
 

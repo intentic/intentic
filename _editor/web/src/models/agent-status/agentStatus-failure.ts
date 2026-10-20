@@ -1,4 +1,5 @@
 import type { AgentErrorCode } from "@intentic/sandbox-contract/events/agent-events";
+import { isPrivacyRefusal, type PrivacyRefusalCode } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import { t } from "@intentic/ui/i18n";
 import type { AgentStanding } from "./agentStatus-standing";
 
@@ -37,7 +38,8 @@ export type FailureKind =
     | `advisory`;
 
 // Every code the wire names, each with its kind: a code added to the contract fails the build here until it has one, so no
-// surface draws a failure it has no word for.
+// surface draws a failure it has no word for. The shield's own refusals are the contract's to name (isPrivacyRefusal),
+// and are all the privacy kind.
 const KINDS_BY_CODE = {
     rate_limit: `limit`,
     "session-not-found": `cutShort`,
@@ -67,18 +69,21 @@ const KINDS_BY_CODE = {
     "engine-version-floor": `update`,
     "safeguard-flagged": `flagged`,
     "trial-exhausted": `limit`,
-    "privacy-unshielded": `privacy`,
-    "privacy-instructions": `privacy`,
     "workspace-setup": `held`,
     "turn-cap": `cutShort`,
     "harness-incomplete": `cutShort`,
-} as const satisfies Record<AgentErrorCode, FailureKind>;
+} as const satisfies Record<Exclude<AgentErrorCode, PrivacyRefusalCode>, FailureKind>;
 // Looked up by a bare string, since the roster and a row carry the code as one: a newer sandbox's code this build has no
 // word for reads as no kind, never as a wrong one.
 const KIND_OF_CODE = new Map<string, FailureKind>(Object.entries(KINDS_BY_CODE));
 
 /** The kind a failure code names; undefined for none, and for a code this build does not know. */
-export const kindOfCode = (code: string | undefined): FailureKind | undefined => (code === undefined ? undefined : KIND_OF_CODE.get(code));
+export const kindOfCode = (code: string | undefined): FailureKind | undefined => {
+    if (isPrivacyRefusal(code)) {
+        return `privacy`;
+    }
+    return code === undefined ? undefined : KIND_OF_CODE.get(code);
+};
 
 // The kind an `error` card's failure is, or undefined for one nothing classified (and for every other status: a refused
 // start says "Didn't start" whatever refused it, since that is the half of it the reader did not know).
@@ -113,17 +118,3 @@ export const failureOpensChat = (kind: FailureKind): boolean => kind !== `cutSho
 // The ink of the card's failure glyph: a fault reads as one, a refusal or a wait as something to decide.
 export const failureTone = (kind: FailureKind | undefined): `danger` | `warning` =>
     kind === undefined || kind === `cutShort` ? `danger` : `warning`;
-
-// A sentence ends at a stop followed by the start of another (an upper-case letter, a bracket or a quote), so "e.g. check
-// quota" and "version 2.1.233" stay whole; a refusal that joins its advice on with a middle dot ("… for Claude Code ·
-// Use an API key instead") ends there too, and so does a line break.
-const SENTENCE_END = /(?<=[.!?])\s+(?=[\p{Lu}"'([])|\s+·\s+|\n/u;
-
-// The first sentence of someone else's words, for a line with room for one: what a card says of a failure at rest, the
-// whole of it left to the hover. Its closing stop goes, as a label's would. Whitespace runs fold, so an indented stack
-// trace reads as its first line rather than as blank space.
-export const failureGist = (words: string): string => {
-    const flat = words.trim();
-    const first = flat.split(SENTENCE_END)[0] ?? flat;
-    return first.replace(/\s+/gu, ` `).replace(/\.$/u, ``).trim();
-};

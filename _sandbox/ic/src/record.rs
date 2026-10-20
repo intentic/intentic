@@ -102,8 +102,9 @@ pub struct ChannelRecord {
     /// the registry moves, so the only way to ask "has this sandbox already taken what is staged?" is to
     /// compare what the container actually runs against what the build actually used.
     pub staged_base: Option<String>,
-    /// sha256 of the approved overlay the staged image was built with, absent for a stock sandbox. An owner
-    /// who re-approves a different recipe invalidates the staged build, and this is what notices.
+    /// sha256 of the overlay the staged image was built with (its base's own composition, composition.rs), absent
+    /// for a stock one. A base that composes something else by the time the update is applied (a recipe re-approved,
+    /// a capability connected) invalidates the staged build, and this is what notices.
     pub staged_env: Option<String>,
     /// The release channel it was staged FROM. Held separately from `channel` on purpose: preparing a beta
     /// build is not moving onto beta, and a prepare that is never applied must leave `ic sandbox update`

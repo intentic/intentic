@@ -58,7 +58,7 @@ import { resumeTrimTurn, trimDelivery, type ColdTrimBasis } from "./turn/cold-tr
 import { planTurn, type TurnPlan, type TurnExperimentStamps } from "./turn/turn-plan.js";
 import { classifyFailure, type ErrorFrame, type FailureContext, type FailureQueries } from "./frames/classify-failure.js";
 import { codedFailure } from "./frames/error-frames.js";
-import type { TurnRefusal } from "../providers/adapter.js";
+import { privacyTurnRefusal, type TurnRefusal } from "../providers/adapter.js";
 import { abortSuppresses, type Attribution, decorateFrame, silenceOf, silentEnding, withSilentEnding } from "./frames/frame-decorators.js";
 import { performFailureWrites, recordFrame, settleAnswered, turnActivity } from "./frames/frame-effects.js";
 import { recordQueries } from "./frames/failure-queries.js";
@@ -259,7 +259,7 @@ async function* runConversationTurn(
     const unshieldedRunner =
         runner === undefined ? undefined : await services.privacyShield.refusal({ provider: input.agent ?? "claude", conversationId, route: "runner" });
     if (unshieldedRunner !== undefined) {
-        yield { kind: "error", code: "privacy-unshielded", message: unshieldedRunner, own: true };
+        yield refusalFrame(privacyTurnRefusal(unshieldedRunner), false);
         yield { kind: "done" };
         return;
     }
@@ -641,6 +641,7 @@ const refusalFrame = (refusal: Omit<TurnRefusal, "ok">, unattended: boolean): Er
     ...opt("unattended", unattended ? true : undefined),
     ...opt("memory", refusal.memory),
     ...opt("account", refusal.account),
+    ...opt("privacyRoute", refusal.privacyRoute),
 });
 
 // What the message grew before reaching the model, and what the model's window would not let it grow. Both, together,

@@ -33,7 +33,7 @@ const spoken = computed(() => [t(`common.unsentMark.notSent`), age.value, words.
     <!-- `w-fit` keeps it a chip in both frames: a column would stretch a flex child into a banner, a row would not. -->
     <span
         :aria-label="spoken"
-        class="ui-status-pill flex w-fit shrink-0 items-center gap-1 bg-primary-600/15 text-2xs font-semibold text-link"
+        class="ui-status-pill flex w-fit shrink-0 items-center bg-primary-600/15 font-semibold text-link"
     >
         <Icon name="send" class="shrink-0 text-2xs" />
         {{ t(`common.unsentMark.unsent`) }}

@@ -1,5 +1,6 @@
-import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
-import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import type { AgentEvent, AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
+import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
+import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import {
     applyPatch,
@@ -40,6 +41,35 @@ describe(`applyPatch`, () => {
 
 // A subagent's reasoning arrives a token at a time as its words alone, and must land on the card that spawned it
 // wherever that card nests, leaving every other card as it was.
+// The rows a window draws from a run's patches are the rows the run records, so a chat followed live and the same chat
+// reopened from its record are one transcript: what a patch does to a row is the contract's rule, never this window's.
+test(`a window following a run's patches holds exactly the rows its fold records`, () => {
+    const opening = [userRow(`go`, 1, [])];
+    const fold = new TranscriptFold(opening);
+    const frames: AgentEvent[] = [
+        { kind: `thinking`, text: `look` },
+        { kind: `delta`, text: `Reading ` },
+        { kind: `delta`, text: `it.` },
+        { kind: `text_end` },
+        { kind: `tool_call`, id: `task-1`, name: `Agent`, category: `other`, status: `in_progress` },
+        { kind: `tool_call`, id: `t2`, name: `Read`, category: `read`, status: `in_progress`, parentToolUseId: `task-1` },
+        { kind: `thinking`, text: `inner`, parentToolUseId: `task-1` },
+        { kind: `tool_call_update`, id: `t2`, status: `completed` },
+        { kind: `tool_call_update`, id: `task-1`, status: `completed` },
+        { kind: `todos`, items: [{ content: `a`, status: `pending` }] },
+        { kind: `delta`, text: `Done.` },
+        { kind: `text_end` },
+        { kind: `tool_call`, id: `t3`, name: `Bash`, category: `execute`, status: `in_progress` },
+    ];
+    let state = attachRun(emptyTranscriptState, { kind: `attached`, run: `run-1`, startedAt: 1, seq: 0, rows: opening });
+    for (const patch of [...frames.flatMap((frame) => fold.apply(frame)), ...fold.finish(`settled`)]) {
+        state = applyPatch(state, patch, false);
+    }
+    const drawn: TranscriptRow[] = state.messages.map(({ id: _id, ...row }) => row);
+    expect(drawn).toEqual(fold.rows);
+    expect(drawn.map((row) => row.role)).toEqual([`user`, `assistant`, `assistant`, `assistant`]);
+});
+
 test(`a subagent's reasoning lands on the card that spawned it, however deep it nests`, () => {
     const spawner = { id: `task-1`, name: `Agent`, category: `other` as const, status: `in_progress` as const, thinking: `looking` };
     const nested = { id: `task-2`, name: `Agent`, category: `other` as const, status: `in_progress` as const };

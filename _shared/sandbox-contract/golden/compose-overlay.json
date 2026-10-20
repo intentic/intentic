@@ -1,0 +1,30 @@
+{
+  "cases": [
+    {
+      "name": "an overlay on the release base, its fragments and the custom section",
+      "base": "ghcr.io/intentic/sandbox:stable",
+      "line": {
+        "compose": 1,
+        "overlay": "# Composed by the intentic sandbox daemon: do not edit by hand.\n# Capability fragments are daemon-owned; the custom section mirrors .intentic/config/environment.custom.Dockerfile.\n\nFROM ghcr.io/intentic/sandbox:stable\n\nRUN apt-get update && apt-get install -y --no-install-recommends ripgrep\n\n# ---- custom (owner-approved) ----\n\n# tool: jq\nRUN apt-get install -y jq\n",
+        "hash": "b19044e8f9b1541911e351d0a243a0a54a95bdb1c689cea38f60a20d44ad00c7"
+      }
+    },
+    {
+      "name": "a recipe emptied while the container runs an overlay keeps a bare one",
+      "base": "intentic-sandbox:dev",
+      "line": {
+        "compose": 1,
+        "overlay": "# Composed by the intentic sandbox daemon: do not edit by hand.\n# Capability fragments are daemon-owned; the custom section mirrors .intentic/config/environment.custom.Dockerfile.\n\nFROM intentic-sandbox:dev\n",
+        "hash": "c951ca0e0d5fd6adc65c535842ba295f68ed906d264af679b80248302c60a904"
+      }
+    },
+    {
+      "name": "a sandbox that wants no overlay on this base",
+      "base": "ghcr.io/intentic/sandbox:beta",
+      "line": {
+        "compose": 1,
+        "overlay": null
+      }
+    }
+  ]
+}

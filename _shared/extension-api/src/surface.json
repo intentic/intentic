@@ -4374,6 +4374,13 @@
             "vAction",
             "vSkeletonSource",
             "wordDiff"
+        ],
+        "uiKitDeprecated": [
+            "RepoRail → RepoPicker",
+            "SkeletonSnapshot → Await",
+            "errorMessage → messageOr",
+            "useLoadingReveal → Await",
+            "vSkeletonSource → Await"
         ]
     },
     "2.34.0": {
@@ -4693,6 +4700,18 @@
             "vAction",
             "vSkeletonSource",
             "wordDiff"
+        ],
+        "uiKitDeprecated": [
+            "NavRail.stickyHeadings → nothing: a rail's headers scroll with it",
+            "RepoRail → RepoPicker",
+            "RowGroup.caption → RowNote",
+            "RowGroup.count → the rows themselves",
+            "RowGroup.flat → Section",
+            "SkeletonSnapshot → Await",
+            "errorMessage → messageOr",
+            "ui.sectionLabel → Section, or SectionHeader for a header alone",
+            "useLoadingReveal → Await",
+            "vSkeletonSource → Await"
         ]
     }
 }

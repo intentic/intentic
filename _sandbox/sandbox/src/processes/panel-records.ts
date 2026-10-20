@@ -14,7 +14,13 @@ const PanelSchema = z.object({
 type SavedPanel = z.infer<typeof PanelSchema>;
 
 // Only user-started panels opt in (`durable`). Installs, checks and capability daemons have their own lifecycles.
-export const panelRecordsDocument = defineDocument({ root: "history", path: "panels.json", schema: z.array(PanelSchema) });
+export const panelRecordsDocument = defineDocument({
+    root: "history",
+    path: "panels.json",
+    // User-started operator panels resume on this sandbox after a restart; a moved sandbox starts inert.
+    portability: "derived",
+    schema: z.array(PanelSchema),
+});
 const panelRecords = (historyRoot: string) =>
     openDocument(panelRecordsDocument, join(historyRoot, panelRecordsDocument.path), { fallback: () => [], mode: 0o600 });
 

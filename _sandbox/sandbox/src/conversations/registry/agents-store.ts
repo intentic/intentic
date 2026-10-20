@@ -123,7 +123,9 @@ const EndingSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("idle") }),
     z.object({ kind: z.literal("interrupted") }),
     z.object({ kind: z.literal("stopped") }),
-    z.object({ kind: z.literal("failed"), failure: z.string().optional(), code: z.string().optional() }),
+    // `own`: the failure is the sandbox's own sentence (the error frame's `own`); absent for the provider's words, and in rows
+    // written before it was kept.
+    z.object({ kind: z.literal("failed"), failure: z.string().optional(), code: z.string().optional(), own: z.literal(true).optional() }),
     z.object({
         kind: z.literal("limited"),
         failure: z.string().optional(),
@@ -253,6 +255,7 @@ type LegacyBookedQueue = JsonObject & {
 export const conversationRecordDocument = defineDocument({
     root: "history",
     path: "conversations.db#conversation.record",
+    portability: "carry",
     boot: false,
     schema: PersistedAgentSchema,
     history: [

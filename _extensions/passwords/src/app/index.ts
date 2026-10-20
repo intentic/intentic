@@ -1,3 +1,4 @@
+// allow(kit-check): the desktop app mounts this catalog itself; the rail bundle never calls registerPasswordsMessages.
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { messages, PASSWORDS_EXTENSION_ID } from "../i18n.js";
 

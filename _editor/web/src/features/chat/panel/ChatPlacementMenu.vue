@@ -5,6 +5,7 @@ import type { Conversation } from "../../../models/conversations/session/convers
 import { placeConversation } from "./pane/composerControls";
 import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
 import { useRunners } from "../../../models/sandbox/devices/useRunners";
+import { SectionHeader } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { useFleetAdvice } from "./fleet/fleetAdvice";
 import { draftFleet } from "./fleet/fleetPlacement";
@@ -135,9 +136,7 @@ const place = (at: { box?: string; runner?: string }): void => {
 
         <!-- Other workspaces on this account, under their own heading (a bigger step than the rows above); absent on a single-sandbox account. -->
         <template v-if="otherBoxes.length > 0">
-            <p class="mt-1 px-2.5 pb-0.5 pt-1.5 text-2xs font-medium uppercase tracking-wide text-subtle">
-                {{ t(`chat.chatPlacementMenu.otherSandboxes`) }}
-            </p>
+            <SectionHeader :label="t(`chat.chatPlacementMenu.otherSandboxes`)" density="dense" class="mt-1 px-2.5 pb-0.5 pt-1.5" />
             <button
                 v-for="box in otherBoxes"
                 :key="box.sandbox.id"

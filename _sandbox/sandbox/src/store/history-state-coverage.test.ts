@@ -1,12 +1,14 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
-import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
+import { stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
 import { stateDocuments } from "../bootstrap/state-registry.js";
+import { HISTORY_DOCUMENT_FILES } from "./evolution/history-documents.generated.js";
+import { HISTORY_FILES_WITHOUT_DOCUMENT, HISTORY_STATE_FILES } from "./evolution/history-state.js";
 
-// Same guard as workspace-state-coverage but for /history: scans daemon source for every historyRoot-based path and
-// fails if it is not declared in HISTORY_STATE_FILES. A stored document names its path once, on its spec, and every
-// store opens it from there: those are read off the registry, not the source.
+// Same guard as workspace-state-coverage but for /history. A stored document declares its own portability on its
+// definition, and the generated table is held here to what the loaded documents say; every other path the daemon source
+// builds under historyRoot must be claimed by HISTORY_FILES_WITHOUT_DOCUMENT, and every entry there by something.
 
 // Matched by expression, not string, so a `join(someOtherRoot, …)` call is excluded by construction.
 const ROOT_EXPRESSIONS = new Set(["historyRoot", "config.historyRoot"]);
@@ -30,6 +32,28 @@ const sourceFiles = async (dir: string): Promise<string[]> => {
 // Matches `join(<root>, "a", "b")`; the lookahead lets a computed final segment still contribute its literal prefix.
 const HISTORY_JOIN = /join\(\s*([A-Za-z_.]+)\s*,\s*((?:"[^"]+"\s*,\s*)*"[^"]+"\s*)(?=[,)])/g;
 
+const historyDocuments = stateDocuments().filter((spec) => spec.root === "history");
+const pathOf = (spec: { readonly path: string; readonly directory: boolean }): string => (spec.directory ? `${spec.path}/` : spec.path);
+
+test("the generated table is exactly what every loaded history document declares of itself", () => {
+    // A history document defined any way the source scan cannot read (through a helper, a computed path) is missing
+    // from the generated table, and fails here rather than going unclassified.
+    expect(historyDocuments.length).toBeGreaterThan(50);
+    const declared = historyDocuments.flatMap((spec) => (spec.stateFile === undefined ? [] : [{ ...spec.stateFile, path: pathOf(spec) }]));
+    expect(declared).toHaveLength(historyDocuments.length);
+    expect(HISTORY_DOCUMENT_FILES).toEqual(declared.toSorted((a, b) => a.path.localeCompare(b.path)));
+});
+
+test("a history document inside a directory the hand-kept list claims declares the directory's own class", () => {
+    const disagreeing = HISTORY_DOCUMENT_FILES.flatMap((file) => {
+        const directory = stateFileFor(file.path, HISTORY_FILES_WITHOUT_DOCUMENT);
+        return directory === undefined || directory.portability === file.portability ? [] : [`${file.path} ${file.portability} under ${directory.path} ${directory.portability}`];
+    });
+    expect(disagreeing).toEqual([]);
+    expect(HISTORY_STATE_FILES.map((file) => file.path)).not.toContain("audit/checkpoint.json");
+    expect(HISTORY_STATE_FILES.map((file) => file.path)).toContain("identity/owner.json");
+});
+
 const declaredPaths = async (): Promise<{ path: string; source: string }[]> => {
     const files = await sourceFiles(SOURCE_ROOT);
     const found: { path: string; source: string }[] = [];
@@ -47,26 +71,24 @@ const declaredPaths = async (): Promise<{ path: string; source: string }[]> => {
             found.push({ path: segments.join("/"), source: file.slice(SOURCE_ROOT.length + 1) });
         }
     }
-    for (const spec of stateDocuments().filter((candidate) => candidate.root === "history")) {
-        found.push({ path: spec.directory ? `${spec.path}/` : spec.path, source: "bootstrap/state-registry.ts" });
-    }
     return found;
 };
 
 const covers = (path: string, entry: string): boolean => path === entry || path.startsWith(entry) || `${path}/` === entry;
 
-test("every /history path the daemon builds is declared in HISTORY_STATE_FILES", async () => {
+test("every /history path the daemon builds outside a document is declared in HISTORY_FILES_WITHOUT_DOCUMENT", async () => {
     const used = await declaredPaths();
     // Guards against the regex matching nothing, which would make this test pass vacuously.
     expect(used.length).toBeGreaterThan(10);
 
     const undeclared = used
-        .filter(({ path }) => !HISTORY_STATE_FILES.some((file) => covers(path, file.path)))
+        .filter(({ path }) => !historyDocuments.some((spec) => covers(path, pathOf(spec))))
+        .filter(({ path }) => !HISTORY_FILES_WITHOUT_DOCUMENT.some((file) => covers(path, file.path)))
         .map(({ path, source }) => `${path} (${source})`);
 
     expect(
         [...new Set(undeclared)].toSorted(),
-        "Add these to HISTORY_STATE_FILES in @intentic/sandbox-contract, each saying whether it travels in an environment bundle.",
+        "Add these to HISTORY_FILES_WITHOUT_DOCUMENT (store/evolution/history-state.ts), each saying whether it travels in an environment bundle, or give them a defineDocument that says so.",
     ).toEqual([]);
 });
 
@@ -79,8 +101,12 @@ const WRITTEN_BESIDE_THE_DAEMON = new Map([
 
 test("every declared entry is actually built somewhere in the daemon", async () => {
     // Catches an entry left behind after its store was deleted.
-    const used = [...(await declaredPaths()), ...[...WRITTEN_BESIDE_THE_DAEMON].map(([path, source]) => ({ path, source }))];
-    const unused = HISTORY_STATE_FILES.filter((file) => !used.some(({ path }) => covers(path, file.path))).map((file) => file.path);
+    const used = [
+        ...(await declaredPaths()),
+        ...historyDocuments.map((spec) => ({ path: pathOf(spec), source: "bootstrap/state-registry.ts" })),
+        ...[...WRITTEN_BESIDE_THE_DAEMON].map(([path, source]) => ({ path, source })),
+    ];
+    const unused = HISTORY_FILES_WITHOUT_DOCUMENT.filter((file) => !used.some(({ path }) => covers(path, file.path))).map((file) => file.path);
 
     expect(unused.toSorted(), "These are declared but no daemon source builds them — drop them or fix the path.").toEqual([]);
 });

@@ -49,8 +49,11 @@ flowchart LR
   load, failing closed. The editor's `surface-guard.test.ts` fails when the surface moves without a new entry in
   `src/surface.json`, which records the api's members, from 2.20.0 a digest of the whole generated manifest
   schema, since a host's parse drops a field it does not know at any depth, from 2.21.0 `ToolDefinition`'s fields,
-  from 2.22.0 `api.sideViews`' members and `SideViewRegistration`'s fields, and from 2.31.0 the names
-  [extension-ui](../extension-ui) exports (`uiKitExports`).
+  from 2.22.0 `api.sideViews`' members and `SideViewRegistration`'s fields, from 2.31.0 the names
+  [extension-ui](../extension-ui) exports (`uiKitExports`), and from 2.33.0 what an author must change as of that
+  version (`uiKitDeprecated`: each deprecated kit name and retired prop or recipe member, `<what> → <use instead>`).
+  The package exports the record as `./surface.json`, which the kit's `intentic-kit-check` reads to hold an
+  extension's `engines.intentic` floor to the names it imports.
 - A bundle links by name both this package's runtime exports (`moduleExports`) and the UI kit's, so those two grains
   are held to semver as well: a version that adds a name is at least a minor, and one that drops a name is a major, for
   a name declared deprecated first (the kit's in its `names.mjs`) and at or past the floor that declaration gives. The

@@ -125,6 +125,8 @@
             "entry": [
                 "src/main.ts",
                 "src/state-plan.ts",
+                // Run by path in a target image by `ic` before a swap onto it (_sandbox/ic composition.rs).
+                "src/environment/compose-overlay.ts",
                 // Run by path inside the container, through `docker exec`, by `ic sandbox session` (_sandbox/ic session.rs).
                 "src/auth/host/host-session-cli.ts",
                 "src/**/*-worker.ts",

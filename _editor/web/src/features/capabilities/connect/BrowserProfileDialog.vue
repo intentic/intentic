@@ -8,8 +8,8 @@ import { pointerFrame, type PointerAction } from "../../../models/browsers/point
 import { selectionCopy } from "../../../models/browsers/selectionCopy";
 import { type ScreencastMessage, useScreencast } from "../../../models/browsers/useScreencast";
 import { socketUrl as wsSocketUrl } from "../../../client/sandbox/streams/wsTicket";
-import WaitProgress from "../../../components/WaitProgress.vue";
-import { useBusySince, useWaitClock } from "../../../components/useWaitClock";
+import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
+import { useBusySince, useProgress } from "../../../components/progress/useProgress";
 import { useT } from "@intentic/ui/i18n";
 
 // One connected account's Chromium, driven live over /system/browser-profile (video of the page's viewport in, input
@@ -33,7 +33,7 @@ const painting = ref(false);
 const status = ref<"connecting" | "ready" | "saving" | "error">("connecting");
 const errorMsg = ref<NoticeModel>();
 // How long the browser has been starting (or starting again), shown under its sentence until the first frame paints.
-const startWait = useWaitClock(useBusySince(() => props.visible && !painting.value && status.value !== `error`));
+const startWait = useProgress(useBusySince(() => props.visible && !painting.value && status.value !== `error`));
 // What the page shows under the pointer; the picture carries no cursor of its own.
 const cursor = ref("default");
 const surface = ref<HTMLElement>();
@@ -401,7 +401,7 @@ const finish = async (): Promise<void> => {
                             <Icon name="spinner" spin />
                             <span>{{ t(`capabilities.browserProfileDialog.startingBrowser`) }}</span>
                         </p>
-                        <WaitProgress v-if="startWait" :wait="startWait" class="max-w-xs" />
+                        <ProgressMeter v-if="startWait" :progress="startWait" class="max-w-xs" />
                     </template>
                 </div>
             </div>

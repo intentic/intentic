@@ -195,7 +195,7 @@ export type EnvironmentRemove = z.infer<typeof EnvironmentRemoveSchema>;
 export const EnvironmentContentsSchema = z.object({ items: z.array(EnvironmentItemSchema) });
 export type EnvironmentContents = z.infer<typeof EnvironmentContentsSchema>;
 // A sandbox is four stores: /work, /history, the container, and the AI-provider credential root. A bundle carries only
-// the first two (WORKSPACE_STATE_FILES/HISTORY_STATE_FILES); it cannot rebuild the container or credentials, so
+// the first two (WORKSPACE_STATE_FILES here, the daemon's HISTORY_STATE_FILES); it cannot rebuild the container or credentials, so
 // importing one is a report, not a claim of equivalence. Only the outbound half is here; inbound is one of arrival.ts's
 // four sources.
 

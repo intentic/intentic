@@ -13,7 +13,7 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { useAudience } from "../../app/useAudience";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
-import { useBusySince, useLineWithElapsed } from "../../components/useWaitClock";
+import { useBusySince, useLineWithElapsed } from "../../components/progress/useProgress";
 
 const { window: windowId, active, toolsTo } = defineProps<{
     // One window on the desktop, by its id; absent for the whole display. Fixed for the tab's life, as its key is.
@@ -129,7 +129,7 @@ defineExpose({ driving: view.driving, toggle, focus: () => stageEl.value?.focus(
         >
         <button
             type="button"
-            :class="ui.chip({ on: view.driving.value }, `shrink-0 px-2.5 py-1 font-medium`, !view.driving.value && `text-content`)"
+            :class="ui.chip({ on: view.driving.value }, `shrink-0 font-medium`, !view.driving.value && `text-content`)"
             :aria-pressed="view.driving.value"
             v-tooltip.bottom="
                 view.driving.value
@@ -173,7 +173,7 @@ defineExpose({ driving: view.driving, toggle, focus: () => stageEl.value?.focus(
             <div class="flex max-w-sm flex-col items-center gap-2 text-center">
                 <Icon name="window-maximize" class="text-2xl text-subtle" />
                 <p class="text-sm font-medium text-content">{{ t(`browsers.app.closed`) }}</p>
-                <button type="button" class="ui-chip mt-1 px-2 py-1 font-medium" @click="emit(`close`)">{{ t(`browsers.browsers.closeTab`) }}</button>
+                <button type="button" class="ui-chip mt-1 font-medium" @click="emit(`close`)">{{ t(`browsers.browsers.closeTab`) }}</button>
             </div>
         </div>
 
@@ -189,7 +189,7 @@ defineExpose({ driving: view.driving, toggle, focus: () => stageEl.value?.focus(
                         <code class="truncate font-mono text-xs text-content">{{ exportLine }}</code>
                         <CopyButton :text="exportLine" />
                     </div>
-                    <button type="button" class="ui-chip mt-1 px-2 py-1 font-medium" @click="terminal.setOpen(true)">
+                    <button type="button" class="ui-chip mt-1 font-medium" @click="terminal.setOpen(true)">
                         <Icon name="terminal" />
                         {{ t(`desktop.desktop.openTerminal`) }}
                     </button>

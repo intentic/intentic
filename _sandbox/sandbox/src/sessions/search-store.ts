@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { immediateTransaction, IN_MEMORY, openSqlite } from "@intentic/base/sqlite";
-import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agents";
+import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract/schemas/agent-search";
 import type { FoundLine, SearchIndexMetrics, SearchKind } from "./search-index.js";
 import type { LineVia, SpokenLine } from "./transcript-search.js";
 

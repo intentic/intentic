@@ -17,7 +17,7 @@ export function usePublicOutbox(live: MaybeRefOrGetter<boolean> = false) {
     const queryClient = useQueryClient();
     const queryKey = rpcKey(`public.list`);
 
-    const { query, error } = useSandboxQuery<PublicList>({
+    const { query, error, loaded } = useSandboxQuery<PublicList>({
         queryKey,
         queryFn: () => sandboxRpc.public.list(),
         refetchInterval: computed(() => (toValue(live) ? WATCH_MS : false)),
@@ -27,7 +27,8 @@ export function usePublicOutbox(live: MaybeRefOrGetter<boolean> = false) {
         files: computed(() => query.data.value?.files ?? []),
         // The outbox's address; absent on a sandbox with no tunnel, the honest signal that nothing here can publish.
         url: computed(() => query.data.value?.url),
-        settled: computed(() => query.isFetched.value || query.isError.value),
+        // Where the list stands; only an answer says the outbox is empty.
+        loaded,
         error,
         invalidate: async (): Promise<void> => {
             await queryClient.invalidateQueries({ queryKey });

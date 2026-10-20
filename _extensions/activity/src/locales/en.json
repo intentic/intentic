@@ -1,7 +1,6 @@
 {
     "activityTimeline": {
         "activityFeed": "Activity feed",
-        "entries": "{count} entry | {count} entries",
         "idleNoEnabledListener": "Idle: no enabled listener automation for {label} yet, so nothing is being listened for.",
         "loadingActivity": "Loading activity",
         "nothingEntriesAppearMessage": "Nothing {window}. Entries appear when a message wakes the agent, when it calls a connected provider, and on every turn it runs.",

@@ -67,7 +67,7 @@ pub struct FoundProject {
     pub wsl: Option<String>,
     /// It is a git repository.
     pub git: bool,
-    /// It already has a sandbox of its own (`projects.json`).
+    /// It is in a sandbox already, as the machine agent's pairings say (bindings.rs).
     pub sandbox: bool,
 }
 

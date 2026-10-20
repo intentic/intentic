@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ContextMenu, Icon, SearchBar, SegmentedControl, type Tip } from "@intentic/ui";
+import { ContextMenu, Icon, SearchBar, SegmentedControl, type Tip, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, ref, useTemplateRef } from "vue";
@@ -149,8 +149,7 @@ defineExpose({
             <!-- This control reports which files the list omits. -->
             <button
                 type="button"
-                class="flex shrink-0 items-center rounded-md px-1.5 py-0.5 transition-colors"
-                :class="filtersActive ? 'bg-primary-600/15 text-link' : 'text-muted hover:text-content'"
+                :class="ui.iconButton({ on: filtersActive }, `shrink-0`)"
                 aria-haspopup="menu"
                 :aria-label="t(`workspace.words.filterWhatExplorerLists`)"
                 v-tooltip.bottom="filterTip ?? t(`workspace.words.filter`)"

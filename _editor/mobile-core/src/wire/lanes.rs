@@ -59,10 +59,6 @@ impl AgentSummary {
             )
     }
 
-    fn limited(&self) -> bool {
-        self.status == AgentStatus::Error && self.failure_code.as_deref() == Some("rate_limit")
-    }
-
     fn land_broken(&self) -> bool {
         self.land_failure.is_some() && !self.turn_in_flight()
     }

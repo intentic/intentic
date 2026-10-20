@@ -20,6 +20,7 @@ const {
     recordOf,
     RELEASE_FORWARDS_MS,
     shouldReleaseForwards,
+    swapBegan,
     swapStep,
     syncHeld,
     syncHolds,
@@ -132,9 +133,23 @@ describe("resumeSessions", () => {
 });
 
 describe("a swap", () => {
-    // The record ic keeps while it swaps the sandbox on this machine, by the slug its hostname gives it.
-    const cutover = async () => await Promise.resolve([{ slug: "sandbox-82789f4106b4", phase: "cutover" }]);
+    // The record ic keeps while it swaps the sandbox on this machine, by the slug its hostname gives it: a cutover that
+    // began over a quarter hour ago, so the pass after ic lets its record go is the one that settles it.
+    const cutover = async () => await Promise.resolve([{ slug: "sandbox-82789f4106b4", phase: "cutover", at: Date.now() - PROBATION_HOLD_MS - 1000 }]);
     const settled = async () => await Promise.resolve([]);
+
+    // 2026-10-20: a dev-loop swap's record is gone seconds after its cutover; the hold is not.
+    it("keeps holding for the quarter hour after a cutover even once ic's record of it is gone", async () => {
+        const mutagen = await statefulMutagen([MAIN, STATE]);
+        const fresh = async () => await Promise.resolve([{ slug: "sandbox-82789f4106b4", phase: "cutover", at: Date.now() - 30_000 }]);
+        await holdSyncDuringSwaps(await pairings(), new Map(), quiet, fresh);
+        await holdSessions(mutagen.path, await pairings(), quiet);
+        const held = await holdSyncDuringSwaps(await pairings(), new Map(), quiet, settled);
+        expect([...held]).toHaveLength(1);
+        expect((await pairingNow())?.swapSince).toBeTypeOf("number");
+        await holdSessions(mutagen.path, await pairings(), quiet);
+        expect([await mutagen.paused(MAIN), await mutagen.paused(STATE)]).toEqual([true, true]);
+    });
 
     // fair-moth (2026-10-19): after a rebuild sync stayed paused, the log saying it had resumed.
     it("holds file sync still, and once settled resumes it pass after pass until Mutagen takes it", async () => {
@@ -325,31 +340,68 @@ test("a pairing is known to this machine's ic by its hostname's first label, or 
     expect(recordOf(pairing(), [{ slug: "other", phase: "cutover" }])).toBeUndefined();
 });
 
-test("sync holds through the cutover and the first quarter hour of probation, then only while the sandbox is silent", () => {
-    expect(holdsSync(undefined, NOW, true)).toBe(false);
-    expect(holdsSync({ slug: "s" }, NOW, false)).toBe(false);
-    expect(holdsSync({ slug: "s", phase: "cutover", at: NOW - 2 * PROBATION_HOLD_MS }, NOW, true)).toBe(true);
+test("sync holds through the cutover and the first quarter hour after it, then only while ic watches and the sandbox is silent", () => {
+    expect(holdsSync(undefined, undefined, NOW, true)).toBe(false);
+    expect(holdsSync({ slug: "s" }, undefined, NOW, false)).toBe(false);
+    expect(holdsSync({ slug: "s", phase: "cutover", at: NOW - 2 * PROBATION_HOLD_MS }, undefined, NOW, true)).toBe(true);
     const proving = (at: number | undefined) => ({ slug: "s", phase: "probation", at });
-    expect(holdsSync(proving(NOW - PROBATION_HOLD_MS + 1), NOW, true)).toBe(true);
-    expect(holdsSync(proving(NOW - PROBATION_HOLD_MS), NOW, true)).toBe(false);
-    expect(holdsSync(proving(NOW - PROBATION_HOLD_MS), NOW, false)).toBe(true);
+    expect(holdsSync(proving(NOW - PROBATION_HOLD_MS + 1), undefined, NOW, true)).toBe(true);
+    expect(holdsSync(proving(NOW - PROBATION_HOLD_MS), undefined, NOW, true)).toBe(false);
+    expect(holdsSync(proving(NOW - PROBATION_HOLD_MS), undefined, NOW, false)).toBe(true);
     // Nothing to measure from is read as the swap having just begun.
-    expect(holdsSync(proving(undefined), NOW, true)).toBe(true);
+    expect(holdsSync(proving(undefined), undefined, NOW, true)).toBe(true);
     // A phase a newer ic adds is read as probation.
-    expect(holdsSync({ slug: "s", phase: "verifying", at: NOW - 2 * PROBATION_HOLD_MS }, NOW, true)).toBe(false);
+    expect(holdsSync({ slug: "s", phase: "verifying", at: NOW - 2 * PROBATION_HOLD_MS }, undefined, NOW, true)).toBe(false);
 });
 
-// The swap keeps one fact, written once as it begins and cleared once it settles; whom that holds, and whether a person's
-// own pause still holds it afterwards, is `syncHolds`'s to read (above).
-test("a swap's fact is written once as it begins and cleared once it settles", () => {
-    expect(swapStep(pairing(), true)).toBe("began");
-    expect(swapStep(pairing({ swapSince: NOW }), true)).toBeUndefined();
-    expect(swapStep(pairing({ swapSince: NOW }), false)).toBe("settled");
-    expect(swapStep(pairing(), false)).toBeUndefined();
+// 2026-10-20: a swap with no probation (the dev loop) leaves ic's record seconds after its cutover, and the hold read off
+// the record alone let go after about thirty seconds. It is measured from the start the pairing kept.
+test("the hold lasts its quarter hour after ic's record of the swap is gone, and no longer", () => {
+    const began = NOW - 40_000;
+    expect(holdsSync(undefined, began, NOW, true)).toBe(true);
+    expect(holdsSync(undefined, began, began + PROBATION_HOLD_MS - 1, true)).toBe(true);
+    expect(holdsSync(undefined, began, began + PROBATION_HOLD_MS, true)).toBe(false);
+    // Silence past the quarter hour holds only while ic still watches the swap: with its record gone, nothing does.
+    expect(holdsSync(undefined, began, began + PROBATION_HOLD_MS, false)).toBe(false);
+    expect(holdsSync({ slug: "s", phase: "probation", at: began }, began, began + PROBATION_HOLD_MS, false)).toBe(true);
+});
+
+test("the start a hold measures from is the cutover ic recorded, kept on the pairing once the record goes", () => {
+    expect(swapBegan({ slug: "s", phase: "cutover", at: NOW - 5 }, undefined, NOW)).toBe(NOW - 5);
+    expect(swapBegan(undefined, NOW - 5, NOW)).toBe(NOW - 5);
+    expect(swapBegan(undefined, undefined, NOW)).toBeUndefined();
+    // A record with no time begins when it is first seen, and keeps that start on later passes.
+    expect(swapBegan({ slug: "s", phase: "cutover" }, undefined, NOW)).toBe(NOW);
+    expect(swapBegan({ slug: "s", phase: "cutover" }, NOW - 9, NOW)).toBe(NOW - 9);
+});
+
+// The swap keeps one fact, written as it begins (and again for a later swap) and cleared once it settles; whom that
+// holds, and whether a person's own pause still holds it afterwards, is `syncHolds`'s to read (above).
+test("a swap's fact is written as it begins, again for a later swap, and cleared once it settles", () => {
+    expect(swapStep(pairing(), true, NOW)).toBe("began");
+    expect(swapStep(pairing({ swapSince: NOW }), true, NOW)).toBeUndefined();
+    expect(swapStep(pairing({ swapSince: NOW - PROBATION_HOLD_MS }), true, NOW)).toBe("began");
+    expect(swapStep(pairing({ swapSince: NOW }), false, NOW)).toBe("settled");
+    expect(swapStep(pairing(), false, undefined)).toBeUndefined();
 });
 
 test("forwarded ports come off localhost once the sandbox has been silent ten minutes, if it holds any", () => {
     expect(shouldReleaseForwards(RELEASE_FORWARDS_MS - 1, 2)).toBe(false);
     expect(shouldReleaseForwards(RELEASE_FORWARDS_MS, 2)).toBe(true);
     expect(shouldReleaseForwards(RELEASE_FORWARDS_MS, 0)).toBe(false);
+});
+
+// (2026-10-20) THE MOVE OFF MUTAGEN'S SHARED DIRECTORY KEEPS ITS FIRST LOOK. Which sessions were paused before the move
+// touched anything is written once, before the move's own pause, and every later try reads that record rather than a
+// listing in which the move's pauses look like the owner's (mutagen-move.ts `moveSessions`).
+describe("firstSighting", () => {
+    it("keeps the first try's paused sessions for every later try, and looks afresh at a record it cannot read", async () => {
+        const { firstSighting } = await import("../mutagen-move.js");
+        const path = join(baseDir, "sighting.json");
+        expect(await firstSighting(path, ["intentic-a-state"])).toEqual(["intentic-a-state"]);
+        expect(await firstSighting(path, ["intentic-a", "intentic-a-state"])).toEqual(["intentic-a-state"]);
+        expect(JSON.parse(await readFile(path, "utf8"))).toEqual(["intentic-a-state"]);
+        await writeFile(path, "{ cut short");
+        expect(await firstSighting(path, ["intentic-b"])).toEqual(["intentic-b"]);
+    });
 });

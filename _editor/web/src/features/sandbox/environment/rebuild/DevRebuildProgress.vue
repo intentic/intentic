@@ -3,8 +3,9 @@ import { Code, commandLang, formatElapsed, Notice, type NoticeModel } from "@int
 import { useNow } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { DEV_REBUILD_STEPS } from "./devRebuildStages";
-import StagedProgress from "../../progress/StagedProgress.vue";
-import type { ProgressStatus } from "../../progress/stagedProgress";
+import StagedProgress from "../../../../components/progress/StagedProgress.vue";
+import type { Progress } from "../../../../components/progress/progress";
+import type { ProgressStatus } from "../../../../components/progress/stagedSteps";
 import { type DevRebuildRun, outOfContact, rebuildRunning } from "./useDevRebuild";
 import { useT } from "@intentic/ui/i18n";
 
@@ -49,6 +50,8 @@ const status = computed<ProgressStatus>(() => {
 const stage = computed(() => (props.run.phase === `done` ? `swap` : props.run.stage));
 
 const elapsedLabel = computed(() => (props.elapsed === undefined ? undefined : formatElapsed(props.elapsed)));
+// The run's own count (docker's steps, the stages passed) is what fills the bar: nothing here estimates it.
+const progress = computed<Progress>(() => ({ elapsedMs: props.elapsed === undefined ? undefined : props.elapsed * 1000, measured: props.run.fraction }));
 
 // What the step is on this second, in the tool's own words: the package turbo is compiling, docker's layer count, the
 // sentence ic printed. Only ever beside the running step, since it describes this instant and nothing else.
@@ -148,12 +151,11 @@ watch(
     <StagedProgress
         v-model:log="showLog"
         :heading="heading"
-        :elapsed="elapsed"
+        :progress="progress"
         :steps="DEV_REBUILD_STEPS"
         :stage="stage"
         :stage-at="run.stageAt"
         :ended-at="run.endedAt"
-        :fraction="run.fraction"
         :status="status"
         :live="live"
         :detail="detail"

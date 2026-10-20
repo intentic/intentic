@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MatchSnippetSchema } from "./agents.js";
+import { MatchSnippetSchema } from "./agent-search.js";
 export const SessionIdParamSchema = z.object({ id: z.string().describe("Which past conversation.") });
 export const SessionSummarySchema = z.object({
     id: z.string().describe("Its id."),

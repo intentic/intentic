@@ -10,6 +10,7 @@ import {
     healthReady,
     healthUnavailable,
     healthUnknown,
+    privacyTurnRefusal,
     type TurnArmPlan,
     type TurnContext,
 } from "../../agent/providers/adapter.js";
@@ -86,7 +87,7 @@ export const planGeminiTurn = async (
     }
     const refused = await sharedServerRefusal(services.privacyShield, services.openCode.shielded, "gemini", input.conversationId);
     if (refused !== undefined) {
-        return { ok: false, message: refused };
+        return privacyTurnRefusal(refused);
     }
     const catalog = await services.geminiModels.models();
     // Absent and empty both mean the catalog default: the wire allows `model: ""`, and nothing was pinned.

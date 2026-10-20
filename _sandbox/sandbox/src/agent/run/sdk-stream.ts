@@ -29,8 +29,7 @@ import { TaskChecklist, type TaskOutput, TaskOutputSchema } from "../../sessions
 import { PageDrafts } from "../pages/page-draft.js";
 import { PAGE_TOOL_NAMES } from "../pages/page-names.js";
 import type { ChecklistSeed } from "./task-store.js";
-import { displayNameOf, toolCategoryOf, toolTarget } from "@intentic/agent-context/tool-calls";
-import { type CalledTool, editDiffContent, mayShowPicture, resultContent, toolInput, toolLocations } from "../../sessions/vocabulary/tool-calls.js";
+import { SdkCallFrames, type ToolUseBlock } from "../../sessions/vocabulary/sdk-call-frames.js";
 
 // What a turn needs from the SDK: the message stream and the session's slash-command list. `supportedCommands` is
 // optional since a fake stream used in tests has none.
@@ -381,13 +380,6 @@ export interface StreamSdkArgs {
 
 type SdkOf<T extends SDKMessage["type"]> = Extract<SDKMessage, { type: T }>;
 
-// A tool_use block that can be correlated to its result; real streams always carry an id and a name.
-interface ToolUseBlock {
-    readonly id: string;
-    readonly name: string;
-    readonly input?: unknown;
-}
-
 // One request's accounting, as `message_start` reports it: the Messages API usage object, of which the SDK's own types
 // name only the totals. `cache_creation` is the per-TTL split of `cache_creation_input_tokens`.
 interface RequestUsage {
@@ -428,10 +420,8 @@ class TurnFold {
     // Named once at the first browser call so the client can offer to watch; PreToolUse registers the session.
     private browserSent = false;
     private readonly bashToolIds = new Set<string>();
-    // Calls whose answer can be a picture (mayShowPicture), by tool_use id, read against their result.
-    private readonly pictureCalls = new Map<string, CalledTool>();
-    // tool_use ids whose call already carried the diff; a redundant 'file updated' result must not replace it.
-    private readonly diffToolIds = new Set<string>();
+    // Each call's card and its result's, built as a session read back from the store builds them (sdk-call-frames.ts).
+    private readonly calls: SdkCallFrames;
     // The agent's working checklist, rebuilt from the Task tool family; the list itself is their render.
     private readonly checklist = new TaskChecklist();
     private inheritedChecklist: TodoItem[] | undefined;
@@ -467,6 +457,7 @@ class TurnFold {
 
     constructor(args: StreamSdkArgs, session: AgentQuery) {
         this.args = args;
+        this.calls = new SdkCallFrames(args.cwd, args.browserOutputDir);
         this.session = session;
         this.tally = new MessageTally(args.subagents?.conversationId, args.carriedCostUsd);
     }
@@ -668,7 +659,7 @@ class TurnFold {
         if (browserServerOfTool(block.name) !== undefined) {
             yield* this.onBrowserCall(block, sessionId);
         }
-        yield this.toolCallFrame(block, parent);
+        yield this.calls.call(block, parent);
     }
 
     /* A turn inherits a checklist only when its seed belongs to the same session. */
@@ -744,31 +735,6 @@ class TurnFold {
         yield { kind: "browser", session: browser };
     }
 
-    private toolCallFrame(block: ToolUseBlock, parent: string | undefined): AgentEvent {
-        const diff = editDiffContent(block.name, block.input, this.args.cwd);
-        if (diff !== undefined) {
-            this.diffToolIds.add(block.id);
-        }
-        if (mayShowPicture(block.name)) {
-            this.pictureCalls.set(block.id, { name: block.name, input: block.input });
-        }
-        return {
-            kind: "tool_call",
-            id: block.id,
-            // Through the shared tool-name vocabulary; an MCP browser tool no longer shows its raw `mcp__web__` name
-            // here.
-            name: displayNameOf(block.name),
-            category: toolCategoryOf(block.name),
-            status: "in_progress",
-            ...opt("target", toolTarget(block.input)),
-            // An MCP or Agent call has no target; its input is what the record would otherwise lose.
-            ...opt("input", toolInput(block.input, toolTarget(block.input))),
-            ...opt("locations", toolLocations(block.input, this.args.cwd)),
-            ...(diff !== undefined ? { content: [diff] } : {}),
-            ...opt("parentToolUseId", parent),
-        };
-    }
-
     // Tool results arrive as tool_result blocks on a (usually synthetic) user message; this is where edit diffs and
     // bash output live. A result with no tool_use_id can't be correlated. The message's `tool_use_result` is one tool's
     // structured output, so it is read only beside a lone result, where it cannot belong to another.
@@ -804,14 +770,8 @@ class TurnFold {
             return;
         }
         // A screenshot's answer names the file it wrote and a Read of an image answers with it; either carries the picture.
-        const call = failed ? undefined : this.pictureCalls.get(toolUseId);
         // A successful Edit/Write result is just 'file updated', so the call-time diff stays; errors do replace it.
-        yield {
-            kind: "tool_call_update",
-            id: toolUseId,
-            status: failed ? "failed" : "completed",
-            ...(this.diffToolIds.has(toolUseId) && !failed ? {} : { content: resultContent(content, this.args.cwd, this.args.browserOutputDir, call) }),
-        };
+        yield this.calls.result({ id: toolUseId, content, failed });
     }
 
     // Whether a retry is worth waiting out. Probes the routed endpoint once per turn to catch a refused model early;

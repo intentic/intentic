@@ -183,6 +183,20 @@ describe(`the card of this window's folder, once the sandbox is up`, () => {
         });
         expect(machineCardOf(facts(ready, folderAt(`copying`, { status: `scanning` })))).toMatchObject({ tone: `working`, key: `folder:copying` });
     });
+
+    // Only the reader's own pause is theirs to lift in Devices; a hold that passes by itself says so, by the agent's
+    // first reason, instead of sending the reader to a Resume that is not there (2026-10-20).
+    it(`says why a paused copy waits, by the machine agent's first hold`, () => {
+        const detail = (heldBy: readonly string[] | undefined): string | undefined =>
+            machineCardOf(facts(ready, folderAt(`copying`, { status: `paused`, heldBy })))?.detail;
+        expect(detail([`owner`, `low-disk`])).toBe(`Open the sandbox's Devices page to resume file syncing.`);
+        expect(detail([`low-disk`])).toBe(`The drive this folder is on is nearly full. Copying carries on by itself once there's room.`);
+        expect(detail([`swap`])).toBe(`This computer's sandbox is being updated. Copying carries on by itself once it's back.`);
+        expect(detail([`unreachable`])).toBe(`This computer's sandbox hasn't answered for an hour. Copying carries on by itself once it does.`);
+        expect(detail([`container-trashed`])).toBe(`This computer's sandbox isn't running on this computer right now. Copying carries on once it's back.`);
+        // An app older than holds names no reason: the reader's own pause, as before.
+        expect(detail(undefined)).toBe(`Open the sandbox's Devices page to resume file syncing.`);
+    });
 });
 
 describe(`the folder's own button`, () => {

@@ -1,5 +1,6 @@
 import type { WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract/schemas/automations";
-import { createGoogleVerifier, type IdTokenVerifier } from "../auth/auth.js";
+import type { IdTokenVerifier } from "../auth/auth.js";
+import { createGoogleVerifier } from "../auth/proofs/google-id-token.js";
 import type { Services } from "../composition.js";
 
 // Who the daemon tells the model it is talking to.

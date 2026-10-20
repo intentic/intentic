@@ -395,7 +395,7 @@ export interface LocalRecent {
     openedAt: number | string;
     // Whether the path is still there, asked as the list is read: a recent that has moved is drawn as moved.
     exists: boolean;
-    // Whether the folder has a sandbox of its own (projects.json, src-tauri/src/project.rs).
+    // Whether the folder is in a sandbox, as the machine agent's pairings say (src-tauri/src/bindings.rs).
     sandbox: boolean;
 }
 // The system dialog, then what was chosen: a folder shown in the window that asked, in place of its own; a document
@@ -519,6 +519,8 @@ export interface MachineFolder {
     readonly reason?: string;
     /** The first copy's status: paused, or Mutagen's word while it runs. */
     readonly status?: string;
+    /** While it is paused, why the machine agent holds its sync still (its `heldBy`), the reader's own pause first. */
+    readonly heldBy?: readonly string[];
     /** Its first copy's session has been seen running since it was asked in. */
     readonly ran?: boolean;
 }

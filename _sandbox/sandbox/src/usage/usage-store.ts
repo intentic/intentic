@@ -16,6 +16,7 @@ import { openLedger } from "../store/open-document.js";
 export const usageLedgerDocument = defineDocument({
     root: "history",
     path: "usage.jsonl",
+    portability: "carry",
     schema: UsageTurnSchema,
     granularity: "entries",
     boot: false,

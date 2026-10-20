@@ -140,7 +140,7 @@ const selectedPackage = computed(() => (selected.value === undefined ? undefined
     <div ref="root" class="flex min-h-0 flex-col gap-2 overflow-auto px-4 pb-3 pt-3">
         <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
-                <span v-if="focusLabel" :class="ui.chip({ on: true })" class="gap-1">
+                <span v-if="focusLabel" :class="ui.chip({ on: true })">
                     {{ t(`dependenciesView.graph.focus`, { area: focusLabel }) }}
                     <button
                         type="button"
@@ -190,7 +190,6 @@ const selectedPackage = computed(() => (selected.value === undefined ? undefined
                 :key="hub"
                 type="button"
                 :class="ui.chip({ on: selected === hub })"
-                class="gap-1.5"
                 :title="t(`dependenciesView.graph.hubTitle`, { name: hub, count: counts.get(hub) ?? 0 })"
                 @click="pick(hub)"
             >
@@ -255,7 +254,6 @@ const selectedPackage = computed(() => (selected.value === undefined ? undefined
                     :key="pkg.name"
                     type="button"
                     :class="ui.chip({ on: selected === pkg.name })"
-                    class="gap-1.5"
                     :title="pkg.dir"
                     @click="pick(pkg.name)"
                 >
@@ -273,7 +271,6 @@ const selectedPackage = computed(() => (selected.value === undefined ? undefined
                     :key="pkg.name"
                     type="button"
                     :class="ui.chip({ on: selected === pkg.name })"
-                    class="gap-1.5"
                     :title="pkg.dir"
                     @click="pick(pkg.name)"
                 >

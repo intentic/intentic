@@ -14,8 +14,7 @@ import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSetting
 import { type DeviceRow, type MachineRow, managerOf } from "../../../../models/sandbox/devices/deviceRows";
 import { environmentTitle } from "../machineEnvironments";
 import { useT } from "@intentic/ui/i18n";
-import WaitProgress from "../../../../components/WaitProgress.vue";
-import { useWaitClock } from "../../../../components/useWaitClock";
+import ProgressMeter from "../../../../components/progress/ProgressMeter.vue";
 
 // This sandbox's runners on one MACHINE: containers it keeps there to run agents,
 // separate from the sandbox list above (workspaces belonging to a person). Only runners this sandbox asked for
@@ -78,7 +77,7 @@ const syncing = (id: string): boolean => syncs.at(id)?.state === `running`;
 const failure = computed(() => flow.failure.value ?? mine.value.map((runner) => syncs.at(runner.id)?.failure).find((found) => found !== undefined));
 // How long the flow has run, beside its log: a container build prints nothing for long stretches, and a log that has
 // gone quiet read as one that had stopped. Building is the part that takes minutes; a removal is quicker.
-const flowWait = useWaitClock(() => (busy.value ? flow.operation.value?.startedAt : undefined));
+const flowWait = flow.meter;
 const building = computed(() => busy.value && flow.operation.value?.tag !== `remove`);
 
 const facts = (runner: { online: boolean; facts?: { cpus: number; memoryMb: number; load: number } }): string => {
@@ -292,7 +291,7 @@ const add = async (): Promise<void> => {
             <!-- Named, since the view may be new to it: a reader back from elsewhere sees which runner the log is about. -->
             <p v-if="busy && flow.operation.value" class="text-xs text-content">{{ flow.operation.value.what }}</p>
             <p v-if="building" class="text-2xs text-muted">{{ t(`sandbox.deviceRunners.buildTakesMinutes`) }}</p>
-            <WaitProgress v-if="flowWait" :wait="flowWait" />
+            <ProgressMeter v-if="flowWait" :progress="flowWait" />
             <DeviceRunLog
                 v-if="busy || (failure !== undefined && lines.length > 0)"
                 :lines="lines"

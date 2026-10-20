@@ -1,6 +1,6 @@
 import { AUTH_ROOT_IN_WORKSPACE, AUTH_STATE_FILES } from "@intentic/sandbox-contract/state/auth-state";
 import type { BundleManifest } from "@intentic/sandbox-contract/state/definition";
-import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
+import { HISTORY_STATE_FILES } from "../store/evolution/history-state.js";
 import { type Portability, type StateFile, stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 import { SANDBOX_VOLUMES } from "@intentic/sandbox-run";

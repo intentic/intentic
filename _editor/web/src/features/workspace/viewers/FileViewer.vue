@@ -645,7 +645,7 @@ const onEditorSave = (value: string): void =>
             <button
                 v-if="canHideComments"
                 type="button"
-                :class="ui.chip({ on: hideFileComments }, `shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium`)"
+                :class="ui.chip({ on: hideFileComments, size: `sm` }, `shrink-0 font-medium`)"
                 :aria-pressed="hideFileComments"
                 @click="toggleHideFileComments()"
                 v-tooltip.bottom="hideFileComments ? t(`workspace.fileViewer.showComments`) : t(`workspace.fileViewer.hideComments`)"
@@ -657,7 +657,7 @@ const onEditorSave = (value: string): void =>
             <button
                 v-if="derivedOffered"
                 type="button"
-                :class="ui.chip({ on: textWanted }, `shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium`)"
+                :class="ui.chip({ on: textWanted, size: `sm` }, `shrink-0 font-medium`)"
                 :aria-pressed="textWanted"
                 @click="textWanted = !textWanted"
                 v-tooltip.bottom="
@@ -673,7 +673,7 @@ const onEditorSave = (value: string): void =>
             <button
                 v-if="previewOffered"
                 type="button"
-                :class="ui.chip({ on: previewing }, `shrink-0 gap-1 rounded-md px-1.5 py-0.5 font-medium`)"
+                :class="ui.chip({ on: previewing, size: `sm` }, `shrink-0 font-medium`)"
                 :aria-pressed="previewing"
                 @click="setHtmlPreviewed(path, !previewing)"
                 v-tooltip.bottom="

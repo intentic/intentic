@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId } from "vue"
 import { type JumpScope, jumpScopes, scopedQuery } from "../../workbench/commands/jumpSearch";
 import { type PaletteRow, useFileJumpRows, useJumpRows } from "./useJumpRows";
 import { useQuickOpen } from "../../workbench/commands/useQuickOpen";
-import { type IconName, Modal, Notice, ui, useListNavigation } from "@intentic/ui";
+import { type IconName, Modal, Notice, SearchBar, SectionHeader, ui, useListNavigation } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 
 // The jump palette (Ctrl/Cmd+P, and Ctrl/Cmd+Shift+P opened on `>`): one field over agents, files, terminals and
@@ -51,7 +51,7 @@ const sections = computed(() => {
     });
 });
 
-const input = ref<HTMLInputElement | null>(null);
+const input = ref<InstanceType<typeof SearchBar> | null>(null);
 // The highlight resets to the top only when the result set itself changes (keyed on the rows, not the array), so a live
 // fleet tick (an agent's status line moving while its row stays put) can't throw the reader back to the top.
 const { activeIndex, activeRow, move, setRowEl } = useListNavigation(rows, (row) => row.key);
@@ -72,9 +72,7 @@ const openActive = (): void => {
 const narrow = async (scope: JumpScope): Promise<void> => {
     query.value = scopedQuery(scope.kind, parsed.value.text);
     await nextTick();
-    input.value?.focus();
-    const end = input.value?.value.length ?? 0;
-    input.value?.setSelectionRange(end, end);
+    input.value?.focus(`end`);
 };
 
 // Focuses the field and resets to the top row each time the palette opens. Seeds the query from the shortcut that
@@ -85,14 +83,8 @@ const onShow = async (): Promise<void> => {
     seed.value = undefined;
     query.value = seeded ?? (mode.value === `commands` && !filesOnly ? `> ` : ``);
     await nextTick();
-    input.value?.focus();
     // Caret at the end, not selected, so the next keystroke can't wipe the `> ` prefix.
-    if (seeded !== undefined || (mode.value === `commands` && !filesOnly)) {
-        const end = input.value?.value.length ?? 0;
-        input.value?.setSelectionRange(end, end);
-    } else {
-        input.value?.select();
-    }
+    input.value?.focus(seeded !== undefined || (mode.value === `commands` && !filesOnly) ? `end` : true);
     activeIndex.value = 0;
 };
 </script>
@@ -101,32 +93,23 @@ const onShow = async (): Promise<void> => {
     <Modal v-model:open="isOpen" size="md" :chrome="false" :scroll="false" :labelled-by="titleId" position="top" @show="onShow">
         <div>
             <h2 :id="titleId" class="sr-only">{{ label }}</h2>
-            <!-- field-bare: the search is the panel's top band, not a boxed field — the panel border and this divider are already its frame. -->
-            <div class="ui-search-band relative">
-                <Icon
-                    class="ui-search-icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm"
-                    aria-hidden="true"
-                    :name="searching || pending ? `spinner` : `search`"
-                    :spin="searching || pending"
-                />
-                <input
-                    ref="input"
-                    v-model="query"
-                    type="text"
-                    :placeholder="filesOnly ? t(`local.quickOpen.fileName`) : t(`shell.quickOpen.jumpToPaste`)"
-                    class="field-bare w-full min-w-0 py-2.5 pl-9 pr-3"
-                    role="combobox"
-                    :aria-label="label"
-                    aria-expanded="true"
-                    aria-autocomplete="list"
-                    aria-controls="quick-open-list"
-                    :aria-activedescendant="activeIndex < rows.length ? `quick-open-opt-${activeIndex}` : undefined"
-                    @keydown.down.prevent="move(1)"
-                    @keydown.up.prevent="move(-1)"
-                    @keydown.enter.prevent="openActive"
-                    @keydown.esc="isOpen = false"
-                />
-            </div>
+            <!-- The panel's top band, not a boxed field: the panel border and the divider under it are already its frame. -->
+            <SearchBar
+                ref="input"
+                v-model="query"
+                :placeholder="filesOnly ? t(`local.quickOpen.fileName`) : t(`shell.quickOpen.jumpToPaste`)"
+                :busy="searching || pending"
+                role="combobox"
+                :aria-label="label"
+                aria-expanded="true"
+                aria-autocomplete="list"
+                aria-controls="quick-open-list"
+                :aria-activedescendant="activeIndex < rows.length ? `quick-open-opt-${activeIndex}` : undefined"
+                @keydown.down.prevent="move(1)"
+                @keydown.up.prevent="move(-1)"
+                @keydown.enter.prevent="openActive"
+                @keydown.esc="isOpen = false"
+            />
             <!-- The only place the prefixes are taught: a press is the mouse's way in, the glyph beside it is the keyboard's. -->
             <div
                 v-if="scopes.length > 0"
@@ -151,7 +134,7 @@ const onShow = async (): Promise<void> => {
                 <Notice v-if="truncated" tone="warning" size="xs" class="mx-1.5 mb-1">{{ t(`shell.quickOpen.showingFirstMatchesOnly`) }}</Notice>
                 <div id="quick-open-list" role="listbox" :aria-label="label" :aria-busy="searching || pending">
                     <div v-for="section in sections" :key="section.heading" role="group" :aria-label="section.heading">
-                        <p aria-hidden="true" class="px-3 pb-1 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">{{ section.heading }}</p>
+                        <SectionHeader aria-hidden="true" :label="section.heading" density="dense" class="px-3 pb-1 pt-0.5" />
                         <button
                             v-for="(row, index) in section.rows"
                             :id="`quick-open-opt-${section.from + index}`"

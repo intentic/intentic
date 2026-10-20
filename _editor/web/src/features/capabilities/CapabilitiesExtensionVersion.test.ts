@@ -36,7 +36,7 @@ jest.mock(`../../models/capabilities/useCapabilities`, () => ({
     readRemoteRefs: (url: string, token?: string, keeping?: string) => readRemoteRefs(url, token, keeping),
 }));
 jest.mock(`../../models/extensions/useExtensions`, () => ({
-    useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
+    useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), loaded: ref({ state: `ready`, data: {}, refreshing: false, refreshError: undefined }) }),
 }));
 jest.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
 jest.mock(`../../models/terminal/useBackgroundProcesses`, () => ({

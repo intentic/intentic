@@ -29,7 +29,9 @@ export const ACTIVE_SANDBOX_KEY = accountKey(`intentic.activeSandboxId`);
 export const chatTabsKey = sandboxKeys(`intentic.chatTabs.`);
 // The last prompts sent, per sandbox (features/chat/drafts/inputHistory.ts).
 export const inputHistoryKey = sandboxKeys(`intentic.inputHistory.`);
-// Drafts of chats closed unsent, per sandbox (models/conversations/drafts/closedDrafts.ts).
+// This browser's copy of every unsent message, per sandbox (models/conversations/drafts/composerDrafts.ts).
+export const composerDraftsKey = sandboxKeys(`intentic.composerDrafts.`);
+// Where a chat closed unsent kept its words before the sandbox held drafts: read once into the copy above, then removed.
 export const closedDraftsKey = sandboxKeys(`intentic.closedDrafts.`);
 // Messages sent while the sandbox could not be reached, waiting to go out again, per sandbox (models/conversations/session/sendOutbox.ts).
 export const outboxKey = sandboxKeys(`intentic.outbox.`);

@@ -170,12 +170,30 @@ const addTile: Recipe<object> = recipe((props: { class?: ClassArg[] }) => addTil
 export interface ChipVariants {
     /** Lit: the filter is applied, the option is the chosen one. */
     on?: boolean;
+    /** `sm` 20px (a list header's fold, a viewer toolbar's toggle, a token in a field), `md` 26px (default: the dense
+     *  control's height, as `<Button size="small">` and the `sm` field), `lg` 32px (a phone bar's filter, a chip floating
+     *  over content, a pane's main control). */
+    size?: `sm` | `md` | `lg`;
+    /** Opens on a mark (an avatar, a face, a glyph plate): the start padding follows the chip's curve. */
+    lead?: boolean;
+    /** Ends in its own small button (a token's ×): the end padding follows the chip's curve. */
+    trail?: boolean;
 }
 
 // Chips carry state; buttons carry actions. `.ui-chip` keeps its CSS (utilities.css): the coarse-pointer target is an
 // `::after`, and its lit hover has to outrank its resting one. The recipe is how a template asks for it, so the lit
 // state is a variant rather than forty ternaries each spelling `ui-chip-on`.
-const chipRecipe = tv({ base: `ui-chip`, variants: { on: { true: `ui-chip-on` } } });
+// The sizes are decided in utilities.css, beside the pill's; a call site passes layout only (`recipes` check).
+const chipRecipe = tv({
+    base: `ui-chip`,
+    variants: {
+        on: { true: `ui-chip-on` },
+        size: { sm: `ui-chip-sm`, md: ``, lg: `ui-chip-lg` },
+        lead: { true: `ui-chip-lead` },
+        trail: { true: `ui-chip-trail` },
+    },
+    defaultVariants: { size: `md` },
+});
 const chip: Recipe<ChipVariants> = recipe((props: ChipVariants & { class?: ClassArg[] }) => chipRecipe(props));
 
 // Labelled affordance floating on content (a code block's Copy chip), sized by what it sits on, not the button scale.

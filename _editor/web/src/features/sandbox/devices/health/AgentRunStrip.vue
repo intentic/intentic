@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Button, DeviceRunLog, Icon, toneTint } from "@intentic/ui";
 import RunCommand from "../../../../components/RunCommand.vue";
-import WaitProgress from "../../../../components/WaitProgress.vue";
-import { useWaitClock } from "../../../../components/useWaitClock";
-import { spanWords } from "../../../../components/waitProgress";
+import ProgressMeter from "../../../../components/progress/ProgressMeter.vue";
+import { useProgress } from "../../../../components/progress/useProgress";
+import { spanWords } from "../../../../components/progress/progress";
 import { computed, ref } from "vue";
 import { type AgentRun, agentRunDetail, agentRunTitle } from "../runners/agentRun";
 import { AGENT_RETURN_DEADLINE_MS } from "../runners/deviceWork";
@@ -36,7 +36,7 @@ const showing = ref(false);
 // the new build, so a strip saying only "Waiting for its agent to come back…" read the same at second ten as at minute
 // four. Past the deadline (deviceWork.ts) the run stops counting as work in flight and the machine's own status says
 // what is wrong, which is what the strip promises. A drop of links has no agent to wait for and no deadline.
-const wait = useWaitClock(() => (busy.value ? run.startedAt : undefined));
+const wait = useProgress(() => (busy.value ? run.startedAt : undefined));
 const deadline = computed(() =>
     busy.value && run.op !== `forget-unreachable` && (wait.value?.elapsedMs ?? 0) < AGENT_RETURN_DEADLINE_MS
         ? t(`sandbox.agentRun.deadline`, { limit: spanWords(AGENT_RETURN_DEADLINE_MS) })
@@ -64,7 +64,7 @@ const ICON = { running: `spinner`, waiting: `spinner`, done: `check-circle`, fai
                 <p class="text-xs font-medium text-content">{{ title }}</p>
                 <p v-if="detail" class="text-2xs text-muted">{{ detail }}</p>
                 <p v-else-if="latest" class="truncate font-mono text-2xs text-subtle">{{ latest }}</p>
-                <WaitProgress v-if="wait" :wait="wait" class="mt-0.5" />
+                <ProgressMeter v-if="wait" :progress="wait" class="mt-0.5" />
                 <p v-if="deadline" class="text-2xs text-subtle">{{ deadline }}</p>
             </div>
             <div class="ml-auto flex shrink-0 items-center gap-0.5">

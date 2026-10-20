@@ -12,8 +12,8 @@ use crate::sandbox::lock::{self, Wait};
 use crate::sandbox::outcome::{self, Kind, Outcome};
 use crate::sandbox::side::{self, Side, Unattended};
 use crate::sandbox::{
-    at_rest, desired, identity, mirror, now_ms, preparing, probation, resolve_slug, resume, staged,
-    storage, versions, CONTAINER_PREFIX, PARKED_SUFFIX,
+    at_rest, composition, desired, identity, mirror, now_ms, preparing, probation, resolve_slug,
+    resume, staged, storage, versions, CONTAINER_PREFIX, PARKED_SUFFIX,
 };
 use crate::shape::{Ask, Shape, GPUS_TOKEN, PRIVILEGED_TOKEN};
 use crate::ui;
@@ -331,18 +331,45 @@ fn recreate(
             env_hash = Some(hash.clone());
         }
         Mode::Update { .. } => {
-            /* The approved overlay comes out FIRST here, ahead of the decision below. */
+            /* The running daemon's overlay comes out FIRST here, ahead of the decision below: it is what an image that
+            cannot compose for itself builds, and the base it names is the one the update moves along. */
             stage_overlay(&container, &overlay_path)?;
-            let approved = std::fs::read(&overlay_path)?;
-            let approved_hash = (!approved.is_empty()).then(|| sha256_hex(&approved));
+            let approved = std::fs::read_to_string(&overlay_path)?;
+            let base_ref = overlay_base(&approved).unwrap_or_else(|| registry_image.clone());
 
-            /* WHAT `prepare` LEFT READY, when it is still the right thing to swap onto — the whole point of preparing. */
-            prepared = reach == Reach::Applied
+            /* WHAT `prepare` LEFT READY, when it is still the right thing to swap onto — the whole point of preparing. It
+            is, while the base it was built on still composes what it was built from (composition.rs): an owner who
+            re-approved a different recipe, or a capability connected since, composes something else. */
+            let could_take_staged = reach == Reach::Applied
                 // SANDBOX_IMAGE names an exact image to run — a pinned build, a locally-built one. Someone
                 // who passed it asked for THAT image, not for whatever was staged for the channel.
                 && image_override.is_none()
-                && staged_still_fits(&saved, &channel, approved_hash.as_deref(), old_base_id.as_deref())
-                && docker::image_exists(saved.staged.as_deref().unwrap_or_default());
+                && saved.staged.as_deref().is_some_and(docker::image_exists);
+            if could_take_staged {
+                let composer = saved
+                    .staged_base
+                    .clone()
+                    .filter(|id| docker::image_exists(id))
+                    .unwrap_or_else(|| base_ref.clone());
+                let now = composition::for_target(
+                    &container,
+                    &slug,
+                    &composer,
+                    &base_ref,
+                    &approved,
+                    &dev_mounts(),
+                    &log,
+                );
+                prepared = staged_still_fits(
+                    &saved,
+                    &channel,
+                    now.hash().as_deref(),
+                    old_base_id.as_deref(),
+                );
+                if prepared {
+                    std::fs::write(&overlay_path, &now.content)?;
+                }
+            }
             /* A staged entry that no longer fits is DROPPED here — from the record AND from the sandbox, in one call. */
             if !prepared && reach == Reach::Applied {
                 if saved.staged.is_some() {
@@ -411,6 +438,21 @@ fn recreate(
                     }
                     return Ok(());
                 }
+                /* THE NEW BASE COMPOSES THE OVERLAY IT RUNS (composition.rs), from the base just pulled. */
+                if base_ref != registry_image {
+                    let _ = docker::pull(&base_ref, &log);
+                }
+                let composed = composition::for_target(
+                    &container,
+                    &slug,
+                    &base_ref,
+                    &base_ref,
+                    &approved,
+                    &dev_mounts(),
+                    &log,
+                );
+                composition::say(&composed, &base_ref, &approved, &base_ref);
+                std::fs::write(&overlay_path, &composed.content)?;
             }
         }
         Mode::Rollback { to } => {
@@ -453,14 +495,8 @@ fn recreate(
             }
             ui::note(&format!("rolling back to {registry_image}…"));
             stage_overlay(&container, &overlay_path)?;
-            /* The overlay must ride the TARGET, not its own FROM: the FROM names the channel tag, which now points at the very build being rolled back from. */
             let approved = std::fs::read_to_string(&overlay_path)?;
-            if !approved.is_empty() {
-                let (hash, rebased) = rebase_overlay(&approved, &registry_image);
-                env_hash = Some(hash);
-                std::fs::write(&overlay_path, rebased)?;
-            }
-            /* THE ENVIRONMENT BUILD THE SANDBOX RAN ON THAT BASE, kept beside its pin, runs as it is: nothing is rebuilt, so a recipe that no longer builds cannot block the way back (versions.rs). The recipe staged above still gives the run its runtime directives. */
+            /* THE ENVIRONMENT BUILD THE SANDBOX RAN ON THAT BASE, kept beside its pin, runs as it is: nothing is rebuilt, so a recipe that no longer builds cannot block the way back (versions.rs). The recipe, rebased onto the target, still gives the run its runtime directives. */
             kept_env = versions::pinned_environment(
                 &pin,
                 &registry_image,
@@ -470,6 +506,23 @@ fn recreate(
             if let Some((image, hash)) = &kept_env {
                 ui::note(&format!("using {image}, the environment build this sandbox ran on that version — nothing to rebuild."));
                 env_hash = Some(hash.clone());
+                if !approved.is_empty() {
+                    std::fs::write(&overlay_path, rewrite_from(&approved, &registry_image))?;
+                }
+            } else {
+                /* The overlay must ride the TARGET, not its own FROM (the FROM names the channel tag, which now points at the very build being rolled back from), and is the target's own composition where it can say (composition.rs). */
+                let composed = composition::for_target(
+                    &container,
+                    &slug,
+                    &registry_image,
+                    &registry_image,
+                    &approved,
+                    &dev_mounts(),
+                    &log,
+                );
+                composition::say(&composed, &registry_image, &approved, &registry_image);
+                env_hash = composed.hash();
+                std::fs::write(&overlay_path, &composed.content)?;
             }
         }
         Mode::Reshape(_) => {
@@ -487,15 +540,25 @@ fn recreate(
             // daemon. The FROM is rewritten to the dev tag; --base-image below keeps composing against it.
             let staged = stage_overlay(&container, &overlay_path)?;
             let approved = std::fs::read_to_string(&overlay_path)?;
-            if !approved.is_empty() {
-                let (hash, rebased) = rebase_overlay(&approved, DEV_TAG);
-                env_hash = Some(hash);
-                std::fs::write(&overlay_path, rebased)?;
-            }
+            /* The checkout's daemon composes the overlay it will run (composition.rs): a rebuild that changed its own pack
+            steps no longer leaves one more rebuild pending behind it. Its compiled trees ride the probe as they ride the
+            container. */
+            let composed = composition::for_target(
+                &container,
+                &slug,
+                DEV_TAG,
+                DEV_TAG,
+                &approved,
+                &dev_mounts(),
+                &log,
+            );
+            composition::say(&composed, DEV_TAG, &approved, DEV_TAG);
+            env_hash = composed.hash();
+            std::fs::write(&overlay_path, &composed.content)?;
             // Said out loud, because this is the loop a developer runs a dozen times a day: the one shape
             // where a dev swap legitimately hands back a bare image is a sandbox that has nothing approved,
             // and it should look different on screen from one that kept its environment.
-            if !staged {
+            if !staged && env_hash.is_none() {
                 ui::note(&format!("no approved environment recipe on this sandbox — recreating it from {DEV_TAG} alone."));
             }
         }
@@ -1432,19 +1495,21 @@ fn clear_staged(slug: &str, container: &str, saved: &record::ChannelRecord) {
 /// fast update to hand someone the wrong image, and none of them is observable afterwards:
 ///
 ///   • a DIFFERENT CHANNEL was asked for — a `--channel beta` update must not take a stable build
-///   • the OWNER RE-APPROVED a different environment recipe since — they get the recipe they approved
+///   • the staged base now COMPOSES A DIFFERENT OVERLAY than the one it was built with (`composed_hash`, the hash
+///     of what the staged base composes now, composition.rs): an owner re-approved another recipe, a capability was
+///     connected — they get what the new version would compose, not a stale build of it
 ///   • the sandbox has ALREADY REACHED that base by another route — there is nothing left to apply
 ///
 /// The staged image's own existence is checked by the caller (it needs a daemon); everything else is here.
 fn staged_still_fits(
     saved: &record::ChannelRecord,
     channel: &str,
-    approved_hash: Option<&str>,
+    composed_hash: Option<&str>,
     old_base_id: Option<&str>,
 ) -> bool {
     saved.staged.is_some()
         && saved.staged_channel.as_deref() == Some(channel)
-        && saved.staged_env.as_deref() == approved_hash
+        && saved.staged_env.as_deref() == composed_hash
         && (saved.staged_base.is_none() || saved.staged_base.as_deref() != old_base_id)
 }
 
@@ -1609,7 +1674,7 @@ fn rebase_overlay(approved: &str, base: &str) -> (String, String) {
 
 /// Rewrite the FIRST `FROM` line to `base` — the dev-mode re-base. Only the first, as the sed range did:
 /// a multi-stage overlay's later stages keep their own bases.
-fn rewrite_from(overlay: &str, base: &str) -> String {
+pub(crate) fn rewrite_from(overlay: &str, base: &str) -> String {
     let mut rewritten = Vec::new();
     let mut replaced = false;
     for line in overlay.lines() {

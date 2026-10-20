@@ -20,7 +20,7 @@ export const comingBackNow = (event: Extract<AgentEvent, { kind: "error" }>): bo
 export const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): FailedEnding => {
     const failure = sanitizeFailure(event.message);
     if (event.code !== "rate_limit") {
-        return { kind: "failed", ...opt("failure", failure), ...opt("code", event.code) };
+        return { kind: "failed", ...opt("failure", failure), ...opt("code", event.code), ...opt("own", event.own === true ? (true as const) : undefined) };
     }
     return {
         kind: "limited",

@@ -19,6 +19,7 @@ const manifest = JSON.parse(readFileSync(manifestPath, `utf8`)) as {
     dependencies?: Record<string, string>;
     peerDependencies?: Record<string, string>;
     exports: Record<string, unknown>;
+    bin?: Record<string, string>;
     files: string[];
     scripts: Record<string, string>;
 };
@@ -56,6 +57,8 @@ describe(`the published shape of @intentic/extension-ui`, () => {
             }
         };
         collect(manifest.exports);
+        // `intentic-kit-check` too: an author's typecheck runs it from the installed package.
+        collect(manifest.bin ?? {});
         const packed = (path: string): boolean => manifest.files.some((entry) => path.replace(/^\.\//u, ``).startsWith(entry));
         expect(published.filter((path) => !packed(path))).toEqual([]);
     });

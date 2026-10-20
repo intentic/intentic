@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import type { DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { ScopeError } from "../policy.js";
@@ -29,7 +30,7 @@ import {
     swapResult,
     tailSandboxLogs,
 } from "./sandboxes.js";
-import { checkPerIcFile, featuresFrom, fetchIc, icAssetName, icCandidates, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
+import { checkPerIcFile, featuresFrom, fetchIc, icAssetName, icCandidates, icFeaturesFrom, icNeedsFetch, icVersionFrom } from "./ic-binary.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     shell: "on",
@@ -323,6 +324,18 @@ test("advertises an optional op only when the ic under the agent takes the contr
     // An ic from before `--set` has the verb but not the shape as the contract spells it.
     expect(featuresFrom("Usage: ic sandbox shape [OPTIONS] <SLUG>\n      --when <WHEN>")).toEqual([]);
     expect(featuresFrom(undefined)).toEqual([]);
+});
+
+// (2026-10-20) A current ic says what it implements itself, the features no flag shows among them; only an ic from before
+// `ic features` is read off its help.
+test("takes the features a current ic says it has, the words this agent knows, and reads an older ic's help instead", () => {
+    const golden = readFileSync(join(repoRoot(import.meta.url), "_shared/sandbox-contract/golden/ic-features.json"), "utf8");
+    expect(icFeaturesFrom(`${JSON.stringify(JSON.parse(golden))}\n`)).toContain("reachable-ways-back");
+    expect(icFeaturesFrom('note\n{"features":["sleep","teleport"]}\n')).toEqual(["sleep"]);
+    // An ic from before the verb answers with clap's usage error, which is no list.
+    expect(icFeaturesFrom("error: unrecognized subcommand 'features'\n")).toBeUndefined();
+    expect(icFeaturesFrom('{"features":"sleep"}')).toBeUndefined();
+    expect(icFeaturesFrom(undefined)).toBeUndefined();
 });
 
 // `rollback-to` is advertised only when the ic under the agent can go back to a chosen version: the daemon sends a

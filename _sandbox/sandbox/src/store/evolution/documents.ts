@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { AUTH_STATE_FILES } from "@intentic/sandbox-contract/state/auth-state";
-import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract/state/history-state";
-import { type StateFile, stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
+import { type Portability, type StateFile, stateFileFor } from "@intentic/sandbox-contract/state/state-portability";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract/state/workspace-state";
 import type { z } from "zod";
 import type { Conversion, Granularity } from "./conversions.js";
@@ -50,21 +49,28 @@ export interface DocumentSpec<
     // dotted paths (`trigger.token`). Not a conversion, since a reader that ran it without the step (a guest) would lose
     // the value; declared so the shape check (conversion-types.ts, VanishedKeys) knows the key left on purpose.
     readonly movedByStep: MovedByStep;
-    // What the contract's state-file tables say of this path (@intentic/sandbox-contract: WORKSPACE_STATE_FILES,
-    // HISTORY_STATE_FILES, AUTH_STATE_FILES), found by the path rather than spelled again here: whether it travels in a
-    // bundle, and for a workspace file which views it invalidates. Undefined for a path no entry claims, which the
-    // registry's test refuses.
+    // Whether it travels in a bundle, and for a workspace file which views it invalidates. A history document says so on
+    // its own definition (Placement below), and the bundle's table is generated from those (history-state.ts beside this); a
+    // workspace or auth one is found by its path in the contract's tables (WORKSPACE_STATE_FILES, AUTH_STATE_FILES).
+    // Undefined for a workspace or auth path no entry claims, which the registry's test refuses.
     readonly stateFile: StateFile | undefined;
 }
 
-export interface DocumentDefinition<
+// Where a document lives, and for one on the history volume whether it travels in a bundle and what the bundle report
+// tells the owner when it does not. Required there by the type, and read off the source as literals by the index
+// generator (state-modules.ts), which refuses a history document that does not say: a hand-kept list of them beside the
+// documents broke whenever one was added without its line (CI attempts 12 and 19, 2026-10).
+type Placement =
+    | { readonly root?: "workspace" | "auth"; readonly portability?: never; readonly note?: never }
+    | { readonly root: "history"; readonly portability: Portability; readonly note?: string };
+
+export type DocumentDefinition<
     Schema extends z.ZodType,
     History extends readonly Conversion[],
     MovedByStep extends readonly string[] = readonly [],
     Layout extends Granularity = "object",
     Directory extends boolean = false,
-> {
-    readonly root?: DocumentRoot;
+> = Placement & {
     readonly path: string;
     readonly directory?: Directory;
     readonly boot?: boolean;
@@ -74,15 +80,17 @@ export interface DocumentDefinition<
     readonly movedFrom?: readonly string[];
     readonly horizon?: string;
     readonly movedByStep?: MovedByStep;
-}
+};
 
-// The contract's entry for a path under its root: the longest one that claims it.
-const STATE_FILES = {
-    workspace: WORKSPACE_STATE_FILES,
-    history: HISTORY_STATE_FILES,
-    auth: AUTH_STATE_FILES,
-} as const satisfies Readonly<Record<DocumentRoot, readonly StateFile[]>>;
-const stateFileOf = (root: DocumentRoot, path: string): StateFile | undefined => stateFileFor(path, STATE_FILES[root]);
+// What a definition says of its own portability on the history volume, else the contract's entry for its path: the
+// longest one that claims it.
+const stateFileOf = (placement: Placement, path: string): StateFile | undefined => {
+    if (placement.root === "history") {
+        const declared = { path, portability: placement.portability };
+        return placement.note === undefined ? declared : { ...declared, note: placement.note };
+    }
+    return stateFileFor(path, placement.root === "auth" ? AUTH_STATE_FILES : WORKSPACE_STATE_FILES);
+};
 
 export const documentKey = (spec: Pick<DocumentSpec, "root" | "path">): string => `${spec.root}:${spec.path}`;
 
@@ -113,7 +121,7 @@ export const defineDocument = <
         // SAFETY: an absent list is its type parameter's default, the empty tuple.
         // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- the empty tuple widens through readonly string[] to reach a type parameter
         movedByStep: definition.movedByStep ?? ([] as readonly string[] as MovedByStep),
-        stateFile: stateFileOf(root, definition.directory === true ? `${path}/` : path),
+        stateFile: stateFileOf(definition, definition.directory === true ? `${path}/` : path),
     };
     if (spec.movedFrom.includes(spec.path)) {
         throw new Error(`document ${documentKey(spec)} lists its own path among its earlier ones`);

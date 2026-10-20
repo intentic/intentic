@@ -379,13 +379,13 @@ describe(`a sandbox the reader is a member of`, () => {
     });
 });
 
-// Every wait the gate names carries its own clock (components/WaitProgress.vue), and the time it says it gives up at is
+// Every wait the gate names carries its own clock (components/progress/ProgressMeter.vue), and the time it says it gives up at is
 // the time the gate's own words change: a promise the reader can hold it to.
 describe(`a wait's own clock`, () => {
     const network = classifyFailure({ message: `failed to fetch` });
 
     it(`gives a reconnect the lane's patience, which is when the gate stops calling it a wait`, () => {
-        expect(notice(network, { outageMs: 5_000 }).wait).toEqual({ elapsedMs: 5_000, typicalMs: USUAL_RECONNECT_MS, giveUpMs: OWN_STUCK_AFTER_MS });
+        expect(notice(network, { outageMs: 5_000 }).wait).toEqual({ elapsedMs: 5_000, expectedMs: USUAL_RECONNECT_MS, giveUpMs: OWN_STUCK_AFTER_MS });
         expect(notice(network, { outageMs: 5_000, hostedMachine: true, justSetUp: true }).wait?.giveUpMs).toBe(JUST_SET_UP_PATIENCE_MS);
         expect(notice(network, { outageMs: OWN_STUCK_AFTER_MS }).wait).toBeUndefined();
     });
@@ -399,7 +399,7 @@ describe(`a wait's own clock`, () => {
         const restart = { title: `Restarting`, detail: `About half a minute.` };
         expect(notice(network, { outageMs: 10_000, restart }).wait).toEqual({
             elapsedMs: 10_000,
-            typicalMs: USUAL_RESTART_MS,
+            expectedMs: USUAL_RESTART_MS,
             giveUpMs: RESTART_PATIENCE_MS,
         });
     });
@@ -411,7 +411,7 @@ describe(`a wait's own clock`, () => {
     });
 
     it(`passes a diagnosis's clock through, and puts none on a cause waiting cannot repair`, () => {
-        const diagnosed = { title: `Waking`, body: `About a minute.`, action: undefined, waiting: true, wait: { elapsedMs: 1, typicalMs: 2, giveUpMs: 3 } };
+        const diagnosed = { title: `Waking`, body: `About a minute.`, action: undefined, waiting: true, wait: { elapsedMs: 1, expectedMs: 2, giveUpMs: 3 } };
         expect(notice(network, { diagnosed }).wait).toEqual(diagnosed.wait);
         expect(notice(classifyFailure({ status: 401, message: `401` })).wait).toBeUndefined();
     });

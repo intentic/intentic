@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BrandMark, Icon, PersonaFace, toneDot } from "@intentic/ui";
+import { BrandMark, Icon, PersonaFace, toneDot, ui } from "@intentic/ui";
 import { isIconName } from "@intentic/ui/icons";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
@@ -49,6 +49,11 @@ const mark = computed(() => (lit === `edit` ? `pencil` : lit === `see` ? `eye` :
 const markTitle = computed(() => (lit === `edit` ? t(`sandbox.sandboxMap.legendEdits`) : t(`sandbox.sandboxMap.legendSees`)));
 const persona = computed(() => ({ id: node.ref ?? node.id, label: node.label }));
 const glyph = computed(() => (node.icon !== undefined && isIconName(node.icon) ? node.icon : `folder`));
+// A row and a tile draw their own box; the chip is the kit's (its plate, radius, hover and touch target), opening on
+// its face or glyph plate, and the map only lays its ring over it.
+const body = computed(() =>
+    variant === `row` ? `w-full gap-2 rounded-lg px-2 py-1` : variant === `tile` ? `w-full gap-2.5 rounded-xl px-3 py-2.5` : ui.chip({ lead: true }, `max-w-full`),
+);
 </script>
 
 <template>
@@ -62,10 +67,7 @@ const glyph = computed(() => (node.icon !== undefined && isIconName(node.icon) ?
             edge,
             plate,
             lit === `off` ? `opacity-30 saturate-0` : ``,
-            variant === `row` ? `w-full gap-2 rounded-lg px-2 py-1` : ``,
-            variant === `tile` ? `w-full gap-2.5 rounded-xl px-3 py-2.5` : ``,
-            // The kit's chip: its plate, radius, hover and touch target; the map only lays its ring over it and tucks the face in.
-            variant === `chip` ? `ui-chip max-w-full pl-1` : ``,
+            body,
             node.kind === `rest` ? `border-dashed` : ``,
         ]"
         @pointerenter="$emit(`point`, true)"

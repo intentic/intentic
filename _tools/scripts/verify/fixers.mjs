@@ -86,6 +86,7 @@ const CONTRACT_SOURCES = "_shared/sandbox-contract/src/";
 const DAEMON_SOURCES = "_sandbox/sandbox/src/";
 const under = (...prefixes) => (_root, path) => prefixes.some((prefix) => path.startsWith(prefix));
 const FROM_SOURCE = ["bun", "--conditions=@intentic/src"];
+const EXT_SHIMS = ["vue.js", "extension-api.js", "extension-manifest.js", "extension-ui.js", "vue-query.js"];
 export const DERIVED = [
     {
         id: "contract lock",
@@ -99,7 +100,12 @@ export const DERIVED = [
         wants: under(DAEMON_SOURCES),
         cwd: "_sandbox/sandbox",
         argv: [process.execPath, "scripts/write-indexes.mjs"],
-        writes: ["_sandbox/sandbox/src/bootstrap/state-registry.ts", "_sandbox/sandbox/src/app-raw-routes.ts", "_sandbox/sandbox/src/bootstrap/slices/slice-registry.ts"],
+        writes: [
+            "_sandbox/sandbox/src/bootstrap/state-registry.ts",
+            "_sandbox/sandbox/src/app-raw-routes.ts",
+            "_sandbox/sandbox/src/bootstrap/slices/slice-registry.ts",
+            "_sandbox/sandbox/src/store/evolution/history-documents.generated.ts",
+        ],
     },
     {
         id: "state shapes",
@@ -107,6 +113,16 @@ export const DERIVED = [
         cwd: "_sandbox/sandbox",
         argv: [...FROM_SOURCE, "src/store/shapes/write-state-shapes.ts", "--freeze"],
         writes: ["_sandbox/sandbox/src/store/generated/state-shapes.json"],
+    },
+    // The import map's shims re-export what the host hands an extension bundle, read off the kit's names.mjs and the
+    // API's and manifest's own exports. Written by hand until 2026-10-20, and the kit gained `Await`, `Section`,
+    // `SectionHeader`, `RowNote` and `InlineRename` without them: every bundle importing one would have failed to link.
+    {
+        id: "extension shims",
+        wants: under("_shared/extension-ui/names.mjs", "_shared/extension-api/src/", "_shared/extension-manifest/src/"),
+        cwd: "_editor/web",
+        argv: [...FROM_SOURCE, "scripts/generate-ext-shims.mjs"],
+        writes: EXT_SHIMS.map((file) => `_editor/web/public/ext-shims/${file}`),
     },
     { id: "layer tables", wants: touchesTables, cwd: ".", argv: [process.execPath, "_tools/checks/layer-tables.mjs", "--fix"], writes: [] },
     // A translation keeps only what English still says: a key `en.json` dropped leaves every other language's copy too.

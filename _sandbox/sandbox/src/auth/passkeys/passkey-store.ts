@@ -54,7 +54,16 @@ const PasskeysFileSchema = z.object({
 });
 type PasskeysFile = z.infer<typeof PasskeysFileSchema>;
 
-export const passkeysDocument = defineDocument({ root: "history", path: "identity/passkeys.json", schema: PasskeysFileSchema });
+export const passkeysDocument = defineDocument({
+    root: "history",
+    path: "identity/passkeys.json",
+    // Public keys, the owner's require-a-passkey switch and the hashes of their recovery codes, moved from
+    // `.intentic/identity/passkeys.json` like the owner file (the passkeys-off-workspace step), since a passkey sign-in
+    // trusts the row it finds: a copy that traveled would let a source sandbox's passkeys open the target.
+    portability: "identity",
+    note: "Passkeys are bound to the sandbox they were registered with: add them again on the new one from its Access tab.",
+    schema: PasskeysFileSchema,
+});
 
 export interface PasskeyStore {
     readonly list: () => Promise<StoredCredential[]>;

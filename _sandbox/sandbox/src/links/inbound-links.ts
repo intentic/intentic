@@ -65,7 +65,16 @@ const StoredLinksSchema = z.object({ links: z.array(StoredLinkSchema) });
 type StoredLinks = z.infer<typeof StoredLinksSchema>;
 
 // On the history volume beside the control tokens: a file in the workspace would let a turn plant a link of its own.
-export const inboundLinksDocument = defineDocument({ root: "history", path: "identity/links.json", schema: StoredLinksSchema });
+export const inboundLinksDocument = defineDocument({
+    root: "history",
+    path: "identity/links.json",
+    // The links other sandboxes hand this one tasks through: hashed tokens like the control
+    // tokens, each minted here, and the tasks filed under them; elsewhere they would let the paired sandboxes reach the
+    // target in this one's name.
+    portability: "identity",
+    note: "Pair the sandboxes that hand this one tasks again from its Access tab: their links name the source sandbox.",
+    schema: StoredLinksSchema,
+});
 
 // How many tasks a link keeps on file, settled ones dropping off oldest first; a live or held one is never dropped.
 const TASKS_KEPT = 50;

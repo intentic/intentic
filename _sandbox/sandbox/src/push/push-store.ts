@@ -41,7 +41,13 @@ const StoredStateSchema = z.object({
     channels: z.array(StoredChannelSchema).default([]),
 });
 
-export const pushDocument = defineDocument({ root: "history", path: "push.json", schema: StoredStateSchema });
+export const pushDocument = defineDocument({
+    root: "history",
+    path: "push.json",
+    portability: "identity",
+    note: "Re-enable notifications in the browsers you use, a push subscription is bound to the sandbox that minted it.",
+    schema: StoredStateSchema,
+});
 
 // Must run only inside `update`: concurrent callers both seeing an empty publicKey would each mint and persist their
 // own pair.

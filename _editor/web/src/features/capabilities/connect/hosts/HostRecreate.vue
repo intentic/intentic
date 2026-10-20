@@ -21,7 +21,8 @@ import { useOperation } from "../../../../workbench/operations/operations";
 import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
-import { appliedHash, runningVersion } from "./swapLanding";
+import type { RunningSandbox, SwapVerdict } from "@intentic/sandbox-contract/state/sandbox-build";
+import { answering, swapStanding } from "./swapLanding";
 import { followSwap, type SwapEnd, SwapGaveUp, type SwapProgress } from "./swapFollow";
 import { useRebuildWhenIdle } from "./useRebuildWhenIdle";
 import ConnectDeviceHint from "../../../../parts/sandbox/ConnectDeviceHint.vue";
@@ -257,14 +258,23 @@ const QUIET = computed((): Record<Action, RestartQuiet> => ({
     },
 }));
 
-// Whether what answers now is what the swap aimed at: a rebuild by its overlay, an update or a rollback by moving off
-// the version it was pressed on. With that version unread, answering again after going quiet is the only sign there is.
-const landedOn = async (hash: string | undefined, from: string | undefined, now: SwapProgress): Promise<boolean> => {
-    if (hash !== undefined) {
-        return (await appliedHash()) === hash;
-    }
-    return from === undefined ? now.wentDown : (await runningVersion()) !== from;
+// What answered when a follow began, read in the background: the build and boot a swap is told against (swapLanding.ts).
+// Unread, a rebuild is still told by its overlay, and anything else by the sandbox answering again after going quiet.
+const pressedOn = (): (() => RunningSandbox | undefined) => {
+    let from: RunningSandbox | undefined;
+    void answering()
+        .then((running) => {
+            from = running;
+        })
+        // allow(silent-catch): unread, the landing is told as swapStanding says for a sandbox that said nothing
+        .catch(() => undefined);
+    return () => from;
 };
+// Where a swap aimed at `overlay` (a rebuild) or away from what answered at the press stands, asked of what answers now.
+const standing =
+    (overlay: string | undefined, pressed: () => RunningSandbox | undefined) =>
+    async (now: SwapProgress): Promise<SwapVerdict> =>
+        swapStanding({ from: pressed(), overlay }, await answering(), now);
 
 // A REBUILD THE SANDBOX STARTED BY ITSELF once its agents were idle. Nobody pressed anything here and the sandbox reports
 // it (`rebuilding` on /environment, read again on every mount), so it is followed for as long as this card is open,
@@ -321,20 +331,11 @@ const execute = async (): Promise<void> => {
         // The device's own words when it answered; a swap that landed is said in the hub row's words.
         done: (end) => (`said` in end ? end.said : undefined),
         task: async (report) => {
-            // The version this press is made on, read before the swap can move it; a rebuild is told by its hash instead.
-            let from: string | undefined;
-            if (hash === undefined) {
-                void runningVersion()
-                    .then((version) => {
-                        from = version;
-                    })
-                    // allow(silent-catch): unread, the landing is told by the sandbox answering again after going quiet (landedOn)
-                    .catch(() => undefined);
-            }
+            // What this press is made on, read before the swap can move it.
             const follow = followSwap({
                 reachable: () => reachable.value,
                 here: () => activeSandboxId.value === sandbox,
-                landed: (now) => landedOn(hash, from, now),
+                verdict: standing(hash, pressedOn()),
                 streaming: true,
                 progress: report.progress,
             });
@@ -409,7 +410,7 @@ watch(
         const follow = followSwap({
             reachable: () => reachable.value,
             here: () => activeSandboxId.value === sandbox,
-            landed: (now) => landedOn(hash, undefined, now),
+            verdict: standing(hash, pressedOn()),
             streaming: false,
             progress: (now) => {
                 idleFollow.value = now;

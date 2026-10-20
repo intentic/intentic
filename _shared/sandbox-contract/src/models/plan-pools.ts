@@ -232,10 +232,37 @@ const answers = (refusal: ProviderRefusal, facts: ServiceFacts, measured: boolea
 };
 
 /**
+ * When the pool a spent allowance that named no instant was refused in reopens, in epoch seconds: the soonest reset of
+ * the binding pool for the model it named (the pool judgedReading pins full) on the accounts it may have refused, its own
+ * where it named one, any where it named none, as any account's room answers a nameless one. The daemon's ledger stamps
+ * it on the refusal as it files it (`poolResetsAt`), while the readings still show that pool open: once it reopens the
+ * reading lapses it to an empty pool and a different one binds, so it cannot be read back off the reading later.
+ * Undefined for a refusal that named its instant, one no reading measures (`unmetered`), a person's mark (lifted by a
+ * person or a turn, not a window), and where no reading publishes a reset still ahead of the refusal.
+ */
+export const refusedPoolReset = (refusal: ProviderRefusal, accounts: readonly ServiceFacts[]): number | undefined => {
+    if (refusal.kind !== "limit" || refusal.resetsAt !== undefined || refusal.unmetered === true || refusal.byHand === true) {
+        return undefined;
+    }
+    const model = refusal.model === undefined ? undefined : { id: refusal.model };
+    const resets = accounts
+        .filter((facts) => refusal.account === undefined || facts.account === refusal.account)
+        .flatMap((facts) => {
+            const reset = bindingWindow(facts.usage, model)?.resetsAt;
+            return reset !== undefined && reset * 1000 > refusal.at ? [reset] : [];
+        });
+    return resets.length === 0 ? undefined : Math.min(...resets);
+};
+
+/**
  * How a refusal on file stands against everything read since, over every account the provider holds: `gone` once the
- * account it named is disconnected, `answered` once the instant it named has passed or once that account (or, for a
- * refusal naming none, any account) has a later reading that contradicts it, else `standing`. An empty list is one not
- * loaded yet, so the refusal stands.
+ * account it named is disconnected, `answered` once the instant it named has passed (or, where it named none, the
+ * reset of the pool it was refused in, stamped as it was filed: refusedPoolReset) or once that account (or, for a refusal
+ * naming none, any account) has a later reading that contradicts it, else `standing`. An empty list is one not loaded
+ * yet, so the refusal stands. Judged by the daemon and every open window at the same instant from what the refusal
+ * carries: nothing waits for a fresh reading or a ledger write to flip it. 2026-10-20: a refusal naming no instant stood
+ * past its pool's reset until the next reading landed, up to the 15-minute idle sweep, while the picker already said
+ * "back at" that reset.
  */
 export const refusalVerdict = (
     refusal: ProviderRefusal,
@@ -246,8 +273,11 @@ export const refusalVerdict = (
     if (refusal.account !== undefined && named.length === 0) {
         return accounts.length === 0 ? "standing" : "gone";
     }
-    // The provider's own "try again at" is over at that instant, whichever account it refused.
-    if (refusal.kind === "limit" && refusal.resetsAt !== undefined && refusal.resetsAt * 1000 <= now) {
+    const whose = refusal.account === undefined ? accounts : named;
+    // The provider's own "try again at" is over at that instant, whichever account it refused; so, where it named none,
+    // is the refused pool's reset the ledger stamped.
+    const over = refusal.resetsAt ?? refusal.poolResetsAt;
+    if (refusal.kind === "limit" && over !== undefined && over * 1000 <= now) {
         return "answered";
     }
     // Where it is known which account it refused (it named one, or there is only one), the provider's own instant
@@ -257,7 +287,7 @@ export const refusalVerdict = (
         return "standing";
     }
     if (known) {
-        return (refusal.account === undefined ? accounts : named).some((facts) => answers(refusal, facts)) ? "answered" : "standing";
+        return whose.some((facts) => answers(refusal, facts)) ? "answered" : "standing";
     }
     /* A nameless refusal over several accounts is one of them saying no, and nothing says which: the translator benches
        the one it refused and routes on, so any of them reading room since answers it, whatever kind of allowance it was
@@ -372,8 +402,10 @@ const pinRefusal = (usage: AccountUsage | undefined, refusal: ProviderRefusal, m
         return { ...(usage ?? { measuredAt: refusal.at }), windows: [...(usage?.windows ?? []), refusedPool(refusal)] };
     }
     const pinned = pinnedFull(binding);
-    if (refusal.resetsAt !== undefined) {
-        pinned.resetsAt = refusal.resetsAt;
+    // Reopening when the refusal ends (refusalVerdict), so the "back at" every surface draws is when it flips.
+    const over = refusal.resetsAt ?? refusal.poolResetsAt;
+    if (over !== undefined) {
+        pinned.resetsAt = over;
     }
     return { ...usage, windows: usage.windows.map((window) => (window === binding ? pinned : window)) };
 };

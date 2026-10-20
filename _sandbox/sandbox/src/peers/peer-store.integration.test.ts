@@ -175,6 +175,24 @@ test("a door's extra record travels from the pairing to the enrollment", async (
     ]);
 });
 
+// What the redeeming peer said about itself is written with the record, in the one write: the hosts door's machine id.
+test("fields learned from the redeemer are written over the pairing's own, given the pairing they amend", async () => {
+    const store = filePeerStore(mkdtempSync(join(tmpdir(), "peers-")), {
+        documents: RUNNER_DOCUMENTS,
+        key: "runners",
+        prefix: "irt_",
+        extra: { host: z.string().optional() },
+    });
+    const seen: unknown[] = [];
+    const learned = (pairing: { readonly id: string; readonly host?: string | undefined }) => {
+        seen.push(pairing);
+        return { host: "said-by-the-peer" };
+    };
+    expect(await store.enroll(store.mintPairing("rig", { host: "rog" }).token, learned)).toMatchObject({ id: "rig", host: "said-by-the-peer" });
+    expect(seen).toEqual([{ id: "rig", host: "rog" }]);
+    expect(await store.list()).toEqual([{ id: "rig", card: "rig", host: "said-by-the-peer" }]);
+});
+
 // A runner redeems its pairing at its container's first boot, after the image pull and overlay build that follow the
 // mint; at a door with the ordinary lifetime, a slow first install boots holding a pairing already dead.
 test("a runner's pairing outlives the install between its mint and the container's first boot, then still expires", async () => {

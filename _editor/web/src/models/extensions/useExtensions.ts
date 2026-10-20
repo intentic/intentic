@@ -120,8 +120,6 @@ export function useExtensions() {
         updatesCheckedAt: computed(() => query.data.value?.updatesCheckedAt),
         // When the list on screen was read from the daemon (epoch ms); a hydrated one keeps its original read time.
         listedAt: computed(() => query.dataUpdatedAt.value),
-        // List has arrived or failed for good; gates decisions that must not fire against the empty pre-fetch state.
-        settled: computed(() => query.isFetched.value || query.isError.value),
         error,
         loaded,
         refetch: query.refetch,

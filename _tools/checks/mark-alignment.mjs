@@ -6,11 +6,11 @@
 // - The editor and its extensions: `<Icon>`, whose `.ui-icon` (_editor/ui/src/styles/utilities.css) sits on the text it
 //   labels and, leading an `items-start` line, centres itself on that line's first row from the line's own height.
 //   Refuses a vertical offset on an `<Icon>`, and a glyph-led line whose first words state a type size the line itself
-//   does not (lib/kit-decisions.mjs's `glyphFindings`, where its tests read it).
+//   does not (the kit's `glyphFindings`, _shared/extension-ui/check/kit-decisions.mjs, where its tests read it).
 // Rendered geometry is checked separately, in a browser (check-alignment.mjs).
 import { readFileSync } from "node:fs";
 import { repoRoot } from "../constants/src/node.mjs";
-import { glyphFindings } from "./lib/kit-decisions.mjs";
+import { glyphFindings } from "../../_shared/extension-ui/check/kit-decisions.mjs";
 import { subjectFiles } from "./lib/repo.mjs";
 import { blank, templatesUnder } from "./lib/templates.mjs";
 

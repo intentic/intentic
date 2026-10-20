@@ -1,4 +1,5 @@
 import { DEVICE_FEATURE_ROLLBACK_TO, type DeviceFacts, deviceSupports } from "@intentic/sandbox-contract/schemas/hosts";
+import { waysBack } from "@intentic/sandbox-contract/state/ways-back";
 import type { DeviceSandboxRow, RollbackChoice } from "@intentic/ui";
 import { versionName } from "../overview/version/updateOutcome";
 
@@ -15,7 +16,7 @@ const imageTag = (image: string): string => {
 
 /**
  * The ways back a row's Roll back can choose between, as `ic` lists them (versions.rs `ways_back`: newest first, only
- * ones it can still reach), each once, when the agent the op goes through can go back to one other than the newest
+ * ones it can still reach; an older ic's unreachable rows left out by the contract's `waysBack`), each once, when the agent the op goes through can go back to one other than the newest
  * (`rollback-to`: an older agent refuses the `to` it would be sent). Fewer than two is no choice at all, and the plain
  * verb stands. The newest is the plain rollback, so it carries no `to`; every other is sent as the exact image `ic`
  * listed, never as its version: every dev build says 0.0.0, and a version names whichever kept build carries it first
@@ -25,7 +26,7 @@ export const rollbackChoices = (
     facts: Pick<DeviceFacts, "features"> | undefined,
     sandbox: Pick<DeviceSandboxRow, "rollbackTargets"> | undefined,
 ): RollbackChoice[] => {
-    const targets = [...new Map((sandbox?.rollbackTargets ?? []).map((target) => [target.image, target])).values()];
+    const targets = waysBack(facts, sandbox?.rollbackTargets ?? []);
     if (targets.length < 2 || !deviceSupports(facts, DEVICE_FEATURE_ROLLBACK_TO)) {
         return [];
     }

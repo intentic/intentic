@@ -1,4 +1,5 @@
-import { type ModelSource, modelPinKey, parsePinned, readyChain } from "./model-pins.js";
+import { type ModelSource, modelPinKey, openingRung, parsePinned, readyChain, rungModel } from "./model-pins.js";
+import type { FleetCapacity } from "./plan-pools.js";
 import type { ModelPin } from "../schemas/agent.js";
 
 // Which models a job spends, and in what order: the owner's own list decides, nothing is derived for an empty one, and
@@ -83,4 +84,33 @@ test("honours a pin on a configured endpoint: the whole id, not the half before 
     expect(head([CLAUDE, OLLAMA], [`endpoint/ollama:qwen3-coder`])).toEqual({ provider: `endpoint/ollama`, model: `qwen3-coder` });
     // parsePinned splits on the first colon; an id with its own colon needs the slash form or parsing breaks.
     expect(modelPinKey({ provider: `endpoint/ollama`, model: `qwen3-coder` })).toBe(`endpoint/ollama:qwen3-coder`);
+});
+
+// The rung a chain opens on, read by the daemon's run roles and the editor's job button alike.
+describe("openingRung", () => {
+    const chain = [`codex:gpt-6.1-sol`, `claude:claude-opus-5`, `kimi:kimi-k3`].map(pin);
+    const spent: FleetCapacity = { kind: `spent`, accounts: 1, reopensAt: 5_000, pool: undefined };
+    const serving: FleetCapacity = { kind: `serving`, serving: 1, accounts: 1 };
+    const capacities = (spentOn: readonly string[]) => (rung: ModelPin): FleetCapacity | undefined => (spentOn.includes(rung.provider) ? spent : serving);
+
+    test("opens on the first rung no account is spent on, stepping over a spent head", () => {
+        expect(openingRung(chain, capacities([]))).toBe(chain[0]);
+        expect(openingRung(chain, capacities([`codex`]))).toBe(chain[1]);
+        expect(openingRung(chain, capacities([`codex`, `claude`]))).toBe(chain[2]);
+    });
+
+    test("an unread capacity steps nothing over, and the caller's own reason does", () => {
+        expect(openingRung(chain, () => undefined)).toBe(chain[0]);
+        expect(openingRung(chain, capacities([]), (rung) => rung.provider === `codex`)).toBe(chain[1]);
+    });
+
+    test("opens on the head when every rung is stepped over, and on nothing for an empty chain", () => {
+        expect(openingRung(chain, capacities([`codex`, `claude`, `kimi`]))).toBe(chain[0]);
+        expect(openingRung([], capacities([]))).toBeUndefined();
+    });
+
+    test("an agent with no model id asks about its provider's accounts as a whole", () => {
+        expect(rungModel({ provider: `cursor`, model: `` })).toBeUndefined();
+        expect(rungModel({ provider: `codex`, model: `gpt-6.1-sol` })).toEqual({ id: `gpt-6.1-sol` });
+    });
 });

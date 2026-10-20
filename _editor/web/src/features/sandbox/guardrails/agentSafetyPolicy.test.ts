@@ -6,6 +6,8 @@ import { IconStub } from "@intentic/ui/testing";
 import * as uiOriginal from "@intentic/ui";
 
 const saveError = ref<Error | null>(null);
+const answered = ref(true);
+const readError = ref<string | undefined>(undefined);
 jest.mock(`../environment/useSafetyPolicy`, () => ({
     useSafetyPolicy: () => ({
         text: computed(() => `Ask before deleting anything.\n`),
@@ -13,15 +15,18 @@ jest.mock(`../environment/useSafetyPolicy`, () => ({
         save: jest.fn(),
         isSaving: computed(() => false),
         saveError: computed(() => saveError.value),
-        isLoading: ref(false),
-        error: ref(undefined),
+        answered,
+        error: readError,
     }),
 }));
 
 // The document surface is `@intentic/ui`'s own and has its own suite; this page only hands it the text.
 jest.mock(`@intentic/ui`, () => ({
     ...uiOriginal,
-    MarkdownDocument: defineComponent({ props: { modelValue: String }, setup: () => () => h(`div`, { class: `policy-doc` }) }),
+    MarkdownDocument: defineComponent({
+        props: { modelValue: String, editable: Boolean, stored: String },
+        setup: (props) => () => h(`div`, { class: `policy-doc`, "data-editable": String(props.editable), "data-stored": props.stored ?? `none` }),
+    }),
 }));
 
 const { default: AgentSafetyPolicy } = await import("./AgentSafetyPolicy.vue");
@@ -32,6 +37,8 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     saveError.value = null;
+    answered.value = true;
+    readError.value = undefined;
 });
 
 const mount = async (): Promise<HTMLElement> => {
@@ -54,4 +61,16 @@ test("a refused save says why under the policy, and nothing is said before one",
 
     expect(host.textContent).toContain(`Couldn't save the policy`);
     expect(host.textContent).toContain(`the sandbox refused the write: disk full`);
+});
+
+// Under a failing read the page drew an empty policy, editable, with Save: one press would have replaced the sandbox's
+// real policy with nothing. Only the daemon's answer makes the document editable.
+test("a policy read that failed is never offered as an empty document to edit and save", async () => {
+    answered.value = false;
+    readError.value = `the sandbox did not answer`;
+    const host = await mount();
+    const doc = host.querySelector(`.policy-doc`);
+    expect(doc?.getAttribute(`data-editable`)).toBe(`false`);
+    expect(doc?.getAttribute(`data-stored`)).toBe(`none`);
+    expect(host.textContent).toContain(`the sandbox did not answer`);
 });

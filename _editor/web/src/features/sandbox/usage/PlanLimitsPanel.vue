@@ -509,7 +509,7 @@ const roster = computed(() => {
                             <Icon :name="rosterOpen ? `chevron-down` : `chevron-right`" class="text-muted" />
                             {{ t(`sandbox.planLimitsPanel.allAccounts`) }}
                         </button>
-                        <button v-if="rosterProvider !== undefined" type="button" class="ui-chip gap-1" @click="rosterProvider = undefined">
+                        <button v-if="rosterProvider !== undefined" type="button" class="ui-chip" @click="rosterProvider = undefined">
                             {{ providerLabel(rosterProvider) }}<Icon name="times" />
                         </button>
                         <SearchBar

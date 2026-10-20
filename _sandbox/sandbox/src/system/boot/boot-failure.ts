@@ -23,7 +23,13 @@ const BootFailureSchema = z.object({
     step: z.string().optional(),
 });
 export type BootFailure = z.infer<typeof BootFailureSchema>;
-export const bootFailureDocument = defineDocument({ root: "history", path: "boot-failure.json", boot: false, schema: BootFailureSchema });
+export const bootFailureDocument = defineDocument({
+    root: "history",
+    path: "boot-failure.json",
+    portability: "derived",
+    boot: false,
+    schema: BootFailureSchema,
+});
 
 // Enough of the stack to name the module that threw, few enough for a host's one-line report.
 const STACK_LINES = 6;

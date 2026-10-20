@@ -2478,7 +2478,7 @@ describe(`Conversation`, () => {
                 { text: `Claude Code returned an error result: 401`, noticeWait: undefined },
             ]);
             expect(conversation.failures.credentialRenewal.value).toBeUndefined();
-            expect(conversation.failures.resumeWithdrawn.value).toBe(`Claude Code returned an error result: 401`);
+            expect(conversation.failures.resumeWithdrawn.value?.message).toBe(`Claude Code returned an error result: 401`);
             expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
 
             // Nothing probes for the resumed run, so nothing gives up on it later and writes a line of its own.

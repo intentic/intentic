@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync,writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
@@ -15,7 +15,8 @@ import { DEFAULT_PRIVACY_SHIELD } from "@intentic/sandbox-contract/schemas/priva
 import { rebuildPending } from "@intentic/sandbox-contract/state/sandbox-build";
 import { hasOfficialBase } from "@intentic/sandbox-contract/policy/overlay-lint";
 import { approveDraft, approveEnvironment, decideRuntimeInstall, draftsDir, proposalPath, proposeDraft, readEnvironment, rejectDraft, rejectEnvironment, removeFromEnvironment } from "./environment.js";
-import { approvedPath, composeEnvironment, customPath, baseImageOf, pinnedBase, withoutRuntimeDirectives } from "./overlay.js";
+import { approvedPath, composeEnvironment, composedOverlay, customPath, baseImageOf, pinnedBase, withoutRuntimeDirectives } from "./overlay.js";
+import { readPack } from "../image/packs.js";
 import { PROVIDER_MODULES } from "../runtimes/runtime-table.js";
 
 // Pins PACK_STAMPS_DIR to an empty directory so every compose here means "no base image bakes this pack," regardless of
@@ -131,6 +132,38 @@ test("a rebuild is version-preserving: composing again after one is byte-identic
     const rebuilt = stubServices(first!.hash, [vpn("office")], "intentic-sandbox-env-demo:abc123def456", latest);
     expect(await composeEnvironment(rebuilt)).toEqual(first);
     expect(await rebuilt.files.read(approvedPath(rebuilt))).toBe(approved);
+});
+
+// What an image's composer prints for `ic` before a swap onto it (compose-overlay.ts) is the very overlay that image's
+// daemon materializes once it boots there, and asking writes nothing: the composition is the target's, from its own
+// base's pack stamps, so a pack the new base bakes is left out before the build rather than found pending after it.
+test("the overlay a target composes for a swap is what its daemon composes at boot there, and asking writes nothing", async () => {
+    const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
+    const stamps = process.env["INTENTIC_PACK_STAMPS_DIR"];
+    const next = "ghcr.io/intentic/sandbox:1.500.0";
+    try {
+        // The running base bakes nothing: its daemon composes the browser pack into the overlay.
+        const browser = (await readPack("browser"))!;
+        const running = stubServices("", [reddit], "", RELEASE);
+        const old = await composeEnvironment(running);
+        expect(old?.content).toContain(browser.content);
+        // The target base bakes the browser pack: its composer leaves it out, and says so without touching the file.
+        const baked = mkdtempSync(join(tmpdir(), "environment-stamps-baked-"));
+        writeFileSync(join(baked, "browser"), browser.hash);
+        process.env["INTENTIC_PACK_STAMPS_DIR"] = baked;
+        const asked = stubServices(old!.hash, [reddit], "", next);
+        const target = await composedOverlay(asked);
+        expect(target?.content).toContain(`FROM ${next}`);
+        expect(target?.content).not.toContain(browser.content);
+        expect(await asked.files.read(approvedPath(asked))).toBeUndefined();
+        // Booted there with the hash ic stamped from that answer, the daemon composes the same bytes: nothing pending.
+        const booted = stubServices(sha256Hex(target!.content), [reddit], "intentic-sandbox-env-demo:abc123def456", next);
+        const atBoot = await composeEnvironment(booted);
+        expect(atBoot?.content).toBe(target?.content);
+        expect(rebuildPending(atBoot?.hash, sha256Hex(target!.content))).toBe(false);
+    } finally {
+        process.env["INTENTIC_PACK_STAMPS_DIR"] = stamps;
+    }
 });
 
 test("propose → approve stores the custom section and recomposes; applied derives from the composed hash", async () => {

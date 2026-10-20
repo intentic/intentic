@@ -4,6 +4,9 @@ use serde_json::Value;
 
 use crate::docker;
 use crate::logfile::Log;
+use crate::sandbox::target_probe::{
+    self, clip, error_line, last_line, Mount, Probe, DOCKER_COULD_NOT_RUN,
+};
 use crate::util::{plural, Fail, Result};
 
 /* BEFORE A SWAP TOUCHES THE CONTAINER, THE TARGET IMAGE SAYS WHAT ITS STATE CONVERSIONS WOULD DO TO THIS SANDBOX'S DATA. */
@@ -14,10 +17,6 @@ const SCRIPT: &str = "/opt/sandbox/dist/state-plan.js";
 /// The planner as a refusal names it, where a conversion names its document.
 const PLANNER_NAME: &str = "state-plan.js";
 
-/// `docker run`'s own exits: 125 when docker could not run the container, 126 and 127 when the command could not
-/// be started in it. The probe never ran, which says nothing about the image's code.
-const DOCKER_COULD_NOT_RUN: std::ops::RangeInclusive<i32> = 125..=127;
-
 /// The one plan format this binary reads. Any other is "no plan" rather than a guess at what its fields mean.
 const FORMAT: u64 = 1;
 
@@ -25,16 +24,6 @@ const FORMAT: u64 = 1;
 /// point: every other capture in docker.rs waits for as long as its child runs, and a planner that never exits
 /// would hold the update with it.
 const LIMIT: Duration = Duration::from_secs(120);
-
-/// Where a sandbox's stored data lives in its container, the planner's flag for each, and whether a container
-/// always has it: the run contract's `DATA_MOUNTS` (_shared/sandbox-run), which this binary cannot import, so a
-/// test holds this copy to the contract's golden/data-mounts.json. `/agent-auth` rides only where the container has
-/// it (a dev sandbox sharing AI logins); without it the planner looked for those vaults in the workspace.
-const DATA_MOUNTS: [(&str, &str, bool); 3] = [
-    ("/work", "--workspace", true),
-    ("/history", "--history", true),
-    ("/agent-auth", "--auth", false),
-];
 
 /// The probe container's name, `<prefix><slug>`. Named at all so a probe that outlives its deadline can be
 /// removed (killing the CLI leaves the container running), and never under CONTAINER_PREFIX: every listing of
@@ -166,87 +155,45 @@ fn probe(
     extra: &[String],
     log: &Log,
 ) -> (Plan, Option<String>) {
-    let mut mounts: Vec<Mount> = Vec::new();
-    for (destination, flag, required) in DATA_MOUNTS {
-        match docker::mount_source(container, destination) {
-            Some(source) => mounts.push(Mount {
-                source,
-                destination,
-                flag,
-            }),
-            None if required => {
-                return (
-                    Plan::Unknown(format!(
-                        "{container} has no mount at {destination} to show the planner"
-                    )),
-                    None,
-                )
-            }
-            None => {}
-        }
-    }
-    let name = format!("{NAME_PREFIX}{slug}");
-    let args = probe_argv(&name, image, &mounts, extra);
-    log.section("state pre-flight");
-    log.line(&format!("docker {}", args.join(" ")));
-    // A probe that an interrupted run left behind still holds the name, and would fail this one for a reason
-    // that has nothing to do with the image.
-    docker::quiet(&["rm", "-f", &name]);
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let ran = match docker::capture_bounded(&arg_refs, LIMIT) {
-        Ok(ran) => ran,
-        Err(Fail(reason)) => return (Plan::Unknown(reason), None),
+    let mounts = match target_probe::data_mounts(container) {
+        Ok(mounts) => mounts,
+        Err(reason) => return (Plan::Unknown(reason), None),
     };
-    log.line(&ran.stdout);
-    log.line(&ran.stderr);
-    if ran.timed_out {
-        docker::quiet(&["rm", "-f", &name]);
-    }
+    log.section("state pre-flight");
+    let args = planner_args(&mounts);
+    let ran = match target_probe::run(&probe_of(slug, image, &mounts, extra, &args), LIMIT, log) {
+        Ok(ran) => ran,
+        Err(reason) => return (Plan::Unknown(reason), None),
+    };
     let plan = verdict(&ran, image);
     (plan, last_line(&ran.stdout).map(str::to_string))
 }
 
-/// One data volume as the planner sees it: the running container's source, where it is mounted, and the planner's
-/// flag naming that place.
-struct Mount {
-    source: String,
-    destination: &'static str,
-    flag: &'static str,
+/// The planner is told where each data mount is, by its flag.
+fn planner_args(mounts: &[Mount]) -> Vec<String> {
+    mounts
+        .iter()
+        .flat_map(|mount| [mount.flag.to_string(), mount.destination.to_string()])
+        .collect()
 }
 
-/// The planner's `docker run`. Split out so it is asserted without a daemon, because each flag is a promise
-/// about the owner's data: `:ro` on every data mount is what makes asking harmless, `--network none` keeps a
-/// planner from reaching anything but those files, and `--rm` leaves nothing behind.
-fn probe_argv(name: &str, image: &str, mounts: &[Mount], extra: &[String]) -> Vec<String> {
-    let mut args: Vec<String> = [
-        "run",
-        "--rm",
-        "--name",
-        name,
-        "--network",
-        "none",
-        // The image's own entrypoint is the daemon, which would boot and convert for real.
-        "--entrypoint",
-        "node",
-    ]
-    .iter()
-    .map(|arg| arg.to_string())
-    .collect();
-    for mount in mounts {
-        args.push("-v".to_string());
-        args.push(format!("{}:{}:ro", mount.source, mount.destination));
+/// The planner's probe: the image's own state-plan.js over the data, nothing else in its environment.
+fn probe_of<'a>(
+    slug: &str,
+    image: &'a str,
+    mounts: &'a [Mount],
+    extra: &'a [String],
+    args: &'a [String],
+) -> Probe<'a> {
+    Probe {
+        name: format!("{NAME_PREFIX}{slug}"),
+        image,
+        script: SCRIPT,
+        mounts,
+        extra,
+        env: &[],
+        args,
     }
-    for mount in extra {
-        args.push("-v".to_string());
-        args.push(mount.clone());
-    }
-    args.push(image.to_string());
-    args.push(SCRIPT.to_string());
-    for mount in mounts {
-        args.push(mount.flag.to_string());
-        args.push(mount.destination.to_string());
-    }
-    args
 }
 
 /// What a finished probe means. Pure, so every way it can end is asserted without a daemon.
@@ -263,7 +210,7 @@ fn verdict(ran: &docker::Bounded, image: &str) -> Plan {
     };
     match ran.code {
         Some(0) => read_plan(&ran.stdout),
-        _ if predates_engine(&ran.stderr) => {
+        _ if target_probe::predates(&ran.stderr, SCRIPT) => {
             Plan::Unknown(format!("{image} predates the state-conversion engine"))
         }
         Some(code) if DOCKER_COULD_NOT_RUN.contains(&code) => Plan::Unknown(exited(code)),
@@ -274,29 +221,6 @@ fn verdict(ran: &docker::Bounded, image: &str) -> Plan {
         Some(code) => Plan::Broken(exited(code)),
         None => Plan::Unknown("the planner was stopped before it answered".to_string()),
     }
-}
-
-/// node's words for an entry script that is not there: every image built before the engine. The script's own path,
-/// quoted, as node names the module it could not find: a module the planner imports and the image lacks names that
-/// module instead (`Cannot find module '…/x.js' imported from …/state-plan.js`), and that image is broken, not old.
-fn predates_engine(stderr: &str) -> bool {
-    stderr.contains(&format!("Cannot find module '{SCRIPT}'"))
-}
-
-/// The line of the planner's stderr worth quoting in one warning: the last one naming an error (node's
-/// `TypeError: …` comes after the source excerpt that threw it, docker's refusal after its own chatter). The
-/// log holds the rest.
-fn error_line(stderr: &str) -> Option<String> {
-    stderr
-        .lines()
-        .map(str::trim)
-        .rfind(|line| line.contains("Error"))
-        .map(|line| clip(line, 200))
-}
-
-/// The last line: a runtime that prints a notice to stdout before the plan must not cost the answer.
-fn last_line(stdout: &str) -> Option<&str> {
-    stdout.lines().map(str::trim).rfind(|line| !line.is_empty())
 }
 
 /// The planner's one JSON line → a plan. Pure. A document that says `"ok": false` in so many words is a refusal for
@@ -428,19 +352,18 @@ fn broken(reason: &str, image: &str, verb: &str) -> String {
     )
 }
 
-/// At most `limit` characters of `text`, marked when cut. Characters, not bytes: a cut through a multi-byte
-/// character would panic.
-pub fn clip(text: &str, limit: usize) -> String {
-    if text.chars().count() <= limit {
-        return text.to_string();
-    }
-    let kept: String = text.chars().take(limit).collect();
-    format!("{kept}…")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sandbox::target_probe::DATA_MOUNTS;
+
+    /// The planner's whole `docker run`, by the name it is given.
+    fn probe_argv(name: &str, image: &str, mounts: &[Mount], extra: &[String]) -> Vec<String> {
+        let args = planner_args(mounts);
+        let mut probe = probe_of("unused", image, mounts, extra, &args);
+        probe.name = name.to_string();
+        target_probe::argv(&probe)
+    }
 
     fn finished(code: i32, stdout: &str, stderr: &str) -> docker::Bounded {
         docker::Bounded {

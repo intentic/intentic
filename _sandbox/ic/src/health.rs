@@ -127,7 +127,7 @@ fn restarts_in(log: &str) -> (usize, Option<String>) {
         lines[from..last]
             .iter()
             .rfind(|line| line.contains("Error"))
-            .map(|error| crate::sandbox::preflight::clip(error, 200))
+            .map(|error| crate::sandbox::target_probe::clip(error, 200))
     });
     (restarts.len(), error)
 }

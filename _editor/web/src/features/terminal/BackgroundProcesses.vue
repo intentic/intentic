@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, ui } from "@intentic/ui";
+import { AnchoredOverlay, SectionHeader, ui } from "@intentic/ui";
 import { computed, ref } from "vue";
 import { type BackgroundProcessRow, useBackgroundProcesses, viewProcessLogs } from "../../models/terminal/useBackgroundProcesses";
 import { useT } from "@intentic/ui/i18n";
@@ -43,9 +43,7 @@ const openLogs = (row: BackgroundProcessRow): void => {
 
     <AnchoredOverlay v-model="open" :anchor="trigger ?? undefined" side="bottom" cross="end">
         <div class="flex w-80 flex-col p-1">
-            <div class="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
-                {{ t(`terminal.backgroundProcesses.backgroundProcesses`) }}
-            </div>
+            <SectionHeader :label="t(`terminal.backgroundProcesses.backgroundProcesses`)" density="dense" class="px-2 py-1.5" />
             <template v-for="row in rows" :key="row.id">
                 <div class="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-overlay">
                     <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="row.running ? 'bg-success' : 'bg-content/25'"></span>

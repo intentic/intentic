@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { errorMessage } from "@intentic/base/errors";
-import { AnchoredOverlay, formatDateTime, freshness, Icon, Notice, type Tip, ui } from "@intentic/ui";
+import { AnchoredOverlay, formatDateTime, freshness, Icon, Notice, SectionHeader, type Tip, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, watch } from "vue";
 import { askLocalApp, localFace } from "../app/environments/local";
@@ -202,7 +202,7 @@ const pickFailure = computed(() => (failure.value?.key === `:folder` ? failure.v
             <!-- The other folders opened here lately, newest first. -->
             <template v-if="others.length > 0">
                 <div class="my-1 border-t border-line-subtle"></div>
-                <div class="px-2 py-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`local.folderMenu.recent`) }}</div>
+                <SectionHeader :label="t(`local.folderMenu.recent`)" density="dense" class="px-2 py-1" />
                 <div class="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
                     <template v-for="place in others" :key="place.path">
                         <div :class="rowClass" role="button" tabindex="0" @click="press(place, $event)" @keydown.enter.prevent="press(place, $event)">
@@ -217,7 +217,7 @@ const pickFailure = computed(() => (failure.value?.key === `:folder` ? failure.v
                             </span>
                             <span
                                 v-if="place.sandbox"
-                                class="ui-status-pill shrink-0 bg-primary-600/15 text-2xs font-medium text-link"
+                                class="ui-status-pill shrink-0 bg-primary-600/15 font-medium text-link"
                                 v-tooltip.top="{ title: t(`local.folderMenu.sandbox`), note: t(`local.folderMenu.hasSandbox`) }"
                                 >{{ t(`local.folderMenu.sandbox`) }}</span
                             >

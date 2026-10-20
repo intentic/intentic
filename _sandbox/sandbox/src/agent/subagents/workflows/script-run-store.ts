@@ -57,7 +57,16 @@ const ScriptRunSchema = z.object({
 });
 export type ScriptRun = z.infer<typeof ScriptRunSchema>;
 
-export const scriptRunsDocument = defineDocument({ root: "history", path: "script-runs/", directory: true, schema: ScriptRunSchema });
+export const scriptRunsDocument = defineDocument({
+    root: "history",
+    path: "script-runs/",
+    // One file per workflow run a conversation started: its script, its calls and what each handed back, so a restart
+    // picks it up where it was and a later run can resume from its finished calls. Part of the conversations' own
+    // record, so it goes where they go.
+    portability: "carry",
+    directory: true,
+    schema: ScriptRunSchema,
+});
 
 // A run in progress in this process: its record, its stop, what settles when it ends, and the workers it waits on.
 export interface LiveRun {

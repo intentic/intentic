@@ -18,7 +18,15 @@ export type ParkedRead = z.infer<typeof ParkedReadSchema>;
 
 const StoredParksSchema = z.record(z.string(), ParkedReadSchema);
 
-export const usageParksDocument = defineDocument({ root: "history", path: "usage-parks.json", schema: ParkedReadSchema, granularity: "record" });
+export const usageParksDocument = defineDocument({
+    root: "history",
+    path: "usage-parks.json",
+    // Per-account stay-away for a provider's usage endpoint. Carried, not re-earned: earning one costs the very read it
+    // holds off, and is answered with a deadline measured from that moment. Entries past their instant are inert.
+    portability: "carry",
+    schema: ParkedReadSchema,
+    granularity: "record",
+});
 
 export interface UsageParkStore {
     // Every standing park, keyed the way the usage store keys an account; one whose instant has passed is omitted, not

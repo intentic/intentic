@@ -41,7 +41,7 @@ describe("buildReport", () => {
         const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work" })] });
         // `mirroring: "on"` is stated even untouched, since an absent port list would otherwise mean both "off" and
         // "nothing listening".
-        expect(built.pairings).toEqual([{ sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", mirroring: "on" }]);
+        expect(built.pairings).toEqual([{ sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", slug: "work", mirroring: "on" }]);
     });
 
     // A project pairing says which sandbox folder its local one holds; every other pairing says nothing, which is /work.
@@ -53,9 +53,22 @@ describe("buildReport", () => {
             ],
         });
         expect(built.pairings).toEqual([
-            { sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", mirroring: "on" },
-            { sandboxId: "app", mode: "sync", localDir: "/home/me/code/app", remoteDir: "/work/app", mirroring: "on" },
+            { sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", slug: "work", mirroring: "on" },
+            { sandboxId: "app", mode: "sync", localDir: "/home/me/code/app", remoteDir: "/work/app", slug: "app", mirroring: "on" },
         ]);
+    });
+
+    // The desktop app keeps no list of its own of which folder went into which sandbox (2026-10-20): it reads the
+    // pairing, and starts or forgets that sandbox by the slug said here, the one ic listed it under before its address.
+    it("names the slug this machine's ic knows each pairing's sandbox by", () => {
+        const built = report({
+            pairings: [
+                pairing({ sandboxId: "cm1", sandboxUrl: "https://Sandbox-cm1.intentic.dev", localDir: "/a" }),
+                pairing({ sandboxId: "cm2", sandboxUrl: "https://own.example.com", icSlug: "a1b2c3d4e5f6", localDir: "/b" }),
+                pairing({ sandboxId: "cm3", sandboxUrl: "not an address", localDir: "/c" }),
+            ],
+        });
+        expect(built.pairings.map((entry) => entry.slug)).toEqual(["sandbox-cm1", "a1b2c3d4e5f6", undefined]);
     });
 
     // Off, this device reports no ports for that sandbox, identical to a sandbox serving nothing; the mirroring state
@@ -159,7 +172,7 @@ describe("scopedReport", () => {
     // has no localDir at all, so scoping is the withholding.
     it("carries no local folder to a sandbox that only mirrors ports", () => {
         const scoped = scopedReport(report(machine), "theirs");
-        expect(scoped.pairings).toEqual([{ sandboxId: "theirs", mode: "mirror", localDir: undefined, mirroring: "on" }]);
+        expect(scoped.pairings).toEqual([{ sandboxId: "theirs", mode: "mirror", localDir: undefined, slug: "theirs", mirroring: "on" }]);
         expect(scoped.ports.map((port) => port.sandboxId)).toEqual(["theirs"]);
     });
 });

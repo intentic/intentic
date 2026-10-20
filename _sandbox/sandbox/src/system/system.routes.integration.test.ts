@@ -191,6 +191,14 @@ test("system.info reports the sandbox image tag and exact bundled version", asyn
     });
 });
 
+// What answers rides /info, so a page following a swap tells the new container by its build and boot, never by a
+// version a checkout build never moves off 0.0.0.
+test("system.info reports what answers: the build this container runs and when its daemon started", async () => {
+    const running = { build: { base: "ghcr.io/intentic/sandbox:stable", baseDigest: `sha256:${"a".repeat(64)}`, overlay: "h1" }, bootedAt: 1_700_000_000_000 };
+    const client = clientFor(createApp(services({ info: { name: "intentic-sandbox", image: "ghcr.io/intentic/sandbox:stable", version: "0.0.0", running } })));
+    expect((await client.system.info()).running).toEqual(running);
+});
+
 test("presence: an /events connection joins the roster and a /system/presence report fans back out", async () => {
     // Fake auth resolving a full identity, exercising the whole seam: middleware, context, handler, registry.
     const app = createApp(

@@ -1,0 +1,10 @@
+{
+  "features": [
+    "reshape-later",
+    "set-shape",
+    "rollback-to",
+    "background-prepare",
+    "sleep",
+    "reachable-ways-back"
+  ]
+}

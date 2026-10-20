@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/vue-query";
+import { allLoaded } from "@intentic/extension-api";
 import { computed, type Ref } from "vue";
 import { usePanels } from "../../models/extensions/usePanels";
 import { APPS, rpcPrefix } from "../../lib/queryKeys";
@@ -14,8 +15,8 @@ import { appTargets, mergeTargets, portTargets, type PreviewTarget, portTargetId
 // and apps together; the outbox rides the file watcher's public push.
 export function usePreviewTargets(active: Ref<boolean>) {
     const queryClient = useQueryClient();
-    const { panels, settled: panelsSettled, start: startRepo, stop: stopRepo, invalidate: invalidatePanels } = usePanels();
-    const { files: publicFiles, settled: publicSettled } = usePublicOutbox();
+    const { panels, loaded: panelsRead, start: startRepo, stop: stopRepo, invalidate: invalidatePanels } = usePanels();
+    const { files: publicFiles, loaded: publicRead } = usePublicOutbox();
     // The ports the shell already reads for its exposure indicator (forwarded, and servers agents left for the person);
     // this adds no request.
     const { offered } = usePorts();
@@ -83,8 +84,9 @@ export function usePreviewTargets(active: Ref<boolean>) {
 
     return {
         targets,
-        // Both always-on reads settled; the empty state waits on this. Apps fan-out is additive, never gating.
-        settled: computed(() => panelsSettled.value && publicSettled.value),
+        // Where the two always-on reads stand, as one: only their answer can say an app is gone or that nothing runs;
+        // a failure is said as one. Apps fan-out is additive, never gating.
+        listed: computed(() => allLoaded([panelsRead.value, publicRead.value])),
         start,
         stop,
         forward,

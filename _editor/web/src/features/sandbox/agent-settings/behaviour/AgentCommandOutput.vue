@@ -184,7 +184,7 @@ const gaps = computed(() => savings.value?.input.gaps.slice(0, 5) ?? []);
                             <!-- Capped like the measurement table under it, so a switch stays within reach of its name on a wide pane. -->
                             <div class="@container/cleaners flex min-w-0 max-w-xl flex-col gap-2">
                                 <p class="flex flex-wrap items-baseline gap-x-2 text-2xs text-subtle">
-                                    <span class="font-medium uppercase tracking-wide">{{ t(`sandbox.agentCommandOutput.cleaners`) }}</span>
+                                    <span class="font-medium">{{ t(`sandbox.agentCommandOutput.cleaners`) }}</span>
                                     <!-- Per-switch savings turn twelve identical toggles into a list you can prune by impact. -->
                                     <span>{{ t(`sandbox.agentCommandOutput.tokensSavedAllTime`) }}</span>
                                 </p>

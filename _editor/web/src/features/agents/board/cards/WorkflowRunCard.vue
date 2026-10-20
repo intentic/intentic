@@ -97,7 +97,7 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <span
                 v-if="needsYou"
                 v-tooltip.top="{ title: t(`agents.workflowRunCard.stepWaiting`), note: t(`agents.workflowRunCard.openToAnswer`) }"
-                class="ui-status-pill shrink-0 text-2xs font-semibold"
+                class="ui-status-pill shrink-0 font-semibold"
                 :class="toneWash(`warning`)"
                 >{{ t(`agents.workflowRunCard.needs`) }}</span
             >

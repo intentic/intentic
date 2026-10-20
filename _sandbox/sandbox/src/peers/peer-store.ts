@@ -33,7 +33,12 @@ export interface PeerStore<Extra> {
     readonly seedPairing: (id: string, token: string, extra?: Extra) => Promise<boolean>;
     // Redeems a pairing into a durable token, spent either way; undefined means unknown, expired, or replayed. Throws
     // ManifestUnreadableError, the pairing left unspent, when the enrollment manifest or burn list cannot be read.
-    readonly enroll: (pairToken: string) => Promise<({ readonly id: string; readonly token: string } & Extra) | undefined>;
+    // `learned` is what the redeeming peer said about itself, as fields of its record, given the pairing it redeems: written
+    // with the record itself, over the pairing's own, so no reader ever sees the enrollment without them.
+    readonly enroll: (
+        pairToken: string,
+        learned?: (pairing: Pairing<Extra>) => Partial<Extra>,
+    ) => Promise<({ readonly id: string; readonly token: string } & Extra) | undefined>;
     // Which peer is presenting this token — and when none does, whether that is settled or just this read's silence;
     // the only authorization on the WebSocket.
     readonly verify: (presented: string) => Promise<Presented>;
@@ -65,7 +70,7 @@ export const filePeerStore = <Shape extends z.ZodRawShape>(
     return {
         mintPairing: (id, extra) => pending.mint({ ...pairingExtra(id, extra), id }, { replayable }),
         seedPairing: (id, token, extra) => pending.arm(token, { ...pairingExtra(id, extra), id }),
-        enroll: async (pairToken) => {
+        enroll: async (pairToken, learned) => {
             // Asked before the pairing is spent: a manifest this build cannot read refuses the enrollment that follows
             // (enrollment.ts), and a pairing redeemed for nothing is one the peer has to be handed again.
             await records.requireReadable();
@@ -73,9 +78,10 @@ export const filePeerStore = <Shape extends z.ZodRawShape>(
             if (pairing === undefined) {
                 return undefined;
             }
-            const { id, ...extra } = pairing;
-            const token = await records.issue(id, extra as Extra);
-            return { ...(extra as Extra), id, token };
+            const { id, ...paired } = pairing;
+            const extra = { ...paired, ...learned?.(pairing) } as Extra;
+            const token = await records.issue(id, extra);
+            return { ...extra, id, token };
         },
         verify: records.verify,
         enrolled: records.enrolled,

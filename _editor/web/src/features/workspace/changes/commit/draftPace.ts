@@ -2,11 +2,12 @@ import { shallowRef, watch } from "vue";
 import { z } from "zod";
 import type { LandedMessageDraft } from "@intentic/sandbox-contract/schemas/agents";
 import { commitDraftPaceKey, storedJson, storeJson } from "../../../../app/storage/browserStorage";
+import { type Progress, progressAt } from "../../../../components/progress/progress";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { draftRunning } from "../changeOrigins";
 
 // How long a commit message usually takes to draft, so the field's mark can fill a ring against it instead of spinning
-// with no end in sight (CommitField.vue). Learned from drafts that were written: the roster carries every live agent's,
+// with no end in sight (CommitField.vue). This file only learns the expected length; the ring is the one progress model's. Learned from drafts that were written: the roster carries every live agent's,
 // and the last few are kept in this browser so an archived agent's timing still counts after a reload.
 
 /** One written draft's timing: who answered, and how long the whole draft took, start to sentence. */
@@ -52,35 +53,24 @@ const median = (values: readonly number[]): number => {
     return sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 };
 
-/** What a running draft is measured against. */
-export interface DraftPace {
-    // 0..1 of the expected time spent; 1 once past it.
-    readonly fraction: number;
-    // Past the expected time: the mark stops promising and only says it is still working.
-    readonly overdue: boolean;
-    // The typical whole draft, for the hover's "usually".
-    readonly typicalMs: number;
-}
-
 /**
- * Where a running draft stands against the drafts before it; undefined when it is not running or nothing has been
- * learned yet (the mark then spins, as it honestly can't say more). The model being asked picks the samples when it has
- * any, since models differ several-fold. Time already spent on models that refused is added to the expectation, so a
- * fallback starts its own stretch instead of reading as late at once.
+ * Where a running draft stands, in the one progress model (components/progress/progress.ts): how long it has run and how
+ * long drafts before it took. Undefined when it is not running or nothing has been learned yet (the mark then spins, as
+ * it honestly can't say more). The model being asked picks the samples when it has any, since models differ
+ * several-fold. Time already spent on models that refused is added to the expectation, so a fallback starts its own
+ * stretch instead of reading as late at once. How full the ring is, and when it stops promising, is the model's to say.
  */
-export const draftPace = (draft: LandedMessageDraft | undefined, now: number, samples: readonly PaceSample[]): DraftPace | undefined => {
+export const draftProgress = (draft: LandedMessageDraft | undefined, now: number, samples: readonly PaceSample[]): Progress | undefined => {
     if (draft === undefined || !draftRunning(draft) || samples.length === 0) {
         return undefined;
     }
     const current = draft.steps.at(-1);
     const asking = current?.status === `asking` ? current : undefined;
     const own = asking === undefined ? [] : samples.filter((sample) => sample.model === modelKey(asking));
-    const typicalMs = median((own.length > 0 ? own : samples).slice(-RECENT).map((sample) => sample.ms));
+    const expectedMs = median((own.length > 0 ? own : samples).slice(-RECENT).map((sample) => sample.ms));
     const firstAsked = draft.steps.find((step) => step.at !== undefined)?.at;
     const detour = asking?.at === undefined || firstAsked === undefined ? 0 : Math.max(0, asking.at - firstAsked);
-    const expected = typicalMs + detour;
-    const elapsed = Math.max(0, now - draft.startedAt);
-    return { fraction: Math.min(1, elapsed / expected), overdue: elapsed > expected, typicalMs };
+    return progressAt({ startedAt: draft.startedAt, expectedMs: expectedMs + detour }, now);
 };
 
 const STORAGE_KEY = commitDraftPaceKey;

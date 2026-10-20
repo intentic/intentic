@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BrandMark, ui, CopyButton, DisclosureRow, Notice, type NoticeModel, SegmentedControl, StatusBadge, vAction } from "@intentic/ui";
+import { BrandMark, ui, CopyButton, DisclosureRow, Notice, type NoticeModel, Section, SegmentedControl, StatusBadge, vAction } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { timeAgo } from "@intentic/ui/format";
 import { computed, ref, watch } from "vue";
@@ -400,9 +400,13 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
             <!-- The two ways a secret needs a person, as one section: who has to release it, and (below) where it may go before
                  anybody is asked. Both off for nearly everything by design: they are for the few credentials where one wrong use
                  is the incident. -->
-            <div v-if="row.gateSubject !== undefined" class="mt-3 border-t border-line pt-2">
-                <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`capabilities.secretEntryRow.needsApproval`) }}</span>
-                <div class="flex items-center justify-between gap-2 pt-1.5">
+            <Section
+                v-if="row.gateSubject !== undefined"
+                :label="t(`capabilities.secretEntryRow.needsApproval`)"
+                density="dense"
+                class="mt-3 border-t border-line pt-2"
+            >
+                <div class="flex items-center justify-between gap-2">
                     <span class="text-xs text-content">{{ t(`capabilities.secretEntryRow.fromNamedPerson`) }}</span>
                     <ToggleSwitch
                         v-if="isOwner"
@@ -444,7 +448,7 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                             v-for="email of approverChoices"
                             :key="email"
                             type="button"
-                            :class="ui.chip({ on: draftApprovers.includes(email) }, `py-1 px-2 text-2xs`)"
+                            :class="ui.chip({ on: draftApprovers.includes(email) })"
                             :aria-pressed="draftApprovers.includes(email)"
                             @click="toggleApprover(email)"
                         >
@@ -492,20 +496,19 @@ const ACTION = ui.iconButton({ tone: `subtle` }, `disabled:opacity-40`);
                 <SecretProgramsEditor v-if="row.programsHere" :row="row" :expanded="expanded" />
                 <!-- How a connection's credential reaches the agent, and the credential gateway's rules on it. -->
                 <SecretCredentialPolicy :row="row" :expanded="expanded" />
-            </div>
+            </Section>
 
             <Notice v-if="error" :of="error" class="mt-2" />
 
-            <div v-if="panelMode === `reveal`" class="mt-2">
-                <div class="mb-1 flex items-center gap-2">
-                    <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`capabilities.secretEntryRow.value`) }}</span>
+            <Section v-if="panelMode === `reveal`" :label="t(`capabilities.secretEntryRow.value`)" density="dense" class="mt-2">
+                <template #info>
                     <CopyButton :text="() => revealedValue ?? reveal(row.entry.key)" :label="t(`ui.action.copy`)" />
-                </div>
+                </template>
                 <code
                     class="block max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
                     >{{ revealedValue }}</code
                 >
-            </div>
+            </Section>
 
             <SecretTypeInto v-else-if="panelMode === `type`" :row="row" @close="typing = false" />
 

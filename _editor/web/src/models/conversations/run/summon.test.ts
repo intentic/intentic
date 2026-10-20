@@ -40,10 +40,10 @@ const session = store(`sessionStorage`);
 const { useChat } = await import("./useChat");
 const { Conversation } = await import("../session/conversation");
 const { chatRun } = await import("./chatRun");
-const { claimedSummons, relaySummons, summonChat, summonTurn, wireSummons } = await import("./summon");
+const { relaySummons, summonChat, summonTurn, wireSummons } = await import("./summon");
 const { snapshotTab } = await import("../tabs/tabSnapshot");
 const { receiveChatNote } = await import("./chatChannel");
-const { closedDrafts, forgetClosedDraft, keepClosedDraft } = await import("../drafts/closedDrafts");
+const { discardDraft, draftOf, heldDrafts, writeDraft } = await import("../drafts/composerDrafts");
 const { claimFloating, receiveFloatingNote } = await import("../../../workbench/window/floating");
 
 // A summons as another window's channel would deliver it: an envelope naming its sandbox.
@@ -53,24 +53,24 @@ const deliver = (summons: Summons, sandbox: string | undefined = `sb1`): void =>
 const popOut = (): void => receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
 const dock = (): void => receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
 
-// A chat closed with a message still in it, in the same shape agentTabOf builds from the registry.
-const setAside = (conversationId: string, draft: string): StoredTab => ({
+// A chat nobody has started, in the same shape agentTabOf builds from a card.
+const setAside = (conversationId: string): StoredTab => ({
     conversationId,
     isolated: true,
     registered: false,
     provider: `claude`,
     harness: `native`,
-    draft,
-    draftAt: 1_700,
-    attachments: [],
 });
+
+// Words waiting in a conversation's draft, as a chat closed with them, or another window or device, left them.
+const drafted = (conversationId: string, text: string): void => writeDraft(conversationId, { text, attachments: [] }, { since: 1_700 });
 
 beforeEach(() => {
     local.clear();
     session.clear();
     resetSandboxScope();
-    for (const entry of closedDrafts.value) {
-        forgetClosedDraft(entry.conversationId);
+    for (const draft of heldDrafts.value) {
+        discardDraft(draft.conversationId);
     }
 });
 
@@ -173,40 +173,19 @@ it(`relays a panel gesture without re-applying it in the window that made it`, (
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(other.conversationId);
 });
 
-// The store answers whichever window asks first; with the chat popped out that's the board, which has no live copy of
-// its own.
-it(`claims a closed chat's words once, and sends them with the summons`, () => {
-    keepClosedDraft(setAside(`cnv-parked`, `the half-written message`));
-
-    const carrying = claimedSummons({
-        kind: `reveal`,
-        verb: `show`,
-        entries: [setAside(`cnv-parked`, ``)],
-        focus: `cnv-parked`,
-        caret: false,
-    });
-
-    expect(carrying.kind === `reveal` && carrying.unsent).toMatchObject([{ conversationId: `cnv-parked`, draft: `the half-written message` }]);
-    expect(closedDrafts.value).toEqual([]);
-});
-
-it(`restores a summoned chat's message from what the summons carries, with an empty store`, () => {
+// A reopened chat's words are its draft's: no window claims them, and no summons carries them, so a popped-out chat and
+// the board can never each hold a copy, or neither.
+it(`reopens a chat on the words its draft holds, and leaves exactly that one draft`, () => {
     const chat = useChat();
-    const wire = wireSummons({
-        kind: `reveal`,
-        verb: `show`,
-        entries: [setAside(`cnv-parked`, ``)],
-        focus: `cnv-parked`,
-        caret: false,
-        unsent: [setAside(`cnv-parked`, `the half-written message`)],
-    });
+    drafted(`cnv-parked`, `the half-written message`);
 
-    deliver(wire);
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [setAside(`cnv-parked`)], focus: `cnv-parked`, caret: false }));
 
     expect(chat.activeId.value).toBe(`cnv-parked`);
     expect(chat.active.value.draft.value).toBe(`the half-written message`);
-    // Dated from when it was written, not restored, so the board's age mark doesn't call old work fresh.
+    // Dated from when it was written, not reopened, so the board's age mark doesn't call old work fresh.
     expect(chat.active.value.draftAt.value).toBe(1_700);
+    expect(heldDrafts.value.map((draft) => [draft.conversationId, draft.text])).toEqual([[`cnv-parked`, `the half-written message`]]);
 });
 
 it(`closes a chat in a window that never saw the click`, () => {
@@ -220,30 +199,31 @@ it(`closes a chat in a window that never saw the click`, () => {
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
 });
 
-// The board's × takes the whole card, tab and words together; the panel's own × (which only narrows a pane) is what
-// sets words aside instead.
+// The board's × takes the whole card, tab and words together; the panel's own × (which only narrows a pane) leaves the
+// words their draft.
 it(`drops the words with the tab when the board closes a chat, in the window drawing it`, async () => {
     const chat = useChat();
     const clicked = new Conversation();
     deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
     chat.active.value.draft.value = `half a thought`;
     await nextTick();
+    expect(draftOf(clicked.conversationId)?.text).toBe(`half a thought`);
 
     deliver(wireSummons({ kind: `close`, conversationIds: [clicked.conversationId] }));
 
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
-    expect(closedDrafts.value).toEqual([]);
+    expect(draftOf(clicked.conversationId)).toBeUndefined();
 });
 
-it(`forgets words already set aside when the board closes the card standing for them`, () => {
-    keepClosedDraft(setAside(`cnv-parked`, `the half-written message`));
+it(`drops a draft no chat is open for when the board closes the card standing for it`, () => {
+    drafted(`cnv-parked`, `the half-written message`);
 
     deliver(wireSummons({ kind: `close`, conversationIds: [`cnv-parked`] }));
 
-    expect(closedDrafts.value).toEqual([]);
+    expect(draftOf(`cnv-parked`)).toBeUndefined();
 });
 
-it(`sets no words aside for a chat this window is only shadowing`, async () => {
+it(`drops the draft from a window only shadowing the chat, as from the one drawing it`, async () => {
     const chat = useChat();
     const clicked = new Conversation();
     deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: false }));
@@ -254,7 +234,7 @@ it(`sets no words aside for a chat this window is only shadowing`, async () => {
     deliver(wireSummons({ kind: `close`, conversationIds: [clicked.conversationId] }));
 
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(clicked.conversationId);
-    expect(closedDrafts.value).toEqual([]);
+    expect(draftOf(clicked.conversationId)).toBeUndefined();
 });
 
 // An archive files the card away and takes its chat off every window's panel, the floating one included: a chat window
@@ -270,8 +250,8 @@ it(`takes an archived chat off a window that never saw the press, even the chat 
     expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(filed.conversationId);
 });
 
-// Unlike the board's ×, the conversation survives in the archive, so its unsent words wait to come back with it.
-it(`sets an archived chat's unsent words aside in the window drawing it`, async () => {
+// Unlike the board's ×, the conversation survives in the archive, so its unsent words stay its draft to come back with it.
+it(`keeps an archived chat's unsent words as its draft`, async () => {
     const chat = useChat();
     const filed = new Conversation();
     deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [filed], focus: filed.conversationId, caret: false }));
@@ -280,13 +260,14 @@ it(`sets an archived chat's unsent words aside in the window drawing it`, async 
 
     deliver(wireSummons({ kind: `retire`, conversationIds: [filed.conversationId] }));
 
-    expect(closedDrafts.value.map((entry) => [entry.conversationId, entry.draft])).toEqual([[filed.conversationId, `half a thought`]]);
+    expect(chat.conversations.value.map((conversation) => conversation.conversationId)).not.toContain(filed.conversationId);
+    expect(draftOf(filed.conversationId)?.text).toBe(`half a thought`);
 });
 
 // A chat the roster knows, with nothing waiting to be sent: what a landed card's tab looks like. `box` names the sandbox
 // it lives in, absent for this browser's own.
 const knownTab = (conversationId: string, box?: string): StoredTab => ({
-    ...setAside(conversationId, ``),
+    ...setAside(conversationId),
     registered: true,
     ...(box === undefined ? {} : { box }),
 });
@@ -407,17 +388,4 @@ it(`leaves a carried turn alone in a window only shadowing the chat`, () => {
     deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: true, deliver: `fix it` }));
 
     expect(turnsSentHere()).toEqual([]);
-});
-
-it(`carries the words a summons sets aside as they are`, () => {
-    const wire = wireSummons({
-        kind: `reveal`,
-        verb: `show`,
-        entries: [setAside(`cnv-parked`, ``)],
-        focus: `cnv-parked`,
-        caret: false,
-        unsent: [setAside(`cnv-parked`, `still typing`)],
-    });
-
-    expect(wire.kind === `reveal` ? wire.unsent : undefined).toEqual([setAside(`cnv-parked`, `still typing`)]);
 });

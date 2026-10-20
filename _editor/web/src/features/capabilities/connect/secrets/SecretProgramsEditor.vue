@@ -132,7 +132,7 @@ const readOnly = computed(() => {
                 <span
                     v-for="program of draftPrograms"
                     :key="`program:${program}`"
-                    :class="ui.chip({ on: true }, `gap-1 py-1 pl-2 pr-1 font-mono text-2xs`)"
+                    :class="ui.chip({ on: true, trail: true }, `font-mono`)"
                 >
                     {{ program }}
                     <button
@@ -147,7 +147,7 @@ const readOnly = computed(() => {
                 <span
                     v-for="name of draftPackages"
                     :key="`package:${name}`"
-                    :class="ui.chip({ on: true }, `gap-1 py-1 pl-2 pr-1 font-mono text-2xs`)"
+                    :class="ui.chip({ on: true, trail: true }, `font-mono`)"
                 >
                     <Icon name="mobile" class="text-2xs text-subtle" />
                     {{ name }}

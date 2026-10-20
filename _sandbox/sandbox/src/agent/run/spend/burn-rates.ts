@@ -1,7 +1,7 @@
 import type { AccountUsage } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { z } from "zod";
 import { defineDocument } from "../../../store/evolution/documents.js";
-import { jsonFile } from "../../../store/json-file.js";
+import { openDocument } from "../../../store/open-document.js";
 import { type Anchor, averaged, MIN_PACE_MS, stepAnchor } from "./burn-learning.js";
 import type { ReadingsLog } from "./readings-log.js";
 import { accountTokensBetween, METER_RETAIN_MS } from "./token-meter.js";
@@ -34,6 +34,8 @@ export type BurnRatesValue = z.infer<typeof BurnRatesSchema>;
 export const burnRatesDocument = defineDocument({
     root: "history",
     path: "burn-rates.json",
+    // Each model's learned pace, read off the same accounts account-usage.json carries: travels with them.
+    portability: "carry",
     schema: BurnRatesSchema,
 });
 
@@ -78,11 +80,7 @@ export interface BurnRatesDeps {
 }
 
 export const createBurnRates = ({ path, log, metered = accountTokensBetween, now = Date.now }: BurnRatesDeps): BurnRates => {
-    const file = jsonFile<BurnRatesValue>(path, {
-        parse: (raw) => BurnRatesSchema.safeParse(raw).data,
-        fallback: empty,
-        document: burnRatesDocument,
-    });
+    const file = openDocument(burnRatesDocument, path, { fallback: empty });
     let value: BurnRatesValue = empty();
     // allow(silent-catch): an unreadable file starts the learning afresh; nothing it held is load-bearing.
     const loading = file.read().then(

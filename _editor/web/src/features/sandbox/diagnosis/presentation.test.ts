@@ -166,14 +166,14 @@ describe(`a wait's own clock`, () => {
         const shown = present({ kind: `machine`, report: fixed, standing: `fixed` }, { outageMs: 600_000 });
         expect(shown).toMatchObject({ title: `rog fixed acme`, waiting: true });
         expect(shown.body).toContain(`reconnects by itself`);
-        expect(shown.wait).toEqual({ elapsedMs: 60_000, typicalMs: USUAL_MS.fixed, giveUpMs: FIXED_PATIENCE_MS });
+        expect(shown.wait).toEqual({ elapsedMs: 60_000, expectedMs: USUAL_MS.fixed, giveUpMs: FIXED_PATIENCE_MS });
     });
 
     it(`gives a sleeping sandbox well under a minute, and the owner a way back once waking has taken too long`, () => {
         const slept = report({ outcome: `healthy`, checks: [], asleep: true });
         expect(present({ kind: `asleep`, report: slept, patient: true }).wait).toEqual({
             elapsedMs: 20_000,
-            typicalMs: USUAL_MS.asleep,
+            expectedMs: USUAL_MS.asleep,
             giveUpMs: ASLEEP_WAKE_PATIENCE_MS,
         });
         // Past its patience it is no longer a wait, and says so with a way back rather than a clock.
@@ -182,11 +182,11 @@ describe(`a wait's own clock`, () => {
 
     it(`expects a hosted machine from the warm pool in seconds and one built to order in minutes`, () => {
         expect(present({ kind: `waking`, machine: `starting` }, { lane: `hosted`, warm: true }).wait).toMatchObject({
-            typicalMs: USUAL_MS.wakingWarm,
+            expectedMs: USUAL_MS.wakingWarm,
             giveUpMs: HOSTED_WARM_PATIENCE_MS,
         });
         expect(present({ kind: `waking`, machine: `starting` }, { lane: `hosted`, warm: false }).wait).toMatchObject({
-            typicalMs: USUAL_MS.wakingCold,
+            expectedMs: USUAL_MS.wakingCold,
             giveUpMs: HOSTED_COLD_PATIENCE_MS,
         });
     });

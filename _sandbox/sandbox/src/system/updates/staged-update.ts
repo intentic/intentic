@@ -14,18 +14,41 @@ import { readJsonMarker } from "../../store/plain-files/json-marker.js";
 // Written by ic (_sandbox/ic/src/sandbox/staged.rs), its plan the pre-flight's line verbatim; declared so its shape is
 // frozen like every other stored file, and a change to it that an older marker would not satisfy fails the typecheck.
 // Not the boot step's to look for: ic writes and removes it.
-export const stagedUpdateDocument = defineDocument({ root: "history", path: "update-staged.json", boot: false, schema: StagedUpdateSchema });
+export const stagedUpdateDocument = defineDocument({
+    root: "history",
+    path: "update-staged.json",
+    // An update the host downloaded and built for this sandbox (`ic sandbox prepare`); about this machine only.
+    portability: "derived",
+    boot: false,
+    schema: StagedUpdateSchema,
+});
 
 // A download of the next update running on the host right now, with its step and how far the pull has got: `ic
 // sandbox prepare` rewrites it every few seconds while it works (_sandbox/ic/src/sandbox/preparing.rs) and removes it
 // when it ends. Declared for the same reasons as the staged marker, and like it never written here.
-export const updatePreparingDocument = defineDocument({ root: "history", path: "update-preparing.json", boot: false, schema: PreparingUpdateSchema });
+export const updatePreparingDocument = defineDocument({
+    root: "history",
+    path: "update-preparing.json",
+    // A download the host is running for this sandbox right now (ic rewrites it every few seconds, removes it when
+    // done).
+    portability: "derived",
+    boot: false,
+    schema: PreparingUpdateSchema,
+});
 
 // What the host last did about this sandbox's version: an update that took, one it gave up on, and until when the
 // version before stays ready. Written by ic (_sandbox/ic/src/sandbox/outcome.rs) on the volume both containers share,
 // so the version that ends up running reads what happened to the other one. Declared for the same reasons as the
 // staged marker, and like it never written here.
-export const updateOutcomeDocument = defineDocument({ root: "history", path: "update-outcome.json", boot: false, schema: UpdateOutcomeSchema });
+export const updateOutcomeDocument = defineDocument({
+    root: "history",
+    path: "update-outcome.json",
+    // What the host last did about this sandbox's version (ic writes it), the owner's skipped release, and why the last
+    // boot could not start (the daemon writes it, the host's probation reads it): all rebuilt by whoever next says.
+    portability: "derived",
+    boot: false,
+    schema: UpdateOutcomeSchema,
+});
 
 // One of the host's markers, or undefined. Never throws: a missing, unreadable, or newer-format marker all read as
 // nothing said, since each is only ever advice.

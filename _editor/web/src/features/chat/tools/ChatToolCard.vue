@@ -290,11 +290,11 @@ const openSubagent = (event: MouseEvent): void => {
             </button>
             <span v-else-if="location || target" class="min-w-0 truncate font-mono">{{ target ?? location?.path }}</span>
             <!-- Working in the background while the parent moved on: why this card can sit unfinished for minutes. -->
-            <span v-if="subagent?.background === true && subagentLive" class="ui-status-pill shrink-0 bg-overlay text-2xs text-subtle">{{
+            <span v-if="subagent?.background === true && subagentLive" class="ui-status-pill shrink-0 bg-overlay text-subtle">{{
                 t(`chat.chatToolCard.background`)
             }}</span>
             <!-- The delegate itself reports being stuck on a permission or question; the one live state worth shouting. -->
-            <span v-if="subagentLive && subagent?.status === `blocked`" class="ui-status-pill shrink-0 bg-overlay text-2xs text-warning">{{
+            <span v-if="subagentLive && subagent?.status === `blocked`" class="ui-status-pill shrink-0 bg-overlay text-warning">{{
                 t(`chat.chatToolCard.needsInput`)
             }}</span>
             <!-- Collapsed calls keep their result or pending clock visible. -->

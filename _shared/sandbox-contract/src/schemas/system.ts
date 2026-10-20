@@ -61,6 +61,17 @@ export const PreparingUpdateSchema = z.object({
     percent: z.number().min(0).max(100).optional().describe("How far through the download it is, from 0 to 100. Absent for a step with no measure of its own."),
 });
 export type PreparingUpdate = z.infer<typeof PreparingUpdateSchema>;
+// What answers (state/sandbox-build.ts RunningSandbox): the build this container runs and when its daemon started.
+export const RunningSandboxSchema = z.object({
+    build: z
+        .object({
+            base: z.string().describe("The base image as the machine that runs it named it; empty when it said nothing."),
+            baseDigest: z.string().optional().describe("That base's registry digest, when the machine read one."),
+            overlay: z.string().optional().describe("The hash of the environment recipe built on the base. Absent on a stock image."),
+        })
+        .describe("Which build this container is: its base image and the environment built on it."),
+    bootedAt: z.number().describe("When the daemon answering started, in milliseconds. A container swapped in is a new boot."),
+});
 export const InfoSchema = z.object({
     name: z.string().optional().describe("What this sandbox is called."),
     image: z.string().optional().describe("The image it is running."),
@@ -128,6 +139,10 @@ export const InfoSchema = z.object({
     // cannot (a hosted machine, a checkout-built base, a daemon outside a container) and from a daemon older than it.
     autoUpdate: AutoUpdateSchema.optional().describe(
         "Whether and when this sandbox takes a downloaded update by itself, and what it is waiting on. Absent where it cannot: a hosted sandbox, one built from a checkout, or one older than automatic updates.",
+    ),
+    // What answers now, for a page telling a swap it pressed from one still running; absent from a daemon older than it.
+    running: RunningSandboxSchema.optional().describe(
+        "Which build answers and when its daemon started, so a page that asked for a rebuild, an update or a rollback can tell when the new container is the one answering. Absent from a sandbox older than this field.",
     ),
 });
 export type Info = z.infer<typeof InfoSchema>;

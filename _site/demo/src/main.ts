@@ -4,6 +4,7 @@ import { openTabSnapshot } from "./fixture/openChats";
 import { demoMode } from "./mode";
 import { demoOutage, withOutage } from "./outage";
 import { DEMO_SANDBOX, DEMO_USER, platform } from "./platform";
+import { readsNote, withReads } from "./reads";
 import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
 import { coverage } from "./unserved";
 
@@ -45,8 +46,10 @@ const openOnFleet = (): void => {
     }
 };
 
-installFetch({ platform, daemon: withOutage(daemon) });
-installXhr({ platform, daemon: withOutage(daemon) });
+// The outage outside the reads: a sandbox that does not answer has no reads to slow.
+const answering = withOutage(withReads(daemon));
+installFetch({ platform, daemon: answering });
+installXhr({ platform, daemon: answering });
 installWebSocket((url) => SOCKETS.get(url.pathname));
 installWebTransport();
 seedCredentials();
@@ -55,6 +58,10 @@ openOnFleet();
 
 if (demoOutage !== undefined) {
     console.info(`[demo] acting out a sandbox outage: ${demoOutage} (?outage=none ends it)`);
+}
+const reads = readsNote();
+if (reads !== undefined) {
+    console.info(reads);
 }
 
 const served = coverage();

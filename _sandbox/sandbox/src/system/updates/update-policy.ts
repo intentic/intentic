@@ -17,7 +17,14 @@ const UpdatePolicySchema = z.object({
     applied: z.object({ at: z.number(), to: z.string().optional() }).optional(),
 });
 export type UpdatePolicy = z.infer<typeof UpdatePolicySchema>;
-export const updatePolicyDocument = defineDocument({ root: "history", path: "update-policy.json", schema: UpdatePolicySchema });
+export const updatePolicyDocument = defineDocument({
+    root: "history",
+    path: "update-policy.json",
+    // Whether this sandbox takes downloaded updates by itself, a pause, and the update it last started unasked: about
+    // this machine's restarts, so a moved sandbox starts on the default.
+    portability: "derived",
+    schema: UpdatePolicySchema,
+});
 
 export interface UpdatePolicyFile {
     readonly read: () => Promise<UpdatePolicy>;

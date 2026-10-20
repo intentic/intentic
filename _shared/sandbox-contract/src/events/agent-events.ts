@@ -8,6 +8,7 @@ import { FastModeStateSchema } from "../schemas/providers/fast-mode.js";
 import { NeedSchema } from "../schemas/needs.js";
 import { PromptCacheOpeningSchema, PromptFingerprintSchema } from "../schemas/keep-warm.js";
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
+import { PrivacyBypassSchema } from "../schemas/privacy-egress.js";
 import { SubagentKindSchema, SubagentSdkRecordSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
 import { RetryLadderSchema } from "../schemas/turn-break.js";
 import { HandedOffSchema, HandoffOfferSchema } from "../schemas/providers/handoff.js";
@@ -369,6 +370,12 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                     .describe("The last session entry before the stopped response: a retry resumes the session there, so the model never sees what was stopped."),
             })
             .optional(),
+        // A privacy refusal only: the route the shield's verdict refused (shieldVerdict's `refuse.route`), typed, so a
+        // reader acts on where the bytes would have gone rather than on the sentence. Absent for a policy that could
+        // not be read, which refuses whatever the route.
+        privacyRoute: PrivacyBypassSchema.optional().describe(
+            "Where the bytes would have gone past the privacy shield: a runtime it cannot read, a runner calling its provider from its own machine, the container's own key, or a shared server started before the shield was on.",
+        ),
         // Which engine, the version refused, and the floor the provider requires; lets the client offer an install.
         engine: z
             .object({

@@ -443,7 +443,7 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
         app.state::<AppState>().remember_name(slug, Some(&name));
     }
     // A folder that asked for this sandbox has it now: opening the folder again reaches this one (project.rs).
-    crate::project::remember(&app, &project, slug);
+    crate::project::remember(&app, &project);
     Ok(())
 }
 

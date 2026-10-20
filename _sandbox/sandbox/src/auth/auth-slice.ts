@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../env.config.js";
 import type { Logger } from "pino";
+import { createGoogleVerifier } from "./proofs/google-id-token.js";
 import {
     type AuthorizeOptions,
     type Authorizer,
     createAuthorizer,
-    createGoogleVerifier,
     identityAssertionVerifier,
     type IdTokenVerifier,
     fileMembersStore,

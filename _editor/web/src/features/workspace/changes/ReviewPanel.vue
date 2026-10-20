@@ -11,6 +11,7 @@ import {
     ContextMenu,
     formatElapsed,
     Notice,
+    SectionHeader,
     timeAgo,
     type Tip,
     toneWash,
@@ -61,7 +62,7 @@ import { usePushFlow } from "../push/usePushFlow";
 import { useRepos } from "../../../models/workspace/tree/useRepos";
 import type { DiffPayload } from "@intentic/extension-api";
 import { EMPTY_MODULE_VIEW, moduleView, type ModuleGroup, type ModuleView } from "../../../models/workspace/changes/changeModules";
-import { sideTotal, truncatedOn, truncatedTotal } from "../../../models/workspace/changes/truncation";
+import { truncatedOn, truncatedTotal } from "../../../models/workspace/changes/truncation";
 import type { OpenMode } from "../../../models/workspace/tabs/workspaceTabs";
 import { useChangeGrouping } from "../../../models/workspace/changes/useChangeGrouping";
 import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../../../models/workspace/changes/changeWeight";
@@ -1294,7 +1295,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
              narrows the list to it (toggleOrigin), so it heads the list it narrows: choosing what to commit happens in
              one place, chips and row checkmarks together. Disabled while a git action runs, like every other index verb. -->
         <div v-if="chipRowShown" class="flex shrink-0 flex-wrap items-center gap-1 px-2 pb-1 pt-2">
-            <span class="shrink-0 text-2xs uppercase tracking-wide text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
+            <span class="shrink-0 text-2xs text-subtle">{{ t(`workspace.reviewPanel.from`) }}</span>
             <!-- Resting chips are plain plates with only the logo in the agent's hue (the same hue its rows' badges
                  wear); lighting one floods the chip with that hue. Colour arriving is the whole "on": no tick, no edge,
                  so a lone chip still visibly changes without out-shouting the panel. -->
@@ -1302,7 +1303,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 v-for="entry in legend.agents"
                 :key="entry.id"
                 type="button"
-                class="ui-chip min-w-0 max-w-full gap-1"
+                class="ui-chip min-w-0 max-w-full"
                 :class="[
                     originFilter === entry.id ? ['shrink chip-blade', originHue(entry.id).chip] : 'shrink-0',
                     originFilter !== undefined && originFilter !== entry.id ? 'opacity-40' : '',
@@ -1345,7 +1346,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
             <button
                 v-if="legend.yours > 0"
                 type="button"
-                class="shrink-0 gap-1"
+                class="shrink-0"
                 :class="[ui.chip({ on: originFilter === YOURS }), originFilter === YOURS ? 'chip-blade' : '', originFilter !== undefined && originFilter !== YOURS ? 'opacity-40' : '']"
                 :style="originFilter === YOURS ? originBlade : undefined"
                 :disabled="changes.actionBusy.value"
@@ -1428,7 +1429,7 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                     <!-- The sole side's name, count and verb as one cluster ("STAGED 2 ↺"); never drawn once a repo has two sides. -->
                     <span
                         v-if="soleSide(group)"
-                        class="shrink-0 text-2xs font-medium uppercase tracking-wide"
+                        class="shrink-0 text-2xs font-medium"
                         :class="soleSide(group)!.side === 'conflicted' ? 'text-danger' : 'text-subtle'"
                         >{{ soleSide(group)!.label }}</span
                     >
@@ -1519,34 +1520,36 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                 <div v-if="!collapsed.has(group.repo)" class="pb-1">
                     <!-- One block per git side (conflicts, staged, unstaged); the header's action is whole-side, ignoring selection. -->
                     <template v-for="section in sidesOf(group)" :key="`${group.repo}/${section.side}`">
-                        <div v-if="sidesSplit(group)" class="flex items-center gap-1 pl-5 pr-1 pt-1">
-                            <span
-                                class="shrink-0 text-2xs font-medium uppercase tracking-wide"
-                                :class="section.side === 'conflicted' ? 'text-danger' : 'text-subtle'"
-                                >{{ section.label }}</span
-                            >
-                            <!-- The side count includes visible rows and truncated rows. -->
-                            <span class="shrink-0 text-2xs text-subtle">{{ sideTotal(group, section.side, section.changes.length) }}</span>
+                        <!-- No count beside it: the rows under it are the tally, and the repo's row counts them all. -->
+                        <SectionHeader
+                            v-if="sidesSplit(group)"
+                            :label="section.label"
+                            :tone="section.side === 'conflicted' ? 'danger' : 'neutral'"
+                            density="dense"
+                            class="pl-5 pr-1 pt-1"
+                        >
                             <!-- The section's only module, said here instead of on its own row below it — see soleBucket. -->
-                            <ModuleLabel
-                                v-if="soleBucket(group.repo, section.side)"
-                                :name="soleBucket(group.repo, section.side)!.name"
-                                :packaged="soleBucket(group.repo, section.side)!.packaged"
-                            />
-                            <span class="flex-1"></span>
-                            <!-- Always drawn: what moves a row across the index stays on screen, what destroys work waits for a hover. -->
-                            <button
-                                type="button"
-                                :class="rowGlyph()"
-                                :disabled="changes.actionBusy.value"
-                                v-action="() => stageSide(group, section.side)"
-                                v-tooltip.right="sideVerbTip(group, section.side)"
-                                :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(group, section.side), repo: group.repo })"
-                            >
-                                <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
-                            </button>
-                            <span :class="[GLYPH_GAP, DISCARD_GAP]" aria-hidden="true"></span>
-                        </div>
+                            <template v-if="soleBucket(group.repo, section.side)" #info>
+                                <ModuleLabel :name="soleBucket(group.repo, section.side)!.name" :packaged="soleBucket(group.repo, section.side)!.packaged" />
+                            </template>
+                            <template #actions>
+                                <!-- The rows' own gap, so the verb stands in its column over theirs. -->
+                                <span class="flex items-center gap-1">
+                                    <!-- Always drawn: what moves a row across the index stays on screen, what destroys work waits for a hover. -->
+                                    <button
+                                        type="button"
+                                        :class="rowGlyph()"
+                                        :disabled="changes.actionBusy.value"
+                                        v-action="() => stageSide(group, section.side)"
+                                        v-tooltip.right="sideVerbTip(group, section.side)"
+                                        :aria-label="t(`workspace.reviewPanel.in2`, { side: sideVerbHint(group, section.side), repo: group.repo })"
+                                    >
+                                        <Icon :name="INDEX_VERB[section.side].icon" class="text-2xs" />
+                                    </button>
+                                    <span :class="[GLYPH_GAP, DISCARD_GAP]" aria-hidden="true"></span>
+                                </span>
+                            </template>
+                        </SectionHeader>
 
                         <template v-for="bucket in viewOf(group.repo, section.side).buckets" :key="`${group.repo}/${section.side}/${bucket.key}`">
                             <!-- Each module label is shown once for its row group. -->
@@ -1554,15 +1557,11 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                                 <ModuleLabel :name="bucket.name" :packaged="bucket.packaged" />
                             </div>
                             <template v-for="change in bucket.rows" :key="`${group.repo}/${section.side}/${change.path}`">
-                                <!-- Selection uses the primary tint instead of the row hover colour. -->
+                                <!-- The kit's one selected mark, which keeps its tint under the pointer. -->
                                 <div
-                                    class="group/file flex items-stretch gap-1 rounded pr-1 transition-colors"
+                                    class="ui-row-select group/file flex items-stretch gap-1 rounded pr-1"
                                     @contextmenu="openRowMenu($event, { repo: group.repo, side: section.side, path: change.path }, change)"
-                                    :class="[
-                                        isSelected({ repo: group.repo, side: section.side, path: change.path })
-                                            ? 'bg-primary-500/15 hover:bg-primary-500/25'
-                                            : 'ui-row-select',
-                                    ]"
+                                    :class="{ 'ui-row-select-on': isSelected({ repo: group.repo, side: section.side, path: change.path }) }"
                                 >
                                     <!-- No indent guide or origin rail down the left: the status mark sits under its heading's first letter, and
                                          the origin chips below carry which agent touched the file. -->

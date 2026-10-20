@@ -3,7 +3,7 @@ import { rm, stat } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import type { GitRunner } from "@intentic/base/git";
-import { chunkPaths } from "../../git/changes/changes-index.js";
+import { chunkPaths } from "../../../git/changes/changes-index.js";
 
 // Diff written straight to a file, never held as a string, since a giant patch would blow the git runner's output
 // ceiling. Returns the file's size, since that's all callers ever wanted; zero advances the tip as landed.

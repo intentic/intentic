@@ -1,6 +1,6 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentStanding } from "../../agent-status/agentStatus-standing";
-import { claimClosedDrafts } from "../drafts/closedDrafts";
+import { seedComposer } from "../drafts/composerBinding";
 import { drawsChat } from "../run/chatEcho";
 import { Conversation } from "../session/conversation";
 import type { StoredTab } from "../tabs/tabSnapshot";
@@ -11,7 +11,6 @@ import {
     collapsePanes,
     conversations,
     focusComposer,
-    restoreComposer,
     restoreTab,
     setActive,
     setConversations,
@@ -44,8 +43,6 @@ export interface Reveal {
     readonly caret: boolean;
     // Marks only newly created tabs as a peek (swept once focus leaves); already-open tabs keep their standing.
     readonly peek?: boolean;
-    // Drafts these chats were closed holding, claimed once so every window restores the same composer.
-    readonly unsent?: readonly StoredTab[];
     // The focused chat's first turn, for the window drawing the chat to send (summon.ts); only that window acts on
     // it, so a summons every window applies still starts exactly one turn.
     readonly deliver?: string;
@@ -67,26 +64,6 @@ const loadSession = async (conversation: Conversation, sessionRef: string, title
         }
     } finally {
         conversation.transcript.loading.value = false;
-    }
-};
-
-// Merges a closed draft back into its tab. A registered agent's remembered fields overlay a stored copy's; a
-// client-only draft's kept copy wins outright, since its seed knows nothing the kept tab doesn't.
-const withClosedDraft = (entry: StoredTab, kept: StoredTab | undefined): StoredTab => {
-    if (kept === undefined) {
-        return entry;
-    }
-    const stated = Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined)) as Partial<StoredTab>;
-    const merged = entry.registered ? { ...kept, ...stated } : { ...stated, ...kept };
-    // The kept tab's composer always wins; that's the reason this entry exists.
-    return { ...merged, draft: kept.draft, draftAt: kept.draftAt, attachments: kept.attachments };
-};
-
-// Puts closed-out words back into a tab this window already has open. Only into an empty composer, never over words
-// being typed live.
-const restoreKept = (conversation: Conversation, kept: StoredTab | undefined): void => {
-    if (kept !== undefined && !conversation.unsent.value) {
-        restoreComposer(conversation, kept);
     }
 };
 
@@ -112,7 +89,7 @@ const adoptTab = (existing: Conversation, entry: StoredTab): void => {
 
 // Resolves one entry to the open Conversation it means in this window, matching by id or by shown session so a repeated
 // summons focuses the existing tab instead of minting a twin. New conversations go into `additions`.
-const resolveEntry = (entry: RevealEntry, additions: Conversation[], kept: ReadonlyMap<string, StoredTab>): Conversation => {
+const resolveEntry = (entry: RevealEntry, additions: Conversation[]): Conversation => {
     const opened = [...conversations.value, ...additions];
     const byId = opened.find((conversation) => conversation.conversationId === entry.conversationId);
     if (entry instanceof Conversation) {
@@ -131,9 +108,8 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[], kept: Reado
         // Titled before the transcript loads, so a nameless loading tab isn't mistaken for an untouched draft and swept
         // mid-load.
         conversation.title.value = entry.title ?? null;
-        // A history row names a session, not a composer, so kept drafts are the only record of what was waiting to
-        // send.
-        restoreKept(conversation, kept.get(entry.conversationId));
+        // A history row names a session, not a composer, so its draft is the only record of what was waiting to send.
+        seedComposer(conversation);
         conversation.transcript.loading.value = true;
         void loadSession(conversation, entry.sessionRef, entry.title ?? null);
         additions.push(conversation);
@@ -142,23 +118,16 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[], kept: Reado
     const session = entry.session;
     const existing = byId ?? (session === undefined ? undefined : opened.find((conversation) => conversation.session.value?.id === session.id));
     if (existing !== undefined) {
-        // Words a close in another window set aside come back here, never over ones being typed now.
-        restoreKept(existing, kept.get(entry.conversationId));
         adoptTab(existing, entry);
         return existing;
     }
     // Never open here: built fresh from the snapshot, exactly as a reload would. Hydrated outright rather than left to
     // the reachability watch, so a running turn attaches live and a settled one replays.
-    const conversation = restoreTab(withClosedDraft(entry, kept.get(entry.conversationId)));
+    const conversation = restoreTab(entry);
     additions.push(conversation);
     hydrateOnce(conversation);
     return conversation;
 };
-
-// Drafts a reveal is bringing back, by conversation: carried on the summons if claimed already, else claimed here for a
-// reveal this window makes alone. Claimed once for the whole reveal, not per entry.
-const keptFor = (entries: readonly RevealEntry[], unsent: readonly StoredTab[] | undefined): ReadonlyMap<string, StoredTab> =>
-    new Map((unsent ?? claimClosedDrafts(entries.map((entry) => entry.conversationId))).map((tab) => [tab.conversationId, tab] as const));
 
 // Marks newly created tabs as a peek before the list write seats them, so the snapshot watch never sees an unmarked
 // peek. Leaves already-open tabs' standing untouched.
@@ -173,14 +142,13 @@ const markPeeked = (peek: boolean | undefined, additions: readonly Conversation[
 
 // Returns the conversation the focus resolved to, for callers that need the live instance; `unpane` shows nothing, so
 // it returns nothing.
-export const reveal = ({ verb, entries, focus, caret, unsent, peek }: Reveal): Conversation | undefined => {
+export const reveal = ({ verb, entries, focus, caret, peek }: Reveal): Conversation | undefined => {
     if (verb === `unpane`) {
         closePane(focus);
         return undefined;
     }
     const additions: Conversation[] = [];
-    const kept = keptFor(entries, unsent);
-    const resolved = entries.map((entry) => resolveEntry(entry, additions, kept));
+    const resolved = entries.map((entry) => resolveEntry(entry, additions));
     // The focus as this window knows it (resolveEntry may have aliased it to an existing tab).
     const at = entries.findIndex((entry) => entry.conversationId === focus);
     const focusId = (at === -1 ? undefined : resolved[at]?.conversationId) ?? focus;
@@ -263,8 +231,6 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
             agent.sessionId === undefined
                 ? undefined
                 : { id: agent.sessionId, provider: agent.provider, harness: agent.harness, account: agent.account },
-        draft: ``,
-        attachments: [],
     };
 };
 

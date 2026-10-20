@@ -2,7 +2,7 @@ import { type ResumeNoticeReason, type SandboxNotice, sandboxNoticeOf } from "@i
 import type { TranscriptRow, WatchOutcome } from "@intentic/sandbox-contract/events/transcript";
 import { t } from "@intentic/ui/i18n";
 import type { Audience } from "../../../app/useAudience";
-import { type FailureView, failureView, legacyFailure } from "./failureView";
+import { type FailureView, failureView, legacyFailure } from "../../agent-status/failureView";
 
 /*
  * The sandbox's own notice rows in the reader's language and words. The sandbox writes each as an English sentence

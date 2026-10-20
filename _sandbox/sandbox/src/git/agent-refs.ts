@@ -113,13 +113,20 @@ export const unparkAgentRef = async (main: string, branch: string, git: GitRunne
 // (conversations/worktrees/stray-work.ts); outside `refs/heads/`, so no branch listing shows it.
 export const carriedRef = (branch: string): string => `${REFS}intentic/carried/${branch.startsWith(AGENT) ? branch.slice(AGENT.length) : branch}`;
 
+// Where a conversation's branch stood before the last catch-up that let commits of it go as landed (land/sync.ts): the
+// work as it was, kept whatever the rebase did, until the branch itself is dropped. Outside `refs/heads/` as the carry
+// marker is.
+export const droppedRef = (branch: string): string => `${REFS}intentic/dropped/${branch.startsWith(AGENT) ? branch.slice(AGENT.length) : branch}`;
+
 // Drops an agent's commits from this repo for good, used by discard and archive purge.
-// Deletes both spellings since the caller does not know which one holds it, and the carry marker with them.
+// Deletes both spellings since the caller does not know which one holds it, and the markers that hold its commits too.
 export const dropAgentRef = async (main: string, branch: string, git: GitRunner): Promise<void> => {
     await git(main, ["branch", "-D", branch]).catch(() => undefined);
     await git(main, ["update-ref", "-d", parkedRef(branch)]).catch(() => undefined);
     // allow(silent-catch): most conversations never stood elsewhere, so there is usually no marker to delete.
     await git(main, ["update-ref", "-d", carriedRef(branch)]).catch(() => undefined);
+    // allow(silent-catch): most conversations never had a landed prefix dropped, so there is usually no marker to delete.
+    await git(main, ["update-ref", "-d", droppedRef(branch)]).catch(() => undefined);
 };
 
 // Whether `ancestor` is reachable from `descendant`, via `git merge-base --is-ancestor`'s exit code; shared by both

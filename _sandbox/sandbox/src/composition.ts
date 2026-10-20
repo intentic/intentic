@@ -108,7 +108,7 @@ import { cancelFamily, familyOf } from "./agent/subagents/children.js";
 import { cancelWatchersFor } from "./agent/verification/watchers.js";
 import { createPerfTracker, type PerfTracker } from "./system/resources/perf.js";
 import { panePids } from "./terminal/terminal-session.js";
-import { version } from "./version.js";
+import { type SandboxInfo, sandboxInfoOf } from "./environment/sandbox-info.js";
 import { internalTools } from "./agent/tools/agent-tools.js";
 import { backgroundJobSessions, keptJobDirs } from "./agent/tools/jobs/background-jobs.js";
 import { conversationBusy, turnInFlight } from "./agent/run/turn/turn-liveness.js";
@@ -201,16 +201,7 @@ export interface Services
     // turn's own bearer, which opens only what that turn mounted.
     readonly turnMounts: TurnMounts;
     // This sandbox's identity for the Connections card; undefined means /info returns {} (loopback/test).
-    readonly info:
-        | {
-              readonly name: string;
-              readonly image: string;
-              readonly version: string;
-              // Release channel and rollback image, runner-set env; absent if predating channels or never swapped.
-              readonly channel?: string;
-              readonly previousImage?: string;
-          }
-        | undefined;
+    readonly info: SandboxInfo | undefined;
     // How the platform says this sandbox presents itself: the owner's name for it and its switcher logo. Neither is
     // workspace state, so an export has to ask; injected rather than imported so the bundler stays testable and a
     // headless daemon can simply not have one. Resolves undefined whenever the platform can't answer — an export
@@ -268,19 +259,6 @@ export interface Services
     // What a panel's preview hostname actually serves; the panels list only advertises a URL where it answers.
     readonly panelUpstreamOf: PanelUpstreamResolver;
 }
-
-// This sandbox's identity for the Connections card, or undefined outside a named, imaged sandbox.
-const infoOf = (config: Config): Services["info"] =>
-    config.sandbox.name !== "" && config.sandbox.image !== ""
-        ? {
-              name: config.sandbox.name,
-              image: config.sandbox.image,
-              version,
-              // Empty means not set, never a value to publish; "" would be an unclickable rollback button.
-              ...(config.sandbox.channel !== "" ? { channel: config.sandbox.channel } : {}),
-              ...(config.sandbox.previousImage !== "" ? { previousImage: config.sandbox.previousImage } : {}),
-          }
-        : undefined;
 
 // The provider areas, each built by its own directory, and what they share: the translator, OpenCode, and the headroom
 // every account's allowance is read through.
@@ -529,7 +507,7 @@ const createDaemonMembers = (
         desktopServers: desktopServersOf,
         probeAcpAgent,
         turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),
-        info: infoOf(config),
+        info: sandboxInfoOf(config),
         presentation: () => fetchPresentation(config),
         probeRunner: createProbeRunner({
             workspace,

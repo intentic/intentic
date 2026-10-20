@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AnchoredOverlay, ui, useHoverIntent } from "@intentic/ui";
+import { AnchoredOverlay, SectionHeader, ui, useHoverIntent } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
 import { useRole } from "../../client/sandbox/useRole";
@@ -138,7 +138,7 @@ const runAgain = (stamp: Stamp): void => {
         <span v-if="fold.folded > 0" class="text-[0.7em] font-medium leading-none text-subtle" aria-hidden="true">+{{ fold.folded }}</span>
         <AnchoredOverlay v-model="open" :anchor="anchor" side="top" cross="end" :restore-focus="false">
             <div class="flex w-72 max-w-[calc(100vw-2rem)] flex-col p-1 text-left" data-stamps-card @pointerenter="onCardEnter" @pointerleave="onLeave">
-                <p class="px-1.5 pb-0.5 pt-0.5 text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`agents.stamps.heading`) }}</p>
+                <SectionHeader :label="t(`agents.stamps.heading`)" density="dense" class="px-1.5 py-0.5" />
                 <div v-for="stamp in stamps" :key="stamp.kind" class="flex items-start gap-1" data-stamp-row :data-stamp-kind="stamp.kind">
                     <component
                         :is="stamp.by === undefined ? `div` : `button`"

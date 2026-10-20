@@ -135,7 +135,7 @@ pub struct Recent {
 /// A recent as Home shows it (`local_recents`): the stored entry, plus two facts read at the moment of asking and
 /// never stored, since both change behind this app's back. `exists` is whether the path is there now (a folder
 /// moved or a drive unplugged is shown as such, with the way to forget it); `sandbox` is whether the folder has a
-/// sandbox of its own in `projects.json` (project.rs).
+/// sandbox, as the machine agent's pairings say (bindings.rs).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecentView {
@@ -174,7 +174,8 @@ pub fn recent_views(
 /// How many recents are kept: what fits a menu without scrolling.
 const RECENTS: usize = 12;
 
-/// A folder of this computer that has a sandbox of its own (project.rs): opening it again reaches that sandbox.
+/// A folder of this computer that is in a sandbox, as the machine agent's pairing of it says (bindings.rs): opening it
+/// again reaches that sandbox.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -183,9 +184,12 @@ pub struct Project {
     pub dir: String,
     /// The platform's row for the sandbox, which the workspace opens at.
     pub sandbox_id: Option<String>,
-    /// The sandbox's slug on this machine.
+    /// The slug this machine's ic knows the sandbox by.
     pub slug: Option<String>,
 }
+
+/// The file earlier versions kept the folders in (2026-10-20: the agent's pairings are the one record, bindings.rs).
+const RETIRED_PROJECTS: &str = "projects.json";
 
 pub struct AppState {
     config_dir: PathBuf,
@@ -220,10 +224,13 @@ pub struct AppState {
     /// Whether a sign-in has ever completed here (`intentic://auth`, auth.rs). What earns the tray its "Open
     /// workspace" row and tells Home whether this install has an account to go back to.
     account_seen: Mutex<bool>,
-    /// Held across every read-modify-write of `recent-local.json` and `projects.json`. Each file is written whole
+    /// Held across every read-modify-write of `recent-local.json`. The file is written whole
     /// (`write_json`), but two opens finishing together each read the list, add their own entry and write it
     /// back, and without this the second write drops the first one's entry.
     lists: Mutex<()>,
+    /// The folders in a sandbox as the machine agent's pairings last said (bindings.rs), held here alone and never
+    /// written to a file: `None` until the agent has been read once since launch.
+    bindings: Mutex<Option<Vec<Project>>>,
     /// The folder a local window asked a sandbox for, waiting for the setup page's code (project.rs). In-process
     /// only: a question a quit left unanswered is asked again.
     pub pending_project: Mutex<Option<PathBuf>>,
@@ -254,6 +261,7 @@ impl AppState {
         let account_seen = read_json(&config_dir.join("account-seen.json")).unwrap_or(false);
         let home_folder = read_json(&config_dir.join("home-folder.json"));
         let roster = read_roster(&config_dir);
+        let _ = std::fs::remove_file(config_dir.join(RETIRED_PROJECTS));
         let default_home = app.path().home_dir().map_or_else(
             |_| config_dir.join("local"),
             |home| default_home_folder(&home),
@@ -273,6 +281,7 @@ impl AppState {
             last_face: Mutex::new(last_face),
             account_seen: Mutex::new(account_seen),
             lists: Mutex::new(()),
+            bindings: Mutex::new(None),
             pending_project: Mutex::new(None),
             home_folder: Mutex::new(home_folder),
             default_home,
@@ -454,32 +463,20 @@ impl AppState {
         self.config_dir.join("resume-setup.json")
     }
 
-    /* THE FOLDERS THAT HAVE A SANDBOX OF THEIR OWN. */
+    /* THE FOLDERS IN A SANDBOX: the machine agent's pairings as last read (bindings.rs). */
 
+    /// None bound until the agent has been read once since launch, which the supervisor does first (machine_sandbox.rs).
     pub fn projects(&self) -> Vec<Project> {
-        read_json(&self.config_dir.join("projects.json")).unwrap_or_default()
+        self.bindings.lock().unwrap().clone().unwrap_or_default()
     }
 
-    /// One entry per folder: a folder set up again (its sandbox removed, a new one made) replaces its entry.
-    pub fn remember_project(&self, project: Project) {
-        let _held = self.lists.lock().unwrap();
-        let mut projects = self.projects();
-        projects.retain(|held| held.path != project.path);
-        projects.push(project);
-        write_json(&self.config_dir.join("projects.json"), &projects);
-    }
-
-    /// The entries `gone` picks, taken out of `projects.json` and answered; nothing is written when it picks none.
-    pub fn forget_projects(&self, gone: impl Fn(&Project) -> bool) -> Vec<Project> {
-        let _held = self.lists.lock().unwrap();
-        let (dropped, kept): (Vec<Project>, Vec<Project>) = self
-            .projects()
-            .into_iter()
-            .partition(|project| gone(project));
-        if !dropped.is_empty() {
-            write_json(&self.config_dir.join("projects.json"), &kept);
-        }
-        dropped
+    /// What the agent said now, taken in whole; answers what was held before.
+    pub fn hear_bindings(&self, now: Vec<Project>) -> Vec<Project> {
+        self.bindings
+            .lock()
+            .unwrap()
+            .replace(now)
+            .unwrap_or_default()
     }
 
     /* THE FOLDER THE MAIN WINDOW SHOWS. */
@@ -695,6 +692,7 @@ mod tests {
                 read_json(&config_dir.join("account-seen.json")).unwrap_or(false),
             ),
             lists: Mutex::new(()),
+            bindings: Mutex::new(None),
             pending_project: Mutex::new(None),
             home_folder: Mutex::new(read_json(&config_dir.join("home-folder.json"))),
             default_home: default_home_folder(&config_dir.join("home")),
@@ -828,30 +826,28 @@ mod tests {
         assert!(!forgets_hosting(&[], Some(true), true));
     }
 
+    /// The folders in a sandbox are what the machine agent last said, held in memory alone: nothing is written for
+    /// them, so no file of this app's can outlive the agent's pairing or be lost while the agent still syncs (2026-10-20).
     #[test]
-    fn projects_whose_sandbox_is_gone_are_taken_out_and_the_rest_kept() {
+    fn the_folders_in_a_sandbox_are_what_the_agent_last_said_and_nothing_on_disk() {
         let dir = std::env::temp_dir().join(format!("intentic-projects-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("temp config dir");
         let state = state_in(&dir);
-        for (path, id) in [("/a", Some("gone")), ("/b", Some("live")), ("/c", None)] {
-            state.remember_project(Project {
-                path: path.to_string(),
-                dir: "x".to_string(),
-                sandbox_id: id.map(str::to_string),
-                slug: None,
-            });
-        }
-        assert!(state.forget_projects(|_| false).is_empty());
-        let dropped =
-            state.forget_projects(|project| project.sandbox_id.as_deref() == Some("gone"));
-        assert_eq!(dropped.len(), 1);
-        assert_eq!(dropped[0].path, "/a");
-        let left: Vec<String> = state_in(&dir)
-            .projects()
-            .into_iter()
-            .map(|project| project.path)
-            .collect();
-        assert_eq!(left, vec!["/b".to_string(), "/c".to_string()]);
+        assert_eq!(state.projects(), Vec::<Project>::new());
+        let bound = Project {
+            path: "/a".to_string(),
+            dir: "a".to_string(),
+            sandbox_id: Some("cm1".to_string()),
+            slug: None,
+        };
+        assert_eq!(
+            state.hear_bindings(vec![bound.clone()]),
+            Vec::<Project>::new()
+        );
+        assert_eq!(state.projects(), vec![bound.clone()]);
+        assert_eq!(state.hear_bindings(Vec::new()), vec![bound]);
+        assert_eq!(state.projects(), Vec::<Project>::new());
+        assert_eq!(std::fs::read_dir(&dir).expect("config dir").count(), 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

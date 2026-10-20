@@ -2,6 +2,7 @@ import { instancesOf } from "@intentic/capability-catalog";
 import type { InviteRecord } from "@intentic/api-contract";
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Tone } from "@intentic/ui";
+import { allLoaded } from "@intentic/extension-api";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { useAuth } from "../../../client/auth/useAuth";
@@ -110,7 +111,7 @@ export function useReachMap(models: () => readonly ModelSource[]) {
     // The areas procedure's own cache entry, the one Sandbox ▸ Areas reads and writes.
     const areas = useSandboxQuery({ ...rpcQuery(`areas.list`), select: (answer) => answer.areas });
     const { personas } = usePersonas();
-    const { capabilities, isLoading: capabilitiesLoading } = useCapabilities();
+    const { capabilities, loaded: capabilitiesRead } = useCapabilities();
     const { enabled: enabledExtensions } = useExtensions();
     const { inventory } = useSecretInventory();
     const { roster } = useMembers({ enabled: isOwner });
@@ -191,6 +192,8 @@ export function useReachMap(models: () => readonly ModelSource[]) {
     return {
         input,
         map: computed(() => buildReachMap(input.value)),
-        loading: computed(() => capabilitiesLoading.value),
+        // Where the reads the drawing stands on stand: its connections and its areas. Only their answer can draw "nothing
+        // connected yet"; a failure of either is said as one (the map drew an empty sandbox under failing reads).
+        drawnFrom: computed(() => allLoaded([capabilitiesRead.value, areas.loaded.value])),
     };
 }

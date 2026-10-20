@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Notice, type NoticeModel, SegmentedControl, ui } from "@intentic/ui";
+import { Notice, type NoticeModel, SectionHeader, SegmentedControl, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
@@ -105,12 +105,13 @@ const typedSentence = computed(() => {
 
 <template>
     <section class="mt-2 flex flex-col gap-2 rounded-md border border-line bg-canvas px-3 py-2.5" :aria-label="t(`capabilities.typeInto.title`)">
-        <div class="flex items-center justify-between gap-2">
-            <span class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`capabilities.typeInto.title`) }}</span>
-            <button type="button" :class="ui.iconButton({ size: `xs`, tone: `subtle` })" :aria-label="t(`ui.action.close`)" @click="emit(`close`)">
-                <Icon name="times" class="text-2xs" />
-            </button>
-        </div>
+        <SectionHeader :label="t(`capabilities.typeInto.title`)" density="dense">
+            <template #actions>
+                <button type="button" :class="ui.iconButton({ size: `xs`, tone: `subtle` })" :aria-label="t(`ui.action.close`)" @click="emit(`close`)">
+                    <Icon name="times" class="text-2xs" />
+                </button>
+            </template>
+        </SectionHeader>
 
         <!-- Nothing to type on: said, with what brings one back, rather than a picker with nothing in it. -->
         <p v-if="online.length === 0 && phase === `choose`" class="text-2xs text-muted">{{ t(`capabilities.typeInto.noneOnline`) }}</p>
@@ -121,7 +122,7 @@ const typedSentence = computed(() => {
                     v-for="keyring of online"
                     :key="keyring.machine"
                     type="button"
-                    :class="ui.chip({ on: device === keyring.machine }, `gap-1 py-1 px-2 text-2xs`)"
+                    :class="ui.chip({ on: device === keyring.machine })"
                     :aria-pressed="device === keyring.machine"
                     :disabled="working"
                     @click="device = keyring.machine"

@@ -47,6 +47,8 @@ export interface AgentStanding {
     readonly failureCode?: string | undefined;
     // The words that turn died on (AgentSummary.failure), cleared with the code when it runs again.
     readonly failure?: string | undefined;
+    // Whether those words are the sandbox's own sentence (AgentSummary.failureOwn): what a card may lead with.
+    readonly failureOwn?: boolean | undefined;
     /** When the spent allowance reopens, in epoch SECONDS (the wire's unit). Absent when nobody published one. */
     readonly limitResetsAt?: number | undefined;
     /** Whether the refused turn is held whole, so a press re-runs it rather than sending a new message after it. */

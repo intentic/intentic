@@ -39,7 +39,7 @@ export const machineOf = (record: MachineSandbox | undefined): LocalMachineSandb
 /** The folder this window shows (its face's `path`) on its way into this computer's sandbox; nothing when it is not. */
 export const folderOf = (record: MachineSandbox | undefined, path: string | undefined): LocalFolderSandbox | undefined => {
     const folder = machineFolderOf(record, path);
-    return folder === undefined ? undefined : { name: folder.name, state: folder.state, reason: folder.reason, status: folder.status };
+    return folder === undefined ? undefined : { name: folder.name, state: folder.state, reason: folder.reason, status: folder.status, heldBy: folder.heldBy };
 };
 
 /** The workspace's address for a folder's sandbox, opened on the folder (the app's project.rs `project_path`). */

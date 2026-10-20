@@ -224,7 +224,7 @@ const hasSpend = computed(() => current.value.length > 0);
             </span>
             <span class="h-4 w-px bg-line" />
             <SegmentedControl v-model="providerFilter" :options="providerOptions" size="xs" wrap />
-            <button v-if="agentFilter !== undefined" type="button" class="ui-chip max-w-full gap-1" @click="clearAgentFilter">
+            <button v-if="agentFilter !== undefined" type="button" class="ui-chip max-w-full" @click="clearAgentFilter">
                 <Icon name="sliders-h" class="shrink-0" />
                 <span class="min-w-0 break-words whitespace-normal text-left">{{ agentTitle(agentFilter) }}</span>
                 <Icon name="times" class="shrink-0" />

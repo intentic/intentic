@@ -1,4 +1,4 @@
-import { errnoCode, errorMessage, exitCodeOf, isFetchNetworkFailure, isMissing, networkCodeOf, stderrOf, undefinedIfMissing } from "./errors.js";
+import { errnoCode, errorMessage, exitCodeOf, isFetchNetworkFailure, isMissing, networkCodeOf, stderrOf, stdoutOf, undefinedIfMissing } from "./errors.js";
 
 const errno = (code: string): NodeJS.ErrnoException => Object.assign(new Error(code), { code });
 
@@ -63,6 +63,13 @@ describe(`stderrOf and exitCodeOf`, () => {
         expect(exitCodeOf(errno(`ENOENT`))).toBeUndefined();
         expect(stderrOf(new Error(`plain`))).toBeUndefined();
         expect(stderrOf(`fatal: text`)).toBeUndefined();
+    });
+
+    it(`reads the stdout a command printed before exiting non-zero, whose exit is its answer`, () => {
+        const conflicted = Object.assign(new Error(`Command failed: git merge-tree`), { code: 1, stdout: `4b825dc\0a.ts\0`, stderr: `` });
+        expect([stdoutOf(conflicted), exitCodeOf(conflicted)]).toEqual([`4b825dc\0a.ts\0`, 1]);
+        expect(stdoutOf(new Error(`plain`))).toBeUndefined();
+        expect(stdoutOf(Object.assign(new Error(`odd`), { stdout: Buffer.from(`bytes`) }))).toBeUndefined();
     });
 
     it(`does not read a DOMException's legacy error number as an exit`, () => {

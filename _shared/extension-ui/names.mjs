@@ -145,13 +145,16 @@ export const extensionUiNames = [
     "wordDiff",
 ];
 
-// Names kept only so extensions built against them still link: what to use instead, when it was deprecated, and the
-// first extension API version that may drop it. A name leaves the kit only from this list, and only in a major at or
-// past its floor; the entry stays after it goes, as the record that its going was declared.
+// Names kept only so extensions built against them still link: what to use instead, when it was deprecated, the
+// extension API version an author first reads it as deprecated in (`since`, recorded per version in extension-api's
+// surface.json as `uiKitDeprecated`), and the first version that may drop it. A name leaves the kit only from this
+// list, and only in a major at or past its floor; the entry stays after it goes, as the record that its going was
+// declared. `intentic-kit-check` (check/cli.mjs) refuses an extension importing one.
 export const extensionUiDeprecated = [
     {
         name: "errorMessage",
         use: "messageOr",
+        since: "2.31.0",
         deprecated: "2026-10-06",
         removableIn: "3.0.0",
     },
@@ -159,6 +162,7 @@ export const extensionUiDeprecated = [
         // The repository column RepoPicker replaced on 2026-10-12, removed that day with no version moving and restored.
         name: "RepoRail",
         use: "RepoPicker",
+        since: "2.31.0",
         deprecated: "2026-10-15",
         removableIn: "3.0.0",
     },
@@ -167,19 +171,60 @@ export const extensionUiDeprecated = [
         // the wrong one. <Await :of="loaded" imprint="…"> owns the reveal, the remembered look and what it is taken from.
         name: "SkeletonSnapshot",
         use: "Await",
+        since: "2.33.0",
         deprecated: "2026-10-20",
         removableIn: "3.0.0",
     },
     {
         name: "vSkeletonSource",
         use: "Await",
+        since: "2.33.0",
         deprecated: "2026-10-20",
         removableIn: "3.0.0",
     },
     {
         name: "useLoadingReveal",
         use: "Await",
+        since: "2.33.0",
         deprecated: "2026-10-20",
         removableIn: "3.0.0",
+    },
+];
+
+// What a view may no longer decide at a call site although the name it is on still links: a component's prop that was
+// removed (an older bundle passing it has it ignored, as a stray attribute) and a recipe drawn by hand where a component
+// now owns the look. `since` is the extension API version an author first reads it in (surface.json's
+// `uiKitDeprecated`); `why` is what the kit's own checks say where a call site still does it (check/kit-decisions.mjs
+// for props, check/extension.mjs for members), so the reason is written once.
+export const extensionUiRetired = [
+    {
+        name: "RowGroup.count",
+        use: "the rows themselves",
+        since: "2.34.0",
+        why: "the rows below are the tally, and a count beside a header is what a dozen views had removed one at a time",
+    },
+    {
+        name: "RowGroup.caption",
+        use: "RowNote",
+        since: "2.34.0",
+        why: "words beside a header were removed view by view as useless; a sentence a reader needs is a <RowNote> on the group's surface",
+    },
+    {
+        name: "RowGroup.flat",
+        use: "Section",
+        since: "2.34.0",
+        why: "a group draws no card on a surface (a dialog, a <Card>, another group's card, an overlay) by itself; a label over things that are not rows is a <Section>",
+    },
+    {
+        name: "NavRail.stickyHeadings",
+        use: "nothing: a rail's headers scroll with it",
+        since: "2.34.0",
+        why: "a pinned header needs a fill to scroll under, and that band is the dark box the documentation rail was fixed for three times",
+    },
+    {
+        name: "ui.sectionLabel",
+        use: "Section, or SectionHeader for a header alone",
+        since: "2.34.0",
+        why: "a header drawn in the section label's look by hand leaves its size, spacing and what sits beside it to the view, where they drift; <Section :label> (or <RowGroup :label> over rows) draws the kit's one header",
     },
 ];

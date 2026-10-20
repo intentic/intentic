@@ -184,9 +184,12 @@ flowchart LR
   Windows PC without Developer Mode refuses every link, and Mutagen would try again on every cycle, so its sessions
   use `--symlink-mode ignore`. Turning Developer Mode on brings them back at the agent's next start.
 - **Which computer this is** ([`machine-id.ts`](src/machine-id.ts)): a `machineId` minted once at install and kept
-  in `~/.intentic/machine/machine-id`, sent in the connect-time facts, the sync report and the sync enrollment. The
-  Windows side hands its own to the agent it starts in each distro, so every OS install of one PC answers with one id;
-  a sandbox joins enrollments, sync enrollments and device rows on it, never on a hostname.
+  in `~/.intentic/machine/machine-id`, sent in the connect-time facts, the sync report, the sync enrollment and the
+  device enrollment (`device setup` sends it with the environment when it redeems the pairing). The Windows side hands
+  its own to the agent it starts in each distro, so every OS install of one PC answers with one id; a sandbox joins
+  enrollments, sync enrollments and device rows on it, never on a hostname. (2026-10-20: `device setup` used to redeem
+  with no body, so the sandbox learned the id only once the agent connected, and the PC showed as two machine cards
+  until then.)
 - The features a device advertises (`set-shape`, `reshape-later`, `rollback-to`, `background-prepare`) are read off
   the `ic` under it, from that `ic`'s own help (`ic sandbox shape --set` for the first two, `ic sandbox rollback --to`
   for the third, `ic sandbox prepare --auto` for the fourth), rather than listed beside the code. The agent's own two,
@@ -407,7 +410,10 @@ object, `{ "ok": false, "error": "<sentence>" }` and exit code 1 on failure, as 
   compare folders (2026-10-05: the desktop app finds its folder in `status --json` by the path it passed, and on Fedora
   Atomic `/home` is itself a link to `/var/home`, so a link-resolved path would never be found).
 - It returns once the pairing is recorded and the resident agent is running. The agent creates the session on its next
-  pass, and `status --json` lists the folder with its `localDir`, `remoteDir`, `deliver` and `mutagenStatus`.
+  pass, and `status --json` lists the folder with its `localDir`, `remoteDir`, `slug`, `deliver`, `mutagenStatus` and,
+  while anything holds it still, `heldBy`. _(2026-10-20)_ That pairing is the desktop app's only record of which folder
+  is in which sandbox: it reads it back here, and starts or forgets the sandbox by `slug` (the one this machine's ic
+  listed it under, else the first label of its address).
   `mutagenStatus` is absent until the session exists, then Mutagen's own words: `connecting-beta`, `scanning`,
   `reconciling`, `staging-beta`, `transitioning`, `saving` while the first copy runs, and `watching` once a whole cycle
   has finished. Read the first `watching` as "first copy done": later edits pass through the same words again.
@@ -565,7 +571,12 @@ whose it is.
   ([`sync/mutagen-move.ts`](src/sync/mutagen-move.ts)): each of this agent's sync sessions there is carried, not made
   again. It is paused, its state files (`sessions/<id>` and `archives/<id>`, the last state both sides agreed on) are
   copied into the new directory, it is terminated in the old one, and this agent's daemon, started again, loads it. A
-  session that was paused there is the owner's pause (`ownerPausedAt`), and the watcher's next pass resumes the rest. Made again from nothing, a two-way session would bring back what one side deleted while it
+  session that was paused there is the owner's pause (`ownerPausedAt`), and the watcher's next pass resumes the rest.
+  _(2026-10-20)_ Which sessions were paused is written down at the move's first look (`mutagen-move-paused.json`, gone
+  once the move is recorded done) and declared before the move pauses anything; a later try reads that record, not a
+  listing in which the move's own pauses look like the owner's. Declared after the terminate instead, a move cut short
+  in between left nothing saying whose the pauses were, and its retry declared every session the owner's, so folders
+  nobody paused stayed paused. Made again from nothing, a two-way session would bring back what one side deleted while it
   could not sync and read a one-sided edit as a conflict; nothing could be flushed first, since the move runs before the
   transport is up. Forwards are terminated and made again. A session that cannot be carried is terminated and made again
   by the watcher, paused if it was, since its pause was declared the same way. The old daemon is stopped only
@@ -645,9 +656,14 @@ whose it is.
   beside the update ones (`intentic-machine updates --backups off`, `--tidy off`).
 - **File sync holds still while its sandbox is swapped here** ([`sync/holds.ts`](src/sync/holds.ts) `holdsSync`). A
   pairing's local slug is the first label of its sandbox's public hostname (what ic names a sandbox with one) or the
-  id in it (what ic names one from its connect token), so the mapping is exact. Its sync holds still (`swapSince`)
-  through the cutover and the first quarter hour of probation, and past that while the sandbox does not answer. Only
-  this environment's records count: a distro syncing a sandbox the Windows side swaps is not held.
+  id in it (what ic names one from its connect token), so the mapping is exact. Its sync holds still through the
+  cutover and the first quarter hour after the cutover began, and past that while ic still watches the swap and the
+  sandbox does not answer. The quarter hour is measured from the pairing's own `swapSince`, the cutover's start as ic
+  recorded it, so it lasts after ic lets its record of the swap go. (2026-10-20: a swap with no probation, such as the dev
+  loop, leaves no record seconds after its cutover, and a hold read off the record alone let go after about thirty
+  seconds. Giving ic's record a longer life was rejected: the hold is the agent's fact, and ic's record answers whether a
+  swap is going on.) A later swap of the same sandbox starts the quarter hour again. Only this environment's records
+  count: a distro syncing a sandbox the Windows side swaps is not held.
 - **File sync runs or holds still by one rule** (2026-10-20, [`sync/holds.ts`](src/sync/holds.ts)). Seven facts on a
   pairing hold its sync still: the owner's `sync pause` (`ownerPausedAt`), the sandbox said to be gone (`goneSince`),
   its container away or in ic's trash (`containerAway`), a swap (`swapSince`), an hour without an answer

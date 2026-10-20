@@ -9,7 +9,7 @@ import type {
     PrivacyShieldPolicy,
     PrivacyShieldStatus,
 } from "@intentic/sandbox-contract/schemas/privacy";
-import { type PrivacyBypass, type PrivacyRoute, type ShieldVerdict, shieldVerdict } from "@intentic/sandbox-contract/schemas/privacy-egress";
+import { type PrivacyBypass, type PrivacyRefusal, type PrivacyRoute, type ShieldVerdict, shieldVerdict } from "@intentic/sandbox-contract/schemas/privacy-egress";
 import { type ClassCounts, createMasker, createMaskMemo, type EntityRecognizer, type Masker } from "./masker.js";
 import type { PrivacyImageArchive } from "./privacy-images.js";
 import { type EgressNote, noteEgress, type PrivacyLedger } from "./privacy-ledger.js";
@@ -94,7 +94,7 @@ export interface PrivacyShield {
     readonly decide: (egress: EgressAsk) => Promise<ShieldDecision>;
     // Why bytes leaving by a route may not go, in the words a turn ends with, or nothing: they may (masked, watched or as
     // they are). A policy that can't be read refuses, since the shield may be on and what leaves cannot be taken back.
-    readonly refusal: (egress: EgressAsk) => Promise<string | undefined>;
+    readonly refusal: (egress: EgressAsk) => Promise<PrivacyRefusal | undefined>;
     // A sealed request, read for what it holds rather than refused for its runtime: sent as it is when the gateway
     // already stands in front of that runtime or the verdict passes it, masked here, with the restore that reads tokens in
     // the answer back, when the verdict masks. Never refuses: the whole request is in hand. Throws when the policy can't
@@ -351,9 +351,9 @@ export const createPrivacyShield = (deps: PrivacyShieldDeps): PrivacyShield => {
                     return undefined;
                 }
                 const label = privacyProviders(await deps.capabilities()).find((entry) => entry.id === egress.provider)?.label ?? egress.provider;
-                return refusalSentence(verdict.route, label, egress.conversationId !== undefined);
+                return { sentence: refusalSentence(verdict.route, label, egress.conversationId !== undefined), route: verdict.route };
             } catch (error) {
-                return `The privacy shield's policy could not be read, so nothing was sent. ${errorMessage(error)}`;
+                return { sentence: `The privacy shield's policy could not be read, so nothing was sent. ${errorMessage(error)}` };
             }
         },
         // The gateway reads this runtime's wire as it reads a turn's, so reading the prompt here as well would log it twice.

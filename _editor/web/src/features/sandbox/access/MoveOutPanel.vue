@@ -24,8 +24,7 @@ import { workspaceRepoOf } from "../overview/workspaceRepo";
 import { PUBLISH_ANCHOR } from "./publishAnchor";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
-import WaitProgress from "../../../components/WaitProgress.vue";
-import { useWaitClock } from "../../../components/useWaitClock";
+import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
 
 // Body of <ExportCard>: everything that leaves this sandbox, at three fidelities (published workspace,
 // sandbox.toml document, bundle), in that order since publishing unlocks what a definition can carry and comparing
@@ -45,7 +44,7 @@ const publishing = publishOp.busy;
 const publishError = publishOp.failure;
 // How long the push has run, under its row: a whole workspace takes from seconds to minutes, and the panel opened again
 // mid-push has no confirm step left to explain the held button.
-const publishWait = useWaitClock(() => (publishing.value ? publishOp.operation.value?.startedAt : undefined));
+const publishWait = publishOp.meter;
 
 // Read up front, not behind a button: publish status decides if a downloaded definition carries real content.
 const published = computed(() => (workspace.value?.remote === undefined ? undefined : workspaceRepoOf(workspace.value.remote)));
@@ -242,9 +241,9 @@ const compare = async (event: Event): Promise<void> => {
                 </template>
                 <!-- Shown only at the confirm moment, not as standing prose; once pressed, how long the push has run. -->
                 <template v-if="confirmingPublish || publishWait" #below>
-                    <WaitProgress
+                    <ProgressMeter
                         v-if="publishWait"
-                        :wait="publishWait"
+                        :progress="publishWait"
                         :what="t(`sandbox.moveOutPanel.publishingNote`)"
                         :details="publishOp.lines.value"
                     />

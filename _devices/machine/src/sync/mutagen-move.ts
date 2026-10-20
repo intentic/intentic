@@ -2,9 +2,11 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { readTextIfExists } from "@intentic/base/fs";
+import { readTextIfExists, writeFileAtomic } from "@intentic/base/fs";
 import { parseJsonOr } from "@intentic/base/json";
 import { clearWindowsRunValue, homeDir, type Log } from "@intentic/local-agent";
+import { z } from "zod";
+import { baseDir } from "../config.js";
 import { readRegistryValue } from "../windows-registry.js";
 import { sessionOwner } from "./environment.js";
 import { runProcessSync } from "./exec.js";
@@ -111,6 +113,9 @@ export interface MoveSeams {
     readonly ownSessions: (names: readonly string[]) => readonly string[] | undefined;
     // Copies one session's state into this agent's own directory: true once it is there whole.
     readonly carry: (identifier: string) => Promise<boolean>;
+    // Which sessions were paused BEFORE this move touched anything: these names, written down the first time a move
+    // looks, and whatever was written then on every later try (`firstSighting`).
+    readonly pausedBefore: (names: readonly string[]) => Promise<readonly string[]>;
     // Records the owner's pause on the pairings of these sessions, paused in the old directory, and says the pauses from
     // before holds are taken (holds.ts), so the watcher resumes only what was running.
     readonly declarePaused: (names: readonly string[]) => Promise<void>;
@@ -210,12 +215,18 @@ const loadCarried = async (seams: MoveSeams, carried: readonly MovingSession[]):
     seams.startOwn();
 };
 
+// THE OWNER'S PAUSES ARE WRITTEN DOWN BEFORE THE MOVE PAUSES ANYTHING (2026-10-20). They were declared after the old
+// sessions ended, off the listing taken as the move began: a move cut short between its own pause and that declaration
+// (a quit, a crash, a terminate the old daemon refused) left nothing saying which pauses were the owner's, and the next
+// try listed every session paused, the move's own pauses included, and declared them all the owner's, so sync stayed
+// paused for good on folders nobody paused. Now the first look's paused set is kept on disk before anything changes and
+// every later try reads that one, and the declaration lands before the first pause.
 export const moveSessions = async (seams: MoveSeams, plan: MovePlan): Promise<Moved> => {
+    await seams.declarePaused(await seams.pausedBefore(plan.sync.filter((session) => session.paused).map((session) => session.name)));
     const carried = await carrySessions(seams, plan);
     const ended =
         (plan.sync.length === 0 || seams.shared(["sync", "terminate", ...plan.sync.map((session) => session.target)]).ok) &&
         (plan.terminateForwards.length === 0 || seams.shared(["forward", "terminate", ...plan.terminateForwards]).ok);
-    await seams.declarePaused(plan.sync.filter((session) => session.paused).map((session) => session.name));
     await loadCarried(seams, carried);
     return { carried, remade: plan.sync.filter((session) => !carried.includes(session)), ended };
 };
@@ -265,6 +276,23 @@ export const carryState = async (from: string, to: string, identifier: string): 
     }
 };
 
+// Where a move keeps the sessions it found paused at its first look, until it is recorded done (mutagen-env.ts).
+const pausedBeforePath = join(baseDir, "mutagen-move-paused.json");
+
+const SightingSchema = z.array(z.string());
+
+// The names written at `path` by the first try, or `names` written there now when there is no readable record yet. Kept
+// whole or not at all (an atomic write), so a try cut short mid-write leaves the next one to look afresh, which is
+// still before anything was paused.
+export const firstSighting = async (path: string, names: readonly string[]): Promise<readonly string[]> => {
+    const kept = SightingSchema.safeParse(parseJsonOr((await readTextIfExists(path)) ?? "", undefined));
+    if (kept.success) {
+        return kept.data;
+    }
+    await writeFileAtomic(path, `${JSON.stringify(names)}\n`);
+    return names;
+};
+
 const realSeams = (mutagen: string, from: string): MoveSeams => ({
     shared: (args, autostart = false) => {
         const ran = runProcessSync(mutagen, args, { timeoutMs: MUTAGEN_CALL_TIMEOUT_MS, env: sharedEnv(autostart) });
@@ -274,6 +302,7 @@ const realSeams = (mutagen: string, from: string): MoveSeams => ({
     startOwn: () => startMutagenDaemon(mutagen),
     ownSessions: (names) => existingSyncSessions(mutagen, names),
     carry: async (identifier) => await carryState(from, mutagenDataDir, identifier),
+    pausedBefore: async (names) => await firstSighting(pausedBeforePath, names),
     declarePaused: async (names) => {
         const now = Date.now();
         const owned = (await readState()).pairings.filter((pairing) => !syncHeld(pairing, now) && syncSessionNames(pairing).some((name) => names.includes(name)));
@@ -352,4 +381,5 @@ export const moveOffSharedMutagen = async (mutagen: string, log: Log, seams?: Mo
         );
     }
     await recordMove();
+    await rm(pausedBeforePath, { force: true });
 };
