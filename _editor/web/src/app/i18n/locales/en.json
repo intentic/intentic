@@ -3186,7 +3186,11 @@
             "to": "To {payTo}",
             "waitingToFinishSetup": "Waiting for you to finish setup…",
             "waitsReadyToLand": "(it waits as \"Ready to land\" until you land it)",
-            "watchInstall": "Watch the install"
+            "watchInstall": "Watch the install",
+            "waitingToSend": "Waiting to send",
+            "waitingToSendHint": "Sends when the sandbox answers",
+            "sendNow": "Send now",
+            "cancelSend": "Cancel"
         },
         "chatModelPicker": {
             "autoArmed": "Your first message picks what this chat runs on; change it anytime.",
@@ -4249,7 +4253,6 @@
         },
         "turnClient": {
             "chatFailed": "Chat failed.",
-            "messageBack": "Your message is back in the composer, send it again to deliver it.",
             "queueChangedElsewhere": "That waiting message was changed in another window since you saw it: look again before changing it.",
             "queueGone": "That message is no longer waiting: it has gone out, or somebody took it back.",
             "sandboxNoAnswer": "The sandbox did not answer."

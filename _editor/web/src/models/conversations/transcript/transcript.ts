@@ -13,6 +13,13 @@ export interface ChatMessage extends TranscriptRow {
     readonly id: number;
     // True for a row this window drew, not the daemon's record; recordedRows excludes it, replay never restores it.
     readonly local?: true;
+    // Where this row sits in the daemon's record, for a row read from it: the last such row is where this window's next
+    // read of the record carries on from (recordCursor), and the first is where paging back starts. Absent on a live
+    // run's rows until the record holds them, and on rows this window drew.
+    readonly at?: number;
+    // Words this window could not hand to the sandbox yet, waiting in its outbox (sendOutbox.ts) under `messageId`: drawn
+    // where they were sent, sent again until the sandbox answers, and never counted as the record's.
+    readonly unsent?: true;
 }
 
 /* Older retries recorded the restored checklist even when the provider refused before doing any work. */

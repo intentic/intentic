@@ -17,6 +17,7 @@ import { areasOf } from "../../auth/principal.js";
 import { operatorHere } from "../../auth/operator.js";
 import { speakerOf, spokenBy } from "../../seams/turn-speaker.js";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
+import { runToAttach } from "./next-run.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import { refuseUnlessReachable } from "../../personas/persona-reach.js";
 import { opt } from "../../opt.js";
@@ -171,7 +172,7 @@ export const createAgentRoutes = (services: Services) => {
         // Renders the run: its head, then every change as it lands, `end` when it settles.
         attach: i.attach.handler(async function* ({ input, context, signal }) {
             own(context, input.conversationId);
-            const run = turnRunOf(services.conversations, input.conversationId);
+            const run = await runToAttach(services, input.conversationId, input.after, signal);
             if (run === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no live or recent turn for that conversation" });
             }

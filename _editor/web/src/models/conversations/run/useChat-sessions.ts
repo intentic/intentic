@@ -8,9 +8,10 @@ import { useDevice } from "@intentic/ui";
 import { watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { whenIdle } from "../../../lib/whenIdle";
-import { agentTranscript, type AgentTranscript, freshAgentTranscript } from "../transcript/agentTranscript";
+import { agentTranscript, type AgentTranscript, freshAgentTranscript, transcriptSince } from "../transcript/agentTranscript";
+import type { RecordCursor } from "../transcript/transcriptState";
+import { storedOutbox, storeOutbox } from "../session/sendOutbox";
 import type { Conversation } from "../session/conversation";
-import type { PickUp } from "../endings/pickUp";
 import { activeId, conversations, scopedSandboxId, setConversations } from "../tabs/useChat-tabs";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -87,23 +88,37 @@ const readFailed = (conversation: Conversation, reason?: string): undefined => {
 // Tabs whose next transcript read skips the cache, which would hand back the read that hung (retryHydrate).
 const askFresh = new WeakSet<Conversation>();
 
-// Cached transcript read shared across a card being warmed and one just opened, archived agents included. A
-// failure surfaces on the conversation and returns undefined so the caller retries; `gone` passes through. Only the
-// tab's newest pass (`current`) may say it failed: a read a retry replaced while it hung would otherwise mark a
-// transcript the newer one already painted as unreadable, and nothing would clear it.
-const fetchAgentTranscript = async (conversation: Conversation, current: () => boolean): Promise<AgentTranscript | undefined> => {
+// One read of the conversation's record. With a cursor (recordCursor: where this window's copy of the record ends), only
+// what the record gained since, never cached, since only this window holds that cursor. Without one, the cached opening
+// page shared across a card being warmed and one just opened, archived agents included. A failure surfaces on the
+// conversation and returns undefined so the caller retries; `gone` passes through. Only the tab's newest pass (`current`)
+// may say it failed: a read a retry replaced while it hung would otherwise mark a transcript the newer one already
+// painted as unreadable, and nothing would clear it.
+const fetchAgentTranscript = async (conversation: Conversation, current: () => boolean, cursor: RecordCursor | undefined): Promise<AgentTranscript | undefined> => {
     const fresh = askFresh.has(conversation);
     askFresh.delete(conversation);
+    const { conversationId } = conversation;
     try {
-        return await (fresh ? freshAgentTranscript : agentTranscript)(conversation.conversationId, conversation.box.value);
+        if (cursor !== undefined) {
+            return await transcriptSince(conversationId, cursor, conversation.box.value);
+        }
+        return await (fresh ? freshAgentTranscript : agentTranscript)(conversationId, conversation.box.value);
     } catch (error) {
         return current() ? readFailed(conversation, messageOr(error, noAnswer())) : undefined;
     }
 };
 
-// Brings a tab with no visible transcript up to date: attaches to a running turn, or replays the stored
-// session. False means the round-trip failed; the caller retries (retryLater). `current` says whether this pass is still
-// the tab's newest, the only one whose ending may move its loading mark.
+/* ONE WAY A CONVERSATION CATCHES UP WITH ITS SANDBOX: read the record from where this window's copy of it ends, then
+   follow the run that is live. Every reason to look again (opening the chat, the sandbox coming back, a page waking, the
+   roster saying a turn started or settled, a run this window followed ending) asks for this same pass; passes never
+   overlap, and one asked for while another runs is run once more after it (hydrateOnce).
+
+   Where the rows name themselves (TranscriptRow.rowId), the read is a cursor's: only what the record gained, added where
+   it belongs, so a live run's rows stand and the read can come first, and the sandbox says on the same answer whether
+   a run is live (`live`), so an attach is made only to follow one. A rewind elsewhere answers with the whole latest page
+   instead. A sandbox from before says none of that; for it the pass is what it always was: the record read whole, and
+   a run looked for by attaching. False means the round-trip failed; the caller retries (retryLater). `current` says
+   whether this pass is still the tab's newest, the only one whose ending may move its loading mark. */
 const hydrate = async (conversation: Conversation, current: () => boolean): Promise<boolean> => {
     // Must run before attaching, or the live turn paints over an empty transcript and clobbers the mirror.
     await conversation.transcript.paintCached();
@@ -117,19 +132,24 @@ const hydrate = async (conversation: Conversation, current: () => boolean): Prom
     conversation.transcript.loading.value = seeded;
     let hydrated = false;
     try {
-        // A failed seed still lets the attach run; the failure rides the return value so the caller retries.
-        const seededOk = seeded ? await replayStoredSession(conversation, current) : true;
+        if (seeded || conversation.transcript.cursor() !== undefined) {
+            // The record first, then the run: a cursor's read never touches a live run's rows, and with nothing painted
+            // the run's head would otherwise land on an empty transcript.
+            const read = await replayStoredSession(conversation, current);
+            const live = read.told ? await followLive(conversation, read.live) : await conversation.turn.reattach();
+            if (live === undefined) {
+                return attachUnasked(conversation, current);
+            }
+            hydrated = read.answered;
+            return hydrated;
+        }
+        // A mirror painted with no cursor (a sandbox from before row ids): the run first, since reading the record whole
+        // can only redraw what a live run has not finished, and with nothing running, the record whole.
         const live = await conversation.turn.reattach();
         if (live === undefined) {
-            // The daemon was never asked whether a turn runs, so this is not hydrated whatever the record said: a first
-            // turn still running has no record yet, and reading this as "nothing running" drew an empty chat over it.
-            if (current() && conversation.transcript.refresh.value?.kind !== `failed`) {
-                readFailed(conversation);
-            }
-            return false;
+            return attachUnasked(conversation, current);
         }
-        // With nothing running, reconcile the mirror against the daemon unless seeding just did.
-        hydrated = live || seeded ? seededOk : await replayStoredSession(conversation, current);
+        hydrated = live ? true : (await replayStoredSession(conversation, current)).answered;
         return hydrated;
     } finally {
         // Nothing painted and another try on its way is still loading, not the empty invitation to start a chat.
@@ -137,6 +157,20 @@ const hydrate = async (conversation: Conversation, current: () => boolean): Prom
             conversation.transcript.loading.value = !hydrated && conversation.transcript.messages.value.length === 0 && retryComing(conversation);
         }
     }
+};
+
+// The run a read said is live, followed; nothing live (or a stream already following) is nothing to attach to.
+const followLive = async (conversation: Conversation, live: string | undefined): Promise<boolean | undefined> =>
+    live === undefined || conversation.turn.streaming.value ? false : conversation.turn.attachLive(live);
+
+// An attach that never reached the daemon: whether a turn runs was never asked, so this is not hydrated whatever the
+// record said (a first turn still running has no record yet, and reading this as "nothing running" drew an empty chat
+// over it). Said beside the transcript unless a read already said so. False, for the caller to retry.
+const attachUnasked = (conversation: Conversation, current: () => boolean): false => {
+    if (current() && conversation.transcript.refresh.value?.kind !== `failed`) {
+        readFailed(conversation);
+    }
+    return false;
 };
 
 // The rows of the tab's own SDK session, read from that separate store: `none` without one, undefined when the read
@@ -153,45 +187,96 @@ const sessionRows = async (conversation: Conversation, current: () => boolean): 
     }
 };
 
-// Redraws a conversation from the daemon's own record, the only copy surviving a device with no mirror. False
-// means the read failed, not that there's nothing to show. Asked for every provider now. A pass no longer the tab's
-// newest (`current`) never says the read failed; any answer still paints, since the sandbox answered.
-const replayStoredSession = async (conversation: Conversation, current: () => boolean): Promise<boolean> => {
+// What one read of the record said: whether the sandbox answered at all, and, where it says so (`told`, a sandbox that
+// reads forward), the run live in the conversation now.
+interface RecordRead {
+    readonly answered: boolean;
+    readonly told: boolean;
+    readonly live?: string;
+}
+const UNANSWERED: RecordRead = { answered: false, told: false };
+const answeredWith = (transcript: AgentTranscript | undefined): RecordRead => {
+    if (transcript === undefined || transcript === `gone` || transcript.through === undefined) {
+        return { answered: true, told: false };
+    }
+    return transcript.live === undefined ? { answered: true, told: true } : { answered: true, told: true, live: transcript.live };
+};
+
+// What a registered conversation's record said to one read of it: unanswered; the conversation gone; what the record
+// gained since this window's cursor, already merged in; or a page to redraw the transcript from.
+type RecordAnswer =
+    | { readonly kind: `unanswered` }
+    | { readonly kind: `gone` }
+    | { readonly kind: `merged`; readonly read: RecordRead }
+    | { readonly kind: `page`; readonly transcript: Exclude<AgentTranscript, `gone`> };
+
+// Reads the record from this window's cursor where it has one, else its latest page; `whole` reads the latest page
+// whatever the cursor says. A forward read that carried on is merged here, whatever runs: it only adds what the record
+// gained. A row the cursor named that this window no longer holds (a rewind here while the read was out) is mended by
+// reading the record whole.
+const readRecord = async (conversation: Conversation, current: () => boolean, whole: boolean): Promise<RecordAnswer> => {
+    const cursor = whole ? undefined : conversation.transcript.cursor();
+    const transcript = await fetchAgentTranscript(conversation, current, cursor);
+    if (transcript === undefined) {
+        return { kind: `unanswered` };
+    }
+    if (transcript === `gone`) {
+        // A named 404 means the daemon dropped this id; an archive or lost stream don't. Unlatched, it's an
+        // ordinary draft: empty, the sweep takes it; with a transcript, it stays open and re-registers on send.
+        conversation.registered.value = false;
+        setConversations(conversations.value, activeId.value, `unlatch-registered`);
+        return { kind: `gone` };
+    }
+    // Session as the daemon actually has it; the tab's own picks would drift the moment account/provider/harness
+    // switches mid-chat. No session in the record leaves the tab's existing ref alone.
+    if (transcript.session !== undefined) {
+        conversation.selection.apply({ kind: `bindSession`, session: transcript.session });
+    }
+    if (cursor === undefined || transcript.continuous !== true) {
+        return { kind: `page`, transcript };
+    }
+    conversation.transcript.refresh.value = undefined;
+    if (!conversation.transcript.mergeRecorded(transcript.messages, cursor)) {
+        return readRecord(conversation, current, true);
+    }
+    conversation.failures.adoptEnding(transcript.ending);
+    return { kind: `merged`, read: answeredWith(transcript) };
+};
+
+// Brings the transcript level with the daemon's own record, the only copy surviving a device with no mirror: what the
+// record gained since this window's cursor, added, or its latest page, redrawn. Unanswered means the read failed, not
+// that there's nothing to show. Asked for every provider now. A pass no longer the tab's newest (`current`) never says
+// the read failed; any answer still paints, since the sandbox answered.
+const replayStoredSession = async (conversation: Conversation, current: () => boolean): Promise<RecordRead> => {
     // Fleet conversations resolve by identity, not session id; adopt whatever session supplied it.
     let restored: TranscriptRow[] | undefined;
     // Position of these rows in the daemon's record; absent for the SDK-session fallback, which has none.
     let page: { readonly from: number; readonly more: boolean } | undefined;
-    // How the last turn ended; applied once the transcript below is in place (see TurnFailures.adoptEnding).
-    let ending: PickUp | undefined;
+    // The page read, for what it says beside its rows: how the last turn ended (applied once the transcript below is in
+    // place, see TurnFailures.adoptEnding), and the run live now.
+    let transcript: Exclude<AgentTranscript, `gone`> | undefined;
     if (conversation.registered.value) {
-        const transcript = await fetchAgentTranscript(conversation, current);
-        if (transcript === undefined) {
-            return false;
+        const answer = await readRecord(conversation, current, false);
+        if (answer.kind === `unanswered`) {
+            return UNANSWERED;
         }
-        if (transcript === `gone`) {
-            // A named 404 means the daemon dropped this id; an archive or lost stream don't. Unlatched, it's an
-            // ordinary draft: empty, the sweep takes it; with a transcript, it stays open and re-registers on send.
-            conversation.registered.value = false;
-            setConversations(conversations.value, activeId.value, `unlatch-registered`);
-        } else {
+        if (answer.kind === `merged`) {
+            return answer.read;
+        }
+        if (answer.kind === `page`) {
+            transcript = answer.transcript;
             restored = transcript.messages;
             page = { from: transcript.from, more: transcript.more };
-            ending = transcript.ending;
-            // Session as the daemon actually has it; the tab's own picks would drift the moment
-            // account/provider/harness switches mid-chat. No session in the record leaves the tab's existing ref alone.
-            if (transcript.session !== undefined) {
-                conversation.selection.apply({ kind: `bindSession`, session: transcript.session });
-            }
         }
     }
     // Not an else: a tab that lost its agent may still have an SDK session readable in that separate store.
     if (restored === undefined) {
         const fallback = await sessionRows(conversation, current);
         if (fallback === `none`) {
-            return true;
+            return answeredWith(transcript);
         }
         if (fallback === undefined) {
-            return false;
+            return UNANSWERED;
         }
         restored = fallback;
     }
@@ -204,8 +289,8 @@ const replayStoredSession = async (conversation: Conversation, current: () => bo
     }
     // Applied last, over a painted transcript rather than the blank interim pane. Handed the verdict, not gated
     // on it: adoptEnding itself refuses a live turn, an empty transcript, or an already-armed pick-up.
-    conversation.failures.adoptEnding(ending);
-    return true;
+    conversation.failures.adoptEnding(transcript?.ending);
+    return answeredWith(transcript);
 };
 
 // The pass in flight, cleared once it ends either way (unlike `hydrating`, done for good), so it can be waited on.
@@ -214,10 +299,19 @@ const hydrateInFlight = new WeakMap<Conversation, Promise<void>>();
 // Each tab's newest pass, by number: a retry may replace a pass while it hangs, and only the newest speaks for the tab.
 const passes = new WeakMap<Conversation, number>();
 
+// Tabs asked to catch up again while a pass was in flight: that pass may have read the record before what was asked
+// about happened, so one more runs once it ends, however many asks came meanwhile.
+const askedAgain = new WeakSet<Conversation>();
+
 // Hydrates a tab once, holding the in-flight mark while the daemon answers. Exported for the pane's fleet
-// watcher, which calls it whenever the fleet reports a change to a conversation this tab didn't stream itself.
+// watcher, which calls it whenever the fleet reports a change to a conversation this tab didn't stream itself. An ask
+// while a pass is in flight is kept for after it where the tab reads the record by cursor, which costs only what changed;
+// a tab reading it whole lets the pass in flight stand for it, as it always has.
 export const hydrateOnce = (conversation: Conversation): void => {
     if (hydrateInFlight.has(conversation)) {
+        if (conversation.transcript.cursor() !== undefined) {
+            askedAgain.add(conversation);
+        }
         return;
     }
     hydrating.add(conversation);
@@ -240,6 +334,10 @@ export const hydrateOnce = (conversation: Conversation): void => {
         }
         if (hydrated) {
             answered(conversation);
+            // The sandbox answered: whatever waited to go out goes now.
+            if (conversation.turn.outbox.entries.value.length > 0) {
+                void conversation.turn.outbox.flush();
+            }
             return;
         }
         hydrating.delete(conversation);
@@ -248,6 +346,9 @@ export const hydrateOnce = (conversation: Conversation): void => {
         // Only its own mark: a retry may have replaced it with a newer pass while this one hung.
         if (hydrateInFlight.get(conversation) === pass) {
             hydrateInFlight.delete(conversation);
+            if (askedAgain.delete(conversation) && conversations.value.includes(conversation)) {
+                hydrateOnce(conversation);
+            }
         }
     });
     hydrateInFlight.set(conversation, pass);
@@ -372,13 +473,20 @@ const inFrontFirst = <T>(each: (conversation: Conversation) => T): void => {
 
 // Paints every restored tab from the local mirror immediately, without waiting on reachability: a reopened
 // chat is readable before any round-trip (see transcriptCache). At load, and each time a sandbox's tabs come back.
+// The words each tab was still waiting to send when the page last closed come back with it, drawn after its mirror
+// (a bubble drawn first would read as a painted transcript, and the mirror would never paint).
+const outboxAdopted = new WeakSet<Conversation>();
 watch(
     scopedSandboxId,
-    () => {
+    (sandboxId) => {
         inFrontFirst((conversation) => {
             void conversation.transcript.paintCached().then((didPaint) => {
                 if (didPaint) {
                     painted.add(conversation);
+                }
+                if (sandboxId !== undefined && !outboxAdopted.has(conversation)) {
+                    outboxAdopted.add(conversation);
+                    conversation.turn.outbox.adopt(storedOutbox(sandboxId, conversation.conversationId));
                 }
             });
         });
@@ -386,17 +494,73 @@ watch(
     { immediate: true },
 );
 
+// The sandbox reachable again, or tabs opened: each tab not yet caught up does so, and a tab reading the record by cursor
+// does so on every return, since what it missed while away costs only its own rows to read. A tab reading it whole is
+// left to its roster's changes rather than reading every chat whole on each reconnect.
 watch([reachable, conversations], ([isReachable]) => {
     if (!isReachable) {
         return;
     }
+    // Words that waited for the sandbox go now, whatever else each tab does.
+    for (const conversation of conversations.value) {
+        if (conversation.turn.outbox.entries.value.length > 0) {
+            void conversation.turn.outbox.flush();
+        }
+    }
     inFrontFirst((conversation) => {
-        if ((conversation.transcript.messages.value.length > 0 && !painted.has(conversation)) || conversation.turn.streaming.value || hydrating.has(conversation)) {
+        const caughtUp = (conversation.transcript.messages.value.length > 0 && !painted.has(conversation)) || hydrating.has(conversation);
+        if (conversation.turn.streaming.value || (caughtUp && conversation.transcript.cursor() === undefined)) {
             return;
         }
         hydrateOnce(conversation);
     });
 });
+
+// Two watches per tab, let go with the tab. A run this window followed has ended: the record now holds it (its rows'
+// places, the rewind points on its prompt) and says whatever the conversation does next, one read away; only for a tab
+// reading by cursor, since one reading whole learns it from its roster, as it always did. And the words a tab waits to
+// send are saved as they change, beside its tab, so a reload or an update does not lose them.
+const runEnds = new Map<Conversation, () => void>();
+const watchTab = (conversation: Conversation): (() => void) => {
+    const ended = watch(
+        () => conversation.turn.streaming.value,
+        (live, was) => {
+            if (was && !live && conversation.transcript.cursor() !== undefined) {
+                hydrateOnce(conversation);
+            }
+        },
+    );
+    const saved = watch(
+        () => conversation.turn.outbox.entries.value,
+        (entries) => {
+            const sandboxId = scopedSandboxId.value;
+            if (sandboxId !== undefined) {
+                storeOutbox(sandboxId, conversation.conversationId, entries);
+            }
+        },
+    );
+    return () => {
+        ended();
+        saved();
+    };
+};
+watch(
+    conversations,
+    (open) => {
+        for (const conversation of open) {
+            if (!runEnds.has(conversation)) {
+                runEnds.set(conversation, watchTab(conversation));
+            }
+        }
+        for (const [conversation, stop] of runEnds) {
+            if (!open.includes(conversation)) {
+                stop();
+                runEnds.delete(conversation);
+            }
+        }
+    },
+    { immediate: true },
+);
 
 // Attaches a tab to a turn this browser didn't start (e.g. a workflow step whose turn begins before the tab
 // hydrates). Driven by the roster stream; touches only a tab with nothing painted yet.

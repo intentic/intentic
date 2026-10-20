@@ -2512,6 +2512,147 @@ describe(`hydrating a conversation whose turn is still running`, () => {
     });
 });
 
+// ONE WAY BACK TO THE SANDBOX. Where the rows name themselves, a tab keeps a cursor (where its copy of the record ends)
+// and every catch-up reads only what the record gained since, adds it where it belongs, and attaches only to a run the
+// sandbox says is live, instead of reading the latest page whole and probing for a run on every look.
+describe(`catching a conversation up from where its copy of the record ends`, () => {
+    const page = (rows: { role: `user` | `assistant`; text: string; rowId: string }[], extra: Record<string, unknown>) => ({ messages: rows, ...extra });
+    const OPENING = page(
+        [
+            { role: `user`, text: `reword the notice`, rowId: `u1` },
+            { role: `assistant`, text: `Reworded.`, rowId: `a1` },
+        ],
+        { from: 0, more: false, through: 2 },
+    );
+
+    beforeEach(() => {
+        stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => {
+            callback(0);
+            return 0;
+        });
+        stubGlobal(`cancelAnimationFrame`, () => {});
+        storage.clear();
+        resetSandboxScope();
+    });
+
+    afterEach(() => {
+        unstubAllGlobals();
+    });
+
+    it(`reads only what the record gained since, adds it, and attaches only to a run the sandbox says is live`, async () => {
+        const reads: unknown[] = [];
+        let attaches = 0;
+        daemonAnswers((procedure, input) => {
+            if (procedure === `agents.transcript`) {
+                reads.push(input);
+                if (reads.length === 1) {
+                    return Promise.resolve(OPENING);
+                }
+                // Another window ran a turn meanwhile; a third is running now. Read again once that one ended (the run's
+                // end asks), the record has nothing new and nothing runs.
+                if (reads.length > 2) {
+                    return Promise.resolve(page([], { from: 4, more: true, through: 4, continuous: true }));
+                }
+                return Promise.resolve(
+                    page(
+                        [
+                            { role: `user`, text: `and the docs`, rowId: `u2` },
+                            { role: `assistant`, text: `Done.`, rowId: `a2` },
+                        ],
+                        { from: 2, more: true, through: 4, continuous: true, live: `r3` },
+                    ),
+                );
+            }
+            if (procedure === `agent.attach`) {
+                attaches += 1;
+                return Promise.resolve(
+                    new ReadableStream<AttachFrame>({
+                        start(controller) {
+                            controller.enqueue({ kind: `attached`, run: `r3`, startedAt: 1000, seq: 0, rows: [{ role: `user`, text: `now the tests`, rowId: `u3`, run: `r3` }] });
+                            controller.enqueue({ kind: `end` });
+                            controller.close();
+                        },
+                    }),
+                );
+            }
+            return undefined;
+        });
+
+        const conversation = openAgentConversation({ id: `cursor-read`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        // The sandbox said nothing runs: nothing was asked to attach.
+        expect(attaches).toBe(0);
+        const drawn = conversation.transcript.messages.value;
+
+        hydrateOnce(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual([`reword the notice`, `Reworded.`, `and the docs`, `Done.`, `now the tests`]));
+        expect(reads[1]).toEqual({ id: `cursor-read`, after: 2, afterRow: `a1` });
+        expect(attaches).toBe(1);
+        // The followed run's end asks the record once more, which carries on from where the merge left the cursor.
+        await waitFor(() => expect(reads).toHaveLength(3));
+        expect(reads[2]).toEqual({ id: `cursor-read`, after: 4, afterRow: `a2` });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(attaches).toBe(1);
+        // What was already drawn stayed drawn: the same rows, not a redraw of the record.
+        expect(conversation.transcript.messages.value[0]).toBe(drawn[0]);
+        expect(conversation.transcript.messages.value[1]).toBe(drawn[1]);
+        expect(conversation.transcript.cursor()).toEqual({ after: 4, afterRow: `a2` });
+    });
+
+    it(`redraws whole when the record no longer runs through the cursor, a rewind elsewhere`, async () => {
+        let reads = 0;
+        daemonAnswers((procedure) => {
+            if (procedure !== `agents.transcript`) {
+                return undefined;
+            }
+            reads += 1;
+            return Promise.resolve(
+                reads === 1 ? OPENING : page([{ role: `user`, text: `reword it again`, rowId: `u9` }], { from: 0, more: false, through: 1, continuous: false }),
+            );
+        });
+
+        const conversation = openAgentConversation({ id: `rewound-elsewhere`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        hydrateOnce(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value.map((message) => message.text)).toEqual([`reword it again`]));
+        expect(conversation.transcript.cursor()).toEqual({ after: 1, afterRow: `u9` });
+    });
+
+    it(`looks once more after a pass in flight, for what was asked about while it was out`, async () => {
+        const answers: ((value: unknown) => void)[] = [];
+        let reads = 0;
+        daemonAnswers((procedure) => {
+            if (procedure !== `agents.transcript`) {
+                return undefined;
+            }
+            reads += 1;
+            if (reads === 1) {
+                return Promise.resolve(OPENING);
+            }
+            return new Promise((resolve) => answers.push(resolve));
+        });
+
+        const conversation = openAgentConversation({ id: `asked-again`, provider: `claude`, harness: `native` });
+        hydrateOnce(conversation);
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        hydrateOnce(conversation);
+        await waitFor(() => expect(reads).toBe(2));
+        // Asked twice more while that read is out: one more pass once it lands, not two, and not none.
+        hydrateOnce(conversation);
+        hydrateOnce(conversation);
+        answers[0]!(page([], { from: 2, more: true, through: 2, continuous: true }));
+        await waitFor(() => expect(reads).toBe(3));
+        answers[1]!(page([], { from: 2, more: true, through: 2, continuous: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(reads).toBe(3);
+    });
+});
+
 // pickUp used to arm only in the window that watched the turn stop; every other path got nothing. The daemon now
 // records how the last turn ended (ending), and hydration adopts it.
 describe(`opening a session whose last turn stopped short`, () => {

@@ -299,13 +299,15 @@ test("agents.search matches titles and later lines, across the archive", async (
         provider: "claude",
         harness: "native",
         account: "default",
+        // Named by position: the fake's rows carry no ids of their own, as a record from before ids would not.
         messages: [
-            { role: "user", text: "restored words" },
-            { role: "assistant", text: "landAgent lives in laneDrop.ts" },
+            { role: "user", text: "restored words", rowId: "@0" },
+            { role: "assistant", text: "landAgent lives in laneDrop.ts", rowId: "@1" },
         ],
         // from: 0, more: false because a two-row conversation fits entirely inside the page window.
         from: 0,
         more: false,
+        through: 2,
     });
     // Every read must scope to the workspace root; an isolated turn's worktree maps to /work here.
     expect([...new Set(scopedTo)]).toEqual(["/work"]);
@@ -669,13 +671,16 @@ test("agents.place appends the user's words as the agent's, retires the session,
     expect((await client.agents.list()).agents[0]).toMatchObject({ id: "conv1", sessionId: "sess-live" });
 
     const placed = "I checked the tests and they pass.";
-    expect(await client.agents.place({ id: "conv1", text: placed })).toEqual({ ok: true });
+    const answered = await client.agents.place({ id: "conv1", text: placed });
+    expect(answered).toEqual({ ok: true, rowId: expect.stringMatching(/^[0-9a-z]{12}$/u) });
 
-    // Newest row is the placed line, marked, exactly what the transcript route serves any reopening tab.
+    // Newest row is the placed line, marked, exactly what the transcript route serves any reopening tab, under the id
+    // the place answered, so the window that placed it holds the same row.
     expect((await client.agents.transcript({ id: "conv1" })).messages.at(-1)).toEqual({
         role: "assistant",
         text: placed,
         placed: true,
+        rowId: answered.rowId,
     });
     // Only the session pointer is gone; the record above is what the conversation reads back as.
     expect((await client.agents.list()).agents[0]).not.toHaveProperty("sessionId");
@@ -871,12 +876,14 @@ test("agents.place in a channel conversation delivers the line to the provider's
             isolated: true,
             origin: { automationId: "auto", provider: "discord", channelId: "123" },
         });
-        expect(await client.agents.place({ id: "conv1", text: "On it. checking now." })).toEqual({ ok: true });
+        const answered = await client.agents.place({ id: "conv1", text: "On it. checking now." });
+        expect(answered).toEqual({ ok: true, rowId: expect.stringMatching(/^[0-9a-z]{12}$/u) });
         expect(gateway.deliveries).toEqual([{ path: "/deliver", body: { channelId: "123", text: "On it. checking now." } }]);
         expect((await client.agents.transcript({ id: "conv1" })).messages.at(-1)).toEqual({
             role: "assistant",
             text: "On it. checking now.",
             placed: true,
+            rowId: answered.rowId,
         });
         // Same activity row shape an ordinary agent send would produce.
         await waitFor(
@@ -936,8 +943,9 @@ test("agents.place in a webchat conversation queues the words for the visitor as
         isolated: true,
         origin: { automationId: "auto", provider: "webchat", channelId: "wc-visitor-1" },
     });
-    expect(await client.agents.place({ id: "conv1", text: "We are on it." })).toEqual({ ok: true });
-    expect(records.get("conv1")?.at(-1)).toEqual({ role: "assistant", text: "We are on it.", placed: true });
+    const answered = await client.agents.place({ id: "conv1", text: "We are on it." });
+    expect(answered).toEqual({ ok: true, rowId: expect.stringMatching(/^[0-9a-z]{12}$/u) });
+    expect(records.get("conv1")?.at(-1)).toEqual({ role: "assistant", text: "We are on it.", placed: true, rowId: answered.rowId });
     expect((await webchatOutbox.since("webchat:auto:wc-visitor-1", 0, Date.now())).replies).toMatchObject([{ text: "We are on it." }]);
 });
 
@@ -959,6 +967,110 @@ test("agents.place is refused while the agent's turn is running", async () => {
     expect(await errorCode(client.agents.place({ id: "conv1", text: "planted" }))).toBe("CONFLICT");
     release?.();
     await collect(await client.agent.attach({ conversationId: "conv1" }));
+});
+
+// A reader keeps a cursor (`through`, and the id of the row before it) and asks only for what the record gained since;
+// a record that no longer runs through the cursor answers its latest page, said not to carry on.
+test("agents.transcript reads forward from a reader's cursor, and says what runs now", async () => {
+    const record: TranscriptRow[] = Array.from({ length: 60 }, (_, index) =>
+        index % 2 === 0 ? { role: "user", text: `ask ${index / 2}` } : { role: "assistant", text: `answer ${(index - 1) / 2}` },
+    );
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let gated = false;
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    if (gated) {
+                        await gate;
+                    }
+                    yield { kind: "done" };
+                },
+                transcripts: {
+                    read: async () => record,
+                    rows: async () => record,
+                    fork: async () => {},
+                    append: async () => {},
+                    page: async (_agent, window = {}) => transcriptPageOf(record, window),
+                    toolChildren: async (_agent, toolId) => toolChildrenOf(record, toolId),
+                    toolCard: async (_agent, toolId) => toolCardOf(record, toolId),
+                    lastSaid: async () => record.findLast((row) => row.role === "assistant")?.text,
+                    count: async () => record.length,
+                    truncate: async () => 0,
+                    migrate: async () => {},
+                    sweep: async () => {},
+                },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "seed the registry", conversationId: "conv1" });
+
+    // An editor that never reads forward sees today's page, with the cursor beside it and nothing said to run.
+    const latest = await client.agents.transcript({ id: "conv1" });
+    expect(latest).toMatchObject({ from: 20, more: true, through: 60 });
+    expect(latest).not.toHaveProperty("continuous");
+    expect(latest).not.toHaveProperty("live");
+    // A page walked back ends where the next one starts.
+    expect(await client.agents.transcript({ id: "conv1", before: 20 })).toMatchObject({ from: 0, through: 20 });
+
+    record.push({ role: "user", text: "ask 30" }, { role: "assistant", text: "answer 30" });
+    const afterRow = latest.messages.at(-1)?.rowId;
+    expect(afterRow).toBe("@59");
+    const gained = await client.agents.transcript({ id: "conv1", after: 60, afterRow });
+    expect(gained).toMatchObject({ from: 60, through: 62, more: true, continuous: true });
+    expect(gained.messages.map(({ text }) => text)).toEqual(["ask 30", "answer 30"]);
+    // A cursor whose row is no longer there (a rewind since) gets the latest page, to replace what it holds.
+    const rewound = await client.agents.transcript({ id: "conv1", after: 60, afterRow: "a-row-it-never-had" });
+    expect(rewound).toMatchObject({ from: 22, through: 62, continuous: false });
+    expect(rewound.messages).toHaveLength(40);
+    // `before` is paging back, whatever `after` says.
+    expect(await client.agents.transcript({ id: "conv1", before: 20, after: 60, afterRow })).not.toHaveProperty("continuous");
+
+    // While a turn runs, every answer names it: the record does not hold its rows yet, and its stream does.
+    gated = true;
+    const { run } = await client.agent.run({ prompt: "a long think", conversationId: "conv1" });
+    expect((await client.agents.transcript({ id: "conv1", after: 62, afterRow: "@61" })).live).toBe(run);
+    release?.();
+    await collect(await client.agent.attach({ conversationId: "conv1" }));
+    expect(await client.agents.transcript({ id: "conv1" })).not.toHaveProperty("live");
+});
+
+// The queue sends its next message a moment after a turn ends; a reader that watched the turn end asks for the one
+// after it and is answered once it starts, rather than asking again on a timer.
+test("agent.attach after a run it watched end opens on the next run, once it starts", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let gated = false;
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent() {
+                    if (gated) {
+                        await gate;
+                    }
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+    await runAgentTurn(client, { prompt: "first", conversationId: "conv1", isolated: true });
+    const [ended] = await collect(await client.agent.attach({ conversationId: "conv1" }));
+    const first = ended?.kind === "attached" ? ended.run : undefined;
+    expect(first).toEqual(expect.any(String));
+
+    const following = client.agent.attach({ conversationId: "conv1", after: first });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    gated = true;
+    const { run: second } = await client.agent.run({ prompt: "second", conversationId: "conv1", isolated: true });
+    const stream = await following;
+    const head = await stream.next();
+    expect(head.value).toMatchObject({ kind: "attached", run: second });
+    expect(second).not.toBe(first);
+    release?.();
+    await collect(stream);
+    // Asked after a run that is not the newest, it opens on the newest at once.
+    expect((await collect(await client.agent.attach({ conversationId: "conv1", after: "an-older-run" })))[0]).toMatchObject({ run: second });
 });
 
 // Browser builds this URL by hand, not via the typed client, so a dropped `before` would break paging silently.

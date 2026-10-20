@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, inject, ref, useTemplateRef } from "vue";
 import type { TipRow, TooltipValue } from "@intentic/ui";
 import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import ChatToolRows from "../../tools/ChatToolRows.vue";
 import ChatSpineNode from "./ChatSpineNode.vue";
+import { TRANSCRIPT_HOLD } from "../useStickToBottom";
 import { useToolCalls } from "../../../../models/conversations/tools/useToolCalls";
 import { summarizeRun, type RunKind } from "../../tools/toolRun";
 import { useT } from "@intentic/ui/i18n";
@@ -35,9 +36,15 @@ const run = computed(() => (showToolCalls.value ? undefined : summarizeRun(props
 const shown = ref(false);
 // Opened by find-in-page: shown at once, since the browser scrolls to the match before a reveal would finish.
 const found = ref(false);
+// The figure is pressed as a band and shut by a mark in the gutter, two controls swapped for each other; what holds its
+// place while the material opens below is the spine they both stand on (useStickToBottom's hold).
+const spine = useTemplateRef<HTMLElement>(`spine`);
+const hold = inject(TRANSCRIPT_HOLD, (_element, change) => change());
 const toggle = (): void => {
-    found.value = false;
-    shown.value = !shown.value;
+    hold(spine.value, () => {
+        found.value = false;
+        shown.value = !shown.value;
+    });
 };
 const onFound = (): void => {
     found.value = true;
@@ -95,6 +102,7 @@ const tip = computed((): TooltipValue => {
          the row's words. Shut, the thought and the hidden run are one band in that seam, as tall as the row was busy. -->
     <div
         v-if="calls !== undefined"
+        ref="spine"
         class="chat-spine flex w-full flex-col gap-1"
         :class="shown ? `chat-spine-open` : `chat-spine-shut`"
         :style="{ '--wash-calls': calls }"

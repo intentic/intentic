@@ -12,6 +12,7 @@ import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
 import type { AttachEntry, TurnContext } from "../../../client/sandbox/streams/turnStream";
 import { olderTranscriptPage, PHONE_TURNS } from "../transcript/agentTranscript";
 import { type ChatAttachment, type ChatMessage, lastTurns, recordedRows, withCancelledCards } from "../transcript/transcript";
+import { type RecordCursor, recordCursor } from "../transcript/transcriptState";
 import { readTranscript, saveTranscript } from "../transcript/transcriptCache";
 import { TranscriptClock } from "../transcript/transcriptClock";
 import { firstWhere, runningTotal } from "../transcript/transcriptScan";
@@ -138,7 +139,33 @@ export class TranscriptView extends TranscriptClock {
             return false;
         }
         // A phone paints the turns its record will open on, not the mirror's whole tail (agentTranscript.ts).
-        this.adopt(useDevice().mobile.value ? lastTurns(cached, PHONE_TURNS) : cached);
+        const painted = useDevice().mobile.value ? lastTurns(cached, PHONE_TURNS) : cached;
+        this.adopt(painted);
+        // Paging back starts where the oldest row painted sits in the record, which each row read from it carries; a
+        // mirror from before rows did leaves it to the record's first read, as it always was.
+        const oldest = painted.find((message) => message.at !== undefined)?.at;
+        if (oldest !== undefined) {
+            this.historyFrom.value = oldest;
+            this.historyMore.value = oldest > 0;
+        }
+        return true;
+    }
+
+    // Where this window's copy of the daemon's record ends, for the next read to carry on from (recordCursor).
+    cursor(): RecordCursor | undefined {
+        return recordCursor(this.messages.value);
+    }
+
+    // What the record gained since `cursor`, read forward from it: added where it belongs, leaving every row already
+    // here (a live turn's included) where it is. False when this window no longer holds the row the cursor named, which
+    // a whole read mends. Mirrored, as any of the daemon's answers is.
+    mergeRecorded(rows: readonly TranscriptRow[], cursor: RecordCursor): boolean {
+        if (!this.mergeRecord(rows, cursor.after, cursor.afterRow)) {
+            return false;
+        }
+        if (rows.length > 0) {
+            this.persist(true);
+        }
         return true;
     }
 
@@ -147,7 +174,12 @@ export class TranscriptView extends TranscriptClock {
     restoreMessages(messages: readonly TranscriptRow[], page?: { readonly from: number; readonly more: boolean }): void {
         // A replayed record wears the same ids on different messages; an edit armed against the old one fails.
         this.editing.value = undefined;
-        this.rebuild(messages);
+        // Words waiting to send are this window's alone, so no record holds them: they stay at the end, as they were.
+        const unsent = this.messages.value.filter((message) => message.unsent === true);
+        this.rebuild(messages, page?.from);
+        for (const message of unsent) {
+            this.keepUnsent(message);
+        }
         // The cursor moves with the redraw: a caller with no page to report leaves it at "this is all of it".
         this.historyFrom.value = page?.from ?? 0;
         this.historyMore.value = page?.more ?? false;
@@ -169,7 +201,7 @@ export class TranscriptView extends TranscriptClock {
                 this.historyMore.value = false;
                 return;
             }
-            this.prepend(page.messages);
+            this.prepend(page.messages, page.from);
             this.historyFrom.value = page.from;
             this.historyMore.value = page.more;
         } catch {
@@ -183,7 +215,8 @@ export class TranscriptView extends TranscriptClock {
     // since rows this window drew locally are not the source's to copy.
     cutFrom(source: TranscriptView, index: number): number {
         const kept = source.messages.value.slice(0, index);
-        this.rebuild(kept);
+        // Without their places in the source's record: the branch's record is its own, read whole on its first read.
+        this.rebuild(kept.map(({ at: _source, ...row }) => row));
         return recordedRows(kept);
     }
 
@@ -285,7 +318,9 @@ export class TranscriptView extends TranscriptClock {
                       : t(`chat.transcriptView.placeFailed`, { reason: placed.message });
             return false;
         }
-        this.append({ role: `assistant`, text, placed: true });
+        // Under the id the record gave it, so the next read of the record finds this row rather than adding it again.
+        const row: Omit<ChatMessage, "id"> = { role: `assistant`, text, placed: true };
+        this.append(placed.rowId === undefined ? row : { ...row, rowId: placed.rowId });
         this.host.session.value = undefined;
         this.host.error.value = null;
         this.persist(true);

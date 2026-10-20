@@ -189,6 +189,8 @@ export interface LiveRun {
     readonly id: string;
     readonly startedAt: number;
     readonly done: boolean;
+    // Done and on the record (or its write over, landed or not): only then do its streams end. Absent on a stand-in.
+    readonly onRecord?: boolean;
     // Turned away at the door before anything ran, its words handed back to whoever keeps them rather than recorded.
     readonly ranNothing: boolean;
     // The transcript as it stands, live.

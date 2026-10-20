@@ -4,13 +4,32 @@ import { keyedLock } from "@intentic/base/async";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { syncDirectories } from "@intentic/base/fs";
 import { isConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
-import { type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract/events/transcript";
+import type { TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { newRowId } from "@intentic/sandbox-contract/ids/row-ids";
 import { conversationsRoot, conversationUnit, quarantinedUnits } from "../store/conversation-units.js";
 import { getBlob, hashOf, putBlob, sweepBlobs } from "./record/record-blobs.js";
 import { type Converted, convertLegacy, framesByTurn, keptLines, type PutBlob } from "./record/record-convert.js";
 import { appendLog, current, frameOfRow, type LogIndex, openLog, readFrame, repairLog, writeLog } from "./record/record-log.js";
 import { blobNamesIn, callsOf, keptLine, previewOf, wholeOf } from "./record/record-rows.js";
-import { parseJsonOr } from "@intentic/base/json";
+import {
+    forwardIn,
+    legacyPageRows,
+    logPositioned,
+    memoryPositioned,
+    NO_POSITIONS,
+    pageIn,
+    type Positioned,
+    rowOf,
+    rowsAt,
+    type TranscriptForward,
+    type TranscriptForwardWindow,
+    type TranscriptPage,
+    type TranscriptWindow,
+    withRowId,
+} from "./record/record-pages.js";
+
+// Read a page at a time (record/record-pages.ts); named here too, where every reader of the record already looks.
+export { MAX_WINDOW_BYTES, type TranscriptPage, type TranscriptWindow, windowOf } from "./record/record-pages.js";
 
 // One zstd log per conversation (sessions/record/record-log.ts), in its unit on the HISTORY volume, a frame appended per
 // settled turn and made durable before the append resolves. Not the live path; a running turn is served from its frame
@@ -27,35 +46,6 @@ export const legacyTranscriptFile = (historyRoot: string, conversationId: string
     join(conversationUnit(historyRoot, conversationId), "transcript.jsonl");
 
 // Ids are filename-safe by construction; a name that fails validation is never trusted into a path.
-// Window size is counted in user turns, not rows, so a page starts on a question rather than mid-answer. `maxRows` caps
-// a single turn with many rows from taking over the whole page.
-export interface TranscriptWindow {
-    // Exclusive: rows before this position, the previous page's `from`. Absent means the end of the record.
-    readonly before?: number | undefined;
-    readonly turns?: number | undefined;
-    readonly maxRows?: number | undefined;
-    // Ceiling on the page in bytes, whatever the turn and row counts allow: a row carries whole tool outputs, so a
-    // handful of turns runs to tens of megabytes.
-    readonly maxBytes?: number | undefined;
-    // Trims a row to what the reader will actually carry, applied as it is taken. The budget has to measure the served
-    // row, not the stored one, or a page that ships 1 MB is cut as though it shipped 60.
-    readonly fit?: ((row: TranscriptRow) => TranscriptRow) | undefined;
-}
-
-export interface TranscriptPage {
-    readonly rows: TranscriptRow[];
-    // Absolute position of these rows in the whole record, not relative to the page above.
-    readonly from: number;
-    // Whether earlier rows exist, so a client can offer paging back without a second request.
-    readonly more: boolean;
-}
-
-// Default window: enough that a chat opens on more than a screenful without scaling with conversation length.
-export const DEFAULT_WINDOW_TURNS = 20;
-export const MAX_WINDOW_ROWS = 400;
-// Byte ceiling on one page. Measured on this workspace's records, the turn and row counts alone leave the median page
-// at 275 KB and the worst at 62 MB, because length lives in the rows rather than in how many there are.
-export const MAX_WINDOW_BYTES = 2_000_000;
 
 export interface TranscriptRecord {
     // Copies another record's first `keep` rows to start a branch; a `wx` write, a no-op if the file already exists.
@@ -71,6 +61,10 @@ export interface TranscriptRecord {
     // Returns the tail of a conversation and where it sits; only the returned rows are parsed, so cost scales with the
     // window, not the conversation. A cursor is never an error: out-of-range values clamp instead of failing.
     readonly window: (conversationId: string, window: TranscriptWindow) => Promise<TranscriptPage>;
+    // Everything from a reader's cursor to the end, when the record still runs through it (the row before `after` is
+    // still `afterRow`) and the rest fits one page; undefined otherwise, and the reader is served the latest page.
+    // Parses only the rows past the cursor.
+    readonly forward: (conversationId: string, window: TranscriptForwardWindow) => Promise<TranscriptForward | undefined>;
     // Newest row back, for a reader looking for one thing rather than a span; rows are parsed one at a time, so a hit
     // near the tail costs the tail rather than the record.
     readonly findBack: (conversationId: string, match: (row: TranscriptRow) => boolean) => Promise<TranscriptRow | undefined>;
@@ -85,16 +79,9 @@ export interface TranscriptRecord {
     readonly truncate: (conversationId: string, keep: number) => Promise<number>;
 }
 
-// Parses one stored line through `read`: whole, as a page reads it, or with its delegations' calls. A row that fails
-// the current schema, or a line that is not JSON, is dropped rather than failing the whole read.
-const rowOf = async (line: string, read: (stored: unknown) => unknown): Promise<TranscriptRow[]> => {
-    const parsed = parseJsonOr(line, undefined);
-    if (parsed === undefined) {
-        return [];
-    }
-    const message = TranscriptRowSchema.safeParse(await read(parsed));
-    return message.success ? [message.data] : [];
-};
+// A row written outside a run (a placed line, a notice, a fork's seed) is named as it is recorded, where it is made; a
+// run's rows already carry the ids its live readers hold.
+const minted = (row: TranscriptRow): TranscriptRow => (row.rowId === undefined ? { ...row, rowId: newRowId() } : row);
 
 // A legacy record's lines, every non-empty one a row position, torn or not.
 const legacyLines = async (path: string): Promise<string[] | undefined> => {
@@ -103,69 +90,26 @@ const legacyLines = async (path: string): Promise<string[] | undefined> => {
 };
 
 
-// Clamps a cursor to a valid end position: past the end clamps to the end, below zero to zero, fractional floors,
-// absent means the end.
-const pageEnd = (before: number | undefined, length: number): number => Math.min(Math.max(Math.floor(before ?? length), 0), length);
+// A record not yet converted reads as its legacy lines, whole; every read converts nothing.
+const legacyReader =
+    (historyRoot: string) =>
+    async (conversationId: string): Promise<string[] | undefined> =>
+        (await stat(transcriptFile(historyRoot, conversationId)).catch(undefinedIfMissing)) === undefined
+            ? legacyLines(legacyTranscriptFile(historyRoot, conversationId))
+            : undefined;
 
-// One stored position as the page will carry it: the rows it yields, and what they cost against the byte budget.
-type Taken = (index: number) => Promise<{ readonly rows: TranscriptRow[]; readonly bytes: number }>;
-
-interface PageBounds {
-    readonly turns: number;
-    readonly maxRows: number;
-    readonly maxBytes: number;
-}
-
-// Walks back from `end` collecting rows until `turns` user messages have opened, or `maxRows`/`maxBytes` is hit; only
-// collected rows are parsed.
-const scanBack = async (at: Taken, end: number, { turns, maxRows, maxBytes }: PageBounds): Promise<TranscriptPage> => {
-    const rows: TranscriptRow[] = [];
-    let from = end;
-    let seen = 0;
-    let bytes = 0;
-    for (let index = end - 1; index >= 0; index -= 1) {
-        // each row decides whether the page needs the one before it.
-        const taken = await at(index);
-        // Never checked against an empty page: a single turn larger than the whole budget is still served, since
-        // withholding it would leave the chat with nothing to show at all.
-        if (rows.length > 0 && bytes + taken.bytes > maxBytes) {
-            break;
+// A record's byte size, whichever format it is in (TranscriptRecord.size).
+const recordSize =
+    (historyRoot: string) =>
+    async (conversationId: string): Promise<number | undefined> => {
+        if (!isConversationId(conversationId)) {
+            return undefined;
         }
-        if (taken.rows[0]?.role === "user") {
-            seen += 1;
-        }
-        rows.unshift(...taken.rows);
-        bytes += taken.bytes;
-        from = index;
-        // Stops on the user row that opens the oldest wanted turn, not the row after it, so its answers keep their
-        // question.
-        if (seen === turns) {
-            break;
-        }
-        // Row ceiling wins over the turn boundary; `more` carries whatever a fanned-out turn leaves behind.
-        if (end - from >= maxRows) {
-            break;
-        }
-    }
-    return { rows, from, more: from > 0 };
-};
-
-const servedSize = (rows: readonly TranscriptRow[]): number => rows.reduce((total, served) => total + JSON.stringify(served).length, 0);
-
-// Same windowing as `window`, for a caller that already holds the whole record in memory.
-export const windowOf = (
-    rows: readonly TranscriptRow[],
-    { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS, maxBytes = MAX_WINDOW_BYTES, fit }: TranscriptWindow,
-): Promise<TranscriptPage> =>
-    scanBack(
-        async (index) => {
-            const found = rows[index];
-            const taken = found === undefined ? [] : [fit === undefined ? found : fit(found)];
-            return { rows: taken, bytes: servedSize(taken) };
-        },
-        pageEnd(before, rows.length),
-        { turns, maxRows, maxBytes },
-    );
+        const info =
+            (await stat(transcriptFile(historyRoot, conversationId)).catch(undefinedIfMissing)) ??
+            (await stat(legacyTranscriptFile(historyRoot, conversationId)).catch(undefinedIfMissing));
+        return info?.size;
+    };
 
 // Decoded frames kept across reads, least recently used dropped first past this many characters of JSONL.
 const FRAMES_KEPT_CHARS = 32_000_000;
@@ -175,7 +119,6 @@ const INDEXES_KEPT = 256;
 // the only write this record's own pins cannot see.
 export const BLOB_GRACE_MS = 10 * 60_000;
 
-const emptyPage = (): TranscriptPage => ({ rows: [], from: 0, more: false });
 
 export interface FileTranscriptRecord extends TranscriptRecord {
     // Puts a log the migration wrote at `prepared` in place of the conversation's legacy record, if that record is
@@ -325,6 +268,20 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             }),
         );
 
+    // The record's positions as a page reads them, none when there is no record. Row positions, the same ones `count`
+    // and `truncate` use, so `from` addresses the message a rewind would.
+    const positioned = async (conversationId: string): Promise<Positioned> => {
+        if (!isConversationId(conversationId)) {
+            return NO_POSITIONS;
+        }
+        const legacy = await legacyRead(conversationId);
+        if (legacy !== undefined) {
+            return memoryPositioned(await legacyPageRows(legacy));
+        }
+        const path = transcriptFile(historyRoot, conversationId);
+        return logPositioned(await indexed(path), (index, at) => lineAt(path, index, at));
+    };
+
     // Every line of the log at `path`, read past the frame cache, which a scan of every record would only empty.
     const scanned = async (path: string): Promise<string[]> => {
         const index = await openLog(path);
@@ -336,11 +293,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
         return lines;
     };
 
-    // A record not yet converted reads as its legacy lines, whole; every read converts nothing.
-    const legacyRead = async (conversationId: string): Promise<string[] | undefined> =>
-        (await stat(transcriptFile(historyRoot, conversationId)).catch(undefinedIfMissing)) === undefined
-            ? legacyLines(legacyTranscriptFile(historyRoot, conversationId))
-            : undefined;
+    const legacyRead = legacyReader(historyRoot);
 
     // Every write since the logs were read is named, and every write in flight pinned, so what the scan missed is
     // exactly what nothing will name; a plain record names no blob. A record the orphan sweep set aside names its blobs
@@ -409,7 +362,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
                 return;
             }
             await changing(conversationId, async (path, index, put) => {
-                const kept = await Promise.all(messages.map((message) => keptLine(message, put)));
+                const kept = await Promise.all(messages.map((message) => keptLine(minted(message), put)));
                 remember(path, await appendLog(path, index, kept));
             });
         },
@@ -419,11 +372,11 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             }
             const legacy = await legacyRead(conversationId);
             if (legacy !== undefined) {
-                return (await Promise.all(legacy.map((line) => rowOf(line, (parsed) => parsed)))).flat();
+                return rowsAt(legacy, (parsed) => parsed);
             }
             const path = transcriptFile(historyRoot, conversationId);
             const index = await indexed(path);
-            return index === undefined ? [] : (await Promise.all((await allLines(path, index)).map((line) => rowOf(line, whole)))).flat();
+            return index === undefined ? [] : rowsAt(await allLines(path, index), whole);
         },
         rows: async (conversationId) => {
             if (!isConversationId(conversationId)) {
@@ -431,42 +384,15 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             }
             const legacy = await legacyRead(conversationId);
             if (legacy !== undefined) {
-                return (await Promise.all(legacy.map((line) => rowOf(line, previewOf)))).flat();
+                return rowsAt(legacy, previewOf);
             }
             const path = transcriptFile(historyRoot, conversationId);
             const index = await indexed(path);
-            return index === undefined ? [] : (await Promise.all((await allLines(path, index)).map((line) => rowOf(line, previewOf)))).flat();
+            return index === undefined ? [] : rowsAt(await allLines(path, index), previewOf);
         },
-        window: async (conversationId, { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS, maxBytes = MAX_WINDOW_BYTES, fit }) => {
-            if (!isConversationId(conversationId)) {
-                return emptyPage();
-            }
-            const legacy = await legacyRead(conversationId);
-            if (legacy !== undefined) {
-                const rows = (await Promise.all(legacy.map((line) => rowOf(line, previewOf)))).map((parsed) => parsed[0] ?? { role: "notice" as const, text: "" });
-                return windowOf(rows, { before, turns, maxRows, maxBytes, ...(fit === undefined ? {} : { fit }) });
-            }
-            const path = transcriptFile(historyRoot, conversationId);
-            const index = await indexed(path);
-            if (index === undefined) {
-                return emptyPage();
-            }
-            // Row positions, the same ones `count` and `truncate` use, so `from` addresses the message a rewind would.
-            return scanBack(
-                async (at) => {
-                    const line = await lineAt(path, index, at);
-                    const parsed = await rowOf(line, previewOf);
-                    // Unfitted, the stored line is what goes out, so its own length is the cost and nothing is re-measured.
-                    if (fit === undefined) {
-                        return { rows: parsed, bytes: line.length };
-                    }
-                    const fitted = parsed.map(fit);
-                    return { rows: fitted, bytes: servedSize(fitted) };
-                },
-                pageEnd(before, index.rows),
-                { turns, maxRows, maxBytes },
-            );
-        },
+        window: async (conversationId, window) => pageIn(await positioned(conversationId), window),
+        // No record is an empty one: a reader at 0 has all of it.
+        forward: async (conversationId, window) => forwardIn(await positioned(conversationId), window),
         findBack: async (conversationId, match) => {
             if (!isConversationId(conversationId)) {
                 return undefined;
@@ -478,7 +404,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             for (let at = count - 1; at >= 0; at -= 1) {
                 // newest first, and the first hit ends the search.
                 const line = legacy === undefined ? await lineAt(path, index!, at) : (legacy[at] ?? "");
-                const found = (await rowOf(line, calls)).find(match);
+                const found = (await rowOf(line, calls)).map((row) => withRowId(row, at)).find(match);
                 if (found !== undefined) {
                     return found;
                 }
@@ -492,15 +418,7 @@ export const fileTranscriptRecord = (historyRoot: string): FileTranscriptRecord 
             const legacy = await legacyRead(conversationId);
             return legacy?.length ?? (await indexed(transcriptFile(historyRoot, conversationId)))?.rows ?? 0;
         },
-        size: async (conversationId) => {
-            if (!isConversationId(conversationId)) {
-                return undefined;
-            }
-            const info =
-                (await stat(transcriptFile(historyRoot, conversationId)).catch(undefinedIfMissing)) ??
-                (await stat(legacyTranscriptFile(historyRoot, conversationId)).catch(undefinedIfMissing));
-            return info?.size;
-        },
+        size: recordSize(historyRoot),
         stored: async (conversationId) => {
             if (!isConversationId(conversationId)) {
                 return [];

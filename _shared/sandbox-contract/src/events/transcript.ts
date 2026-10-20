@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { AgentHarnessSchema, AgentProviderSchema } from "../schemas/agent.js";
 import { ShareDetailSchema } from "../schemas/share.js";
 import { TurnErrandSchema, TurnSpeakerSchema } from "../schemas/speaker.js";
 import { SubagentKindSchema, SubagentSdkRecordSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
@@ -272,6 +271,15 @@ export const TranscriptRowSchema = z.object({
             "Who said it. A notice is neither side: it is something that happened to the turn, recorded so a reopened conversation can say it. Without those, a turn a provider refused ends on the user's message and reads as broken.",
         ),
     text: z.string().describe("The words."),
+    // The row's own name, minted once where the row is made (the live fold, or the record for a row written outside a
+    // run) and carried on every copy: the live head's, each patch's, the record's, a client's mirror. Positions move
+    // under a rewind and contents grow while a run streams, so this is how a reader says "this row" across all of them.
+    rowId: z
+        .string()
+        .optional()
+        .describe(
+            "The row's own id: the same on the live turn's copy, every change to it, the record, and a reader's own copy, so a reader updates the row it already holds instead of matching it by content. Rows recorded before rows had ids are named by their position (`@12`). Absent from a sandbox older than ids.",
+        ),
     // Which run produced this row, carried on every copy of it: the live head's, the record's, a client's mirror.
     // It is how a client says "I am already showing this run" without comparing content, which cannot answer that
     // while the run's last row is still growing.
@@ -420,33 +428,45 @@ export const holdsRequest = (row: TranscriptRequests): boolean => REQUEST_FIELDS
 // Whether a row is holding the turn open on a card nobody has answered.
 export const isAwaitingDecision = (row: TranscriptRequests): boolean => REQUEST_FIELDS.some((field) => row[field]?.status === "pending");
 
+// The row a patch changes, by its own id, beside the index older readers count from.
+const patchRowId = z
+    .string()
+    .optional()
+    .describe("The id of the row this changes. A reader holding a row by that id changes it there, wherever it sits; `index` is for one that does not.");
+
 // One change to a run's rows, so a client keeps rows rather than frames. Prose/thinking append to a row or a card; a
 // `tool` card replaces its own fields by id, never its nested calls or thinking, which arrive by their own patches;
-// everything else replaces its row; `drop` removes a row that opened and never wrote.
+// everything else replaces its row; `drop` removes a row that opened and never wrote. Each names its row twice: by
+// `index` from where the run's rows start, and by `rowId`, which needs no counting and survives a row dropped above it.
 export const TranscriptPatchSchema = z.discriminatedUnion("op", [
     z.object({ op: z.literal("append").describe("A new row at the end."), row: TranscriptRowSchema }),
     z.object({
         op: z.literal("replace").describe("This row, whole, in place of the one at that index."),
         index: z.number().int().nonnegative(),
+        rowId: patchRowId,
         row: TranscriptRowSchema,
     }),
     z.object({
         op: z.literal("drop").describe("The row at that index is gone: it was opened and never written into."),
         index: z.number().int().nonnegative(),
+        rowId: patchRowId,
     }),
     z.object({
         op: z.literal("text").describe("More of the agent's prose, onto that row's text."),
         index: z.number().int().nonnegative(),
+        rowId: patchRowId,
         text: z.string(),
     }),
     z.object({
         op: z.literal("thinking").describe("More of the agent's reasoning, onto that row's thinking."),
         index: z.number().int().nonnegative(),
+        rowId: patchRowId,
         text: z.string(),
     }),
     z.object({
         op: z.literal("toolThinking").describe("More of a delegated subagent's reasoning, onto the thinking of the card that started it."),
         index: z.number().int().nonnegative(),
+        rowId: patchRowId,
         id: z.string().describe("The card's id, matched wherever it nests."),
         text: z.string(),
     }),
@@ -457,6 +477,7 @@ export const TranscriptPatchSchema = z.discriminatedUnion("op", [
                 "A tool card's own fields: new, or the latest state of one already there, matched by id wherever it nests. Carries no `children` or `thinking`; a card already there keeps its own.",
             ),
         index: z.number().int().nonnegative(),
+        rowId: patchRowId,
         tool: TranscriptToolSchema,
         parent: z.string().optional().describe("The card this one nests under, when it is a delegated subagent's own call."),
     }),
@@ -530,29 +551,6 @@ export const TurnEndingSchema = z.object({
     ),
 });
 export type TurnEnding = z.infer<typeof TurnEndingSchema>;
-
-// The record a reopened tab rebuilds from: messages plus what the session is bound to (provider, runtime, account). A
-// client can't derive these: after a mid-chat switch, its own picks belong to a different session.
-export const AgentTranscriptSchema = SessionTranscriptSchema.extend({
-    sessionId: z.string().optional().describe("The provider session behind the last turn, when there is one."),
-    provider: AgentProviderSchema.optional().describe("Which provider minted that session."),
-    harness: AgentHarnessSchema.optional().describe("Which runtime minted it: a session resumes only on the loop that opened it."),
-    account: z
-        .string()
-        .optional()
-        .describe("Which stored account it belongs to, as the daemon resolved it. Absent when no stored account paid for the turn."),
-    // How the last turn ended, for endings that leave a live session with just a press to offer; absent otherwise.
-    ending: TurnEndingSchema.optional().describe(
-        "How the last turn ended, when it left work behind that one press finishes. Absent for a conversation whose last turn ended on its own, and for the failures that name something to repair first.",
-    ),
-    // `from` offsets every `rewindIndex` here, and is the `before` for the page above; `more` flags older messages.
-    from: z
-        .number()
-        .int()
-        .nonnegative()
-        .describe("Where the first message sits in the whole record, and the `before` that asks for the page above this one."),
-    more: z.boolean().describe("Whether older messages precede this page."),
-});
 
 // A delegation's own run, fetched when its card opens; empty when the record no longer holds it.
 export const AgentToolChildrenSchema = z.object({

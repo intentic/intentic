@@ -1,5 +1,5 @@
 import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
-import { REQUEST_FIELDS, type TranscriptPatch } from "@intentic/sandbox-contract/events/transcript";
+import { REQUEST_FIELDS, type TranscriptPatch, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { appendToolThinking, upsertTool } from "@intentic/sandbox-contract/transcript-fold";
 import type { ChatMessage } from "./transcript";
 
@@ -38,14 +38,27 @@ export const appendMessage = (state: TranscriptState, message: Omit<ChatMessage,
 // A RECORD REDRAWN KEEPS THE ROWS IT ALREADY DREW. Opening a chat paints the local mirror and then the daemon's record
 // replaces it, and replay after a reconnect or a Retry does the same: with every row a fresh object, every row's markdown
 // was parsed, sanitised and laid out again for words that had not changed — on a phone, seconds of a frozen chat to
-// redraw what was on screen. A message already standing whose content equals a row of the record is kept, id and all
-// (the list's key and its memo both hold). A named prompt keeps its id even when its checkpoint metadata changes: that
-// id keys the whole turn, so remounting it discards every reply's remembered layout and jumps the reader on recovery.
-// Its incoming contents still win, including a rewind point withdrawn by the daemon. Unnamed rows match by content;
-// anything unmatched is allocated above every id standing.
+// redraw what was on screen. A message already standing that is the same row is kept, id and all (the list's key and its
+// memo both hold). The same row is the one with its `rowId`, wherever the sandbox names rows; a named prompt keeps its
+// id even when its checkpoint metadata changes, since that id keys the whole turn, and remounting it discards every
+// reply's remembered layout and jumps the reader on recovery. Either way its incoming contents win, including a rewind
+// point withdrawn by the daemon. Only rows from a sandbox older than row ids, and unnamed, match by content; anything
+// unmatched is allocated above every id standing.
 const contentKey = (message: Omit<ChatMessage, "id">): string => JSON.stringify(message);
-const rowKey = (message: Omit<ChatMessage, "id">): string =>
-    message.role === `user` && message.messageId !== undefined ? JSON.stringify([`user`, message.messageId]) : contentKey(message);
+const rowKey = (message: Omit<ChatMessage, "id">): string => {
+    if (message.rowId !== undefined) {
+        return JSON.stringify([`row`, message.rowId]);
+    }
+    return message.role === `user` && message.messageId !== undefined ? JSON.stringify([`user`, message.messageId]) : contentKey(message);
+};
+// Whether a key names its row rather than spelling out its contents, so a match on it says nothing about them.
+const namedRow = (message: Omit<ChatMessage, "id">): boolean => message.rowId !== undefined || (message.role === `user` && message.messageId !== undefined);
+
+// The row a named match keeps: the standing object where nothing changed, else the incoming contents under its id.
+const keepingId = (same: ChatMessage, row: Omit<ChatMessage, "id">): ChatMessage => {
+    const { id, ...content } = same;
+    return contentKey(content) === contentKey(row) ? same : { ...row, id };
+};
 
 export const rebuildKeeping = (standing: readonly ChatMessage[], rows: readonly Omit<ChatMessage, "id">[]): TranscriptState => {
     const kept = new Map<string, ChatMessage[]>();
@@ -66,14 +79,80 @@ export const rebuildKeeping = (standing: readonly ChatMessage[], rows: readonly 
         if (same === undefined) {
             return { ...row, id: nextId++ };
         }
-        // An unnamed match already proves equal contents; don't serialise a long reply a second time.
-        if (row.role !== `user` || row.messageId === undefined) {
-            return same;
-        }
-        const { id, ...content } = same;
-        return contentKey(content) === contentKey(row) ? same : { ...row, id };
+        // A content match already proves equal contents; don't serialise a long reply a second time.
+        return namedRow(row) ? keepingId(same, row) : same;
     });
     return { ...emptyTranscriptState, messages, nextId };
+};
+
+// The rows of a page of the daemon's record, each knowing where it sits there, counting from the page's own `from`.
+export const positioned = (rows: readonly TranscriptRow[], from: number): Omit<ChatMessage, "id">[] =>
+    rows.map((row, offset) => ({ ...row, at: from + offset }));
+
+// WHERE THIS WINDOW'S COPY OF THE RECORD ENDS, as the next read of it asks: just past the last row it holds that the
+// record does, named by that row's id so the sandbox can tell a record that only grew from one rewound since. Undefined
+// when it holds no such row, or that row has no id (a sandbox older than row ids): a whole page is then the way back.
+export interface RecordCursor {
+    readonly after: number;
+    readonly afterRow: string;
+}
+
+export const recordCursor = (messages: readonly ChatMessage[]): RecordCursor | undefined => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index]!;
+        if (message.at !== undefined) {
+            return message.rowId === undefined ? undefined : { after: message.at + 1, afterRow: message.rowId };
+        }
+    }
+    return undefined;
+};
+
+/* WHAT THE RECORD GAINED, ADDED TO WHAT IS HELD. `rows` carry on from the row named `afterRow` (the cursor this window
+   asked with), in the record's order. A row this window already holds under the same id (a live run's row, now
+   recorded) takes its recorded copy where it stands and keeps its id, and moves up beside the record's other rows; one
+   it never held goes in after the last of them. Whatever else stands below (a live run's rows still unrecorded, this
+   window's own notices, words waiting to send) stays below, in its order. Undefined when the row the cursor names is no
+   longer held, which only a whole page can mend. */
+export const mergeRecorded = (state: TranscriptState, rows: readonly Omit<ChatMessage, "id">[], afterRow: string): TranscriptState | undefined => {
+    const anchor = state.messages.findLastIndex((message) => message.rowId === afterRow);
+    if (anchor === -1) {
+        return undefined;
+    }
+    if (rows.length === 0) {
+        return state;
+    }
+    const incoming = new Set(rows.flatMap((row) => (row.rowId === undefined ? [] : [row.rowId])));
+    const above = state.messages.slice(0, anchor + 1);
+    const below = state.messages.slice(anchor + 1);
+    // The held copies of incoming rows, by id: taken out of `below` (or replaced in `above`, which a cursor that is
+    // honest never needs) as their recorded copies land.
+    const held = new Map<string, ChatMessage>();
+    for (const message of below) {
+        if (message.rowId !== undefined && incoming.has(message.rowId)) {
+            held.set(message.rowId, message);
+        }
+    }
+    let nextId = state.nextId;
+    const recorded = rows.flatMap((row): ChatMessage[] => {
+        const same = row.rowId === undefined ? undefined : held.get(row.rowId);
+        if (same !== undefined) {
+            return [keepingId(same, row)];
+        }
+        const standing = row.rowId === undefined ? -1 : above.findIndex((message) => message.rowId === row.rowId);
+        if (standing !== -1) {
+            above[standing] = keepingId(above[standing]!, row);
+            return [];
+        }
+        return [{ ...row, id: nextId++ }];
+    });
+    const rest = below.filter((message) => message.rowId === undefined || !held.has(message.rowId));
+    const messages = [...above, ...recorded, ...rest];
+    const pending = state.pending !== undefined && messages.some((message) => message.id === state.pending!.id) ? state.pending : undefined;
+    if (state.attached === undefined) {
+        return { messages, nextId, pending };
+    }
+    // A run still attached keeps counting its patches from its own first row, wherever the merge put it.
+    return { messages, nextId, pending, attached: { ...state.attached, base: baseFor(messages, state.attached.run, undefined) } };
 };
 
 const mapMessage = (state: TranscriptState, id: number, fn: (message: ChatMessage) => ChatMessage): TranscriptState => ({
@@ -147,7 +226,13 @@ export const attachRun = (state: TranscriptState, head: AttachHead, drawn?: numb
 /** Applies one daemon change to the attached run's rows. */
 export const applyPatch = (state: TranscriptState, patch: TranscriptPatch, typewriter: boolean): TranscriptState => {
     const base = state.attached?.base ?? state.messages.length;
-    const at = (index: number): ChatMessage | undefined => state.messages[base + index];
+    // The row the patch names: by its id where the sandbox names rows (no counting, so a row this window holds above or
+    // within the run cannot shift it), else by its index from where the run's rows start. Searched from the end, where
+    // a live run writes.
+    const at = (index: number): ChatMessage | undefined => {
+        const named = `rowId` in patch && patch.rowId !== undefined ? state.messages.findLast((message) => message.rowId === patch.rowId) : undefined;
+        return named ?? state.messages[base + index];
+    };
     switch (patch.op) {
         case `append`:
             return appendMessage(state, patch.row);

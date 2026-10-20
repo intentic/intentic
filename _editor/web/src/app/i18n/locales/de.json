@@ -1484,7 +1484,11 @@
             "to": "An {payTo}",
             "waitingToFinishSetup": "Wartet darauf, dass Sie die Einrichtung abschließen…",
             "waitsReadyToLand": "(er wartet als „Bereit zum Landen“, bis Sie ihn landen)",
-            "watchInstall": "Der Installation zusehen"
+            "watchInstall": "Der Installation zusehen",
+            "waitingToSend": "Wartet auf Versand",
+            "waitingToSendHint": "Geht raus, sobald Sandbox antwortet",
+            "sendNow": "Jetzt senden",
+            "cancelSend": "Abbrechen"
         },
         "chatModelPicker": {
             "autoDescription": "Let a model choose from what's connected and still has allowance"

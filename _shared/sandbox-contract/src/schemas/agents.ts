@@ -745,6 +745,19 @@ export const AgentTranscriptQuerySchema = AgentIdSchema.extend({
         .optional()
         .describe("Return the messages before this position in the record: the `from` of the page below. Absent asks for the most recent turns."),
     turns: z.coerce.number().int().min(1).max(200).optional().describe("How many of the user's turns to return, newest first. Absent takes the daemon's default."),
+    // Reading forward from the reader's cursor, checked by the row it names: a rewind since reuses positions.
+    after: z.coerce
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe(
+            "Return what the record holds from this position on: the `through` of the reader's last page. Answered `continuous` when it still runs through there; otherwise with its latest page. Ignored beside `before`.",
+        ),
+    afterRow: z
+        .string()
+        .optional()
+        .describe("The `rowId` of the row just before `after`, as the reader holds it: how a record rewound since is told apart from one that only grew."),
 });
 
 // Fills in what a page counted instead of carrying: a delegation's own calls, addressed by the card's id, which is
@@ -865,19 +878,6 @@ export const AgentReactSchema = z.object({
         .refine(isSingleEmoji, { message: "not a single emoji" })
         .describe("The mark to leave, as the emoji character itself. Exactly one: a chip has room for one mark, and a press is one press."),
     on: z.boolean().describe("Whether to add your mark or take it back. Saying what you want rather than flipping what is there, so pressing twice lands where pressing once did."),
-});
-// Bounded just above the handoff's per-message render cap, so a line too long to carry whole doesn't reach the agent
-// truncated.
-export const AgentPlaceSchema = z.object({
-    id: z.string().min(1).describe("Which conversation."),
-    text: z
-        .string()
-        .trim()
-        .min(1)
-        .max(8_000)
-        .describe(
-            "The words to put in the agent's mouth. Bounded just above what the next turn can carry whole, because a line too long to be handed over intact would reach the agent truncated and quietly break the very thing this is for.",
-        ),
 });
 // `null` clears the override back to inheriting the sandbox setting, so an agent doesn't hold a frozen copy that stops
 // following it.

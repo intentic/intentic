@@ -6,7 +6,7 @@ import { setAccountUsage } from "../../providers/providerAccounts";
 import { boundSession } from "../run/turnRequest";
 import type { AttachEntry, TurnContext } from "../../../client/sandbox/streams/turnStream";
 import type { Conversation } from "./conversation";
-import { withAgentStatus, withPageDraft } from "./turnClient";
+import { withAgentStatus, withPageDraft } from "./turnLiveState";
 
 // What a run's entries mean to the conversation beyond its rows, which the transcript has already drawn: the session
 // the turn minted, the worktree it runs in, its live posture and model, the terminal and browser it drives, and how it

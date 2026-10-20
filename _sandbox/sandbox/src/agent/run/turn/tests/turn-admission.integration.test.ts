@@ -150,7 +150,7 @@ test.each(domainRefusals)("a queued person's batch and attachments return held a
     expect(run.done).toBe(false);
     expect(run.rows).toEqual([{
         role: "user", text: "first instructions\n\nsecond instructions", sentAt: run.startedAt,
-        attachments: ["draft.txt", "diagram.png"], messageId: "a1", run: run.id,
+        attachments: ["draft.txt", "diagram.png"], messageId: "a1", run: run.id, rowId: expect.any(String),
     }]);
     expect(fleet.conversations.queued("c1")).toEqual({ items: [third], revision: 4 });
     expect(await receiptOf(services, "c1", "a1")).toEqual({ delivered: "started", run: run.id });
@@ -209,11 +209,11 @@ test.each(domainRefusals)("a senderless sandbox message is kept with its attachm
     // Kept turns deliberately record their unexecuted opening instead of setting ranNothing and returning to a queue.
     expect(run.ranNothing).toBe(false);
     expect(rows).toEqual([
-        { role: "user", text: turn.prompt, sentAt: run.startedAt, attachments: ["repair.txt"], messageId: "repair", speaker: { kind: "sandbox" }, run: run.id },
+        { role: "user", text: turn.prompt, sentAt: run.startedAt, attachments: ["repair.txt"], messageId: "repair", speaker: { kind: "sandbox" }, run: run.id, rowId: expect.any(String) },
         {
             role: "notice", text: `${message} Nothing has run yet: the message above is kept here to send again once that is sorted.`,
             noticeAction: "sendAgain", sandboxHeld: true,
-            noticeCode: { code: "kept", params: { message, error: "agent-domain-refused" } }, openedAt: expect.any(Number), run: run.id,
+            noticeCode: { code: "kept", params: { message, error: "agent-domain-refused" } }, openedAt: expect.any(Number), run: run.id, rowId: expect.any(String),
         },
     ]);
     expect(append).toHaveBeenCalledTimes(1);

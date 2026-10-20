@@ -3,7 +3,18 @@ import { useTouchMotion } from "@intentic/ui/motion";
 import { computed, type ComputedRef, ref, shallowRef } from "vue";
 import { recordPerf } from "../../../app/perf/perf";
 import type { ChatMessage } from "./transcript";
-import { appendMessage, applyPatch, attachRun, emptyTranscriptState, flushPending, rebuildKeeping, revealPending, type TranscriptState } from "./transcriptState";
+import {
+    appendMessage,
+    applyPatch,
+    attachRun,
+    emptyTranscriptState,
+    flushPending,
+    mergeRecorded,
+    positioned,
+    rebuildKeeping,
+    revealPending,
+    type TranscriptState,
+} from "./transcriptState";
 import type { AttachEntry, AttachHead, TurnContext } from "../../../client/sandbox/streams/turnStream";
 
 // The transcript as it's being written: state, the clock deciding when an entry shows, and every write to it, unified
@@ -200,17 +211,33 @@ export class TranscriptClock {
     }
 
     // Replaces the transcript with rows that carry no ids of their own (a branch's inherited turns, the daemon's
-    // record), keeping unchanged objects and the ids of named prompts whose contents were refreshed (rebuildKeeping).
-    // Unmatched rows get fresh ids. Nothing stays attached afterward.
-    rebuild(rows: readonly TranscriptRow[]): void {
-        this.state.value = rebuildKeeping(this.state.value.messages, rows);
+    // record), keeping unchanged objects and the ids of rows that are the same row (rebuildKeeping). Unmatched rows get
+    // fresh ids. Nothing stays attached afterward. `from` is where the rows start in the daemon's record, for rows read
+    // from it: each then knows its place there (ChatMessage.at).
+    rebuild(rows: readonly TranscriptRow[], from?: number): void {
+        this.state.value = rebuildKeeping(this.state.value.messages, from === undefined ? rows : positioned(rows, from));
+    }
+
+    // Adds what the daemon's record gained past `afterRow` (the row this window's cursor named), from position `from`:
+    // rows it already holds take their recorded copies in place, the rest go in below the record's last (mergeRecorded).
+    // False, with nothing changed, when that row is no longer held here; a whole page is then the way to catch up.
+    mergeRecord(rows: readonly TranscriptRow[], from: number, afterRow: string): boolean {
+        this.catchUp();
+        const merged = mergeRecorded(this.state.value, positioned(rows, from), afterRow);
+        if (merged === undefined) {
+            return false;
+        }
+        this.state.value = merged;
+        return true;
     }
 
     // Puts an older page above what's drawn; every standing message keeps its id and position, safe mid-stream. New ids
-    // allocate above the current high-water mark, keeping the allocator monotonic and collision-free.
-    prepend(rows: readonly TranscriptRow[]): void {
+    // allocate above the current high-water mark, keeping the allocator monotonic and collision-free. `from` is where
+    // the page starts in the daemon's record.
+    prepend(rows: readonly TranscriptRow[], from?: number): void {
         const state = this.state.value;
-        const older = rows.reduce((built, row) => appendMessage(built, row), { ...emptyTranscriptState, nextId: state.nextId });
+        const placed = from === undefined ? rows : positioned(rows, from);
+        const older = placed.reduce((built, row) => appendMessage(built, row), { ...emptyTranscriptState, nextId: state.nextId });
         this.state.value = {
             ...state,
             messages: [...older.messages, ...state.messages],
@@ -218,6 +245,49 @@ export class TranscriptClock {
             // Every row moved down by the page just inserted above it, so a live run's patch cursor moves with them.
             ...(state.attached === undefined ? {} : { attached: { ...state.attached, base: state.attached.base + older.messages.length } }),
         };
+    }
+
+    // Words waiting to send (ChatMessage.unsent): the bubble this window drew for them marks them so, under the id they
+    // go out with; one drawn afresh where none stands (a reload that lost the mirror). Returns the bubble's id.
+    holdUnsent(message: Pick<ChatMessage, "text" | "attachments" | "messageId" | "sentAt">, bubble?: number): number {
+        const held = this.messages.value.find((standing) => standing.id === bubble || (standing.unsent === true && standing.messageId === message.messageId));
+        if (held === undefined) {
+            return this.append({ role: `user`, ...message, local: true, unsent: true });
+        }
+        this.write((state) => ({
+            ...state,
+            messages: state.messages.map((standing) => (standing === held ? { ...standing, messageId: message.messageId, local: true, unsent: true } : standing)),
+        }));
+        return held.id;
+    }
+
+    // The bubble standing for words waiting under `messageId`, if one is drawn.
+    unsentBubble(messageId: string): ChatMessage | undefined {
+        return this.messages.value.find((message) => message.unsent === true && message.messageId === messageId);
+    }
+
+    // Words waiting to send kept through a redraw, which otherwise keeps only the record's rows: at the end, under their
+    // own id, unless still there.
+    keepUnsent(message: ChatMessage): void {
+        const state = this.state.value;
+        if (state.messages.some((held) => held.id === message.id)) {
+            return;
+        }
+        this.state.value = { ...state, messages: [...state.messages, message], nextId: Math.max(state.nextId, message.id + 1) };
+    }
+
+    // The words went out: their bubble is an ordinary sent bubble again, which the run's head (or a drop) takes from here.
+    sentUnsent(id: number): void {
+        this.write((state) => ({
+            ...state,
+            messages: state.messages.map((message) => {
+                if (message.id !== id || message.unsent !== true) {
+                    return message;
+                }
+                const { unsent: _sent, local: _drawn, ...sent } = message;
+                return sent;
+            }),
+        }));
     }
 
     // Keeps existing ids from the local mirror; the allocator resumes above them so a notice can't collide.

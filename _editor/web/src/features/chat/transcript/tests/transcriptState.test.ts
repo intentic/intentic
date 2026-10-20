@@ -1,7 +1,16 @@
 import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
 import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
-import { applyPatch, attachRun, emptyTranscriptState, rebuildKeeping } from "../../../../models/conversations/transcript/transcriptState";
+import {
+    applyPatch,
+    attachRun,
+    emptyTranscriptState,
+    mergeRecorded,
+    positioned,
+    rebuildKeeping,
+    recordCursor,
+    type TranscriptState,
+} from "../../../../models/conversations/transcript/transcriptState";
 
 const child: TranscriptTool = { id: `t2`, name: `Read`, category: `read`, status: `in_progress` };
 const delegation: TranscriptTool = { id: `task-1`, name: `Agent`, category: `other`, status: `in_progress`, thinking: `in`, children: [child] };
@@ -154,5 +163,96 @@ describe(`rebuildKeeping`, () => {
 
     it(`numbers from one when nothing stands`, () => {
         expect(rebuildKeeping([], [{ role: `user`, text: `hi` }]).messages).toEqual([{ role: `user`, text: `hi`, id: 1 }]);
+    });
+});
+
+// A ROW IS ITSELF ACROSS EVERY COPY OF IT. Rows from a sandbox that names them (TranscriptRow.rowId) are matched by that
+// name: a patch lands on its row wherever it sits, a redraw keeps the row's id whatever its contents became, and what the
+// record gained since this window's cursor is added in place rather than the whole record drawn again.
+describe(`row ids`, () => {
+    const live = (rows: ChatMessage[]): TranscriptState => ({ ...emptyTranscriptState, messages: rows, nextId: Math.max(0, ...rows.map((row) => row.id)) + 1 });
+
+    it(`lands a patch on the row it names, whatever index the run counts it at`, () => {
+        // A notice this window drew sits inside the run's rows, so counting from the run's first row lands one short.
+        const state: TranscriptState = {
+            ...live([
+                { id: 1, role: `user`, text: `fix it`, rowId: `u1`, run: `r1` },
+                { id: 2, role: `notice`, text: `switched`, local: true },
+                { id: 3, role: `assistant`, text: `on it`, rowId: `a1`, run: `r1` },
+            ]),
+            attached: { run: `r1`, base: 0 },
+        };
+        const patched = applyPatch(state, { op: `text`, index: 1, rowId: `a1`, text: `, now` }, false);
+        expect(patched.messages.map((message) => message.text)).toEqual([`fix it`, `switched`, `on it, now`]);
+    });
+
+    it(`keeps a row's id through a redraw that changed its contents, and its object where nothing changed`, () => {
+        const asked = { id: 4, role: `user` as const, text: `fix it`, rowId: `u1`, at: 0 };
+        const answered = { id: 5, role: `assistant` as const, text: `on it`, rowId: `a1` };
+        const state = rebuildKeeping([asked, answered], positioned([{ role: `user`, text: `fix it`, rowId: `u1` }, { role: `assistant`, text: `on it, done`, rowId: `a1` }], 0));
+        expect(state.messages[0]).toBe(asked);
+        expect(state.messages[1]).toEqual({ id: 5, role: `assistant`, text: `on it, done`, rowId: `a1`, at: 1 });
+    });
+
+    it(`reads the cursor off the last row the record holds, past a live run and this window's own rows`, () => {
+        const messages: ChatMessage[] = [
+            { id: 1, role: `user`, text: `fix it`, rowId: `u1`, at: 7 },
+            { id: 2, role: `assistant`, text: `on it`, rowId: `a1`, at: 8 },
+            { id: 3, role: `user`, text: `and the docs`, rowId: `u2`, run: `r2` },
+            { id: 4, role: `user`, text: `later`, local: true, unsent: true },
+        ];
+        expect(recordCursor(messages)).toEqual({ after: 9, afterRow: `a1` });
+        // A record row with no id (a sandbox from before ids) leaves no cursor: only a whole read catches up then.
+        expect(recordCursor([{ id: 1, role: `user`, text: `fix it`, at: 0 }])).toBeUndefined();
+        expect(recordCursor([])).toBeUndefined();
+    });
+
+    it(`adds what the record gained after the cursor's row, above a live run's rows and below the rest of the record`, () => {
+        const state = live([
+            { id: 1, role: `user`, text: `fix it`, rowId: `u1`, at: 0 },
+            { id: 2, role: `assistant`, text: `on it`, rowId: `a1`, at: 1 },
+            { id: 3, role: `user`, text: `now the docs`, rowId: `u3`, run: `r3` },
+        ]);
+        // Another window ran a turn (r2) this one never saw; r3 is live here and not on the record yet.
+        const merged = mergeRecorded(state, positioned([{ role: `user`, text: `and the tests`, rowId: `u2`, run: `r2` }, { role: `assistant`, text: `done`, rowId: `a2`, run: `r2` }], 2), `a1`);
+        expect(merged?.messages.map((message) => [message.id, message.text, message.at])).toEqual([
+            [1, `fix it`, 0],
+            [2, `on it`, 1],
+            [4, `and the tests`, 2],
+            [5, `done`, 3],
+            [3, `now the docs`, undefined],
+        ]);
+        expect(merged?.nextId).toBe(6);
+    });
+
+    it(`takes a live run's recorded copy in place, under the id it was drawn with, ahead of this window's own rows`, () => {
+        const reply = { id: 2, role: `assistant` as const, text: `done`, rowId: `a1`, run: `r1` };
+        const state = live([{ id: 1, role: `user`, text: `fix it`, rowId: `u1`, run: `r1` }, { id: 3, role: `notice`, text: `Stopped.`, local: true }, reply]);
+        const merged = mergeRecorded(
+            { ...live([{ id: 9, role: `user`, text: `before`, rowId: `u0`, at: 4 }, ...state.messages]), nextId: 10 },
+            positioned(
+                [
+                    { role: `user`, text: `fix it`, rowId: `u1`, run: `r1`, checkpointId: `cp-1`, rewindIndex: 5 },
+                    { role: `assistant`, text: `done`, rowId: `a1`, run: `r1` },
+                ],
+                5,
+            ),
+            `u0`,
+        );
+        expect(merged?.messages.map((message) => [message.id, message.at, message.checkpointId])).toEqual([
+            [9, 4, undefined],
+            [1, 5, `cp-1`],
+            [2, 6, undefined],
+            [3, undefined, undefined],
+        ]);
+        // Nothing new was drawn: every row kept the id it was drawn under.
+        expect(merged?.nextId).toBe(10);
+    });
+
+    it(`cannot add after a row this window no longer holds`, () => {
+        const state = live([{ id: 1, role: `user`, text: `fix it`, rowId: `u1`, at: 0 }]);
+        expect(mergeRecorded(state, positioned([{ role: `assistant`, text: `on it`, rowId: `a1` }], 1), `gone`)).toBeUndefined();
+        // Nothing gained is nothing changed.
+        expect(mergeRecorded(state, [], `u1`)).toBe(state);
     });
 });

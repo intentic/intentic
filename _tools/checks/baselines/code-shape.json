@@ -775,7 +775,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/conversations/session/turnClient.ts": {
-        "count": 1288,
+        "count": 1275,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_editor/web/src/models/conversations/transcript/transcriptState.ts#applyPatch#cognitive": {

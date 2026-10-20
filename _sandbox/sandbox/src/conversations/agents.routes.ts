@@ -6,9 +6,11 @@ import { errorMessage } from "@intentic/base/errors";
 import { agentsContract } from "@intentic/sandbox-contract/contracts/agents.contract";
 import type { AgentChanges, AgentScratch, ScratchPath } from "@intentic/sandbox-contract/schemas/git/git";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { newRowId } from "@intentic/sandbox-contract/ids/row-ids";
 import { implement, ORPCError } from "@orpc/server";
 import { withBaseText } from "../agent/prompt/prompt-disclosure.js";
 import { opt } from "../opt.js";
+import { transcriptPageAnswer } from "./transcript-page-answer.js";
 import { cancelWatcher, cancelWatchersFor } from "../agent/verification/watchers.js";
 import { backgroundJobOf } from "../agent/tools/jobs/background-jobs.js";
 import { stopJob } from "../agent/tools/jobs/job-fates.js";
@@ -161,8 +163,6 @@ export const createAgentsRoutes = (services: Services) => {
         transcript: i.transcript.handler(async ({ input, context }) => {
             const agent = entryFor(input.id, context);
             const sessionId = sdkSessionIdOf(agent);
-            // One page, newest turns first, walking back on each `before`, not the whole conversation every time.
-            const { rows: messages, from, more } = await services.transcripts.page(agent, { ...opt("before", input.before), ...opt("turns", input.turns) });
             // Session/provider/account are the entry's own values, not the client's, which can disagree after a switch.
             return {
                 ...(sessionId !== undefined
@@ -175,9 +175,7 @@ export const createAgentsRoutes = (services: Services) => {
                     : {}),
                 // How the last turn ended, so any tab opened later can offer the press the prior window kept to itself.
                 ...opt("ending", endingOf(services, input.id)),
-                messages,
-                from,
-                more,
+                ...(await transcriptPageAnswer(services, agent, input)),
             };
         }),
         // Fills in what `transcript` counted rather than carried. Off the record, so it answers for an archived
@@ -230,14 +228,16 @@ export const createAgentsRoutes = (services: Services) => {
                             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
                     }
                 }
-                await services.transcripts.append(agent, [{ role: "assistant", text: input.text, placed: true }]);
+                // Named here rather than by the record, so the window that placed it holds the row its next read brings.
+                const rowId = newRowId();
+                await services.transcripts.append(agent, [{ role: "assistant", text: input.text, placed: true, rowId }]);
                 await services.conversations.send(input.id, { kind: "session-cleared" }).settled;
-                return true;
+                return rowId;
             });
             if (outcome === undefined) {
                 throw new ORPCError("CONFLICT", { message: "the agent's turn or a rewind holds this conversation, wait for it to finish" });
             }
-            return { ok: true } as const;
+            return { ok: true, rowId: outcome } as const;
         }),
         // Legal mid-turn: a title touches no worktree state, and the registry re-reads the entry at begin/finish.
         rename: i.rename.handler(async ({ input, context }) => {

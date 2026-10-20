@@ -18,6 +18,7 @@ import { turnPulseOf } from "./turn-pulse.js";
 import { settledOf } from "./turn-closing.js";
 import { planAnswerRows } from "./plan-answer.js";
 import type { RunLog, RunLogHead } from "../../../sessions/run-log.js";
+import { RunRowIds } from "./run-row-ids.js";
 
 // Turn execution decoupled from any client connection: POST /agent starts a run, folds the transcript frame by frame,
 // and any number of clients attach to it live. Holds rows, not frames; each run is held by its conversation's actor
@@ -36,7 +37,11 @@ export class TurnRun implements LiveRun {
     // Whether the turn journal holds it; the unjournalled door (a loop's iteration) says otherwise as it starts it.
     journalled = true;
     private finishedAt: number | undefined;
+    // Set once the settled run is on the record (or its write is over, landed or not): what ends its followers' streams.
+    private isRecorded = false;
     private readonly fold: TranscriptFold;
+    // Each row's own id, kept in step with the fold's rows (run-row-ids.ts).
+    private readonly rowIds: RunRowIds;
     // Facts so far, replayed to every attach so a late window learns which session and branch the turn is on.
     private readonly facts: AttachEntry[] = [];
     private seq = 0;
@@ -64,10 +69,16 @@ export class TurnRun implements LiveRun {
     ) {
         // The live fold, on the daemon's clock: what dates each card and bubble in the record (TranscriptFold's `now`).
         this.fold = new TranscriptFold(opening, Date.now);
+        // A run carried on after a restart keeps the ids its rows were drawn under, which the windows showing it hold.
+        this.rowIds = new RunRowIds(opening);
     }
 
     get done(): boolean {
         return this.finishedAt !== undefined;
+    }
+
+    get onRecord(): boolean {
+        return this.isRecorded;
     }
 
     // True once the run is finished AND past retention; attach then reports NOT_FOUND and the map entry drops.
@@ -79,7 +90,7 @@ export class TurnRun implements LiveRun {
     // Stamped on the way out, the one place a row leaves this run, so every copy of it says which run made it and a
     // client redrawing the run knows where it already sits.
     get rows(): readonly TranscriptRow[] {
-        return this.fold.rows.map((row) => ({ ...row, run: this.id }));
+        return this.fold.rows.map((row, index) => ({ ...row, run: this.id, rowId: this.rowIds.at(index) }));
     }
 
     // Rows where the user's mid-turn messages landed, for the anchors filed under them at settlement.
@@ -116,15 +127,11 @@ export class TurnRun implements LiveRun {
         this.publish(this.fold.note(row));
     }
 
+    // The run's last rows, and the end of its hold on the conversation. Its followers' streams stay open until it is on
+    // the record too (recordedNow): a reader that asks the record for the run once its stream ends then finds it there.
     finish(ending: TurnEnding = "settled"): void {
         this.publish(this.fold.finish(ending));
         this.finishedAt = Date.now();
-        for (const follower of this.followers) {
-            follower.close();
-        }
-        for (const listener of this.listeners) {
-            listener.close();
-        }
         this.wake();
     }
 
@@ -147,8 +154,19 @@ export class TurnRun implements LiveRun {
         return this.recorded;
     }
 
-    /** @internal The pump's own end: everything a settled run writes is written. */
+    /**
+     * @internal The pump's own end: everything a settled run writes is written, or failed to be. Only now do its streams
+     * end, so `end` on an attach means every row was delivered AND the record holds them (unless its write failed, which
+     * the next writer of this conversation's record makes good).
+     */
     recordedNow(): void {
+        this.isRecorded = true;
+        for (const follower of this.followers) {
+            follower.close();
+        }
+        for (const listener of this.listeners) {
+            listener.close();
+        }
         this.markRecorded();
     }
 
@@ -168,7 +186,9 @@ export class TurnRun implements LiveRun {
             seq: this.seq,
             rows: this.rows.map((row) => structuredClone(row)),
         };
-        if (this.done || signal?.aborted === true) {
+        // A run finished but not yet recorded keeps a late follower too: its head is the whole run, and its end comes with
+        // the record.
+        if (this.isRecorded || signal?.aborted === true) {
             mailbox.close();
         } else {
             this.followers.add(mailbox);
@@ -185,10 +205,10 @@ export class TurnRun implements LiveRun {
     }
 
     // Raw frames from this instant on, for the daemon's own readers of a turn (a child's supervisor, a loop); nothing
-    // before now.
+    // before now. Ends once the run is on the record, like an attach.
     frames(): AsyncGenerator<AgentEvent> {
         const mailbox = new Mailbox<AgentEvent>([], undefined);
-        if (this.done) {
+        if (this.isRecorded) {
             mailbox.close();
         } else {
             this.listeners.add(mailbox);
@@ -196,14 +216,10 @@ export class TurnRun implements LiveRun {
         return mailbox.drain(() => this.listeners.delete(mailbox));
     }
 
-    // The delta half of the same stamp the `rows` getter puts on the snapshot: a row reaching a client by patch is no
-    // less this run's, and one arriving unmarked would leave a gap in what a redraw can recognise.
-    private stamped(patch: TranscriptPatch): TranscriptPatch {
-        return patch.op === "append" || patch.op === "replace" ? { ...patch, row: { ...patch.row, run: this.id } } : patch;
-    }
-
     private publish(patches: readonly TranscriptPatch[], fact?: TurnFact): void {
-        const stamped = patches.map((patch) => this.stamped(patch));
+        // The delta half of the stamp the `rows` getter puts on the snapshot: a row reaching a client by patch is no less
+        // this run's, and names itself as every other copy of it does.
+        const stamped = patches.map((patch) => this.rowIds.stamp(patch, this.id));
         for (const patch of stamped) {
             this.deliver({ kind: "patch", seq: ++this.seq, patch });
         }

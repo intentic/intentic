@@ -1152,7 +1152,7 @@ describe(`Conversation`, () => {
     });
 
     // A closed tab is done with this conversation: the look for a queued turn must not attach a stream after it.
-    it(`stops looking for the queued turn once the tab closes`, async () => {
+    it(`asks the sandbox once for the run its queue starts next, and stops looking once the tab closes`, async () => {
         const conversation = new Conversation(`c1`);
         let controller!: ReadableStreamDefaultController<AttachFrame>;
         const body = new ReadableStream<AttachFrame>({
@@ -1161,11 +1161,15 @@ describe(`Conversation`, () => {
                 c.enqueue(frameOf(head()));
             },
         });
-        let attaches = 0;
-        daemon.mockImplementation((procedure: string) => {
+        const attaches: { readonly input: unknown; readonly signal: AbortSignal | undefined }[] = [];
+        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
             if (procedure === `agent.attach`) {
-                attaches += 1;
-                return Promise.resolve(body);
+                attaches.push({ input, signal: options?.signal });
+                // The first is the turn's own stream; the next is the sandbox waiting for the queue's run, which never
+                // comes here, and ends only when its asker lets go.
+                return attaches.length === 1
+                    ? Promise.resolve(body)
+                    : new Promise((_resolve, reject) => options?.signal?.addEventListener(`abort`, () => reject(new DOMException(`aborted`, `AbortError`))));
             }
             if (procedure === `agent.run`) {
                 return Promise.resolve({ delivered: `started`, run: `r1` });
@@ -1175,15 +1179,18 @@ describe(`Conversation`, () => {
 
         const turn = conversation.turn.send(`start`, settings);
         await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
-        // Something waits in the daemon's queue, so the turn's end sets this window looking for the one it starts.
+        // Something waits in the daemon's queue, so the turn's end asks for the run it starts behind the one that ended.
         conversation.queue.value = { items: [{ id: `m-2`, text: `and the docs`, voice: `person`, queuedAt: 1, revision: 1 }], revision: 1 };
         controller.enqueue(frameOf({ kind: `end` }));
         controller.close();
         await turn;
-        // The tab closes before the first look (FOLLOW_MS after the end) fires.
+        await waitFor(() => expect(attaches).toHaveLength(2));
+        expect(attaches[1]!.input).toMatchObject({ conversationId: `c1`, after: `r1` });
+        // The tab closes while the sandbox is still waiting: the ask is let go, and nothing asks again.
         conversation.turn.abort();
+        expect(attaches[1]!.signal?.aborted).toBe(true);
         await new Promise((resolve) => setTimeout(resolve, 600));
-        expect(attaches).toBe(1);
+        expect(attaches).toHaveLength(2);
     });
 
     // Two probes can be out at once; a send must stop both, not only the one assigned last.
@@ -3353,21 +3360,61 @@ describe(`Conversation`, () => {
     // A request that never completed (unreachable daemon, dropped tunnel) is neither a status nor a frame, and must
     // not be treated as a mid-turn crash: once its tries are spent, the words return to the composer rather than
     // sitting shown-but-unsent.
-    it(`hands the words back when the request never reached the daemon`, async () => {
+    it(`keeps words the request never delivered where they were sent, waiting, and hands them back only when asked`, async () => {
         const conversation = new Conversation(`c1`);
         const shot = { name: `setup.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/setup.png` };
         daemon.mockRejectedValue(new Error(`Your sandbox isn't reachable yet, finish setup so it registers its address.`));
 
         await conversation.turn.send(`the setup view is too scary`, settings, [shot]);
 
-        expect(conversation.error.value).toBe(
-            `Your sandbox isn't reachable yet, finish setup so it registers its address. Your message is back in the composer, send it again to deliver it.`,
-        );
-        // Back whole, attachment and all: the composer is the only place this survives.
+        // Nothing is the person's to redo: no error line, an empty composer, and the words standing where they were sent,
+        // marked as waiting, to go again by themselves (sendOutbox.ts).
+        expect(conversation.error.value).toBeNull();
+        expect(conversation.draft.value).toBe(``);
+        expect(conversation.transcript.messages.value.map(({ role, text, attachments, unsent }) => ({ role, text, attachments, unsent }))).toEqual([
+            { role: `user`, text: `the setup view is too scary`, attachments: [shot.path], unsent: true },
+        ]);
+        const [waiting] = conversation.turn.outbox.entries.value;
+        expect(waiting?.attachments).toEqual([shot]);
+        // A tab holding words nobody else has is guarded from closing, like a draft.
+        expect(conversation.unsent.value).toBe(true);
+
+        // Taken back: whole, attachment and all, and out of the transcript, since no daemon anywhere has a record of it.
+        conversation.turn.outbox.cancel(waiting!.messageId);
         expect(conversation.draft.value).toBe(`the setup view is too scary`);
         expect(conversation.attachments.value.map(({ name, path, status }) => ({ name, path, status }))).toEqual([{ ...shot, status: `done` }]);
-        // And out of the transcript: no daemon anywhere has a record of it.
         expect(conversation.transcript.messages.value).toEqual([]);
+        expect(conversation.turn.outbox.entries.value).toEqual([]);
+    });
+
+    it(`sends waiting words again under the id they first went out with, and follows the turn they start`, async () => {
+        const conversation = new Conversation(`c1`);
+        daemon.mockRejectedValue(new TypeError(`Failed to fetch`));
+        await conversation.turn.send(`tidy the docs`, settings);
+        const [waiting] = conversation.turn.outbox.entries.value;
+        // Read off, not matched against: an asymmetric matcher in toMatchObject writes itself into the object it reads.
+        expect(waiting?.text).toBe(`tidy the docs`);
+        expect(waiting?.messageId).toMatch(/^[\da-f-]{36}$/u);
+
+        // The sandbox is back, and starts a turn with the words.
+        daemon.mockReset();
+        daemon.mockImplementation((procedure: string) => {
+            if (procedure === `agent.run`) {
+                return Promise.resolve({ delivered: `started`, run: `r1` });
+            }
+            if (procedure === `agent.attach`) {
+                return Promise.resolve(chunkStream([frameOf(head({ prompt: `tidy the docs` })), frameOf({ kind: `end` })], `close`));
+            }
+            return Promise.resolve({ ok: true });
+        });
+        await conversation.turn.outbox.flush();
+
+        const runs = daemon.mock.calls.filter(([procedure]) => procedure === `agent.run`);
+        expect(runs.map(([, body]) => body)).toEqual([expect.objectContaining({ messageId: waiting!.messageId })]);
+        expect(conversation.turn.outbox.entries.value).toEqual([]);
+        // The run's head drew over the waiting bubble: one prompt, the sandbox's, no longer waiting.
+        await waitFor(() => expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toHaveLength(1));
+        expect(conversation.transcript.messages.value.some((message) => message.unsent === true)).toBe(false);
     });
 
     // A Stop on a send that never became a turn must not arm the continue offer: nothing is behind it to resume, and

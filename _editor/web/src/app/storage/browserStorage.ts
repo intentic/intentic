@@ -31,6 +31,8 @@ export const chatTabsKey = sandboxKeys(`intentic.chatTabs.`);
 export const inputHistoryKey = sandboxKeys(`intentic.inputHistory.`);
 // Drafts of chats closed unsent, per sandbox (models/conversations/drafts/closedDrafts.ts).
 export const closedDraftsKey = sandboxKeys(`intentic.closedDrafts.`);
+// Messages sent while the sandbox could not be reached, waiting to go out again, per sandbox (models/conversations/session/sendOutbox.ts).
+export const outboxKey = sandboxKeys(`intentic.outbox.`);
 // A half-answered question card, per request (features/chat/drafts/questionDraft.ts).
 export const questionDraftKey = accountKeys(`intentic.questionDraft.`);
 // The commit message being written, per sandbox (features/workspace/changes/commit/commitMessage.ts).

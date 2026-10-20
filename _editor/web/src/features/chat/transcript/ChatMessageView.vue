@@ -258,6 +258,16 @@ const startEdit = (): void => {
     conversation.value.transcript.beginEdit(props.message);
 };
 
+// Words waiting to send (ChatMessage.unsent): sent now rather than on the next try, or taken back into the composer.
+const sendUnsentNow = (): void => {
+    void conversation.value.turn.outbox.flush();
+};
+const cancelUnsent = (): void => {
+    if (props.message.messageId !== undefined) {
+        conversation.value.turn.outbox.cancel(props.message.messageId);
+    }
+};
+
 // Clamp overflow (.chat-prompt-text) depends on wrap width, so it's measured via ResizeObserver, not guessed from text.
 const bubble = useTemplateRef<HTMLElement>(`bubble`);
 const overflowing = ref(false);
@@ -525,6 +535,22 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         <Icon :name="expanded ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
                     </button>
                 </div>
+            </div>
+            <!-- Words the sandbox has not taken yet (ChatMessage.unsent): said under them, with what a person can do about it. -->
+            <div
+                v-if="message.unsent"
+                v-tooltip.left="{ title: t(`chat.chatMessageView.waitingToSend`), note: t(`chat.chatMessageView.waitingToSendHint`) }"
+                class="flex items-center gap-2 text-2xs text-subtle"
+                data-testid="chat-unsent"
+            >
+                <Icon name="clock" class="text-2xs" />
+                <span>{{ t(`chat.chatMessageView.waitingToSend`) }}</span>
+                <button type="button" class="touch-target cursor-pointer text-content hover:underline" @click.stop="sendUnsentNow">
+                    {{ t(`chat.chatMessageView.sendNow`) }}
+                </button>
+                <button type="button" class="touch-target cursor-pointer hover:text-content hover:underline" @click.stop="cancelUnsent">
+                    {{ t(`chat.chatMessageView.cancelSend`) }}
+                </button>
             </div>
             <!-- Sent-time label sits in the margin beside the bubble, visible only on hover, so it costs no row height. -->
             <span

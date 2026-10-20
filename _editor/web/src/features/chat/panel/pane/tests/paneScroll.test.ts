@@ -6,7 +6,7 @@ import { effectScope, nextTick, ref } from "vue";
 // follow moves anything, is the scroller's own rule (useStickToBottom), stood in for here.
 
 const { pin, follow } = { pin: jest.fn(), follow: jest.fn() };
-jest.mock("../../../transcript/useStickToBottom", () => ({ useStickToBottom: () => ({ pin, follow }) }));
+jest.mock("../../../transcript/useStickToBottom", () => ({ useStickToBottom: () => ({ pin, follow }), TRANSCRIPT_HOLD: Symbol(`transcriptHold`) }));
 const { usePaneScroll } = await import("../paneScroll");
 
 const paneOf = () => {

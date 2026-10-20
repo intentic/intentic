@@ -73,6 +73,7 @@ test.each([false, true])("keeps plan feedback through auth recovery and a usage 
                         sentAt: expect.any(Number),
                         attachments: [attachment],
                         run,
+                        rowId: expect.any(String),
                     },
                 ]),
             });

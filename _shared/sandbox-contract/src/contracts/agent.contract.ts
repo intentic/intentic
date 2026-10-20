@@ -4,13 +4,13 @@ import { AgentCommandsQuerySchema, AgentCommandsSchema } from "../events/request
 import { AttachFrameSchema } from "../events/agent-events.js";
 import {
     AgentRunSchema,
-    AttachTurnSchema,
     ConversationQueueSchema,
     MessageReceiptSchema,
     QueueResumedSchema,
     QueueTakenBackSchema,
     StartedTurnSchema,
 } from "../schemas/agent.js";
+import { AttachTurnSchema } from "../schemas/attach.js";
 import { ChatRouteAskSchema, ChatRouteSchema } from "../schemas/chat-route.js";
 import { RewindResultSchema, RewindTurnSchema } from "../schemas/history.js";
 import {

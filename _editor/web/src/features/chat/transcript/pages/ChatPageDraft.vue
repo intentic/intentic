@@ -3,7 +3,7 @@ import { SEALED_PAGE_POLICY, pageThemeCss } from "@intentic/sandbox-contract/tex
 import { Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
-import type { PageDraftView } from "../../../../models/conversations/session/turnClient";
+import type { PageDraftView } from "../../../../models/conversations/session/turnLiveState";
 import { usePageTheme } from "./pageTheme";
 
 // A page as the agent is still writing it, drawn as its markup streams in, the way prose is. The browser's own HTML

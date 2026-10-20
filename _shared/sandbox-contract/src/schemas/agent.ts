@@ -617,15 +617,3 @@ export const QueueResumedSchema = z.object({
         ),
 });
 export type QueueResumed = z.infer<typeof QueueResumedSchema>;
-// Attaches to a conversation's newest run (live, or finished within retention); no cursor to resume from, the head
-// carries all rows. `run` names what the client was watching, so a newer run's head id tells it to catch up.
-export const AttachTurnSchema = z.object({
-    conversationId: ConversationIdSchema.describe("Which conversation to watch."),
-    run: z
-        .string()
-        .optional()
-        .describe(
-            "The run you were watching. The stream opens on the conversation's newest run whatever you name: if a newer turn has started since, the head names that one instead, and its rows are that turn's.",
-        ),
-});
-export type AttachTurn = z.infer<typeof AttachTurnSchema>;

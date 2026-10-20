@@ -11,6 +11,9 @@ import { blobsRoot, putBlob } from "./record-blobs.js";
 import { backupFile, convertLegacy } from "./record-convert.js";
 import { type MigrationDeps, migrateOnThreads, migrateRecords, preparedFile } from "./record-migration.js";
 
+// A row recorded before rows had ids reads back named by its position; the rows a record gains later get minted ids.
+const byPosition = <T extends object>(rows: readonly T[]): (T & { rowId: string })[] => rows.map((row, at) => ({ ...row, rowId: `@${at}` }));
+
 // The pass that converts plain records against real files and real worker threads: every record read back as it was,
 // its original kept, the phrase index's pin moved only where it stood on the record converted, and a record that
 // changed or failed midway left as it is.
@@ -81,7 +84,7 @@ test("converts every plain record on worker threads, keeps each original and mov
     expect(report).toMatchObject({ converted: 2, failed: 0, legacyBytes: jsonl(rowsOf("pinned-one")).length + jsonl(rowsOf("unpinned-two")).length });
     for (const id of ["pinned-one", "unpinned-two"]) {
         expect(await readdir(dirname(transcriptFile(historyRoot, id)))).toEqual(["transcript.jsonl.zst"]);
-        expect(await record.read(id)).toEqual(rowsOf(id));
+        expect(await record.read(id)).toEqual(byPosition(rowsOf(id)));
         expect(await readZstd(backupFile(historyRoot, id))).toBe(jsonl(rowsOf(id)));
     }
     expect(await readdir(dirname(preparedFile(historyRoot, "left-three")))).toEqual([]);
@@ -118,8 +121,8 @@ test("a record that changed after its conversion is not adopted, and one that fa
     expect(report).toMatchObject({ converted: 0, failed: 1 });
     expect(await readdir(dirname(changed))).toEqual(["transcript.jsonl"]);
     expect(await readdir(dirname(legacyTranscriptFile(historyRoot, "failing-two")))).toEqual(["transcript.jsonl"]);
-    expect(await record.read("failing-two")).toEqual(rowsOf("failing-two"));
-    expect((await record.read("changed-one")).at(-1)).toEqual({ role: "user", text: "one more" });
+    expect(await record.read("failing-two")).toEqual(byPosition(rowsOf("failing-two")));
+    expect((await record.read("changed-one")).at(-1)).toEqual({ role: "user", text: "one more", rowId: "@2" });
     expect(moved.size).toBe(0);
 });
 
@@ -129,5 +132,5 @@ test("a turn that changes a record the pass has not reached converts it first, a
     await record.append("busy-one", [{ role: "user", text: "next" }]);
     expect(await readdir(dirname(transcriptFile(historyRoot, "busy-one")))).toEqual(["transcript.jsonl.zst"]);
     expect(await migrateOnThreads({ historyRoot, adopt: record.adopt, logger, ...pins().deps })).toMatchObject({ converted: 0, failed: 0 });
-    expect(await record.read("busy-one")).toEqual([...rowsOf("busy-one"), { role: "user", text: "next" }]);
+    expect(await record.read("busy-one")).toEqual([...byPosition(rowsOf("busy-one")), { role: "user", text: "next", rowId: expect.stringMatching(/^[0-9a-z]{12}$/u) }]);
 });

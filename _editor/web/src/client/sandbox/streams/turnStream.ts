@@ -52,6 +52,18 @@ export interface RunRenderer {
     entry(entry: AttachEntry, turn: TurnContext, replay: boolean): void;
 }
 
+// What an attach asks for: the conversation, and the run it means or the run it means to follow on from, where known.
+const attachInput = (conversationId: string, run: string | undefined, after: string | undefined): ProcedureInput<`agent.attach`> => {
+    const input: ProcedureInput<`agent.attach`> = { conversationId };
+    if (run !== undefined) {
+        input.run = run;
+    }
+    if (after !== undefined) {
+        input.after = after;
+    }
+    return input;
+};
+
 // How a follow ended: the stream engaged (true), the daemon said nothing runs (false), or it could not be asked at all
 // (undefined): a network error before anything engaged, which is not "nothing is running". A first turn still running
 // has no settled record to fall back on, so a caller reading that as false drew an empty chat over a live turn.
@@ -171,6 +183,9 @@ export const followRun = async (
     controller: AbortController,
     // Which daemon runs it (undefined=this box); reused every re-attach so a resumed stream stays on it.
     at: string | undefined,
+    // A run this window already saw end: the daemon then opens on the run after it, waiting a moment for the one the
+    // conversation's queue starts next (AttachTurnSchema.after), where asking without it would find nothing yet.
+    after?: string,
 ): Promise<FollowEnd> => {
     let run = initialRun;
     let attached = false;
@@ -212,7 +227,7 @@ export const followRun = async (
             return attached;
         }
         const attempt = watchSilence(controller);
-        const opening = await openAttach({ conversationId, ...(run !== undefined ? { run } : {}) }, controller, attempt, at, attached);
+        const opening = await openAttach(attachInput(conversationId, run, after), controller, attempt, at, attached);
         if (!(`frames` in opening)) {
             // Slot releases before the follow ends or backs off.
             attempt.dispose();

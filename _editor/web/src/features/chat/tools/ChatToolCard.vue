@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { linkedConversationHref, openLinkedSubagent } from "../../../models/fleet/linkedSubagent";
 import type { IconName } from "@intentic/ui";
-import { computed, ref, watch } from "vue";
+import { computed, inject, ref, watch } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { useChatSurface } from "../../../models/conversations/tools/chatToolSurface";
+import { TRANSCRIPT_HOLD } from "../transcript/useStickToBottom";
 import ChatCodeBody from "../transcript/ChatCodeBody.vue";
 import ChatDocumentBody from "../transcript/cards/ChatDocumentBody.vue";
 import ChatToolDiff from "./ChatToolDiff.vue";
@@ -69,8 +70,13 @@ const hasContent = computed(() => hasOutput.value || hasDelegation.value);
 const outputOverride = ref<boolean>();
 const isOpen = computed(() => outputOverride.value ?? view.value.defaultOpen);
 
-const toggleOpen = (): void => {
-    outputOverride.value = !isOpen.value;
+// The header the reader pressed stays where it is while the output opens below it (useStickToBottom's hold); with no
+// scroller to hold it in (a published page), the fold just turns.
+const hold = inject(TRANSCRIPT_HOLD, (_element, change) => change());
+const toggleOpen = (event: MouseEvent): void => {
+    hold(event.currentTarget, () => {
+        outputOverride.value = !isOpen.value;
+    });
 };
 
 // The card's clickable location chip: the first workspace file this call touches. Not a command's: the files the daemon

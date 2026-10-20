@@ -48,6 +48,11 @@ import { opt } from "../../../../opt.js";
 import type { Caller } from "../../../../auth/auth.js";
 import { restartResume } from "../restart-resume-policy.js";
 
+// SAFETY: a matcher standing in for a row's id, which the run or the record mints; compared only by toEqual.
+const ROW_ID = expect.any(String) as string;
+// Rows as read back: each named, whatever it was named.
+const withIds = <T extends object>(rows: readonly T[]): (T & { rowId: string })[] => rows.map((row) => ({ ...row, rowId: ROW_ID }));
+
 // `takes` answers each abandon attempt (false: the turn is still unwinding); `armed`/`limitArmed` are per-conversation
 // overrides for outage/limit resume, a missing id follows the sandbox default.
 const fakeServices = (
@@ -155,8 +160,8 @@ test("a started turn records its settled transcript, whatever provider ran it", 
     // The run each row came from is part of the record: within its retention window that run is still attachable, and
     // a window redrawing from here has to recognise its rows when the head arrives.
     expect(await record.read("tr-record")).toEqual([
-        { role: "user", text: "ship it", sentAt: expect.any(Number), messageId: "m-ship", run: started.id },
-        { role: "assistant", text: "shipped", openedAt: expect.any(Number), run: started.id },
+        { role: "user", text: "ship it", sentAt: expect.any(Number), messageId: "m-ship", run: started.id, rowId: ROW_ID },
+        { role: "assistant", text: "shipped", openedAt: expect.any(Number), run: started.id, rowId: ROW_ID },
     ]);
 });
 
@@ -1193,14 +1198,14 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
     expect(prompts).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
     // Written to the transcript with an explicit notice before the journal entry drains.
-    expect(await fileTranscriptRecord(root).read("rs-off")).toEqual([
+    expect(await fileTranscriptRecord(root).read("rs-off")).toEqual(withIds([
         { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" },
         {
             role: "notice",
             text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.",
             noticeCode: { code: "restartInterrupted" },
         },
-    ]);
+    ]));
     expect((await services.automations.get("nightly"))?.runs[0]).toMatchObject({ outcome: "interrupted" });
 });
 
@@ -1322,7 +1327,7 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
 
     await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
 
-    expect(await fileTranscriptRecord(root).read("rs-work")).toEqual([
+    expect(await fileTranscriptRecord(root).read("rs-work")).toEqual(withIds([
         // sentAt is the turn's own start time, not the provider's, and the id is its sender's, as on every other user row.
         { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" },
         // Reads the session the journal recorded, from the turn's own start; the registry entry may predate it.
@@ -1332,7 +1337,7 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
             text: "The sandbox restarted before this turn finished. Continue picks it up from the saved worktree.",
             noticeCode: { code: "restartInterrupted" },
         },
-    ]);
+    ]));
 });
 
 // The provider's store keeps an ask with no answer as a card still up; its waiter died with the daemon.
@@ -1704,11 +1709,13 @@ test("a parked run comes back as itself: its id, its start and its rows, the car
     const carried = turnRunOf(services.conversations, "pk-same");
     expect(carried?.id).toBe("run-parked");
     expect(carried?.startedAt).toBe(10_000);
-    expect(carried?.rows).toEqual(drawn);
-    // A second restart finds the same run, rows and all, to bring back again.
+    // Named as the run that drew them named them; this journal entry's rows, written by hand, carried none.
+    expect(carried?.rows).toEqual(withIds(drawn));
+    // A second restart finds the same run, rows and all, to bring back again: under the same ids, so a window holding
+    // them still recognises every row.
     await waitFor(async () => {
         const [entry] = await services.turnJournal.list();
-        expect(entry?.kind === "turn" ? entry.run : undefined).toEqual({ id: "run-parked", rows: drawn });
+        expect(entry?.kind === "turn" ? entry.run : undefined).toEqual({ id: "run-parked", rows: [...(carried?.rows ?? [])] });
     }, SETTLES);
 
     expect(services.cards.resolve({ kind: "question", requestId: "r-same", answers: { "Deploy now?": ["Yes"] } })).toBe("settled");
@@ -1717,8 +1724,8 @@ test("a parked run comes back as itself: its id, its start and its rows, the car
     await waitFor(async () => expect(await record.read("pk-same")).toHaveLength(4), SETTLES);
     const [recordedPrompt, recordedWork, answered, answer] = await record.read("pk-same");
     // What it did before it asked, the prompt at the hour it was sent, and the card answered once, where it stood.
-    expect([recordedPrompt, recordedWork]).toEqual([prompt, work]);
-    expect(answered).toEqual({ ...raised, question: { ...card, status: "answered", answers: { "Deploy now?": ["Yes"] } } });
+    expect([recordedPrompt, recordedWork]).toEqual([prompt, work].map((row, at) => ({ ...row, rowId: carried?.rows[at]?.rowId })));
+    expect(answered).toEqual({ ...raised, question: { ...card, status: "answered", answers: { "Deploy now?": ["Yes"] } }, rowId: carried?.rows[2]?.rowId });
     // The answer is a message of its own, never wearing the prompt's id.
     expect(answer).toMatchObject({ role: "user", messageId: expect.any(String) });
     expect(answer?.messageId).not.toBe("m-report");
@@ -1876,8 +1883,8 @@ test("a parked turn given up records the rows it had drawn, its card frozen as n
     await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
 
     const [prompt, work, notice] = await fileTranscriptRecord(root).read("pk-given");
-    expect(prompt).toEqual(opened);
-    expect(work).toEqual({ ...asking, question: { ...card, status: "cancelled" } });
+    expect(prompt).toEqual({ ...opened, rowId: ROW_ID });
+    expect(work).toEqual({ ...asking, question: { ...card, status: "cancelled" }, rowId: ROW_ID });
     expect(notice).toMatchObject({ role: "notice", noticeCode: { code: "restartInterrupted" } });
 });
 
@@ -2256,7 +2263,7 @@ test("a turn the sandbox started is kept when the door turns it away, its messag
     });
     await waitFor(async () => expect(await record.read("door-kept")).toHaveLength(2), SETTLES);
     expect(await record.read("door-kept")).toEqual([
-        { role: "user", text: "fix the pipeline", sentAt: expect.any(Number), messageId: "m-fix", run: started.id },
+        { role: "user", text: "fix the pipeline", sentAt: expect.any(Number), messageId: "m-fix", run: started.id, rowId: ROW_ID },
         expect.objectContaining({ role: "notice", noticeAction: "sendAnyway", sandboxHeld: true, run: started.id }),
     ]);
 

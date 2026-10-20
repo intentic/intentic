@@ -130,8 +130,8 @@ export class Conversation {
     readonly failures: TurnFailures;
     readonly requests: CardReplies;
 
-    // Words this window holds and nothing else does (a draft, an attachment; never the daemon's queue); guards a tab from
-    // closing. A watcher keeps it, not a computed, so a keystroke wakes none of the strip, fleet and cards that read it.
+    // Words this window holds and nothing else does (a draft, an attachment, words waiting to send; never the daemon's
+    // queue); guards a tab from closing. A watcher keeps it, not a computed, so a keystroke wakes none of the strip, fleet and cards that read it.
     readonly unsent = shallowRef(false);
 
     // What this conversation is doing, for the tab's status icon.
@@ -161,7 +161,7 @@ export class Conversation {
         // Detached: the conversation outlives whichever component made it, and the watchers are reachable only through it.
         effectScope(true).run(() => {
             watch(
-                () => this.draft.value.trim() !== `` || this.attachments.value.length > 0,
+                () => this.draft.value.trim() !== `` || this.attachments.value.length > 0 || this.turn.outbox.entries.value.length > 0,
                 (now) => {
                     this.unsent.value = now;
                 },

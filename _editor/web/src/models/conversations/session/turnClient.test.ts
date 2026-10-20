@@ -793,24 +793,34 @@ describe(`saying something`, () => {
     });
 
     // A daemon that took the words after all while no answer came back recognises them when they are sent again unchanged.
-    it(`gives words back to the composer under the id they went out with, which sending them again unchanged keeps`, async () => {
+    it(`keeps words no answer came back for waiting under the id they went out with, and sends them again under it`, async () => {
         const { client, host } = clientOf();
         run.mockImplementation(async () => {
             throw new TypeError(`Failed to fetch`);
         });
 
         await client.say(`tidy the docs`);
-        expect(host.draft.value).toBe(`tidy the docs`);
-        expect(host.error.value).toBe(`Failed to fetch Your message is back in the composer, send it again to deliver it.`);
+        // Nothing is the person's to redo: no error line and no words handed back, only the bubble, waiting.
+        expect(host.draft.value).toBe(``);
+        expect(host.error.value).toBeNull();
+        expect(client.outbox.entries.value.map(({ text }) => text)).toEqual([`tidy the docs`]);
+        expect(host.transcript.messages.value.map(({ role, text, unsent }) => ({ role, text, unsent }))).toEqual([{ role: `user`, text: `tidy the docs`, unsent: true }]);
         const sentAs = run.mock.calls.map(([body]) => body.messageId);
         expect(sentAs).toEqual([sentAs[0], sentAs[0], sentAs[0]]);
 
-        run.mockReset();
-        answers({ delivered: `started`, run: `r4`, duplicate: true });
-        attach.mockImplementation(async () => attached(`r4`, 8_000, `tidy the docs`));
-        await client.say(host.draft.value);
+        // Words written meanwhile go behind them, never ahead.
+        await client.say(`and the changelog`);
+        expect(client.outbox.entries.value.map(({ text }) => text)).toEqual([`tidy the docs`, `and the changelog`]);
 
-        expect(run.mock.calls.map(([body]) => body.messageId)).toEqual([sentAs[0]]);
+        run.mockReset();
+        answers({ delivered: `queued` }, { delivered: `queued` });
+        await client.outbox.flush();
+
+        expect(run.mock.calls.map(([body]) => body.prompt)).toEqual([`tidy the docs`, `and the changelog`]);
+        expect(run.mock.calls[0]?.[0].messageId).toBe(sentAs[0]);
+        expect(client.outbox.entries.value).toEqual([]);
+        // Queued at the daemon: its own queue shows them now, so the waiting bubbles go.
+        expect(host.transcript.messages.value.filter(({ unsent }) => unsent === true)).toEqual([]);
     });
 });
 

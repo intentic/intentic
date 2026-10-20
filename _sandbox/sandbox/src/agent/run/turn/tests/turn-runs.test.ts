@@ -18,8 +18,9 @@ import { beginTurn } from "../../../../conversations/actor/conversation-actors.t
 import { fleetStoreOver, memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
 import { commandsOf, resetCommands } from "../../../providers/agent-commands.js";
 import { MAX_BACKLOG_FRAMES } from "../../../../seams/frame-backlog.js";
-import { startedByOf, startTurnRun, type TurnRun } from "../turn-runs.js";
-import type { TranscriptPatch } from "@intentic/sandbox-contract/events/transcript";
+import { startedByOf, startTurnRun, TurnRun } from "../turn-runs.js";
+import type { TranscriptPatch, TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
+import { applyTranscriptPatch } from "@intentic/sandbox-contract/transcript-fold";
 import { NO_RUN_LOG, type RunLog, type RunLogHead } from "../../../../sessions/run-log.js";
 
 // Where every run here is filed and announced: one fleet's actors, one bus.
@@ -73,6 +74,8 @@ const started = (run: TurnRun | BeginRefusal): TurnRun => {
 const opening = () => [{ role: `user` as const, text: `do the thing`, sentAt: 1 }];
 // When the live fold dated an assistant or notice row, on the daemon's clock (TranscriptFold's `now`).
 const AT = expect.any(Number) as number;
+// A row's own id, minted by the run (turn-runs.ts); which one is beside the point here, that it is there is not.
+const ID = expect.any(String) as string;
 
 // Attach and drain: the head, then everything until the run finishes.
 const collect = async (
@@ -92,7 +95,7 @@ describe(`turn runs`, () => {
         const { turnFn, push, close } = crankedTurn();
         const run = started(startTurnRun(deps, turnFn, turn(`c-live`), { opening }));
         // Every row the run emits says which run it is, so a client redrawing it knows where it already sits.
-        expect(run.rows).toEqual([{ role: `user`, text: `do the thing`, sentAt: 1, run: run.id }]);
+        expect(run.rows).toEqual([{ role: `user`, text: `do the thing`, sentAt: 1, run: run.id, rowId: ID }]);
 
         const followed = collect(`c-live`);
         push({ kind: `session`, sessionId: `s1` });
@@ -106,17 +109,17 @@ describe(`turn runs`, () => {
             run: run.id,
             startedAt: run.startedAt,
             seq: 0,
-            rows: [{ role: `user`, text: `do the thing`, sentAt: 1, run: run.id }],
+            rows: [{ role: `user`, text: `do the thing`, sentAt: 1, run: run.id, rowId: ID }],
         });
         expect(entries).toEqual([
             { kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `s1` } },
-            { kind: `patch`, seq: 2, patch: { op: `append`, row: { role: `assistant`, text: ``, openedAt: AT, run: run.id } } },
-            { kind: `patch`, seq: 3, patch: { op: `text`, index: 1, text: `a` } },
+            { kind: `patch`, seq: 2, patch: { op: `append`, row: { role: `assistant`, text: ``, openedAt: AT, run: run.id, rowId: ID } } },
+            { kind: `patch`, seq: 3, patch: { op: `text`, index: 1, rowId: ID, text: `a` } },
         ]);
         expect(run.done).toBe(true);
         expect(run.rows).toEqual([
-            { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
-            { role: `assistant`, text: `a`, openedAt: AT, run: run.id },
+            { role: `user`, text: `do the thing`, sentAt: 1, run: run.id, rowId: ID },
+            { role: `assistant`, text: `a`, openedAt: AT, run: run.id, rowId: ID },
         ]);
     });
 
@@ -134,12 +137,12 @@ describe(`turn runs`, () => {
         const { head, entries } = await followed;
         expect(head.seq).toBe(4);
         expect(head.rows).toEqual([
-            { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
-            { role: `assistant`, text: `ab`, openedAt: AT, run: run.id },
+            { role: `user`, text: `do the thing`, sentAt: 1, run: run.id, rowId: ID },
+            { role: `assistant`, text: `ab`, openedAt: AT, run: run.id, rowId: ID },
         ]);
         expect(entries).toEqual([
             { kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `s1` } },
-            { kind: `patch`, seq: 5, patch: { op: `text`, index: 1, text: `c` } },
+            { kind: `patch`, seq: 5, patch: { op: `text`, index: 1, rowId: ID, text: `c` } },
         ]);
     });
 
@@ -262,6 +265,7 @@ describe(`turn runs`, () => {
             text: `adapter exploded`,
             openedAt: AT,
             run: turnRunOf(deps.conversations, `c-throw`)!.id,
+            rowId: ID,
         });
         expect((await collect(`c-throw`)).entries).toEqual([{ kind: `fact`, seq: 2, fact: { kind: `error`, message: `adapter exploded` } }]);
 
@@ -275,6 +279,7 @@ describe(`turn runs`, () => {
             noticeCode: { code: `stopped` },
             openedAt: AT,
             run: turnRunOf(deps.conversations, `c-abort`)!.id,
+            rowId: ID,
         });
         expect((await collect(`c-abort`)).entries).toEqual([]);
     });
@@ -288,8 +293,8 @@ describe(`turn runs`, () => {
         await waitFor(() => expect(turnRunOf(deps.conversations, `c-park-stop`)!.done).toBe(true));
         const parkStop = turnRunOf(deps.conversations, `c-park-stop`)!;
         expect(parkStop.rows.slice(1)).toEqual([
-            { role: `assistant`, text: ``, openedAt: AT, question: { requestId: `q1`, questions: [], status: `cancelled` }, run: parkStop.id },
-            { role: `notice`, text: `Stopped.`, noticeCode: { code: `stopped` }, openedAt: AT, run: parkStop.id },
+            { role: `assistant`, text: ``, openedAt: AT, question: { requestId: `q1`, questions: [], status: `cancelled` }, run: parkStop.id, rowId: ID },
+            { role: `notice`, text: `Stopped.`, noticeCode: { code: `stopped` }, openedAt: AT, run: parkStop.id, rowId: ID },
         ]);
     });
 
@@ -310,15 +315,16 @@ describe(`turn runs`, () => {
                 patch: {
                     op: `replace`,
                     index: 1,
-                    row: { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p1`, text: `the plan`, status: `approved` }, run: run.id },
+                    rowId: ID,
+                    row: { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p1`, text: `the plan`, status: `approved` }, run: run.id, rowId: ID },
                 },
             },
             {
                 kind: `patch`,
                 seq: 4,
-                patch: { op: `append`, row: { role: `notice`, text: `Plan approved.`, noticeCode: { code: `planApproved` }, openedAt: AT, run: run.id } },
+                patch: { op: `append`, row: { role: `notice`, text: `Plan approved.`, noticeCode: { code: `planApproved` }, openedAt: AT, run: run.id, rowId: ID } },
             },
-            { kind: `patch`, seq: 5, patch: { op: `append`, row: { role: `notice`, text: `The turn resumed.`, openedAt: AT, run: run.id } } },
+            { kind: `patch`, seq: 5, patch: { op: `append`, row: { role: `notice`, text: `The turn resumed.`, openedAt: AT, run: run.id, rowId: ID } } },
         ]);
     });
 
@@ -340,11 +346,11 @@ describe(`turn runs`, () => {
         await run.waitUntilFinished();
 
         expect(run.rows).toEqual([
-            { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
-            { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p1`, text: `the plan`, status: `rejected` }, run: run.id },
-            { role: `notice`, text: `Kept planning.`, noticeCode: { code: `keptPlanning` }, openedAt: AT, run: run.id },
-            { role: `user`, text: `smaller steps`, sentAt: AT, run: run.id },
-            { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p2`, text: `another plan`, status: `cancelled` }, run: run.id },
+            { role: `user`, text: `do the thing`, sentAt: 1, run: run.id, rowId: ID },
+            { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p1`, text: `the plan`, status: `rejected` }, run: run.id, rowId: ID },
+            { role: `notice`, text: `Kept planning.`, noticeCode: { code: `keptPlanning` }, openedAt: AT, run: run.id, rowId: ID },
+            { role: `user`, text: `smaller steps`, sentAt: AT, run: run.id, rowId: ID },
+            { role: `assistant`, text: ``, openedAt: AT, plan: { requestId: `p2`, text: `another plan`, status: `cancelled` }, run: run.id, rowId: ID },
         ]);
     });
 
@@ -402,9 +408,9 @@ describe(`turn runs`, () => {
         // window that redrew from the record has to recognise those rows when its head arrives.
         expect(transcript).toHaveBeenCalledWith(
             [
-                { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
-                { role: `assistant`, text: `a`, openedAt: AT, run: run.id },
-                { role: `user`, text: `and`, sentAt: 2, run: run.id },
+                { role: `user`, text: `do the thing`, sentAt: 1, run: run.id, rowId: ID },
+                { role: `assistant`, text: `a`, openedAt: AT, run: run.id, rowId: ID },
+                { role: `user`, text: `and`, sentAt: 2, run: run.id, rowId: ID },
             ],
             [2],
         );
@@ -451,7 +457,7 @@ describe(`turn runs`, () => {
             expect(entries).toContainEqual(expect.objectContaining({ kind: `fact`, fact: { ...REFUSAL, held: { ran: false } } }));
             await waitFor(() => expect(transcript).toHaveBeenCalledTimes(1));
             expect(run.rows).toEqual([
-                { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
+                { role: `user`, text: `do the thing`, sentAt: 1, run: run.id, rowId: ID },
                 expect.objectContaining({ role: `notice`, noticeAction: `sendAnyway`, sandboxHeld: true, run: run.id }),
             ]);
 
@@ -767,6 +773,7 @@ describe(`turn runs`, () => {
             noticeCode: { code: "undelivered", params: { message, error: "agent-domain-refused" } },
             openedAt: AT,
             run: run.id,
+            rowId: ID,
         }]);
         expect(transcript).not.toHaveBeenCalled();
         expect(writes).toEqual([]);
@@ -807,6 +814,78 @@ describe(`turn runs`, () => {
 
         expect(commandsOf(`claude`)).toEqual([{ name: `code-review`, description: `Review the diff` }]);
         expect(commandsOf(`codex`)).toEqual([]);
+    });
+});
+
+// Every row a run draws has one id, the same on the attach head, on every patch that changes it, on the rows the record
+// takes, and on a run carried on after a restart: what lets a reader update the row it holds instead of guessing.
+describe(`a run's row ids`, () => {
+    const replayed = (head: AttachHead, entries: readonly AttachEntry[]): TranscriptRow[] =>
+        entries.reduce<TranscriptRow[]>((rows, entry) => (entry.kind === `patch` ? applyTranscriptPatch(rows, entry.patch) : rows), [...head.rows]);
+    const patchesOf = (entries: readonly AttachEntry[]): TranscriptPatch[] => entries.flatMap((entry) => (entry.kind === `patch` ? [entry.patch] : []));
+
+    it(`names each row once, the same on the head, every patch and the settled rows, and lets a dropped row's id go`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const run = started(startTurnRun(deps, turnFn, turn(`c-ids`), { opening }));
+        const followed = collect(`c-ids`);
+        push({ kind: `delta`, text: `a` });
+        push({ kind: `plan`, requestId: `p1`, text: `the plan` });
+        push({ kind: `resolved`, requestId: `p1`, reply: { kind: `plan`, requestId: `p1`, approve: true } });
+        push({ kind: `done` });
+        close();
+        const { head, entries } = await followed;
+        const patches = patchesOf(entries);
+        // Every patch names its row: an append on the row it brings, every other change beside its index.
+        for (const patch of patches) {
+            expect(patch.op === `append` ? patch.row.rowId : patch.rowId).toEqual(expect.any(String));
+        }
+        expect(patches.some((patch) => patch.op === `replace`)).toBe(true);
+        const ids = run.rows.map((row) => row.rowId);
+        expect(new Set(ids).size).toBe(ids.length);
+        expect(ids[0]).toBe(head.rows[0]?.rowId);
+        // The head and the patches folded by a reader's own reducer give the run's rows, ids and all: the ids stayed
+        // aligned with the rows through every change.
+        expect(replayed(head, entries)).toEqual([...run.rows]);
+        // Each change names the very row its index points at as it lands, so a reader finding rows by id finds the same one.
+        patches.reduce<TranscriptRow[]>((rows, patch) => {
+            if (patch.op !== `append`) {
+                expect(patch.rowId).toBe(rows[patch.index]?.rowId);
+            }
+            return applyTranscriptPatch(rows, patch);
+        }, [...head.rows]);
+    });
+
+    it(`lets a dropped row's id go with it, and names the rows after it rightly`, async () => {
+        const run = new TurnRun(opening());
+        const [opened] = run.rows;
+        const { entries } = run.attach(() => new Error(`fell behind`));
+        // Turned away at the door: the fold takes the user's bubble back (its queue keeps the words) and says why.
+        run.push({ kind: `error`, code: `sandbox-memory-low`, message: `Not enough sandbox memory to start this turn.` });
+        run.finish();
+        run.recordedNow();
+        const patches: TranscriptPatch[] = [];
+        for await (const entry of entries) {
+            if (entry.kind === `patch`) {
+                patches.push(entry.patch);
+            }
+        }
+        expect(patches[0]).toEqual({ op: `drop`, index: 0, rowId: opened?.rowId });
+        expect(run.rows).toHaveLength(1);
+        expect(run.rows[0]?.rowId).toEqual(expect.any(String));
+        expect(run.rows[0]?.rowId).not.toBe(opened?.rowId);
+    });
+
+    it(`keeps the ids a run carried on after a restart drew under, and names an opening row that had none`, () => {
+        const { turnFn } = crankedTurn();
+        const continues = {
+            id: `run-carried`,
+            startedAt: 1,
+            rows: [{ role: `user` as const, text: `do the thing`, sentAt: 1, rowId: `kept-user` }, { role: `assistant` as const, text: `half`, rowId: `kept-reply` }],
+        };
+        const run = started(startTurnRun(deps, turnFn, turn(`c-ids-carried`), { continues }));
+        expect(run.rows.map((row) => row.rowId)).toEqual([`kept-user`, `kept-reply`]);
+        const fresh = started(startTurnRun(deps, crankedTurn().turnFn, turn(`c-ids-fresh`), { opening }));
+        expect(fresh.rows[0]?.rowId).toEqual(expect.any(String));
     });
 });
 
@@ -853,6 +932,57 @@ describe(`the record`, () => {
         await waitFor(() => expect(order).toEqual([`finished`]));
         write?.();
         await waitFor(() => expect(order).toEqual([`finished`, `recorded`]));
+    });
+
+    // A reader that asks the record for the run as its stream ends must find it there: `end` waits for the write.
+    it(`ends its streams only once the run is on the record, a follower that came between included`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        let write: (() => void) | undefined;
+        let written = false;
+        const writing = new Promise<void>((resolve) => {
+            write = () => {
+                written = true;
+                resolve();
+            };
+        });
+        const run = started(startTurnRun(deps, turnFn, turn(`c-end-recorded`), { opening, transcript: () => writing }));
+        const order: string[] = [];
+        const early = collect(`c-end-recorded`).then((followed) => {
+            order.push(written ? `ended, recorded` : `ended before the record`);
+            return followed;
+        });
+        const frames = Array.fromAsync(run.frames()).then(() => order.push(written ? `frames ended, recorded` : `frames ended before the record`));
+        push({ kind: `delta`, text: `done it` });
+        push({ kind: `done` });
+        close();
+        // The stop barrier is the run's finish, as before: it does not wait on the record.
+        await run.waitUntilFinished();
+        expect(run.done).toBe(true);
+        // Between the finish and the record: a follower that attaches now gets the whole run, then its end with the rest.
+        const late = collect(`c-end-recorded`);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(order).toEqual([]);
+        // What a transcript read names as still live: the record does not hold it yet.
+        expect(run.onRecord).toBe(false);
+        write?.();
+        const [{ head: lateHead, entries: lateEntries }, { entries }] = await Promise.all([late, early, frames]);
+        expect(order).toEqual([`ended, recorded`, `frames ended, recorded`]);
+        expect(run.onRecord).toBe(true);
+        expect(lateHead.rows.map((row) => row.text)).toEqual([`do the thing`, `done it`]);
+        expect(lateEntries).toEqual([]);
+        expect(entries.filter((entry) => entry.kind === `patch`)).toHaveLength(2);
+        // Once recorded, an attach ends at once.
+        expect((await collect(`c-end-recorded`)).entries).toEqual([]);
+    });
+
+    it(`ends its streams even when the record refused the run`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const run = started(startTurnRun(deps, turnFn, turn(`c-end-refused`), { opening, transcript: () => Promise.reject(new Error(`disk full`)) }));
+        const followed = collect(`c-end-refused`);
+        push({ kind: `done` });
+        close();
+        await followed;
+        expect(run.done).toBe(true);
     });
 
     it(`is on it at once for a run that wrote nothing down`, async () => {

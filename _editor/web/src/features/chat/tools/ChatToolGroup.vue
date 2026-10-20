@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { useChatSurface } from "../../../models/conversations/tools/chatToolSurface";
 import ChatToolCard from "./ChatToolCard.vue";
+import { TRANSCRIPT_HOLD } from "../transcript/useStickToBottom";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
 import { delegates, present, readableToolName } from "./toolPresentation";
 import { useT } from "@intentic/ui/i18n";
@@ -23,8 +24,12 @@ const props = defineProps<{
 const openFile = useChatSurface().openFile;
 
 const expanded = ref(false);
-const toggle = (): void => {
-    expanded.value = !expanded.value;
+// The row the reader pressed holds its place while the calls open below it, as a single card's header does (ChatToolCard).
+const hold = inject(TRANSCRIPT_HOLD, (_element, change) => change());
+const toggle = (event: MouseEvent): void => {
+    hold(event.currentTarget, () => {
+        expanded.value = !expanded.value;
+    });
 };
 
 // Use the first tool's presentation for the icon (all tools in the group share the same name).

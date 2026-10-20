@@ -3186,7 +3186,11 @@
             "to": "Do {payTo}",
             "waitingToFinishSetup": "Czekamy, aż dokończysz konfigurację…",
             "waitsReadyToLand": "(czeka jako „Gotowe do scalenia”, aż to scalisz)",
-            "watchInstall": "Obejrzyj instalację"
+            "watchInstall": "Obejrzyj instalację",
+            "waitingToSend": "Czeka na wysłanie",
+            "waitingToSendHint": "Wyjdzie, gdy sandbox odpowie",
+            "sendNow": "Wyślij teraz",
+            "cancelSend": "Anuluj"
         },
         "chatModelPicker": {
             "autoArmed": "Twoja pierwsza wiadomość wybierze, na czym działa ten czat; możesz to zmienić w każdej chwili.",
@@ -4249,7 +4253,6 @@
         },
         "turnClient": {
             "chatFailed": "Czat nie zadziałał.",
-            "messageBack": "Twoja wiadomość wróciła do kompozytora: wyślij ją ponownie, żeby ją dostarczyć.",
             "queueChangedElsewhere": "Ta oczekująca wiadomość została zmieniona w innym oknie, odkąd ją widziałeś: sprawdź ją jeszcze raz, zanim ją zmienisz.",
             "queueGone": "Ta wiadomość już nie czeka: została wysłana albo ktoś ją wycofał.",
             "sandboxNoAnswer": "Sandbox nie odpowiedział."

@@ -1493,7 +1493,11 @@
             "to": "A {payTo}",
             "waitingToFinishSetup": "Esperando a que termines la configuración…",
             "waitsReadyToLand": "(espera como «Listo para integrar» hasta que lo integres)",
-            "watchInstall": "Ver la instalación"
+            "watchInstall": "Ver la instalación",
+            "waitingToSend": "Esperando para enviar",
+            "waitingToSendHint": "Se envía cuando responda",
+            "sendNow": "Enviar ahora",
+            "cancelSend": "Cancelar"
         },
         "chatModelPicker": {
             "autoDescription": "Let a model choose from what's connected and still has allowance"

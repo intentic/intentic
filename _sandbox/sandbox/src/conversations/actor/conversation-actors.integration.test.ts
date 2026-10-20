@@ -263,9 +263,13 @@ const drained = async (): Promise<void> => {
     }
 };
 
-// Drains until `holds` answers true; bounded, so a step that never gets there fails by name rather than hanging.
+// Drains until `holds` answers true; bounded, so a step that never gets there fails by name rather than hanging. Bounded
+// in time rather than rounds: a run's end now waits on its record, a write to disk, which no count of turns of the event
+// loop measures.
+const UNTIL_MS = 5_000;
 const until = async (holds: () => boolean, what: string): Promise<void> => {
-    for (let round = 0; round < 400 && !holds(); round += 1) {
+    const deadline = Date.now() + UNTIL_MS;
+    while (Date.now() < deadline && !holds()) {
         await new Promise<void>((resolve) => setImmediate(resolve));
     }
     expect(holds(), what).toBe(true);

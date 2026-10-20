@@ -1,5 +1,5 @@
 import { computed, getCurrentInstance, provide, type Ref, watch } from "vue";
-import { useStickToBottom } from "../../transcript/useStickToBottom";
+import { TRANSCRIPT_HOLD, useStickToBottom } from "../../transcript/useStickToBottom";
 import { useTranscriptWarmup } from "../../transcript/useTranscriptWarmup";
 import { TRANSCRIPT_PARKED } from "./paneWindow";
 
@@ -20,11 +20,13 @@ export interface PaneScrollHost {
 }
 
 export const usePaneScroll = (pane: PaneScrollHost) => {
-    const { pin, follow, parked } = useStickToBottom(pane.scroller, pane.content);
-    // The row window (paneWindow.ts, in the turns below) takes rows above it down only while the reader is here. A host
-    // that is no component (a test's scope) has no turns below it to tell.
+    const { pin, follow, hold, parked } = useStickToBottom(pane.scroller, pane.content);
+    // The row window (paneWindow.ts, in the turns below) takes rows above it down only while the reader is here, and a
+    // fold the reader presses in them holds its place through this scroller. A host that is no component (a test's
+    // scope) has no turns below it to tell.
     if (getCurrentInstance() !== null) {
         provide(TRANSCRIPT_PARKED, parked);
+        provide(TRANSCRIPT_HOLD, hold);
     }
     const { realizing } = useTranscriptWarmup({
         conversationId: computed(pane.conversationId),

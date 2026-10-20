@@ -334,8 +334,8 @@ test("the import lands every conversation, row and file where this build's own s
     expect(await checkpoints.all(BRISK)).toEqual(new Map([[0, { kind: "tree", snapshot: "snap-b" }]]));
     expect(await sqliteTurnJournal(conversations).list()).toEqual([briskTurn, nightlyFire]);
     expect(await sqliteWatchJournal(conversations).list()).toEqual([ciWatch]);
-    expect(await fileTranscriptRecord(roots.history).read(AMBER)).toEqual(amberRows);
-    expect(await fileTranscriptRecord(roots.history).read(BRISK)).toEqual(briskRows);
+    expect(await fileTranscriptRecord(roots.history).read(AMBER)).toEqual(amberRows.map((row, at) => ({ ...row, rowId: `@${at}` })));
+    expect(await fileTranscriptRecord(roots.history).read(BRISK)).toEqual(briskRows.map((row, at) => ({ ...row, rowId: `@${at}` })));
     expect(await filePromptRecord(roots.history).of(AMBER)).toEqual(amberPrompt);
     expect(await readFile(join(sessionsDir(roots.history, BRISK), SESSION_FILE), "utf8")).toBe('{"type":"summary"}\n');
     // Copied, never moved: a rollback to 1.307 finds every old file as it left it.
@@ -516,8 +516,8 @@ test("the copies convert to logs like any plain record, and a rollback after tha
     expect(await migrate(roots.history)).toMatchObject({ converted: 2, failed: 0 });
     expect(await readdir(conversationUnit(roots.history, BRISK))).toEqual(expect.arrayContaining(["transcript.jsonl.zst"]));
     await expect(stat(legacyTranscriptFile(roots.history, BRISK))).rejects.toThrow("ENOENT");
-    expect(await fileTranscriptRecord(roots.history).read(AMBER)).toEqual(amberRows);
-    expect(await fileTranscriptRecord(roots.history).read(BRISK)).toEqual(briskRows);
+    expect(await fileTranscriptRecord(roots.history).read(AMBER)).toEqual(amberRows.map((row, at) => ({ ...row, rowId: `@${at}` })));
+    expect(await fileTranscriptRecord(roots.history).read(BRISK)).toEqual(briskRows.map((row, at) => ({ ...row, rowId: `@${at}` })));
 
     // The import's boot converts its copies and still dies before it commits.
     clearNewestRun();
@@ -547,6 +547,6 @@ test("a conversation whose record is already a log keeps it, and no plain copy l
         FRESH.map((line) => (line.startsWith("copies 2 transcripts") ? "copies 1 transcript into conversations/<id>/" : line)),
     );
     await expect(stat(legacyTranscriptFile(roots.history, AMBER))).rejects.toThrow("ENOENT");
-    expect(await fileTranscriptRecord(roots.history).read(AMBER)).toEqual(logged);
-    expect(await fileTranscriptRecord(roots.history).read(BRISK)).toEqual(briskRows);
+    expect(await fileTranscriptRecord(roots.history).read(AMBER)).toEqual(logged.map((row) => ({ ...row, rowId: expect.stringMatching(/^[0-9a-z]{12}$/u) })));
+    expect(await fileTranscriptRecord(roots.history).read(BRISK)).toEqual(briskRows.map((row, at) => ({ ...row, rowId: `@${at}` })));
 });

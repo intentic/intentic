@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { procedure } from "../protocol/route-meta.js";
-import { AgentToolChildrenSchema, AgentTranscriptSchema, SessionTranscriptSchema } from "../events/transcript.js";
+import { AgentToolChildrenSchema, SessionTranscriptSchema } from "../events/transcript.js";
+import { AgentTranscriptSchema } from "../events/agent-transcript.js";
 import {
     AgentAssignSchema,
     AgentAutoLandSchema,
@@ -11,7 +12,6 @@ import {
     AgentTranscriptQuerySchema,
     AgentIdsSchema,
     AgentLandSchema,
-    AgentPlaceSchema,
     AgentReactSchema,
     AgentRenameSchema,
     AgentStopJobSchema,
@@ -30,6 +30,7 @@ import { AgentsAttentionSchema, AgentsListSchema } from "../schemas/agents-list.
 import { AgentChangesSchema, AgentConflictsSchema, AgentIgnoredSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
+import { AgentPlacedSchema, AgentPlaceSchema } from "../schemas/agent-place.js";
 import { AgentKeepWarmSchema } from "../schemas/keep-warm.js";
 import { ConversationPromptSchema } from "../schemas/system-prompt.js";
 
@@ -147,7 +148,7 @@ export const agentsContract = {
                 "Writes a line into the record as though the agent had said it, with no turn behind it and no reply. Human readers see it marked as placed. The next real turn starts fresh from the record, where the line reads as the agent's own. Refused while a turn is running.",
         })
         .input(AgentPlaceSchema)
-        .output(OkSchema),
+        .output(AgentPlacedSchema),
     rename: procedure
         .route({
             method: "POST",
