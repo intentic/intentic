@@ -91,6 +91,25 @@ printf 'HostKey %s\n' "$host_key" > /etc/ssh/sshd_config.d/intentic-hostkey.conf
 # rather than raced for by every shell.
 mkdir -p "$HISTORY_ROOT/shell"
 
+# THE DAEMON'S COMPILED CODE, KEPT FOR ITS NEXT START (2026-10-19). Node loads about 2,800 modules before the daemon
+# logs its first line, and every start of a container (a wake from sleep is one) paid for compiling all of them again:
+# measured in the image on rog, the import took 2.0 s in a fresh container and 1.2 s warm, and Node's compile cache
+# took 0.27 to 0.3 s off the warm figure. Node writes what it compiled into this folder and reads it back on the next
+# start; a module whose file changed is compiled again and its entry replaced, so an update reuses whatever it did not
+# change. On /history, so it outlives a recreate as well as a stop. Node keeps one folder per Node version, so a folder
+# no start has written to for a month belongs to a Node this image no longer runs. Set for the daemon alone: it takes
+# the variable out of its own environment before it starts anything (bootstrap/daemon-env.ts), so neither the agents'
+# shells nor the owner's own Node programs write here.
+node_compile_cache="$HISTORY_ROOT/cache/node-compile"
+if mkdir -p "$node_compile_cache" 2>/dev/null; then
+    find "$node_compile_cache" -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} + 2>/dev/null || true
+    # The standard cache tag, so a backup (restic's --exclude-caches, ic's backup.rs) leaves out what rebuilds itself.
+    [ -f "$node_compile_cache/CACHEDIR.TAG" ] ||
+        printf 'Signature: 8a477f597d28d172789f06886806bc55\n# The daemon'"'"'s compiled code (docker-entrypoint.sh); it rebuilds itself.\n' \
+            > "$node_compile_cache/CACHEDIR.TAG" 2>/dev/null || true
+    export NODE_COMPILE_CACHE="$node_compile_cache"
+fi
+
 # /run/sshd may be a fresh tmpfs at runtime, so (re)create it here rather than relying on the build layer.
 mkdir -p /run/sshd
 # Only local sync rides it, so an sshd that will not start costs that and nothing else: netd and the daemon still start.

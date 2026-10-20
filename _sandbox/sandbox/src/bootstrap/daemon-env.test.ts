@@ -1,6 +1,6 @@
 import { os } from "@orpc/server";
 import { failureOf, orpcLink } from "../peers/orpc-link.testing.js";
-import { isAbandonedPeerSend, logEscaped } from "./daemon-env.js";
+import { COMPILE_CACHE_ENV, forgetCompileCacheEnv, isAbandonedPeerSend, keepCompiledCode, logEscaped } from "./daemon-env.js";
 
 const recording = () => {
     const lines: { level: string; data: Record<string, unknown>; message: string }[] = [];
@@ -52,4 +52,24 @@ test("oRPC's refused send on a closed peer socket is the one recognised", async 
     } finally {
         close();
     }
+});
+
+test("the compile cache folder Node was started with is the daemon's alone: no child inherits it", () => {
+    const env: NodeJS.ProcessEnv = { [COMPILE_CACHE_ENV]: "/var/tmp/compile-cache", PATH: "/usr/bin" };
+    forgetCompileCacheEnv(env);
+    expect(env).toEqual({ PATH: "/usr/bin" });
+});
+
+test("writing the compiled code is asked once and a failure to write it is a trace, never a throw", () => {
+    const { lines, logger } = recording();
+    let flushed = 0;
+    keepCompiledCode(logger, () => {
+        flushed += 1;
+    });
+    expect(flushed).toBe(1);
+    expect(lines).toEqual([]);
+    keepCompiledCode(logger, () => {
+        throw new Error("EROFS: read-only file system");
+    });
+    expect(lines.map((line) => line.level)).toEqual(["debug"]);
 });

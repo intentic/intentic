@@ -1,3 +1,4 @@
+import { flushCompileCache } from "node:module";
 import { join } from "node:path";
 import type { Logger } from "pino";
 import { authEnabled } from "../auth/auth-enabled.js";
@@ -58,6 +59,7 @@ export const prepareDaemonProcess = (config: Config, traits: ProfileTraits): Log
     // Before any spawn: every child carries this run's generation, by which a later boot ends what this one left
     // (system/boot/generation-sweep.ts). Fresh each boot, whatever this process inherited.
     adoptDaemonGeneration();
+    forgetCompileCacheEnv();
     if (!traits.sharedTmux) {
         // Defaulted, not forced, so an operator can override.
         process.env["INTENTIC_AGENT_TMUX"] ??= "0";
@@ -80,6 +82,28 @@ export const prepareDaemonProcess = (config: Config, traits: ProfileTraits): Log
         }
     }
     return logger;
+};
+
+/* THE DAEMON'S COMPILED CODE (2026-10-19). The entrypoint hands Node a folder to keep the daemon's compiled modules in
+ * (docker-entrypoint.sh, NODE_COMPILE_CACHE), which Node reads once, as it starts, and goes on using whatever the
+ * environment says afterwards. Every child inherits the environment, so the variable is taken off it before the first
+ * spawn: an agent's shell, a turn's runtime or the owner's own Node programs would otherwise write their compiled code
+ * into the daemon's folder. And Node writes the folder only as it exits, which a daemon killed at the end of docker's
+ * stop grace or by the kernel never does, so it is written once boot has loaded what it loads (main.ts): the start
+ * after any end, a wake from sleep included, finds it. */
+export const COMPILE_CACHE_ENV = "NODE_COMPILE_CACHE";
+
+export const forgetCompileCacheEnv = (env: NodeJS.ProcessEnv = process.env): void => {
+    delete env[COMPILE_CACHE_ENV];
+};
+
+// Never throws: a cache that cannot be written only means the next start compiles what it does not find.
+export const keepCompiledCode = (logger: Pick<Logger, "debug">, flush: () => void = flushCompileCache): void => {
+    try {
+        flush();
+    } catch (error) {
+        logger.debug({ err: error }, "compile cache: the daemon's compiled code could not be written; the next start compiles it again");
+    }
 };
 
 /**

@@ -15,7 +15,7 @@ import { startBootResumes } from "./bootstrap/boot-resumes.js";
 import { startBootSchedulers } from "./bootstrap/boot-schedulers.js";
 import { startBootSweeps } from "./bootstrap/boot-sweeps.js";
 import { startChangeReactions } from "./bootstrap/change-reactions.js";
-import { forgetDaemonOnlyEnv, prepareDaemonProcess, requireAuthWhenReachable } from "./bootstrap/daemon-env.js";
+import { forgetDaemonOnlyEnv, keepCompiledCode, prepareDaemonProcess, requireAuthWhenReachable } from "./bootstrap/daemon-env.js";
 import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
 import { requireNetdSockets, startNetdDoor } from "./bootstrap/netd-door.js";
@@ -287,6 +287,8 @@ const pastGate = async ({ phase, runnerEnv, prewarm, stop, sleep }: Ready, fault
         () => undefined,
     );
     logger.info({ ms: Date.now() - services.boot.progress().startedAt, cpu }, "boot: chain converged");
+    // What boot compiled, written now rather than only at exit, for the next start (daemon-env.ts).
+    keepCompiledCode(logger);
 
     // Parent link, for a runner (or one that ever was: an identity on /history outlives an env-stripping rebuild).
     // After the gate, since a parent's first act dispatches a turn. Never fatal: a failed enrollment just logs once.
