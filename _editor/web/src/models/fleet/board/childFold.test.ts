@@ -163,6 +163,41 @@ describe(`which children ride under their parent`, () => {
         expect(ids(work.lanes.active)).toEqual([`p`, `mid`]);
     });
 
+    // A review or test a person opened on the work under a card (freshSession.ts) belongs under that card in every state,
+    // not only once the sandbox has filed it: before it is sent, and after a send the sandbox refused, when it stood
+    // alone in Attention as an ordinary session.
+    describe(`a fresh session on a card's work`, () => {
+        const fresh = { of: `p`, kind: `review`, at: 0 } as const;
+
+        it(`rides its origin's card when its send was refused, the words back in its composer, and calls the reader through it`, () => {
+            const fold = folded(card(`p`), child(`review`, `p`, { status: `failed`, unsent: true, fresh }));
+            expect(ids(fold.lanes.attention)).toEqual([`p`]);
+            expect(ids(fold.children.get(`p`))).toEqual([`review`]);
+            expect(ids(fold.calls.get(`p`))).toEqual([`review`]);
+        });
+
+        it(`rides as a draft without moving its origin's card or counting as running`, () => {
+            const fold = folded(card(`p`), child(`review`, `p`, { status: `draft`, unsent: true, updatedAt: 0, fresh }));
+            expect(ids(fold.lanes.finished)).toEqual([`p`]);
+            expect(ids(fold.children.get(`p`))).toEqual([`review`]);
+            expect(trayCount(fold.children.get(`p`) ?? [])).toEqual({ total: 1, running: 0 });
+        });
+
+        it(`calls the reader for a stop while its origin is still at work, since that agent never hears of it`, () => {
+            const fold = folded(working(`p`), child(`test`, `p`, { status: `error`, fresh: { ...fresh, kind: `test` } }));
+            expect(ids(fold.lanes.attention)).toEqual([`p`]);
+            expect(ids(fold.calls.get(`p`))).toEqual([`test`]);
+        });
+
+        it(`keeps a card of its own only for a land it owes, as any child does`, () => {
+            expect(standsAlone(child(`review`, `p`, { status: `ready`, fresh }))).toBe(true);
+            expect(standsAlone(child(`review`, `p`, { status: `starting`, unsent: true, fresh }))).toBe(false);
+            // An agent's own child keeps the card for its draft and its words, as before.
+            expect(standsAlone(child(`spawned`, `p`, { status: `draft` }))).toBe(true);
+            expect(standsAlone(child(`spawned`, `p`, { unsent: true }))).toBe(true);
+        });
+    });
+
     it(`leaves a child standing when its parent is not on the board`, () => {
         const fold = folded(child(`orphan`, `archived-parent`));
         expect(ids(fold.lanes.finished)).toEqual([`orphan`]);

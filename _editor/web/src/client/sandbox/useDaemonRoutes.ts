@@ -7,6 +7,7 @@ import { z } from "zod";
 import { contractModule } from "./daemon/contract";
 import { contractUncompiled } from "./contractFreshness";
 import { routeArea } from "./daemon/routeAreas";
+import type { RefusalWords } from "./sandboxHttpError";
 
 // What the active daemon can do, from its /events hello frame. A newer browser than daemon is normal, not an
 // error; this turns a silent 404 into a named gap, so features can gate on `supportsRoute` instead of finding out
@@ -251,4 +252,22 @@ export const driftedRouteReason = (name: string): string | undefined => {
     const area = areaOf(name);
     const remedy = eitherSideOlderRemedy();
     return area === undefined ? t(`sandbox.useDaemonRoutes.routeDriftedUnnamed`, { remedy }) : t(`sandbox.useDaemonRoutes.routeDrifted`, { area, remedy });
+};
+
+// Ends the daemon's words as a sentence, so the drift's own sentence can follow them.
+const asSentence = (words: string): string => (/[.!?…]$/u.test(words.trimEnd()) ? words.trimEnd() : `${words.trimEnd()}.`);
+
+// How a refusal from the active daemon on route `name` reads, where the routes say more than its words; undefined where
+// they don't, and the daemon's words stand alone. A 404 on a route it never advertised is that daemon being older,
+// whatever it answered. A 400 on a route the two shape differently keeps the daemon's words first: they name what it
+// refused, which is often nothing the drift touched (a title past its cap, a path outside the workspace), and putting
+// the drift in their place sent the reader to restart a sandbox over a field that would be refused by any version. The
+// drift follows, as what may lie behind it.
+export const routeRefusalText = (name: string, status: number, said: RefusalWords): string | undefined => {
+    if (status === 404) {
+        return staleDaemonReason(name);
+    }
+    const drift = status === 400 ? driftedRouteReason(name) : undefined;
+    const own = said.message ?? said.error;
+    return drift === undefined || own === undefined ? drift : `${asSentence(own)} ${drift}`;
 };

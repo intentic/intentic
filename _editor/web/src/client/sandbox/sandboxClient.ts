@@ -1,7 +1,7 @@
 import { parseJsonOr } from "@intentic/base/json";
 import type { output, ZodType } from "zod";
 import { t } from "@intentic/ui/i18n";
-import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
+import { routeRefusalText } from "./useDaemonRoutes";
 import { trackPerf } from "../../app/perf/perf";
 import { CHUNK_BYTES } from "../../lib/files/uploadChunking";
 import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
@@ -32,19 +32,15 @@ export async function sandboxRequest(path: string, init?: RequestInit): Promise<
     return requestTo(currentSandboxTarget(), path, init);
 }
 
-// Reads the daemon's message (`message`/`error`, or the status as fallback) unless drift evidence says
-// otherwise: a 404 on an unadvertised contract route, or a 400 on one with a disagreed shape, gets a drift message.
-// Still read here because an extension reaches contract routes through api.sandbox.json.
+// Reads the daemon's message (`message`/`error`, or the status as fallback), with what drift evidence adds to it
+// (routeRefusalText): a 404 on an unadvertised contract route reads as the daemon being older, and a 400 on one with a
+// disagreed shape names the drift after the daemon's own words. Still read here because an extension reaches contract
+// routes through api.sandbox.json.
 export async function sandboxError(response: Response, request?: { method: string; path: string }): Promise<SandboxHttpError> {
     const route = request === undefined ? undefined : (await loadContract()).sandboxRouteName(request.method, request.path);
-    if (route !== undefined) {
-        const reason = response.status === 404 ? staleDaemonReason(route) : response.status === 400 ? driftedRouteReason(route) : undefined;
-        if (reason !== undefined) {
-            return new SandboxHttpError(response.status, reason);
-        }
-    }
     const said = wordsOf(await response.json().catch(() => undefined));
-    return new SandboxHttpError(response.status, refusalText(response.status, said), said);
+    const routes = route === undefined ? undefined : routeRefusalText(route, response.status, said);
+    return new SandboxHttpError(response.status, routes ?? refusalText(response.status, said), said);
 }
 
 // A GET/POST to the daemon that parses the JSON body and throws the daemon's message on any non-2xx status.

@@ -64,6 +64,10 @@ export interface AgentStanding {
     // themselves at a time or once another agent's work lands (`scheduled`), which make the conversation one that runs
     // again by itself. Never the words.
     readonly queue?: QueueHold | undefined;
+    // The conversation whose work this one was opened on, for a fresh session (AgentSummary.fresh): a person's own
+    // review, test or ask, which hangs under that conversation's card and is never reported to it
+    // (subagents/child-report.ts), so nothing it stops on is that conversation's news. Absent for every other one.
+    readonly fresh?: { readonly of: string } | undefined;
 }
 
 // The part of a conversation's queue the board reads: why it holds, and what a scheduled hold waits for. A queue-level
@@ -284,9 +288,11 @@ export const onlyOwnerCanAnswer = (agent: AgentStanding): boolean =>
 // an orchestrator that worked around three spent allowances and landed is done, not stuck. Only a turn's ending
 // counts. A question is still parked and waits for an answer whoever has moved since, and a land refused or broken
 // leaves work stuck on the child's branch that no report settles. A turn a person ran in the child's own chat is never
-// reported to the parent, and it ends after the parent's last move, so it still reads as unheard here.
+// reported to the parent, and it ends after the parent's last move, so it still reads as unheard here. Nor is anything a
+// fresh session does, whenever its origin moved: it is the person's, so its stops are never the origin's to have heard.
 // `updatedAt` is the clock on both sides: a rename keeps it (agents-registry), and reading does not move it.
 export const heardByParent = (child: AgentStanding & { readonly updatedAt: number }, parentAt: number): boolean =>
+    child.fresh === undefined &&
     BLOCKING_ENDINGS.has(child.status) &&
     // Still unwinding: its ending has not reached anyone yet.
     child.status !== "stopping" &&

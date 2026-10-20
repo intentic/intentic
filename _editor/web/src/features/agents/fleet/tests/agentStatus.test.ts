@@ -701,6 +701,17 @@ describe("what a child agent asks of the reader", () => {
         expect(heardByParent(at({ status: `stopping` }), 9_000)).toBe(false);
         expect(heardByParent(at({ status: `error`, failureCode: `rate_limit`, limitScheduled: true }), 9_000)).toBe(false);
     });
+
+    // A fresh session is the person's review or test of the parent's work: nothing it does is reported to the parent, so
+    // the parent neither supervises it while busy nor hears its stop by moving on.
+    it("hands a fresh session's stop to the reader at once, whatever its parent is doing or has done", () => {
+        const fresh = { ...standing({ status: `error`, fresh: { of: `p` } }), updatedAt: 1_000 };
+        expect(callsOwner(fresh, { child: `attention`, parent: `active`, parentAt: 500 })).toBe(true);
+        expect(heardByParent(fresh, 9_000)).toBe(false);
+        expect(callsOwner(fresh, { child: `attention`, parent: `finished`, parentAt: 9_000 })).toBe(true);
+        // Running or settled, it asks nothing.
+        expect(callsOwner({ ...fresh, status: `running` }, { child: `active`, parent: `active`, parentAt: 500 })).toBe(false);
+    });
 });
 
 // The rail badge names the Attention lane as the board draws it, children folded under their parents.
@@ -748,6 +759,15 @@ describe("attentionCards", () => {
     it("counts a child as a card of its own when its parent is not here, or its composer holds words", () => {
         expect(attentionCards([child(`orphan`, `gone`, spent), agent(`else`, { status: `awaiting` }), agent(`done`)])).toBe(2);
         expect(attentionCards([agent(`p`, { status: `running` }), child(`words`, `p`, { ...spent, unsent: true })])).toBe(1);
+    });
+
+    // What the daemon counts for the status bar: a fresh session that stopped, with the person's words back in its
+    // composer, calls through the card of the work it was opened on, even while that work's agent is still running.
+    it("counts a stopped fresh session on its origin's card, words in its composer or not", () => {
+        const fresh = { status: `error`, fresh: { of: `p` }, unsent: true } as const;
+        const fleet = [agent(`p`, { status: `running` }), child(`review`, `p`, fresh)];
+        expect(attentionCalls(fleet)).toEqual([{ id: `review`, card: `p` }]);
+        expect(attentionCards(fleet)).toBe(1);
     });
     // The browser tab rings for a new caller, so it reads the callers the count folds away: a second child asking
     // under a family already in Attention moves no count but is news.

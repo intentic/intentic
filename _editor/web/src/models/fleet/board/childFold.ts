@@ -26,9 +26,15 @@ const LANES: readonly FleetLane[] = [`attention`, `active`, `finished`];
 
 // A child keeps a card of its own only for a press a row cannot carry: a land owed or under way, landed work the
 // workspace no longer holds, words left in its composer. Whatever it asks of the reader rides up on its parent's card
-// instead (callsOwner), and a draft has no record to ride with.
+// instead (callsOwner), and a draft has no record to ride with. A fresh session does: the work it was opened on, which
+// this browser holds from the press that opened it (useAgents-fleet.linkedDraft). So it rides that work's card from its
+// first draft, through a send the sandbox refused, and with the person's words in its composer, which is its ordinary
+// state rather than a press a row cannot carry; only a land keeps a card of its own.
 export const standsAlone = (agent: FleetAgent): boolean =>
-    unregistered(agent.status) || agent.status === `ready` || agent.status === `landing` || finishedNeedsReland(agent) || agent.unsent;
+    agent.status === `ready` ||
+    agent.status === `landing` ||
+    finishedNeedsReland(agent) ||
+    (agent.fresh === undefined && (unregistered(agent.status) || agent.unsent));
 
 // How a fold treats the children it meets: which keep a card wherever their parent is, and which call the reader through
 // their parent's card, given the lanes both were dealt.
@@ -97,13 +103,15 @@ const ordered = (cards: FleetAgent[], order: (a: FleetAgent, b: FleetAgent) => n
 // A family's lift once one more of its riding children is read into it. What the child asks of the family's lane: the
 // reader's when it calls them, Active while it is in flight or stopped under a parent still supervising it, nothing
 // more than the ledger once it has settled, or once its parent has moved past its stop (heardByParent), which leaves
-// the card where its own standing puts it.
+// the card where its own standing puts it. A draft not sent yet (a fresh session being written) asks nothing either:
+// nothing runs, and the card it was opened from stays where it stood rather than jumping lanes under the reader's press.
 const liftWith = (lift: Lift, child: FleetAgent, read: { readonly lane: FleetLane; readonly calling: boolean; readonly heard: boolean }): Lift => {
-    const wants: FleetLane = read.calling ? `attention` : read.lane === `finished` || read.heard ? `finished` : `active`;
+    const drafted = child.status === `draft`;
+    const wants: FleetLane = read.calling ? `attention` : read.lane === `finished` || read.heard || drafted ? `finished` : `active`;
     return {
         lane: URGENCY[wants] < URGENCY[lift.lane] ? wants : lift.lane,
         calledAt: read.calling ? Math.max(lift.calledAt, child.updatedAt) : lift.calledAt,
-        workingSince: read.lane === `active` ? Math.min(lift.workingSince, child.startedAt ?? child.updatedAt) : lift.workingSince,
+        workingSince: read.lane === `active` && !drafted ? Math.min(lift.workingSince, child.startedAt ?? child.updatedAt) : lift.workingSince,
     };
 };
 
@@ -399,7 +407,8 @@ export const trayCount = (children: readonly FleetAgent[], subagents: readonly S
     if (total === 0) {
         return undefined;
     }
-    const running = children.filter((child) => laneOf(child) === `active`).length + subagents.filter(subagentLive).length;
+    // A draft not sent yet (a fresh session being written) is in the tray, and runs nothing.
+    const running = children.filter((child) => laneOf(child) === `active` && child.status !== `draft`).length + subagents.filter(subagentLive).length;
     return { total, running };
 };
 

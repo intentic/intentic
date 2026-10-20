@@ -257,7 +257,7 @@ it(`blames the sandbox's image for a 404 on a route its daemon never advertised`
     resetSandboxScope();
 });
 
-it(`blames the drift for a 400 on a route whose shape the daemon disagrees about`, async () => {
+it(`names the drift after the daemon's own words for a 400 on a route whose shape the daemon disagrees about`, async () => {
     setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...sandboxRouteFingerprints(), "settings.set": `different` });
     stubGlobal(
         `fetch`,
@@ -266,8 +266,37 @@ it(`blames the drift for a 400 on a route whose shape the daemon disagrees about
     const failure = await sandboxRpc.settings.set({}).catch((error: unknown) => error);
     expect(failure).toMatchObject({ status: 400 });
     expect((failure as Error).message).toStartWith(
-        `This sandbox answers this part of the app (Sandbox settings: settings.set) with different fields than this app expects.`,
+        `Input validation failed. This sandbox answers this part of the app (Sandbox settings: settings.set) with different fields than this app expects.`,
     );
+    resetSandboxScope();
+});
+
+// The refusal that read as drift: a fresh session's title past the cap, which every daemon refuses whatever its build,
+// and whose field the words now name ahead of the drift that had stood in for them.
+it(`names the fields a schema refused, ahead of any drift`, async () => {
+    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...sandboxRouteFingerprints(), "agent.run": `different` });
+    const refused = {
+        defined: false,
+        code: `BAD_REQUEST`,
+        status: 400,
+        message: `Input validation failed`,
+        data: { issues: [{ code: `too_big`, path: [`title`], message: `Too big: expected string to have <=80 characters` }] },
+    };
+    stubGlobal(
+        `fetch`,
+        jest.fn(async () => json(400, refused)),
+    );
+    const failure = await sandboxRpc.agent.run({ prompt: `/code-review`, conversationId: `brave-otter-ab12` }).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ status: 400, said: { message: `Input validation failed (title: Too big: expected string to have <=80 characters)` } });
+    expect(failure).toMatchObject({
+        message: expect.stringMatching(
+            /^Input validation failed \(title: Too big: expected string to have <=80 characters\)\. This sandbox answers this part of the app \(Running a turn: agent\.run\)/u,
+        ),
+    });
+
+    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...sandboxRouteFingerprints() });
+    const level = await sandboxRpc.agent.run({ prompt: `/code-review`, conversationId: `brave-otter-ab12` }).catch((error: unknown) => error);
+    expect(level).toMatchObject({ message: `Input validation failed (title: Too big: expected string to have <=80 characters)` });
     resetSandboxScope();
 });
 

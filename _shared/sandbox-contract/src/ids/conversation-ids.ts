@@ -8,6 +8,13 @@ export const CONVERSATION_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 // Safe to interpolate into a path or a branch name. `false` for anything else, including the empty string.
 export const isConversationId = (value: string): boolean => CONVERSATION_ID.test(value);
 
+// The longest title a conversation opens with (AgentTurn.title). A title made by joining words (a fresh session's
+// "Code review: " and its origin's whole title) runs past it easily, and a turn naming one is refused outright, so a
+// sender clips it first rather than lose the turn to its name.
+export const CONVERSATION_TITLE_MAX = 80;
+export const clipTitle = (title: string): string =>
+    title.length <= CONVERSATION_TITLE_MAX ? title : `${title.slice(0, CONVERSATION_TITLE_MAX - 1).trimEnd()}…`;
+
 // Short (nothing over seven letters) and visually distinct: no near-rhymes, no shared first syllable.
 const ADJECTIVES = [
     "amber",

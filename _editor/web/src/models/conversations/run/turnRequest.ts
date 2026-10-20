@@ -1,4 +1,5 @@
 import type { AgentHarness, AgentProvider, EditorContext, PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
+import { clipTitle } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { TurnErrand } from "@intentic/sandbox-contract/schemas/speaker";
 import type { ProcedureInput } from "../../../client/sandbox/sandboxRpc";
@@ -171,8 +172,9 @@ export const turnRequestBody = (input: {
     const body: ProcedureInput<`agent.run`> = {
         messageId: input.messageId,
         prompt: input.text,
-        // Seeds a fresh registry entry's title; an existing entry keeps its own.
-        ...(input.title !== null ? { title: input.title } : {}),
+        // Seeds a fresh registry entry's title; an existing entry keeps its own. Clipped to the contract's cap, since a
+        // title past it refuses the whole turn and a composed one (a fresh session's) runs past it easily.
+        ...(input.title !== null ? { title: clipTitle(input.title) } : {}),
         ...filePaths(input.attachmentPaths, input.mentionedPaths),
         agent: input.settings.agent,
         // Isolated runs in this conversation's own worktree (branch agent/<conversationId>), not /work.

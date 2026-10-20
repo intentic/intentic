@@ -23,11 +23,15 @@ import {
 // reader's once it no longer does: nothing running there to hear it and nothing armed to wake it, which is a parent out
 // of Active. That holds only until the parent moves past it (heardByParent). After that the stop is the family's
 // history, drawn in the tray, and no longer something the reader owes a press. The sandbox draws the same line for a
-// child's land news (subagents/child-lands.ts): the parent's while it has a live turn, the owner's after.
+// child's land news (subagents/child-lands.ts): the parent's while it has a live turn, the owner's after. A fresh
+// session is the exception: its parent never supervises it (nothing it does is reported there), so whatever it stops on
+// is the reader's from the start, through its parent's card, however busy the parent is.
 export const callsOwner = (
     child: AgentStanding & { readonly updatedAt: number },
     family: { readonly child: FleetLane; readonly parent: FleetLane; readonly parentAt: number },
-): boolean => onlyOwnerCanAnswer(child) || (family.child === "attention" && family.parent !== "active" && !heardByParent(child, family.parentAt));
+): boolean =>
+    onlyOwnerCanAnswer(child) ||
+    (family.child === "attention" && (family.parent !== "active" || child.fresh !== undefined) && !heardByParent(child, family.parentAt));
 
 export type FleetLane = "attention" | "active" | "finished";
 
@@ -127,7 +131,9 @@ export const attentionCalls = (agents: readonly CallerStanding[]): readonly { re
     const calls: { readonly id: string; readonly card: string }[] = [];
     for (const agent of agents) {
         const parent = parentIn(agent);
-        if (parent === undefined || agent.unsent === true) {
+        // Words left in a child's composer give it a card of its own (childFold.standsAlone), except a fresh session's:
+        // its composer is the person's anyway, and it rides its origin's card whatever it holds.
+        if (parent === undefined || (agent.unsent === true && agent.fresh === undefined)) {
             if (laneOf(agent) === "attention") {
                 calls.push({ id: agent.id, card: agent.id });
             }

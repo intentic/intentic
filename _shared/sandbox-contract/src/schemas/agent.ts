@@ -1,6 +1,6 @@
 import { TurnErrandSchema } from "./speaker.js";
 import { z } from "zod";
-import { CONVERSATION_ID } from "../ids/conversation-ids.js";
+import { CONVERSATION_ID, CONVERSATION_TITLE_MAX } from "../ids/conversation-ids.js";
 import { canonicalHarness } from "../models/agent-catalog.js";
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { NATIVE_PROVIDERS } from "../models/provider-specs.js";
@@ -152,7 +152,7 @@ const AgentTurnFieldsSchema = z.object({
     // Seeds a fresh registry entry's title; an existing entry's title always wins over this.
     title: z
         .string()
-        .max(80)
+        .max(CONVERSATION_TITLE_MAX)
         .optional()
         .describe("A title for a conversation this turn is opening. Ignored for a conversation that already has one."),
     // Already uploaded via /workspace/upload; Claude reads them via Read, Codex gets images as native input.

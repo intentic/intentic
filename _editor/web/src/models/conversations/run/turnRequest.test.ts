@@ -1,3 +1,5 @@
+import { CONVERSATION_TITLE_MAX } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { AgentRunSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { turnRequestBody } from "./turnRequest";
 import { advertisedLoops } from "../../providers/offeredLoops";
 
@@ -183,6 +185,19 @@ describe(`turnRequestBody`, () => {
 
         const full = wire(turnRequestBody({ ...base, title: `Do the thing`, attachmentPaths: [`a.png`], editorContext: { file: `src/app.ts` } }));
         expect(full).toMatchObject({ title: `Do the thing`, attachments: [`a.png`], editorContext: { file: `src/app.ts` } });
+    });
+
+    // A fresh session's title is "Code review: " and its origin's whole title, which the daemon refused outright once
+    // it ran past the cap: the turn never ran, and the 400 surfaced as version drift.
+    it(`clips a title past the contract's cap, so the turn is not refused for its name`, () => {
+        const title = `Code review: Preparing the sandbox for decoupling: make every piece declare what it is`;
+        const sent = turnRequestBody({ ...base, title, isolated: true, conversationId: `brave-otter-ab12` });
+        expect(sent.title).toHaveLength(CONVERSATION_TITLE_MAX);
+        expect(sent.title).toStartWith(`Code review: Preparing the sandbox`);
+        expect(sent.title).toEndWith(`…`);
+        expect(AgentRunSchema.safeParse(sent).success).toBe(true);
+
+        expect(turnRequestBody({ ...base, title: `Short` }).title).toBe(`Short`);
     });
 
     // Apart on the wire: the daemon refuses a turn over a chip it can't resolve and drops a mention it can't,

@@ -6,7 +6,7 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink, type OpenAPILinkOptions } from "@orpc/openapi-client/fetch";
 import { trackPerf } from "../../app/perf/perf";
 import { uuid } from "../../lib/uuid";
-import { driftedRouteReason, staleDaemonReason } from "./useDaemonRoutes";
+import { routeRefusalText, staleDaemonReason } from "./useDaemonRoutes";
 import { sandboxAuthenticatedFetch, SandboxUnaddressedError } from "./sandboxAuthFetch";
 import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
@@ -55,22 +55,21 @@ const targetOf = (context: SandboxCallContext): SandboxTarget => {
 };
 
 // The body a refusal came with: a hand-written route's, arriving undecoded under `data.body`, or an oRPC handler's error,
-// whose one word for the reader is its message.
+// whose word for the reader is its message, with the fields its schema refused when that is what it refused.
 const refusalBody = (error: ORPCError<string, unknown>): unknown => {
     const data = error.data as { readonly body?: unknown } | undefined;
-    return data !== undefined && typeof data === `object` && `body` in data ? data.body : { message: error.message };
+    return data !== undefined && typeof data === `object` && `body` in data ? data.body : { message: error.message, data: error.data };
 };
 
-// What a failed call throws: an HTTP refusal as a SandboxHttpError, in the daemon's own words unless the active daemon
-// lacks the route or shapes it differently; anything that never got an answer (a dead tunnel, an abort) as it was.
+// What a failed call throws: an HTTP refusal as a SandboxHttpError, in the daemon's own words, with what the active
+// daemon's routes add to them (routeRefusalText); anything that never got an answer (a dead tunnel, an abort) as it was.
 const refusalOf = (error: unknown, route: string | undefined): unknown => {
     if (!(error instanceof ORPCError)) {
         return error;
     }
     const said = wordsOf(refusalBody(error));
-    const drift =
-        route === undefined ? undefined : error.status === 404 ? staleDaemonReason(route) : error.status === 400 ? driftedRouteReason(route) : undefined;
-    return new SandboxHttpError(error.status, drift ?? refusalText(error.status, said), said);
+    const routes = route === undefined ? undefined : routeRefusalText(route, error.status, said);
+    return new SandboxHttpError(error.status, routes ?? refusalText(error.status, said), said);
 };
 
 /** The same answer, its body reporting each chunk to `heard` on the way through (SandboxCallContext.heard). */

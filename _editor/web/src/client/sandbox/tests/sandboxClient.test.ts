@@ -103,6 +103,8 @@ it("blames the image for a 404 on a route the daemon never advertised", async ()
 it("blames the image for a 400 on a route whose shape the daemon disagrees about", async () => {
     setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...sandboxRouteFingerprints(), "settings.set": `different` });
     const error = await sandboxError(json(400, { message: `Invalid input` }), { method: `POST`, path: `/settings` });
+    // The daemon's words first: what it refused may be nothing the drift touched.
+    expect(error.message).toStartWith(`Invalid input. `);
     expect(error.message).toContain(`settings.set`);
 });
 
