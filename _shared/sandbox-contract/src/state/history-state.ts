@@ -66,12 +66,11 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "provider-refusals.json", portability: "carry" },
     // Models refused to this sandbox's credentials; expires daily, same subscriptions apply elsewhere.
     { path: "model-refusals.json", portability: "carry" },
-    // When a model every credential is benched on reopens. Carried for the same reason as the refusals around it: the
-    // wait belongs to the subscription, not to the machine that hit it, and entries past their instant are inert.
-    { path: "model-cooldowns.json", portability: "carry" },
-    // What each account has run out of, for a plan publishing no allowance to poll — the refusal is the reading.
-    // Carried like the refusals above: an allowance belongs to the account, not to the machine that spent it.
-    { path: "observed-limits.json", portability: "carry" },
+    // How fast this sandbox's agents spend, per account window and per model (agent/run/spend/burn-rates.ts), and every
+    // reading those rates were learned from (readings-log.ts). Carried like the readings above: each figure takes a
+    // window's worth of readings to settle, and describes the subscriptions, not the machine that spent them.
+    { path: "burn-rates.json", portability: "carry" },
+    { path: "usage-readings.jsonl", portability: "carry" },
     // When each provider's allowance last ran out and under how many agents, which the spawn listing quotes beside the
     // figure left. Carried like the refusals: it describes the subscription's windows, not the machine that spent them.
     { path: "run-outs.json", portability: "carry" },

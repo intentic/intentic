@@ -15,18 +15,18 @@ test("lines are handed on as they land, only those after `from`, and the follow 
         await writeFile(log, "old line\n");
         const lines: { line: string; at: number }[] = [];
         let alive = true;
-        const started = Date.now();
+        const started = performance.now();
         setTimeout(() => void appendFile(log, "downloading\n"), 50);
         setTimeout(() => void appendFile(log, "installed\n"), 150);
         setTimeout(() => {
             alive = false;
         }, 200);
-        await followLog({ path: log, from: "old line\n".length, isAlive: () => alive, onLine: (line) => lines.push({ line, at: Date.now() - started }), timing: FAST });
+        await followLog({ path: log, from: "old line\n".length, isAlive: () => alive, onLine: (line) => lines.push({ line, at: performance.now() - started }), timing: FAST });
         expect(lines.map((entry) => entry.line)).toEqual(["downloading", "installed"]);
         // Heard by the watch, not the 5 s fallback read.
         expect(lines[0]?.at ?? Infinity).toBeLessThan(1_000);
         // Gone at 200 ms, quiet for 60: well before the drain cap would have ended it.
-        expect(Date.now() - started).toBeLessThan(200 + FAST.drainMaxMs);
+        expect(performance.now() - started).toBeLessThan(200 + FAST.drainMaxMs);
     } finally {
         await rm(dir, { recursive: true, force: true });
     }
@@ -38,10 +38,10 @@ test("a log that keeps being written (the new agent) is cut off at the drain cap
         const log = join(dir, "agent.log");
         await writeFile(log, "");
         const writer = setInterval(() => void appendFile(log, "tick\n"), 15);
-        const started = Date.now();
+        const started = performance.now();
         await followLog({ path: log, from: 0, isAlive: () => false, onLine: () => undefined, timing: FAST });
         clearInterval(writer);
-        const took = Date.now() - started;
+        const took = performance.now() - started;
         expect(took).toBeGreaterThanOrEqual(FAST.drainMaxMs);
         expect(took).toBeLessThan(FAST.drainMaxMs + 500);
     } finally {

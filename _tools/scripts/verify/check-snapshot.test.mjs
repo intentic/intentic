@@ -50,6 +50,24 @@ test("a snapshot older than the limit is taken back, a younger one is left", () 
     }
 });
 
+// A `worktree add` killed after its checkout but before its last step leaves the worktree locked as "initializing":
+// one --force refuses it and `worktree prune` skips it, so it stayed registered for good.
+test("a snapshot left locked by a killed `worktree add` is taken back too", () => {
+    const { root, run } = repo();
+    const parent = mkdtempSync(join(tmpdir(), "verify-snapshot-"));
+    try {
+        run("worktree", "add", "--detach", join(parent, "before"), "HEAD");
+        run("worktree", "lock", "--reason", "initializing", join(parent, "before"));
+        utimesSync(parent, new Date(Date.now() - 3_600_000), new Date(Date.now() - 3_600_000));
+        assert.equal(sweepSnapshots(root), 1);
+        assert.deepEqual(snapshotsOf(run), []);
+        assert.equal(existsSync(parent), false);
+    } finally {
+        rmSync(parent, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test("a run killed with its checks leaves no snapshot behind", async () => {
     const { root, run } = repo();
     try {

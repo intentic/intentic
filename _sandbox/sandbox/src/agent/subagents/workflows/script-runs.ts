@@ -334,7 +334,7 @@ type WaitOutcome = NonNullable<ScriptRunStatus["waitOutcome"]>;
 // tool does, so an owner's message or a watch's wake is not left unread for up to half an hour) (2026-10-20). Every
 // listener goes with the park, the turn's abort listener included.
 const parkOnRun = (ended: Promise<unknown>, ms: number, signal: AbortSignal, heard: { readonly actors: Pick<ConversationActors, "holdings">; readonly parent: string } | undefined): Promise<WaitOutcome> =>
-    new Promise<WaitOutcome>((resolve) => {
+    new Promise<WaitOutcome>((settle) => {
         const held = new DisposableStore();
         const done = new AbortController();
         let settled = false;
@@ -345,7 +345,7 @@ const parkOnRun = (ended: Promise<unknown>, ms: number, signal: AbortSignal, hea
             settled = true;
             done.abort();
             held.dispose();
-            resolve(outcome);
+            settle(outcome);
         };
         const timer = setTimeout(() => finish("timeout"), ms);
         timer.unref();

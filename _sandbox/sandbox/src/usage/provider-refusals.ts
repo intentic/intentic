@@ -1,9 +1,8 @@
 import { type ProviderRefusal, ProviderRefusalSchema } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { reportsPlanLimits } from "@intentic/sandbox-contract/models/agent-catalog";
-import { z } from "zod";
 import { defineDocument } from "../store/evolution/documents.js";
-import { jsonFile } from "../store/json-file.js";
+import { openDocument } from "../store/open-document.js";
 
 /* EVERY TIME A PROVIDER SAID NO, IN ONE LEDGER, at <historyRoot>/provider-refusals.json, outside the agent's reach.
    account-usage.ts holds polled headroom; this holds the moments a plan actually refused, which polling can't produce: a
@@ -17,8 +16,6 @@ import { jsonFile } from "../store/json-file.js";
    which only the role ladder and the spawn listing read, 2026-10-13). Each copy had its own horizon and its own settle
    rule, and each reader judged by its own subset, so one surface greyed a model another spawned onto. Every verdict now
    reads this ledger whole (plan-pools.ts serviceStates), the daemon's and the editor's alike. */
-
-const StoredRefusalsSchema = z.record(z.string(), ProviderRefusalSchema);
 
 export const providerRefusalsDocument = defineDocument({
     root: "history",
@@ -140,7 +137,7 @@ interface LedgerBacking {
 
 export const fileProviderRefusalStore = (path: string, options: ProviderRefusalStoreOptions = {}): ProviderRefusalStore =>
     refusalStoreOver(
-        jsonFile<Stored>(path, { parse: (raw) => StoredRefusalsSchema.safeParse(raw).data, fallback: () => ({}), document: providerRefusalsDocument }),
+        openDocument(providerRefusalsDocument, path, { fallback: (): Stored => ({}) }),
         options,
     );
 

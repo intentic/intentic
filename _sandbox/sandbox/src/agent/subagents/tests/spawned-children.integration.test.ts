@@ -204,7 +204,7 @@ describe("starts held across a restart", () => {
         const turns: string[] = [];
         const services = kit.servicesFor(kit.before, recordTurns(turns));
         FAN_OUT.admit("probe", spec("probe"));
-        const first = await spawned(services, "first");
+        await spawned(services, "first");
         const cancelled = await spawned(services, "cancelled");
         const last = await spawned(services, "last");
         const restored = await kit.reboot(recordTurns(turns));

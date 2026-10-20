@@ -32,7 +32,7 @@ export const memoryPrivacyLedger = (): PrivacyLedger & { readonly entries: Priva
     const entries: PrivacyLedgerEntry[] = [];
     return {
         entries,
-        recent: async () => [...entries].reverse(),
+        recent: async () => entries.toReversed(),
         record: async (entry) => {
             entries.push(entry);
         },

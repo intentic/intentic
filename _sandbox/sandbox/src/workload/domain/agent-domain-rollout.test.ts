@@ -44,7 +44,7 @@ test("unreadable policy refuses instead of using the root default", async () => 
 test("root admission continues to normal runner validation", async () => {
     const services = policyServices(async () => ({ agentDomain: "root" }));
     expect(await collect(streamAgent(services, { prompt: "go", placement: { kind: "runner", id: "runner" } }, undefined))).toStrictEqual([
-        { kind: "error", message: "Running on a runner needs a conversation id — the conversation's branch is what travels." },
+        { kind: "error", message: "Running on a runner needs a conversation id — the conversation's branch is what travels.", own: true },
         { kind: "done" },
     ]);
 });

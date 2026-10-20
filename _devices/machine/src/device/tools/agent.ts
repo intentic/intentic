@@ -57,20 +57,22 @@ export interface LogFollow {
     readonly timing?: LogFollowTiming | undefined;
 }
 
-// Hands every new line of the log to `onLine` until the run is gone and its log has drained, or the timeout.
+// Hands every new line of the log to `onLine` until the run is gone and its log has drained, or the timeout. Timed on
+// the monotonic clock: a wall clock moved under it (a test's fake time, an NTP step) would end the drain early or late.
 export const followLog = async ({ path, from, isAlive, onLine, timing = AGENT_LOG_TIMING }: LogFollow): Promise<void> => {
     let at = from;
-    let lastLineAt = Date.now();
-    let lastReadAt = 0;
+    let lastLineAt = performance.now();
+    // Never read yet: the first look reads whatever landed before the follow began.
+    let lastReadAt = Number.NEGATIVE_INFINITY;
     let running: Promise<void> | undefined;
     let again = false;
     const readOnce = async (): Promise<void> => {
-        lastReadAt = Date.now();
+        lastReadAt = performance.now();
         const { text, at: next } = await readFrom(path, at);
         at = next;
         const lines = text.split(/\r?\n/).filter((one) => one.trim() !== "");
         if (lines.length > 0) {
-            lastLineAt = Date.now();
+            lastLineAt = performance.now();
         }
         for (const line of lines) {
             onLine(line);
@@ -93,12 +95,12 @@ export const followLog = async ({ path, from, isAlive, onLine, timing = AGENT_LO
         return await running;
     };
     const unwatch = onFileChange(path, () => void drain());
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     let goneAt: number | undefined;
     try {
         await new Promise<void>((resolve) => {
             const look = async (): Promise<void> => {
-                const now = Date.now();
+                const now = performance.now();
                 if (unwatch === undefined || now - lastReadAt >= timing.fallbackReadMs) {
                     await drain();
                 }
@@ -113,7 +115,7 @@ export const followLog = async ({ path, from, isAlive, onLine, timing = AGENT_LO
                     goneAt = now;
                     await drain();
                 }
-                if (now - goneAt >= timing.drainMaxMs || Date.now() - Math.max(lastLineAt, goneAt) >= timing.drainQuietMs) {
+                if (now - goneAt >= timing.drainMaxMs || performance.now() - Math.max(lastLineAt, goneAt) >= timing.drainQuietMs) {
                     stop();
                 }
             };

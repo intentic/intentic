@@ -31,6 +31,7 @@ export type OpenMic<Stream> = (constraints: MediaStreamConstraints) => Promise<S
 export type ListedDevice = Pick<MediaDeviceInfo, `deviceId` | `label` | `kind`>;
 
 /** The picked microphone's id; undefined leaves the choice to the browser. */
+// allow(module-state): this browser's microphone, kept per browser and the same whichever sandbox is open
 export const chosenMic = ref<string | undefined>(storedValue(MIC_KEY));
 
 export const chooseMic = (id: string | undefined): void => {

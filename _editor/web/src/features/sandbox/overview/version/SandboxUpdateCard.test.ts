@@ -235,8 +235,8 @@ it(`leads with the version it takes you to and how much is in it, then what is n
     expect(el.querySelector(`h2`)?.textContent).toBe(`Intentic 1.54.0 is here`);
     expect(el.textContent).toContain(`7 improvements`);
     const heading = [...el.querySelectorAll(`h3`)].find((node) => node.textContent === `What's new`)!;
-    // Each change as its own line, what it replaced a line of its own under it.
-    const items = [...heading.nextElementSibling!.querySelectorAll(`li`)];
+    // Each change as its own line, what it replaced a line of its own under it, below the header's line.
+    const items = [...heading.parentElement!.nextElementSibling!.querySelectorAll(`li`)];
     expect(items.map((item) => [...item.lastElementChild!.children].map((line) => line.textContent))).toEqual([
         [`Approve a waiting plan from the bar above the composer`, `Those buttons no longer appear on the plan card.`],
         [`Desktop sign-in completes again instead of showing an incomplete link`],

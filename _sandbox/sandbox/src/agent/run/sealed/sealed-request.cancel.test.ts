@@ -43,7 +43,7 @@ test("a cancel during the shield's read ends the call: nothing is planned and th
             ok: true,
             request: { ...context.base, credential: { kind: "cursor-key" as const, apiKey: "key" } },
             account: "cursor-one",
-            run: async function* (): AsyncGenerator<AgentEvent> {
+            async *run(): AsyncGenerator<AgentEvent> {
                 seenAborted.push(context.base.signal.aborted);
                 yield { kind: "delta", text: "fix: answered after the cancel" };
                 yield { kind: "done" };
