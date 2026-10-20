@@ -1,25 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { AgentHarness, AgentProvider, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
-import { termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import ModelPicker from "../../../chat/models/ModelPicker.vue";
 import PickerRunSettings from "../../../chat/models/run-settings/PickerRunSettings.vue";
-import ProviderLogo from "../../../../parts/providers/ProviderLogo.vue";
-import LoopTermsRow from "../../../chat/models/LoopTermsRow.vue";
-import LoopChips from "../../../chat/models/LoopChips.vue";
-import LoopLimitsRow from "../../../chat/models/LoopLimitsRow.vue";
-import { limitationsOn, offeredLoops, selectedLoop } from "../../../../models/providers/offeredLoops";
+import { loopRowShown, offeredLoops } from "../../../../models/providers/offeredLoops";
 import type { PickerEntry } from "../../../../models/conversations/accounts/modelPickerState";
-import { providerDisplayLabel } from "../../../../models/providers/providerCatalog";
 import { carryPinKnobs, defaultPinRunSettings, honoredPinKnobs, usePickerRunSettings } from "../../../../models/providers/pickerRunSettings";
 import { useChat } from "../../../../models/conversations/run/useChat";
-import { useT } from "@intentic/ui/i18n";
 
 // Full app model picker (composer's ModelPicker), pointed at one entry of a pinned list. No account control: that's a
 // per-turn question (PickerAccounts); the daemon spreads unattended work over headroom instead. Effort, thinking, fast
 // and harness live per entry, not shared, and draw only where the run would honour them.
-
-const t = useT();
 
 const emit = defineEmits<{ pick: [ModelPin]; configure: [ModelPin]; close: [] }>();
 const {
@@ -60,20 +51,13 @@ const { hasContent: runSettingsShown } = usePickerRunSettings(
     computed(() => pin?.effort),
 );
 
-// Which loops this provider has is the daemon's answer (offeredLoops), not a second list kept in sync by hand.
-const harnessChoosable = computed(() => offeredLoops(provider.value).length > 1);
-
-// What this provider/harness pair cannot do, straight off its declared record: the honest half of a choice made
-// for runs nobody is watching. Empty (the Claude Code loop, the ceiling) draws nothing.
-const limitations = computed(() => limitationsOn(provider.value, offeredLoops(provider.value), harness.value));
-
-// The vendor's own terms for this loop, beside its limits: a pin is a choice made for runs nobody is watching.
-const terms = computed(() => termsOf(provider.value, selectedLoop(offeredLoops(provider.value), harness.value)));
+// The harness row: a choice where the daemon offers this provider several loops (offeredLoops, not a second list kept in
+// sync by hand), and either way what the loop can't do and what its vendor says, the honest half of a choice made for
+// runs nobody is watching.
+const loopShown = computed(() => loopRowShown(provider.value, offeredLoops(provider.value), harness.value));
 
 // Whether the footer earns its border and padding: never draw a rule over nothing.
-const footerVisible = computed(
-    () => knobs && pin !== undefined && (runSettingsShown.value || harnessChoosable.value || limitations.value.length > 0 || terms.value !== undefined),
-);
+const footerVisible = computed(() => knobs && pin !== undefined && (runSettingsShown.value || loopShown.value));
 
 // Unset fields are dropped rather than stored as undefined, since the daemon reads an absent field as the provider's
 // default and a stored null would be a third, meaningless state.
@@ -108,26 +92,13 @@ const unpickable = (entry: PickerEntry): boolean =>
 </script>
 
 <template>
-    <ModelPicker
-        :provider="provider"
-        :model="model"
-        :unpickable="unpickable"
-        :helper-jobs="helperJobs"
-        @pick="pick"
-        @close="emit(`close`)"
-    >
+    <ModelPicker :provider="provider" :model="model" :unpickable="unpickable" :helper-jobs="helperJobs" @pick="pick" @close="emit(`close`)">
         <template #footer>
             <!-- Composer footer's own spacing, so a reader can't tell whether this opened from a settings row or the composer. -->
             <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
-                <!-- Labels whose settings these are: the picker above browses every provider, this configures only the one entry. -->
-                <div class="flex items-center justify-between gap-2">
-                    <span class="flex min-w-0 items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
-                        <ProviderLogo :provider="provider" class="shrink-0 text-xs" />
-                        <span class="truncate">{{ t(`sandbox.modelPinPickerBody.run`, { provider: providerDisplayLabel(provider) }) }}</span>
-                    </span>
-                </div>
-
-                <!-- Reasoning effort, extended thinking and speed: the shell picker's own controls, shared verbatim (PickerRunSettings). -->
+                <!-- The composer picker's own toolbar, so a reader can't tell whether this opened from a settings row or the composer:
+                     reasoning effort, then the harness with what it can't do and what its vendor says (shown even with one loop to
+                     name, since a pin is a choice made for runs nobody is watching), then extended thinking and speed. -->
                 <PickerRunSettings
                     :provider="provider"
                     :model="model"
@@ -136,15 +107,8 @@ const unpickable = (entry: PickerEntry): boolean =>
                     :thinking="pin?.thinking"
                     :fast="pin?.fast"
                     @update="configure($event)"
+                    @select-harness="configure({ harness: $event })"
                 />
-
-                <!-- Loop axis: one chip per loop this sandbox's daemon runs the provider on. -->
-                <LoopChips :provider="provider" :harness="harness" @select="configure({ harness: $event })" />
-
-                <!-- Model limits must be visible before an unattended run starts. -->
-                <LoopLimitsRow :provider="provider" :harness="harness" />
-
-                <LoopTermsRow v-if="terms !== undefined" :terms="terms" />
             </div>
         </template>
     </ModelPicker>

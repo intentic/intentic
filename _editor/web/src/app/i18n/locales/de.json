@@ -1995,9 +1995,12 @@
             "noAccountsMatch": "Keine Konten passen.",
             "outdatedMissing": "Bis zur Aktualisierung können die Konten unten nicht anzeigen, ob sie einen Zug übernehmen können (verlorene Anmeldung oder Lizenz, aufgebrauchtes oder gesperrtes Kontingent), und eine Auswahl wirkt erst ab der nächsten Nachricht.",
             "remeasureLimits": "Limits neu messen",
-            "session": "{provider}-Session",
-            "subscription": "Abo",
-            "turnsSpreadAcrossAutomatically": "Züge werden automatisch darauf verteilt"
+            "subscription": "Abo"
+        },
+        "pickerStatus": {
+            "nextMessage": "Gilt ab deiner nächsten Nachricht",
+            "spread": "{count} Konten, automatisch verteilt",
+            "measured": "gemessen {age}"
         },
         "pickerRunSettings": {
             "extendedThinking": "Erweitertes Nachdenken",
@@ -3415,9 +3418,6 @@
         },
         "modelPinPicker": {
             "addModel": "Ein Modell hinzufügen"
-        },
-        "modelPinPickerBody": {
-            "run": "{provider}-Lauf"
         },
         "moveOutPanel": {
             "compareSandboxToml": "sandbox.toml vergleichen",

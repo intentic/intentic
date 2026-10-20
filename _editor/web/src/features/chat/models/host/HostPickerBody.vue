@@ -10,6 +10,8 @@ import { usePickerRunSettings } from "../../../../models/providers/pickerRunSett
 import ModelPicker from "../ModelPicker.vue";
 import PickerAccounts from "../../accounts/PickerAccounts.vue";
 import PickerRunSettings from "../run-settings/PickerRunSettings.vue";
+import PickerStatus from "../../accounts/PickerStatus.vue";
+import { loopRowShown, offeredLoops } from "../../../../models/providers/offeredLoops";
 import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
 import { useT } from "@intentic/ui/i18n";
 
@@ -20,7 +22,7 @@ const t = useT();
 const request = computed(() => modelRequest.value);
 
 // Mounted only when the block has something to say; border and padding are drawn here, not by it.
-const { hasContent } = usePickerAccounts(
+const { hasContent, unplacedRefusal } = usePickerAccounts(
     computed(() => request.value?.provider ?? `claude`),
     computed(() => request.value?.harness ?? `native`),
     computed(() => request.value?.model),
@@ -37,7 +39,14 @@ const { hasContent: runSettingsShown } = usePickerRunSettings(
 );
 const runSettings = computed(() => request.value?.chooseRun === true && runSettingsShown.value);
 
-const footerVisible = computed(() => hasContent.value || runSettings.value);
+// The harness row: a choice where the provider has several loops, and the loop's limits and vendor terms either way.
+const loopShown = computed(
+    () =>
+        request.value !== undefined && loopRowShown(request.value.provider, offeredLoops(request.value.provider), request.value.harness ?? `native`),
+);
+const runShown = computed(() => loopShown.value || runSettings.value);
+
+const footerVisible = computed(() => hasContent.value || unplacedRefusal.value !== undefined || runShown.value);
 
 /* THE KEYBOARD'S SUBMIT, drawn on the one verb it presses (defaultResume): ⌘Enter on a Mac, Ctrl+Enter elsewhere. */
 const submitKeys = formatChord(`Mod+Enter`, isApplePlatform());
@@ -94,6 +103,8 @@ const choose = (entry: PickerEntry): void => {
         <template #footer>
             <!-- Picker and composer share the footer metrics. -->
             <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
+                <!-- The composer picker's own three parts: the status line, the account rows, the toolbar under a rule. -->
+                <PickerStatus :provider="request.provider" :harness="request.harness ?? `native`" :model="request.model" />
                 <PickerAccounts
                     v-if="hasContent"
                     :provider="request.provider"
@@ -101,19 +112,24 @@ const choose = (entry: PickerEntry): void => {
                     :model="request.model"
                     :account="request.account"
                     @select-account="stageModelPick({ account: $event })"
-                    @select-harness="stageModelPick({ harness: $event })"
                 />
-
-                <PickerRunSettings
-                    v-if="runSettings"
-                    :provider="request.provider"
-                    :model="request.model"
-                    :harness="request.harness ?? `native`"
-                    :effort="request.effort"
-                    :thinking="request.thinking"
-                    :fast="request.fast"
-                    @update="stageModelPick($event)"
-                />
+                <div
+                    v-if="runShown"
+                    class="-mx-3 flex flex-col gap-2 px-3 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-line [&:not(:first-child)]:pt-2"
+                >
+                    <!-- A caller that does not carry run settings (`chooseRun`) gets the harness alone: a control whose answer is dropped is worse than none. -->
+                    <PickerRunSettings
+                        :provider="request.provider"
+                        :model="request.model"
+                        :harness="request.harness ?? `native`"
+                        :effort="request.effort"
+                        :thinking="request.thinking"
+                        :fast="request.fast"
+                        :settings="runSettings"
+                        @update="stageModelPick($event)"
+                        @select-harness="stageModelPick({ harness: $event })"
+                    />
+                </div>
             </div>
         </template>
 

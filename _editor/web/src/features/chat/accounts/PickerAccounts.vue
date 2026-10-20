@@ -1,25 +1,22 @@
 <script setup lang="ts">
-import { SearchBar, useDevice, vAction, ui } from "@intentic/ui";
+import { SearchBar, useDevice, vAction } from "@intentic/ui";
 import { computed, nextTick, type Ref, ref, toRef } from "vue";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import UsageMeter from "../session/UsageMeter.vue";
 import { ACCOUNT_LIST_LIMIT, matchAccounts, pickerOrder, usePickerAccounts } from "./pickerAccounts";
-import { providerDisplayLabel } from "../../../models/providers/providerCatalog";
 import { servingAccount } from "../../../models/conversations/accounts/servingAccount";
-import { formatAge } from "../../../models/providers/usageStatus";
-import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
-import LoopChips from "../models/LoopChips.vue";
 import SandboxOutdatedNotice from "../../../parts/sandbox/SandboxOutdatedNotice.vue";
 import { accountsOutdated } from "../../../models/providers/accountsOutdated";
 import { useT } from "@intentic/ui/i18n";
 
-// Footer of the model picker: which connected account, and which agentic loop. Used by both the
-// composer's and shell's pickers; it picks (selection is prop in, event out), never applies. Past
+// The model picker footer's account rows: which connected account serves the turn. Its status line is PickerStatus and its
+// toolbar PickerRunBar, both the host's to compose around it. Used by both the composer's and shell's pickers; it picks
+// (selection is prop in, event out), never applies. Past
 // ACCOUNT_LIST_LIMIT each list folds to the active row plus a count, so the account list can't swallow the panel.
 
 const t = useT();
 
-const emit = defineEmits<{ selectAccount: [string]; selectHarness: [AgentHarness] }>();
+const emit = defineEmits<{ selectAccount: [string] }>();
 const {
     provider,
     harness,
@@ -27,9 +24,9 @@ const {
     account,
     named = true,
     accountsLocked,
-    harnessLocked,
 } = defineProps<{
     provider: AgentProvider;
+    // The loop the turn runs on: which accounts can serve it (a CLI loop has sign-ins of its own).
     harness: AgentHarness;
     // Model the headroom rings measure against; absent means the account's tightest pool.
     model?: string | undefined;
@@ -39,19 +36,16 @@ const {
     // Whether the next turn names `account` (turnRequest.ts accountIntent); false leaves it to the daemon's record,
     // which moves a turn off a seat an organisation took. A pick handed in by a caller is always named.
     named?: boolean;
-    // The two axes lock independently: the account may switch mid-turn (an allowance refusal is answered
-    // by switching), the harness only between turns. Disabled styling always follows these props via
-    // `.ui-off`.
+    // The account may switch mid-turn (an allowance refusal is answered by switching), so this locks only while the
+    // turn is generating. Disabled styling follows it via `.ui-off`.
     accountsLocked?: boolean;
-    harnessLocked?: boolean;
 }>();
 
-const { accountRows, accountCapacity, routedRows, routedCapacity, unplacedRefusal, measuredAt, measuring, remeasureLabel, remeasure } =
-    usePickerAccounts(
-        toRef(() => provider),
-        toRef(() => harness),
-        toRef(() => model),
-    );
+const { accountRows, accountCapacity, routedRows, routedCapacity } = usePickerAccounts(
+    toRef(() => provider),
+    toRef(() => harness),
+    toRef(() => model),
+);
 
 const { mobile } = useDevice();
 
@@ -151,36 +145,10 @@ const pickAccount = (id: string): void => {
 </script>
 
 <template>
-    <!-- The list above browses across providers; this footer configures what's selected. -->
-    <div class="flex items-center justify-between gap-2">
-        <span class="flex min-w-0 items-center gap-1.5 text-2xs font-medium uppercase tracking-wide text-muted">
-            <ProviderLogo :provider="provider" class="shrink-0 text-xs" />
-            <span class="truncate">{{ t(`chat.pickerAccounts.session`, { provider: providerDisplayLabel(provider) }) }}</span>
-        </span>
-        <span class="flex shrink-0 items-center gap-2">
-            <!-- One control for age and re-measure: the age is the label, and watching it reset to "just now" is the confirmation that the press worked. -->
-            <button
-                type="button"
-                :class="ui.textButton({ tone: `subtle`, size: `xs` })"
-                :disabled="measuring"
-                v-tooltip.top="{ title: t(`chat.pickerAccounts.remeasureLimits`), note: t(`chat.pickerAccounts.everyAccount`) }"
-                :aria-label="remeasureLabel"
-                @click="remeasure"
-            >
-                <Icon name="refresh" class="text-[0.6rem]" :spin="measuring" />
-                <span v-if="measuredAt !== undefined">{{ formatAge(measuredAt) }}</span>
-            </button>
-        </span>
-    </div>
-
+    <!-- The list above browses across providers; this footer configures what's selected. Nothing here but rows: what the
+         footer has to SAY (a refusal, a live turn, how fresh the meters are) is PickerStatus's one line above. -->
     <!-- A sandbox too old to judge its accounts: every row reads unknown, and this says why and how to update. -->
     <SandboxOutdatedNotice v-if="accountsOutdated" :missing="t(`chat.pickerAccounts.outdatedMissing`)" />
-
-    <!-- The refusal belonging to this selection but no single row (`unplacedRefusal`); shown above every control it qualifies. -->
-    <p v-if="unplacedRefusal" class="flex items-start gap-1.5 text-2xs text-warning" v-tooltip.top="unplacedRefusal">
-        <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-2xs" aria-hidden="true" />
-        <span class="line-clamp-2">{{ unplacedRefusal }}</span>
-    </p>
 
     <!-- No frame per row: only the tint marks the active one, hover shows the rest are choosable. -->
     <template v-if="accountRows.length > 1">
@@ -320,11 +288,5 @@ const pickAccount = (id: string): void => {
                 </span>
             </span>
         </button>
-
-        <!-- Shown only past one connection; with a single one there's nothing to explain. -->
-        <p v-if="routedRows.length > 1" class="text-2xs text-subtle">{{ t(`chat.pickerAccounts.turnsSpreadAcrossAutomatically`) }}</p>
     </template>
-
-    <!-- Loop axis: one chip per loop the daemon offers this provider on; the same subscription ids run under each. -->
-    <LoopChips :provider="provider" :harness="harness" :disabled="harnessLocked" @select="emit(`selectHarness`, $event)" />
 </template>

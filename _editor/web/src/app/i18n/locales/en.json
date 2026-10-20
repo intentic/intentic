@@ -3869,9 +3869,12 @@
             "outdatedMissing": "Until it updates, the accounts below can't say whether they can take a turn (a lost sign-in or seat, a spent or benched pool), and picking one only takes effect on the next message.",
             "remeasureLimits": "Re-measure limits",
             "remeasurePlanLimits": "Re-measure plan limits, measured {age}",
-            "session": "{provider} session",
-            "subscription": "Subscription",
-            "turnsSpreadAcrossAutomatically": "Turns are spread across these automatically"
+            "subscription": "Subscription"
+        },
+        "pickerStatus": {
+            "nextMessage": "Applies from your next message",
+            "spread": "{count} accounts, spread automatically",
+            "measured": "measured {age}"
         },
         "pickerRunSettings": {
             "defaultEffort": "default effort",
@@ -7118,9 +7121,6 @@
         },
         "modelPinPicker": {
             "addModel": "Add a model"
-        },
-        "modelPinPickerBody": {
-            "run": "{provider} run"
         },
         "moveOutPanel": {
             "compareSandboxToml": "Compare sandbox.toml",

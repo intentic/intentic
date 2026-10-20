@@ -707,6 +707,8 @@ const REFUSAL_ANSWERED: Record<ProviderRefusal["kind"], () => string> = {
 export interface RefusalNote {
     // Provider's own sentence while current; what's happened since once it's answered.
     readonly line: string;
+    // What happened and when, without the provider's sentence: the lead a surface with room for two lines sets apart.
+    readonly headline: string;
     // Provider's own words in both states; the hover once `line` stops printing them.
     readonly detail: string;
     // Alarm vs footnote; never hidden either way, just less urgent once answered.
@@ -723,6 +725,7 @@ export const refusalNote = (refusal: ProviderRefusal | undefined, accounts: read
     const opening = `${REFUSAL_CONDITION[refusal.kind]()} ${formatAge(refusal.at, now)}`;
     return {
         line: answer === undefined ? `${opening}, ${refusal.message}` : `${opening}, ${answer}.`,
+        headline: opening,
         detail: refusal.message,
         current: answer === undefined,
     };

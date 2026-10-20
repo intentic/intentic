@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Icon } from "@intentic/ui";
-import { termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { modelLabelFor } from "../../../models/providers/providerCatalog";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { AUTO_KEY, autoEntry, type PickerEntry } from "../../../models/conversations/accounts/modelPickerState";
@@ -10,13 +8,12 @@ import { type RunSettingsPatch, usePickerRunSettings } from "../../../models/pro
 import ModelPicker from "./ModelPicker.vue";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
 import PickerRunSettings from "./run-settings/PickerRunSettings.vue";
-import LoopTermsRow from "./LoopTermsRow.vue";
-import LoopLimitsRow from "./LoopLimitsRow.vue";
-import { limitationsOn, offeredLoops, selectedLoop } from "../../../models/providers/offeredLoops";
+import PickerStatus from "../accounts/PickerStatus.vue";
+import { loopRowShown, offeredLoops } from "../../../models/providers/offeredLoops";
 import { useT } from "@intentic/ui/i18n";
 
-// Chat's binding of the shared model picker: the list, the who-serves-the-turn block, and per-conversation footer
-// controls (extended thinking, fast speed, this runtime's limits). Edits the given conversation, not the active tab, so
+// Chat's binding of the shared model picker: the list, then a footer every picker draws in the same three parts: one status
+// line (PickerStatus), the account rows (PickerAccounts) and one toolbar (PickerRunSettings). Edits the given conversation, not the active tab, so
 // a proposed session's picker can be re-pointed before it starts. Harness is a separate axis from the model.
 
 const t = useT();
@@ -42,8 +39,8 @@ const autoOffered = computed(() => messages.value.length === 0 && box.value === 
 const leadRows = computed(() => (autoOffered.value ? [autoEntry(t(`chat.words.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : []));
 const leadSelected = computed(() => (auto.value ? AUTO_KEY : undefined));
 
-// Whether the shared block has content for this provider; needed before the footer renders its own padding.
-const { hasContent } = usePickerAccounts(provider, harness, model);
+// Whether the account rows draw for this provider, and a refusal no row carries; needed before the footer renders its own padding.
+const { hasContent: listed, unplacedRefusal } = usePickerAccounts(provider, harness, model);
 
 /* THE TWO CHIPS ARE THE SHARED CONTROL (PickerRunSettings): the same questions about the same model. */
 const { hasContent: runSettingsShown } = usePickerRunSettings(provider, model, harness, thinking, effort, false);
@@ -65,7 +62,8 @@ const applyRun = (patch: RunSettingsPatch): void => {
 // Hidden, not inert: another box's account pays for nothing; the model list stays since it isn't box-scoped. Under
 // Auto they are hidden for a second reason — the account is part of what the reading chooses, so offering one here
 // would be a control over a decision not yet made.
-const accountsShown = computed(() => hasContent.value && box.value === undefined && !auto.value);
+const accountsHere = computed(() => box.value === undefined && !auto.value);
+const accountsShown = computed(() => listed.value && accountsHere.value);
 
 // Mid-stream, only a same-provider model swap is allowed (a provider switch retires the session). Refused with its reason,
 // said where the row's description would be: a greyed provider with no reason read as one that was not connected.
@@ -93,11 +91,12 @@ const pick = (entry: PickerEntry): void => {
     emit(`selected`);
 };
 
-// What the selected provider/harness pair can't do here; empty for the ceiling (Claude Code loop).
-const limitations = computed(() => limitationsOn(provider.value, offeredLoops(provider.value), harness.value));
-
-// What the vendor's own terms say about this loop, when they say anything worth a quiet note.
-const terms = computed(() => termsOf(provider.value, selectedLoop(offeredLoops(provider.value), harness.value)));
+// The harness row: a choice where the account block is this chat's to set, and where it is not (another box's session),
+// still the loop's name with what it can't do and what its vendor says, since those decide whether to send at all.
+const loopChoosable = computed(() => box.value === undefined);
+const runShown = computed(
+    () => !auto.value && (runSettingsShown.value || loopRowShown(provider.value, offeredLoops(provider.value), harness.value, loopChoosable.value)),
+);
 
 // Sentence per reason the harness can give; an unrecognized one still shows the raw word verbatim.
 // Built when read, so a switched language reaches it.
@@ -139,7 +138,7 @@ const fastSpeedNotice = computed<string | undefined>(() => {
 const footerVisible = computed(() =>
     auto.value || liveTurnNote.value !== undefined
         ? true
-        : accountsShown.value || runSettingsShown.value || limitations.value.length > 0 || terms.value !== undefined,
+        : accountsShown.value || (accountsHere.value && unplacedRefusal.value !== undefined) || runShown.value,
 );
 </script>
 
@@ -159,11 +158,6 @@ const footerVisible = computed(() =>
             <!-- Shrinks and scrolls instead of holding natural height, paired with the list's own floor. -->
             <!-- bg-canvas marks the footer as the surface the list stands on, not more list; a rule alone read unclearly on a tall picker. -->
             <div v-if="footerVisible" class="flex min-h-0 shrink flex-col gap-2 overflow-y-auto border-t border-line bg-canvas px-3 py-2">
-                <!-- A live turn keeps the model it runs on; what is picked here is for the next message (liveTurnNote). -->
-                <p v-if="liveTurnNote !== undefined" class="flex items-start gap-1.5 text-2xs text-subtle" role="note">
-                    <Icon name="clock" class="mt-px shrink-0 text-2xs" aria-hidden="true" />
-                    <span>{{ liveTurnNote }}</span>
-                </p>
                 <!-- What Auto is about to do, said where it was switched on: a mode that changes the model owes an explanation before it does, not after. -->
                 <div v-if="auto" class="flex flex-col gap-1">
                     <span class="text-2xs text-subtle">{{ t(`chat.chatModelPicker.autoArmed`) }}</span>
@@ -173,7 +167,11 @@ const footerVisible = computed(() =>
                     </RouterLink>
                 </div>
 
-                <!-- Account list and harness axis, shared with the shell's own picker. Ticks the account the next turn runs on, as the selection's servingAccount does. -->
+                <!-- THE STATUS LINE: every message this footer has, in one line: a live turn (whose model it finishes on), a refusal no row
+                     carries, how fresh the meters are. Never a paragraph above or below the rows. -->
+                <PickerStatus v-if="!auto" :provider="provider" :harness="harness" :model="model" :note="liveTurnNote" :accounts="accountsHere" />
+
+                <!-- THE ROWS: who pays, shared with the shell's own picker. Ticks the account the next turn runs on, as the selection's servingAccount does. -->
                 <PickerAccounts
                     v-if="accountsShown"
                     :provider="provider"
@@ -182,13 +180,15 @@ const footerVisible = computed(() =>
                     :account="account"
                     :named="accountNamed"
                     :accounts-locked="generating"
-                    :harness-locked="streaming"
                     @select-account="conversation.selection.apply({ kind: `selectAccount`, account: $event })"
-                    @select-harness="conversation.selection.apply({ kind: `selectHarness`, harness: $event })"
                 />
 
-                <!-- Extended thinking and speed: the shell picker's and the settings page's own chips, shared verbatim (PickerRunSettings). -->
-                <div v-if="runSettingsShown && !auto" class="flex flex-col gap-1">
+                <!-- THE TOOLBAR: how it runs, under one rule spanning the panel whenever anything stands above it. The harness locks
+                     once a turn streams, since switching it retires the session the turn runs in. -->
+                <div
+                    v-if="runShown"
+                    class="-mx-3 flex flex-col gap-2 px-3 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-line [&:not(:first-child)]:pt-2"
+                >
                     <PickerRunSettings
                         :provider="provider"
                         :model="model"
@@ -197,16 +197,13 @@ const footerVisible = computed(() =>
                         :thinking="thinking"
                         :fast="fast"
                         :effort-row="false"
+                        :loop-choosable="loopChoosable"
+                        :loop-locked="streaming"
+                        :fast-notice="fastSpeedNotice"
                         @update="applyRun($event)"
+                        @select-harness="conversation.selection.apply({ kind: `selectHarness`, harness: $event })"
                     />
-                    <!-- Shown only when the harness's answer differs from the ask; a notice under a working control trains people to ignore notices. -->
-                    <span v-if="fastSpeedNotice !== undefined" class="text-2xs text-subtle">{{ fastSpeedNotice }}</span>
                 </div>
-
-                <!-- One row (label-left/control-right), the list itself behind a hover card. -->
-                <LoopLimitsRow v-if="!auto" :provider="provider" :harness="harness" />
-
-                <LoopTermsRow v-if="terms !== undefined && !auto" :terms="terms" />
             </div>
         </template>
     </ModelPicker>

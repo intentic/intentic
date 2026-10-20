@@ -1,6 +1,6 @@
 import { sandboxRef } from "@intentic/extension-api";
 import { type AgentHarness, AgentHarnessSchema, type AgentLoop, type AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { capabilitiesOf, limitationsOf, loopOf, loopsOf } from "@intentic/sandbox-contract/models/agent-catalog";
+import { capabilitiesOf, limitationsOf, loopOf, loopsOf, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
 
 // Which loops a chat may put each provider on: what the daemon behind this window advertised (`providers.list`
 // `loops`), never more, since a loop it does not run would be refused or silently run as its default. The functions
@@ -39,6 +39,11 @@ export const offeredHarness = (offered: readonly AgentLoop[], harness: AgentHarn
 /** What the loop a stored harness runs on here cannot do; a loop no longer offered is not the one that runs. */
 export const limitationsOn = (provider: AgentProvider, offered: readonly AgentLoop[], harness: AgentHarness): string[] =>
     limitationsOf(capabilitiesOf(provider, selectedLoop(offered, harness)));
+
+/** Whether the harness row (LoopChips) has anything to draw: a choice to offer, or, for the loop the pick runs on, a limit
+ *  or a vendor's terms to state. Hosts read it to decide whether the "how it runs" group shows at all. */
+export const loopRowShown = (provider: AgentProvider, offered: readonly AgentLoop[], harness: AgentHarness, choosable = true): boolean =>
+    (choosable && offered.length > 1) || limitationsOn(provider, offered, harness).length > 0 || termsOf(provider, selectedLoop(offered, harness)) !== undefined;
 
 /** Another offered loop free of every limit the current one has, which is the one worth naming beside them. */
 export const liftingLoop = (provider: AgentProvider, offered: readonly AgentLoop[], harness: AgentHarness): AgentLoop | undefined => {

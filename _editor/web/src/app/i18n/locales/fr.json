@@ -1995,9 +1995,12 @@
             "noAccountsMatch": "Aucun compte ne correspond.",
             "outdatedMissing": "Tant qu'il n'est pas mis à jour, les comptes ci-dessous ne peuvent pas dire s'ils peuvent prendre un tour (connexion ou siège perdu, quota épuisé ou suspendu), et en choisir un ne prend effet qu'au message suivant.",
             "remeasureLimits": "Remesurer les limites",
-            "session": "Session {provider}",
-            "subscription": "Abonnement",
-            "turnsSpreadAcrossAutomatically": "Les tours sont répartis entre eux automatiquement"
+            "subscription": "Abonnement"
+        },
+        "pickerStatus": {
+            "nextMessage": "S'applique à partir de votre prochain message",
+            "spread": "{count} comptes, répartis automatiquement",
+            "measured": "mesuré {age}"
         },
         "pickerRunSettings": {
             "extendedThinking": "Réflexion étendue",
@@ -3418,9 +3421,6 @@
         },
         "modelPinPicker": {
             "addModel": "Ajouter un modèle"
-        },
-        "modelPinPickerBody": {
-            "run": "Exécution {provider}"
         },
         "moveOutPanel": {
             "compareSandboxToml": "Comparer sandbox.toml",

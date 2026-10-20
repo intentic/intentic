@@ -78,19 +78,18 @@ afterEach(() => {
     ticked = undefined;
 });
 
-// Every row the footer drew, by its label; asserted as a whole set, since what's offered is the claim under test.
+// Every labelled row the footer drew, by its label; asserted as a whole set, since what's offered is the claim under test.
+// The toolbar under them carries no labels: its controls' own words are the label.
 const knobRows = (host: HTMLElement): string[] =>
-    [...host.querySelectorAll<HTMLElement>(`div.flex.items-center.justify-between`)]
-        .map((element) => element.querySelector(`span`)?.textContent?.trim() ?? ``)
-        .filter((label) => label !== ``);
+    [...host.querySelectorAll<HTMLElement>(`span.uppercase`)].map((label) => label.textContent?.trim() ?? ``).filter((label) => label !== ``);
 
+// A labelled row, by its label: the effort meter's.
 const row = (host: HTMLElement, label: string): HTMLElement | undefined =>
-    [...host.querySelectorAll<HTMLElement>(`div.flex.items-center.justify-between`)].find((element) =>
-        element.querySelector(`span`)?.textContent?.trim().startsWith(label),
-    );
+    [...host.querySelectorAll<HTMLElement>(`span.uppercase`)].find((span) => span.textContent?.trim() === label)?.parentElement ?? undefined;
 
-const segment = (host: HTMLElement, label: string, option: string): HTMLButtonElement =>
-    [...(row(host, label)?.querySelectorAll<HTMLButtonElement>(`button`) ?? [])].find((button) => button.textContent?.trim() === option)!;
+// The harness: one segment per offered loop, at the toolbar's left end.
+const loops = (host: HTMLElement): HTMLButtonElement[] => [...host.querySelectorAll<HTMLButtonElement>(`[role="tablist"] button`)];
+const segment = (host: HTMLElement, option: string): HTMLButtonElement => loops(host).find((button) => button.textContent?.trim() === option)!;
 
 /* The two switches, which are chips and not rows: `.composer-toggle` is the chip recipe. */
 const chips = (host: HTMLElement): string[] =>
@@ -125,12 +124,13 @@ test("adding ticks the job's own first model, and nothing for a job with none, n
     expect([ticked?.provider, ticked?.model]).toEqual([`claude`, ``]);
 });
 
-// A scale is a row and a switch is a chip: the effort meter keeps its label, thinking carries its own.
+// A scale is a row and a switch is a chip: the effort meter keeps its label, the chips sit on the toolbar under it.
 test("a Claude entry is offered the reasoning tiers and thinking, and neither the harness nor speed", async () => {
     const host = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5` }, knobs: true });
     await nextTick();
 
-    expect(knobRows(host)).toEqual([`CLAUDE run`, `Reasoning effort`]);
+    expect(knobRows(host)).toEqual([`Reasoning effort`]);
+    expect(loops(host)).toEqual([]);
     expect(chips(host)).toEqual([`Extended thinking`]);
 });
 
@@ -186,35 +186,40 @@ test("a codex entry is offered the harness axis, and picking a chip writes it", 
     const host = mount({ pin: { provider: `codex`, model: `gpt-5.6` }, knobs: true });
     await nextTick();
 
-    expect(knobRows(host)).toContain(`Harness`);
-    // Neither Claude switch is a codex question, so the chip line is not drawn at all.
+    expect(loops(host).length).toBeGreaterThan(1);
+    // Neither Claude switch is a codex question, so the toolbar holds the harness alone.
     expect(chips(host)).toEqual([]);
-    segment(host, `Harness`, `Claude Code`).click();
+    segment(host, `Claude Code`).click();
     expect(written).toEqual([{ provider: `codex`, model: `gpt-5.6`, harness: `claude-code` }]);
 });
 
-// One chip per loop, each named for itself; the default's stores `native`, which every daemon reads, never its own name.
+// One segment per loop, each named for itself; the default's stores `native`, which every daemon reads, never its own name.
 test("the loop chips are the offered loops, the default's lit for native and storing native", async () => {
     const host = mount({ pin: { provider: `codex`, model: `gpt-5.6`, harness: `claude-code` }, knobs: true });
     await nextTick();
 
-    const loops = [...(row(host, `Harness`)?.querySelectorAll<HTMLButtonElement>(`button`) ?? [])];
-    expect(loops.map((button) => [button.textContent?.trim(), button.getAttribute(`aria-pressed`)])).toEqual([
+    expect(loops(host).map((button) => [button.textContent?.trim(), button.getAttribute(`aria-selected`)])).toEqual([
         [`Codex`, `false`],
         [`Claude Code`, `true`],
     ]);
-    // The vendor's own terms ride beside the chip they are about, as a hint and nothing louder.
-    expect(row(host, `Harness`)?.querySelectorAll(`[tabindex="0"]`)).toHaveLength(1);
-    segment(host, `Harness`, `Codex`).click();
+    // The vendor's own terms for the loop picked ride behind the one (i) beside it, as a hint and nothing louder.
+    const hint = host.querySelector<HTMLElement>(`.cursor-help`)!.parentElement!;
+    hint.dispatchEvent(new MouseEvent(`mouseenter`));
+    await nextTick();
+    expect(document.body.textContent).toContain(`Vendor terms`);
+    hint.dispatchEvent(new MouseEvent(`mouseleave`));
+    segment(host, `Codex`).click();
     expect(written).toEqual([{ provider: `codex`, model: `gpt-5.6`, harness: `native` }]);
 });
 
-test("a daemon that offers the provider one loop draws no loop axis at all", async () => {
+// A lone segment would be a label pretending to be a control: the one loop is named, with what it can't do, and offered nothing.
+test("a daemon that offers the provider one loop draws no loop choice, only the loop's name", async () => {
     advertisedLoops.value = { codex: [`codex`] };
     try {
         const host = mount({ pin: { provider: `codex`, model: `gpt-5.6`, harness: `claude-code` }, knobs: true });
         await nextTick();
-        expect(knobRows(host)).not.toContain(`Harness`);
+        expect(loops(host)).toEqual([]);
+        expect(host.textContent).toContain(`Codex`);
     } finally {
         advertisedLoops.value = undefined;
     }

@@ -74,9 +74,21 @@ jest.mock(`@intentic/ui`, () => ({
                 h(`button`, { disabled: props.disabled, onClick: attrs[`onClick`] }, props.label),
     }),
 }));
-jest.mock(`../../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
+// The account rows' composable, as the status line reads it too: nothing refused, nothing measured.
+jest.mock(`../../accounts/pickerAccounts`, () => ({
+    usePickerAccounts: () => ({
+        hasContent: computed(() => true),
+        unplacedRefusal: computed(() => undefined),
+        routedRows: computed(() => []),
+        measuredAt: computed(() => undefined),
+        measuring: computed(() => false),
+        remeasureLabel: computed(() => ``),
+        remeasure: async () => {},
+    }),
+}));
 
-const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } = await import("../../../../models/conversations/accounts/hostModelPicker");
+const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } =
+    await import("../../../../models/conversations/accounts/hostModelPicker");
 const { modelLabelFor, providerModels } = await import("../../../../models/providers/providerCatalog");
 const { DEFAULT_EFFORT, DEFAULT_THINKING, defaultPinRunSettings } = await import("../../../../models/providers/pickerRunSettings");
 const { default: HostPickerBody } = await import("./HostPickerBody.vue");

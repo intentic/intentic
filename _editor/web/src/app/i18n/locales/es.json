@@ -2004,9 +2004,12 @@
             "noAccountsMatch": "Ninguna cuenta coincide.",
             "outdatedMissing": "Hasta que se actualice, las cuentas de abajo no pueden indicar si pueden atender un turno (un inicio de sesión o puesto perdido, un cupo agotado o en pausa), y elegir una solo surte efecto en el siguiente mensaje.",
             "remeasureLimits": "Volver a medir límites",
-            "session": "Sesión de {provider}",
-            "subscription": "Suscripción",
-            "turnsSpreadAcrossAutomatically": "Los turnos se reparten entre estas automáticamente"
+            "subscription": "Suscripción"
+        },
+        "pickerStatus": {
+            "nextMessage": "Se aplica desde tu próximo mensaje",
+            "spread": "{count} cuentas, repartidas automáticamente",
+            "measured": "medido {age}"
         },
         "pickerRunSettings": {
             "extendedThinking": "Razonamiento extendido",
@@ -3428,9 +3431,6 @@
         },
         "modelPinPicker": {
             "addModel": "Añadir un modelo"
-        },
-        "modelPinPickerBody": {
-            "run": "Ejecución de {provider}"
         },
         "moveOutPanel": {
             "compareSandboxToml": "Comparar sandbox.toml",

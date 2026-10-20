@@ -23,7 +23,18 @@ jest.mock(`./ModelPicker.vue`, () => ({
 }));
 // Account catalogs live in the shared block; stubbed empty so the footer shows only the runtime's own rows.
 jest.mock(`../accounts/PickerAccounts.vue`, () => ({ default: defineComponent({ setup: () => () => h(`div`) }) }));
-jest.mock(`../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => false) }) }));
+// The account rows' composable, as the status line reads it too: nothing refused, nothing measured.
+jest.mock(`../accounts/pickerAccounts`, () => ({
+    usePickerAccounts: () => ({
+        hasContent: computed(() => false),
+        unplacedRefusal: computed(() => undefined),
+        routedRows: computed(() => []),
+        measuredAt: computed(() => undefined),
+        measuring: computed(() => false),
+        remeasureLabel: computed(() => ``),
+        remeasure: async () => {},
+    }),
+}));
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
 const { providerModels } = await import("../../../models/providers/providerCatalog");
 const { effortsFor } = await import("../../../models/providers/effortScale");
@@ -51,7 +62,10 @@ interface Standing {
     readonly plan?: boolean;
     readonly ran?: string;
 }
-const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }, { auto = false, sent = 0, open = true, live = false, plan = false, ran }: Standing = {}): Conversation =>
+const conversationOf = (
+    pair: { provider: AgentProvider; harness: AgentHarness },
+    { auto = false, sent = 0, open = true, live = false, plan = false, ran }: Standing = {},
+): Conversation =>
     ({
         selection: {
             autoOpen: ref(open),
@@ -100,8 +114,11 @@ const mount = (
     return { element, conversation: held };
 };
 
-// The hint's trigger: the parent of the focusable span the icon sits in.
-const hint = (element: HTMLElement): HTMLElement => element.querySelector<HTMLElement>(`[tabindex="0"]`)!.parentElement!;
+// The live turn's whole sentence, which the status row says short and carries as its accessible name.
+const note = (element: HTMLElement): string => element.querySelector(`[role="note"]`)?.getAttribute(`aria-label`) ?? ``;
+
+// The limits hint's trigger: the parent of the focusable span it sits in (a harness segment is focusable too, so by its look).
+const hint = (element: HTMLElement): HTMLElement => element.querySelector<HTMLElement>(`.cursor-help[tabindex="0"]`)!.parentElement!;
 
 // The run-settings chips, by the shape a chip has: a pressed-state button carrying its own name. Read as
 // `label → lit`, so a test says both which chips exist and which of them are on.
@@ -119,13 +136,13 @@ afterEach(() => {
     providerModels.value = { ...providerModels.value, claude: [] };
 });
 
-it(`spends one line on the runtime's limits, with the count where the list used to be`, () => {
+it(`puts nothing on the toolbar for the runtime's limits but a count, beside the harness it qualifies`, () => {
     const { element } = mount();
     const limits = limitsOf(ROUTED);
 
-    expect(limits.length).toBeGreaterThan(1); // the row is pointless on a runtime with nothing to say
-    expect(element.textContent).toContain(`Not available here`);
-    expect(element.textContent).toContain(`${limits.length}`);
+    expect(limits.length).toBeGreaterThan(1); // the hint is pointless on a runtime with nothing to say
+    // Not a row of its own, not a word: an (i) and the number.
+    expect(hint(element).textContent).toBe(`${limits.length}`);
     // The wall this replaced: not a sentence of it is in the panel until asked for.
     for (const limit of limits) {
         expect(element.textContent).not.toContain(limit);
@@ -179,7 +196,7 @@ it(`says nothing at all when the runtime is the ceiling`, () => {
     const { element } = mount(CEILING);
 
     expect(element.textContent).toContain(`Extended thinking`);
-    expect(element.textContent).not.toContain(`Not available here`);
+    expect(element.querySelector(`.cursor-help`)).toBeNull();
     expect(element.querySelector(`[tabindex="0"]`)).toBeNull();
 });
 
@@ -267,21 +284,24 @@ it(`withdraws Auto from a chat whose first message already waits in its queue`, 
 it(`says the running turn finishes on its own model, by name`, () => {
     const { element } = mount(CEILING, { live: true, sent: 1, ran: MODEL });
 
-    expect(element.textContent).toContain(`This turn finishes on`);
-    expect(element.textContent).toContain(`applies from your next message`);
+    // One short line on the status row; the whole sentence, model named, is its hover and its accessible name.
+    expect(element.textContent).toContain(`Applies from your next message`);
+    expect(note(element)).toContain(`This turn finishes on`);
+    expect(note(element)).toContain(`applies from your next message`);
 });
 
 // The trap reported: Opus picked over a plan waiting for approval, the approval carried on with the planning model.
 it(`says an approval carries on with the model the plan was written on`, () => {
     const { element } = mount(CEILING, { live: true, plan: true, sent: 1, ran: MODEL });
 
-    expect(element.textContent).toContain(`Approving the plan carries on with`);
+    expect(note(element)).toContain(`Approving the plan carries on with`);
 });
 
 it(`says nothing about the next message while nothing runs`, () => {
     const { element } = mount(CEILING, { sent: 1, ran: MODEL });
 
-    expect(element.textContent).not.toContain(`applies from your next message`);
+    expect(element.textContent).not.toContain(`Applies from your next message`);
+    expect(element.querySelector(`[role="note"]`)).toBeNull();
 });
 
 // Another provider is refused mid-turn; the row says why where its description would be, rather than greying out.
@@ -308,20 +328,23 @@ it(`says what Auto will do and withholds every control over the model underneath
     expect(limitsOf(ROUTED).length).toBeGreaterThan(1);
     expect(element.textContent).toContain(`Your first message picks what this chat runs on`);
     expect(element.textContent).toContain(`Choose which model does the reading`);
-    expect(element.textContent).not.toContain(`Not available here`);
+    expect(element.querySelector(`.cursor-help`)).toBeNull();
     expect(chips(element)).toEqual({});
 });
 
-/* THE VENDOR'S TERMS RIDE QUIETLY: a row and a hover card in the footer, only where the vendor has said something. */
+/* THE VENDOR'S TERMS RIDE QUIETLY: in the harness's one hover card, only where the vendor has said something. */
 
-it(`notes a loop its vendor does not list, in the footer and nowhere louder`, () => {
+it(`notes a loop its vendor does not list, behind the harness's (i) and nowhere louder`, async () => {
     const { element } = mount({ provider: `codex`, harness: `claude-code` });
 
-    expect(element.textContent).toContain(`Vendor terms`);
+    expect(element.textContent).not.toContain(`Vendor terms`);
+    hint(element).dispatchEvent(new MouseEvent(`mouseenter`));
+    await nextTick();
+    expect(document.body.textContent).toContain(`Vendor terms`);
 });
 
 it(`says nothing about terms where the vendor sanctions the loop`, () => {
     const { element } = mount(CEILING);
 
-    expect(element.textContent).not.toContain(`Vendor terms`);
+    expect(element.querySelector(`.cursor-help`)).toBeNull();
 });

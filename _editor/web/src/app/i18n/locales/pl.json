@@ -3869,9 +3869,12 @@
             "outdatedMissing": "Do czasu aktualizacji konta poniżej nie pokażą, czy mogą przyjąć turę (utracone logowanie lub miejsce, wyczerpana lub wstrzymana pula), a wybór konta zadziała dopiero od następnej wiadomości.",
             "remeasureLimits": "Zmierz limity ponownie",
             "remeasurePlanLimits": "Zmierz ponownie limity planu, ostatni pomiar {age}",
-            "session": "Sesja {provider}",
-            "subscription": "Subskrypcja",
-            "turnsSpreadAcrossAutomatically": "Tury rozkładają się na nie automatycznie"
+            "subscription": "Subskrypcja"
+        },
+        "pickerStatus": {
+            "nextMessage": "Obowiązuje od następnej wiadomości",
+            "spread": "Konta ({count}), tury rozkładane automatycznie",
+            "measured": "zmierzono {age}"
         },
         "pickerRunSettings": {
             "defaultEffort": "domyślny wysiłek",
@@ -6669,9 +6672,6 @@
         },
         "modelPinPicker": {
             "addModel": "Dodaj model"
-        },
-        "modelPinPickerBody": {
-            "run": "Przebieg {provider}"
         },
         "moveOutPanel": {
             "compareSandboxToml": "Porównaj sandbox.toml",
