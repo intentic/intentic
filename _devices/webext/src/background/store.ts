@@ -1,6 +1,6 @@
 import { type WebExtGrant, type WebExtScopes, WebExtScopesSchema } from "@intentic/sandbox-contract/webext";
 // Named imports, as in mcp.ts: the `z` namespace would keep zod's locales in the bundle.
-import { number, object, string } from "zod";
+import { enum as zEnum, number, object, string } from "zod";
 import { approvalCovers, type KeptApproval } from "./policy.js";
 
 // Everything this extension remembers, in chrome.storage.local: the sandbox's url+token (the only secret), cached
@@ -15,6 +15,7 @@ const KEY_MODES = "modes";
 const KEY_PAUSED = "paused";
 const KEY_LOG = "log";
 const KEY_PENDING = "pending";
+const KEY_CHOICE = "choice";
 const KEY_INBOX = "inbox";
 const KEY_DECLINED = "declined";
 const KEY_SETTINGS = "settings";
@@ -24,6 +25,7 @@ const KEY_PASSWORDS = "passwordsOn";
 const KEY_NEVER_SAVE = "passwordsNeverHosts";
 
 const KeptApprovalSchema = object({ tabId: number(), url: string(), what: string(), at: number() });
+const SiteChoiceSchema = object({ origin: string(), mode: zEnum(["read", "act"]), at: number() });
 
 export interface PairedSandbox {
     readonly url: string;
@@ -60,6 +62,18 @@ export interface PendingAccess {
     readonly reason: string;
     readonly at: number;
 }
+
+// The mode the person picked in the popup for a site Chrome is being asked for, kept until Chrome's grant lands
+// (site-grants.ts), since the popup that picked it is closed by the time that happens.
+export interface SiteChoice {
+    readonly origin: string;
+    readonly mode: WebExtGrant["mode"];
+    readonly at: number;
+}
+
+// How long a pick waits for Chrome's grant: the dialog is answered in seconds, and a pick whose dialog was turned down
+// should not be filed by a grant the person makes much later, some other way.
+export const CHOICE_HOLD_MS = 5 * 60_000;
 
 // The last 200 actions: long enough to answer "what did it just do", short enough to never be a browsing-history
 // record (tool calls, not pages).
@@ -131,6 +145,21 @@ export const store = {
         }),
     setPending: async (pending: PendingAccess | undefined): Promise<void> =>
         pending === undefined ? await chrome.storage.local.remove([KEY_PENDING]) : await chrome.storage.local.set({ [KEY_PENDING]: pending }),
+
+    // One pick at a time, like the request it usually answers; a newer one replaces it.
+    setChoice: async (choice: SiteChoice): Promise<void> => await chrome.storage.local.set({ [KEY_CHOICE]: choice }),
+    // Spends the pick if it is for `origin` and still fresh; one for another site is left for its own grant.
+    takeChoice: async (origin: string, now: number): Promise<SiteChoice | undefined> => {
+        const choice = await read<SiteChoice | undefined>(KEY_CHOICE, undefined, (raw) => {
+            const parsed = SiteChoiceSchema.safeParse(raw);
+            return parsed.success ? parsed.data : undefined;
+        });
+        if (choice?.origin !== origin) {
+            return undefined;
+        }
+        await chrome.storage.local.remove([KEY_CHOICE]);
+        return now >= choice.at && now - choice.at < CHOICE_HOLD_MS ? choice : undefined;
+    },
 
     // A pairing code the sandbox's page handed over, waiting for the popup to finish it: redeeming needs a host
     // permission, which Chrome only grants from a user gesture, so a page can't connect the browser on its own.

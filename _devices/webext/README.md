@@ -20,6 +20,9 @@ flowchart LR
   grants one, so the agent can only ask (`ask_access`), which opens the popup with its reason (Chrome 127+, else the
   badge alone); a decline holds for 15 minutes. Then the switches on the sandbox's capability card, then the
   site's read-only or read-and-act mode. The sandbox's own origin is never a target, and the popup's pause stops everything.
+- Chrome's permission dialog closes the popup that opened it, so the popup sends the person's Read or Read & act pick
+  to the worker before asking Chrome, and [`site-grants.ts`](src/background/site-grants.ts) files it when Chrome's
+  grant lands. A site allowed from Chrome's own menu while the agent is waiting on it is filed as read only.
 - `connect_site` hands a site's session to the sandbox and `lend_site` borrows one back; both need the sessions
   switch and a confirmation in the page every time.
 - `type_ticket` types a stored secret into the field in focus for the sandbox's own `type_secret`, and the agent's

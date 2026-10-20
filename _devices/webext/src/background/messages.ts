@@ -12,7 +12,8 @@ export type PopupCommand =
     // A pasted or accepted pairing code; the popup already obtained the host permission, so this just redeems it and
     // dials.
     | { readonly type: "pair"; readonly code: string }
-    // A site the popup has just been granted by the browser, filed with the mode the person picked.
+    // The mode the person picked for a site, sent just before the popup asks Chrome for it: filed once Chrome holds the
+    // site (site-grants.ts), since Chrome's dialog closes the popup before it could say so itself.
     | { readonly type: "allow"; readonly origin: string; readonly mode: WebExtGrant["mode"] }
     | { readonly type: "mode"; readonly origin: string; readonly mode: WebExtGrant["mode"] }
     | { readonly type: "revoke"; readonly origin: string }

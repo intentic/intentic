@@ -16,6 +16,7 @@ import {
     type PasswordContentMessage,
 } from "./passwords.js";
 import { siteOf } from "./policy.js";
+import { choose, granted, owner } from "./site-grants.js";
 
 // The service worker's entry point: keeps the socket up and answers the popup. Deliberately holds no state,
 // since Chrome rebuilds this module from scratch on every run; only storage and these listeners survive. A
@@ -55,19 +56,10 @@ chrome.permissions.onRemoved.addListener((removed) => {
     }
 });
 
-// A site allowed outside the popup (Chrome's own site-access menu): if it is the one the agent asked for, the request
-// is answered, and the badge should stop saying otherwise.
+// A site Chrome just granted, from its own dialog (the popup that asked is closed by then) or its own site-access menu:
+// filed with the mode the person picked, or as read only when it answers the agent's request (site-grants.ts).
 chrome.permissions.onAdded.addListener((added) => {
-    void (async () => {
-        const pending = await store.pending();
-        for (const origin of added.origins ?? []) {
-            await store.forgetDecline(origin);
-            if (pending?.origin === origin) {
-                await store.setPending(undefined);
-            }
-        }
-        await refreshBadge();
-    })();
+    void granted(added.origins ?? []);
 });
 
 const readState = async (): Promise<PopupState> => {
@@ -116,24 +108,6 @@ const pair = async (code: string): Promise<{ ok: boolean; message: string }> => 
     return { ok: true, message: `Connected.` };
 };
 
-// Something the person did in the popup, in the same activity list as the agent's calls, so "why can it act on
-// github.com" has its answer beside what it did there.
-const owner = async (detail: string): Promise<void> => await store.append({ at: Date.now(), tool: "owner", detail, ok: true });
-
-// The browser already granted this (the popup asked, click behind it); this only files the read/act narrowing Chrome
-// has no concept of.
-const allow = async (origin: string, mode: "read" | "act"): Promise<{ ok: true }> => {
-    await store.setMode(origin, mode);
-    await store.forgetDecline(origin);
-    const pending = await store.pending();
-    if (pending === undefined || pending.origin === origin) {
-        await store.setPending(undefined);
-    }
-    await owner(`Allowed ${siteOf(origin)} to ${mode === "act" ? "read and act" : "read only"}`);
-    await refreshBadge();
-    return { ok: true };
-};
-
 const decline = async (): Promise<{ ok: true }> => {
     const pending = await store.pending();
     if (pending !== undefined) {
@@ -161,7 +135,8 @@ const handle = async (command: PopupCommand): Promise<unknown> => {
         case "pair":
             return await pair(command.code);
         case "allow":
-            return await allow(command.origin, command.mode);
+            await choose(command.origin, command.mode);
+            return { ok: true };
         case "mode":
             await store.setMode(command.origin, command.mode);
             await owner(`Set ${siteOf(command.origin)} to ${command.mode === "act" ? "read and act" : "read only"}`);

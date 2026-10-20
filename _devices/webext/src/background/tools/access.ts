@@ -126,7 +126,9 @@ export const askAccess = async (origin: string, reason: string): Promise<string>
     if (pattern === undefined) {
         throw new RefusedError(`"${origin}" is not a website this browser can be allowed on.`);
     }
-    if (await chrome.permissions.contains({ origins: [pattern] })) {
+    // Allowed means on the agent's list (tab-access.ts `targetTab`): Chrome holding the site is not enough, since
+    // Passwords' all-sites grant holds every site, and answering "allowed" there sent the agent back to a refusal.
+    if (pattern in (await store.modes()) && (await chrome.permissions.contains({ origins: [pattern] }))) {
         return `You are already allowed on ${siteOf(pattern)}.`;
     }
     const declinedAt = (await store.declined())[pattern];

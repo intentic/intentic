@@ -60,12 +60,14 @@ const favicon = (origin: string): HTMLElement => {
     return box;
 };
 
-// Asks Chrome first, then records the mode; the mode is only saved once Chrome's own dialog says yes.
+// Hands the pick to the worker, then asks Chrome. Chrome closes this popup the moment its own dialog takes focus
+// (crbug.com/40721470), so nothing after the request is sure to run: the worker files the mode once Chrome holds the
+// site (background/site-grants.ts), never before. Sent, not awaited, since an await in front of the request would
+// spend the click.
 const allow = async (origin: string, mode: WebExtGrant["mode"], error?: HTMLElement): Promise<void> => {
+    void send({ type: "allow", origin, mode });
     const granted = await chrome.permissions.request({ origins: [origin] });
-    if (granted) {
-        await send({ type: "allow", origin, mode });
-    } else if (error !== undefined) {
+    if (!granted && error !== undefined) {
         say(error, `The browser did not allow ${siteOf(origin)}, so nothing changed.`);
     }
     await refresh();
