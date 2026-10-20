@@ -187,7 +187,7 @@ const excludedEntries = (secrets: boolean, authOutside: string | undefined): Bun
         )
         .toSorted((left, right) => left.path.localeCompare(right.path));
     // Appended rather than sorted in: the tables describe named state, these describe whole subtrees, and mixing them
-    // alphabetically would bury the one entry (the shelf) that costs somebody 49 repositories.
+    // alphabetically would bury the whole-subtree entries (the shelf, a volume) among single files.
     return [...declared, ...IGNORE_SCOPE_EXCLUSIONS, ...storageExclusions(authOutside)];
 };
 

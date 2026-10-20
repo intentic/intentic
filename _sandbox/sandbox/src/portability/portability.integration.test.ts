@@ -438,7 +438,7 @@ test("the manifest names the reference shelf it leaves behind, instead of droppi
     const excluded = held.index.manifest.excluded;
     await dropSpool(held.spool);
 
-    // The shelf does not travel — that part is deliberate, since each entry is a clone with its own remote.
+    // The shelf does not travel, on purpose: it is temporary consultation material, never part of the sandbox.
     await arrive(await bundleOf(source, false), target);
     await expect(readFile(join(target.work, "refs/vscode/README.md"), "utf8")).rejects.toThrow();
     // What was wrong is that nothing said so: `excluded` was built from the state tables alone, and the tables

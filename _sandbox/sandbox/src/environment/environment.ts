@@ -36,6 +36,13 @@ export const baseImageOf = (baseImage: string | undefined, runningImage: string 
     return isOfficialSandboxImage(running) ? running : RELEASE_IMAGE;
 };
 
+// The base named exactly: its reference with the registry digest the runner read (`ghcr.io/intentic/sandbox:stable@sha256:…`,
+// which docker pulls by the digest and a reader still sees the channel in). For what a sandbox records about itself, a
+// definition's `baseImage`; never what an overlay composes FROM, which follows the channel's tag. A reference that
+// already names a digest, or a digest that is not one, leaves the reference as it is.
+export const pinnedBase = (base: string, digest: string): string =>
+    base.includes("@") || !/^sha256:[0-9a-f]{64}$/u.test(digest) ? base : `${base}@${digest}`;
+
 // Composed overlay must extend the official sandbox image; the FROM line is pinned in composeEnvironment, and every
 // executor (`ic`, the hosted rebuild) re-checks it via the contract's `hasOfficialBase`.
 

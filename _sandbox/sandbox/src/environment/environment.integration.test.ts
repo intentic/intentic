@@ -23,6 +23,7 @@ import {
     decideRuntimeInstall,
     draftsDir,
     baseImageOf,
+    pinnedBase,
     proposalPath,
     proposeDraft,
     readEnvironment,
@@ -69,6 +70,7 @@ const stubServices = (environmentHashApplied = "", capabilities: Capability[] = 
                 name: "intentic-sandbox-demo",
                 image,
                 baseImage,
+                baseDigest: "",
                 channel: "",
                 previousImage: "",
                 definitionSeed: "",
@@ -102,6 +104,16 @@ const vpn = (id: string): Capability => ({
     config: { provider: "wireguard", config: "[Interface]\nPrivateKey = P\n", autoConnect: "on" },
 });
 const discord: Capability = { id: "discord", kind: "cli", config: { provider: "discord", botToken: "t" } };
+
+test("pinnedBase adds the runner's digest to a reference that names none, and only a real digest", () => {
+    const digest = `sha256:${"ab".repeat(32)}`;
+    expect(pinnedBase("ghcr.io/intentic/sandbox:stable", digest)).toBe(`ghcr.io/intentic/sandbox:stable@${digest}`);
+    expect(pinnedBase("ghcr.io/intentic/sandbox:stable", "")).toBe("ghcr.io/intentic/sandbox:stable");
+    expect(pinnedBase("ghcr.io/intentic/sandbox:stable", "latest")).toBe("ghcr.io/intentic/sandbox:stable");
+    // A hosted machine's reference already names its digest.
+    const hosted = `ghcr.io/intentic/sandbox@sha256:${"cd".repeat(32)}`;
+    expect(pinnedBase(hosted, digest)).toBe(hosted);
+});
 
 test("baseImageOf prefers the runner-named base, else an official running image, else the release tag", () => {
     const latest = "ghcr.io/intentic/sandbox:latest";

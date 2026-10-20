@@ -34,6 +34,17 @@ export const sandboxNames = (slug: string): SandboxNames => ({
 // Where a dev sandbox's shared AI-provider logins are mounted, a mount and AGENT_AUTH_DIR together (`mounts` carries it).
 export const AGENT_AUTH_ROOT = "/agent-auth";
 
+// The registry digest of the base an image was built on, stamped on the container for the daemon. ic hands it to the
+// run command as an env var on the probe rather than a flag: an older image's run command ignores an env var it does
+// not know, where it would refuse an unknown flag, so a rollback onto one still runs.
+export const BASE_DIGEST_ENV = "SANDBOX_BASE_DIGEST";
+
+// A digest as docker prints one: what a runner's reading is held to before it is stamped.
+export const baseDigestOf = (value: string | undefined): string | undefined => {
+    const trimmed = value?.trim() ?? "";
+    return /^sha256:[0-9a-f]{64}$/u.test(trimmed) ? trimmed : undefined;
+};
+
 // Where the sandbox's own Docker engine keeps its images, containers and their volumes.
 export const DOCKER_ROOT = "/var/lib/docker";
 
@@ -42,6 +53,8 @@ export interface SandboxVolume {
     readonly destination: string;
     // Its name, as sandboxNames spells it for a slug.
     readonly volume: "workspaceVolume" | "historyVolume" | "dockerVolume";
+    // What a compose file calls it in its `volumes:` table (the editor's setupCompose.ts).
+    readonly composeKey: "work" | "history" | "docker-engine";
     // The state planner's flag (the daemon's state-plan.ts) for a volume holding files the daemon converts.
     readonly planner?: "--workspace" | "--history";
     // Why an environment bundle leaves the volume out, shown to the owner in the bundle's report. Absent for a volume
@@ -54,12 +67,13 @@ export interface SandboxVolume {
 // line mounts each, and an environment bundle either walks one or says why it does not.
 export const SANDBOX_VOLUMES: readonly SandboxVolume[] = [
     // Never optional: the owner's files and every repo's working tree.
-    { destination: WORKSPACE_ROOT, volume: "workspaceVolume", planner: "--workspace" },
+    { destination: WORKSPACE_ROOT, volume: "workspaceVolume", composeKey: "work", planner: "--workspace" },
     // Never optional: holds the fleet registry, transcripts, every repo's git dir, the checkpoints.
-    { destination: HISTORY_ROOT, volume: "historyVolume", planner: "--history" },
+    { destination: HISTORY_ROOT, volume: "historyVolume", composeKey: "history", planner: "--history" },
     {
         destination: DOCKER_ROOT,
         volume: "dockerVolume",
+        composeKey: "docker-engine",
         unbundled:
             "The sandbox's own Docker engine (its images, containers and their volumes) does not travel. A database kept in a container volume is only there: dump it into the workspace before exporting, or recreate the containers in the target.",
     },
@@ -349,6 +363,9 @@ export interface SandboxRun {
     // Release channel and prior image, set by recreate.sh; not replayed, so it won't pin forever.
     readonly channel?: string;
     readonly previousImage?: string;
+    // The registry digest (`sha256:…`) of the base this image was built on, when the runner could read it off the
+    // machine; not replayed, since the next run may be on another base. What makes `baseImage` an exact image.
+    readonly baseDigest?: string | undefined;
     // A sandbox.toml an empty workspace seeds from, carried base64 in SANDBOX_DEFINITION_SEED.
     readonly definition?: string;
     // Replayed/wizard env pairs, already filtered through replayableEnv.
@@ -425,6 +442,7 @@ const identityEnv = (run: SandboxRun): string[] => [
     ...(run.environmentHash === undefined ? [] : ["-e", `SANDBOX_ENVIRONMENT_HASH=${run.environmentHash}`]),
     ...(run.channel === undefined ? [] : ["-e", `SANDBOX_CHANNEL=${run.channel}`]),
     ...(run.previousImage === undefined ? [] : ["-e", `SANDBOX_PREVIOUS_IMAGE=${run.previousImage}`]),
+    ...(run.baseDigest === undefined ? [] : ["-e", `${BASE_DIGEST_ENV}=${run.baseDigest}`]),
     ...(run.definition === undefined ? [] : ["-e", `SANDBOX_DEFINITION_SEED=${Buffer.from(run.definition, "utf8").toString("base64")}`]),
 ];
 

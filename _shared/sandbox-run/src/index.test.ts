@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import {
+    BASE_DIGEST_ENV,
+    baseDigestOf,
     HEALTH,
     hostRuntimeOf,
     LOCAL_SANDBOX_MEMORY,
@@ -369,6 +371,19 @@ test("the publish is the one part of the run that may be dropped: no id, or a po
 
 // Both are deliberately outside the replay allowlist: replaying from the old container would freeze the channel and the
 // rollback target at whatever they were when the sandbox was first created.
+test("the base's digest rides as container env when the runner read one, and only a digest docker would print", () => {
+    const digest = `sha256:${"ab".repeat(32)}`;
+    expect(baseDigestOf(` ${digest}\n`)).toBe(digest);
+    expect(baseDigestOf("sha256:abc")).toBeUndefined();
+    expect(baseDigestOf(`ghcr.io/intentic/sandbox@sha256:${  "ab".repeat(32)}`)).toBeUndefined();
+    expect(baseDigestOf(undefined)).toBeUndefined();
+
+    const bare = sandboxRunArgv({ names, image: "img", baseImage: "img" });
+    expect(bare.join(" ")).not.toContain(BASE_DIGEST_ENV);
+    const pinned = sandboxRunArgv({ names, image: "img", baseImage: "img", baseDigest: digest });
+    expect(pinned).toContain(`${BASE_DIGEST_ENV}=${digest}`);
+});
+
 test("channel and previousImage ride as container env, and only when the runner set them", () => {
     const bare = sandboxRunArgv({ names, image: "img:1", baseImage: "img:1" });
     expect(bare.join(" ")).not.toContain("SANDBOX_CHANNEL");

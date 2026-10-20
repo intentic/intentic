@@ -299,4 +299,15 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     // Every conversation the import of the pre-1.308 layout settled (the daemon's conversations/registry/pre-1308-import.ts),
     // so one deleted after its import is not brought back from the old files still on disk. About this volume only.
     { path: "pre-1308-import.json", portability: "derived" },
+
+    /* ---- written beside the daemon, by the image, the host's ic and the package manager ---- */
+
+    // The terminal's typed history (the image's HISTFILE, made by docker-entrypoint.sh): the owner's own, kept so its
+    // suggestions survive a rebuild. `secret`, since a typed line can hold a pasted token.
+    { path: "shell/", portability: "secret" },
+    // ic's copy of its records for this sandbox (ic's sandbox/mirror.rs): its channel and rollback target, the machine
+    // that keeps it, its backups and repairs. About the machine it runs on, so the target's ic writes its own.
+    { path: ".ic/", portability: "identity" },
+    // pnpm's package store for installs in a checkout under /history, kept at the top of the mount pnpm finds it on.
+    { path: ".pnpm-store/", portability: "derived" },
 ];

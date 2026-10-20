@@ -30,8 +30,16 @@ interface World {
 // shelf of two folders; this conversation's sparse checkout holding one area with its repository pointer, and a folder
 // of the other left behind (a narrowing that failed); a neighbour conversation's checkout; and a daemon home holding a
 // key no turn should see. The fence: the one area, and one folder of the shelf.
+// Every world made on the history volume, removed after each test whatever became of it: an anchor that failed to start,
+// or a test the hang detector stopped, never reaches the test's own `finally`, and its tree used to stay on /history.
+const bases: string[] = [];
+afterEach(async () => {
+    await Promise.all(bases.splice(0).map((base) => rm(base, { recursive: true, force: true })));
+});
+
 const world = async (): Promise<World> => {
     const base = await mkdtemp(join(HISTORY_ROOT, ".turn-sandbox-"));
+    bases.push(base);
     const main = join(base, "work");
     const worktree = join(base, "history", "worktrees", "conv-1");
     const neighbour = join(base, "history", "worktrees", "conv-2");
@@ -132,7 +140,6 @@ test.skipIf(!sandbox.runs)(sandbox.title("a fenced turn sees its own checkout at
         expect(spawnSync("cat", [join(w.plan.worktree, "support", "notes.md")], { encoding: "utf8" }).stdout).toBe("edited\n");
     } finally {
         anchor.dispose();
-        await rm(w.base, { recursive: true, force: true });
     }
 });
 
@@ -153,7 +160,6 @@ test.skipIf(!sandbox.runs)(sandbox.title("the fence, not the checkout, decides w
         expect(await readFile(join(w.plan.root, ".pnpm-store", "files", "dep-linked"), "utf8")).toBe("stored");
     } finally {
         anchor.dispose();
-        await rm(w.base, { recursive: true, force: true });
     }
 });
 
@@ -167,7 +173,6 @@ test.skipIf(!sandbox.runs)(sandbox.title("the repository pointer reads empty, so
         expect(spawnSync("cat", [join(w.plan.worktree, ".git")], { encoding: "utf8" }).stdout).toContain("gitdir:");
     } finally {
         anchor.dispose();
-        await rm(w.base, { recursive: true, force: true });
     }
 });
 
@@ -185,7 +190,6 @@ test.skipIf(!sandbox.runs)(sandbox.title("an entrant holds no capability, cannot
         expect(pids).toBeLessThan(10);
     } finally {
         anchor.dispose();
-        await rm(w.base, { recursive: true, force: true });
     }
 });
 
@@ -198,7 +202,6 @@ test.skipIf(!sandbox.runs)(sandbox.title("the home holds the listed dotfiles and
         expect(inside(anchor, "test -s /etc/shadow").code).toBe(1);
     } finally {
         anchor.dispose();
-        await rm(w.base, { recursive: true, force: true });
     }
 });
 
@@ -215,6 +218,5 @@ test.skipIf(!sandbox.runs)(sandbox.title("released, the sandbox ends once nothin
         expect(await until(() => !alive(anchor.pid), 15_000)).toBe(true);
     } finally {
         anchor.dispose();
-        await rm(w.base, { recursive: true, force: true });
     }
 });

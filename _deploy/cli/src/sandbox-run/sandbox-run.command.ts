@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import {
+    BASE_DIGEST_ENV,
+    baseDigestOf,
     HOST_RUNTIME_ENV,
     hostRuntimeOf,
     localSandboxCpus,
@@ -172,6 +174,9 @@ export const sandboxRunCommandCli = buildCommand<{
             localPublish: flags.noLocalPublish !== true,
             unsupported: (flags.unsupported ?? "").split(/\s+/).filter((token) => token !== ""),
             ...runnerFacts(flags),
+            // A fact of this run, read off the probe's env (ic sets it there, where an older image ignores it); never
+            // replayed, since the container being replaced may sit on another base.
+            baseDigest: baseDigestOf(process.env[BASE_DIGEST_ENV]),
             env,
             // Directive lines pass through as-is; extraction and allowlist checks live in the contract.
             runtime: runtimeDirectivesOf(flags.runtime ?? ""),

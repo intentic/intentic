@@ -168,6 +168,17 @@ test("derive reads the live stores: remotes become references, a remoteless repo
     await cleanup();
 });
 
+test("the base is named exactly when the runner read its digest, and by its tag alone when it could not", async () => {
+    const source = await makeRoots();
+    const digest = `sha256:${"ab".repeat(32)}`;
+    const sandbox = { ...testConfig.sandbox, baseImage: "ghcr.io/intentic/sandbox:stable", image: "intentic-sandbox-env-demo:abc" };
+    const pinned = await deriveDefinition(servicesFor(source, { config: { ...testConfig, workspaceRoot: source.work, historyRoot: source.history, sandbox: { ...sandbox, baseDigest: digest } } }));
+    expect(pinned.definition.environment.baseImage).toBe(`ghcr.io/intentic/sandbox:stable@${digest}`);
+    const tagged = await deriveDefinition(servicesFor(source, { config: { ...testConfig, workspaceRoot: source.work, historyRoot: source.history, sandbox } }));
+    expect(tagged.definition.environment.baseImage).toBe("ghcr.io/intentic/sandbox:stable");
+    await cleanup();
+});
+
 test("a connection travels by shape: the credential it holds is never in the definition", async () => {
     const source = await makeRoots();
     const sourceServices = servicesFor(source, {

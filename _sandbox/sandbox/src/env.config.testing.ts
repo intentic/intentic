@@ -42,6 +42,7 @@ export const testConfig: Config = {
         name: "",
         image: "",
         baseImage: "",
+        baseDigest: "",
         environmentHash: "",
         channel: "",
         previousImage: "",

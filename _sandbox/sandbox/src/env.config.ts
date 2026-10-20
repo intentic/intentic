@@ -116,6 +116,9 @@ export const configSchema = z.object({
             image: z.string().default(""),
             // Upstream image the overlay extends, distinct from `image` (its own tag); empty derives from `image`.
             baseImage: z.string().default(""),
+            // The registry digest (`sha256:…`) of that base as the runner read it off the machine, so a definition names
+            // the exact image; empty when unknown (a local build, an older runner).
+            baseDigest: z.string().default(""),
             // sha256 of the approved overlay Dockerfile this container was built from; empty ⇒ stock image.
             environmentHash: z.string().default(""),
             // Release channel and rollback tag, runner-set; empty channel ⇒ `stable`, empty tag ⇒ no rollback offered.

@@ -115,7 +115,10 @@ pub fn run_command(
         request,
         no_local_publish,
         unsupported,
-        &with_env_seed(seeds, std::env::var("SANDBOX_MEMORY").ok()),
+        &with_base_digest(
+            with_env_seed(seeds, std::env::var("SANDBOX_MEMORY").ok()),
+            crate::sandbox::identity::base_digest(request.image, request.base_image),
+        ),
     );
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let output = docker::capture_with_stdin(&arg_refs, env_nul, log).map_err(|_| {
@@ -151,6 +154,17 @@ fn with_env_seed(seeds: &[Seed], env_memory: Option<String>) -> Vec<Seed> {
         }
     }
     all
+}
+
+/* The base's registry digest rides the probe's env like a seed: an image whose run command predates it ignores an env var
+it does not know, where it would refuse an unknown flag, so a rollback onto one still runs. The image stamps it on the
+container (SANDBOX_BASE_DIGEST), and the daemon's sandbox definition names its base by it. A fact of this run, never one
+of the owner's asks: it is read off the images each time, not carried from the old container. */
+fn with_base_digest(mut seeds: Vec<Seed>, digest: Option<String>) -> Vec<Seed> {
+    if let Some(digest) = digest {
+        seeds.push(("SANDBOX_BASE_DIGEST".to_string(), digest));
+    }
+    seeds
 }
 
 pub struct Probe {
@@ -375,6 +389,28 @@ mod tests {
                 ("SANDBOX_MEMORY".to_string(), "10g".to_string())
             ]
         );
+    }
+
+    #[test]
+    fn the_base_digest_rides_the_probes_env_beside_the_seeds_and_only_when_known() {
+        let seeds = vec![("SANDBOX_MEMORY".to_string(), "10g".to_string())];
+        let digest = format!("sha256:{}", "ab".repeat(32));
+        let with = with_base_digest(seeds.clone(), Some(digest.clone()));
+        assert_eq!(
+            with,
+            vec![
+                ("SANDBOX_MEMORY".to_string(), "10g".to_string()),
+                ("SANDBOX_BASE_DIGEST".to_string(), digest.clone())
+            ]
+        );
+        let argv = run_command_argv(&request("img", "abc"), false, &[], &with);
+        let at = argv
+            .iter()
+            .position(|arg| *arg == format!("SANDBOX_BASE_DIGEST={digest}"))
+            .expect("the digest rides as -e on the probe");
+        assert_eq!(argv[at - 1], "-e");
+        assert!(at < argv.iter().position(|arg| arg == "img").unwrap());
+        assert_eq!(with_base_digest(seeds.clone(), None), seeds);
     }
 
     #[test]

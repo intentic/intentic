@@ -3,7 +3,7 @@
 // alias and names, so a sandbox can move between script-managed and compose-managed without losing /work.
 
 import { LOCAL_PORT, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
-import { ORIGIN_HOST, SANDBOX_CAPABILITIES, sandboxNames } from "@intentic/sandbox-run";
+import { ORIGIN_HOST, SANDBOX_CAPABILITIES, SANDBOX_VOLUMES, sandboxNames } from "@intentic/sandbox-run";
 import { slugOfHostname } from "@intentic/sandbox-run/slug";
 
 export interface ComposeArgs {
@@ -77,9 +77,8 @@ export const composeFile = (args: ComposeArgs): string => {
         // Loopback shortcut skipping the tunnel; .env carries LOCAL_PORT since the token is unknown; delete if taken.
         `        ports: ["127.0.0.1:\${LOCAL_PORT}:${LOCAL_PORT}"]`,
         `        volumes:`,
-        `            - work:/work`,
-        `            - history:/history`,
-        `            - docker-engine:/var/lib/docker`,
+        // The run contract's volumes, so a sandbox moved between compose and `ic` lands on the same storage.
+        ...SANDBOX_VOLUMES.map(({ composeKey, destination }) => `            - ${composeKey}:${destination}`),
         ...(dev ? [`            - agent-auth:/agent-auth`] : []),
         // Ports, roots, and bind host ride the daemon's defaults; only identity, reachability, and secrets appear here.
         `        environment:`,
@@ -100,12 +99,7 @@ export const composeFile = (args: ComposeArgs): string => {
         `    intentic:`,
         `        name: ${names.network}`,
         `volumes:`,
-        `    work:`,
-        `        name: ${names.workspaceVolume}`,
-        `    history:`,
-        `        name: ${names.historyVolume}`,
-        `    docker-engine:`,
-        `        name: ${names.dockerVolume}`,
+        ...SANDBOX_VOLUMES.flatMap(({ composeKey, volume }) => [`    ${composeKey}:`, `        name: ${names[volume]}`]),
         ...(dev ? [`    agent-auth:`, `        name: intentic-dev-agent-auth`] : []),
         ``,
     ].join(`\n`);

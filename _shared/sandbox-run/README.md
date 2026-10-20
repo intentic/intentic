@@ -23,10 +23,15 @@ flowchart LR
   `machine`. A copy keeps neither `identity` nor `machine`. `REPLAY_ENV` and `REPLAY_SECRET_ENV` are derived from
   it. `parseNulEnv` reads the values NUL-framed because one can be a multi-line private key. The table includes the
   paths of optional mounted at-rest keys, never their contents.
+- `SANDBOX_BASE_DIGEST` is the registry digest of the base an image was built on. `ic` reads it off the machine
+  (identity.rs `base_digest`) and hands it to the run command as an env var on the probe, not a flag: an older
+  image's run command ignores an env var it does not know but refuses an unknown flag, so a rollback onto one still
+  runs. The container is stamped with it, and the daemon's `sandbox.toml` names its base as `<tag>@<digest>`. It is
+  never replayed, because the next run may be on another base.
 - `localDaemonPort` derives a sandbox's host loopback port from its id, so a recreate lands on the same port and the
   editor and machine agent compute it without being told.
 - `SANDBOX_VOLUMES` lists a sandbox's storage: the workspace, `/history` and the sandbox's own Docker engine. The run
-  line mounts each one, and a swap in `ic` must carry each over unchanged; ic's copy (`storage.rs`) is held to
+  line and the editor's compose file both mount each one, and a swap in `ic` must carry each over unchanged; ic's copy (`storage.rs`) is held to
   `golden/volumes.json`. A volume an environment bundle does not walk says why (`unbundled`), and the bundle's report
   repeats it.
 - `DATA_MOUNTS`, derived from the volumes plus the optional `/agent-auth`, names where the daemon's converted files

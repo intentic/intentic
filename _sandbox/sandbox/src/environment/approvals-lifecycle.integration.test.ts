@@ -86,6 +86,7 @@ const world = (): World => {
         name: "intentic-sandbox-lifecycle",
         image: "",
         baseImage: "",
+        baseDigest: "",
         channel: "",
         previousImage: "",
         definitionSeed: "",

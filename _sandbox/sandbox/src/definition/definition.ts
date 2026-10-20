@@ -23,7 +23,7 @@ import { version } from "../version.js";
 import { contributionRegistry } from "../capabilities/contributions.js";
 import { secretFieldsOf } from "../capabilities/credentials/secret-fields.js";
 import type { Services } from "../composition.js";
-import { baseImageOf, customPath } from "../environment/environment.js";
+import { baseImageOf, customPath, pinnedBase } from "../environment/environment.js";
 import { remoteState } from "../git/remote/remote.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { stateRelPath } from "../state-paths.js";
@@ -266,7 +266,7 @@ export const deriveDefinition = async (services: Services): Promise<{ definition
             schemaVersion: 1,
             ...(name === "" ? {} : { name }),
             environment: {
-                baseImage: baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image),
+                baseImage: pinnedBase(baseImageOf(services.config.sandbox.baseImage, services.config.sandbox.image), services.config.sandbox.baseDigest),
                 ...(custom === "" ? {} : { dockerfile: `${custom}\n` }),
             },
             ...(workspace === undefined ? {} : { workspace }),

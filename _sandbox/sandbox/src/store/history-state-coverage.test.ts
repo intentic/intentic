@@ -70,9 +70,16 @@ test("every /history path the daemon builds is declared in HISTORY_STATE_FILES",
     ).toEqual([]);
 });
 
+// Entries on /history something other than the daemon writes, each with what writes it: the source scan cannot see them.
+const WRITTEN_BESIDE_THE_DAEMON = new Map([
+    ["shell/", "docker-entrypoint.sh and the image's HISTFILE"],
+    [".ic/", "ic's sandbox/mirror.rs"],
+    [".pnpm-store/", "pnpm, at the top of the mount an install runs on"],
+]);
+
 test("every declared entry is actually built somewhere in the daemon", async () => {
     // Catches an entry left behind after its store was deleted.
-    const used = await declaredPaths();
+    const used = [...(await declaredPaths()), ...[...WRITTEN_BESIDE_THE_DAEMON].map(([path, source]) => ({ path, source }))];
     const unused = HISTORY_STATE_FILES.filter((file) => !used.some(({ path }) => covers(path, file.path))).map((file) => file.path);
 
     expect(unused.toSorted(), "These are declared but no daemon source builds them — drop them or fix the path.").toEqual([]);

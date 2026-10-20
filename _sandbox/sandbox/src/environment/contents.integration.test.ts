@@ -44,6 +44,7 @@ const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Se
                 name: "intentic-sandbox-demo",
                 image: "",
                 baseImage: "",
+                baseDigest: "",
                 channel: "",
                 previousImage: "",
                 definitionSeed: "",

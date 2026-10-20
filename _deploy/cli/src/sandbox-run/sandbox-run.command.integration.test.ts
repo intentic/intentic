@@ -63,6 +63,20 @@ test("--definition-b64 rides through to SANDBOX_DEFINITION_SEED on the emitted c
     expect(bare.stdout).not.toContain("SANDBOX_DEFINITION_SEED");
 });
 
+// A fact of this run, set by ic on the probe's env (an older image ignores an env var it does not know, where it would
+// refuse an unknown flag) and stamped on the container; the replaced container's own value is never carried over.
+test("the base's digest on the probe's env is stamped on the container, and the old container's is not replayed", async () => {
+    const digest = `sha256:${"cd".repeat(32)}`;
+    const { stdout } = await runVerb(["--slug", "s3", "--image", "i", "--base-image", "i"], `SANDBOX_BASE_DIGEST=sha256:${"00".repeat(32)}\0`, {
+        SANDBOX_BASE_DIGEST: digest,
+    });
+    expect(stdout).toContain(`-e SANDBOX_BASE_DIGEST=${digest}`);
+    expect(stdout).not.toContain("00".repeat(32));
+    // Something that is not a digest is not stamped at all.
+    const garbled = await runVerb(["--slug", "s3", "--image", "i", "--base-image", "i"], "", { SANDBOX_BASE_DIGEST: "latest" });
+    expect(garbled.stdout).not.toContain("SANDBOX_BASE_DIGEST");
+});
+
 test("--format json prints the argv for PowerShell to splat", async () => {
     const { stdout } = await runVerb(["--slug", "s2", "--image", "i", "--base-image", "i", "--format", "json"], "");
     const argv = JSON.parse(stdout) as string[];

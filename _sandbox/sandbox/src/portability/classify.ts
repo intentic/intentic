@@ -37,15 +37,16 @@ export const carries = (portability: Portability, secrets: boolean): boolean => 
 // the tables alone, so those subtrees were left out SILENTLY — and the manifest's own contract is the opposite
 // ("every path class left out … a silent skip becomes an actionable list", BundleManifestSchema).
 //
-// The reference shelf is the one that costs a person something: 49 repos and 15G of it on the sandbox this list was
-// written for, absent from both the tar and the report, discovered only by diffing the two sandboxes afterwards.
+// The reference shelf was the one a person noticed: 49 repos and 15G of it on the sandbox this list was written for,
+// absent from both the tar and the report, discovered only by diffing the two sandboxes afterwards. It is left out on
+// purpose, since the shelf is temporary consultation material and never part of the sandbox; the report says so.
 // These cannot become WORKSPACE_STATE_FILES entries — that table is pinned by test to `.intentic/` paths — so they
 // are declared here, beside the classification they belong to, and appended to the manifest by excludedEntries.
 export const IGNORE_SCOPE_EXCLUSIONS: readonly { readonly path: string; readonly portability: string; readonly note: string }[] = [
     {
         path: "refs/",
         portability: "shelf",
-        note: "The reference shelf does not travel: each entry is a clone with its own remote, and carrying them would dwarf the bundle. Re-clone them in the target, or copy the directory across by hand — uncommitted work in a shelf repo is only there.",
+        note: "The reference shelf is a temporary place for outside code to consult, not part of the sandbox, so it never travels. Clone again on the target whatever a task there needs to study.",
     },
     {
         path: "<ignored dirs>",

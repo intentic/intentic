@@ -52,6 +52,57 @@ pub fn base_label(image: &str) -> Option<String> {
     .filter(|value| value.starts_with("sha256:"))
 }
 
+/// The registry digest (`sha256:…`) of the base `image` was built on, under `base_image`'s repository: the image itself
+/// when it is the base (a stock sandbox), else the base its label names (an overlay this ic built). None when no
+/// registry digest is known for it (a local build, the dev image) or an older overlay carries no label: the run then
+/// goes without the stamp rather than with a guess.
+pub fn base_digest(image: &str, base_image: &str) -> Option<String> {
+    let base = if image == base_image {
+        image.to_string()
+    } else {
+        base_label(image)?
+    };
+    let digests = docker::try_capture(&[
+        "image",
+        "inspect",
+        "--format",
+        "{{json .RepoDigests}}",
+        &base,
+    ])?;
+    digest_under(&digests, base_image)
+}
+
+/// Out of an image's repo digests (`["ghcr.io/intentic/sandbox@sha256:…"]`), the digest under `reference`'s repository,
+/// whatever tag or digest `reference` itself names. Pure.
+fn digest_under(repo_digests_json: &str, reference: &str) -> Option<String> {
+    let repository = repository_of(reference);
+    let digests: Vec<String> = serde_json::from_str(repo_digests_json.trim()).ok()?;
+    digests.iter().find_map(|entry| {
+        let (repo, digest) = entry.split_once('@')?;
+        (repo == repository && is_digest(digest)).then(|| digest.to_string())
+    })
+}
+
+/// A reference's repository: without its `@digest`, then without a `:tag` in its last path segment (a registry's
+/// `host:port` keeps its colon).
+fn repository_of(reference: &str) -> &str {
+    let named = reference.split('@').next().unwrap_or(reference);
+    let last = named.rfind('/').map_or(0, |slash| slash + 1);
+    match named[last..].find(':') {
+        Some(colon) => &named[..last + colon],
+        None => named,
+    }
+}
+
+fn is_digest(value: &str) -> bool {
+    value.strip_prefix("sha256:").is_some_and(|hex| {
+        hex.len() == 64
+            && hex
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
+}
+
 /// The id of the base the image `container` runs was built on, or None when that cannot be known honestly.
 ///
 /// - A stock sandbox (no base stamp, or a base stamp naming the image it runs): the image it runs.
@@ -161,5 +212,56 @@ mod tests {
             Some("sha256:old")
         );
         assert_eq!(deepest_base("", &running), None);
+    }
+
+    #[test]
+    fn the_base_digest_is_the_one_under_the_base_references_repository() {
+        let digest = format!("sha256:{}", "ab".repeat(32));
+        let other = format!("sha256:{}", "cd".repeat(32));
+        let listing = serde_json::json!([
+            format!("mirror.example/sandbox@{other}"),
+            format!("ghcr.io/intentic/sandbox@{digest}"),
+        ])
+        .to_string();
+        assert_eq!(
+            digest_under(&listing, "ghcr.io/intentic/sandbox:stable").as_deref(),
+            Some(digest.as_str())
+        );
+        // A reference already naming a digest, or none, is the same repository.
+        assert_eq!(
+            digest_under(&listing, &format!("ghcr.io/intentic/sandbox@{other}")).as_deref(),
+            Some(digest.as_str())
+        );
+        assert_eq!(
+            digest_under(&listing, "ghcr.io/intentic/sandbox").as_deref(),
+            Some(digest.as_str())
+        );
+        // A local build has no repo digest; a repository the image was never pulled from names none.
+        assert_eq!(digest_under("[]", "intentic-sandbox:dev"), None);
+        assert_eq!(
+            digest_under(&listing, "ghcr.io/intentic/other:stable"),
+            None
+        );
+        assert_eq!(
+            digest_under("not json", "ghcr.io/intentic/sandbox:stable"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_repository_keeps_its_registry_port_and_drops_its_tag() {
+        assert_eq!(
+            repository_of("localhost:5000/sandbox:1.2"),
+            "localhost:5000/sandbox"
+        );
+        assert_eq!(
+            repository_of("localhost:5000/sandbox"),
+            "localhost:5000/sandbox"
+        );
+        assert_eq!(
+            repository_of("ghcr.io/intentic/sandbox:stable@sha256:00"),
+            "ghcr.io/intentic/sandbox"
+        );
+        assert_eq!(repository_of("sandbox"), "sandbox");
     }
 }
