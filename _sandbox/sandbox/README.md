@@ -589,6 +589,12 @@ flowchart LR
   `heldCheckoutDays` quiet days (14 by default, zero disables), on the hourly archive pass. Work is committed first;
   the branch and board card stay, review and land read the refs, and the next turn restores the checkout. Watches,
   running turns, queued messages and unsent drafts prevent reclaim.
+- Build output leaves a checkout that has sat settled for 6 hours (`conversations/worktrees/build-outputs.ts`,
+  2026-10-21), hourly while no turn runs: cargo `target/`, gradle and flutter `build/`, `.gradle/` and `.dart_tool/`,
+  each only beside the file that makes its tool build there, ignored by git and holding nothing git tracks. The
+  checkout itself stays; the conversation's next build regenerates what went. `node_modules` and `dist` are never
+  touched, since in an isolated checkout they are overlay mount points. Measured before it: 38 GB across finished
+  checkouts, a Tauri `target/` of 9-14 GB in each that built the desktop app.
 - Data retention (`retention/retention-sweep.ts`, 2026-10-13) makes `settings.retention` real, on the same clock:
   each positive `*Days` DELETES that kind of copy once it is older (nothing is archived or set aside first), and every
   value is 0 by default except restore points, which default to 30 days. Zero runs nothing.

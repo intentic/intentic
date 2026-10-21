@@ -11,6 +11,7 @@ import type { ConversationActors } from "../actor/conversation-actors.js";
 import { isBooked } from "../actor/conversation-queue.js";
 import type { AgentsRegistry } from "./agents-registry.js";
 import { isIsolated, type PersistedAgent } from "./agents-store.js";
+import { pruneBuildOutputs } from "../worktrees/build-outputs.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // The board's only non-destructive exit: the Finished lane never transitions out on its own, and each finished card
@@ -360,4 +361,68 @@ export const sweepHeldCheckouts = async (deps: AgentArchiveDeps, now: number, re
         }
     }
     return reclaimed;
+};
+
+// A checkout's build output goes once its card has been settled this long (worktrees/build-outputs.ts says what and
+// why). Long enough that a follow-up the same working session still finds its warm build; short of the days a quiet
+// card then waits for its archive or reclaim, which is where the disk went.
+export const BUILD_OUTPUT_QUIET_MS = 6 * 60 * 60 * 1000;
+
+// Settled: nothing in flight reads or writes the checkout. Landing reads it; a resume or a stop is about to.
+const SETTLED: ReadonlySet<AgentSummary["status"]> = new Set(["idle", "stopped", "ready", "landed", "conflict", "error", "interrupted"]);
+
+export const buildOutputsQuiet = (agent: AgentSummary, now: number, quietMs: number): boolean =>
+    agent.archivedAt === undefined &&
+    SETTLED.has(agent.status) &&
+    (agent.watches ?? []).length === 0 &&
+    (agent.queue?.items.length ?? 0) === 0 &&
+    agent.unsentAt === undefined &&
+    now - agent.updatedAt >= quietMs;
+
+// Which card was last pruned at which `updatedAt`, so a quiet checkout is walked once, not every hour; any activity
+// moves `updatedAt` and earns it a fresh look. Lost with the daemon, which costs one walk per quiet checkout a boot.
+export type PrunedAt = Map<string, number>;
+
+export const sweepBuildOutputs = async (
+    deps: AgentArchiveDeps,
+    now: number,
+    quietMs: number,
+    runningJobs: RunningJobs,
+    prunedAt: PrunedAt,
+): Promise<string[]> => {
+    const pruned: string[] = [];
+    for (const agent of deps.agents.list()) {
+        if (!buildOutputsQuiet(agent, now, quietMs) || prunedAt.get(agent.id) === agent.updatedAt || deps.conversations.running(agent.id)) {
+            continue;
+        }
+        const entry = deps.agents.entry(agent.id);
+        if (entry === undefined || !isIsolated(entry) || (await deps.agentWorktrees.presence(agent.id)) !== "present") {
+            continue;
+        }
+        // A kept dev server or a child still at work may be running the very build output this would take.
+        const working = stillWorking(deps, runningJobs, agent.id);
+        if (working !== undefined) {
+            continue;
+        }
+        const removed: string[] = [];
+        let failed = false;
+        for (const { repo } of entry.placement.repos) {
+            // A big `target/` takes a while to remove; a turn that opened meanwhile keeps whatever is left.
+            if (deps.conversations.running(agent.id)) {
+                failed = true;
+                break;
+            }
+            const pass = await pruneBuildOutputs(deps.agentWorktrees.worktreeDir(agent.id, repo));
+            removed.push(...pass.removed.map((path) => (repo === "root" ? path : `${repo}/${path}`)));
+            failed ||= pass.failed.length > 0;
+        }
+        if (!failed) {
+            prunedAt.set(agent.id, agent.updatedAt);
+        }
+        if (removed.length > 0) {
+            pruned.push(agent.id);
+            deps.logger.info({ id: agent.id, removed }, "agents: removed build output from a quiet checkout; the next build regenerates it");
+        }
+    }
+    return pruned;
 };

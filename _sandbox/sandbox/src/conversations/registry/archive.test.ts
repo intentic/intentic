@@ -14,6 +14,8 @@ import {
     type AgentArchiveDeps,
     sweepHeldCheckouts,
     heldCheckoutByAge,
+    buildOutputsQuiet,
+    BUILD_OUTPUT_QUIET_MS,
     agedFamilies,
     archivable,
     archivableByAge,
@@ -384,6 +386,23 @@ describe("sweepAgedAgents", () => {
         expect(await sweepAgedAgents({ agents, conversations, agentWorktrees: worktrees, logger }, 100 * DAY, 0)).toEqual([]);
         expect(retire).not.toHaveBeenCalled();
     });
+});
+
+test("build output goes only from a settled card quiet past the window, with nothing waiting on its checkout", () => {
+    const now = BUILD_OUTPUT_QUIET_MS;
+    for (const status of ["idle", "stopped", "ready", "landed", "conflict", "error", "interrupted"] as const) {
+        expect(buildOutputsQuiet(card({ status }), now, BUILD_OUTPUT_QUIET_MS)).toBe(true);
+    }
+    // In flight: a turn, a question, or a land reading the checkout.
+    for (const status of ["running", "awaiting", "stopping", "dismissing", "resuming", "landing"] as const) {
+        expect(buildOutputsQuiet(card({ status }), now, BUILD_OUTPUT_QUIET_MS)).toBe(false);
+    }
+    expect(buildOutputsQuiet(card({ status: "landed", updatedAt: 1 }), now, BUILD_OUTPUT_QUIET_MS)).toBe(false);
+    expect(buildOutputsQuiet(card({ status: "landed", archivedAt: 1 }), now, BUILD_OUTPUT_QUIET_MS)).toBe(false);
+    expect(buildOutputsQuiet(card({ status: "landed", unsentAt: 1 }), now, BUILD_OUTPUT_QUIET_MS)).toBe(false);
+    expect(
+        buildOutputsQuiet(card({ status: "landed", watches: [{ id: "watch-k3f9", note: "CI", intervalSeconds: 60, deadlineAt: 1 }] }), now, BUILD_OUTPUT_QUIET_MS),
+    ).toBe(false);
 });
 
 test("held checkout retention leaves every live, watched, queued or unsent conversation alone", () => {

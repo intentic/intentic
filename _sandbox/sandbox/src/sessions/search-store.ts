@@ -12,7 +12,8 @@ import type { LineVia, SpokenLine } from "./transcript-search.js";
 
 // Bump on any change to the tables or how lines are extracted/folded; a mismatch deletes the file and rebuilds.
 // 2: deeds (tool calls, question cards, notices, runs) beside speech, in the `via` column.
-const SCHEMA_VERSION = "2";
+// 3: said_rows, so forgetting a source finds its lines by key instead of scanning every line said.
+const SCHEMA_VERSION = "3";
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -35,6 +36,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS said USING fts5(
     fold,
     tokenize='trigram'
 );
+/* Which lines each source owns. fts5 indexes only tokenized columns, so "DELETE FROM said WHERE key = ?" read the
+   whole table (230-800 MB a forget, and every put forgets first). A side table beats an external-content fts5 over
+   an indexed lines table: same rows, same search SQL, and the said table stays the one fts5 keeps consistent. Written
+   in the same transaction as the line it names; keyed (key, line) so it is its own index. */
+CREATE TABLE IF NOT EXISTS said_rows (
+    key TEXT NOT NULL,
+    line INTEGER NOT NULL,
+    PRIMARY KEY (key, line)
+) WITHOUT ROWID;
 `;
 
 // Snippet width: wide enough for the sentence around a hit, short enough to fit the card.
@@ -97,6 +107,9 @@ export const SEARCH_SQL = `
     ) WHERE rn = 1
 `;
 
+// A source's lines by rowid, which fts5 answers as one lookup each; binds the key.
+export const FORGET_SQL = "DELETE FROM said WHERE rowid IN (SELECT line FROM said_rows WHERE key = ?)";
+
 const isSpeaker = (value: unknown): value is Speaker => value === "user" || value === "agent";
 
 const VIAS: ReadonlySet<string> = new Set<LineVia>(["ran", "asked", "notice", "run"]);
@@ -128,7 +141,9 @@ export const openSearchStore = (dir: string): SearchStore => {
     db.prepare("INSERT INTO meta(key, value) VALUES('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(SCHEMA_VERSION);
 
     const insertLine = db.prepare("INSERT INTO said(key, kind, speaker, via, text, fold) VALUES(?, ?, ?, ?, ?, ?)");
-    const deleteLines = db.prepare("DELETE FROM said WHERE key = ?");
+    const insertRow = db.prepare("INSERT INTO said_rows(key, line) VALUES(?, ?)");
+    const deleteLines = db.prepare(FORGET_SQL);
+    const deleteRows = db.prepare("DELETE FROM said_rows WHERE key = ?");
     const deleteSource = db.prepare("DELETE FROM source WHERE key = ?");
     const upsertSource = db.prepare(`
         INSERT INTO source(key, kind, version, lines) VALUES(?, ?, ?, ?)
@@ -144,7 +159,8 @@ export const openSearchStore = (dir: string): SearchStore => {
 
     const insert = (key: string, kind: SearchKind, lines: readonly SpokenLine[]): void => {
         for (const line of lines) {
-            insertLine.run(key, kind, line.speaker, line.via ?? "", line.text, line.text.toLowerCase());
+            const { lastInsertRowid } = insertLine.run(key, kind, line.speaker, line.via ?? "", line.text, line.text.toLowerCase());
+            insertRow.run(key, lastInsertRowid);
         }
     };
 
@@ -152,6 +168,7 @@ export const openSearchStore = (dir: string): SearchStore => {
         forget: (key) =>
             immediateTransaction(db, () => {
                 deleteLines.run(key);
+                deleteRows.run(key);
                 deleteSource.run(key);
             }),
         add: (key, kind, lines) => immediateTransaction(db, () => insert(key, kind, lines)),

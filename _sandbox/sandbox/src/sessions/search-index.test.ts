@@ -130,6 +130,30 @@ test("forget takes a source out entirely", async () => {
     expect((await index.versions("conversation")).has("c1")).toBe(false);
 });
 
+// Lines are forgotten by the rowids said_rows recorded for the key, so interleaved writes of two sources must not leak
+// into each other: every line of the forgotten one goes, every line of the other stays.
+test("forget removes exactly that source's lines and leaves the others searchable", async () => {
+    const index = fresh();
+    await index.put("c1", "conversation", "1", said(["shared phrase from one", "user"]));
+    await index.put("c2", "conversation", "1", said(["shared phrase from two", "user"]));
+    await index.extend("c1", "conversation", "2", said(["only one said this", "agent"]));
+    await index.extend("c2", "conversation", "2", said(["only two said this", "agent"]));
+    await index.put("s1", "session", "1", said(["shared phrase in a session", "user"]));
+
+    await index.forget("c1");
+
+    expect([...(await index.search("shared phrase", "conversation", false)).keys()]).toEqual(["c2"]);
+    expect((await index.search("only one said", "conversation", false)).size).toBe(0);
+    expect((await index.search("only two said", "conversation", false)).get("c2")).toEqual({ text: "only two said this", speaker: "agent" });
+    expect([...(await index.search("shared phrase", "session", false)).keys()]).toEqual(["s1"]);
+    expect(index.metrics()).toEqual({ conversations: 1, sessions: 1, lines: 3 });
+
+    // A forgotten key indexes afresh, with none of its old lines coming back.
+    await index.put("c1", "conversation", "3", said(["one again", "user"]));
+    expect((await index.search("shared phrase from one", "conversation", false)).size).toBe(0);
+    expect((await index.search("one again", "conversation", false)).has("c1")).toBe(true);
+});
+
 // Backfill uses this to ask "still current" with one stat, not a read.
 test("versions report what each source was last indexed at", async () => {
     const index = fresh();

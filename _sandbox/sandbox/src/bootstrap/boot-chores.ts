@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { panelKeyOf } from "@intentic/sandbox-contract/session-names";
 import { dockerPruneChore } from "../capabilities/handlers/docker-prune.js";
 import { parkedRefRetentionChore } from "../conversations/land/parked-ref-retention.js";
-import { sweepAgedAgents, sweepHeldCheckouts } from "../conversations/registry/archive.js";
+import { BUILD_OUTPUT_QUIET_MS, type PrunedAt, sweepAgedAgents, sweepBuildOutputs, sweepHeldCheckouts } from "../conversations/registry/archive.js";
 import { runningJobsOf } from "../agent/tools/jobs/background-jobs.js";
 import { deleteAgedConversations } from "../conversations/registry/transcript-retention.js";
 import { cacheDirsOf, rawOutputDirsOf, type RetentionDeps, type RetentionKind, type RetentionPass, runRetentionSweep } from "../retention/retention-sweep.js";
@@ -22,7 +22,9 @@ import type { BootPhase } from "./boot-phase.js";
 // logs what it did; the heavy ones wait for a moment with no turn running.
 // - git: maintenance hourly (it was a timer reset by every restart), stale locks hourly while idle, `gc` with two weeks'
 //   grace daily while idle, and the parked branches of conversations archived over 90 days ago daily;
-// - storage: /history/trash entries past 14 days hourly, checkouts and dependency overlays no conversation owns daily;
+// - storage: /history/trash entries past 14 days hourly, checkouts and dependency overlays no conversation owns daily,
+//   and (2026-10-21) the build output (cargo `target/`, gradle and flutter `build/`) of checkouts quiet for 6 hours,
+//   hourly while no turn runs (conversations/worktrees/build-outputs.ts);
 // - the agents' dockerd, when it already runs: stopped containers and dangling images daily;
 // - retention passes (2026-10-12), hourly: agents archived once finished past the retention window, the aged browser
 //   captures and the file view's trash, the log files over their keeping, and finished terminal sessions. None must also
@@ -102,6 +104,9 @@ const dataRetentionChores = (phase: BootPhase): Chore[] => {
     ];
 };
 
+// Which quiet checkouts the build-output pass already emptied, for the daemon's life (archive.ts PrunedAt).
+const buildOutputsPrunedAt: PrunedAt = new Map();
+
 export const retentionChores = (phase: BootPhase): Chore[] => {
     const { config, logger, role, services } = phase;
     return [
@@ -116,6 +121,21 @@ export const retentionChores = (phase: BootPhase): Chore[] => {
                           const { agentRetentionDays, heldCheckoutDays } = await services.sandboxSettings.get();
                           await sweepAgedAgents(services, Date.now(), agentRetentionDays * DAY_MS);
                           await sweepHeldCheckouts(services, Date.now(), heldCheckoutDays * DAY_MS, (id) => runningJobsOf(services.conversations, id).length);
+                      },
+                  },
+                  {
+                      name: "agents-build-outputs",
+                      everyMs: HOUR_MS,
+                      // Removing gigabytes is heavy disk work; it waits for a moment no turn is running.
+                      when: () => services.conversations.liveSessionIds().length === 0,
+                      run: async (): Promise<void> => {
+                          await sweepBuildOutputs(
+                              services,
+                              Date.now(),
+                              BUILD_OUTPUT_QUIET_MS,
+                              (id) => runningJobsOf(services.conversations, id).length,
+                              buildOutputsPrunedAt,
+                          );
                       },
                   },
                   { name: "state-aged", everyMs: HOUR_MS, run: () => sweepAgedState(services.workspace.root, Date.now(), logger) },

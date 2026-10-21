@@ -344,6 +344,25 @@ const ENTRIES: readonly GuidanceEntry[] = [
         text: ({ search }) => SEARCH_GUIDANCE[search],
     },
     {
+        id: "walks",
+        // Its own entry rather than a clause of `search`, whose iq text is hashed into that experiment's cohort. Agents
+        // hunting a file they could not place (a skill's SKILL.md, a crate's source) ran `find /`, which walks every
+        // conversation's checkout: one read 3.2 GB in two minutes and stalled the machine (2026-10-21).
+        reach: "every",
+        text:
+            `Never walk the filesystem from \`/\`, \`${HISTORY_ROOT}\` or the home directory (\`find /\`, \`rg … /\`, ` +
+            `\`du /\`): \`${HISTORY_ROOT}/worktrees\` holds every conversation's checkout with its own node_modules, tens ` +
+            "of gigabytes, so one such walk reads gigabytes from disk and stalls every session on the machine. Search from " +
+            "the directory you mean. What you cannot place has a known home: a skill opens through your skill tool, and " +
+            "its files are in `/root/.claude/skills/<name>/` (built in) or the workspace's `.agents/skills/<name>/`; a " +
+            "program is `command -v <name>`; SDKs and models baked into the image are under `/opt/<name>` (`ls /opt`), " +
+            `agent runtimes under \`${HISTORY_ROOT}/engines/<name>\`; a dependency's source is in the project's ` +
+            "`node_modules/<package>` (pnpm: " +
+            "`node_modules/.pnpm/`), `~/.cargo/registry/src/*/<crate>-<version>/` or the path Python prints for " +
+            "`import <module>; print(<module>.__file__)`; another conversation's files are in the worktree " +
+            "`agents show <handle>` names.",
+    },
+    {
         id: "fleet",
         reach: "every",
         text:
