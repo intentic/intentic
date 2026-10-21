@@ -161,6 +161,26 @@ describe(`<Await>`, () => {
         expect(host.querySelector(`[data-fallback]`)).toBeNull();
     });
 
+    // The look every later wait is drawn from: taken through <Await>'s two boxless wrappers, from the answer's own box.
+    it(`remembers the answer it drew as the region's look`, async () => {
+        const box = jest.spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function measure(this: Element): DOMRect {
+            const [width, height] = this.hasAttribute(`data-answer`) ? [200, 16] : [0, 0];
+            return { top: 0, left: 0, width, height, x: 0, y: 0, right: width, bottom: height, toJSON: () => ({}) };
+        });
+        // jsdom has no line boxes; a text with no lines is kept as its element alone.
+        Range.prototype.getClientRects = (): DOMRectList => Object.assign([], { item: () => null });
+        try {
+            mount(() => h(Await, { of: ready(`rows`), imprint: NAME }, { default: answer }));
+            await flush();
+            await advance(1_000);
+            // The answer's paragraph, inside the two wrappers: not nothing, and not the empty look of a region that drew none.
+            expect(imprintOf(NAME)?.root).toMatchObject({ e: `div`, k: [{ e: `div`, k: [{ e: `p` }] }] });
+        } finally {
+            box.mockRestore();
+            Reflect.deleteProperty(Range.prototype, `getClientRects`);
+        }
+    });
+
     it(`remembers a region that answered with nothing as nothing, so its next wait promises nothing`, async () => {
         rememberImprint(`default`, NAME, remembered);
         const empty = defineComponent({ render: () => null });

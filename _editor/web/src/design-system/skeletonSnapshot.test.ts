@@ -174,6 +174,34 @@ describe(`takeImprint`, () => {
         ]);
     });
 
+    // <Await>'s shape: its root and the wrapper that hides the answer while it holds are both boxless.
+    it(`takes a root boxless through more than one layer by the boxes laid out inside it`, () => {
+        const imprint = takeImprint(
+            laidOut(
+                `<div style="display: contents"><div style="display: contents">` +
+                    `<section data-box="0,0,400,80" class="flex flex-col gap-2"><p data-box="0,0,200,16" data-lines="200">rows</p></section>` +
+                    `</div></div>`,
+            ),
+        );
+        expect(imprint?.root.k?.map((wrapper) => readable(wrapper, imprint.t))).toEqual([
+            {
+                e: `div`,
+                c: undefined,
+                s: `display: contents`,
+                v: undefined,
+                k: [
+                    {
+                        e: `section`,
+                        c: `flex flex-col gap-2`,
+                        s: undefined,
+                        v: undefined,
+                        k: [{ e: `p`, c: undefined, s: undefined, v: undefined, k: [{ h: 11, w: [200] }] }],
+                    },
+                ],
+            },
+        ]);
+    });
+
     it(`takes nothing from a tree the DOM never laid out`, () => {
         expect(takeImprint(laidOut(`<div><p>no box anywhere</p></div>`))).toBeUndefined();
     });

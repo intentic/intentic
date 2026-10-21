@@ -426,13 +426,19 @@ interface Box {
     readonly height: number;
 }
 
+// The boxes of what lays out inside a boxless element: its children's, and through any child that is boxless too.
+const boxesWithin = (element: Element): DOMRect[] =>
+    [...element.children].flatMap((child) => (getComputedStyle(child).display === `contents` ? boxesWithin(child) : [child.getBoundingClientRect()]));
+
 // Where the root sits. A `display: contents` root (a run of grid items wrapped only so they can be imprinted together,
-// beside a live item that must stay live) has no box of its own; its children's together stand in for it.
+// beside a live item that must stay live) has no box of its own; the boxes laid out inside it together stand in for
+// it. Through every boxless layer, not only the first: <Await>'s root holds its answer in a second `contents` wrapper,
+// and measuring that wrapper alone found no box, so no region drawn by <Await> was ever imprinted and every wait drew
+// its generic fallback.
 const boxOf = (root: Element, style: CSSStyleDeclaration): Box | undefined => {
-    const rects =
-        style.display === `contents`
-            ? [...root.children].map((child) => child.getBoundingClientRect()).filter((rect) => rect.width >= 1 && rect.height >= 1)
-            : [root.getBoundingClientRect()].filter((rect) => rect.width >= 1 && rect.height >= 1);
+    const rects = (style.display === `contents` ? boxesWithin(root) : [root.getBoundingClientRect()]).filter(
+        (rect) => rect.width >= 1 && rect.height >= 1,
+    );
     if (rects.length === 0) {
         return undefined;
     }
