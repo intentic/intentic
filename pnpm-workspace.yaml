@@ -64,19 +64,11 @@ overrides:
   "primevue>@primevue/icons": "-"
   "mermaid>@iconify/utils": "-"
   zod: 4.6.5
-  # THE ONE PACKAGE THE ZOD OVERRIDE ABOVE MUST NOT REACH. @cursor/sdk asks for `^3.25.0` and the blanket
-  # override hands it 4.5.4 anyway, which is a MAJOR it was not written against, and the damage is silent
-  # rather than loud: the SDK's published .d.ts is a ~52k-line wall of zod-3 type shapes, every public type in
-  # it is a `z.infer<typeof …>` over one of them, and against zod 4's generics each of those collapses to
-  # `unknown`. So the whole SDK type-checks as `any`-by-another-name — InteractionUpdate, ToolCall,
-  # ModelListItem, all of it — and the daemon's Cursor adapter would have been written with no type safety at
-  # all while appearing fully typed. cursor-events.test.ts pins the repair by asserting a real discriminated
-  # union is visible, so a future blanket bump cannot quietly undo it.
-  #
-  # Scoped back to its declared range, the tw-to-css>postcss precedent. The second copy of zod this adds is
-  # the point rather than a cost: two packages genuinely want different majors, and this workspace's own code
-  # is unaffected because nothing here imports through @cursor/sdk's zod.
-  "@cursor/sdk>zod": 3.25.76
+  # @cursor/sdk is NOT carved out of it any more. Up to 1.0.37 the SDK depended on zod ^3.25 and was scoped back to
+  # 3.25.76 here, since its zod-3 .d.ts collapsed to `unknown` against zod 4's generics. From 1.0.40 zod is a peer
+  # (`^3.25.0 || ^4.0.0`), which pnpm resolves from the importer's own zod: a `@cursor/sdk>zod` override could only
+  # rewrite that range to one nothing satisfies, an unmet peer the tidy gate's peer-deps check fails on (2026-10-21).
+  # cursor-events.test.ts still pins that the SDK's discriminated unions are visible, so a regression stays loud.
   # prisma and better-auth both carry mysql2 as an optional driver dependency, and both resolved 3.15.3, which
   # leaks plaintext credentials on an auth-plugin downgrade to mysql_clear_password (GHSA-3f6p-5ww8-9rcr,
   # fixed in 3.22.0). Nothing here connects to MySQL — the datasource in _platform/prisma/schema.prisma is

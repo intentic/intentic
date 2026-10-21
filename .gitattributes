@@ -10,3 +10,8 @@
 /_sandbox/sandbox/src/app-raw-routes.ts merge=derived
 /_sandbox/sandbox/src/store/evolution/history-documents.generated.ts merge=derived
 /_editor/web/public/ext-shims/*.js merge=derived
+
+# SHELL SCRIPTS ARE LF IN EVERY CHECKOUT. A Windows runner checks out with core.autocrlf, and a script it then hands to
+# bash inside WSL (windows-smoke.yml runs _tools/scripts/ci/wsl-workers.sh that way) fails on the first `\r`:
+# `set: pipefail\r: invalid option name` (2026-10-21).
+*.sh text eol=lf

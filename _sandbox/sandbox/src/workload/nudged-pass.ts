@@ -50,7 +50,7 @@ export const nudgedPass = (pass: (now: number, due: DueAt) => Promise<void>, opt
         return timer;
     };
     // Only a started pass arms its own timers: a test driving `run` with its own clock gets none.
-    const armDue = (instants: readonly number[]): void => {
+    const armDue = (instants: readonly number[], passNow: number): void => {
         clearTimeout(dueTimer);
         dueTimer = undefined;
         if (!started || instants.length === 0) {
@@ -62,7 +62,9 @@ export const nudgedPass = (pass: (now: number, due: DueAt) => Promise<void>, opt
             return;
         }
         // A timer may ring a moment early, and a pass run then would find its instant not yet come and leave it to the
-        // backstop: it waits out the rest first. An instant already past waits the floor.
+        // backstop: it waits out the rest first. An instant already past waits the floor, unless it fell due while the
+        // pass that reported it ran (after that pass's clock): no pass has looked at it yet, so it is owed one at once, not a
+        // floor late. A slow pass under load used to cost a moment due inside it a whole second (2026-10-21).
         const ring = (): void => {
             const left = at - Date.now();
             dueTimer = left > 0 ? unrefd(setTimeout(ring, left)) : undefined;
@@ -70,7 +72,7 @@ export const nudgedPass = (pass: (now: number, due: DueAt) => Promise<void>, opt
                 fire();
             }
         };
-        dueTimer = unrefd(setTimeout(ring, at > Date.now() ? at - Date.now() : floorMs));
+        dueTimer = unrefd(setTimeout(ring, at > Date.now() ? at - Date.now() : at > passNow ? settleMs : floorMs));
     };
     const run = (now: number = Date.now()): Promise<void> =>
         passes.run("pass", async () => {
@@ -80,7 +82,7 @@ export const nudgedPass = (pass: (now: number, due: DueAt) => Promise<void>, opt
                     instants.push(at);
                 });
             } finally {
-                armDue(instants);
+                armDue(instants, now);
                 // By the timer, not at once: this pass is still the one in flight until its promise settles.
                 if (again && started) {
                     schedule();

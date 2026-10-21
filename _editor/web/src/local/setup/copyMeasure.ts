@@ -6,7 +6,7 @@ import { copyWeight } from "../projectWords";
 
 // HOW FAR A FOLDER'S FIRST COPY IS, AS ITS PAGE SAYS IT (LocalSandboxSetup.vue), read off what the sync already counts:
 // Mutagen's status word and, from an agent that reports them, the folder's files and bytes and how many of them the
-// sandbox has (the machine agent's sync/copy.ts, through the app's folder_setup.rs). Nothing walks the folder to say it.
+// sandbox has (the machine agent's sync/report.ts `copyOf`, through the app's folder_setup.rs). Nothing walks the folder to say it.
 //
 // (2026-10-21) The copy used to be a bar that only swept, under "Getting the sandbox ready for this folder…", for as
 // long as the copy took or, when it never started, for three minutes before saying so. A reader could tell neither how

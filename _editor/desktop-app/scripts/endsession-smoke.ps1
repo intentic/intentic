@@ -51,7 +51,8 @@ try {
     [IO.File]::WriteAllText($consent, 'deny')
     $env:INTENTIC_DISABLE_UPDATE_CHECK = '1'
     $app = Start-Process -FilePath $Executable -PassThru
-    $deadline = [DateTime]::UtcNow.AddSeconds(45)
+    $startupSeconds = 45
+    $deadline = [DateTime]::UtcNow.AddSeconds($startupSeconds)
     $target = [IntPtr]::Zero
     do {
         if ($app.HasExited) { throw "App exited before its event target was ready: $($app.ExitCode)" }
@@ -79,7 +80,11 @@ try {
         } catch { }
         if ($stage -notin @('window', 'shown')) { Start-Sleep -Milliseconds 100 }
     } while ($stage -notin @('window', 'shown') -and [DateTime]::UtcNow -lt $deadline)
-    if ($stage -notin @('window', 'shown')) { throw 'App never completed startup' }
+    if ($stage -notin @('window', 'shown')) {
+        # What the launch did get to, so a failure says whether the app stalled, wrote another launch's marker, or none.
+        $seen = if (Test-Path -LiteralPath $marker) { (Get-Content -LiteralPath $marker -Raw) -replace '\s+', ' ' } else { 'no launch.json' }
+        throw "App never completed startup within ${startupSeconds}s of launch (pid $($app.Id); last marker: $seen)"
+    }
     $result = [UIntPtr]::Zero
     # TRUE + ENDSESSION_CLOSEAPP, SMTO_ABORTIFHUNG. The receiver may exit before sending a reply.
     [void][EndSessionWindow]::SendMessageTimeoutW($target, 0x16, [UIntPtr]1, [IntPtr]1, 0x2, 10000, [ref]$result)

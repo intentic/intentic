@@ -105,6 +105,29 @@ test("an instant already past waits the floor, and a stopped pass arms nothing",
     expect(counter.runs).toHaveLength(stopped);
 });
 
+// A slow pass can outlast the instant it reported: no pass has seen that one due yet, so the next comes at once rather
+// than a floor later (the scheduler's one-time wake fired a second late under CI load, 2026-10-21).
+test("an instant that falls due while its pass still runs is run soon after, not a floor later", async () => {
+    const reported: number[] = [];
+    const counter = counted((due) => {
+        reported.push(Date.now() + 30);
+        due(reported.at(-1) ?? 0);
+    });
+    const passes = nudgedPass(counter.pass, { backstopMs: 60_000, settleMs: 10, floorMs: 5_000, failed });
+    passes.start();
+    try {
+        counter.holdNext();
+        const first = passes.run();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        counter.release();
+        await first;
+        await waitFor(() => expect(counter.runs).toHaveLength(2), { timeout: 1_000, interval: 5 });
+        expect(counter.runs[1]).toBeGreaterThanOrEqual(reported[0] ?? Number.POSITIVE_INFINITY);
+    } finally {
+        passes.stop();
+    }
+});
+
 test("a pass not started runs only when asked, with the clock it is given", async () => {
     const counter = counted((due) => due(Date.now() + 10));
     const passes = nudgedPass(counter.pass, { backstopMs: 20, failed });

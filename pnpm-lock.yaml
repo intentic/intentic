@@ -650,7 +650,6 @@ overrides:
   primevue>@primevue/icons: '-'
   mermaid>@iconify/utils: '-'
   zod: 4.6.5
-  '@cursor/sdk>zod': 3.25.76
   mysql2: 3.24.4
   react: 19.3.0
   onnxruntime-node>adm-zip: 0.6.1
@@ -5234,7 +5233,7 @@ packages:
     resolution: {integrity: sha512-IaI59014gXLUTiWnVS2LlagOdSgWfMma0Sl4MwzsOh79UQf+CrKj+jj/AeX4vVPTlJ81X/Ca3dGytwPf/hWAQA==}
     engines: {node: '>=22.13'}
     peerDependencies:
-      zod: 3.25.76
+      zod: 4.6.5
 
   '@dagrejs/dagre@3.1.1':
     resolution: {integrity: sha512-zroZB1dFOFiGgv4Xcrn1DckB1o4aOikPqD2NDQPV0WM//CXGcS6xiD0rNkqHmw6FEg4tabt4nxPLwgCWT+Vb2A==}

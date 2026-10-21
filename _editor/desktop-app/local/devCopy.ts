@@ -1,7 +1,7 @@
 import { sleep as pause } from "@intentic/base/async";
 import type { FolderSetup, FolderStanding } from "../src/desktop";
 
-// A FOLDER'S FIRST COPY, STOOD IN FOR (devDesktop.ts), as the machine agent counts it off Mutagen (its sync/copy.ts):
+// A FOLDER'S FIRST COPY, STOOD IN FOR (devDesktop.ts), as the machine agent counts it off Mutagen (its sync/report.ts `copyOf`):
 // connecting, a scan, files crossing a few at a time, then put in place. The folder is the one the stand-in's preview
 // counts (devDesktop.ts `project_preview`): 128 files, 3.1 MB.
 
