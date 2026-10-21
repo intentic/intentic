@@ -87,6 +87,14 @@ const consultRulebook = async (
     return { answer, held };
 };
 
+// A sealed request's answer to every call (agent-request.ts `policy.sealed`): its prompt is everything the model reads,
+// so nothing it asks to run is let through, and nobody is asked. A no where one is on offer, else a cancel, which ends
+// the request rather than letting the call run.
+export const refusePermission = (request: RequestPermissionRequest): RequestPermissionResponse => {
+    const rejection = pick(request.options, ["reject_once", "reject_always"]);
+    return rejection === undefined ? CANCELLED : selected(rejection);
+};
+
 export const decidePermission = async (
     request: RequestPermissionRequest,
     phase: PermissionPhase,

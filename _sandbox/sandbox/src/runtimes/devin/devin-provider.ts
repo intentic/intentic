@@ -117,6 +117,17 @@ export const planDevinTurn = async (
     // Keeps the pinned model while offered, else the account's own default; the floor is no choice at all.
     const catalog = await services.devinModels.models();
     const model = input.model !== undefined && catalog.models.some((entry) => entry.id === input.model) ? input.model : catalog.default;
+    const launch = devinLaunch(readiness.binary, account.apiKey);
+    const options = model === DEVIN_OWN_PICK ? {} : { model };
+    // A sealed request reads nothing past its prompt, so nothing is mounted for it: the account and the model are all
+    // this arm decides, and the ACP loop refuses every call the agent asks about (acp-agent.ts).
+    if (context.base.policy.sealed === true) {
+        return armPlan(
+            (request) => refusedSignIn(services.devinStore, account.id, services.acpAgent(devinAgentId(account.id), launch, request, options)),
+            { ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "container" } },
+            account.id,
+        );
+    }
     // The same remote MCP set the ACP floor mounts: a warm session keeps the MCP config it was opened with, so its turns
     // share the conversation's bearer.
     const mounted = await turnToolsOf(services, granted, {
@@ -130,8 +141,6 @@ export const planDevinTurn = async (
     const persona = context.persona ?? turnPersona({ personas: [], actsAs: undefined, unattended: false });
     const settings = context.settings ?? (await services.sandboxSettings.get());
     const daemon = daemonServersFor(services, { input, context, persona, granted, settings, mounted, gate: false });
-    const launch = devinLaunch(readiness.binary, account.apiKey);
-    const options = model === DEVIN_OWN_PICK ? {} : { model };
     const tools = [...mounted.tools, ...daemon.tools];
     return armPlan(
         releasingMounts(
@@ -157,6 +166,8 @@ export type DevinAdapterDeps = DevinPlanDeps;
 
 const DEVIN_ADAPTER: AgentAdapter<"devin", DevinAdapterDeps> = {
     runtime: "devin",
+    // Serves helpers too (a commit subject, a title): planDevinTurn and the ACP loop read `policy.sealed`.
+    sealed: true,
     preflight: (services, input, context, granted) => planDevinTurn(services, input, context, granted),
     health: async (services) => {
         const readiness = await attemptProbe(() => devinReadiness(services.devinStore));

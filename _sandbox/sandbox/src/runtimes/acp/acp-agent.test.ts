@@ -13,6 +13,7 @@ import { parkedCards } from "../../conversations/actor/parked-cards.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createTurnRelay } from "../daemon-tools/turn-relay.js";
 import { PROXY_BEARER_ENV, PROXY_URL_ENV } from "./acp-mcp-proxy.js";
+import { opt } from "../../opt.js";
 
 // Where a turn here parks its cards: one fleet's actors.
 const cards = parkedCards(memoryFleet().conversations);
@@ -450,4 +451,41 @@ test("a launch's session meta rides session/new", async () => {
     }
     expect(events.at(-1)).toEqual({ kind: "done" });
     expect(seen).toEqual([{ askUserQuestion: false }]);
+});
+
+// A helper's question (agent-request.ts `policy.sealed`): the prompt is everything the model reads, so the agent is put in
+// its read-only mode, every call it asks about is refused without a card, and its answer streams as the reply.
+describe("a sealed request asks once, with nothing the agent can run", () => {
+    const sealedRequest = (prompt: string, systemPrompt?: string): AgentRequest<ContainerCredential> => {
+        const base = request(prompt);
+        return { ...base, spec: { ...base.spec, ...opt("systemPrompt", systemPrompt) }, policy: { sealed: true } };
+    };
+
+    test("the session is put in the agent's plan mode, and its words stream rather than being held as a plan", async () => {
+        const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ modes: DEVIN_MODES }))), TIMEOUTS);
+        const events = await collect(agent, sealedRequest("which-mode"));
+        expect(said(events)).toBe("mode:plan");
+        expect(events.some((event) => event.kind === "plan")).toBe(false);
+        expect(events.at(-1)).toEqual({ kind: "done" });
+    });
+
+    test("a call the agent asks about is refused, and nobody is asked", async () => {
+        const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);
+        const events = await collect(agent, sealedRequest("ask-permission"));
+        expect(said(events)).toBe("permission:deny");
+        expect(events.some((event) => event.kind === "permission")).toBe(false);
+    });
+
+    test("no terminal is offered and no form is put to a person", async () => {
+        const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);
+        expect(said(await collect(agent, sealedRequest("run-terminal")))).toBe("terminal:refused");
+        const form = await collect(agent, sealedRequest("ask-form"));
+        expect(said(form)).toBe(`form:${JSON.stringify({ action: "decline" })}`);
+        expect(form.some((event) => event.kind === "question")).toBe(false);
+    });
+
+    test("the system prompt rides in front of the words, the protocol having no channel of its own for it", async () => {
+        const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp({ modes: DEVIN_MODES }))), TIMEOUTS);
+        expect(said(await collect(agent, sealedRequest("hello", "which-mode")))).toBe("mode:plan");
+    });
 });

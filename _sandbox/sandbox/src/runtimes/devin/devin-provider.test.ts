@@ -167,3 +167,24 @@ test("the daemon's own servers ride the turn's remote list, with the relay the l
     expect(plan.request.tools.remote?.map((tool) => tool.name)).toEqual(expect.arrayContaining(["ui", "watch", "deps"]));
     expect(plan.request.hooks.relay).toMatchObject({ attach: expect.any(Function), push: expect.any(Function) });
 });
+
+// A helper's question (a commit subject, a title) is planned on the account and model a turn would take, with nothing
+// mounted: the prompt is everything the model reads (agent-request.ts `policy.sealed`).
+test("a sealed request is planned with nothing mounted, on the account and model a turn would start from", async () => {
+    const { services, ran } = harness([account("a")]);
+    const sealed: TurnContext = { ...context, base: { ...context.base, policy: { sealed: true } } };
+    const plan = await planDevinTurn(services, turn({ model: "opus" }), sealed, []);
+    if (!plan.ok) {
+        throw new Error(`planning refused the sealed request: ${plan.message}`);
+    }
+    expect(plan.account).toBe("a");
+    expect(plan.request.policy).toEqual({ sealed: true });
+    expect(plan.request.tools).toEqual({});
+    expect(plan.request.hooks.relay).toBeUndefined();
+    const events: AgentEvent[] = [];
+    for await (const event of plan.run(plan.request.spec)) {
+        events.push(event);
+    }
+    expect(events).toEqual([{ kind: "done" }]);
+    expect(ran).toEqual([expect.objectContaining({ id: "devin:a", options: { model: "opus" } })]);
+});

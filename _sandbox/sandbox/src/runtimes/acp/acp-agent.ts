@@ -51,6 +51,7 @@ import {
     permissionProgram,
     type PersonAsk,
     type PersonDecision,
+    refusePermission,
 } from "./acp-permissions.js";
 import { terminalProgram } from "./acp-terminal.js";
 
@@ -299,6 +300,9 @@ const personAsk =
 interface PhaseTurn {
     readonly phase: PermissionPhase;
     readonly captureText: boolean;
+    // A sealed request (agent-request.ts `policy.sealed`): every call the agent asks about is refused, no form or
+    // terminal is offered, and nobody is asked, since the prompt is everything the model reads.
+    readonly sealed: boolean;
     readonly gate: CommandGuard;
     // The gate's taint bit, which a daemon tool's outside result marks (turn-relay.ts).
     readonly taint: TurnTaint;
@@ -339,6 +343,10 @@ const bindPhase = (connection: AcpConnection, request: AgentRequest, session: st
     // terminal/create runs in the conversation's own tmux session; the first one surfaces it in the panel.
     const tmuxSession = agentSessionName(session);
     let terminalSurfaced = false;
+    if (turn.sealed) {
+        // No form (absent declines it) and no terminal (absent refuses it); a permission is refused without asking.
+        return { queue, held, unbind: connection.bindTurn(session, { onUpdate, permission: async (permissionRequest) => refusePermission(permissionRequest) }) };
+    }
     const unbind = connection.bindTurn(session, {
         onUpdate,
         permission: async (permissionRequest) => {
@@ -411,6 +419,12 @@ const settledFailure = (response: PromptResponse | undefined, failure: unknown, 
 
 // The prompt's words as text blocks: one, or a command's words first and the daemon's notes after (command-turn.ts).
 const textBlocks = (text: string, command: string | undefined): ContentBlock[] => commandFirstTexts(text, command).map((part) => ({ type: "text", text: part }));
+
+// A sealed request's words: its system prompt, where it names one, in front of its prompt.
+const sealedWords = (request: AgentRequest): string => {
+    const system = request.spec.systemPrompt?.trim();
+    return system === undefined || system === "" ? request.spec.prompt : `${system}\n\n${request.spec.prompt}`;
+};
 
 // One prompt turn on one session: resolves/creates/loads it, binds routing, and streams mapped updates until the
 // response settles or the watchdog fires. Never emits the terminal `done`; callers do once the whole turn settles.
@@ -531,19 +545,35 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: TurnTimeou
                 const sink = { push: (_event: AgentEvent) => {} };
                 // Ends with the turn, settling any form or approval card an agent that moved on left open.
                 const ended = new AbortController();
+                const phase = {
+                    timeouts: withTurnCap(timeouts, request.spec.turnCapMs),
+                    gate,
+                    taint,
+                    sink,
+                    ended: AbortSignal.any([request.signal, ended.signal]),
+                    model,
+                    sessionMeta: launch.sessionMeta,
+                };
                 try {
+                    if (request.policy.sealed === true) {
+                        // A helper's one question on a fresh session with nothing mounted (mcpServersOf reads an empty
+                        // list), in the agent's read-only plan mode where it has one, its answer streamed rather than
+                        // held. ACP has no system prompt channel, so it rides in front of the words, as Cursor's does.
+                        yield* runAcpTurn(connection, request, [{ type: "text", text: sealedWords(request) }], undefined, {
+                            ...phase,
+                            phase: "plan",
+                            captureText: false,
+                            sealed: true,
+                        });
+                        return;
+                    }
                     // Native image blocks when the agent advertises image prompts; everything else rides the file note.
                     yield* textPlanTurn(EMULATED_PLAN, request, connection.capabilities.promptCapabilities?.image === true, (text, images, sessionId, planning) =>
                         runAcpTurn(connection, request, [...textBlocks(text, request.spec.command), ...images.map(imageBlock)], sessionId, {
+                            ...phase,
                             phase: planning ? "plan" : "execute",
                             captureText: planning,
-                            timeouts: withTurnCap(timeouts, request.spec.turnCapMs),
-                            gate,
-                            taint,
-                            sink,
-                            ended: AbortSignal.any([request.signal, ended.signal]),
-                            model,
-                            sessionMeta: launch.sessionMeta,
+                            sealed: false,
                         }),
                     );
                 } finally {
