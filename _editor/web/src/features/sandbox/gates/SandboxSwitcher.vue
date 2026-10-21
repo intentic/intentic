@@ -13,7 +13,7 @@ import {
     type Tip,
     useHoverMenu,
 } from "@intentic/ui";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, type ComputedRef, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { commandShortcut } from "../../../workbench/commands/useCommands";
 import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
@@ -32,7 +32,7 @@ import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTre
 import { operationRunning } from "../../../workbench/operations/operations";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
-import { isLocalFolderRow } from "../../../app/environments/local";
+import { isLocalFolderRow, localFace } from "../../../app/environments/local";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useFolderPlace } from "./switcherPlace";
 import { answerNote } from "./switcherRows";
@@ -55,7 +55,7 @@ import { useT } from "@intentic/ui/i18n";
 // account's sandboxes reach it through the app (its local/platform.ts), so picking, removing, leaving and rolling one
 // back are the same rows, chords and dialogs as here. What it leaves out is what a folder's window cannot read: other
 // sandboxes' daemons refuse its page (attention counts, "not answering"), and the sandbox hub is the workspace's.
-// Until 2026-10-21 it had a switcher of its own (LocalPlaceSwitcher.vue) that could list sandboxes and nothing else.
+// Until 2026-10-21 it had a switcher of its own, a local place switcher that could list sandboxes and nothing else.
 //
 // PLACES ONLY. What the sandbox in use needs, what is worth knowing and setups never finished used to hang under the
 // list as three headed sections, with the badge for them on the logo; they turned a menu for picking a place into a
@@ -83,7 +83,8 @@ const hubPath = computed(() => sandboxHubPath(isGuest.value));
 // connection's state — the glyph says which machine, its ink says whether that machine answers — because both are
 // facts about the same link and two corners saying it was twice the tile for one sentence. That sentence rides the
 // control's own label, because a glyph alone cannot be the only place a reader can learn this.
-const placement = useSandboxPlacement();
+// A local window stands on a folder, not a sandbox, and its sidecar has no device registry to ask, so it reads none.
+const placement: ComputedRef<SandboxPlacement | undefined> = localFace() === undefined ? useSandboxPlacement() : computed(() => undefined);
 
 // One label for the whole control, its marks included, since a tooltip on a mark would nest inside this one.
 const switcherLabel = computed(() => {
