@@ -12,6 +12,6 @@
 # there, and a process the daemon kills is then the one holding the session rather than a wrapper around it.
 # ponytail: engines.json blesses this pin; bump-engines.mjs moves both.
 RUN --mount=type=cache,target=/root/.npm \
-    npm install --prefix /opt/devin --no-save --no-package-lock --no-audit --no-fund devin@3000.11.3 \
+    npm install --prefix /opt/devin --no-save --no-package-lock --no-audit --no-fund devin@3000.11.92 \
     && ln -sf "/opt/devin/node_modules/devin-linux-$(node -p 'process.arch')/bin/devin" /usr/local/bin/devin \
     && devin --version

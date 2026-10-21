@@ -12,7 +12,7 @@
 # ponytail: bump together with @opencode/client.
 RUN --mount=type=cache,target=/root/.npm \
     --mount=type=tmpfs,target=/tmp \
-    npm install -g @opencode/cli@2.0.28 \
+    npm install -g @opencode/cli@2.1.2 \
     && test -x "$(npm root -g)/@opencode/cli/bin/opencode.exe" \
     && rm -rf "$(npm root -g)"/@opencode/cli/node_modules/@opencode/cli-* "$(npm root -g)"/@opencode/cli-* \
     && opencode --version

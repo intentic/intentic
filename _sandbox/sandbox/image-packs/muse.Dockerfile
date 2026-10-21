@@ -8,7 +8,7 @@
 # rebuild the owner approves bakes the same copy into their own image (runtimes/minted/minted-provider.ts `packs`).
 #
 # ponytail: engines.json blesses this pin; bump-engines.mjs moves it together with @muse-code/sdk in pnpm-workspace.yaml.
-RUN set -eu; version=1.4.7-R6101.1; \
+RUN set -eu; version=1.4.11-R6667.1; \
     case "$(uname -m)" in \
         x86_64) platform=x86_linux ;; \
         aarch64) platform=aarch64_linux ;; \
