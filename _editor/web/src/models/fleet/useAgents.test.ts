@@ -1523,9 +1523,11 @@ describe("the finished fold", () => {
     // Ordering, not pinning: unsent cards lead by recency among themselves, and past a window's worth the fold still
     // applies.
     it("orders every unsent card ahead of the sent ones", () => {
-        const held = [`a6`, `a7`, `a8`].map((id) => {
+        const held = [`a6`, `a7`, `a8`].map((id, at) => {
             const conversation = new Conversation(id);
             conversation.registered.value = true;
+            // Draft time participates in recency: never rely on these writes sharing a wall-clock millisecond.
+            conversation.draftAt.value = 3_000 - at;
             conversation.draft.value = `later`;
             return conversation;
         });
