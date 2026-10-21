@@ -10,13 +10,20 @@ import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSetting
 import { useFieldNotes } from "./useFieldNotes";
 import { commitCount, asPercent } from "../models/numberInputs";
 import MeasurementPanel from "../models/MeasurementPanel.vue";
+import ResultChip from "../models/ResultChip.vue";
+import DetailSwitch from "./DetailSwitch.vue";
+import { useDetailLevel } from "./detailLevel";
+import CodeSearchExplainer from "./explainers/CodeSearchExplainer.vue";
 import { type ResultTable, tableOf } from "../models/experimentReadings";
 import { useT } from "@intentic/ui/i18n";
 
 // Three composing settings, ordered by when each acts: iq search (on demand), the project map (before there's a
-// question), and the field notes (before the conversation, and for all of it).
+// question), and the field notes (before the conversation, and for all of it). Simple draws each switch with one chip
+// of what it measured; Advanced adds the tables, the comparison groups and the field notes' own state.
 
 const t = useT();
+const level = useDetailLevel(`code-search`);
+const advanced = computed(() => level.value === `advanced`);
 
 const { settings, patch, refusal } = useSandboxSettings();
 const { savings } = useSavings({});
@@ -63,6 +70,8 @@ const notesSchedule = computed<string>(() => {
 
 <template>
     <RowGroup data-setting="agent-code-search" :label="t(`sandbox.agentCodeSearch.codeSearch`)">
+        <template #info><CodeSearchExplainer /></template>
+        <template #actions><DetailSwitch v-model="level" :label="t(`sandbox.agentCodeSearch.codeSearch`)" /></template>
         <!-- Loads the iq plugin so the assistant searches with the iq CLI instead of grep/find/glob. -->
         <!-- `spine` hangs the measurement block off this row's name rather than the group's edge. -->
         <Row spine icon="search" :title="t(`sandbox.agentCodeSearch.iqCodeSearch`)" :description="t(`sandbox.agentCodeSearch.useIqSearchCli`)">
@@ -74,7 +83,9 @@ const notesSchedule = computed<string>(() => {
                 />
             </template>
             <template v-if="settings?.iqSearch === true" #below>
+                <ResultChip v-if="!advanced" :table="searchTable" />
                 <MeasurementPanel
+                    v-else
                     :table="searchTable"
                     :percent="iqSearchHoldoutPercent"
                     :note="t(`sandbox.agentCodeSearch.ofConversationsRunWithout`)"
@@ -105,7 +116,9 @@ const notesSchedule = computed<string>(() => {
             </template>
             <!-- Holdout flips whole conversations here too: the map is sent once, on the conversation's opening turn. -->
             <template v-if="settings?.workspaceMap === true" #below>
+                <ResultChip v-if="!advanced" :table="mapTable" />
                 <MeasurementPanel
+                    v-else
                     :table="mapTable"
                     :percent="mapHoldoutPercent"
                     :note="t(`sandbox.agentCodeSearch.ofConversationsOpenWithout`)"
@@ -128,7 +141,23 @@ const notesSchedule = computed<string>(() => {
                 />
             </template>
             <template v-if="settings?.fieldNotes === true" #below>
-                <div class="flex flex-col gap-4">
+                <!-- Simple: the chip, and a line only when the brief cannot do its job (nothing keeps it current, or it
+                     cannot be read), since a switch left on over a brief nothing maintains is the failure to show. -->
+                <div v-if="!advanced" class="flex flex-col items-start gap-1">
+                    <ResultChip :table="notesTable" />
+                    <span v-if="notes?.unreadable !== undefined" class="text-xs text-warning">
+                        {{ t(`sandbox.agentCodeSearch.briefUnreadable`, { why: notes.unreadable }) }}
+                    </span>
+                    <span v-else-if="notes?.automation === `missing` || notes?.automation === `disabled`" class="flex flex-wrap gap-x-3 text-xs">
+                        <span class="text-warning">{{
+                            notes.automation === `missing` ? t(`sandbox.agentCodeSearch.notScheduled`) : t(`sandbox.agentCodeSearch.automationOff`)
+                        }}</span>
+                        <RouterLink to="/ext/automations" class="text-link hover:underline">{{
+                            t(`sandbox.agentCodeSearch.openAutomations`)
+                        }}</RouterLink>
+                    </span>
+                </div>
+                <div v-else class="flex flex-col gap-4">
                     <!-- The brief's own state as labelled facts, one per line on one grid: what is sent, the limit that
                          decides how much of it, and what keeps it current. A switch left on over a brief nothing
                          maintains is the failure to show, so the schedule gets a line even when it is fine. -->

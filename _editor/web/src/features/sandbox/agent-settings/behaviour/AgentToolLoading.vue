@@ -6,6 +6,10 @@ import { useSavings } from "../../usage/useSavings";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import { asPercent } from "../models/numberInputs";
 import MeasurementPanel from "../models/MeasurementPanel.vue";
+import ResultChip from "../models/ResultChip.vue";
+import DetailSwitch from "./DetailSwitch.vue";
+import { useDetailLevel } from "./detailLevel";
+import TokenSavingsExplainer from "./explainers/TokenSavingsExplainer.vue";
 import { type ResultTable, tableOf } from "../models/experimentReadings";
 import { useT } from "@intentic/ui/i18n";
 
@@ -14,9 +18,11 @@ import { useT } from "@intentic/ui/i18n";
 // between turns so the provider's cache holds them, with what moves between turns said on the message instead; and a
 // large conversation whose cache already expired resumed with older tool output cleared, when re-reading it is paid in
 // full anyway. Each measured like the other composing settings: a share of conversations runs without it, and the table
-// says what it costs.
+// says what it costs. Simple says each one's finding as a chip; Advanced draws the tables and the comparison groups.
 
 const t = useT();
+const level = useDetailLevel(`token-savings`);
+const advanced = computed(() => level.value === `advanced`);
 
 const { settings, patch, refusal } = useSandboxSettings();
 const { savings } = useSavings({});
@@ -36,6 +42,8 @@ const coldTable = computed<ResultTable | undefined>(() => tableOf(savings.value?
 
 <template>
     <RowGroup data-setting="agent-tool-loading" :label="t(`sandbox.agentToolLoading.group`)">
+        <template #info><TokenSavingsExplainer /></template>
+        <template #actions><DetailSwitch v-model="level" :label="t(`sandbox.agentToolLoading.group`)" /></template>
         <Row spine icon="wrench" :title="t(`sandbox.agentToolLoading.onDemand`)" :description="t(`sandbox.agentToolLoading.onDemandDescription`)">
             <template #control>
                 <ToggleSwitch
@@ -45,7 +53,9 @@ const coldTable = computed<ResultTable | undefined>(() => tableOf(savings.value?
                 />
             </template>
             <template v-if="settings?.toolSearch === true" #below>
+                <ResultChip v-if="!advanced" :table="table" />
                 <MeasurementPanel
+                    v-else
                     :table="table"
                     :percent="holdoutPercent"
                     :note="t(`sandbox.agentToolLoading.ofConversationsLoadEverything`)"
@@ -65,7 +75,9 @@ const coldTable = computed<ResultTable | undefined>(() => tableOf(savings.value?
                 />
             </template>
             <template v-if="settings?.stableSystemPrompt === true" #below>
+                <ResultChip v-if="!advanced" :table="stableTable" />
                 <MeasurementPanel
+                    v-else
                     :table="stableTable"
                     :percent="stableHoldoutPercent"
                     :note="t(`sandbox.agentToolLoading.ofConversationsKeepMoving`)"
@@ -85,7 +97,9 @@ const coldTable = computed<ResultTable | undefined>(() => tableOf(savings.value?
                 />
             </template>
             <template v-if="settings?.coldTrim === true" #below>
+                <ResultChip v-if="!advanced" :table="coldTable" />
                 <MeasurementPanel
+                    v-else
                     :table="coldTable"
                     :percent="coldHoldoutPercent"
                     :note="t(`sandbox.agentToolLoading.ofConversationsResumeWhole`)"

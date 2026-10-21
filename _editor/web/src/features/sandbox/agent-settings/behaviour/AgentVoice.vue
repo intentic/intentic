@@ -31,6 +31,8 @@ import {
     withProvider,
     withVoiceFor,
 } from "./agentVoice";
+import DetailSwitch from "./DetailSwitch.vue";
+import { useDetailLevel } from "./detailLevel";
 
 // How the agent's replies are spoken (SandboxSettings.voice, schemas/voice.ts): whether a hands-free turn is answered
 // out loud, which voice speaks each language, and a speech provider of the owner's own. The daemon reads these on every
@@ -38,6 +40,11 @@ import {
 // GET /speech/voices, which says what this sandbox can speak with and whether the provider's key resolves.
 
 const t = useT();
+// Simple is what hands-free needs: whether it answers out loud, how fast, the name it answers to and in which voice.
+// Advanced adds talking over it and a speech provider of your own, which Simple still shows once one is set, so a
+// provider speaking for every language is never hidden by the simpler view.
+const level = useDetailLevel(`voice`, [`agent-speech-provider`]);
+const advanced = computed(() => level.value === `advanced`);
 
 const { settings, save, refusal } = useSandboxSettings();
 const voice = computed((): VoiceSettings => settings.value?.voice ?? VoiceSettingsSchema.parse({}));
@@ -231,6 +238,7 @@ const voicesFailure = computed<NoticeModel | undefined>(() =>
     <!-- Its sections stacked here at the page's rhythm, so whatever mounts it cannot leave two headers touching. -->
     <div class="flex flex-col gap-6">
         <RowGroup data-setting="agent-voice" :label="t(`sandbox.agentVoice.group`)">
+            <template #actions><DetailSwitch v-model="level" :label="t(`sandbox.agentVoice.group`)" /></template>
             <Row icon="volume-up" :title="t(`sandbox.agentVoice.replies`)" :description="t(`sandbox.agentVoice.repliesNote`)">
                 <template #control>
                     <ToggleSwitch
@@ -243,7 +251,7 @@ const voicesFailure = computed<NoticeModel | undefined>(() =>
             </Row>
 
             <!-- Off by default: a laptop's speakers without echo cancellation feed its own voice back as the person's. -->
-            <Row icon="microphone" :title="t(`sandbox.agentVoice.interrupt`)" :description="t(`sandbox.agentVoice.interruptNote`)">
+            <Row v-if="advanced" icon="microphone" :title="t(`sandbox.agentVoice.interrupt`)" :description="t(`sandbox.agentVoice.interruptNote`)">
                 <template #control>
                     <ToggleSwitch
                         :model-value="voice.interrupt"
@@ -357,7 +365,7 @@ const voicesFailure = computed<NoticeModel | undefined>(() =>
         </RowGroup>
 
         <!-- The owner's own account with a speech service: better voices, at the price of the words leaving the sandbox. -->
-        <RowGroup data-setting="agent-speech-provider" :label="t(`sandbox.agentVoice.providerGroup`)">
+        <RowGroup v-if="advanced || cloud !== undefined" data-setting="agent-speech-provider" :label="t(`sandbox.agentVoice.providerGroup`)">
             <Row icon="cloud" :title="t(`sandbox.agentVoice.provider`)" :description="t(`sandbox.agentVoice.providerNote`)">
                 <template #control>
                     <select

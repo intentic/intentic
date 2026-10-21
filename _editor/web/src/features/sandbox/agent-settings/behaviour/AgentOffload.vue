@@ -8,12 +8,17 @@ import { useSandboxQuery } from "../../../../client/sandbox/useSandboxQuery";
 import { useRunners } from "../../../../models/sandbox/devices/useRunners";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
 import type { SessionsPlacement } from "@intentic/sandbox-contract/schemas/offload";
+import DetailSwitch from "./DetailSwitch.vue";
+import { useDetailLevel } from "./detailLevel";
+import OffloadExplainer from "./explainers/OffloadExplainer.vue";
 import { HERE, kindDetail, kindTitle, sessionsOptions, targetOptions, unavailableRunner, withCommandTarget, withSessions } from "./offloadRows";
 
 // "Where heavy work runs" (settings `offload`): each kind of heavy command an agent runs, either here or on a runner on
 // one of your machines. The kinds are the heavy-command rules this sandbox queues by (GET /offload/kinds), so a rule the
-// owner adds shows up here too. A runner is added from Devices, per machine.
+// owner adds shows up here too. A runner is added from Devices, per machine. Simple is the one choice a person meets
+// in the composer, new chats; Advanced adds a row per kind of command.
 const t = useT();
+const level = useDetailLevel(`offload`);
 
 const { settings, patch, refusal } = useSandboxSettings();
 const { query: kindsQuery } = useSandboxQuery(rpcQuery(`offload.kinds`));
@@ -39,6 +44,8 @@ const setKind = (kind: string, runner: string | undefined): void => {
 
 <template>
     <RowGroup data-setting="agent-offload" :label="t(`sandbox.agentOffload.title`)">
+        <template #info><OffloadExplainer /></template>
+        <template #actions><DetailSwitch v-model="level" :label="t(`sandbox.agentOffload.title`)" /></template>
         <RowNote>
             {{ t(`sandbox.agentOffload.intro`) }}
             <i18n-t v-if="noRunners" keypath="sandbox.agentOffload.noRunners" tag="span" scope="global">
@@ -63,7 +70,7 @@ const setKind = (kind: string, runner: string | undefined): void => {
             </template>
         </Row>
 
-        <Row v-for="kind in kinds" :key="kind.id" icon="bolt" :title="kindTitle(kind)" :description="kindDetail(kind)">
+        <Row v-for="kind in level === `advanced` ? kinds : []" :key="kind.id" icon="bolt" :title="kindTitle(kind)" :description="kindDetail(kind)">
             <template #control>
                 <Picker
                     :model-value="offload.commands[kind.id] ?? HERE"

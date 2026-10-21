@@ -1,5 +1,5 @@
 import type { TurnExperiment, TurnMetricReading } from "@intentic/sandbox-contract/schemas/settings";
-import { outcomeOf, tableOf } from "./experimentReadings";
+import { headlineOf, outcomeOf, tableOf } from "./experimentReadings";
 
 // Every row of the results table must land in one of four answers, and the arithmetic behind the hover note (the likely
 // range, the sample still owed) must say what the daemon's margin says. Pins each state rather than trusting the panel.
@@ -20,7 +20,13 @@ const experiment = (readings: TurnMetricReading[], overrides: Partial<TurnExperi
 describe(`outcomeOf`, () => {
     it(`states a measured drop as a whole percent with the likely range around it`, () => {
         // -63.7 ± 29.6: somewhere between 34.1 and 93.3 percent fewer.
-        expect(outcomeOf(reading({ deltaPct: -63.7, marginPct: 29.6, saved: 388.4 }))).toEqual({ kind: `lower`, pct: 64, low: 34, high: 93, saved: 388 });
+        expect(outcomeOf(reading({ deltaPct: -63.7, marginPct: 29.6, saved: 388.4 }))).toEqual({
+            kind: `lower`,
+            pct: 64,
+            low: 34,
+            high: 93,
+            saved: 388,
+        });
     });
 
     it(`states a measured rise the same way, as its own kind`, () => {
@@ -106,8 +112,14 @@ describe(`tableOf`, () => {
         );
         expect(table).toMatchObject({ on: 29, off: 27 });
         expect(table?.rows.map((row) => [row.samples, row.outcome])).toEqual([
-            [{ on: 29, off: 27 }, { kind: `early`, have: 27, need: 30 }],
-            [{ on: 16, off: 19 }, { kind: `early`, have: 16, need: 30 }],
+            [
+                { on: 29, off: 27 },
+                { kind: `early`, have: 27, need: 30 },
+            ],
+            [
+                { on: 16, off: 19 },
+                { kind: `early`, have: 16, need: 30 },
+            ],
         ]);
     });
 
@@ -117,7 +129,11 @@ describe(`tableOf`, () => {
                 previous: { from: 1000, to: 2000, metrics: [reading({ metric: `openedWithListing`, deltaPct: -45, marginPct: 20 })] },
             }),
         );
-        expect(table?.previous).toMatchObject({ from: 1000, to: 2000, rows: [{ key: `openedWithListing`, share: true, outcome: { kind: `lower`, pct: 45 } }] });
+        expect(table?.previous).toMatchObject({
+            from: 1000,
+            to: 2000,
+            rows: [{ key: `openedWithListing`, share: true, outcome: { kind: `lower`, pct: 45 } }],
+        });
     });
 
     it(`carries nothing when the earlier comparison answered nothing`, () => {
@@ -126,5 +142,42 @@ describe(`tableOf`, () => {
 
     it(`counts turns when the experiment names no unit`, () => {
         expect(tableOf(experiment([reading()]))?.unit).toBe(`turns`);
+    });
+});
+
+// The Simple view's one chip: the finding a reader acts on first, never a figure the table would not stand behind.
+describe(`headlineOf`, () => {
+    it(`says nothing while there is no experiment`, () => {
+        expect(headlineOf(undefined)).toBeUndefined();
+    });
+
+    it(`picks the biggest measured drop over a rise, a no-difference and an open row`, () => {
+        const table = tableOf(
+            experiment([
+                reading({ metric: `searchCalls`, marginPct: 10 }),
+                reading({ metric: `failedCalls`, deltaPct: 12, marginPct: 4 }),
+                reading({ metric: `openedWithListing`, deltaPct: -20, marginPct: 5 }),
+                reading({ metric: `callsBeforeTarget`, deltaPct: -45, marginPct: 9 }),
+            ]),
+        );
+        expect(headlineOf(table)?.row).toMatchObject({ key: `callsBeforeTarget`, outcome: { kind: `lower`, pct: 45 } });
+    });
+
+    it(`says a measured rise when nothing dropped, so a cost is not hidden behind "no difference"`, () => {
+        const table = tableOf(experiment([reading({ marginPct: 10 }), reading({ metric: `failedCalls`, deltaPct: 12, marginPct: 4 })]));
+        expect(headlineOf(table)?.row.outcome.kind).toBe(`higher`);
+    });
+
+    it(`keeps the earlier comparison's answer while a restarted one has none, with that comparison's sample`, () => {
+        const table = tableOf(
+            experiment([reading({ on: { turns: 5 }, off: { turns: 2 } })], {
+                previous: {
+                    from: 1,
+                    to: 2,
+                    metrics: [reading({ metric: `failedCalls`, deltaPct: -31, marginPct: 8, on: { turns: 84 }, off: { turns: 21 } })],
+                },
+            }),
+        );
+        expect(headlineOf(table)).toMatchObject({ row: { key: `failedCalls`, outcome: { kind: `lower`, pct: 31 } }, on: 84, off: 21 });
     });
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { formatTokens, Icon, Notice, Row, RowGroup, RowNote, timeAgo, Verdict } from "@intentic/ui";
+import { formatTokens, Notice, Row, RowGroup, RowNote, timeAgo, Verdict } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
@@ -10,11 +10,17 @@ import { asPercent } from "../models/numberInputs";
 import MeasurementPanel from "../models/MeasurementPanel.vue";
 import type { ResultTable } from "../models/experimentReadings";
 import { useT } from "@intentic/ui/i18n";
+import DetailSwitch from "./DetailSwitch.vue";
+import { useDetailLevel } from "./detailLevel";
+import CommandOutputExplainer from "./explainers/CommandOutputExplainer.vue";
 
 // Shell-output filter as one switch. What it saved sits under it; the per-cleaner switches, the commands no cleaner
-// covers and the measurement holdout are tuning, so they fold away under "Advanced" with their state said on the fold.
+// covers and the measurement holdout are tuning, which the section's Advanced view draws. Simple says only the figure,
+// and a line when some cleaners are off, so a pruned list is never hidden by the simpler view.
 
 const t = useT();
+const level = useDetailLevel(`command-output`);
+const advanced = computed(() => level.value === `advanced`);
 
 const { settings, patch, refusal } = useSandboxSettings();
 const { savings } = useSavings({});
@@ -120,14 +126,11 @@ const summary = computed(() => {
     return { value: `${input.savedPct}%`, unit: t(`sandbox.agentCommandOutput.ofOutputRemoved`), tone: `success`, detail, measured: true } as const;
 });
 
-// Said on the fold's own line, so a cleaner switched off or a share of commands left raw is never hidden by closing it.
-const advancedFacts = computed<string[]>(() => {
+// Said in the Simple view only when it is not the default: some cleaners switched off.
+const prunedCleaners = computed<string | undefined>(() => {
     const total = allCleanerIds().length;
     const on = enabledCleaners.value.size;
-    return [
-        on === total ? t(`sandbox.agentCommandOutput.allCleanersOn`, { total }) : t(`sandbox.agentCommandOutput.someCleanersOn`, { on, total }),
-        ...(holdoutPercent.value > 0 ? [t(`sandbox.agentCommandOutput.heldOutForComparison`, { pct: holdoutPercent.value })] : []),
-    ];
+    return on === total ? undefined : t(`sandbox.agentCommandOutput.someCleanersOn`, { on, total });
 });
 
 // Per-cleaner value, all time and unwindowed; the Usage tab's Savings section owns the windowed comparison.
@@ -139,7 +142,9 @@ const gaps = computed(() => savings.value?.input.gaps.slice(0, 5) ?? []);
 
 <template>
     <RowGroup data-setting="agent-command-output" :label="t(`sandbox.agentCommandOutput.commandOutput`)">
-        <!-- One switch is the whole decision; what it saved hangs under its name, and the parts behind it fold away. -->
+        <template #info><CommandOutputExplainer /></template>
+        <template #actions><DetailSwitch v-model="level" :label="t(`sandbox.agentCommandOutput.commandOutput`)" /></template>
+        <!-- One switch is the whole decision; what it saved hangs under its name, and the parts behind it are Advanced's. -->
         <Row
             indent
             icon="bolt"
@@ -157,86 +162,64 @@ const gaps = computed(() => savings.value?.input.gaps.slice(0, 5) ?? []);
                 <div class="flex min-w-0 flex-col gap-3">
                     <div v-if="summary !== undefined">
                         <Verdict :value="summary.value" :unit="summary.unit" :tone="summary.tone" />
-                        <p class="mt-1 text-2xs text-subtle">
+                        <p v-if="advanced" class="mt-1 text-2xs text-subtle">
                             {{ summary.detail }}
                             <RouterLink v-if="summary.measured" to="/sandbox/usage" class="ml-1 whitespace-nowrap text-link hover:underline">{{
                                 t(`sandbox.agentCommandOutput.breakdown`)
                             }}</RouterLink>
                         </p>
+                        <p v-else-if="prunedCleaners !== undefined" class="mt-1 text-2xs text-subtle">{{ prunedCleaners }}</p>
                     </div>
 
-                    <details class="group/advanced min-w-0">
-                        <summary
-                            class="flex w-fit max-w-full cursor-pointer list-none flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-sm text-xs text-muted hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500 [&::-webkit-details-marker]:hidden"
-                        >
-                            <span class="flex items-center gap-1.5">
-                                <Icon
-                                    name="chevron-right"
-                                    aria-hidden="true"
-                                    class="text-2xs text-subtle transition-transform group-open/advanced:rotate-90"
-                                />
-                                {{ t(`sandbox.agentCommandOutput.advanced`) }}
-                            </span>
-                            <span class="text-2xs text-subtle">{{ advancedFacts.join(` · `) }}</span>
-                        </summary>
-
-                        <div class="mt-3 flex min-w-0 flex-col gap-5">
-                            <!-- Capped like the measurement table under it, so a switch stays within reach of its name on a wide pane. -->
-                            <div class="@container/cleaners flex min-w-0 max-w-xl flex-col gap-2">
-                                <p class="flex flex-wrap items-baseline gap-x-2 text-2xs text-subtle">
-                                    <span class="font-medium">{{ t(`sandbox.agentCommandOutput.cleaners`) }}</span>
-                                    <!-- Per-switch savings turn twelve identical toggles into a list you can prune by impact. -->
-                                    <span>{{ t(`sandbox.agentCommandOutput.tokensSavedAllTime`) }}</span>
-                                </p>
-                                <div class="grid grid-cols-1 gap-x-6 gap-y-1.5 @md/cleaners:grid-cols-2">
-                                    <label
-                                        v-for="cleaner in cleanerOptions()"
-                                        :key="cleaner.id"
-                                        class="flex min-w-0 items-center justify-between gap-2"
-                                    >
-                                        <span class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-                                            <span class="min-w-0 break-words text-xs text-content">{{ cleaner.label }}</span>
-                                            <!-- Absent means not yet measured, a different claim from zero. -->
-                                            <span
-                                                v-if="savedTokens.get(cleaner.id) !== undefined"
-                                                class="shrink-0 text-2xs tabular-nums text-success"
-                                            >
-                                                ~{{ formatTokens(savedTokens.get(cleaner.id) ?? 0) }}
-                                            </span>
+                    <div v-if="advanced" class="flex min-w-0 flex-col gap-5">
+                        <!-- Capped like the measurement table under it, so a switch stays within reach of its name on a wide pane. -->
+                        <div class="@container/cleaners flex min-w-0 max-w-xl flex-col gap-2">
+                            <p class="flex flex-wrap items-baseline gap-x-2 text-2xs text-subtle">
+                                <span class="font-medium">{{ t(`sandbox.agentCommandOutput.cleaners`) }}</span>
+                                <!-- Per-switch savings turn twelve identical toggles into a list you can prune by impact. -->
+                                <span>{{ t(`sandbox.agentCommandOutput.tokensSavedAllTime`) }}</span>
+                            </p>
+                            <div class="grid grid-cols-1 gap-x-6 gap-y-1.5 @md/cleaners:grid-cols-2">
+                                <label v-for="cleaner in cleanerOptions()" :key="cleaner.id" class="flex min-w-0 items-center justify-between gap-2">
+                                    <span class="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                                        <span class="min-w-0 break-words text-xs text-content">{{ cleaner.label }}</span>
+                                        <!-- Absent means not yet measured, a different claim from zero. -->
+                                        <span v-if="savedTokens.get(cleaner.id) !== undefined" class="shrink-0 text-2xs tabular-nums text-success">
+                                            ~{{ formatTokens(savedTokens.get(cleaner.id) ?? 0) }}
                                         </span>
-                                        <ToggleSwitch
-                                            class="shrink-0"
-                                            :model-value="enabledCleaners.has(cleaner.id)"
-                                            @update:model-value="(value: boolean) => toggleCleaner(cleaner.id, value)"
-                                        />
-                                    </label>
-                                </div>
-                                <p v-if="gaps.length > 0" class="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 text-2xs">
-                                    <span class="text-subtle">{{ t(`sandbox.agentCommandOutput.notCovered`) }}</span>
-                                    <span
-                                        v-for="gap in gaps"
-                                        :key="gap.command"
-                                        v-tooltip.top="t(`sandbox.agentCommandOutput.runs`, { count: gap.commands }, gap.commands)"
-                                        tabindex="0"
-                                        class="inline-flex min-w-0 max-w-full cursor-help items-baseline gap-1"
-                                    >
-                                        <code class="min-w-0 truncate font-mono text-muted">{{ gap.command }}</code>
-                                        <span class="shrink-0 tabular-nums text-subtle">~{{ formatTokens(gap.tokens) }}</span>
                                     </span>
-                                </p>
+                                    <ToggleSwitch
+                                        class="shrink-0"
+                                        :model-value="enabledCleaners.has(cleaner.id)"
+                                        @update:model-value="(value: boolean) => toggleCleaner(cleaner.id, value)"
+                                    />
+                                </label>
                             </div>
-
-                            <!-- Leaves a share of commands raw so the saving is measured against a real baseline, not just estimated. -->
-                            <MeasurementPanel
-                                :percent="holdoutPercent"
-                                :table="cleanerTable"
-                                :note="t(`sandbox.agentCommandOutput.ofCommandsRunUncleaned`)"
-                                :on-label="t(`sandbox.agentCommandOutput.cleaned`)"
-                                :off-label="t(`sandbox.agentCommandOutput.raw`)"
-                                @commit="(outputHoldout: number) => patch({ outputHoldout })"
-                            />
+                            <p v-if="gaps.length > 0" class="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 text-2xs">
+                                <span class="text-subtle">{{ t(`sandbox.agentCommandOutput.notCovered`) }}</span>
+                                <span
+                                    v-for="gap in gaps"
+                                    :key="gap.command"
+                                    v-tooltip.top="t(`sandbox.agentCommandOutput.runs`, { count: gap.commands }, gap.commands)"
+                                    tabindex="0"
+                                    class="inline-flex min-w-0 max-w-full cursor-help items-baseline gap-1"
+                                >
+                                    <code class="min-w-0 truncate font-mono text-muted">{{ gap.command }}</code>
+                                    <span class="shrink-0 tabular-nums text-subtle">~{{ formatTokens(gap.tokens) }}</span>
+                                </span>
+                            </p>
                         </div>
-                    </details>
+
+                        <!-- Leaves a share of commands raw so the saving is measured against a real baseline, not just estimated. -->
+                        <MeasurementPanel
+                            :percent="holdoutPercent"
+                            :table="cleanerTable"
+                            :note="t(`sandbox.agentCommandOutput.ofCommandsRunUncleaned`)"
+                            :on-label="t(`sandbox.agentCommandOutput.cleaned`)"
+                            :off-label="t(`sandbox.agentCommandOutput.raw`)"
+                            @commit="(outputHoldout: number) => patch({ outputHoldout })"
+                        />
+                    </div>
                 </div>
             </template>
         </Row>

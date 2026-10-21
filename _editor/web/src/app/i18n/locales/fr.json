@@ -2542,10 +2542,7 @@
             "raw": "Brutes",
             "tokensSavedAllTime": "jetons économisés, en tout",
             "trimNoisyShellOutput": "Élaguer la sortie shell bruyante avant qu'elle n'atteigne l'assistant.",
-            "advanced": "Avancé",
-            "allCleanersOn": "Les {total} nettoyeurs actifs",
             "someCleanersOn": "{on} nettoyeurs actifs sur {total}",
-            "heldOutForComparison": "{pct} % des commandes laissées brutes, pour comparer",
             "breakdown": "Détail →",
             "notCovered": "Aucun nettoyeur pour",
             "runs": "{count} exécution | {count} exécutions"

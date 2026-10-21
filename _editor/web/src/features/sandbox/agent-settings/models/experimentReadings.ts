@@ -99,7 +99,8 @@ const rowOf = (reading: TurnMetricReading, minimum: number | undefined): ResultR
 });
 
 // An opening turn is one per conversation, so the reader counts conversations either way.
-const unitOf = (experiment: TurnExperiment): SampleUnit => (experiment.sampleUnit === `turns` || experiment.sampleUnit === undefined ? `turns` : `conversations`);
+const unitOf = (experiment: TurnExperiment): SampleUnit =>
+    experiment.sampleUnit === `turns` || experiment.sampleUnit === undefined ? `turns` : `conversations`;
 
 /** Undefined until the daemon has an experiment to report, which the panel says in words. */
 export const tableOf = (experiment: TurnExperiment | undefined): ResultTable | undefined => {
@@ -130,4 +131,44 @@ export const tableOf = (experiment: TurnExperiment | undefined): ResultTable | u
             rows: previous.metrics.map((reading) => rowOf(reading, undefined)),
         },
     };
+};
+
+/** The one row a section's Simple view says about its experiment, with the table it came from. */
+export interface Headline {
+    readonly row: ResultRow;
+    readonly unit: SampleUnit;
+    readonly on: number;
+    readonly off: number;
+}
+
+// Which finding a reader acts on first: the biggest measured drop, else a measured rise (a cost to know about), else a
+// comparison that has answered "no difference", else the one furthest along. A restarted comparison that has not
+// answered yet still has its earlier result, which outranks "too early" for the same reason the table keeps it.
+const RANK = { lower: 0, higher: 1, unclear: 2, early: 3 } as const satisfies Record<Outcome["kind"], number>;
+const sizeOf = (outcome: Outcome): number => {
+    switch (outcome.kind) {
+        case `lower`:
+        case `higher`:
+            return outcome.pct;
+        case `early`:
+            return outcome.have ?? 0;
+        case `unclear`:
+            return 0;
+    }
+};
+const best = (rows: readonly ResultRow[]): ResultRow | undefined =>
+    rows.toSorted((a, b) => RANK[a.outcome.kind] - RANK[b.outcome.kind] || sizeOf(b.outcome) - sizeOf(a.outcome))[0];
+
+/** Undefined while there is no table; the chip then says nothing rather than a guess. */
+export const headlineOf = (table: ResultTable | undefined): Headline | undefined => {
+    if (table === undefined) {
+        return undefined;
+    }
+    const current = best(table.rows);
+    const previous = table.previous === undefined ? undefined : best(table.previous.rows);
+    const settled = (row: ResultRow | undefined): boolean => row !== undefined && RANK[row.outcome.kind] <= RANK.unclear;
+    if (!settled(current) && settled(previous) && previous !== undefined && table.previous !== undefined) {
+        return { row: previous, unit: table.unit, on: table.previous.on, off: table.previous.off };
+    }
+    return current === undefined ? undefined : { row: current, unit: table.unit, on: table.on, off: table.off };
 };

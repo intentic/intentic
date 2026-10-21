@@ -5026,10 +5026,7 @@
             "tokensOverCommands": "~{raw} → ~{emitted} tokenów w {count} poleceniu | ~{raw} → ~{emitted} tokenów w {count} poleceniach | ~{raw} → ~{emitted} tokenów w {count} poleceniach",
             "measuredAgainstHoldout": "{pct}% zmierzone względem grupy kontrolnej",
             "lastCommand": "ostatnie polecenie {ago}",
-            "advanced": "Zaawansowane",
-            "allCleanersOn": "Wszystkie czyściciele włączone ({total})",
             "someCleanersOn": "Włączone czyściciele: {on} z {total}",
-            "heldOutForComparison": "{pct}% poleceń bez czyszczenia, do porównania",
             "breakdown": "Szczegóły →",
             "notCovered": "Bez czyściciela",
             "runs": "{count} uruchomienie | {count} uruchomienia | {count} uruchomień"
@@ -9471,6 +9468,114 @@
             "retentionPeriods": "usuwanie starych czatów, historia, jak długo, przechowywanie, sprzątanie, miejsce na dysku, wygasanie, automatyczne usuwanie, rozmowy",
             "retentionAudit": "dziennik audytu, ślad audytowy, SIEM, przekazywanie logów, eksport logów, kto co otworzył, zgodność",
             "dataProtectionDocuments": "RODO, rejestr czynności przetwarzania, ocena skutków, środki techniczne, dokumentacja zgodności, artykuł 30"
+        },
+        "agentTools": {
+            "simple": "Prosty",
+            "advanced": "Zaawansowany",
+            "detailOf": "Ile pokazać z sekcji {section}"
+        },
+        "resultChip": {
+            "comparedOver": "Porównano na {on} z tym i {off} bez",
+            "noDifference": "Na razie brak wyraźnej różnicy",
+            "measuring": "Trwa pomiar",
+            "measuringProgress": "Trwa pomiar · {have} z {need}",
+            "lower": {
+                "callsBeforeTarget": "o {pct}% mniej kroków do właściwego pliku",
+                "failedCalls": "o {pct}% mniej nieudanych wywołań narzędzi",
+                "openedWithListing": "o {pct}% mniej listowanych katalogów",
+                "openingPrompt": "o {pct}% mniej tokenów promptu",
+                "openingSearches": "o {pct}% mniej wyszukiwań przed otwarciem pliku",
+                "openingWrite": "o {pct}% mniej promptu zapisywanego ponownie",
+                "outputReached": "o {pct}% mniej wyjścia docierającego do agenta",
+                "searchCalls": "o {pct}% mniej wyszukiwań"
+            },
+            "higher": {
+                "callsBeforeTarget": "o {pct}% więcej kroków do właściwego pliku",
+                "failedCalls": "o {pct}% więcej nieudanych wywołań narzędzi",
+                "openedWithListing": "o {pct}% więcej listowanych katalogów",
+                "openingPrompt": "o {pct}% więcej tokenów promptu",
+                "openingSearches": "o {pct}% więcej wyszukiwań przed otwarciem pliku",
+                "openingWrite": "o {pct}% więcej promptu zapisywanego ponownie",
+                "outputReached": "o {pct}% więcej wyjścia docierającego do agenta",
+                "searchCalls": "o {pct}% więcej wyszukiwań"
+            }
+        },
+        "explainers": {
+            "schematic": "Szkic mechanizmu, nie liczby z twojego sandboxa.",
+            "inTheChat": "W czacie",
+            "tokens": "Tokeny",
+            "codeSearch": {
+                "label": "Jak działa wyszukiwanie kodu",
+                "title": "Właściwy plik w mniejszej liczbie kroków",
+                "experience": "Agent szybciej dociera do potrzebnego kodu, więc szybciej zaczyna odpowiadać i mniej błądzi.",
+                "tokens": "Mniej wyszukiwań i odczytów plików na turę. Mapa i notatki kosztują trochę na starcie; niewielka część rozmów działa bez nich, więc oszczędność jest zmierzona, a nie zakładana.",
+                "without": "Bez iq",
+                "with": "Z iq",
+                "rightFile": "właściwy plik",
+                "ridesAlong": "Co towarzyszy rozmowie",
+                "turn": "Tura {turn}"
+            },
+            "commandOutput": {
+                "label": "Jak działa czyszczenie wyjścia poleceń",
+                "title": "Agent czyta wynik, nie cały przewijany log",
+                "experience": "Na twoim ekranie nic się nie zmienia. Agent widzi podsumowanie i błędy, a nie strony postępu.",
+                "tokens": "Wyjście poleceń to większość tego, co czyta tura, a każda jego linia jest opłacana ponownie przy każdym kolejnym zapytaniu w rozmowie.",
+                "printed": "Wypisane",
+                "cleaner": "Filtr",
+                "agentReads": "Agent czyta",
+                "noise": "Postęp, szum",
+                "failure": "Błąd",
+                "summary": "Podsumowanie"
+            },
+            "tokenSavings": {
+                "label": "Jak działa oszczędzanie tokenów",
+                "title": "Co niesie każde zapytanie i co zdejmuje każdy przełącznik",
+                "experience": "Nic do zauważenia: agent wyszukuje narzędzie albo ponownie czyta wyczyszczone wyjście, gdy tylko go potrzebuje.",
+                "tokens": "Każde zapytanie jest mniejsze albo większa jego część jest czytana z pamięci podręcznej dostawcy, co kosztuje ułamek wysłania jej od nowa.",
+                "everyRequest": "Każde zapytanie, domyślnie",
+                "cached": "w cache",
+                "cleared": "wyczyszczone",
+                "part": {
+                    "instructions": "Instrukcje",
+                    "tools": "Opisy narzędzi",
+                    "history": "Rozmowa",
+                    "message": "Nowa wiadomość"
+                }
+            },
+            "repoChecks": {
+                "label": "Jak działają kontrole po edycjach",
+                "title": "Każde repozytorium sprawdza edycje agenta po swojemu",
+                "experience": "Mniej zepsutych edycji trafia do ciebie: to, co znajdzie kontrola, jest poprawiane w tej samej turze, zanim spojrzysz.",
+                "tokens": "Znalezisko dodaje kilka linii do tury, dużo mniej niż kolejna tura spędzona na szukaniu tego samego problemu.",
+                "eachEdit": "Po każdej edycji",
+                "edit": "Edycja",
+                "findings": "Znaleziska",
+                "fixed": "Poprawione",
+                "turnEnds": "Na koniec tury",
+                "endChecks": "Kontrole końca tury",
+                "saidBack": "Przekazane agentowi",
+                "neverBlocks": "Nic tutaj nigdy nie blokuje scalenia, commita ani pusha."
+            },
+            "subagents": {
+                "label": "Jak działają limity subagentów",
+                "title": "Jak szeroko i jak głęboko agent może delegować",
+                "experience": "Duże zadania kończą się szybciej, bo części działają równolegle; limity zatrzymują niekontrolowane rozgałęzienie.",
+                "tokens": "Każdy subagent wydaje z tych samych kont co ty. Miejsce zostawione dla ciebie to część każdego okna limitu, której nie ruszają.",
+                "thisChat": "Ten czat",
+                "window": "Jedno okno limitu",
+                "roomKept": "Zielona część jest zostawiona dla twoich własnych czatów."
+            },
+            "offload": {
+                "label": "Jak ciężka praca trafia na twój komputer",
+                "title": "Ciężkie polecenia działają na twoim komputerze i wracają",
+                "experience": "Testy i sprawdzanie typów przestają spowalniać sandbox; w czacie wyniki wyglądają tak samo.",
+                "tokens": "Bez wpływu na tokeny: zmienia się tylko miejsce, w którym działa polecenie.",
+                "sandbox": "Sandbox",
+                "results": "wyjście, zmienione pliki",
+                "runner": "Twój komputer",
+                "offline": "Runner offline lub zajęty",
+                "runsHere": "działa tutaj, jak wcześniej"
+            }
         }
     },
     "settings": {

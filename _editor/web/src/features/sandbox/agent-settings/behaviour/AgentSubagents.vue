@@ -7,6 +7,9 @@ import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSetting
 import { commitCount } from "../models/numberInputs";
 import { postureOf } from "../../guardrails/spawnPosture";
 import { useT } from "@intentic/ui/i18n";
+import DetailSwitch from "./DetailSwitch.vue";
+import { useDetailLevel } from "./detailLevel";
+import SubagentsExplainer from "./explainers/SubagentsExplainer.vue";
 
 // Three ceilings over one activity, starting subagents, and how long a subagent refused for a spent allowance waits for
 // its reset before it stops instead (childRerunHorizonHours): how wide one fan-out is, the lifetime budget per conversation,
@@ -16,7 +19,11 @@ import { useT } from "@intentic/ui/i18n";
 // box never accepts a number the save would reject. Whether it may spawn one at all (a conversation of its own, on any
 // provider) is a guardrail, set on Guardrails beside every other thing it may do without asking; it led this group
 // until 2026-10-16, and the group still says when it is refused, since that changes what these bound.
+// Simple keeps the two a person weighs (how many at once, how much of the allowance is left for them) and the switch
+// the second depends on; Advanced adds the lifetime ceiling, the nesting depth and the wait for a reset.
 const t = useT();
+const level = useDetailLevel(`subagents`);
+const advanced = computed(() => level.value === `advanced`);
 
 const { settings, patch, refusal } = useSandboxSettings();
 
@@ -33,6 +40,8 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
 
 <template>
     <RowGroup data-setting="agent-subagents" :label="t(`shared.subagents`)" equal-rows>
+        <template #info><SubagentsExplainer /></template>
+        <template #actions><DetailSwitch v-model="level" :label="t(`shared.subagents`)" /></template>
         <RowNote>
             {{ spawnDenied ? t(`sandbox.agentSubagents.spawningRefusedOutright`) : t(`sandbox.agentSubagents.whetherInGuardrails`) }}
             <RouterLink :to="GUARDRAILS" :class="ui.textButton()"
@@ -65,6 +74,7 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
 
         <!-- Bounds a long conversation's total rather than one burst: twenty rounds of five reach the same count as one round of a hundred. -->
         <Row
+            v-if="advanced"
             icon="clone"
             :title="t(`sandbox.agentSubagents.subagentsPerConversation`)"
             :description="t(`sandbox.agentSubagents.totalDelegatedAgentsAllowed`)"
@@ -87,7 +97,12 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
         </Row>
 
         <!-- The only one of the three whose runaway case multiplies rather than widens. -->
-        <Row icon="sitemap" :title="t(`sandbox.agentSubagents.nestingDepth`)" :description="t(`sandbox.agentSubagents.maximumDelegationDepth`)">
+        <Row
+            v-if="advanced"
+            icon="sitemap"
+            :title="t(`sandbox.agentSubagents.nestingDepth`)"
+            :description="t(`sandbox.agentSubagents.maximumDelegationDepth`)"
+        >
             <template #control>
                 <input
                     type="number"
@@ -104,7 +119,12 @@ const GUARDRAILS = { name: `sandbox`, params: { tab: `guardrails` } } as const;
             </template>
         </Row>
         <!-- Nobody watches a subagent, so a spent allowance either waits for the reset by itself or ends and says where else the work can go. -->
-        <Row icon="clock" :title="t(`sandbox.agentSubagents.waitForReset`)" :description="t(`sandbox.agentSubagents.waitForResetHours`)">
+        <Row
+            v-if="advanced"
+            icon="clock"
+            :title="t(`sandbox.agentSubagents.waitForReset`)"
+            :description="t(`sandbox.agentSubagents.waitForResetHours`)"
+        >
             <template #control>
                 <input
                     type="number"

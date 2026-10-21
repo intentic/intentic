@@ -140,7 +140,7 @@ it(`sends an old Safety link to Guardrails`, async () => {
 
 it(`holds delegation under tools`, async () => {
     const { el } = await mount({ section: `tools` });
-    expect(shown(el)).toEqual([`Code search`, `Checks after edits`, `Command output`, `Subagents`, `Where heavy work runs`]);
+    expect(shown(el)).toEqual([`Code search`, `Command output`, `Checks after edits`, `Subagents`, `Where heavy work runs`]);
 });
 
 it(`says under finished work that deleting is Retention's`, async () => {

@@ -4,15 +4,18 @@ import { nextTick, onBeforeUnmount, reactive, ref } from "vue";
 import { placeAnchored } from "../../lib/anchorPlacement.js";
 
 // Visible label beside the icon; use when content shouldn't be discoverable only by hovering.
-const { label, text = `` } = defineProps<{ label: string; text?: string }>();
+// `wide` for a card that draws something (a diagram of how a setting works) rather than a sentence or two.
+const { label, text = ``, wide = false } = defineProps<{ label: string; text?: string; wide?: boolean }>();
 
-const CARD_WIDTH = 288; // Must match the template's `w-72`.
+const NARROW = 288;
+const WIDE = 416;
 const GAP = 8;
 const EDGE = 8;
 
 const trigger = ref<HTMLElement>();
 const card = ref<HTMLElement>();
 const open = ref(false);
+const width = ref(NARROW);
 const pos = reactive({ top: 0, left: 0 });
 
 // Placement's height comes from the rendered card, so this can't happen in one pass; placeAnchored handles flip/clamp,
@@ -24,11 +27,13 @@ const place = (): void => {
         return;
     }
     const rect = el.getBoundingClientRect();
+    // Never wider than the window leaves room for: a wide card on a phone takes the window's width less its edges.
+    width.value = Math.min(wide ? WIDE : NARROW, view.innerWidth - EDGE * 2);
     // Height is 0 before the card renders; the first pass sets the column, a second settles the row after nextTick.
     const height = card.value?.getBoundingClientRect().height ?? 0;
     const placement = placeAnchored({
         anchor: rect,
-        box: { width: CARD_WIDTH, height },
+        box: { width: width.value, height },
         view: { width: view.innerWidth, height: view.innerHeight },
         side: `bottom`,
         cross: `start`,
@@ -97,8 +102,8 @@ onBeforeUnmount(hide);
                 v-if="open"
                 ref="card"
                 role="tooltip"
-                class="pointer-events-none fixed z-[1200] w-72"
-                :style="{ top: `${pos.top}px`, left: `${pos.left}px` }"
+                class="pointer-events-none fixed z-[1200]"
+                :style="{ top: `${pos.top}px`, left: `${pos.left}px`, width: `${width}px` }"
             >
                 <span class="block rounded-xl border border-line-strong bg-overlay p-4 text-left shadow-xl shadow-black/30">
                     <slot />

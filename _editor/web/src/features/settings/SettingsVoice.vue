@@ -32,13 +32,17 @@ const listening = computed(
 );
 
 // Where the word is chosen: the sandbox's own Agent settings, which only a maintainer reaches.
-const wordSettings = `/sandbox/agent?section=tools`;
+const wordSettings = `/sandbox/agent?section=tools#setting-agent-voice`;
 </script>
 
 <template>
     <div class="flex flex-col gap-6">
         <RowGroup data-setting="wake-word" :label="t(`settings.settingsVoice.group`)">
-            <Row icon="microphone" :title="t(`settings.settingsVoice.listen`, { word })" :description="t(`settings.settingsVoice.listenNote`, { word })">
+            <Row
+                icon="microphone"
+                :title="t(`settings.settingsVoice.listen`, { word })"
+                :description="t(`settings.settingsVoice.listenNote`, { word })"
+            >
                 <template #control>
                     <ToggleSwitch
                         :model-value="listener.enabled.value"
@@ -49,7 +53,9 @@ const wordSettings = `/sandbox/agent?section=tools`;
             </Row>
             <Row v-if="status !== undefined" :icon="status.icon" :title="status.label" :description="status.detail" indent>
                 <template #control>
-                    <Button v-if="listening" size="small" thumb tier="quiet" @click="listener.pause(60)">{{ t(`settings.settingsVoice.pause`) }}</Button>
+                    <Button v-if="listening" size="small" thumb tier="quiet" @click="listener.pause(60)">{{
+                        t(`settings.settingsVoice.pause`)
+                    }}</Button>
                     <Button v-else-if="paused" size="small" thumb tier="quiet" @click="listener.resume()">{{
                         t(`settings.settingsVoice.resume`)
                     }}</Button>

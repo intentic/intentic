@@ -4,6 +4,7 @@ import { computed } from "vue";
 import { useRepoChecks } from "../../../../models/sandbox/environment/useRepoChecks";
 import RepoCheckRow from "../../../../components/RepoCheckRow.vue";
 import { useT } from "@intentic/ui/i18n";
+import RepoChecksExplainer from "./explainers/RepoChecksExplainer.vue";
 
 const t = useT();
 
@@ -21,6 +22,7 @@ const waiting = computed(() => (repos.value ?? []).filter((entry) => !entry.adop
     <Await :of="loaded" imprint="sandbox.agent.repo-checks" :label="t(`sandbox.agentRepoChecks.readingWhatWorkspacesRepositories`)">
         <template #default="{ data: repos, refreshError }">
             <RowGroup data-setting="agent-repo-checks" :label="t(`sandbox.agentRepoChecks.checksAfterEdits`)">
+                <template #info><RepoChecksExplainer /></template>
                 <Row
                     v-if="refreshError !== undefined"
                     icon="exclamation-triangle"
@@ -68,7 +70,12 @@ const waiting = computed(() => (repos.value ?? []).filter((entry) => !entry.adop
         </template>
         <template #failed="{ error }">
             <RowGroup :label="t(`sandbox.agentRepoChecks.checksAfterEdits`)">
-                <Row icon="exclamation-triangle" tone="danger" :title="t(`sandbox.agentRepoChecks.couldntReadWhatRepositories`)" :description="error" />
+                <Row
+                    icon="exclamation-triangle"
+                    tone="danger"
+                    :title="t(`sandbox.agentRepoChecks.couldntReadWhatRepositories`)"
+                    :description="error"
+                />
             </RowGroup>
         </template>
     </Await>

@@ -5501,10 +5501,7 @@
             "tokensOverCommands": "~{raw} → ~{emitted} tokens over {count} command | ~{raw} → ~{emitted} tokens over {count} commands",
             "measuredAgainstHoldout": "{pct}% measured against the holdout",
             "lastCommand": "last command {ago}",
-            "advanced": "Advanced",
-            "allCleanersOn": "All {total} cleaners on",
             "someCleanersOn": "{on} of {total} cleaners on",
-            "heldOutForComparison": "{pct}% of commands left uncleaned for comparison",
             "breakdown": "Breakdown →",
             "notCovered": "No cleaner covers",
             "runs": "{count} run | {count} runs"
@@ -9946,6 +9943,114 @@
             "retentionPeriods": "delete old chats, history, how long, keep, cleanup, storage, disk space, expire, auto delete, conversations",
             "retentionAudit": "audit trail, audit log, siem, forward logs, export logs, who opened what, compliance",
             "dataProtectionDocuments": "gdpr, records of processing, impact assessment, technical measures, compliance paperwork, article 30"
+        },
+        "agentTools": {
+            "simple": "Simple",
+            "advanced": "Advanced",
+            "detailOf": "How much of {section} to show"
+        },
+        "resultChip": {
+            "comparedOver": "Compared over {on} with it and {off} without",
+            "noDifference": "No clear difference yet",
+            "measuring": "Measuring",
+            "measuringProgress": "Measuring · {have} of {need}",
+            "lower": {
+                "callsBeforeTarget": "{pct}% fewer steps to the right file",
+                "failedCalls": "{pct}% fewer failed tool calls",
+                "openedWithListing": "{pct}% fewer listed directories",
+                "openingPrompt": "{pct}% fewer prompt tokens",
+                "openingSearches": "{pct}% fewer searches before opening a file",
+                "openingWrite": "{pct}% less prompt written again",
+                "outputReached": "{pct}% less output reaching the agent",
+                "searchCalls": "{pct}% fewer searches"
+            },
+            "higher": {
+                "callsBeforeTarget": "{pct}% more steps to the right file",
+                "failedCalls": "{pct}% more failed tool calls",
+                "openedWithListing": "{pct}% more listed directories",
+                "openingPrompt": "{pct}% more prompt tokens",
+                "openingSearches": "{pct}% more searches before opening a file",
+                "openingWrite": "{pct}% more prompt written again",
+                "outputReached": "{pct}% more output reaching the agent",
+                "searchCalls": "{pct}% more searches"
+            }
+        },
+        "explainers": {
+            "schematic": "A sketch of the mechanism, not your sandbox's numbers.",
+            "inTheChat": "In the chat",
+            "tokens": "Tokens",
+            "codeSearch": {
+                "label": "How code search works",
+                "title": "Finding the right file in fewer steps",
+                "experience": "The agent gets to the code it needs sooner, so answers start sooner and wander less.",
+                "tokens": "Fewer searches and file reads per turn. The map and the notes cost a little up front; a small share of conversations runs without them, so the saving is measured rather than assumed.",
+                "without": "Without iq",
+                "with": "With iq",
+                "rightFile": "right file",
+                "ridesAlong": "What rides along in a conversation",
+                "turn": "Turn {turn}"
+            },
+            "commandOutput": {
+                "label": "How command output cleaning works",
+                "title": "The agent reads the result, not the scroll",
+                "experience": "Nothing changes on your screen. The agent sees the summary and the failures, not pages of progress output.",
+                "tokens": "Command output is the bulk of what a turn reads, and every line of it is paid for again on each later request of the conversation.",
+                "printed": "Printed",
+                "cleaner": "Cleaner",
+                "agentReads": "Agent reads",
+                "noise": "Progress, noise",
+                "failure": "Failure",
+                "summary": "Summary"
+            },
+            "tokenSavings": {
+                "label": "How the token savings work",
+                "title": "What every request carries, and what each switch takes off",
+                "experience": "Nothing to notice: the agent looks up a tool, or reads cleared output again, the moment it needs it.",
+                "tokens": "Each request is smaller, or more of it is read from the provider's cache, which costs a fraction of sending it fresh.",
+                "everyRequest": "Every request, by default",
+                "cached": "cached",
+                "cleared": "cleared",
+                "part": {
+                    "instructions": "Instructions",
+                    "tools": "Tool descriptions",
+                    "history": "Conversation",
+                    "message": "New message"
+                }
+            },
+            "repoChecks": {
+                "label": "How checks after edits work",
+                "title": "Each repository checks the agent's edits its own way",
+                "experience": "Fewer broken edits reach you: what a check finds is fixed in the same turn, before you look.",
+                "tokens": "A finding adds a few lines to the turn, far less than a later turn spent finding the same problem.",
+                "eachEdit": "After each edit",
+                "edit": "Edit",
+                "findings": "Findings",
+                "fixed": "Fixed",
+                "turnEnds": "As a turn ends",
+                "endChecks": "Turn-end checks",
+                "saidBack": "Said back to the agent",
+                "neverBlocks": "Nothing here ever blocks a land, a commit or a push."
+            },
+            "subagents": {
+                "label": "How subagent limits work",
+                "title": "How wide and how deep the agent may delegate",
+                "experience": "Big jobs finish sooner because parts run side by side; the limits stop a runaway fan-out.",
+                "tokens": "Every subagent spends from the same accounts you do. The room kept for you is a share of each allowance window they leave alone.",
+                "thisChat": "This chat",
+                "window": "One allowance window",
+                "roomKept": "The green share is kept for your own chats."
+            },
+            "offload": {
+                "label": "How heavy work moves to your machine",
+                "title": "Heavy commands run on your machine and come back",
+                "experience": "Tests and typechecks stop slowing the sandbox down; in the chat the results look the same.",
+                "tokens": "No effect on tokens: only where the command runs changes.",
+                "sandbox": "Sandbox",
+                "results": "output, changed files",
+                "runner": "Your machine",
+                "offline": "Runner offline or busy",
+                "runsHere": "runs here instead, as before"
+            }
         }
     },
     "settings": {

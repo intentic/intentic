@@ -113,12 +113,7 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
     <!-- `@container`: every category below thins against this pane, which the docked chat can leave a third of the window's width. -->
     <div class="@container flex flex-col gap-6">
         <!-- Tabs, as every page's parts are (Privacy & safety's, Activity's): as pills they read as one more setting beside the settings they open. -->
-        <SegmentedControl
-            v-model="section"
-            :options="SECTIONS"
-            variant="underline"
-            :aria-label="t(`sandbox.sandboxAgent.agentSettingsCategory`)"
-        />
+        <SegmentedControl v-model="section" :options="SECTIONS" variant="underline" :aria-label="t(`sandbox.sandboxAgent.agentSettingsCategory`)" />
 
         <!-- Page-level so it sits above whichever category is showing; every control below is inert while the read is pending or failed. -->
         <Notice v-if="settingsBlocked" :of="settingsBlocked" />
@@ -145,21 +140,20 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
             <AgentMemoryImport />
         </template>
 
-        <!-- Finding code, feedback after edits, command output, then how much of the job it may delegate. -->
+        <!-- Simplest and most-met first, deepest last: how it answers you (pages, voice), what it can find (documents, then
+             code), what a turn costs (command output, then what every request carries), how its edits are checked, how
+             far it may delegate, and last where the heaviest of it runs, which only matters once a machine has a runner.
+             Each section with tuning behind its switches has a Simple | Advanced pair of its own (detailLevel.ts), and
+             each that takes explaining has an (i) that draws how it works. -->
         <template v-else-if="section === `tools`">
-            <AgentCodeSearch />
-            <!-- Beside code search: the same searches reaching into PDFs, Word files and spreadsheets. -->
-            <AgentDocumentSearch />
-            <AgentRepoChecks />
-            <AgentCommandOutput />
-            <!-- Beside it, the other thing every request carries whether or not the agent needs it: tool descriptions. -->
-            <AgentToolLoading />
-            <!-- What it may answer with besides words: a page drawn in the chat, or one it asks on. -->
             <AgentChatPages />
-            <!-- Beside it, the other way it answers besides text: out loud, when you talk to it hands-free. -->
             <AgentVoice />
+            <AgentDocumentSearch />
+            <AgentCodeSearch />
+            <AgentCommandOutput />
+            <AgentToolLoading />
+            <AgentRepoChecks />
             <AgentSubagents />
-            <!-- Last: not what it may reach for but where the heaviest of it runs, which only matters once a machine has a runner. -->
             <AgentOffload />
         </template>
 
