@@ -79,8 +79,9 @@ into the landed commit, and CI's push check reads it there.
 
 Derived files are never yours to carry: the contract's `contract.lock.json`, the stored shapes (`state-shapes.json`)
 and the daemon's generated indexes are marked `merge=derived` in `.gitattributes`. A land leaves them out of its patch
-and the repository's fixers (`_tools/scripts/verify/fixers.mjs`, its `DERIVED` table) write them again in the tree the
-work lands in, from what landed; a rebase keeps the side it lands on, so none of them is ever a conflict. Regenerate one
+and once the land is over the repository's derived writers (`_tools/scripts/verify/fixers.mjs --only derived`, its
+`DERIVED` table) write them again in the tree the work landed in, from what landed, in the background; a rebase keeps
+the side it lands on, so none of them is ever a conflict. Regenerate one
 in your own tree only to run its tests there: `pnpm --filter @intentic/sandbox-contract lock`, `pnpm indexes` and
 `bun --conditions=@intentic/src src/store/shapes/write-state-shapes.ts --freeze` in `_sandbox/sandbox`, all from
 source with no build first. A removal from the contract still needs its `!` and `Breaking-Note:`; the drafted commit

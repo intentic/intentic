@@ -14,7 +14,7 @@ import { withConversationTrailer } from "../../git-identity.js";
 import { writeChangesPatch, writePatch } from "./patch/land-patch.js";
 import { reconcileLockfile } from "./lockfile-reconcile.js";
 import { applies, changesByPath, changesNamedIn, type DeltaChange, deltaChangeOf, deltaChanges, gitSaid, refusal } from "./patch/apply-refusal.js";
-import { type Rederived, rederiveAll, UNDERIVED } from "./rederive.js";
+import { type RederiveWrite, rederiveWrites, UNDERIVED } from "./rederive.js";
 import { planThreeWay, type ThreeWay, unwrittenThreeWay, writeThreeWay } from "./patch/three-way.js";
 import { opt } from "../../opt.js";
 import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
@@ -44,8 +44,9 @@ export interface LandOutcome extends LandResult {
     readonly adjudicated: boolean;
     // Repos whose lockfile could not be regenerated for a manifest the delta changed; the land went ahead without it.
     readonly lockfileFailures?: readonly LockfileFailure[];
-    // What each written repo's own fixers derived again in the tree the land wrote into (rederive.ts).
-    readonly derived?: readonly Rederived[];
+    // Each repo the land wrote into the main tree, for its derived files to be written again there once the land is
+    // over (rederive.ts afterLand): never inside it, which is a git operation only.
+    readonly rederive?: readonly RederiveWrite[];
     // A landed tip moved with nothing written: a net-zero delta (an edit and its revert). The books must keep it or a
     // later land re-reports the delta, but `changed` stays false: nothing reached a tree, so nothing is announced.
     readonly advanced?: true;
@@ -623,9 +624,9 @@ export const landAgent = async (
                 if (written.conflicts.length > 0) {
                     return { landed: false, changed, repos: written.repos, diff, adjudicated: true, conflicts: written.conflicts, ...resolving, ...target };
                 }
-                // Every write went through, under the same locks: the tree it wrote derives its own files (rederive.ts).
-                const derived = opt("derived", await rederiveAll(plannings.flatMap(({ plan }) => (plan.write === undefined ? [] : [plan.write])), git));
-                return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...derived, ...target };
+                // Every write went through: the main tree derives its own files from them, after this land (rederive.ts).
+                const rederive = opt("rederive", into === undefined ? rederiveWrites(plannings.map(({ plan }) => plan.write)) : undefined);
+                return { landed: !held, changed, repos: written.repos, diff, adjudicated, ...advanced, ...resolving, ...(held ? { held: true } : {}), ...rederive, ...target };
             },
         );
         return lockfileFailures.length === 0 ? outcome : { ...outcome, lockfileFailures };

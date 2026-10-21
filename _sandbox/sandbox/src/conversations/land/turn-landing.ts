@@ -2,7 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import { landAgent, type LandOutcome } from "./land.js";
-import { reportLandRepairs } from "./rederive.js";
+import { afterLand } from "./rederive.js";
 import { landFailureOf } from "./land-failure.js";
 import { intoOf, type LandTarget, landTargetOf, type Upstream, upstreamOf, underLeases } from "./land-target.js";
 import { landingPaths } from "./landing-paths.js";
@@ -17,9 +17,9 @@ import { opt } from "../../opt.js";
 
 // A finished isolated turn's land, step 4 of the turn's close (turn-close.ts). Whether its work reaches the main tree or
 // waits on its branch is decided purely, from the rules and the paths it touched; no check holds it, and none runs after
-// it either: CI checks what the owner pushes. The land runs as the sequence below: decide, land under the lease (which
-// writes the repository's derived files again where the work lands, rederive.ts), record, reconcile the installed
-// tree, announce. A spawned child's work goes
+// it either: CI checks what the owner pushes. The land runs as the sequence below: decide, land under the lease (a git
+// operation only; the repository's derived files are written again where the work landed after it, in the background,
+// rederive.ts), record, reconcile the installed tree, announce. A spawned child's work goes
 // into its parent's checkout instead (land-target.ts), as the parent's in-process subagents' edits do: no rule decides
 // that, and nothing of the main tree's after-land (its version commit, its installed tree, its announcements) follows.
 
@@ -152,7 +152,7 @@ const landUnderLease = async (
     const outcome = await deps.perf.track("agent.land", { id, mode, span: "outstanding" }, () =>
         landAgent(deps.agentWorktrees, landing, mode, "outstanding", intoOf(target)),
     );
-    reportLandRepairs(deps.logger, id, outcome);
+    afterLand(deps, id, outcome);
     return outcome;
 };
 
@@ -303,7 +303,7 @@ export const settleLandBooks = async (
                 landAgent(deps.agentWorktrees, entry, "measure", "outstanding", into),
             ),
         );
-        reportLandRepairs(deps.logger, conversationId, measured);
+        afterLand(deps, conversationId, measured);
         if (measured.changed || measured.advanced === true) {
             await deps.agents.recordLanded(conversationId, measured);
         }

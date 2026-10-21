@@ -156,7 +156,7 @@ describe("a turn that may not land", () => {
         expect(await takeLandHeldForWake(deps, "c")).toBeUndefined();
     });
 
-    // Nothing runs in the worktree first: what the repository derives is written where the work lands (rederive.ts).
+    // Nothing runs in the worktree first: what the repository derives is written where the work landed, after (rederive.ts).
     test("awaiting nothing, the same turn goes straight on to decide its land", async () => {
         const deps = await registered(true);
         const turn = { conversationId: "c", prompt: "p", autoLand: true, failed: false, aborted: false, awaitingWake: false, sync: async () => [] };

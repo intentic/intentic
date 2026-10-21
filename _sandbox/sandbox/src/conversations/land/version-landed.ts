@@ -12,6 +12,7 @@ import { standing } from "../../rules/rules.js";
 import { reposOf } from "../registry/agents-store.js";
 import { landMarksOf } from "../registry/land-marks.js";
 import { conversationTrailers, describeLanding } from "./landed-subject.js";
+import { rederiveSettled } from "./rederive.js";
 import { opt } from "../../opt.js";
 
 // The `version-landed` built-in at `agent.landed`: keeps the main tree committed for a person who never commits.
@@ -165,6 +166,10 @@ export const settleLanding = async (
         if (rule === undefined) {
             return;
         }
+        // The derived files are written after the land, in the background (rederive.ts): the commit waits for them, so
+        // they ride the commit of the work they were derived from. Seconds, and usually over while the draft was written.
+        const entry = services.agents.entry(id);
+        await rederiveSettled(entry === undefined ? [] : reposOf(entry).map((composed) => services.agentWorktrees.mainDir(composed.repo)));
         const committed = await commitClaim(services, id, drafted);
         if (committed.length === 0) {
             return;

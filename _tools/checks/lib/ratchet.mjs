@@ -4,9 +4,9 @@ import { isLinkedWorktree, root, subjectScope } from "./repo.mjs";
 
 /* A RATCHET READS ITS BASELINE AND NEVER WRITES IT DURING A CHECK. Three explicit commands write one, each naming what
    earned the move:
-   - `--tighten a,b,c` lowers the entries those paths touch to what the tree holds. The fixers a conversation's
-     worktree runs before its land pass the change's own paths (fixers.mjs), so a lower count is written by the change
-     that earned it and by nothing else. A whole-tree check run only says the tree beats the baseline.
+   - `--tighten a,b,c` lowers the entries those paths touch to what the tree holds. fixers.mjs passes the change's own
+     paths, so a lower count is written by the change that earned it and by nothing else. A whole-tree check run only
+     says the tree beats the baseline.
    - `--write-baseline --reason "<why>"` adopts the whole tree's findings, in the primary checkout only.
    - `layout.mjs --allow <dir> --reason "<why>"` records one key (`allowOne`).
    Growth is always declared: an entry raised by adoption or `--allow` carries its reason in the baseline. */
@@ -182,7 +182,7 @@ export const ratchet = (check, name, found, { touchedBy = underKey, lent = new M
     const lending = new Set([...lent.values()].map(({ from }) => from));
     const { lowered: beaten } = tightenedOf(baseline, found, (key) => (scope === undefined || scope.has(key)) && !lending.has(key));
     if (beaten.length > 0) {
-        console.log(`${check}: the tree beats baselines/${name}.json (${beaten.join(", ")}), and \`--tighten <the paths that shrank them>\` lowers it, which fixers.mjs runs before a worktree's land`);
+        console.log(`${check}: the tree beats baselines/${name}.json (${beaten.join(", ")}), and \`--tighten <the paths that shrank them>\` lowers it, which fixers.mjs runs for a change`);
     }
     return { grown, baseline, beaten };
 };

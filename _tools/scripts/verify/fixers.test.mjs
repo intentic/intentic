@@ -1,5 +1,5 @@
 // Pins which crates a change set touches, which baselines a change may lower, and which derived files it writes again,
-// since all of them run unasked wherever a land writes.
+// since the derived writers run unasked after every land, where it wrote (`--only derived`), and the rest by hand.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -76,7 +76,7 @@ test("every file .gitattributes marks derived has a writer, and every writer's f
     assert.deepEqual(marked.toSorted(), DERIVED.flatMap((writer) => writer.writes).toSorted());
 });
 
-test("every check that keeps a baseline says so in the manifest, so the fixers where a land writes can tighten it", () => {
+test("every check that keeps a baseline says so in the manifest, so the fixers can tighten it", () => {
     const checks = join(repoRoot(import.meta.url), "_tools/checks");
     // A check keeps one by calling ratchet() itself, or by running a door rule that is ratcheted (lib/doors.mjs).
     const keeps = (source) =>
@@ -85,7 +85,7 @@ test("every check that keeps a baseline says so in the manifest, so the fixers w
     assert.deepEqual(CHECKS.filter((check) => check.ratchet === true).map(({ id }) => id), keeping);
 });
 
-test("a land whose paths are unknown or empty tightens nothing", () => {
+test("a change whose paths are unknown or empty tightens nothing", () => {
     assert.deepEqual(tightenBaselines(tmpdir(), undefined), []);
     assert.deepEqual(tightenBaselines(tmpdir(), []), []);
 });
@@ -128,6 +128,7 @@ test("the worktree entry refuses without a tree and one change list, and answers
     assert.equal(run("--paths", "a.ts").status, 2);
     assert.equal(run("--worktree", tmpdir(), "--paths", "a.ts").status, 2);
     assert.equal(run("--worktree", ".", "--paths", "a.ts", "--since", "HEAD").status, 2);
+    assert.equal(run("--worktree", repoRoot(import.meta.url), "--paths", "a.ts", "--only", "rustfmt").status, 2);
     const root = mkdtempSync(join(tmpdir(), "fix-change-"));
     try {
         spawnSync("git", ["init", "-q"], { cwd: root });
@@ -135,6 +136,12 @@ test("the worktree entry refuses without a tree and one change list, and answers
         // Nothing the change touched has a fixer, so nothing runs and nothing is written, however often it is asked.
         assert.deepEqual(fixChange(root, ["README.md"]), { ran: [], wrote: [] });
         assert.deepEqual(fixChange(root, ["README.md"]), { ran: [], wrote: [] });
+        // What runs after a land: the derived writers alone, so a crate it touched is not formatted there.
+        mkdirSync(join(root, "c/src"), { recursive: true });
+        writeFileSync(join(root, "c/Cargo.toml"), '[package]\nname = "c"\nversion = "0.0.0"\nedition = "2021"\n');
+        writeFileSync(join(root, "c/src/lib.rs"), "pub fn  f( ){}\n");
+        assert.deepEqual(fixChange(root, ["c/src/lib.rs"], "derived"), { ran: [], wrote: [] });
+        assert.equal(readFileSync(join(root, "c/src/lib.rs"), "utf8"), "pub fn  f( ){}\n");
     } finally {
         rmSync(root, { recursive: true, force: true });
     }

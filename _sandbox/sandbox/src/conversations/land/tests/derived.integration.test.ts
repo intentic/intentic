@@ -17,20 +17,30 @@ import { workspacePaths } from "../../../workspace/workspace.js";
 import { presenceOf } from "../agent-changes.js";
 import { landAgent } from "../land.js";
 import { createAgentOrigins } from "../origins.js";
-import { REPO_FIXERS } from "../rederive.js";
+import { afterLand, REPO_FIXERS, rederiveSettled, scheduleRederive } from "../rederive.js";
 import { syncConversation } from "../sync.js";
 
 // A file the repository marks `merge=derived` is a function of the tree it sits in. The evidence this pins: in two weeks
 // of October, 21 lands were refused on intentic's contract.lock.json alone, each a pair of conversations that had both
 // moved the contract, and five of main's CI runs failed on a lock nobody had written again. Here `derived.txt` is every
 // file of `src/` in name order, and the repository's own fixers (a stand-in for _tools/scripts/verify/fixers.mjs) write
-// it. Two lines next to each other, so two conversations that each moved one of them cannot both apply as text.
+// it. Two lines next to each other, so two conversations that each moved one of them cannot both apply as text. The
+// land itself is a git operation only: the writers run after it, in the background (afterLand), and the tests wait for
+// them with rederiveSettled, as a version commit does.
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
 const commit = (cwd: string, message: string): Promise<string> => sh(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-am", message);
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 const perf = createPerfTracker(logger);
+
+// What a door does once the land's lease is released, and the wait a version commit makes before it commits.
+const landThenDerive = async (worktrees: AgentWorktrees, work: string, entry: Parameters<typeof landAgent>[1]) => {
+    const landed = await landAgent(worktrees, entry);
+    afterLand({ agentWorktrees: worktrees, logger }, entry.id, landed);
+    await rederiveSettled([work]);
+    return landed;
+};
 
 const FIXERS = `import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -84,12 +94,13 @@ test("two conversations that both moved a derived file land one after the other,
     await write(first.cwd, { "src/a.txt": "a1\n", "derived.txt": "a1\nb\n" });
     await write(second.cwd, { "src/b.txt": "b2\n", "derived.txt": "a\nb2\n" });
 
-    const landedFirst = await landAgent(worktrees, isolatedAgent(first.repos));
+    const landedFirst = await landThenDerive(worktrees, work, isolatedAgent(first.repos));
     expect(landedFirst.landed).toBe(true);
-    expect(landedFirst.derived).toEqual([{ repo: "root", ran: ["derived"], wrote: ["derived.txt"] }]);
+    expect(landedFirst.rederive?.map(({ repo, main }) => ({ repo, main }))).toEqual([{ repo: "root", main: work }]);
+    expect(await readFile(join(work, "derived.txt"), "utf8")).toBe("a1\nb\n");
 
     // As text the second copy cannot apply over the first (its context line `a` is `a1` now): no land carries it.
-    const landedSecond = await landAgent(worktrees, isolatedAgent(second.repos, { id: "c2" }));
+    const landedSecond = await landThenDerive(worktrees, work, isolatedAgent(second.repos, { id: "c2" }));
     expect(landedSecond.conflicts).toBeUndefined();
     expect(landedSecond.landed).toBe(true);
     expect(await readFile(join(work, "src/b.txt"), "utf8")).toBe("b2\n");
@@ -101,19 +112,84 @@ test("a branch's stale copy of a derived file never reaches the tree it lands in
     const conversation = await worktrees.ensure("c1", []);
     // The agent moved a source and left the derived file as it found it.
     await write(conversation.cwd, { "src/a.txt": "a1\n", "derived.txt": "left behind\n" });
-    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    const landed = await landThenDerive(worktrees, work, isolatedAgent(conversation.repos));
     expect(landed.landed).toBe(true);
     expect(await readFile(join(work, "derived.txt"), "utf8")).toBe("a1\nb\n");
+});
+
+test("a land is a git operation: it returns with its patch in the tree and no fixer run, and the writers run after", async () => {
+    const { work, worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    await write(conversation.cwd, { "src/a.txt": "a1\n" });
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    expect(landed.landed).toBe(true);
+    expect(await readFile(join(work, "src/a.txt"), "utf8")).toBe("a1\n");
+    // Nothing derived yet: the land ran no fixer, under its locks or anywhere else.
+    expect(await readFile(join(work, "derived.txt"), "utf8")).toBe("a\nb\n");
+    afterLand({ agentWorktrees: worktrees, logger }, "c1", landed);
+    await rederiveSettled([work]);
+    expect(await readFile(join(work, "derived.txt"), "utf8")).toBe("a1\nb\n");
+});
+
+test("lands that come while the writers run are folded into one next run, under the repo lock", async () => {
+    const { work, worktrees } = await setup();
+    const first = await worktrees.ensure("c1", []);
+    const second = await worktrees.ensure("c2", []);
+    const third = await worktrees.ensure("c3", []);
+    await write(first.cwd, { "src/a.txt": "a1\n" });
+    await write(second.cwd, { "src/b.txt": "b2\n" });
+    await write(third.cwd, { "src/c.txt": "c3\n" });
+    const runs: string[][] = [];
+    const locked: boolean[] = [];
+    const { promise: started, resolve: start } = Promise.withResolvers<void>();
+    const { promise: released, resolve: release } = Promise.withResolvers<void>();
+    const run = async (_dir: string, pathsFile: string): Promise<string> => {
+        runs.push((await readFile(pathsFile, "utf8")).split("\n"));
+        // The first run is held, so the next two lands come while it is going.
+        if (runs.length === 1) {
+            start();
+            await released;
+        }
+        // Under the repo lock: a land into the same repo cannot be writing the tree now.
+        locked.push(worktrees.repoBusy("root"));
+        return JSON.stringify({ ran: [], wrote: [] });
+    };
+    // Landed first: a land takes the repo lock a run holds, so one pressed during the held run would wait it out.
+    const one = await landAgent(worktrees, isolatedAgent(first.repos));
+    const two = await landAgent(worktrees, isolatedAgent(second.repos, { id: "c2" }));
+    const three = await landAgent(worktrees, isolatedAgent(third.repos, { id: "c3" }));
+    // Each hand-off reads its delta's paths first; the held run is released once the later two are both queued.
+    let read = 0;
+    const { promise: bothRead, resolve: readBoth } = Promise.withResolvers<void>();
+    const git: typeof defaultGit = async (cwd, args, options) => {
+        const answer = await defaultGit(cwd, args, options);
+        read += 1;
+        if (read === 3) {
+            readBoth();
+        }
+        return answer;
+    };
+    const handOff = (id: string, outcome: typeof one): void => scheduleRederive({ agentWorktrees: worktrees, logger }, id, outcome.rederive ?? [], git, run);
+    handOff("c1", one);
+    await started;
+    handOff("c2", two);
+    handOff("c3", three);
+    await bothRead;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    await rederiveSettled([work]);
+    expect(runs).toEqual([["src/a.txt"], ["src/b.txt", "src/c.txt"]]);
+    expect(locked).toEqual([true, true]);
 });
 
 test("a derived path reads as landed, and while it differs from HEAD it is the newest landing's alone", async () => {
     const { work, worktrees } = await setup();
     const first = await worktrees.ensure("c1", []);
     await write(first.cwd, { "src/a.txt": "a1\n", "derived.txt": "mine\n" });
-    const landedFirst = await landAgent(worktrees, isolatedAgent(first.repos));
+    const landedFirst = await landThenDerive(worktrees, work, isolatedAgent(first.repos));
     const second = await worktrees.ensure("c2", []);
     await write(second.cwd, { "src/b.txt": "b2\n" });
-    const landedSecond = await landAgent(worktrees, isolatedAgent(second.repos, { id: "c2" }));
+    const landedSecond = await landThenDerive(worktrees, work, isolatedAgent(second.repos, { id: "c2" }));
 
     // The branch's own copy differs from the tree's, and still counts as in it: the tree wrote its own.
     const tip = await sh(first.cwd, "rev-parse", "HEAD");

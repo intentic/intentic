@@ -7,7 +7,7 @@ import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { agentBranchTips } from "../../git/agent-refs.js";
 import { type IsolatedAgent, isIsolated, type RepoRecord } from "../registry/agents-store.js";
 import { landAgent, type LandOutcome } from "./land.js";
-import { reportLandRepairs } from "./rederive.js";
+import { afterLand } from "./rederive.js";
 import { intoOf, type LandTarget, landTargetOf, recordedTargetOf, upstreamOf, underLeases } from "./land-target.js";
 import { keepLandFailure, settleParentBooks } from "./turn-landing.js";
 import { syncBeforeLand } from "./sync.js";
@@ -79,7 +79,7 @@ export const landByHand = async (services: LandByHandDeps, entry: IsolatedAgent,
             await keepLandFailure(services, entry.id, cause);
             throw cause;
         });
-    reportLandRepairs(services.logger, entry.id, result);
+    afterLand(services, entry.id, result);
     // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
     await services.agents.recordLanded(entry.id, result);
     // A spawned child's parent, still supervising, is told its press met a conflict and nothing reached the tree. A

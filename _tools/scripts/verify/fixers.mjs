@@ -1,9 +1,12 @@
-// What a machine can decide about a change, written into the tree so no model has to type it. Every land runs these in
-// the tree it writes into, on what it landed (the sandbox's conversations/land/rederive.ts), so a derived file there is
-// always the one that tree's sources make, and a lowered baseline is written for the change that earned it. By hand
-// they do the same for any checkout of this repository:
+// What a machine can decide about a change, written into the tree so no model has to type it. By hand they run in any
+// checkout of this repository:
 //
 //   node _tools/scripts/verify/fixers.mjs --worktree <dir> --paths a,b,c     (or --paths-file <file>, or --since <rev>)
+//
+// `--only derived` runs just the DERIVED writers. That is all the sandbox runs after a land, in the background and
+// never as part of the land itself (the sandbox's conversations/land/rederive.ts): a land is a git operation, and the
+// derived files it leaves out are written again from what landed. rustfmt and the ratchet's `--tighten` take the whole
+// tree tens of seconds, so they stay commands a person or CI runs.
 //
 // Every fixer is scoped to the change and idempotent: a second run writes nothing. It prints one JSON line on stdout,
 // `{"ran":[…],"wrote":[…]}`, the fixers that ran and the repo-relative paths whose content moved, and exits 0; a bad
@@ -73,7 +76,7 @@ export const tightenBaselines = (root, changed) => {
 
 // Each derived file's writer: the changed paths that call for it, and the command that writes it, run from `cwd`. What
 // `writes` names is `merge=derived` in .gitattributes, so no land carries it and a rebase keeps the side it lands on;
-// a land runs this in the tree it writes into instead. The layer tables and the translations are the exception: a
+// after a land the sandbox runs these (and only these) in the tree it wrote into instead. The layer tables and the translations are the exception: a
 // generated region inside a hand-written README, and what a machine may decide about a hand-written catalog (dropping
 // what English no longer has), both merged like the rest of the file. In this order: the shapes freeze reads the registry the daemon's
 // indexes write.
@@ -159,16 +162,19 @@ export const writeDerived = (root, changed) =>
 
 /**
  * Every machine fixer scoped to `changed` (repo-relative paths), in `root`: rustfmt on the crates it touched, the
- * ratcheted baselines it beat, and every derived file whose sources it reached (DERIVED). Answers which ran and which
- * paths they wrote.
+ * ratcheted baselines it beat, and every derived file whose sources it reached (DERIVED); with `only` "derived", just
+ * the last. Answers which ran and which paths they wrote.
  */
-export const fixChange = (root, changed) => {
+export const fixChange = (root, changed, only = undefined) => {
     const before = dirtyContents(root);
     const ran = [];
-    if (rustfmtAvailable(root) && formatCrates(root, touchedCrates(root, changed)).length > 0) {
-        ran.push("rustfmt");
+    if (only !== "derived") {
+        if (rustfmtAvailable(root) && formatCrates(root, touchedCrates(root, changed)).length > 0) {
+            ran.push("rustfmt");
+        }
+        ran.push(...tightenBaselines(root, changed));
     }
-    ran.push(...tightenBaselines(root, changed), ...writeDerived(root, changed));
+    ran.push(...writeDerived(root, changed));
     const after = dirtyContents(root);
     const wrote = [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).toSorted();
     return { ran, wrote };
@@ -185,8 +191,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     const listed = argument(args, "--paths");
     const listFile = argument(args, "--paths-file");
     const since = argument(args, "--since");
+    const only = argument(args, "--only");
     if (worktree === undefined || [listed, listFile, since].filter((given) => given !== undefined).length !== 1) {
         process.stderr.write("fixers: --worktree <dir> and exactly one of --paths a,b / --paths-file <file> / --since <rev>\n");
+        process.exit(2);
+    }
+    if (only !== undefined && only !== "derived") {
+        process.stderr.write(`fixers: --only takes "derived", not ${only}\n`);
         process.exit(2);
     }
     const root = resolve(worktree);
@@ -202,5 +213,5 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
         process.stderr.write(`fixers: git could not list what changed since ${since}\n`);
         process.exit(2);
     }
-    process.stdout.write(`${JSON.stringify(fixChange(root, changed))}\n`);
+    process.stdout.write(`${JSON.stringify(fixChange(root, changed, only))}\n`);
 }

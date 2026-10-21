@@ -2,7 +2,7 @@ import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events"
 import { type FreshSession, profileOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import { landAgent } from "../../../conversations/land/land.js";
-import { reportLandRepairs } from "../../../conversations/land/rederive.js";
+import { afterLand } from "../../../conversations/land/rederive.js";
 import { intoOf, landTargetOf, underLeases } from "../../../conversations/land/land-target.js";
 import type { ConversationActors } from "../../../conversations/actor/conversation-actors.js";
 import type { BeginRefusal, BeginTurn } from "../../../conversations/actor/conversation-decide.js";
@@ -250,7 +250,7 @@ async function* landIntoParent(
         await keepLandFailure(deps, conversationId, cause);
         throw cause;
     });
-    reportLandRepairs(deps.logger, conversationId, landed);
+    afterLand(deps, conversationId, landed);
     if (landed.advanced === true) {
         await deps.agents.recordLanded(conversationId, landed);
     }
