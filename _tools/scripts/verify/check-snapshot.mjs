@@ -101,6 +101,35 @@ const lendModules = (from, to) => {
     return { links, lent: links.includes(join(to, "node_modules")) };
 };
 
+// LENDS THE SNAPSHOT THE CHECKOUT'S NEIGHBOURS, for the same reason: a check that reads past the repository (extension-kit
+// and extension-siblings read the workspace's `../extensions`, standalone repositories beside this one) found nothing
+// beside a snapshot under the temp dir, so every finding there read as the change's own. Those neighbours are no part
+// of the diff under test, so both runs read the same ones. Linked beside the snapshot, never into it; returned so they
+// are taken back before the directory holding them is removed.
+const lendNeighbours = (root, snapshot) => {
+    const links = [];
+    const beside = dirname(root);
+    let entries;
+    try {
+        entries = readdirSync(beside);
+    } catch {
+        return links; // a parent this process may not list has nothing it can lend
+    }
+    for (const name of entries) {
+        const at = join(dirname(snapshot), name);
+        if (name === basename(root) || existsSync(at)) {
+            continue;
+        }
+        try {
+            symlinkSync(join(beside, name), at, "junction");
+            links.push(at);
+        } catch {
+            // allow(silent-catch): a neighbour that cannot be linked is read as absent, as it was before any were lent
+        }
+    }
+    return links;
+};
+
 const SNAPSHOT_PREFIX = "verify-snapshot-";
 // Longer than any run is allowed to take, so a worktree this old belongs to a run that is gone.
 const STALE_AFTER_MS = 30 * 60 * 1000;
@@ -190,6 +219,7 @@ export const withSnapshot = (root, rev, use) => {
             return undefined;
         }
         borrowed = lendModules(root, snapshot);
+        borrowed.links.push(...lendNeighbours(root, snapshot));
         return use(snapshot, borrowed.lent);
     } finally {
         release();

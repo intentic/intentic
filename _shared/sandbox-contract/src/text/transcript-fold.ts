@@ -268,7 +268,7 @@ export class TranscriptFold {
                     : this.pushRow({
                           role: "notice",
                           text: event.text,
-                          agentNotice: { level: event.level, ...(event.source === undefined ? {} : { source: event.source }) },
+                          agentNotice: { level: event.level, ...defined({ source: event.source, sent: event.sent }) },
                       });
             case "error":
                 // Keeps a refusal (no prose from the provider) from reading as a session that ended mid-question.

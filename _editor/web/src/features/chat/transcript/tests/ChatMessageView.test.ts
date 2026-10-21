@@ -6,6 +6,7 @@ import type { ChildAgentAsk } from "@intentic/sandbox-contract/events/requests";
 import type { QueuePause } from "@intentic/sandbox-contract/schemas/agent";
 import type { TranscriptPermission } from "@intentic/sandbox-contract/events/transcript";
 import { agentWordsRow, childReportPrompt, peerMessagePrompt } from "@intentic/sandbox-contract/events/agent-words";
+import { TURN_CHECKS_SOURCE } from "@intentic/sandbox-contract/events/agent-ui";
 import { LAND_FIX_OPENING } from "@intentic/sandbox-contract/events/land-breakage";
 import { verifyNudgePrompt } from "@intentic/sandbox-contract/events/verify-nudge";
 import { watchWakePrompt, watchWakeRow } from "@intentic/sandbox-contract/events/watch-wake";
@@ -1912,5 +1913,21 @@ describe(`a runtime extension's notice`, () => {
         expect(info?.classList.contains(`text-subtle`)).toBe(true);
         expect(info?.textContent?.trim()).toBe(`Command blocked\nby the guard`);
         expect(mount(noticeRow(`error`)).querySelector(`[data-agent-notice]`)?.classList.contains(`text-danger`)).toBe(true);
+    });
+
+    // The repositories' end-of-turn checks: a line that names itself, with what the agent was told one press away.
+    it(`draws the end-of-turn checks as their own line, the findings behind a press`, async () => {
+        const sent = `"CI push checks" in intentic:\n✗ i18n-keys: A.vue: sandbox.gone is in no catalog`;
+        const text = `Checks found problems in this change (CI push checks). Sent to the agent.`;
+        const row = foldTurn([], [{ kind: `agent_notice`, level: `info`, source: TURN_CHECKS_SOURCE, text, sent }]).at(-1)!;
+        const element = mount({ id: 12, ...row });
+        expect(iconsOf(element)).toEqual([`list-check`]);
+        expect(element.querySelector(`[data-agent-notice]`)?.textContent).not.toContain(`turn checks:`);
+        expect(element.querySelector(`pre`)).toBeNull();
+        const toggle = element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!;
+        expect(toggle.textContent?.trim()).toBe(`Show findings`);
+        toggle.click();
+        await nextTick();
+        expect(element.querySelector(`pre`)?.textContent).toBe(sent);
     });
 });

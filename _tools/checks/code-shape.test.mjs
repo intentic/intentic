@@ -68,6 +68,17 @@ test("a split carries what the source file gave up, and no more", () => {
     assert.deepEqual(grownOf([file(`d/a.ts`, 650), file(`d/c.ts`, 760)], { "d/a.ts": 800, "d/c.ts": 700 }), []);
 });
 
+// fair-badger-o1w6 (2026-10-21): with any file's slack open to every other, ReviewPanel.vue's +3 took the last of an
+// unrelated file's shrink and the untouched schemas/devices.ts, next in key order, was reported for it.
+test("a file grows on no slack outside its own directory, so its growth is named on it and on nothing else", () => {
+    const baseline = { "p/grew.ts": 700, "q/same.ts": 700, "r/shrank.ts": 900 };
+    const lines = { "r/shrank.ts": 800 };
+    assert.deepEqual(grownOf([file(`p/grew.ts`, 703), file(`q/same.ts`, 700)], baseline, { lines }), [`p/grew.ts`]);
+    assert.deepEqual(grownOf([file(`p/grew.ts`, 700), file(`q/same.ts`, 704)], baseline, { lines }), [`q/same.ts`]);
+    // Its own directory's shrink still pays for it: a split.
+    assert.deepEqual(grownOf([file(`r/grew.ts`, 650)], { "r/shrank.ts": 900 }, { lines }), []);
+});
+
 test("tighten writes a borrowed allowance under the new key and drops the one it came from", () => {
     const why = `standing when the check arrived (2026-10-16)`;
     const baseline = { "a.ts#foo#lines": { count: 150, why }, "a.ts": { count: 1400, why } };

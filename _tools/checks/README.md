@@ -57,8 +57,9 @@ install it measures file length alone and says so. Entries are keyed per functio
 a second function of one name in a file, and an anonymous one named after its enclosing function), and a function
 pairs with its own name's entries by score, so a reorder moves nothing. A function with no entry may take over an
 orphaned one of its metric that holds its score: in its own file (a rename) or of its own name elsewhere (a move, a
-`git mv`). A file past what it may hold takes the excess from a file entry the tree now holds less of, preferring the
-same name gone (a `git mv`) and then the same directory (a split), so the excess over the cap never grows. `--tighten`
+`git mv`). A file past what it may hold takes the excess from a file entry the tree now holds less of: the same name
+gone (a `git mv`), else one in its own directory (a split), never one elsewhere, so the excess over the cap never grows
+and a file's growth is never paid for, or reported, on a file it did not touch. `--tighten`
 writes what was taken under the new key and drops or lowers the old (`lib/ratchet.mjs`'s `lent`). Per-file sums of
 excess were the other option (2026-10-16): simpler to key, but a function could then grow on what its neighbour gave
 up.

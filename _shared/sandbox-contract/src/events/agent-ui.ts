@@ -19,8 +19,16 @@ export const TranscriptAgentNoticeSchema = z.object({
         .string()
         .optional()
         .describe("Who said it, when the runtime named one: the extension or plugin, as the runtime spells it. Absent when the runtime's loop said it itself."),
+    sent: z
+        .string()
+        .optional()
+        .describe("What the model was told along with this notice, where that differs from the line itself: disclosed under the row."),
 });
 export type TranscriptAgentNotice = z.infer<typeof TranscriptAgentNoticeSchema>;
+
+// Who said the notice a turn's transcript carries where the repositories' end-of-turn checks were said back to the model
+// (the sandbox's agent/run/turn-checks.ts): a reader draws that row as the checks' own, its findings behind it.
+export const TURN_CHECKS_SOURCE = "turn checks";
 
 // The two frames, as members of AgentEventSchema.
 export const agentStatusEvent = {

@@ -20,7 +20,7 @@ import {
 // once, and never a refusal. The checks here are the rules a declaration becomes (repo-checks.ts), not hand-written ones.
 
 const VERIFY_TURN = "node _tools/scripts/verify/verify-turn.mjs";
-const LABEL = "Checks CI runs on every push, for what this change added";
+const LABEL = "CI push checks";
 const [TURN_CHECK] = rulesOf(declarationOf("intentic", [{ when: "turn", run: VERIFY_TURN, label: LABEL }]));
 const CHANGED: TurnChange = { paths: ["intentic/_editor/web/src/A.vue"], repos: ["intentic"] };
 const FOUND = "✗ i18n-keys: _editor/web/src/A.vue: sandbox.gone is in no catalog\nverify-turn: 1 finding(s) this change added against 7ffb812af";
@@ -86,6 +86,12 @@ describe("turnCheckHooks", () => {
         const found = armed({ run: { status: "failed", output: `${FOUND}\n` } });
         await stop(found.hooks);
         expect(found.said).toEqual([expect.objectContaining({ kind: "agent_notice", source: TURN_CHECKS_SOURCE, level: "info" })]);
+        // One plain line for the reader, naming the check; what the model was told rides behind it.
+        expect(found.said[0]).toMatchObject({ text: `Checks found problems in this change (${LABEL}). Sent to the agent.` });
+        expect(found.said[0]).toMatchObject({ sent: expect.stringContaining("sandbox.gone is in no catalog") });
+        const unrun = armed({ run: { status: "error", output: "timed out" } });
+        await stop(unrun.hooks);
+        expect(unrun.said[0]).toMatchObject({ text: `Checks could not run on this change (${LABEL}). The agent was told.` });
         const clean = armed();
         await stop(clean.hooks);
         expect(clean.said).toEqual([]);

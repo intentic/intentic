@@ -171,20 +171,24 @@ const lendOrphans = (keyed, fresh, orphans, lent) => {
     }
 };
 
-// A file past what it may hold takes the excess from a file entry the tree now holds less than.
+// A file past what it may hold takes the excess from a file entry the tree now holds less than: one of its own name gone
+// (a `git mv`), else one in its own directory (a split), and never one anywhere else. A donor anywhere in the tree made
+// every file's slack one pool, drained in key order, so a change that grew one file was paid for by an unrelated file's
+// shrink, and the file next in line, which nobody touched, was reported in its place (fair-badger-o1w6, 2026-10-21:
+// ReviewPanel.vue grew 3 lines and schemas/devices.ts was named).
 const lendSlack = (keyed, donors, baseline, fileCap, lent) => {
     const rank = (item, donor) => {
         if (donor.gone && baseOf(donor.path) === baseOf(item.path)) {
             return 0;
         }
-        return dirOf(donor.path) === dirOf(item.path) ? 1 : 2;
+        return dirOf(donor.path) === dirOf(item.path) ? 1 : undefined;
     };
     const files = [...keyed].filter(([key, item]) => item.metric === `file` && item.value > (baseline.get(key) ?? fileCap));
     for (const [key, item] of files.toSorted(([a], [b]) => a.localeCompare(b))) {
         const own = baseline.get(key);
         const needed = item.value - (own ?? fileCap);
         const better = (a, b) => rank(item, a) < rank(item, b) || (rank(item, a) === rank(item, b) && a.slack < b.slack);
-        const at = indexOfBest(donors, (donor) => donor.path !== item.path && donor.slack >= needed, better);
+        const at = indexOfBest(donors, (donor) => donor.path !== item.path && rank(item, donor) !== undefined && donor.slack >= needed, better);
         if (at !== -1) {
             lent.set(key, { from: donors[at].key, count: item.value - (own ?? 0) });
             donors[at].slack -= needed;
@@ -202,8 +206,9 @@ const lendSlack = (keyed, donors, baseline, fileCap, lent) => {
  *
  * A function with no entry of its own borrows an orphan of the same metric that allows at least its score: one in the
  * same file (a rename), else one of the same name in another (a move, a `git mv`, a split). A file past its entry, or
- * over the cap with none, borrows the excess from a file entry the tree holds less than: preferring the same file name
- * gone (a `git mv`), then the same directory (a split). What is lent is what tighten moves (ratchet.mjs).
+ * over the cap with none, borrows the excess from a file entry the tree holds less than: the same file name gone (a
+ * `git mv`), else one in the same directory (a split), and from nowhere else. What is lent is what tighten moves
+ * (ratchet.mjs).
  */
 export const judge = ({ items, baseline, measuredPath, metrics, linesOf, fileCap = CAPS.file }) => {
     const entries = [...baseline].map(([key, allowance]) => ({ key, allowance, ...partsOf(key) })).filter((entry) => metrics.has(entry.metric));

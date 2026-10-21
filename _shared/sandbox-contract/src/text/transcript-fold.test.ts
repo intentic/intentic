@@ -437,10 +437,12 @@ describe("foldTurn", () => {
             { kind: "agent_notice", level: "warning", text: "Command blocked by user", source: "guard-ext" },
             { kind: "agent_notice", level: "info", text: "Compacting soon" },
             { kind: "agent_notice", level: "error", text: "   " },
+            { kind: "agent_notice", level: "warning", text: "Checks found problems", source: "turn checks", sent: "lint: a.ts:1 unused" },
         ]);
         expect(rows.slice(1)).toEqual([
             { role: "notice", text: "Command blocked by user", agentNotice: { level: "warning", source: "guard-ext" } },
             { role: "notice", text: "Compacting soon", agentNotice: { level: "info" } },
+            { role: "notice", text: "Checks found problems", agentNotice: { level: "warning", source: "turn checks", sent: "lint: a.ts:1 unused" } },
         ]);
         expect(rows.slice(1).map((row) => TranscriptRowSchema.parse(row))).toEqual(rows.slice(1));
     });

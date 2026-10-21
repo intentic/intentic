@@ -1,5 +1,6 @@
 import type { HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { TURN_CHECKS_SOURCE } from "@intentic/sandbox-contract/events/agent-ui";
 import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
 import type { Logger } from "pino";
 import type { EditCommandRun } from "../../rules/file-edited.js";
@@ -104,15 +105,26 @@ export const turnChecksNote = (reports: readonly TurnCheckReport[]): string => {
 
 // Who said the notice a turn's transcript carries where the checks were said back (`agentNotice.source`), the boundary
 // a report reads its real closing from (turn-runs.ts closingOf): the model's answer to the checks comes after it.
-export const TURN_CHECKS_SOURCE = "turn checks";
+export { TURN_CHECKS_SOURCE };
 
-/** The notice row itself: what a reader of the transcript sees, since the note rode to the model and nowhere else. */
-export const turnChecksNotice = (reports: readonly TurnCheckReport[]): AgentEvent => ({
-    kind: "agent_notice",
-    level: "info",
-    source: TURN_CHECKS_SOURCE,
-    text: `The end-of-turn checks found something in this change (${reports.map(({ rule }) => named(rule)).join(", ")}) and said it back once.`,
-});
+// A check by its label alone, for the transcript's line: the repository only where the turn's checks span several.
+const shortNames = (reports: readonly TurnCheckReport[]): string => {
+    const repos = new Set(reports.map(({ rule }) => rule.when?.repo ?? "root"));
+    return reports.map(({ rule }) => (repos.size > 1 ? named(rule) : rule.label)).join(", ");
+};
+
+/** The notice row itself: one plain line for a reader of the transcript, with the note the model was told behind it
+ *  (`sent`, disclosed under the row), since the note rode to the model and nowhere else. */
+export const turnChecksNotice = (reports: readonly TurnCheckReport[]): AgentEvent => {
+    const found = reports.filter(({ run }) => run.status === "failed");
+    const unrun = reports.filter(({ run }) => run.status !== "failed");
+    const line =
+        found.length > 0
+            ? `Checks found problems in this change (${shortNames(found)})${unrun.length > 0 ? `, and ${shortNames(unrun)} could not run` : ""}. Sent to the agent.`
+            : `Checks could not run on this change (${shortNames(unrun)}). The agent was told.`;
+    // A muted line either way: the agent, not the reader, is the one asked to act on it.
+    return { kind: "agent_notice", level: "info", source: TURN_CHECKS_SOURCE, text: line, sent: turnChecksNote(reports) };
+};
 
 /** The repositories' `turn` checks as a Stop matcher (agent.ts mergeHooks), beside the checklist note (checklist-close.ts).
  *  Wires nothing for a turn in the shared tree, whose working tree carries everyone's uncommitted work, or for one no

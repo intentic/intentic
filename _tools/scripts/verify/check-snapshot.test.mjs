@@ -2,12 +2,12 @@
 // run killed at its deadline used to leave the worktree registered in the repository, and its directory under the temp dir.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { sweepSnapshots } from "./check-snapshot.mjs";
+import { sweepSnapshots, withSnapshot } from "./check-snapshot.mjs";
 
 const SNAPSHOT = fileURLToPath(new URL("./check-snapshot.mjs", import.meta.url));
 
@@ -84,5 +84,31 @@ test("a run killed with its checks leaves no snapshot behind", async () => {
         assert.deepEqual(snapshotsOf(run), []);
     } finally {
         rmSync(root, { recursive: true, force: true });
+    }
+});
+
+// fair-badger-o1w6 (2026-10-21) was charged with 65 extension-kit findings in `../extensions`, standalone repositories
+// it never touched: the snapshot under the temp dir had no `../extensions`, so the base found nothing there.
+test("a snapshot reads the same neighbours as the checkout, and taking it back leaves them whole", () => {
+    const workspace = mkdtempSync(join(tmpdir(), "check-snapshot-workspace-"));
+    try {
+        const root = join(workspace, "repo");
+        mkdirSync(root);
+        execFileSync("git", ["init", "-q", "-b", "main"], { cwd: root });
+        writeFileSync(join(root, "a.txt"), "a\n");
+        execFileSync("git", ["add", "-A"], { cwd: root });
+        execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base"], { cwd: root });
+        mkdirSync(join(workspace, "extensions/acceptance"), { recursive: true });
+        writeFileSync(join(workspace, "extensions/acceptance/view.vue"), "<template />\n");
+        let link;
+        const seen = withSnapshot(root, "HEAD", (snapshot) => {
+            link = join(snapshot, "..", "extensions");
+            return readFileSync(join(snapshot, "..", "extensions/acceptance/view.vue"), "utf8");
+        });
+        assert.equal(seen, "<template />\n");
+        assert.equal(existsSync(link), false);
+        assert.equal(lstatSync(join(workspace, "extensions/acceptance/view.vue")).isFile(), true);
+    } finally {
+        rmSync(workspace, { recursive: true, force: true });
     }
 });

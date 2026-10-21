@@ -39,6 +39,7 @@ import ChatTodoList from "./ChatTodoList.vue";
 import ChatTurnAsides from "./asides/ChatTurnAsides.vue";
 import ChatTurnStatus from "./ChatTurnStatus.vue";
 import NoticeDepsInstall from "./notices/NoticeDepsInstall.vue";
+import { agentNoticeLookOf, isTurnChecks, noticeIconOf } from "./notices/noticeLook";
 import NoticeFailureDetails from "./notices/NoticeFailureDetails.vue";
 import NoticeSwitchModel from "./notices/NoticeSwitchModel.vue";
 import NoticeHeld from "./notices/NoticeHeld.vue";
@@ -204,7 +205,10 @@ const waitClock = computed(() => {
 
 // What the model was told, for a row nobody at the composer typed; one press away.
 const watchEvidence = ref(false);
-const unspokenSent = computed(() => props.message.watchWake?.sent ?? props.message.needWake?.sent ?? props.message.agentWords?.sent);
+const unspokenSent = computed(
+    () => props.message.watchWake?.sent ?? props.message.needWake?.sent ?? props.message.agentWords?.sent ?? props.message.agentNotice?.sent,
+);
+const turnChecks = computed(() => isTurnChecks(props.message));
 // A watch that never saw its condition, or a child that failed, calls for a different next step.
 const watchGaveUp = computed(
     () => (props.message.watchWake !== undefined && props.message.watchWake.outcome !== `met`) || props.message.agentWords?.failed === true,
@@ -216,34 +220,8 @@ const noticeText = computed(() => noticeLine(props.message, audience.value) ?? p
 // A failure row: its own glyph and line, and the provider's or the harness's own words, where it carries any, a press away.
 const failure = computed(() => (props.message.role === `notice` ? noticeFailure(props.message) : undefined));
 const failureOpen = ref(false);
-// A notice the runtime's own extension or loop said (sandbox-contract events/agent-ui.ts): its level's glyph and colour.
-// An info line stays the muted notice every other row is; only a warning or an error is drawn louder.
-const AGENT_NOTICE_LOOK = {
-    info: { icon: `info-circle`, tone: `text-subtle` },
-    warning: { icon: `exclamation-triangle`, tone: `text-warning` },
-    error: { icon: `exclamation-circle`, tone: `text-danger` },
-} as const;
-const agentNoticeLook = computed(() => (props.message.agentNotice === undefined ? undefined : AGENT_NOTICE_LOOK[props.message.agentNotice.level]));
-// The board's own watch glyph, another conversation, or a child reporting back.
-const noticeIcon = computed(() => {
-    if (agentNoticeLook.value !== undefined) {
-        return agentNoticeLook.value.icon;
-    }
-    if (failure.value !== undefined) {
-        return `exclamation-triangle`;
-    }
-    if (props.message.watchWake !== undefined) {
-        return `eye`;
-    }
-    // An answered need: the same glyph as its card, so the two read as one thread.
-    if (props.message.needWake !== undefined) {
-        return props.message.needWake.outcome === `met` ? `check-circle` : `times`;
-    }
-    if (props.message.agentWords !== undefined) {
-        return props.message.agentWords.kind === `peer` ? `comments` : `users`;
-    }
-    return `info-circle`;
-});
+const agentNoticeLook = computed(() => agentNoticeLookOf(props.message));
+const noticeIcon = computed(() => noticeIconOf(props.message, failure.value !== undefined));
 
 // Edit pencil shows only for a user prompt with a rewindIndex, never mid-turn (agent/rewind.ts), and never while this
 // message's own edit is open.
@@ -572,7 +550,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 /></span>
                 <!-- Who said it, when the runtime named an extension: its words are not the sandbox's. -->
                 <span class="min-w-0" :class="{ 'whitespace-pre-line': message.agentNotice }"
-                    ><span v-if="message.agentNotice?.source" class="font-medium">{{ message.agentNotice.source }}: </span>{{ noticeText }}</span
+                    ><span v-if="message.agentNotice?.source && !turnChecks" class="font-medium">{{ message.agentNotice.source }}: </span>{{ noticeText }}</span
                 >
                 <span v-if="waitClock" class="shrink-0 tabular-nums">{{ waitClock }}</span>
             </span>
@@ -586,6 +564,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             >
                 <template v-if="message.watchWake">{{
                     watchEvidence ? t(`chat.chatMessageView.hideCheck`) : t(`chat.chatMessageView.showCheck`)
+                }}</template>
+                <template v-else-if="turnChecks">{{
+                    watchEvidence ? t(`chat.chatMessageView.hideFindings`) : t(`chat.chatMessageView.showFindings`)
                 }}</template>
                 <template v-else>{{ watchEvidence ? t(`chat.chatMessageView.hideMessage`) : t(`chat.chatMessageView.showMessage`) }}</template>
             </button>
