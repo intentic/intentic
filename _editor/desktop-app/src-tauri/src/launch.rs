@@ -480,7 +480,10 @@ pub fn exited() {
 }
 
 /// This launch got as far as `stage`. Only ever forward, and written only when it moves, so the page-load callback
-/// that calls this on every load costs one comparison after the first.
+/// that calls this on every load costs one comparison after the first. A write that did not land is not counted:
+/// the stage stays where the file says it is, so the next call writes it again rather than taking it as done, and the
+/// marker never claims less than the launch reached. _(2026-10-21) A `shown` lost to a busy file stayed lost, and the
+/// next launch would have reported this one as stalled._
 pub fn reached(stage: Stage) {
     let mut launch = LAUNCH
         .lock()
@@ -491,8 +494,11 @@ pub fn reached(stage: Stage) {
     if stage <= launch.marker.stage {
         return;
     }
+    let before = launch.marker.stage;
     launch.marker.stage = stage;
-    crate::state::write_json(&marker_path(&launch.dir), &launch.marker);
+    if !crate::state::write_json(&marker_path(&launch.dir), &launch.marker) {
+        launch.marker.stage = before;
+    }
 }
 
 /// The workspace could not be reached ([`crate::offline`]): kept as a report, once per launch.

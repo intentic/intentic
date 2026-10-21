@@ -650,18 +650,52 @@ pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> 
 }
 
 /// Written whole or not at all: a sibling temp file renamed over the old one, so a crash mid-write cannot leave
-/// half a file for the next launch to read.
-pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) {
+/// half a file for the next launch to read. Whether it was saved, for a caller that must not believe a write that
+/// did not land (launch.rs `reached`).
+pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> bool {
     let written = serde_json::to_string_pretty(value)
         .map_err(std::io::Error::from)
         .and_then(|serialized| {
             let temp = path.with_extension("json.tmp");
             std::fs::write(&temp, serialized)?;
-            std::fs::rename(&temp, path)
+            rename_over(&temp, path)
         });
-    if let Err(error) = written {
-        eprintln!("intentic: could not save {}: {error}", path.display());
+    match written {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!("intentic: could not save {}: {error}", path.display());
+            false
+        }
     }
+}
+
+/// How long [`rename_over`] waits between tries, in all: about two thirds of a second before it gives up.
+const RENAME_WAITS_MS: [u64; 6] = [10, 20, 40, 80, 160, 320];
+
+/// `temp` renamed over `path`, tried again while the target is busy. On Windows a rename over a file another process
+/// holds open without delete sharing fails with "Access is denied" (or a sharing violation): an antivirus scanning
+/// the file just written, an indexer, or a script reading it, as the end-session smoke reads `launch.json` ten times a
+/// second. Every such hold lasts milliseconds, so a short wait gets the write through rather than dropping it.
+/// _(2026-10-21) The nightly smoke failed "App never completed startup" on a launch that had shown its window: the
+/// write of `shown` met the smoke's own read and was lost._
+fn rename_over(temp: &Path, path: &Path) -> std::io::Result<()> {
+    let mut waits = RENAME_WAITS_MS.iter();
+    loop {
+        match std::fs::rename(temp, path) {
+            Err(error) if target_busy(&error) => match waits.next() {
+                Some(ms) => std::thread::sleep(std::time::Duration::from_millis(*ms)),
+                None => return Err(error),
+            },
+            done => return done,
+        }
+    }
+}
+
+/// Whether a failed rename is another process holding the target, which passes, rather than a refusal that stays.
+/// ERROR_ACCESS_DENIED (5), ERROR_SHARING_VIOLATION (32) and ERROR_LOCK_VIOLATION (33) on Windows; a POSIX rename
+/// is not blocked by readers, so nothing there is waited on.
+fn target_busy(error: &std::io::Error) -> bool {
+    cfg!(windows) && matches!(error.raw_os_error(), Some(5 | 32 | 33))
 }
 
 #[cfg(test)]
@@ -700,6 +734,20 @@ mod tests {
             default_home: default_home_folder(&config_dir.join("home")),
             roster: Mutex::new(read_roster(config_dir)),
         }
+    }
+
+    /* A WRITE SAYS WHETHER IT LANDED, which launch.rs `reached` counts on to try a lost stage again. */
+    #[test]
+    fn a_write_says_whether_it_landed() {
+        let dir = std::env::temp_dir().join(format!("intentic-write-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).expect("temp config dir");
+        let path = dir.join("launch.json");
+        assert!(write_json(&path, &"shown"));
+        assert_eq!(read_json::<String>(&path).as_deref(), Some("shown"));
+        assert!(!dir.join("launch.json.tmp").exists());
+        // A folder that is not there cannot take the file: said, not swallowed.
+        assert!(!write_json(&dir.join("gone").join("launch.json"), &"shown"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /* A FILE THIS APP CANNOT PARSE is kept, not written over by the default that stood in for it. */

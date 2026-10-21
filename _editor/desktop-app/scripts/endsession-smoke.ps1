@@ -20,6 +20,13 @@ public static class EndSessionWindow {
     public static extern IntPtr SendMessageTimeoutW(IntPtr window, uint message, UIntPtr wparam, IntPtr lparam, uint flags, uint timeout, out UIntPtr result);
 }
 '@
+# The launch marker, read the way the app's own files are opened: sharing read, write AND delete. Get-Content holds the
+# file without delete sharing, and on Windows the app's write (a temp file renamed over this one) then fails with
+# "Access is denied" for as long as the read lasts; polled ten times a second, that once lost the launch's `shown`.
+function Read-Marker([string]$Path) {
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]'ReadWrite, Delete')
+    try { ([IO.StreamReader]::new($stream)).ReadToEnd() } finally { $stream.Dispose() }
+}
 $installed = $null
 $app = $null
 $originalUpdateCheck = $env:INTENTIC_DISABLE_UPDATE_CHECK
@@ -75,14 +82,14 @@ try {
         $stage = $null
         # A marker from an earlier run of the app is not this launch's: only ours counts, by pid.
         try {
-            $current = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+            $current = Read-Marker $marker | ConvertFrom-Json
             if ($current.pid -eq $app.Id) { $stage = $current.stage }
         } catch { }
         if ($stage -notin @('window', 'shown')) { Start-Sleep -Milliseconds 100 }
     } while ($stage -notin @('window', 'shown') -and [DateTime]::UtcNow -lt $deadline)
     if ($stage -notin @('window', 'shown')) {
         # What the launch did get to, so a failure says whether the app stalled, wrote another launch's marker, or none.
-        $seen = if (Test-Path -LiteralPath $marker) { (Get-Content -LiteralPath $marker -Raw) -replace '\s+', ' ' } else { 'no launch.json' }
+        $seen = if (Test-Path -LiteralPath $marker) { (Read-Marker $marker) -replace '\s+', ' ' } else { 'no launch.json' }
         throw "App never completed startup within ${startupSeconds}s of launch (pid $($app.Id); last marker: $seen)"
     }
     $result = [UIntPtr]::Zero
@@ -91,7 +98,7 @@ try {
     if (-not $app.WaitForExit(15000)) { throw 'WM_ENDSESSION left the app running' }
     if ($app.ExitCode -ne 0) { throw "WM_ENDSESSION exited $($app.ExitCode)" }
     if (Test-Path -LiteralPath $crash) { throw "WM_ENDSESSION wrote $crash" }
-    $last = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+    $last = Read-Marker $marker | ConvertFrom-Json
     if ($last.pid -ne $app.Id -or $last.stage -ne 'exited' -or $last.exitCause -ne 'session-end') { throw 'Exit cleanup did not record session-end' }
     Write-Output 'WM_ENDSESSION: clean exit, session-end recorded, no crash.json'
 } finally {
