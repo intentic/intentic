@@ -69,6 +69,7 @@ test("the retention passes are hourly chores, scoped by role", () => {
     expect(cadenceOf(phaseOf({ roots: true, container: true }))).toEqual([
         ...dataRetention,
         hourly("agents-aged-archive"),
+        hourly("agents-build-outputs"),
         hourly("state-aged"),
         hourly("log-retention"),
         hourly("finished-terminal-sessions"),
@@ -78,6 +79,7 @@ test("the retention passes are hourly chores, scoped by role", () => {
     expect(cadenceOf(phaseOf({ roots: true, container: false }))).toEqual([
         ...dataRetention,
         hourly("agents-aged-archive"),
+        hourly("agents-build-outputs"),
         hourly("state-aged"),
         hourly("log-retention"),
     ]);
