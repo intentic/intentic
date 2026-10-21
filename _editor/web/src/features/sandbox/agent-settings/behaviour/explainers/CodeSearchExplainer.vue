@@ -29,8 +29,8 @@ const SWATCH = `inline-block h-2.5 w-4 rounded-sm`;
 // The conversation's own exchange in a quiet ground, so the two pieces this section adds stand out against it.
 const EXCHANGE = `border border-line-subtle bg-card text-muted`;
 
-// One request's stack, front first: the instructions with the notes in them, then each turn's message (the map with the
-// first) and, for turns already answered, the reply that is now history.
+// One request's stack, front first: the instructions with the notes in them, then each turn's message (the map in front of
+// the first, where the wire puts it) and, for turns already answered, the reply that is now history.
 const stackOf = (turn: number): Block[] => {
     const fixed: Block[] = [
         { key: `instructions`, label: t(`sandbox.explainers.codeSearch.instructions`), tone: EXCHANGE, cached: turn > 1 },
@@ -40,8 +40,8 @@ const stackOf = (turn: number): Block[] => {
         const at = index + 1;
         const past = at < turn;
         return [
-            { key: `message-${at}`, label: t(`sandbox.explainers.codeSearch.message`, { turn: at }), tone: EXCHANGE, cached: past },
             ...(at === 1 ? [{ key: `map`, label: t(`sandbox.agentCodeSearch.projectMap`), tone: `bg-info-tint text-content`, cached: past }] : []),
+            { key: `message-${at}`, label: t(`sandbox.explainers.codeSearch.message`, { turn: at }), tone: EXCHANGE, cached: past },
             ...(past ? [{ key: `reply-${at}`, label: t(`sandbox.explainers.codeSearch.reply`, { turn: at }), tone: `${EXCHANGE} py-1`, cached: true }] : []),
         ];
     });
