@@ -49,6 +49,11 @@ Var IntenticBoldFont
 ; What `ic uninstall` answered in the hook: nsExec's exit code ("0" is done), "timeout" or "error". "by-ic" when ic is
 ; what started this uninstaller; empty when there was no ic to run.
 Var IntenticIcResult
+; ic's process while its look runs beside the first page, empty when none does; the timer's ticks since it started;
+; the label that says how long that has been (A LOOK THAT SAYS IT IS LOOKING, below).
+Var IntenticLookProcess
+Var IntenticLookTicks
+Var IntenticLookElapsed
 
 ; The app's binary by name, for the page's reinstall check. A Function in this file is read where Tauri includes it,
 ; before the template defines ${MAINBINARYNAME}, so it cannot use that name; NSIS_HOOK_PREUNINSTALL, inserted later,
@@ -73,36 +78,42 @@ Var IntenticIcResult
 ; an update (/UPDATE) and a reinstall's uninstall (AN UNINSTALL AN INSTALL IS ABOUT TO UNDO, below), and ic itself
 ; running this uninstaller (INTENTIC_UNINSTALL=done) after doing the rest. An unanswered page keeps the sandboxes.
 ;
-; ic gets a minute to look (docker, WSL), behind a banner, since the window has nothing to show until it answers. When
-; it is missing, fails or says nothing readable, the page says only the app goes and the hook keeps the sandboxes: a
-; choice built on a guess about what is on the PC is not one to offer.
+; ic looks first (docker, WSL), on a page of its own (A LOOK THAT SAYS IT IS LOOKING, below). When it is missing, fails
+; or says nothing readable, the page says only the app goes and the hook keeps the sandboxes: a choice built on a guess
+; about what is on the PC is not one to offer.
+UninstPage custom un.IntenticLookShow
 UninstPage custom un.IntenticChoiceShow un.IntenticChoiceLeave
 
-Function un.IntenticChoiceShow
-  ; $PassiveMode and $UpdateMode do not exist yet where this Function is read, so the switches are read again from the
-  ; command line, the way the template's un.onInit reads them.
+; Whether the two pages are shown at all: $0 is 1 where they are not. $PassiveMode and $UpdateMode do not exist yet
+; where this Function is read, so the switches are read again from the command line, the way the template's un.onInit
+; reads them.
+Function un.IntenticPagesSkipped
+  StrCpy $0 1
   ClearErrors
-  ${GetOptions} $CMDLINE "/P" $0
+  ${GetOptions} $CMDLINE "/P" $1
   ${IfNot} ${Errors}
-    Abort
+    Return
   ${EndIf}
   ClearErrors
-  ${GetOptions} $CMDLINE "/UPDATE" $0
+  ${GetOptions} $CMDLINE "/UPDATE" $1
   ${IfNot} ${Errors}
-    Abort
+    Return
   ${EndIf}
   ${If} ${Silent}
   ${OrIf} ${FileExists} "$EXEDIR\${INTENTIC_APP_EXE}"
-    Abort
+    Return
   ${EndIf}
-  ReadEnvStr $0 INTENTIC_UNINSTALL
-  ${If} $0 == "done"
-    Abort
+  ReadEnvStr $1 INTENTIC_UNINSTALL
+  ${If} $1 == "done"
+    Return
   ${EndIf}
+  StrCpy $0 0
+FunctionEnd
 
-  ; Once: Back from the confirm page draws this page again, from what was found the first time.
-  ${If} $IntenticLook == ""
-    Call un.IntenticLook
+Function un.IntenticChoiceShow
+  Call un.IntenticPagesSkipped
+  ${If} $0 = 1
+    Abort
   ${EndIf}
 
   nsDialogs::Create 1018
@@ -111,6 +122,9 @@ Function un.IntenticChoiceShow
     Abort
   ${EndIf}
   ${IfThen} $(^RTL) = 1 ${|} nsDialogs::SetRTL $(^RTL) ${|}
+  ; The look page before this one never shows twice (it has answered), so there is nothing for Back to go to.
+  GetDlgItem $0 $HWNDPARENT 3
+  EnableWindow $0 0
   ${If} $IntenticBoldFont == ""
     CreateFont $IntenticBoldFont "$(^Font)" "$(^FontSize)" "700"
   ${EndIf}
@@ -241,10 +255,70 @@ Function un.IntenticChoiceLeave
   ${EndIf}
 FunctionEnd
 
-; What ic finds on this PC, into the page's Vars. Its file goes in the plugins folder, which the uninstaller deletes on
-; its way out. nsExec's timeout counts from the last line the program printed: a minute of silence ends the look.
-Function un.IntenticLook
+; A LOOK THAT SAYS IT IS LOOKING (2026-10-21). ic's look used to run behind NSIS's Banner: a small grey box reading
+; "Checking what Intentic has here...", with nothing moving and no window behind it, for as long as docker took to
+; answer (`docker system df -v` alone can take most of a minute). It read as a hung uninstaller, and the reader's way
+; out of one is the Task Manager. It is now the wizard's first page: what is being looked for, that it can take a
+; minute and nothing is changed yet, a marquee bar, and from ten seconds on how long it has been. ic runs beside the
+; page rather than inside nsExec, which holds the window's thread until the program exits, so the bar moves and
+; Cancel answers; a timer asks after it four times a second and moves on to the choice the moment it is done.
+;
+; The page is shown once: Back from the choice is off, and a look that has answered is not asked again. Where ic is
+; missing or will not start, the page is skipped and the choice says Intentic could not check. ic gets ninety seconds
+; in all (nsExec gave it a minute of silence, and ic bounds each of its own questions well under that); then it is
+; ended and the look counts as "timeout". Cancel ends it too (un.IntenticLookAbort), so no ic is left behind writing
+; into a plugins folder that is being deleted.
+; PBS_MARQUEE is in no header NSIS ships (CommCtrl.h's 0x08); PBM_SETMARQUEE is in WinMessages.nsh.
+!define INTENTIC_PBS_MARQUEE 0x08
+!define INTENTIC_LOOK_TICK_MS 250
+!define INTENTIC_LOOK_TICKS_MAX 360
+!define MUI_CUSTOMFUNCTION_UNABORT un.IntenticLookAbort
+
+Function un.IntenticLookShow
+  Call un.IntenticPagesSkipped
+  ${If} $0 = 1
+    Abort
+  ${EndIf}
+  ${If} $IntenticLook != ""
+    Abort
+  ${EndIf}
+  Call un.IntenticLookStart
+  ${If} $IntenticLookProcess == ""
+    Abort
+  ${EndIf}
+
+  nsDialogs::Create 1018
+  Pop $0
+  ${If} $0 == error
+    Call un.IntenticLookAbort
+    StrCpy $IntenticLook "error"
+    Abort
+  ${EndIf}
+  ${IfThen} $(^RTL) = 1 ${|} nsDialogs::SetRTL $(^RTL) ${|}
+  !insertmacro MUI_HEADER_TEXT "Uninstall Intentic" "Checking what Intentic has on this PC."
+  ${NSD_CreateLabel} 0 0 100% 26u "Intentic is looking for your sandboxes, their data, the engine and saved passwords, so the next step can show exactly what uninstalling removes."
+  Pop $0
+  nsDialogs::CreateControl "msctls_progress32" ${DEFAULT_STYLES}|${INTENTIC_PBS_MARQUEE} 0 0 32u 100% 10u ""
+  Pop $0
+  SendMessage $0 ${PBM_SETMARQUEE} 1 30
+  ${NSD_CreateLabel} 0 50u 100% 20u "This can take a minute, most of it waiting for Docker to answer. Nothing has been changed yet."
+  Pop $0
+  ${NSD_CreateLabel} 0 74u 100% 10u ""
+  Pop $IntenticLookElapsed
+  ; Nothing to go on to until ic answers: the timer moves the page on by itself.
+  GetDlgItem $0 $HWNDPARENT 1
+  EnableWindow $0 0
+  StrCpy $IntenticLookTicks 0
+  ${NSD_CreateTimer} un.IntenticLookTick ${INTENTIC_LOOK_TICK_MS}
+  nsDialogs::Show
+  ${NSD_KillTimer} un.IntenticLookTick
+FunctionEnd
+
+; Starts `ic uninstall --dry-run --ini` with no window and keeps its process handle in $IntenticLookProcess, which
+; stays empty where there is no ic beside the app ($IntenticLook "missing") or it would not start ("error").
+Function un.IntenticLookStart
   StrCpy $IntenticLook "missing"
+  StrCpy $IntenticLookProcess ""
   StrCpy $IntenticSandboxes 0
   StrCpy $IntenticDeleteCount 0
   StrCpy $IntenticPasswords 0
@@ -253,10 +327,91 @@ Function un.IntenticLook
   ${EndIf}
   InitPluginsDir
   Delete "$PLUGINSDIR\intentic-inventory.ini"
-  Banner::show /set 76 "Checking what Intentic has here..." "Uninstall Intentic"
-  nsExec::Exec /TIMEOUT=60000 '"$INSTDIR\intentic-ic.exe" uninstall --dry-run --ini "$PLUGINSDIR\intentic-inventory.ini"'
-  Pop $IntenticLook
-  Banner::destroy
+  ; STARTUPINFOW, zeroed but for its size; PROCESS_INFORMATION is hProcess, hThread, then two ids.
+  !if ${NSIS_PTR_SIZE} > 4
+    StrCpy $2 104
+  !else
+    StrCpy $2 68
+  !endif
+  System::Alloc $2
+  Pop $3
+  System::Call "*$3(i r2)"
+  System::Alloc 24
+  Pop $4
+  StrCpy $5 '"$INSTDIR\intentic-ic.exe" uninstall --dry-run --ini "$PLUGINSDIR\intentic-inventory.ini"'
+  ; CREATE_NO_WINDOW (0x08000000): a console without a window, which docker and wsl, started by ic, share.
+  System::Call "kernel32::CreateProcessW(p 0, w r5, p 0, p 0, i 0, i 0x08000000, p 0, p 0, p r3, p r4) i .r0"
+  ${If} $0 <> 0
+    System::Call "*$4(p .r6, p .r7)"
+    System::Call "kernel32::CloseHandle(p r7)"
+    StrCpy $IntenticLookProcess $6
+  ${Else}
+    StrCpy $IntenticLook "error"
+  ${EndIf}
+  System::Free $3
+  System::Free $4
+FunctionEnd
+
+; Four times a second while the page is up: ic done moves the page on; ninety seconds without it ends ic.
+Function un.IntenticLookTick
+  ${If} $IntenticLookProcess == ""
+    Return
+  ${EndIf}
+  IntOp $IntenticLookTicks $IntenticLookTicks + 1
+  ; WAIT_OBJECT_0 (0) is a process that has exited.
+  System::Call "kernel32::WaitForSingleObject(p $IntenticLookProcess, i 0) i .r0"
+  ${If} $0 = 0
+    System::Call "kernel32::GetExitCodeProcess(p $IntenticLookProcess, *i .r1) i .r0"
+    ${If} $0 = 0
+      StrCpy $1 "error"
+    ${EndIf}
+    Call un.IntenticLookEnd
+    StrCpy $IntenticLook $1
+    Call un.IntenticLookRead
+    Goto next
+  ${EndIf}
+  ${If} $IntenticLookTicks >= ${INTENTIC_LOOK_TICKS_MAX}
+    System::Call "kernel32::TerminateProcess(p $IntenticLookProcess, i 1)"
+    Call un.IntenticLookEnd
+    StrCpy $IntenticLook "timeout"
+    Goto next
+  ${EndIf}
+  ; Seconds so far, from ten on, so a slow look reads as one still going.
+  IntOp $0 $IntenticLookTicks % 4
+  ${If} $0 = 0
+    IntOp $0 $IntenticLookTicks / 4
+    ${If} $0 >= 10
+      ${NSD_SetText} $IntenticLookElapsed "Still checking ($0 seconds so far)..."
+    ${EndIf}
+  ${EndIf}
+  Return
+  next:
+    ${NSD_KillTimer} un.IntenticLookTick
+    GetDlgItem $0 $HWNDPARENT 1
+    EnableWindow $0 1
+    ; WM_NOTIFY_OUTER_NEXT: on to the choice, as Next would. Posted, so the page is not torn down inside its own timer.
+    System::Call "user32::PostMessageW(p $HWNDPARENT, i 0x408, p 1, p 0)"
+FunctionEnd
+
+; Lets go of ic's process handle.
+Function un.IntenticLookEnd
+  ${If} $IntenticLookProcess != ""
+    System::Call "kernel32::CloseHandle(p $IntenticLookProcess)"
+    StrCpy $IntenticLookProcess ""
+  ${EndIf}
+FunctionEnd
+
+; Cancel while ic is still looking ends it with the uninstaller.
+Function un.IntenticLookAbort
+  ${If} $IntenticLookProcess != ""
+    System::Call "kernel32::TerminateProcess(p $IntenticLookProcess, i 1)"
+    Call un.IntenticLookEnd
+  ${EndIf}
+FunctionEnd
+
+; What ic found on this PC, into the page's Vars, once it exited ($IntenticLook is its exit code). Its file is in the
+; plugins folder, which the uninstaller deletes on its way out.
+Function un.IntenticLookRead
   ${If} $IntenticLook != "0"
     Return
   ${EndIf}
