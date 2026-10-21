@@ -11,6 +11,7 @@ import {
     jobStatusLine,
     type MeasureText,
     NAME_LINE,
+    nameLines,
     rowHeight,
     STATUS_LINE,
 } from "./cardSize";
@@ -53,8 +54,8 @@ const pin = (id: string): void => {
 
 const dag = computed(() => pipelineDag(stages, focus.value));
 
-// Split over the card's two ends, so a single-job card isn't text jammed against its border.
-const CARD_PADDING_Y = 12;
+// Split over the card's two ends, plus its two 1px borders, so the rows keep their full allocated height.
+const CARD_PADDING_Y = 12 + 2;
 // Between stacked cards in one column.
 const NODE_SEP = 24;
 // The frame's own margin, px on every side: only enough that a card does not touch the band's border.
@@ -228,7 +229,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                     <div
                         v-for="member in node.data.jobs"
                         :key="member.id"
-                        class="relative flex flex-col justify-center pl-2.5 pr-2"
+                        class="relative flex shrink-0 flex-col justify-center pl-2.5 pr-2"
                         :class="tintOf(member.job)"
                         :style="{ height: `${heightOf(node.id, member.job)}px` }"
                         @mouseenter="hovered = member.id"
@@ -240,12 +241,13 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         <!-- The calls a called workflow's job came through, above its own name rather than before it. -->
                         <span
                             v-if="jobName(member.job.name).caller"
-                            class="truncate text-3xs text-subtle"
+                            class="shrink-0 truncate text-3xs text-subtle"
                             :style="{ lineHeight: `${CALLER_LINE}px` }"
+                            v-tooltip.top="member.job.name"
                         >
                             {{ jobName(member.job.name).caller }}
                         </span>
-                        <!-- One size below body text; wraps rather than widening the card, and the whole name is on its tooltip. -->
+                        <!-- Clamp to the lines the row allocated: an unexpected wrap must not squeeze or clip a line. -->
                         <!-- The name alone is the link, so the rest of the row keeps the click that traces this job through the run. -->
                         <a
                             v-if="member.job.webUrl"
@@ -253,8 +255,11 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             target="_blank"
                             rel="noopener"
                             draggable="false"
-                            class="line-clamp-2 break-words rounded-xs text-2xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-link"
-                            :class="member.job.status === `failed` ? `text-danger` : `text-content hover:text-link`"
+                            class="shrink-0 rounded-xs text-2xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-link"
+                            :class="[
+                                nameLines(member.job, widthOf(node.id), measure) === 1 ? `truncate` : `line-clamp-2 break-words`,
+                                member.job.status === `failed` ? `text-danger` : `text-content hover:text-link`,
+                            ]"
                             :style="{ lineHeight: `${NAME_LINE}px` }"
                             v-tooltip.top="{ title: t(`tip.openLog`), rows: [{ label: t(`tip.job`), value: member.job.name }] }"
                             @click.stop
@@ -264,15 +269,18 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                         <!-- No page of its own: a job the workflow declares that the run never reported, as GitHub draws it. -->
                         <span
                             v-else
-                            class="line-clamp-2 break-words text-2xs font-medium"
-                            :class="member.job.status === `failed` ? `text-danger` : `text-content`"
+                            class="shrink-0 text-2xs font-medium"
+                            :class="[
+                                nameLines(member.job, widthOf(node.id), measure) === 1 ? `truncate` : `line-clamp-2 break-words`,
+                                member.job.status === `failed` ? `text-danger` : `text-content`,
+                            ]"
                             :style="{ lineHeight: `${NAME_LINE}px` }"
-                            v-tooltip.top="jobName(member.job.name).caller ? member.job.name : undefined"
+                            v-tooltip.top="member.job.name"
                         >
                             {{ jobName(member.job.name).title }}
                         </span>
                         <!-- Status under the name, not before it: the icon's column was width a long run is short of. -->
-                        <span class="flex items-center gap-1 whitespace-nowrap" :style="{ height: `${STATUS_LINE}px` }">
+                        <span class="flex min-w-0 shrink-0 items-center gap-1 whitespace-nowrap" :style="{ height: `${STATUS_LINE}px` }">
                             <Icon
                                 :name="toneOf(member.job).icon"
                                 class="shrink-0 text-xs"
@@ -282,7 +290,7 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                             />
                             <span
                                 v-if="jobStatusLine(member.job, recurring).streak"
-                                :class="toneWash(`danger`, `rounded px-1 text-3xs font-semibold`)"
+                                :class="toneWash(`danger`, `shrink-0 rounded px-1 text-3xs font-semibold`)"
                                 v-tooltip.top="{
                                     title: t(`tip.failingStreak`),
                                     tone: `danger`,
@@ -290,7 +298,9 @@ const focusedCard = computed(() => dag.value.nodes.find((node) => node.data.jobs
                                 }"
                                 >×{{ jobStatusLine(member.job, recurring).streak }}</span
                             >
-                            <span class="text-3xs tabular-nums text-subtle">{{ jobStatusLine(member.job, recurring).text }}</span>
+                            <span class="min-w-0 truncate text-3xs tabular-nums text-subtle" v-tooltip.top="jobStatusLine(member.job, recurring).text">{{
+                                jobStatusLine(member.job, recurring).text
+                            }}</span>
                         </span>
                     </div>
                 </div>
