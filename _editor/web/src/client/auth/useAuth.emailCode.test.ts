@@ -24,7 +24,7 @@ jest.mock(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ clea
 jest.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ clearCredential: jest.fn() }) }));
 jest.mock(`../../lib/queryPersistence`, () => ({ clearPersistedQueries: jest.fn(async () => undefined) }));
 jest.mock(`../../app/environments/local`, () => ({ localFace: () => undefined }));
-jest.mock(`../../app/environments/desktop`, () => ({ announceDesktopRoster: jest.fn() }));
+jest.mock(`../../app/environments/desktop`, () => ({ announceDesktopRoster: jest.fn(), desktopVersion: () => undefined }));
 jest.mock(`../directory/deviceDirectory`, () => ({ forgetAccount: jest.fn() }));
 jest.mock(`../directory/directState`, () => ({ directMode: ref(false) }));
 jest.mock(`@intentic/ui/skeleton-store`, () => ({ clearImprints: jest.fn(async () => undefined) }));
