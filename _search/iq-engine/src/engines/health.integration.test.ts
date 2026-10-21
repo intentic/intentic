@@ -110,7 +110,8 @@ test("resident health single-flights one full ranking and ref invalidation refre
     }
 
     const tracedLogs = (await readFile(tracePath, "utf8")).split("\n").filter((line) => line.includes("git log --numstat"));
-    expect(tracedLogs).toHaveLength(1);
+    // At most one: none when the HEAD-keyed log (engines/git.ts) is still warm from an earlier test.
+    expect(tracedLogs.length).toBeLessThanOrEqual(1);
     expect(short.hotspots).toHaveLength(0);
     expect(full.hotspots.length).toBeGreaterThan(short.hotspots.length);
 

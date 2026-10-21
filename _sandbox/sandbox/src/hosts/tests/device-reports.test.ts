@@ -436,6 +436,36 @@ test("waits for the answer rather than serving a reading old enough to read as q
     expect((await devices(services))[0]?.report?.hostname).toBe("after");
 });
 
+// The settle window is for a refresh that can land inside it. A machine whose last reading took longer (a laptop that
+// takes seconds to list its containers) never did, and every reader paid the full window for the copy it was then
+// handed anyway: GET /system/devices sat at a flat 2.0 s (2026-10-21). Its landing is announced instead.
+test("serves a quiet reading at once from a machine whose last reading took longer than the settle window", async () => {
+    jest.useFakeTimers();
+    let hostname = "before";
+    // The first reading costs the machine three seconds; the second hangs until the test lets it answer.
+    let held: Promise<void> = Promise.resolve();
+    let release = (): void => undefined;
+    const { services } = fakeServices("slow-pc", async (call) => {
+        if (call.tool === "report") {
+            jest.setSystemTime(Date.now() + 3_000);
+        }
+        await held;
+        return call.tool === "report" ? report(hostname, { capturedAt: Date.now() }) : answer("[]");
+    });
+
+    expect((await devices(services))[0]?.report?.hostname).toBe("before");
+    published.length = 0;
+
+    hostname = "after";
+    held = new Promise((resolve) => (release = resolve));
+    jest.setSystemTime(Date.now() + 61_000);
+    // Fake timers: a reader that waited on the settle would never return here.
+    expect((await devices(services))[0]?.report?.hostname).toBe("before");
+    release();
+    await waitFor(() => expect(published).toEqual(["hosts"]));
+    expect((await devices(services))[0]?.report?.hostname).toBe("after");
+});
+
 // A pull that failed or ran out its deadline is an attempt like any other: the reading it established (offline) is
 // served as a fresh one is, at once and with no new pull, until the TTL since it landed passes. Only a machine with no
 // attempt inside the TTL is asked again, and one whose last reading is old enough to read as quiet is waited for.

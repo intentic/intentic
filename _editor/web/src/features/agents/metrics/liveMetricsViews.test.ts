@@ -247,9 +247,9 @@ describe("the sandbox panel", () => {
         expect(figuresOf(el, `gauges`)[1]).toBe(`Memory 7.9 GiB / 18 GiB`);
         expect(termsOf(el, `memory-accounting`)).toEqual([
             `Anonymous memory: 3.1 GiB`,
-            `File cache (counted): 4.2 GiB`,
+            `Cached file reads (reclaimable): 4.2 GiB`,
             `Kernel memory: 637 MiB`,
-            `Inactive cache (excluded): 689 MiB`,
+            `Idle cached reads (not counted): 689 MiB`,
         ]);
         expect(figuresOf(el, `roles`)).toEqual([`builds and tests 2.0 GiB`, `browsers 1.2 GiB`]);
         expect(el.querySelector(`p`)).toBeNull();

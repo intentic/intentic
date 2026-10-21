@@ -111,6 +111,35 @@ export interface FileChurn {
     dels: number;
 }
 
+// All-history `--numstat` logs by repo dir and arguments, valid while HEAD stays put. The output is small (~2 MB for
+// this monorepo) but producing it diffs every blob in history: ~0.8 GB read from disk per call, and the chores rail
+// asked for it every 5-10 minutes per repo (2026-10-21: ~20 GB of a container's 145 GB of reads in 2.5 h). A
+// windowed log (`since`) moves with the clock and is never cached.
+const fullHistoryLogs = new Map<string, { head: string; stdout: Promise<string> }>();
+
+const headOf = (cwd: string): Promise<string | undefined> =>
+    exec("git", [...GIT_GLOBAL_ARGS, "-C", cwd, "rev-parse", "--verify", "--quiet", "HEAD"], { timeout: UNBORN_TIMEOUT_MS }).then(
+        ({ stdout }) => stdout.trim() || undefined,
+        () => undefined,
+    );
+
+const fullHistoryLog = async (root: string, repo: string, args: string[]): Promise<string> => {
+    const key = `${join(root, repo)}\0${args.join("\0")}`;
+    const head = await headOf(join(root, repo));
+    const held = fullHistoryLogs.get(key);
+    if (head !== undefined && held?.head === head) {
+        return held.stdout;
+    }
+    // The promise is what is held, so readers arriving while the log runs share it; a failed read is not kept.
+    const stdout = git(root, repo, args);
+    if (head !== undefined) {
+        const entry = { head, stdout };
+        fullHistoryLogs.set(key, entry);
+        stdout.catch(() => fullHistoryLogs.get(key) === entry && fullHistoryLogs.delete(key));
+    }
+    return stdout;
+};
+
 // Per-file committed activity from `git log --numstat`; shared by `recent` (windowed) and `hotspots` (all history).
 // Paths outside the sweep or floor-denied are dropped here so callers need not recheck.
 export const churnOf = async (root: string, entries: readonly FileEntry[], options: ChurnOptions): Promise<Map<string, FileChurn>> => {
@@ -121,12 +150,13 @@ export const churnOf = async (root: string, entries: readonly FileEntry[], optio
     const logs = await Promise.all(
         repos.map((repo) => {
             const args = ["log", "--numstat", "--format=commit:%ct"];
-            if (options.since !== undefined) {
-                args.push(`--since=${Math.floor((Date.now() - parseSince(options.since)) / 1000)}`);
-            }
             if (options.author !== undefined) {
                 args.push(`--author=${options.author}`);
             }
+            if (options.since === undefined) {
+                return fullHistoryLog(root, repo, args);
+            }
+            args.push(`--since=${Math.floor((Date.now() - parseSince(options.since)) / 1000)}`);
             return git(root, repo, args);
         }),
     );

@@ -37,9 +37,12 @@ import { sandboxesFromTool, unreadFromTool } from "./device-listing.js";
 // How old a served reading may be before re-asking; readers never wait on this, refresh runs behind it.
 const PULL_TTL_MS = 30_000;
 
-// How long a reader waits for the refresh once the held reading is old enough to read as quiet. Below that age the
-// old copy is served at once; past it, handing it over would only be contradicted a second later, which is what makes
-// a healthy machine look dead the moment its page opens.
+// How long readers wait for a refresh once the held reading is old enough to read as quiet. Below that age the old
+// copy is served at once; past it, handing it over would only be contradicted a second later, which is what makes a
+// healthy machine look dead the moment its page opens. One window per refresh, counted from when it went out, and only
+// for a machine whose last reading came back inside it: a laptop that takes 4-8 s to list its containers never landed
+// in time, so every reader paid the whole 2 s for the quiet copy it was then handed anyway (GET /system/devices sat at
+// a flat 2.0 s p50, 2026-10-21). The landing announces itself (`worthAnnouncing`), so the view still catches up.
 const PULL_SETTLE_MS = 2_000;
 
 // Deadline on one reading, both halves together; a miss reads as offline.
@@ -70,6 +73,10 @@ interface PullEntry {
     result: PullResult | undefined;
     /** The refresh on the wire, so however many readers arrive, the machine is asked once. */
     inflight: Promise<PullResult> | undefined;
+    /** When the refresh on the wire went out: the settle window is that refresh's, not each reader's. */
+    sentAt: number;
+    /** How long the last reading took to land, which says whether waiting on the next one can pay. */
+    took: number;
 }
 
 const pulled = new Map<string, PullEntry>();
@@ -209,6 +216,7 @@ const worthAnnouncing = (before: { at: number; result: PullResult | undefined },
 // against the reading's age.
 const refresh = (services: Services, id: string, entry: PullEntry): Promise<PullResult> => {
     const had = { at: entry.at, result: entry.result };
+    const sentAt = Date.now();
     let thrown: string | undefined;
     const inflight = services.perf
         .track("devices.pull", { id }, () => pull(services, id))
@@ -220,6 +228,7 @@ const refresh = (services: Services, id: string, entry: PullEntry): Promise<Pull
         .then((result) => {
             entry.at = Date.now();
             entry.result = result;
+            entry.took = entry.at - sentAt;
             noteReading(services, id, result, thrown);
             if (entry.inflight === inflight) {
                 entry.inflight = undefined;
@@ -232,13 +241,15 @@ const refresh = (services: Services, id: string, entry: PullEntry): Promise<Pull
             return result;
         });
     entry.inflight = inflight;
+    entry.sentAt = sentAt;
     return inflight;
 };
 
 // Answers from memory while a refresh runs behind it. Two readings block: a machine never read before (bounded by
-// PULL_TIMEOUT_MS) and one held long enough to read as quiet (bounded by PULL_SETTLE_MS, then served anyway).
+// PULL_TIMEOUT_MS) and one held long enough to read as quiet (what is left of the refresh's PULL_SETTLE_MS, and only
+// when the machine's last reading landed inside it; then served anyway).
 const pullCached = async (services: Services, id: string): Promise<PullResult> => {
-    const entry = pulled.get(id) ?? { at: 0, result: undefined, inflight: undefined };
+    const entry = pulled.get(id) ?? { at: 0, result: undefined, inflight: undefined, sentAt: 0, took: 0 };
     pulled.set(id, entry);
     const held = entry.result;
     if (held !== undefined && Date.now() - entry.at < PULL_TTL_MS) {
@@ -252,7 +263,11 @@ const pullCached = async (services: Services, id: string): Promise<PullResult> =
         // Stale but serving: the refresh is not awaited here, it lands in the map for the next reader to pick up.
         return held;
     }
-    return (await within(inflight, PULL_SETTLE_MS, undefined, { unref: true })) ?? held;
+    const settle = entry.took > PULL_SETTLE_MS ? 0 : PULL_SETTLE_MS - (Date.now() - entry.sentAt);
+    if (settle <= 0) {
+        return held;
+    }
+    return (await within(inflight, settle, undefined, { unref: true })) ?? held;
 };
 
 // Maps os.platform()'s spelling (win32, darwin) to capability-card slugs; unknown tokens pass through as-is.
