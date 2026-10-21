@@ -8,7 +8,7 @@ import type { LocalCheckRow, LocalFirstTask, LocalPcCheck, LocalPcSetup } from "
 
 /**
  * What the card says, one phase at a time. `hidden`: nothing to say, off Windows or on a ready PC with someone signed in.
- * `signIn`: the PC is ready and nobody is signed in. `firstTaskFailed`: the first task did not start once it could.
+ * `signIn`: the PC is ready, nobody is signed in, and a first task waits on the sign-in. `firstTaskFailed`: the first task did not start once it could.
  */
 export type PcCardPhase =
     | `hidden`
@@ -43,8 +43,8 @@ export interface PcCardInput {
 /**
  * The card's phase. The setup's own state first: it is newer than the check made before it ran, so a running, waiting or
  * failed setup is said whatever that check still says, and a finished one makes the PC ready even if no check has
- * looked since. Then what the check found. A ready PC is the card's business only while nobody is signed in (the
- * sign-in and the first task are on it) or while the first task failed to start.
+ * looked since. Then what the check found. A ready PC is the card's business only while a first task waits on the
+ * sign-in, or failed to start.
  */
 export const pcCardPhase = (input: PcCardInput): PcCardPhase => {
     if (input.os !== `windows`) {
@@ -78,10 +78,18 @@ export const pcCardPhase = (input: PcCardInput): PcCardPhase => {
                 return `needsSetup`;
         }
     }
+    return readyPhase(input);
+};
+
+// A ready PC is done with this card. Signed out, the sign-in is already the rail's foot tile and the folder's own way to
+// a sandbox (the web's local/setup), so the card stays only for a first task written here that waits on it (2026-10-21:
+// it used to stay for the sign-in alone, between a finished step and a locked one, on Devices).
+const readyPhase = (input: PcCardInput): PcCardPhase => {
+    const task = input.firstTask?.state;
     if (input.signedIn === false) {
-        return `signIn`;
+        return task === undefined || task === `sent` ? `hidden` : `signIn`;
     }
-    return input.firstTask?.state === `failed` ? `firstTaskFailed` : `hidden`;
+    return task === `failed` ? `firstTaskFailed` : `hidden`;
 };
 
 // The phases with work for the reader on the card: the setup's own, the sign-in, and the first task, which can be

@@ -56,8 +56,11 @@ describe(`the card for this PC's own setup`, () => {
         expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`cantRun`), hostsSandboxes: true })).toBe(`cantRun`);
     });
 
-    it(`stays for the sign-in on a ready PC, and goes once someone is signed in`, () => {
-        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`) })).toBe(`signIn`);
+    it(`goes on a ready PC, staying signed out only for a first task that waits on the sign-in`, () => {
+        // The sign-in alone is the rail's and the folder's own page's, not this card's.
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`) })).toBe(`hidden`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), firstTask: task(`queued`) })).toBe(`signIn`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), firstTask: task(`sent`) })).toBe(`hidden`);
         expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), signedIn: true })).toBe(`hidden`);
         expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), signedIn: true, firstTask: task(`queued`) })).toBe(`hidden`);
         // Nothing heard of who is signed in yet is not "signed out".
@@ -65,7 +68,8 @@ describe(`the card for this PC's own setup`, () => {
     });
 
     it(`takes a finished setup for a ready PC, whatever the check made before it said`, () => {
-        expect(pcCardPhase({ ...FIRST_LAUNCH, setup: { state: `ready` } })).toBe(`signIn`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, setup: { state: `ready` } })).toBe(`hidden`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, setup: { state: `ready` }, firstTask: task(`queued`) })).toBe(`signIn`);
         expect(pcCardPhase({ ...FIRST_LAUNCH, setup: { state: `ready` }, signedIn: true })).toBe(`hidden`);
     });
 

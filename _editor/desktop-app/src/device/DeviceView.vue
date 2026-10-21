@@ -323,8 +323,8 @@ onMounted(() => {
                 @dismiss="dismissFix"
             />
 
-            <!-- THIS PC'S OWN SETUP, ITS SIGN-IN AND THE FIRST TASK, on a Windows PC until it is ready and someone is signed in:
-                 ahead of any folder's own sandbox, which waits for it. A folder's sandbox being made is said in that
+            <!-- THIS PC'S OWN SETUP, on a Windows PC until it is ready (then only for a first task waiting on the sign-in, or
+                 failed; the sign-in alone is the rail's and the folder page's): ahead of any folder's sandbox, which waits for it. A folder's sandbox being made is said in that
                  folder's window, never here: this page is the machine, its sandboxes, its agent and its engine
                  (2026-10-21; it used to lead with a card about the one sandbox the app kept for the whole computer). -->
             <PcSetupCard />
