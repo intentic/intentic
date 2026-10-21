@@ -7,6 +7,7 @@ import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
+import * as providerCatalogOriginal from "../../../models/providers/providerCatalog";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
 const patch = jest.fn((fields: Partial<SandboxSettings>) => {
@@ -26,6 +27,7 @@ const connected = ref<readonly string[]>([`codex`, `claude`]);
 
 jest.mock(`../../../models/providers/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
 jest.mock(`../../../models/providers/providerCatalog`, () => ({
+    ...providerCatalogOriginal,
     endpointProviders: ref([]),
     providerModels: ref({}),
     demandCatalog: () => undefined,

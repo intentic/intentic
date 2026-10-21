@@ -1693,7 +1693,7 @@ export interface ChildSupervisor {
     readonly landing: (childId: string) => string | undefined;
     // Brings a child's work held off the parent's checkout by a clash into it with conflict markers to resolve.
     readonly merge: (childId: string) => Promise<ChildActionResult>;
-    // Records a held child's work as one the parent brought in some other way (child-settle.ts), and which it still holds.
+    // Records a held child's work as one the parent brought in some other way (child-held.ts), and which it still holds.
     readonly settle: (childId: string) => Promise<ChildActionResult>;
     readonly held: () => readonly HeldChild[];
     // Stops a child's running turn, its pending start, or the re-run the sandbox booked for it.

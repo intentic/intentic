@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
+import { statePath } from "../state-paths.js";
 
 const run = promisify(execFile);
 const ENTRY = join(packageRoot(import.meta.url), "src", "environment", "compose-overlay.ts");
@@ -23,6 +24,11 @@ test("the composer opens no log file for writing, and answers with its line wher
     const [workspace, history, auth] = [join(base, "work"), join(base, "history"), join(base, "auth")];
     const logs = join(history, "logs");
     await Promise.all([workspace, join(logs, "perf.jsonl"), join(logs, "client.jsonl"), auth].map((dir) => mkdir(dir, { recursive: true })));
+    // An empty sandbox may need no overlay at all. Give this one an approved input so composing exercises the output
+    // path regardless of the host image's baked packs or runner-set environment.
+    const custom = statePath(workspace, ".intentic/config/environment.custom.Dockerfile");
+    await mkdir(dirname(custom), { recursive: true });
+    await writeFile(custom, "RUN echo log-free-composition\n");
 
     // Spawned the way ic runs it in the target image, with the test runtime standing in for node; the bound is a hang
     // bound for a busy runner.

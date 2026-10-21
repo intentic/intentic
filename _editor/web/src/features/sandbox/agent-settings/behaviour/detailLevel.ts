@@ -17,6 +17,7 @@ const KEY = deviceKey(`intentic:agent-tools-detail`);
 const StoredSchema = z.record(z.string(), z.enum([`simple`, `advanced`]));
 
 // One map for the page, read once: every section's switch writes through it.
+// allow(module-state): this browser's section detail preferences, shared across sandboxes like the theme
 const stored = ref<Record<string, DetailLevel>>(storedJson(KEY, StoredSchema) ?? {});
 
 const write = (section: string, level: DetailLevel): void => {

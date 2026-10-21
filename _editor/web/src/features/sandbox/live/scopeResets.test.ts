@@ -14,7 +14,7 @@ import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 jest.mock("../../../router", () => ({ router: { push: jest.fn() } }));
 jest.mock("../../../app/analytics", () => ({ track: jest.fn(), replaySessionId: () => undefined, noteTurnCompleted: jest.fn() }));
 const reachable = ref(false);
-jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
+jest.mock("../../../client/sandbox/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId, reachable, active: ref(undefined) }) }));
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({
     sandboxRpc: fakeSandboxRpc({
         agents: { list: async () => ({ agents: [], rev: 0, held: [] }), archived: async () => ({ agents: [], rev: 0, held: [] }) },

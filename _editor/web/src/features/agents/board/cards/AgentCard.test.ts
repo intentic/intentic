@@ -406,14 +406,14 @@ it(`says why a session died, on the card that reports it died`, () => {
 });
 
 // The screenshot that redrew this: two cards in Attention, each reading "Error" in the corner over two red lines of the
-// same refusal. The corner names the kind the daemon coded, the line keeps the refusal's first sentence in the card's own
-// ink, and its advice (the half after the middle dot) waits in the hover with the rest.
+// same refusal. The corner names the kind the daemon coded, the line uses the chat's sentence for that kind in the card's
+// own ink, and the provider's words wait in the hover.
 it(`names a classified failure in the corner and keeps one line of it on the card`, () => {
     const failure = `Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access`;
     const card = mount({ ...ready(`error`), failureCode: `claude-not-entitled`, failure });
     expect(card.querySelector(`.ui-status-pill`)?.textContent?.trim()).toBe(`No access`);
     const line = card.querySelector<HTMLElement>(`[data-failure]`)!;
-    expect(line.textContent?.trim()).toBe(`Your organization has disabled Claude subscription access for Claude Code`);
+    expect(line.textContent?.trim()).toBe(`The provider refused this account: its plan or organization does not allow it`);
     expect(card.textContent).not.toContain(`Use an Anthropic API key`);
     // Not a red paragraph: only the glyph wears the tone, and a refusal's tone is the one asking for a decision.
     expect(line.classList.contains(`text-danger`)).toBe(false);

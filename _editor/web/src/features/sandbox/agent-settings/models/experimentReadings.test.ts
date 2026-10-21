@@ -170,11 +170,11 @@ describe(`headlineOf`, () => {
 
     it(`keeps the earlier comparison's answer while a restarted one has none, with that comparison's sample`, () => {
         const table = tableOf(
-            experiment([reading({ on: { turns: 5 }, off: { turns: 2 } })], {
+            experiment([reading({ on: { turns: 5, mean: 3.2 }, off: { turns: 2, mean: 6.4 } })], {
                 previous: {
                     from: 1,
                     to: 2,
-                    metrics: [reading({ metric: `failedCalls`, deltaPct: -31, marginPct: 8, on: { turns: 84 }, off: { turns: 21 } })],
+                    metrics: [reading({ metric: `failedCalls`, deltaPct: -31, marginPct: 8, on: { turns: 84, mean: 3.2 }, off: { turns: 21, mean: 6.4 } })],
                 },
             }),
         );

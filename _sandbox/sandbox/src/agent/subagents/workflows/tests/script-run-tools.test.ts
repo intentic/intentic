@@ -78,6 +78,7 @@ test("a delegating turn with workflow runs lists the workflow tools, and passes 
         "cancel",
         "answer",
         "merge",
+        "settle",
         "wait",
         "workflow",
         "workflow_status",

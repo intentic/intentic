@@ -28,15 +28,15 @@ const card = (id: string, over: Partial<FleetAgent> = {}): FleetAgent => ({
 });
 const child = (id: string, parent: string, over: Partial<FleetAgent> = {}): FleetAgent => card(id, { startedBy: `agent:${parent}`, ...over });
 const step = (id: string, runId: string): FleetAgent => card(id, { workflow: { runId, name: `Review`, step: `first`, index: 0, total: 1 } });
-// SAFETY: only the fields the fold reads (runId, the design's name, each step's conversation and state) are filled in.
-const run = (runId: string, conversations: readonly string[]): WorkflowRun =>
-    ({
-        runId,
-        workflow: { id: `wf`, name: `Nightly review`, steps: [], maxParallel: 1 },
-        state: `running`,
-        startedAt: 1,
-        steps: conversations.map((conversationId, at) => ({ stepId: `s${at}`, conversationId, state: at === 0 ? `done` : `running`, iterations: 0 })),
-    }) as WorkflowRun;
+const run = (runId: string, conversations: readonly string[]): WorkflowRun => ({
+    runId,
+    workflow: { id: `wf`, name: `Nightly review`, steps: [], maxParallel: 1 },
+    repos: [],
+    state: `running`,
+    startedAt: 1,
+    resumed: 0,
+    steps: conversations.map((conversationId, at) => ({ stepId: `s${at}`, conversationId, state: at === 0 ? `done` : `running`, iterations: 0 })),
+});
 
 const reading = (sessions: SandboxMetrics[`sessions`]): SandboxMetrics => ({
     at: 1,

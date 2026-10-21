@@ -11,6 +11,7 @@ import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
 import * as uiOriginal from "@intentic/ui";
+import * as providerCatalogOriginal from "../../../../models/providers/providerCatalog";
 
 // useDevice reads window.matchMedia at import; environment.ts reads window.env.
 
@@ -52,6 +53,7 @@ jest.mock(`../../../../models/providers/access`, () => ({ providerReady: (provid
 // here assumes, and leaves the presets nothing to suggest from.
 const providerModels = ref<Record<string, readonly { value: string; label: string; helperOnly?: string }[]>>({});
 jest.mock(`../../../../models/providers/providerCatalog`, () => ({
+    ...providerCatalogOriginal,
     endpointProviders: ref([]),
     providerModels,
     demandCatalog: () => undefined,
