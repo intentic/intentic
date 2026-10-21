@@ -7,8 +7,7 @@ import type { MenuItem } from "primevue/menuitem";
 import { type Component, computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useId } from "vue";
 import { useSandboxLiveness } from "../../client/sandbox/freshness/queryFreshness";
 import { chatInSidePanel } from "../../models/conversations/panel/chatPanelLayout";
-import { SIDE_PANEL } from "../../workbench/commands/categories";
-import { type CommandRegistration, registerCommand } from "../../workbench/commands/useCommands";
+import { registerBuiltin } from "../../workbench/commands/builtinCommands";
 import { chatSlot } from "../../workbench/window/panelSlots";
 import { toAppPx, toScreenPx, uiLength } from "../../workbench/window/uiScale";
 import {
@@ -196,56 +195,16 @@ onMounted(() => {
             act(activeTab.value);
         }
     };
-    const entries: Omit<CommandRegistration, `owner` | `category`>[] = [
-        {
-            command: `side.nextTab`,
-            title: t(`ui.action.next`),
-            keybinding: `Alt+PageDown`,
-            when: `tabSurface == 'side'`,
-            handler: () => cycleTab(1, shownSideTabs.value),
-        },
-        {
-            command: `side.previousTab`,
-            title: t(`shell.sidePanel.previous`),
-            keybinding: `Alt+PageUp`,
-            when: `tabSurface == 'side'`,
-            handler: () => cycleTab(-1, shownSideTabs.value),
-        },
-        {
-            command: `side.closeTab`,
-            title: t(`ui.action.close`),
-            icon: `times`,
-            keybinding: `Ctrl+Shift+X`,
-            when: `tabSurface == 'side'`,
-            handler: acting((tab) => closeTab(tab.id)),
-        },
-        {
-            command: `side.closeOtherTabs`,
-            title: t(`shell.sidePanel.closeOthers`),
-            icon: `times`,
-            keybinding: `Ctrl+Shift+,`,
-            when: `tabSurface == 'side'`,
-            handler: acting((tab) => closeOtherTabs(tab.id)),
-        },
-        {
-            command: `side.closeAllTabs`,
-            title: t(`shell.sidePanel.closeAll`),
-            icon: `times`,
-            keybinding: `Ctrl+Shift+Backspace`,
-            when: `tabSurface == 'side'`,
-            handler: closeAllTabs,
-        },
-        { command: `side.keepTab`, title: t(`ui.action.keepOpen`), icon: `pin`, handler: acting((tab) => keepTab(tab.id)) },
-        { command: `side.openInSection`, title: t(`shell.sidePanel.openInSection`), icon: `expand`, handler: acting(openHome) },
-        {
-            command: `side.toggleSplit`,
-            title: t(`shell.sidePanel.toggleSplit`),
-            icon: `split-columns`,
-            when: `tabSurface == 'side'`,
-            handler: () => setSplit(fills.value),
-        },
+    commandDisposables = [
+        registerBuiltin(`side.nextTab`, () => cycleTab(1, shownSideTabs.value)),
+        registerBuiltin(`side.previousTab`, () => cycleTab(-1, shownSideTabs.value)),
+        registerBuiltin(`side.closeTab`, acting((tab) => closeTab(tab.id))),
+        registerBuiltin(`side.closeOtherTabs`, acting((tab) => closeOtherTabs(tab.id))),
+        registerBuiltin(`side.closeAllTabs`, closeAllTabs),
+        registerBuiltin(`side.keepTab`, acting((tab) => keepTab(tab.id))),
+        registerBuiltin(`side.openInSection`, acting(openHome)),
+        registerBuiltin(`side.toggleSplit`, () => setSplit(fills.value)),
     ];
-    commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, category: SIDE_PANEL, ...entry }));
 });
 onBeforeUnmount(() => {
     for (const disposable of commandDisposables) {

@@ -4,8 +4,8 @@ import { Button, clipboardOf, ui, ContextMenu, type IconName, ResizeSeam, Segmen
 import type { Disposable } from "@intentic/extension-api";
 import type { MenuItem } from "primevue/menuitem";
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
-import { WORKSPACE } from "../../../workbench/commands/categories";
-import { commandShortcut, type CommandRegistration, registerCommand } from "../../../workbench/commands/useCommands";
+import { type BuiltinCommand, registerBuiltin } from "../../../workbench/commands/builtinCommands";
+import { commandShortcut, type CommandRegistration } from "../../../workbench/commands/useCommands";
 import { publishContextKey } from "../../../workbench/commands/contextKeys";
 import { deleteUndoable } from "../../../models/workspace/tree/deleteUndo";
 import { UNDO_DELETE, useDeleteUndo } from "../explorer/undo/useDeleteUndo";
@@ -592,135 +592,30 @@ const cycleTab = (delta: number): void => {
         selectTab(next.id);
     }
 };
-const WORKSPACE_COMMANDS = computed((): readonly Omit<CommandRegistration, `owner`>[] => [
-    { command: `workspace.search`, title: t(`workspace.workspaceDesktop.search`), icon: `search`, handler: () => focusSearch() },
-    {
-        command: `workspace.searchContent`,
-        title: t(`workspace.workspaceDesktop.searchInFiles2`),
-        icon: `search`,
-        keybinding: `Mod+Shift+F`,
-        handler: () => focusSearch(`text`),
-    },
-    {
-        command: `workspace.showChanges`,
-        title: t(`workspace.workspaceDesktop.showChanges`),
-        icon: `check-square`,
-        keybinding: `Ctrl+Shift+D`,
-        handler: openReview,
-    },
-    { command: `workspace.showFiles`, title: t(`workspace.workspaceDesktop.showFiles`), icon: `folder`, handler: () => focusSearch() },
-    {
-        command: `workspace.showHistory`,
-        title: t(`workspace.workspaceDesktop.show`, { restorePoints: words.value.restorePoints }),
-        icon: `history`,
-        handler: () => layout.setSidebarPanel(`history`),
-    },
-    // The root repo's health report: the palette route to what a nested repo opens from its own tree row.
-    {
-        command: `workspace.codebaseHealth`,
-        title: t(`workspace.workspaceDesktop.showCodebaseHealth`),
-        icon: `wave-pulse`,
-        handler: () => openHealth(`root`),
-    },
-    { command: `workspace.showHome`, title: t(`workspace.workspaceDesktop.showHome2`), icon: `th-large`, handler: showHome },
-    {
-        command: `workspace.toggleSidebar`,
-        title: t(`workspace.workspaceDesktop.toggleExplorer2`),
-        icon: `bars`,
-        keybinding: `Ctrl+Shift+B`,
-        handler: () => toggleSidebar(),
-    },
-    // One chord toggles both directions; Ctrl+Shift+\ avoids bare Ctrl+\, which is SIGQUIT in a focused terminal.
-    {
-        command: `workspace.splitEditor`,
-        title: t(`workspace.workspaceDesktop.openTabToSide`),
-        icon: `split-columns`,
-        keybinding: `Ctrl+Shift+\\`,
-        when: `tabSurface == 'workspace'`,
-        handler: () => openToSide(),
-    },
-    { command: `workspace.unsplitEditor`, title: t(`workspace.workspaceDesktop.closeSplit`), icon: `split-columns`, handler: () => collapseSplit() },
-    // The explorer's two filters, reachable from the palette when the sidebar is collapsed and off-screen.
-    {
-        command: `workspace.toggleIgnored`,
-        title: t(`workspace.workspaceDesktop.toggleIgnoredFiles`),
-        icon: `eye`,
-        handler: () => layout.toggleShowIgnored(),
-    },
-    {
-        command: `workspace.toggleTests`,
-        title: t(`workspace.workspaceDesktop.toggleTestFiles`),
-        icon: `filter`,
-        handler: () => layout.toggleHideTests(),
-    },
-    // Shared tab family with chat/terminal (tabSurface.ts resolves by focus); workspace is the fallback surface.
-    {
-        command: `workspace.nextTab`,
-        title: t(`workspace.workspaceDesktop.nextTab`),
-        keybinding: `Alt+PageDown`,
-        when: `tabSurface == 'workspace'`,
-        handler: () => cycleTab(1),
-    },
-    {
-        command: `workspace.previousTab`,
-        title: t(`workspace.workspaceDesktop.previousTab`),
-        keybinding: `Alt+PageUp`,
-        when: `tabSurface == 'workspace'`,
-        handler: () => cycleTab(-1),
-    },
-    {
-        command: `workspace.closeTab`,
-        title: t(`workspace.workspaceDesktop.closeTab`),
-        icon: `times`,
-        keybinding: `Ctrl+Shift+X`,
-        when: `tabSurface == 'workspace'`,
-        handler: closeActiveTab,
-    },
-    {
-        command: `workspace.closeOtherTabs`,
-        title: t(`workspace.workspaceDesktop.closeOtherTabs`),
-        icon: `times`,
-        keybinding: `Ctrl+Shift+,`,
-        when: `tabSurface == 'workspace'`,
-        handler: closeOtherTabs,
-    },
-    {
-        command: `workspace.closeTabsToRight`,
-        title: t(`workspace.workspaceDesktop.closeTabsToRight`),
-        icon: `times`,
-        keybinding: `Ctrl+Shift+.`,
-        when: `tabSurface == 'workspace'`,
-        handler: closeTabsToRight,
-    },
-    {
-        command: `workspace.closeAllTabs`,
-        title: t(`workspace.workspaceDesktop.closeAllTabs`),
-        icon: `times`,
-        keybinding: `Ctrl+Shift+Backspace`,
-        when: `tabSurface == 'workspace'`,
-        handler: closeAllTabs,
-    },
-    // Ctrl+Shift+O ("reOpen"), not VSCode's Ctrl+Shift+T: that reopens the browser's own tab and isn't cancellable.
-    {
-        command: `workspace.reopenClosedTab`,
-        title: t(`workspace.workspaceDesktop.reopenClosedTab`),
-        icon: `undo`,
-        keybinding: `Ctrl+Shift+O`,
-        when: `tabSurface == 'workspace'`,
-        handler: reopenClosedTab,
-    },
-    { command: `workspace.refresh`, title: t(`workspace.workspaceDesktop.refreshFiles`), icon: `refresh`, handler: () => refetch() },
-    // Mod+Z brings back the last delete wherever the caret isn't in a field or the code editor, which keep their own
-    // undo; with nothing deleted the chord passes through untouched.
-    {
-        command: UNDO_DELETE,
-        title: t(`workspace.workspaceDesktop.undoDelete`),
-        icon: `undo`,
-        keybinding: `Mod+Z`,
-        when: `workspaceDeleteUndoable && !editableTarget`,
-        handler: () => undoDelete(),
-    },
-]);
+// What each command is called and bound to is declared once (builtinCommands.ts); the workspace gives it its handler.
+const WORKSPACE_COMMANDS: readonly (readonly [BuiltinCommand, CommandRegistration[`handler`]])[] = [
+    [`workspace.search`, () => focusSearch()],
+    [`workspace.searchContent`, () => focusSearch(`text`)],
+    [`workspace.showChanges`, openReview],
+    [`workspace.showFiles`, () => focusSearch()],
+    [`workspace.showHistory`, () => layout.setSidebarPanel(`history`)],
+    [`workspace.codebaseHealth`, () => openHealth(`root`)],
+    [`workspace.showHome`, showHome],
+    [`workspace.toggleSidebar`, () => toggleSidebar()],
+    [`workspace.splitEditor`, () => openToSide()],
+    [`workspace.unsplitEditor`, () => collapseSplit()],
+    [`workspace.toggleIgnored`, () => layout.toggleShowIgnored()],
+    [`workspace.toggleTests`, () => layout.toggleHideTests()],
+    [`workspace.nextTab`, () => cycleTab(1)],
+    [`workspace.previousTab`, () => cycleTab(-1)],
+    [`workspace.closeTab`, closeActiveTab],
+    [`workspace.closeOtherTabs`, closeOtherTabs],
+    [`workspace.closeTabsToRight`, closeTabsToRight],
+    [`workspace.closeAllTabs`, closeAllTabs],
+    [`workspace.reopenClosedTab`, reopenClosedTab],
+    [`workspace.refresh`, () => refetch()],
+    [UNDO_DELETE, () => undoDelete()],
+];
 let workspaceCommandDisposables: readonly Disposable[] = [];
 
 onMounted(() => {
@@ -733,10 +628,9 @@ onMounted(() => {
     }
     // Loads Monaco (+ Shiki bridge) while browsing the tree, so the first file open isn't cold.
     void useMonaco().ensureMonaco();
-    // One family for the whole list, stated here rather than on every entry.
     workspaceCommandDisposables = [
         publishContextKey(`workspaceDeleteUndoable`, deleteUndoable),
-        ...WORKSPACE_COMMANDS.value.map((spec) => registerCommand({ owner: `builtin`, category: WORKSPACE, ...spec })),
+        ...WORKSPACE_COMMANDS.map(([command, handler]) => registerBuiltin(command, handler)),
     ];
 });
 onBeforeUnmount(() => {

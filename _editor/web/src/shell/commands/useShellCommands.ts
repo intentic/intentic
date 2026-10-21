@@ -1,8 +1,7 @@
 import type { Disposable } from "@intentic/extension-api";
 import { onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
-import { BROWSERS, CHAT, GO_TO, TERMINAL } from "../../workbench/commands/categories";
-import { type CommandRegistration, registerCommand } from "../../workbench/commands/useCommands";
+import { registerBuiltin } from "../../workbench/commands/builtinCommands";
 import { chatOnRail, toggleChatFloating, toggleChatHome } from "../../models/conversations/panel/chatPanelLayout";
 import { useChatFloating } from "../../models/conversations/panel/chatFloating";
 import { toggleBrowsersFloating, useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
@@ -14,8 +13,8 @@ import { t } from "@intentic/ui/i18n";
 
 // Core shell's built-in actions: what the shell can *do*, against the panels it owns. Where these commands can take
 // you is useNavigationCommands' half, derived from the rail and the hubs rather than listed. Each handler calls the
-// real composable directly; the command is the binding. Registered on mount and disposed on unmount so a shell
-// remount (mobile/desktop crossover, HMR) can't double-register into the registry.
+// real composable directly; what each command is called and bound to is declared once, in builtinCommands.ts.
+// Registered on mount and disposed on unmount so a shell remount (mobile/desktop crossover, HMR) can't double-register into the registry.
 export function useShellCommands(): void {
     const router = useRouter();
     const terminal = useTerminalPanel();
@@ -28,100 +27,39 @@ export function useShellCommands(): void {
     let disposables: readonly Disposable[] = [];
 
     onMounted(() => {
-        // Explicitly typed: heterogeneous members would otherwise infer a narrow union from the first entries.
-        const entries: Omit<CommandRegistration, `owner`>[] = [
-            {
-                command: `workspace.goToAnything`,
-                title: t(`shell.useShellCommands.anything`),
-                category: GO_TO,
-                icon: `search`,
-                keybinding: `Mod+P`,
-                handler: (): void => {
-                    mode.value = `all`;
-                    isOpen.value = true;
-                },
-            },
-            {
-                command: `workspace.commandPalette`,
-                // The one command with no family: it is the list the others are read from.
-                title: t(`shell.useShellCommands.commandPalette`),
-                icon: `search`,
-                keybinding: `Mod+Shift+P`,
-                handler: (): void => {
-                    mode.value = `commands`;
-                    isOpen.value = true;
-                },
-            },
+        // The three window toggles' titles say which way a press goes, so they are read live from the state.
+        const dockWord = (floats: boolean): string => (floats ? t(`shell.useShellCommands.dockBack`) : t(`shell.useShellCommands.moveIntoNewWindow`));
+        disposables = [
+            registerBuiltin(`workspace.goToAnything`, (): void => {
+                mode.value = `all`;
+                isOpen.value = true;
+            }),
+            registerBuiltin(`workspace.commandPalette`, (): void => {
+                mode.value = `commands`;
+                isOpen.value = true;
+            }),
             // Both terminal commands no-op below maintainer, where the daemon refuses the socket.
-            {
-                command: `terminal.toggle`,
-                title: t(`shell.useShellCommands.togglePanel`),
-                category: TERMINAL,
-                icon: `code`,
-                keybinding: `Ctrl+\``,
-                handler: () => (canShip.value ? terminal.toggle() : undefined),
-            },
-            // Match the physical key globally so terminal.new works while its panel is closed.
-            {
-                command: `terminal.new`,
-                title: t(`shell.words.new`),
-                category: TERMINAL,
-                icon: `code`,
-                keybinding: `Ctrl+Shift+\``,
-                handler: () => (canShip.value ? terminal.spawnShell() : undefined),
-            },
-            // Getter title, so the palette re-reads it live; gated off the terminal, where F9 belongs to whatever's
-            // there.
-            {
-                command: `chat.toggleFloating`,
-                get title(): string {
-                    return chat.floats.value ? t(`shell.useShellCommands.dockBack`) : t(`shell.useShellCommands.moveIntoNewWindow`);
-                },
-                category: CHAT,
-                icon: `external-link`,
-                keybinding: `F9`,
-                when: `tabSurface != 'terminal'`,
-                handler: () => toggleChatFloating(),
-            },
-            // In-app counterpart to the pop-out: rail vs. side column; title getter tracks state; unbound (F9 is
-            // spent).
-            {
-                command: `chat.toggleHome`,
-                get title(): string {
-                    return chatOnRail.value ? t(`shell.useShellCommands.dockBackToSide`) : t(`shell.useShellCommands.dockToRail`);
-                },
-                category: CHAT,
-                // `layout-left`, not `expand`: the rail is a left-edge dock, not something this command maximises.
-                icon: `layout-left`,
-                handler: () => toggleChatHome(router),
-            },
-            {
-                command: `terminal.toggleFloating`,
-                get title(): string {
-                    return terminalFloat.floats.value ? t(`shell.useShellCommands.dockBack`) : t(`shell.useShellCommands.moveIntoNewWindow`);
-                },
-                category: TERMINAL,
-                icon: `external-link`,
-                handler: (): void => {
+            registerBuiltin(`terminal.toggle`, () => (canShip.value ? terminal.toggle() : undefined)),
+            registerBuiltin(`terminal.new`, () => (canShip.value ? terminal.spawnShell() : undefined)),
+            registerBuiltin(`chat.toggleFloating`, () => toggleChatFloating(), () => dockWord(chat.floats.value)),
+            // In-app counterpart to the pop-out: rail vs. side column.
+            registerBuiltin(
+                `chat.toggleHome`,
+                () => toggleChatHome(router),
+                () => (chatOnRail.value ? t(`shell.useShellCommands.dockBackToSide`) : t(`shell.useShellCommands.dockToRail`)),
+            ),
+            registerBuiltin(
+                `terminal.toggleFloating`,
+                (): void => {
                     // Open first: popping out a closed panel would float an empty window.
                     terminal.setOpen(true);
                     terminalFloat.toggle();
                 },
-            },
-            // The window toggle whose title says which way the press goes; the jump to its area is a destination
-            // (useNavigationCommands), like every other area's.
-            {
-                command: `browsers.toggleFloating`,
-                get title(): string {
-                    return browsersFloat.floats.value ? t(`shell.useShellCommands.dockBack`) : t(`shell.useShellCommands.moveIntoNewWindow`);
-                },
-                category: BROWSERS,
-                icon: `external-link`,
-                handler: () => toggleBrowsersFloating(),
-            },
+                () => dockWord(terminalFloat.floats.value),
+            ),
+            // The jump to its area is a destination (useNavigationCommands), like every other area's.
+            registerBuiltin(`browsers.toggleFloating`, () => toggleBrowsersFloating(), () => dockWord(browsersFloat.floats.value)),
         ];
-        // Object.assign, not a spread: a spread would read (and freeze) the two dynamic title getters above.
-        disposables = entries.map((entry) => registerCommand(Object.assign(entry, { owner: `builtin` })));
     });
 
     onUnmounted(() => {

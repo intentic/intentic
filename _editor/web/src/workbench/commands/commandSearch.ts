@@ -1,5 +1,8 @@
 import { GO_TO, SANDBOX, SETTINGS } from "./categories";
-import { commandLabel, type RegisteredCommand } from "./useCommands";
+import { type CommandRegistration, commandLabel } from "./useCommands";
+
+/** What ranking reads of a command: its id, its name and its family. */
+type Ranked = Pick<CommandRegistration, `command` | `title` | `category`>;
 
 // How a typed query picks rows by name, shared by the palette (every kind of row it lists), the command registry's own
 // ranking and the Keybindings page, so the same words find the same rows everywhere. Two rules, both about how people
@@ -58,14 +61,14 @@ const DESTINATIONS: ReadonlySet<string> = new Set([GO_TO, SANDBOX, SETTINGS]);
 
 // Where you can go, versus what you can do. Only used with nothing typed, and for two reasons: a palette opened to be
 // read is a menu of places first, and the row a bare Enter lands on is then a navigation rather than an action.
-const isDestination = (entry: RegisteredCommand): number => (DESTINATIONS.has(entry.category ?? ``) ? 0 : 1);
+const isDestination = (entry: Ranked): number => (DESTINATIONS.has(entry.category ?? ``) ? 0 : 1);
 
 /**
  * The query's answer: matching commands, best first, ties broken by name so the order is stable and families sit
  * together. An empty query is every command — destinations first, then alphabetically, which groups "Sandbox: …"
  * into one run.
  */
-export const rankCommands = <T extends RegisteredCommand>(entries: readonly T[], query: string): readonly T[] => {
+export const rankCommands = <T extends Ranked>(entries: readonly T[], query: string): readonly T[] => {
     const browsing = terms(query).length === 0;
     return entries
         .flatMap((entry) => {

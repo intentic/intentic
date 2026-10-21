@@ -1,9 +1,7 @@
 import type { Disposable } from "@intentic/extension-api";
-import { t } from "@intentic/ui/i18n";
 import { customRef, onBeforeUnmount, onMounted, type Ref } from "vue";
-import { AGENTS } from "../../../workbench/commands/categories";
 import { publishContextKey } from "../../../workbench/commands/contextKeys";
-import { registerCommand } from "../../../workbench/commands/useCommands";
+import { registerBuiltin } from "../../../workbench/commands/builtinCommands";
 
 // The review pass's one-key peers (arrows or j/k to move, v to mark a file viewed and advance, Shift+V for its whole
 // group), claimed in the command registry while a review is on screen. Being commands is what puts them in the
@@ -30,67 +28,22 @@ export const useReviewKeys = (host: ReviewKeysHost): void => {
         get: () => host.panel.value !== null && host.panel.value.closest(`[inert]`) === null,
         set: () => undefined,
     }));
-    // Bare letters and arrows belong to whatever field has the caret: the chat composer, Monaco, a filter.
-    const when = `agentReviewOnScreen && !editableTarget`;
+    // Bare letters and arrows belong to whatever field has the caret (the chat composer, Monaco, a filter): each chord is
+    // gated on `agentReviewOnScreen && !editableTarget` in builtinCommands.ts.
     let claims: readonly Disposable[] = [];
     onMounted(() => {
         const next = (): void => host.move(1);
         const previous = (): void => host.move(-1);
         claims = [
             publishContextKey(`agentReviewOnScreen`, onScreen),
-            registerCommand({ owner: `builtin`, command: REVIEW_NEXT, title: t(`agents.agentReviewPanel.nextFile`), category: AGENTS, icon: `chevron-down`, keybinding: `j`, when, handler: next }),
-            registerCommand({
-                owner: `builtin`,
-                command: REVIEW_PREVIOUS,
-                title: t(`agents.agentReviewPanel.previousFile`),
-                category: AGENTS,
-                icon: `chevron-up`,
-                keybinding: `k`,
-                when,
-                handler: previous,
-            }),
+            registerBuiltin(REVIEW_NEXT, next),
+            registerBuiltin(REVIEW_PREVIOUS, previous),
             // The arrows are the same moves under the keys everyone tries first; a command carries one chord, so each
             // is a command of its own.
-            registerCommand({
-                owner: `builtin`,
-                command: `${REVIEW_NEXT}.arrow`,
-                title: t(`agents.agentReviewPanel.nextFile`),
-                category: AGENTS,
-                icon: `chevron-down`,
-                keybinding: `ArrowDown`,
-                when,
-                handler: next,
-            }),
-            registerCommand({
-                owner: `builtin`,
-                command: `${REVIEW_PREVIOUS}.arrow`,
-                title: t(`agents.agentReviewPanel.previousFile`),
-                category: AGENTS,
-                icon: `chevron-up`,
-                keybinding: `ArrowUp`,
-                when,
-                handler: previous,
-            }),
-            registerCommand({
-                owner: `builtin`,
-                command: REVIEW_MARK,
-                title: t(`agents.agentReviewPanel.markReviewed`),
-                category: AGENTS,
-                icon: `check`,
-                keybinding: `v`,
-                when,
-                handler: host.viewAndAdvance,
-            }),
-            registerCommand({
-                owner: `builtin`,
-                command: REVIEW_MARK_GROUP,
-                title: t(`agents.agentReviewPanel.markGroupReviewed`),
-                category: AGENTS,
-                icon: `check-check`,
-                keybinding: `Shift+V`,
-                when,
-                handler: host.viewGroupAndAdvance,
-            }),
+            registerBuiltin(`agents.review.nextFile.arrow`, next),
+            registerBuiltin(`agents.review.previousFile.arrow`, previous),
+            registerBuiltin(REVIEW_MARK, host.viewAndAdvance),
+            registerBuiltin(REVIEW_MARK_GROUP, host.viewGroupAndAdvance),
         ];
     });
     onBeforeUnmount(() => {

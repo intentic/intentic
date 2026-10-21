@@ -7,8 +7,7 @@ import type { Disposable } from "@intentic/extension-api";
 import { AnchoredOverlay, Avatar, browserOwnsClick, Notice, StatusBadge, useDevice, useHoverMenu, vAction } from "@intentic/ui";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { ACCOUNT } from "../workbench/commands/categories";
-import { registerCommand } from "../workbench/commands/useCommands";
+import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { useAccount } from "../client/auth/useAccount";
 import { useHostedPlan } from "../models/hosted-plan/useHostedPlan";
 import { leaveAfterSignOut } from "../app/environments/afterSignOut";
@@ -107,24 +106,7 @@ const reopenTour = (): void => {
 let commands: Disposable[] = [];
 
 onMounted(() => {
-    commands = [
-        registerCommand({
-            owner: `builtin`,
-            command: `account.signOut`,
-            title: t(`shell.accountPanel.signOut2`),
-            category: ACCOUNT,
-            icon: `sign-out`,
-            handler: logout,
-        }),
-        registerCommand({
-            owner: `builtin`,
-            command: `account.joinCommunity`,
-            title: t(`community.command`),
-            category: ACCOUNT,
-            icon: `discord`,
-            handler: () => invite.open(`palette`),
-        }),
-    ];
+    commands = [registerBuiltin(`account.signOut`, logout), registerBuiltin(`account.joinCommunity`, () => invite.open(`palette`))];
 });
 
 onUnmounted(() => {

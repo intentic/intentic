@@ -21,8 +21,8 @@ import { allTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, tabsInLan
 import { useChat } from "../../../models/conversations/run/useChat";
 import { SEARCH_SETTLE_MS } from "../../../models/conversations/run/useChat-sessions";
 import { useChatFloating } from "../../../models/conversations/panel/chatFloating";
-import { CHAT } from "../../../workbench/commands/categories";
-import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../../../workbench/commands/useCommands";
+import { registerBuiltin } from "../../../workbench/commands/builtinCommands";
+import { commandShortcut, withShortcut } from "../../../workbench/commands/useCommands";
 import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
@@ -273,153 +273,59 @@ const splitBeside = (): void => {
     }
 };
 onMounted(() => {
-    const entries: Omit<CommandRegistration, `owner`>[] = [
-        {
-            command: `chat.rename`,
-            title: t(`ui.action.renameEllipsis`),
-            icon: `pencil`,
-            keybinding: `F2`,
-            when: `tabSurface == 'chat'`,
-            handler: (): void => {
-                if (edit.editing) {
-                    return; // Already renaming; a second F2 would wipe the draft.
-                }
-                // Renamed where it's visible: the header docked, or the active card on the rail (no header there).
-                if (vertical.value) {
-                    rail.value?.beginRename(activeId.value);
-                    return;
-                }
-                beginRename();
-            },
-        },
-        {
-            command: `chat.closeTab`,
-            title: t(`ui.action.close`),
-            icon: `times`,
-            keybinding: `Ctrl+Shift+X`,
-            when: `tabSurface == 'chat'`,
-            handler: () => emit(`close`, new Set([activeId.value])),
-        },
-        {
-            command: `chat.closeOtherTabs`,
-            title: t(`chat.words.closeOthers`),
-            icon: `times`,
-            keybinding: `Ctrl+Shift+,`,
-            when: `tabSurface == 'chat'`,
-            handler: (): void => {
-                const others = othersOf(activeId.value);
-                if (others.size > 0) {
-                    emit(`close`, others);
-                }
-            },
-        },
-        {
-            command: `chat.closeTabsToRight`,
-            title: t(`ui.action.closeToRight`),
-            icon: `times`,
-            keybinding: `Ctrl+Shift+.`,
-            when: `tabSurface == 'chat'`,
-            handler: (): void => {
-                const toRight = toRightOf(activeId.value);
-                if (toRight.size > 0) {
-                    emit(`close`, toRight);
-                }
-            },
-        },
-        {
-            // Unbound by default, no file-tab equivalent for "finished"; still reachable via the palette and
-            // Keybindings.
-            command: `chat.closeFinishedTabs`,
-            title: t(`chat.words.closeFinished`),
-            icon: `times`,
-            when: `tabSurface == 'chat'`,
-            handler: (): void => {
-                const finished = tabsInLane(`finished`);
-                if (finished.size > 0) {
-                    emit(`close`, finished);
-                }
-            },
-        },
-        {
-            command: `chat.closeAllTabs`,
-            title: t(`chat.words.closeAll`),
-            icon: `times`,
-            keybinding: `Ctrl+Shift+Backspace`,
-            when: `tabSurface == 'chat'`,
-            handler: () => emit(`close`, allTabs()),
-        },
-        {
-            // Unbound, like Close Finished: palette and Keybindings reach it, and no chord is left free for it.
-            command: `chat.togglePin`,
-            title: t(`chat.chatTabs.togglePin`),
-            icon: `pin`,
-            when: `tabSurface == 'chat'`,
-            handler: () => setPinned(activeId.value, !active.value.pinned.value),
-        },
-        {
-            command: `chat.archive`,
-            title: t(`chat.chatTabs.archiveChat`),
-            icon: `box`,
-            when: `tabSurface == 'chat'`,
-            handler: (): void => {
-                const agent = agentById(activeId.value);
-                if (active.value.box.value === undefined && agent !== undefined && canArchive(agent)) {
-                    void archive([agent.id]);
-                }
-            },
-        },
-        {
-            command: `chat.reopenClosed`,
-            title: t(`chat.words.reopenClosedChat`),
-            icon: `history`,
-            when: `tabSurface == 'chat'`,
-            handler: () => void reopenClosed(),
-        },
-        {
-            command: `chat.nextNeedsYou`,
-            title: t(`chat.chatTabs.nextNeedsYou`),
-            icon: `exclamation-circle`,
-            handler: () => nextNeedsYou(),
-        },
-        { command: `chat.nextTab`, title: t(`ui.action.next`), keybinding: `Alt+PageDown`, when: `tabSurface == 'chat'`, handler: () => cycleTab(1) },
-        {
-            command: `chat.previousTab`,
-            title: t(`chat.chatTabs.previous`),
-            keybinding: `Alt+PageUp`,
-            when: `tabSurface == 'chat'`,
-            handler: () => cycleTab(-1),
-        },
-        {
-            // VSCode's split chord for a different chat, not a second view: a chat carries its own composer.
-            command: `chat.splitView`,
-            title: t(`chat.chatTabs.openNextBeside`),
-            keybinding: `Mod+\\`,
-            when: `tabSurface == 'chat'`,
-            handler: () => splitBeside(),
-        },
-        {
-            // Unbound, like Close Finished, reachable from the row menu; takes back the column, the chat stays open.
-            command: `chat.closePane`,
-            title: t(`chat.words.closePane`),
-            when: `tabSurface == 'chat'`,
-            handler: () => closePane(activeId.value),
-        },
-        {
-            // Unbound: every free chord here is already spent, and the header is one click away regardless.
-            command: `chat.switchTab`,
-            title: t(`chat.chatTabs.switch`),
-            icon: `comments`,
-            when: `tabSurface == 'chat'`,
-            handler: (): void => {
-                if (vertical.value) {
-                    return; // The rail is already the list; there's nothing to open.
-                }
-                listOpen.value = !listOpen.value;
-            },
-        },
+    commandDisposables = [
+        registerBuiltin(`chat.rename`, (): void => {
+            if (edit.editing) {
+                return; // Already renaming; a second F2 would wipe the draft.
+            }
+            // Renamed where it's visible: the header docked, or the active card on the rail (no header there).
+            if (vertical.value) {
+                rail.value?.beginRename(activeId.value);
+                return;
+            }
+            beginRename();
+        }),
+        registerBuiltin(`chat.closeTab`, () => emit(`close`, new Set([activeId.value]))),
+        registerBuiltin(`chat.closeOtherTabs`, (): void => {
+            const others = othersOf(activeId.value);
+            if (others.size > 0) {
+                emit(`close`, others);
+            }
+        }),
+        registerBuiltin(`chat.closeTabsToRight`, (): void => {
+            const toRight = toRightOf(activeId.value);
+            if (toRight.size > 0) {
+                emit(`close`, toRight);
+            }
+        }),
+        registerBuiltin(`chat.closeFinishedTabs`, (): void => {
+            const finished = tabsInLane(`finished`);
+            if (finished.size > 0) {
+                emit(`close`, finished);
+            }
+        }),
+        registerBuiltin(`chat.closeAllTabs`, () => emit(`close`, allTabs())),
+        registerBuiltin(`chat.togglePin`, () => setPinned(activeId.value, !active.value.pinned.value)),
+        registerBuiltin(`chat.archive`, (): void => {
+            const agent = agentById(activeId.value);
+            if (active.value.box.value === undefined && agent !== undefined && canArchive(agent)) {
+                void archive([agent.id]);
+            }
+        }),
+        registerBuiltin(`chat.reopenClosed`, () => void reopenClosed()),
+        registerBuiltin(`chat.nextNeedsYou`, () => nextNeedsYou()),
+        registerBuiltin(`chat.nextTab`, () => cycleTab(1)),
+        registerBuiltin(`chat.previousTab`, () => cycleTab(-1)),
+        registerBuiltin(`chat.splitView`, () => splitBeside()),
+        // Takes back the column; the chat stays open.
+        registerBuiltin(`chat.closePane`, () => closePane(activeId.value)),
+        registerBuiltin(`chat.switchTab`, (): void => {
+            if (vertical.value) {
+                return; // The rail is already the list; there's nothing to open.
+            }
+            listOpen.value = !listOpen.value;
+        }),
     ];
-    // One family for the whole list, stated here rather than on every entry.
-    commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, category: CHAT, ...entry }));
 });
 onBeforeUnmount(() => {
     for (const disposable of commandDisposables) {

@@ -1,5 +1,5 @@
-import { t } from "@intentic/ui/i18n";
 import type { Ref } from "vue";
+import { builtinRegistration } from "../../../workbench/commands/builtinCommands";
 import type { CommandRegistration } from "../../../workbench/commands/useCommands";
 
 // Every strip action as a command, registered while the strip is mounted. Tab-family chords match the workspace and chat
@@ -23,7 +23,8 @@ export interface PanelVerbs {
     readonly canKill: boolean;
 }
 
-type PanelCommand = Omit<CommandRegistration, `owner`>;
+// The verbs' names, chords and focus gates are declared once (builtinCommands.ts); the strip gives each its handler.
+type PanelCommand = CommandRegistration;
 
 // Acts on the focused session, and on nothing while none is focused.
 const onActive = (activeName: Readonly<Ref<string | undefined>>, act: (name: string) => void) => (): void => {
@@ -35,31 +36,16 @@ const onActive = (activeName: Readonly<Ref<string | undefined>>, act: (name: str
 const killCommands = ({ activeName, requestKill, selectedNames, killable, sweepInactive }: PanelVerbs): PanelCommand[] => {
     const killActive = onActive(activeName, (name) => requestKill([name]));
     return [
-        {
-            command: `terminal.kill`,
-            title: t(`terminal.terminalPanel.kill`),
-            icon: `trash`,
-            keybinding: `Ctrl+Shift+X`,
-            when: `tabSurface == 'terminal'`,
-            // The selection first, else the focused session: the chord has the least aim of the three kill gestures.
-            handler: (): void => {
-                if (selectedNames.value.length > 0) {
-                    requestKill(selectedNames.value);
-                    return;
-                }
-                killActive();
-            },
-        },
-        {
-            command: `terminal.killAll`,
-            title: t(`terminal.terminalPanel.killAll`),
-            icon: `trash`,
-            keybinding: `Ctrl+Shift+Backspace`,
-            when: `tabSurface == 'terminal'`,
-            handler: () => requestKill(killable.value),
-        },
-        // Unbound: tidying is occasional, and a chord for it would sit one slip from the one that kills your shell.
-        { command: `terminal.killInactive`, title: t(`terminal.terminalPanel.killInactive`), icon: `trash`, handler: sweepInactive },
+        // The selection first, else the focused session: the chord has the least aim of the three kill gestures.
+        builtinRegistration(`terminal.kill`, (): void => {
+            if (selectedNames.value.length > 0) {
+                requestKill(selectedNames.value);
+                return;
+            }
+            killActive();
+        }),
+        builtinRegistration(`terminal.killAll`, () => requestKill(killable.value)),
+        builtinRegistration(`terminal.killInactive`, sweepInactive),
     ];
 };
 
@@ -67,69 +53,27 @@ export const panelCommands = (verbs: PanelVerbs): PanelCommand[] => {
     const { activeName, renamingName, beginRename, openCustomize, joinSelected, cycleTab, unsplit, splitTab } = verbs;
     const renameActive = onActive(activeName, beginRename);
     const commands: PanelCommand[] = [
-        {
-            command: `terminal.rename`,
-            title: t(`ui.action.rename`),
-            icon: `pencil`,
-            // F2 is gated to a keystroke from inside this panel; outside it the chord stays free for other surfaces.
-            keybinding: `F2`,
-            when: `tabSurface == 'terminal'`,
-            handler: (): void => {
-                // Already editing (F2 lands in the field): starting again would wipe the draft.
-                if (renamingName.value === undefined) {
-                    renameActive();
-                }
-            },
-        },
-        {
-            command: `terminal.changeColor`,
-            title: t(`terminal.terminalPanel.changeColor2`),
-            icon: `palette`,
-            handler: onActive(activeName, (name) => openCustomize(name, `color`)),
-        },
-        {
-            command: `terminal.changeIcon`,
-            title: t(`terminal.terminalPanel.changeIcon2`),
-            icon: `star`,
-            handler: onActive(activeName, (name) => openCustomize(name, `icon`)),
-        },
-        {
-            command: `terminal.join`,
-            title: t(`terminal.terminalPanel.joinSelected`),
-            icon: `code`,
-            keybinding: `Ctrl+Shift+G`,
-            handler: joinSelected,
-        },
-        {
-            command: `terminal.unsplit`,
-            title: t(`terminal.terminalPanel.unsplit`),
-            icon: `code`,
-            keybinding: `Ctrl+Shift+U`,
-            handler: onActive(activeName, unsplit),
-        },
-        {
-            command: `terminal.nextTab`,
-            title: t(`ui.action.next`),
-            keybinding: `Alt+PageDown`,
-            when: `tabSurface == 'terminal'`,
-            handler: () => cycleTab(1),
-        },
-        {
-            command: `terminal.previousTab`,
-            title: t(`terminal.terminalPanel.previous`),
-            keybinding: `Alt+PageUp`,
-            when: `tabSurface == 'terminal'`,
-            handler: () => cycleTab(-1),
-        },
+        builtinRegistration(`terminal.rename`, (): void => {
+            // Already editing (F2 lands in the field): starting again would wipe the draft.
+            if (renamingName.value === undefined) {
+                renameActive();
+            }
+        }),
+        builtinRegistration(
+            `terminal.changeColor`,
+            onActive(activeName, (name) => openCustomize(name, `color`)),
+        ),
+        builtinRegistration(
+            `terminal.changeIcon`,
+            onActive(activeName, (name) => openCustomize(name, `icon`)),
+        ),
+        builtinRegistration(`terminal.join`, joinSelected),
+        builtinRegistration(`terminal.unsplit`, onActive(activeName, unsplit)),
+        builtinRegistration(`terminal.nextTab`, () => cycleTab(1)),
+        builtinRegistration(`terminal.previousTab`, () => cycleTab(-1)),
     ];
     if (splitTab !== undefined) {
-        commands.push({
-            command: `terminal.split`,
-            title: t(`terminal.terminalPanel.split`),
-            icon: `code`,
-            keybinding: `Ctrl+Shift+5`,
-            handler: onActive(activeName, splitTab),
-        });
+        commands.push(builtinRegistration(`terminal.split`, onActive(activeName, splitTab)));
     }
     return verbs.canKill ? [...commands, ...killCommands(verbs)] : commands;
 };

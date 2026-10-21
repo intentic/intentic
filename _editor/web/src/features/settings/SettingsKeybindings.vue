@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Button, FilterBar, Row, RowGroup, RowNote, type Tip, toneRim, ui } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
-import { commandLabel, commands } from "../../workbench/commands/useCommands";
+import { keymapCommands } from "../../workbench/commands/builtinCommands";
+import { commandLabel } from "../../workbench/commands/useCommands";
 import { rankCommands } from "../../workbench/commands/commandSearch";
 import { chordFromEvent, formatChord, isApplePlatform } from "../../workbench/commands/keybindings";
 import { effectiveKeybinding, keymapOverrides, useKeymap } from "../../workbench/commands/useKeymap";
@@ -9,7 +10,8 @@ import { useT } from "@intentic/ui/i18n";
 import { categoryLabel } from "../../workbench/commands/categories";
 import { useAudience } from "../../app/useAudience";
 
-// Lists every command (builtins and extensions share one registry) with its effective chord; lets the user record,
+// Lists every command a person can bind (keymapCommands: every declared built-in, whichever window this is and whatever
+// it has mounted, and every live registration, extensions' included) with its effective chord; lets the user record,
 // reset, or unbind a shortcut, live everywhere via the keymap store. Recording captures one keystroke in the capture
 // phase, so the shell's dispatcher never fires the old shortcut mid-capture.
 
@@ -39,7 +41,7 @@ interface CommandRow {
 // Filtered and ordered by the palette's own matcher, so a word that finds a command there finds it here; families end
 // up in one run, since ordering falls back to the "Category: Title" the palette shows.
 const rows = computed<readonly CommandRow[]>(() =>
-    rankCommands(commands.value, query.value).map((entry): CommandRow => ({
+    rankCommands(keymapCommands.value, query.value).map((entry): CommandRow => ({
         command: entry.command,
         title: entry.title,
         // The family in the reader's language ("Przejdź do"), never its id ("Go to"), which is an English constant.
@@ -58,7 +60,7 @@ const hasAnyOverride = computed(() => Object.keys(keymapOverrides.value).length 
 // Chord → commands sharing it, for collision warnings; a `when` gate excludes a command since it can't collide.
 const chordOwners = computed<Record<string, readonly string[]>>(() => {
     const byChord: Record<string, string[]> = {};
-    for (const entry of commands.value) {
+    for (const entry of keymapCommands.value) {
         if (entry.when !== undefined) {
             continue;
         }
@@ -75,7 +77,7 @@ const conflictTip = (row: CommandRow): Tip => {
     const others = (row.chord === undefined ? [] : (chordOwners.value[row.chord] ?? []))
         .filter((command) => command !== row.command)
         .map((command) => {
-            const entry = commands.value.find((candidate) => candidate.command === command);
+            const entry = keymapCommands.value.find((candidate) => candidate.command === command);
             return entry === undefined ? command : commandLabel(entry);
         });
     return { title: t(`settings.settingsKeybindings.shortcutClash`), tone: `warning`, rows: [{ label: t(`settings.settingsKeybindings.alsoOn`), value: others.join(`, `) }] };

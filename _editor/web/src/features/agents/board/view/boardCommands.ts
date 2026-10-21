@@ -1,9 +1,7 @@
 import type { Disposable } from "@intentic/extension-api";
-import { t } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, type Ref } from "vue";
-import { AGENTS } from "../../../../workbench/commands/categories";
 import { publishContextKey } from "../../../../workbench/commands/contextKeys";
-import { registerCommand } from "../../../../workbench/commands/useCommands";
+import { registerBuiltin } from "../../../../workbench/commands/builtinCommands";
 
 // What the board does on arriving and holds while it is on screen: it reads the roster and the archive, and claims
 // Mod+Z and the filter's accelerator, which it hands back the moment it leaves.
@@ -34,27 +32,10 @@ export const useBoardCommands = (host: CommandsHost): void => {
                 `agentsUndoable`,
                 computed(() => agents.undoable.value.length > 0),
             ),
-            // An archive says nothing, so it undoes by reflex; `when` hands the chord back with nothing to undo or in a field.
-            registerCommand({
-                owner: `builtin`,
-                command: `agents.undoArchive`,
-                title: t(`agents.agentsView.undoArchive`),
-                category: AGENTS,
-                icon: `history`,
-                keybinding: `Mod+Z`,
-                when: `agentsUndoable && !editableTarget`,
-                handler: agents.undoArchive,
-            }),
-            // Unbound: Mod+F is the browser's, and this registry spans every window, the floating chat's included.
-            registerCommand({
-                owner: `builtin`,
-                command: `agents.filter`,
-                title: t(`ui.action.filter`),
-                category: AGENTS,
-                icon: `search`,
-                // Focus and select, so a chord typed over a stale query starts fresh instead of needing it cleared first.
-                handler: () => host.filterField.value?.focus(true),
-            }),
+            // An archive says nothing, so it undoes by reflex (builtinCommands.ts declares its chord and gate).
+            registerBuiltin(`agents.undoArchive`, agents.undoArchive),
+            // Focus and select, so a chord typed over a stale query starts fresh instead of needing it cleared first.
+            registerBuiltin(`agents.filter`, () => host.filterField.value?.focus(true)),
         ];
     });
     onUnmounted(() => {

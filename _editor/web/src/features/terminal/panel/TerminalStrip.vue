@@ -5,7 +5,6 @@ import type { MenuItem } from "primevue/menuitem";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { focusInput } from "@intentic/ui/inline-rename";
 import { clickIntent, useMultiSelect } from "../../../lib/multiSelect";
-import { TERMINAL } from "../../../workbench/commands/categories";
 import { commandShortcut, registerCommand, tipWithShortcut } from "../../../workbench/commands/useCommands";
 import { KINDS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "../../../models/terminal/terminalMeta";
 import type { useTerminalFloating } from "../terminalFloating";
@@ -305,7 +304,7 @@ onMounted(() => {
         unsplit,
         splitTab,
         canKill: killTabs !== undefined,
-    }).map((entry) => registerCommand({ owner: `builtin`, category: TERMINAL, ...entry }));
+    }).map((entry) => registerCommand(entry));
 });
 onBeforeUnmount(() => {
     for (const disposable of commandDisposables) {

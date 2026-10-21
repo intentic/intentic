@@ -21,10 +21,10 @@ import RuntimeChips from "./status-bar/RuntimeChips.vue";
 import WakeStatusChip from "../features/chat/wake/WakeStatusChip.vue";
 import { useWakeListener } from "../models/voice/useWakeListener";
 import { useRuntimeChips } from "./status-bar/useRuntimeChips";
-import { GO_TO } from "../workbench/commands/categories";
 import { useNavigationCommands } from "./commands/useNavigationCommands";
 import { useProjectCommands } from "./commands/useProjectCommands";
-import { commandShortcut, registerCommand } from "../workbench/commands/useCommands";
+import { registerBuiltin } from "../workbench/commands/builtinCommands";
+import { commandShortcut } from "../workbench/commands/useCommands";
 import { railBands, railRank, onRail, railPolicy, onRailOnlyByVisit } from "../workbench/views/registry";
 import ViewBadgeChip from "../workbench/views/ViewBadgeChip.vue";
 import { useVocabulary } from "../workbench/views/vocabulary";
@@ -197,24 +197,8 @@ onMounted(() => {
     sideDocked.value = true;
     sectionCommands = [
         // Follows the tiles: cached views stay useful during a stall, even while live actions wait on reachability.
-        registerCommand({
-            owner: `builtin`,
-            command: `view.previousSection`,
-            title: t(`shell.shellDesktop.previousRailSection`),
-            category: GO_TO,
-            icon: `chevron-up`,
-            keybinding: `Alt+ArrowUp`,
-            handler: () => cycleSection(-1),
-        }),
-        registerCommand({
-            owner: `builtin`,
-            command: `view.nextSection`,
-            title: t(`shell.shellDesktop.nextRailSection`),
-            category: GO_TO,
-            icon: `chevron-down`,
-            keybinding: `Alt+ArrowDown`,
-            handler: () => cycleSection(1),
-        }),
+        registerBuiltin(`view.previousSection`, () => cycleSection(-1)),
+        registerBuiltin(`view.nextSection`, () => cycleSection(1)),
     ];
 });
 

@@ -3,8 +3,8 @@ import { Button, ContextMenu, EmptyState, formatCount, Icon, Modal, ResizeSeam, 
 import type { Disposable } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { TERMINAL } from "../../workbench/commands/categories";
-import { commandShortcut, registerCommand, tipWithShortcut, withShortcut } from "../../workbench/commands/useCommands";
+import { registerBuiltin } from "../../workbench/commands/builtinCommands";
+import { commandShortcut, tipWithShortcut, withShortcut } from "../../workbench/commands/useCommands";
 import { formatChord, isApplePlatform } from "../../workbench/commands/keybindings";
 import { postTurnControl } from "../../client/sandbox/streams/turnStream";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -131,16 +131,7 @@ let live = true;
 onMounted(async () => {
     // Cmd+F on a Mac, Ctrl+F elsewhere, gated to this panel so the page's own find keeps the chord everywhere else.
     commandDisposables = [
-        registerCommand({
-            owner: `builtin`,
-            category: TERMINAL,
-            command: `terminal.find`,
-            title: t(`terminal.terminalPanel.find`),
-            icon: `search`,
-            keybinding: `Mod+F`,
-            when: `tabSurface == 'terminal'`,
-            handler: openFind,
-        }),
+        registerBuiltin(`terminal.find`, openFind),
     ];
     const pane = container.value;
     if (pane === undefined) {
