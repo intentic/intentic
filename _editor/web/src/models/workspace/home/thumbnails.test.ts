@@ -163,13 +163,23 @@ describe(`what a home tile draws`, () => {
         expect(asked().map(({ route }) => route.split(`?`)[0])).toEqual([`/workspace/thumb`]);
     });
 
-    it(`asks a large box's edge in AVIF where this engine decodes it, and a tile's in WebP`, async () => {
+    it(`asks every size in AVIF where this engine decodes it, a tile's as much as a large box's edge`, async () => {
         decodesAvif();
         const { tileArt } = await load();
         await tileArt(shot, `picture`, 1536);
         await tileArt(shot, `picture`, 256);
-        expect(asked().map(({ accept }) => accept)).toEqual([`image/avif,image/webp`, `image/webp`]);
+        expect(asked().map(({ accept }) => accept)).toEqual([`image/avif,image/webp`, `image/avif,image/webp`]);
         expect(sizesAsked()).toEqual([`e1536`, `tile`]);
+    });
+
+    it(`fetches a picture's own file once for the lightbox, and none too large to move whole`, async () => {
+        const { originalArt } = await load();
+        const looks = [originalArt(shot), originalArt(shot)];
+        expect(await looks[0]).toEqual({ url: `blob:picture`, as: `picture`, edge: 2048, bytes: 1 });
+        await looks[1];
+        expect(asked()).toEqual([{ route: `/workspace/raw?${query({ path: shot.path })}`, accept: null }]);
+        expect(originalArt({ ...shot, size: 30_000_000 })).toBeUndefined();
+        expect(originalArt({ ...shot, size: undefined })).toBeUndefined();
     });
 
     it(`takes the viewer's rendition, as the largest edge, where a sandbox does not know the edges`, async () => {

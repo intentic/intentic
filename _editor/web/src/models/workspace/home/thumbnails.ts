@@ -71,15 +71,13 @@ const blobOf = async (route: string, accept?: string): Promise<Blob | undefined>
     }
 };
 
-// The sizes the daemon may answer in AVIF (its own table says which do): the viewer's, and the edges a large box asks for.
-const mayBeAvif = (size: PictureSize): boolean => size === `view` || size.startsWith(`e`);
-
-// What the daemon will not re-encode is drawn from the file, which for SVG is small anyway.
+// What the daemon will not re-encode is drawn from the file, which for SVG is small anyway. Every rendition may come
+// back AVIF, which keeps a dark interface's fine background texture from breaking into squares the way WebP does.
 const pictureBlob = async (scope: string | undefined, path: string, size: PictureSize): Promise<Blob | undefined> => {
     if (size === `original`) {
         return blobOf(`/workspace/raw?${queryOf(scope, path)}`);
     }
-    const accept = mayBeAvif(size) && (await decodesAvif()) ? `image/avif,image/webp` : `image/webp`;
+    const accept = (await decodesAvif()) ? `image/avif,image/webp` : `image/webp`;
     try {
         return await blobOf(`/workspace/thumb?${queryOf(scope, path, size)}`, accept);
     } catch (error) {
@@ -213,7 +211,7 @@ const largest = new Map<string, TileArt>();
 
 // A rewritten file (same path, new size) is a new picture.
 const versionKey = (entry: WorkspaceTreeEntry): string => `${workspaceAgent.value ?? ``}\n${entry.path} ${entry.size ?? 0}`;
-const artKey = (entry: WorkspaceTreeEntry, use: TileEdge | "stream"): string => `${versionKey(entry)}\n${use}`;
+const artKey = (entry: WorkspaceTreeEntry, use: TileEdge | "stream" | "original"): string => `${versionKey(entry)}\n${use}`;
 
 interface Drawn {
     readonly blob: Blob;
@@ -328,6 +326,25 @@ const once = (key: string, version: string, fetch: () => Promise<TileArt>): Prom
 /** What a home tile draws for an entry at `edge` device pixels, fetched once per version of the file and edge. */
 export const tileArt = (entry: WorkspaceTreeEntry, kind: ThumbnailKind, edge: TileEdge = 256): Promise<TileArt> =>
     once(artKey(entry, edge), versionKey(entry), () => fetchArt(entry, kind, edge));
+
+// Past this a picture is not fetched whole for a look, and its largest rendition is what the lightbox keeps drawing.
+const ORIGINAL_MAX_BYTES = 24 * 1024 * 1024;
+
+/**
+ * A picture's own file, for the lightbox: a rendition is lossy however well it is encoded, and a picture opened large is
+ * one the reader came to look at. Undefined for a file too big to move whole, or of no known size.
+ */
+export const originalArt = (entry: WorkspaceTreeEntry): Promise<TileArt> | undefined =>
+    entry.size === undefined || entry.size > ORIGINAL_MAX_BYTES
+        ? undefined
+        : once(artKey(entry, `original`), versionKey(entry), async () => {
+              const blob = await pictureBlob(workspaceAgent.value, entry.path, `original`);
+              if (blob === undefined) {
+                  throw new Error(`Nothing to draw for ${entry.path}.`);
+              }
+              // Its own pixels at whatever size, so it ranks with the largest edge as the best picture on hand.
+              return { url: URL.createObjectURL(blob), as: `picture`, edge: 2048, bytes: blob.size };
+          });
 
 /** The largest picture of an entry already on hand, at whatever edge, to draw while a larger one is on its way. */
 export const heldArt = (entry: WorkspaceTreeEntry): TileArt | undefined => largest.get(versionKey(entry));

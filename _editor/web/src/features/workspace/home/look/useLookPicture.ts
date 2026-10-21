@@ -1,12 +1,13 @@
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { useLatest } from "@intentic/ui/async";
 import { ref, type Ref, watch } from "vue";
-import { heldArt, type TileEdge, tileArt, videoStream } from "../../../../models/workspace/home/thumbnails";
+import { heldArt, originalArt, type TileEdge, tileArt, videoStream } from "../../../../models/workspace/home/thumbnails";
 import { decoded } from "../useTileArt";
 
 // What the quick look draws of a picture or a video. At once, the largest picture of it already on hand (the tile's
 // own), so the card never opens on a blank; then the rendition at the edge the card's box needs on this screen, swapped
-// in once decoded. A video plays its own stream over that picture as its poster.
+// in once decoded. A video plays its own stream over that picture as its poster. Asked to (the lightbox), a picture's own
+// file follows and is swapped in last, since every rendition is lossy and a picture opened large is there to be looked at.
 
 export interface LookPicture {
     // The picture to draw, or a video's poster.
@@ -19,6 +20,7 @@ export const useLookPicture = (
     entry: () => WorkspaceTreeEntry | undefined,
     medium: () => "picture" | "video" | undefined,
     edge: () => TileEdge | undefined,
+    original = false,
 ): LookPicture => {
     const picture = ref<string>();
     const stream = ref<string>();
@@ -26,6 +28,25 @@ export const useLookPicture = (
     let isLatest = latest();
     // The largest edge asked for the entry looked at; a smaller box is already covered.
     let asked = 0;
+    // Whether the file's own bytes are on screen, after which no rendition replaces them.
+    let exact = false;
+
+    const askOriginal = async (target: WorkspaceTreeEntry, current: () => boolean): Promise<void> => {
+        const pending = originalArt(target);
+        if (pending === undefined) {
+            return;
+        }
+        try {
+            const art = await pending;
+            await decoded(art.url);
+            if (current()) {
+                exact = true;
+                picture.value = art.url;
+            }
+        } catch {
+            // allow(silent-catch): the rendition on screen stays, which is a sharp picture of the same file
+        }
+    };
 
     const ask = async (target: WorkspaceTreeEntry, kind: "picture" | "video", at: TileEdge, current: () => boolean): Promise<void> => {
         asked = at;
@@ -37,7 +58,7 @@ export const useLookPicture = (
             if (picture.value !== undefined) {
                 await decoded(art.url);
             }
-            if (current() && asked === at) {
+            if (current() && asked === at && !exact) {
                 picture.value = art.url;
             }
         } catch {
@@ -59,6 +80,7 @@ export const useLookPicture = (
         ([target, kind]) => {
             isLatest = latest();
             asked = 0;
+            exact = false;
             picture.value = target === undefined || kind === undefined ? undefined : heldArt(target)?.url;
             stream.value = undefined;
             if (target === undefined || kind === undefined) {
@@ -76,6 +98,9 @@ export const useLookPicture = (
                 );
             }
             askLarger();
+            if (original && kind === `picture`) {
+                void askOriginal(target, isLatest);
+            }
         },
         { immediate: true },
     );

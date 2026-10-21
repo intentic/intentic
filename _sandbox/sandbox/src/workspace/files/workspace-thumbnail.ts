@@ -21,29 +21,34 @@ export type PictureType = "image/webp" | "image/avif";
 
 interface Spec {
     readonly resize: ResizeOptions;
+    // For a reader that does not decode AVIF.
     readonly webpQuality: number;
-    // Whether the rendition is big enough for AVIF's smaller bytes to repay its slower encode.
-    readonly avif: boolean;
 }
 
-const edge = (side: PictureEdge): Spec => ({
-    resize: { width: side, height: side, fit: "inside", withoutEnlargement: true },
-    webpQuality: side <= 768 ? 78 : 80,
-    avif: side >= 1024,
-});
+// Every rendition is AVIF for a reader that decodes it: at the same bytes it keeps flat dark interfaces flat, where WebP
+// and cheaper AVIF settings break fine background texture (a theme's grain, a gradient's dither) into visible squares.
+// Quality 70 at effort 3 was the cheapest setting that drew forty real screenshots without them: quality 55 at effort 1
+// blotched around translucent cards, 65 at effort 2 still did faintly, and effort 4 bought nothing more for twice the
+// encode. About a tenth more bytes than 55 at effort 1, encoded once and kept. Smoothing the grain away before encoding
+// was measured too and saved under a twentieth of the bytes without drawing any cleaner, so pixels go in as they are.
+const AVIF = { quality: 70, effort: 3 } as const;
+
+// Bumped whenever the encode above changes, so renditions cached at the old settings are not served for the new.
+const ENCODING = 2;
+
+const edge = (side: PictureEdge): Spec => ({ resize: { width: side, height: side, fit: "inside", withoutEnlargement: true }, webpQuality: 85 });
 
 const SPECS: Record<Rendition, Spec> = {
     // Twice the tile's own box, so a HiDPI screen still draws a sharp one.
-    tile: { resize: { width: 256, height: 256, fit: "inside", withoutEnlargement: true }, webpQuality: 72, avif: false },
+    tile: { resize: { width: 256, height: 256, fit: "inside", withoutEnlargement: true }, webpQuality: 78 },
     // Twice the tallest gallery row, so a HiDPI screen still draws it sharp; a row sets the height, so the width is only a
     // cap for a panorama.
-    gallery: { resize: { width: 1440, height: 480, fit: "inside", withoutEnlargement: true }, webpQuality: 74, avif: false },
+    gallery: { resize: { width: 1440, height: 480, fit: "inside", withoutEnlargement: true }, webpQuality: 85 },
     // Twice the strip tile on the widest reading column, cut from the top: a full-page capture shrunk whole is a sliver.
-    strip: { resize: { width: 480, height: 300, fit: "cover", position: "top" }, webpQuality: 75, avif: false },
+    strip: { resize: { width: 480, height: 300, fit: "cover", position: "top" }, webpQuality: 85 },
     // Its own size, capped where WebP stops encoding (16383 px) and wider than any viewer draws a screenshot.
-    view: { resize: { width: 2560, height: 16383, fit: "inside", withoutEnlargement: true }, webpQuality: 80, avif: true },
+    view: { resize: { width: 2560, height: 16383, fit: "inside", withoutEnlargement: true }, webpQuality: 85 },
     // Never enlarged: a picture smaller than the edge comes back at its own size, which the reader can tell by its pixels.
-    // AVIF from 1024 up, where its bytes are a third smaller and the encode is a one-off the cache keeps.
     e384: edge(384),
     e512: edge(512),
     e768: edge(768),
@@ -73,9 +78,10 @@ const cacheDir = (root: string): string => statePath(root, ".intentic/local/cach
 const EXTENSIONS: Record<PictureType, string> = { "image/webp": "webp", "image/avif": "avif" };
 
 // Which file, which version of it, and how it is drawn: an edit moves size or mtime, so a rendition can never outlive the
-// picture it was made from and nothing has to be invalidated by hand. Doubles as the ETag.
+// picture it was made from and nothing has to be invalidated by hand; the encoding's version likewise retires renditions
+// made at old settings. Doubles as the ETag.
 const keyOf = (target: string, size: number, mtimeMs: number, rendition: Rendition, type: PictureType): string =>
-    createHash("sha256").update(`${target}\n${size}\n${Math.trunc(mtimeMs)}\n${rendition}\n${type}`).digest("hex");
+    createHash("sha256").update(`${target}\n${size}\n${Math.trunc(mtimeMs)}\n${rendition}\n${type}\n${ENCODING}`).digest("hex");
 
 // Renders in flight, keyed by cache file, so a screenful of tiles landing on one picture decodes it once.
 const rendering = new SingleFlight<string, Buffer | undefined>();
@@ -178,8 +184,7 @@ const encode = async (target: string, scratch: string, rendition: Rendition, typ
         // Honours the EXIF orientation a phone photo carries, which the tile would otherwise draw on its side.
         .rotate()
         .resize(spec.resize);
-    // AVIF at effort 0 rang around text on dark interfaces; effort 1 is the cheapest setting that stayed clean.
-    const encoded = type === "image/avif" ? pipeline.avif({ quality: 55, effort: 1 }) : pipeline.webp({ quality: spec.webpQuality, effort: 2 });
+    const encoded = type === "image/avif" ? pipeline.avif(AVIF) : pipeline.webp({ quality: spec.webpQuality, effort: 4 });
     return inSlot(() => encoded.toBuffer()).catch(() => undefined);
 };
 
@@ -216,7 +221,7 @@ const renditionOf = async (root: string, target: string, rendition: Rendition, t
 };
 
 /**
- * The picture at `target` drawn as `rendition`: AVIF where the rendition earns it and the reader decodes it, else WebP.
+ * The picture at `target` drawn as `rendition`: AVIF where the reader decodes it, else WebP.
  *
  * Answers undefined when there is nothing to draw: the file is gone, empty, too big to be worth decoding, or not
  * something sharp can read. The caller falls back to the file's glyph rather than reporting a failure.
@@ -227,7 +232,7 @@ export const workspaceThumbnail = async (root: string, target: string, rendition
     if (info === undefined || !info.isFile() || info.size === 0 || (info.size > MAX_SOURCE_BYTES && !isVideo(target))) {
         return undefined;
     }
-    if (readsAvif && SPECS[rendition].avif) {
+    if (readsAvif) {
         // An encoder refusal is not a missing picture: the WebP of the same rendition still draws.
         const avif = await renditionOf(root, target, rendition, "image/avif", info.size, info.mtimeMs);
         if (avif !== undefined) {

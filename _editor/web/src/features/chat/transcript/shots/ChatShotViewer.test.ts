@@ -170,16 +170,16 @@ describe(`ChatShotViewer`, () => {
         expect(new Set(viewAsks)).toEqual(new Set(SHOTS_OF_CHAT.map((shot) => shot.path)));
     });
 
-    it(`draws the original at actual size once it arrives, and the view at the same size until then`, async () => {
+    it(`draws the original once it arrives, and the view at the same size until then`, async () => {
         const element = mount(SHOTS_OF_CHAT[0]!.key);
-        element.querySelector<HTMLButtonElement>(`button[aria-label="Actual size"]`)?.click();
-        await nextTick();
         expect(element.querySelector(`img[alt="before"]`)?.getAttribute(`src`)).toBe(`blob:${SHOTS}/before.png`);
 
         originals.set(SHOTS_OF_CHAT[0]!.path, `blob:original`);
-        // The stand-in cache is not reactive, so leaving actual size and coming back is what reads it again.
-        element.querySelector<HTMLButtonElement>(`button[aria-label="Fit"]`)?.click();
-        await nextTick();
+        // The stand-in cache is not reactive, so stepping away and back is what reads it again.
+        await press(element, `ArrowRight`);
+        await press(element, `ArrowLeft`);
+        // Drawn at fit, not only at actual size: opening a picture is asking to look at it.
+        expect(element.querySelector(`img[alt="before"]`)?.getAttribute(`src`)).toBe(`blob:original`);
         element.querySelector<HTMLButtonElement>(`button[aria-label="Actual size"]`)?.click();
         await nextTick();
         expect(element.querySelector(`img[alt="before"]`)?.getAttribute(`src`)).toBe(`blob:original`);

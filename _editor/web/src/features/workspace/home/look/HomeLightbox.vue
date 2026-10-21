@@ -95,10 +95,12 @@ const edge = computed(() =>
               ),
           ),
 );
+// The file's own bytes follow the rendition: opened this large, a picture is there to be looked at, lossless.
 const { picture, stream } = useLookPicture(
     () => entry.value,
     () => medium.value,
     () => edge.value,
+    true,
 );
 
 // The neighbours are fetched at the same size while this one is looked at, so the arrows land on a sharp picture.

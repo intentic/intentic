@@ -155,15 +155,16 @@ test("a view keeps the picture's own size, as AVIF for a reader that decodes it 
     expect(await readdir(join(root, CACHE))).toHaveLength(2);
 });
 
-test("a view no wider than a viewer draws, and a tile stays WebP even for a reader that decodes AVIF", async () => {
+test("a view no wider than a viewer draws, and every rendition is AVIF for a reader that decodes it", async () => {
     const root = await mkdtemp(join(tmpdir(), "ws-thumb-"));
     const file = join(root, "wide.png");
     await writePicture(file, 3000, 1000);
 
     const view = await sharp((await workspaceThumbnail(root, file, "view", true))!.bytes).metadata();
     expect([view.width, view.height]).toEqual([2560, 853]);
-    expect((await workspaceThumbnail(root, file, "tile", true))!.type).toBe("image/webp");
-    expect((await workspaceThumbnail(root, file, "strip", true))!.type).toBe("image/webp");
+    expect((await workspaceThumbnail(root, file, "tile", true))!.type).toBe("image/avif");
+    expect((await workspaceThumbnail(root, file, "strip", true))!.type).toBe("image/avif");
+    expect((await workspaceThumbnail(root, file, "tile", false))!.type).toBe("image/webp");
 });
 
 // More at once than there are render slots: each waits its turn and every one is answered.
@@ -185,7 +186,7 @@ test("isRendition names the fixed sizes and every edge a reader picks from, and 
     expect(["original", "toString", "", "e100", "e4096"].some(isRendition)).toBe(false);
 });
 
-test("an edge rendition is the picture whole inside that square, never enlarged, AVIF only where it pays", async () => {
+test("an edge rendition is the picture whole inside that square, never enlarged, AVIF for a reader that decodes it", async () => {
     const root = await mkdtemp(join(tmpdir(), "ws-thumb-"));
     const shot = join(root, "shot.png");
     const icon = join(root, "icon.png");
@@ -198,7 +199,7 @@ test("an edge rendition is the picture whole inside that square, never enlarged,
         return [thumbnail.type, drawn.width, drawn.height];
     };
     expect(await sized(shot, "e768")).toEqual(["image/webp", 768, 576]);
-    expect(await sized(shot, "e768", true)).toEqual(["image/webp", 768, 576]);
+    expect(await sized(shot, "e768", true)).toEqual(["image/avif", 768, 576]);
     expect(await sized(shot, "e1536", true)).toEqual(["image/avif", 1536, 1152]);
     // Smaller than the edge: its own pixels, which is how a reader knows it has the whole picture.
     expect(await sized(icon, "e512")).toEqual(["image/webp", 64, 64]);

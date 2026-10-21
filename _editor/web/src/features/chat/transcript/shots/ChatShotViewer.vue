@@ -7,8 +7,9 @@ import { type ChatShot, shotName } from "./shots";
 import { downloadOriginal, type Picture, picture } from "../../../../models/workspace/home/thumbnails";
 
 // The conversation's pictures one at a time and large, opened from a strip's tile or a tool card's picture; the arrows
-// walk every turn's strip in order and the filmstrip jumps. Fit draws the daemon's re-encoded view; actual size swaps in
-// the original file once it arrives, drawing the view at the same size until then.
+// walk every turn's strip in order and the filmstrip jumps. It draws the daemon's re-encoded view at once and swaps in
+// the original file once that arrives: opening a picture is asking to look at it, and the re-encode, however good, is
+// lossy where the file is not.
 
 const t = useT();
 
@@ -50,9 +51,9 @@ const index = computed(() =>
 );
 const shot = computed<ChatShot | undefined>(() => props.shots[index.value]);
 const view = computed(() => (shot.value === undefined ? undefined : picture(props.agent, shot.value.path, `view`)));
-// Asked for only at actual size, where pixels are what the reader came to look at.
-const original = computed(() => (shot.value === undefined || !actual.value ? undefined : picture(props.agent, shot.value.path, `original`)));
-// The view is the picture at its own size, so it stands in for the original until the file arrives.
+// Asked for the picture on screen only; the neighbours fetched ahead are views, so walking past costs no originals.
+const original = computed(() => (shot.value === undefined ? undefined : picture(props.agent, shot.value.path, `original`)));
+// The view is the picture at its own size, so it stands in for the original, at fit and at actual size, until the file arrives.
 const drawn = computed(() => (original.value?.url === undefined ? view.value : original.value));
 const name = computed(() => (shot.value === undefined ? `` : shotName(shot.value.path)));
 const prompt = computed(() => (shot.value === undefined ? undefined : props.prompts.get(shot.value.turnId)));
