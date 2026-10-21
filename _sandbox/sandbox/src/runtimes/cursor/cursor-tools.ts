@@ -17,6 +17,7 @@ import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S } from "../../execution/js-runti
 import { jsToolDescription, runJsTool } from "../../execution/js-tool.js";
 import { JS_TOOL_NAME } from "../../seams/js-tool-names.js";
 import type { CursorOwner, CursorToolAsk } from "./turn/cursor-approvals.js";
+import { SETTLE_WORDS } from "../../agent/subagents/child-held.js";
 
 // What the turn's gate answers with and what it marks, the two halves a tool needs to run a program safely. Carried
 // together because a runtime that consults without marking would launder outside content past the judge.
@@ -211,6 +212,20 @@ const mergeTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool 
             return JSON.stringify({ ok: false, message: "Pass the subagent's id." });
         }
         return JSON.stringify(await children.merge(parsed.data.child));
+    },
+});
+
+// The parent's word that a held child's work is in its checkout already (child-held.ts settleHeldChild).
+const settleTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
+    description: SETTLE_WORDS,
+    inputSchema: {
+        type: "object",
+        properties: { child: { type: "string", description: "The subagent's id, from spawn." } },
+        required: ["child"],
+    },
+    execute: async (args) => {
+        const parsed = CancelArgsSchema.safeParse(args);
+        return JSON.stringify(parsed.success ? await children.settle(parsed.data.child) : { ok: false, message: "Pass the subagent's id." });
     },
 });
 
@@ -437,6 +452,7 @@ export const cursorCustomTools = (
               answer: asked(answerTool(request.hooks.children), childAsk("answer", "Answer this subagent's question?"), owner),
               cancel: asked(cancelTool(request.hooks.children), childAsk("cancel", "Stop this subagent?"), owner),
               merge: asked(mergeTool(request.hooks.children), childAsk("merge", "Merge this subagent's work?"), owner),
+              settle: asked(settleTool(request.hooks.children), childAsk("settle", "Record this subagent's work as already merged?"), owner),
           }
         : {}),
 });

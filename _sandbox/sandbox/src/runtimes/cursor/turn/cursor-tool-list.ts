@@ -95,6 +95,7 @@ const CUSTOM_TOOL_NAMES = new Map<string, string>([
     ["answer", "mcp__subagents__answer"],
     ["cancel", "mcp__subagents__cancel"],
     ["merge", "mcp__subagents__merge"],
+    ["settle", "mcp__subagents__settle"],
 ]);
 
 const customToolName = (tool: string): string => CUSTOM_TOOL_NAMES.get(tool) ?? `mcp__${CUSTOM_TOOLS_SERVER}__${tool}`;

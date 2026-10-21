@@ -86,7 +86,7 @@ describe("what a parent is told of its child's work", () => {
             },
         });
         expect(childLandingWords(registry(parent(), held), "c1")).toBe(
-            "Its changes clash with the edits in your checkout on `app.ts`, `api/src/a.ts`, so nothing of them was written there: they wait on its branch. Bring them in with conflict markers to resolve yourself (the merge tool, or `agents merge c1` from a shell), or leave them.",
+            "Its changes clash with the edits in your checkout on `app.ts`, `api/src/a.ts`, so nothing of them was written there: they wait on its branch. Bring them in with conflict markers to resolve yourself (the merge tool, or `agents merge c1` from a shell), or leave them. If you bring them in some other way (a patch, a port by hand), say so with the settle tool (`agents settle c1`): otherwise the owner is still asked about this land after yours.",
         );
     });
 

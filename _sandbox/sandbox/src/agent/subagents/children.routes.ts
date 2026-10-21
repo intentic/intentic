@@ -119,6 +119,28 @@ const childLookupsOf = (services: Services): ChildLookups => ({
     result: (childId) => (services.linkedChildren.owns(childId) ? undefined : childResultOf(services.conversations, childId)),
 });
 
+// The two doors on a child's work held off this conversation's checkout (child-held.ts): `merge` brings it in with
+// conflict markers, `settle` records that the parent already brought it in some other way.
+const heldWorkRoute =
+    (services: Services, door: "merge" | "settle") =>
+    async (c: Context<AppEnv>): Promise<Response> => {
+        const conversationId = conversationOf(services, c);
+        if (conversationId === undefined) {
+            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
+        }
+        const supervisor = supervisorFor(services.conversations, conversationId);
+        if (supervisor === undefined) {
+            return c.json({ ok: false, message: "This conversation may not supervise agents: no turn with full agency has run on it." }, 403);
+        }
+        // allow(silent-catch): a body that is not JSON is answered as a malformed one, just below.
+        const parsed = CancelBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ ok: false, message: 'Pass JSON like {"child": "sub-…"}.' }, 400);
+        }
+        const result = await supervisor[door](parsed.data.child);
+        return c.json(result, result.ok ? 200 : 409);
+    };
+
 const createChildrenRoutes = (services: Services) => ({
     /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is queued, before any wait for memory. */
     spawn: async (c: Context<AppEnv>): Promise<Response> => {
@@ -246,23 +268,9 @@ const createChildrenRoutes = (services: Services) => ({
         return c.json(result, result.ok ? 200 : 409);
     },
     /** POST /children/merge — bring a child's work held off this conversation's checkout into it, with conflict markers. */
-    merge: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(services, c);
-        if (conversationId === undefined) {
-            return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
-        }
-        const supervisor = supervisorFor(services.conversations, conversationId);
-        if (supervisor === undefined) {
-            return c.json({ ok: false, message: "This conversation may not supervise agents: no turn with full agency has run on it." }, 403);
-        }
-        // allow(silent-catch): a body that is not JSON is answered as a malformed one, just below.
-        const parsed = CancelBodySchema.safeParse(await c.req.json().catch(() => undefined));
-        if (!parsed.success) {
-            return c.json({ ok: false, message: 'Pass JSON like {"child": "sub-…"}.' }, 400);
-        }
-        const result = await supervisor.merge(parsed.data.child);
-        return c.json(result, result.ok ? 200 : 409);
-    },
+    merge: heldWorkRoute(services, "merge"),
+    /** POST /children/settle — record a held child's work as already brought into this checkout by hand. */
+    settle: heldWorkRoute(services, "settle"),
     /** POST /children/answer — settle a child's question; consent cards refuse, they are the owner's. */
     answer: async (c: Context<AppEnv>): Promise<Response> => {
         const conversationId = conversationOf(services, c);
@@ -345,6 +353,7 @@ export const childrenRawRoutes = defineRawRoutes((services: Services) => {
         "POST /children/answer": childrenRoutes.answer,
         "POST /children/cancel": childrenRoutes.cancel,
         "POST /children/merge": childrenRoutes.merge,
+        "POST /children/settle": childrenRoutes.settle,
         // A task handed to another of the owner's sandboxes over a link card, and which ones this turn may hand work to.
         "POST /children/delegate": childrenRoutes.delegate,
         "GET /children/links": childrenRoutes.links,

@@ -146,6 +146,7 @@ export const RAW_ROUTES = {
     "POST /children/answer": { agent: true, control: "never" },
     "POST /children/cancel": { agent: true, control: "never" },
     "POST /children/merge": { agent: true, control: "never" },
+    "POST /children/settle": { agent: true, control: "never" },
     // Handing a task to another of the owner's sandboxes over a link card (`agents delegate`), and which links this
     // conversation's turn may hand work to (`agents links`); held to the cards the turn was granted, like the tool.
     "POST /children/delegate": { agent: true, control: "never" },

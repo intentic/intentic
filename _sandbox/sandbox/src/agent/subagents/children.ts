@@ -1,9 +1,7 @@
 import { within } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import type { WorkPlace } from "../../workload/resource-budget.js";
-import { conversationProfile, isIsolated, worktreeOf } from "../../conversations/registry/agents-store.js";
-import { landByHandLeased } from "../../conversations/land/land-by-hand.js";
-import { landTargetOf } from "../../conversations/land/land-target.js";
+import { conversationProfile, worktreeOf } from "../../conversations/registry/agents-store.js";
 import { parentOfActor } from "../../auth/principal.js";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -27,7 +25,6 @@ import {
     markSubagentEndingReported,
     noteSpawnedChild,
     openSpawnedChild,
-    ranInProcess,
     type SpawnedChildBirth,
     subagentEndingReported,
     type SubagentTurn,
@@ -56,8 +53,9 @@ import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
 import { childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
 import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
-import { elsewhereFor, mergeOutcome, spentAsked } from "./child-listing.js";
+import { elsewhereFor, spentAsked } from "./child-listing.js";
 import { seatLine } from "./child-admission.js";
+import { type HeldChild, heldChildrenOf, mergeChild, noSuchChild, settleHeldChild } from "./child-held.js";
 import { resultContract, type ResultSchema, type ResultValue, turnResult } from "./child-result.js";
 import { CHILDREN, childResultOf, closeUnstarted, keepChild, SEATS, settleChild } from "./child-records.js";
 import { type Admission, admit, askOwner, HELD_MOVES, labelOf, notYet, refusedByRules, restoredStartAnswer, TURN_GRANTS, unanswerableWhy, unmovable } from "./child-gates.js";
@@ -1392,18 +1390,6 @@ const sendAllowed = async (
     }
 };
 
-// Why an id reaches no child of this parent. Both kinds are listed alike (`list`), so an id naming a subagent its own
-// runtime ran in-process is told apart from one naming nothing: it is this conversation's, and a service call cannot
-// reach it.
-const noSuchChild = (services: { readonly conversations: Actors }, parent: ChildParent, childId: string): ChildActionResult =>
-    ranInProcess(services.conversations, parent.conversationId, childId)
-        ? {
-              ok: false,
-              message:
-                  "That subagent ran in-process, inside this conversation's own turn: it has no conversation of its own to message, answer or cancel. Only the turn that started it reaches it, through its runtime's own tools.",
-          }
-        : { ok: false, message: "No such child of this conversation. `list` shows yours." };
-
 /**
  * Steers a working child, or sends a settled one a follow-up turn resuming its last reported session. Only the parent
  * that started it may reach it. A message the owner must allow comes back at once, and goes when they do.
@@ -1500,32 +1486,6 @@ export const childMovingOn = (actors: Actors, childId: string): boolean => actor
 export const childReportOf = (actors: Actors, childId: string): string | undefined => {
     const report = actors.holdings(CHILDREN).get(childId)?.report;
     return report === undefined || report === "" ? undefined : report;
-};
-
-/**
- * Brings a child's work into its parent's own checkout, leaving conflict markers where it clashes with the parent's
- * edits for the parent to resolve: the door a report or `wait` names when a child's land was held off the parent's tree,
- * as a runtime's worktree subagent hands its branch back for the parent to merge. Only the parent that started it may,
- * read off the registry so it outlives a restart, and only for a child whose work goes where the parent works.
- */
-export const mergeChild = async (services: Services, parent: ChildParent, childId: string): Promise<ChildActionResult> => {
-    const entry = services.agents.entry(childId);
-    if (entry === undefined || !isIsolated(entry) || parentOfActor(entry.identity.startedBy) !== parent.conversationId) {
-        return noSuchChild(services, parent, childId);
-    }
-    if (services.conversations.running(childId)) {
-        return { ok: false, message: "It is still working: wait for it to finish, then merge what it did." };
-    }
-    const target = await landTargetOf(services, entry);
-    if (target.kind === "main" && target.ruled) {
-        return {
-            ok: false,
-            message:
-                "Your checkout cannot take its work (you run on another machine, or it carries a repo you do not), so it lands the way any agent's does.",
-        };
-    }
-    const result = await landByHandLeased(services, entry, "merge", "outstanding");
-    return mergeOutcome(result, target.kind === "parent" ? "your checkout" : "the main tree", childId);
 };
 
 // What a cancel reaches a child through: its conversation's actor, and the turn port's stop.
@@ -1733,6 +1693,9 @@ export interface ChildSupervisor {
     readonly landing: (childId: string) => string | undefined;
     // Brings a child's work held off the parent's checkout by a clash into it with conflict markers to resolve.
     readonly merge: (childId: string) => Promise<ChildActionResult>;
+    // Records a held child's work as one the parent brought in some other way (child-settle.ts), and which it still holds.
+    readonly settle: (childId: string) => Promise<ChildActionResult>;
+    readonly held: () => readonly HeldChild[];
     // Stops a child's running turn, its pending start, or the re-run the sandbox booked for it.
     readonly cancel: (childId: string) => Promise<ChildActionResult>;
     // Parks until one of the parent's children or background commands moves, or the named one does.
@@ -1778,6 +1741,8 @@ export const childSupervisor = (services: Services, parent: ChildParent): ChildS
             return ownChild(childId) ? childLandingWords(services.agents, childId) : undefined;
         },
         merge: (childId) => (linked.owns(childId) ? Promise.resolve(LINKED_MERGE) : mergeChild(services, parent, childId)),
+        settle: (childId) => (linked.owns(childId) ? Promise.resolve(LINKED_MERGE) : settleHeldChild(services, parent, childId)),
+        held: () => heldChildrenOf(services, parent.conversationId),
         cancel: async (childId) => {
             if (linked.owns(childId)) {
                 return linked.cancel(parent, childId);

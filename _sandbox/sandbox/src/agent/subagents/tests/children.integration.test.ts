@@ -38,7 +38,6 @@ import {
     composeRuntimeFloor,
     familyOf,
     type ChildSpawnSpec,
-    mergeChild,
     pendingQuestionOf,
     resetChildrenForTest,
     sendToChild,
@@ -46,6 +45,7 @@ import {
     supervisorFor,
     type ChildSupervisor,
 } from "../children.js";
+import { mergeChild, settleHeldChild } from "../child-held.js";
 import { turnRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import type { Fleet } from "../../../conversations/registry/agents-registry.js";
@@ -635,6 +635,10 @@ describe("the escalation ladder", () => {
             ok: false,
             message: "No such child of this conversation. `list` shows yours.",
         });
+        await expect(settleHeldChild(services, stranger, result.id)).resolves.toEqual({
+            ok: false,
+            message: "No such child of this conversation. `list` shows yours.",
+        });
         // The stranger's send started no turn; the child is still parked, unanswered.
         expect(turns).toHaveLength(1);
         expect(pendingQuestionOf(actors, result.id)).toMatchObject({ kind: "question", requestId });
@@ -657,6 +661,7 @@ describe("the escalation ladder", () => {
         await expect(cancelChild(services, parent, "call-in")).resolves.toEqual(inProcess);
         // Its edits are already in this conversation's tree: there is nothing of it to merge.
         await expect(mergeChild(services, parent, "call-in")).resolves.toEqual(inProcess);
+        await expect(settleHeldChild(services, parent, "call-in")).resolves.toEqual(inProcess);
         // Another conversation's in-process subagent is nothing of this one's.
         await expect(sendToChild(services, { conversationId: "conv-other", cwd: "/work" }, "call-in", "more")).resolves.toEqual({
             ok: false,
@@ -853,6 +858,8 @@ describe("the shell door's arming", () => {
         result: () => undefined,
         landing: () => undefined,
         merge: async () => ({ ok: true }),
+        settle: async () => ({ ok: true }),
+        held: () => [],
         cancel: async () => ({ ok: true }),
         wait: async () => ({ outcome: "unknown-target" }),
         delegate: async () => ({ ok: false, message: "no links here" }),

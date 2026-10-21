@@ -104,7 +104,7 @@ export const childLandingWords = (agents: { readonly entry: (id: string) => Pers
     const where = target.kind === "parent" ? "your checkout" : "the main tree you work in";
     const clashing = conflictPaths(child.landing.conflicts ?? []);
     if (clashing.length > 0) {
-        return `Its changes clash with the edits in ${where} on ${listed(clashing, PATHS_NAMED)}, so nothing of them was written there: they wait on its branch. Bring them in with conflict markers to resolve yourself (the merge tool, or \`agents merge ${childId}\` from a shell), or leave them.`;
+        return `Its changes clash with the edits in ${where} on ${listed(clashing, PATHS_NAMED)}, so nothing of them was written there: they wait on its branch. Bring them in with conflict markers to resolve yourself (the merge tool, or \`agents merge ${childId}\` from a shell), or leave them. If you bring them in some other way (a patch, a port by hand), say so with the settle tool (\`agents settle ${childId}\`): otherwise the owner is still asked about this land after yours.`;
     }
     const landedHere = target.kind === "parent" ? child.placement.landedInto === target.parent : child.placement.repos.some(({ landedTip }) => landedTip !== undefined);
     if (!landedHere || (child.landing.diff?.files ?? 0) === 0) {

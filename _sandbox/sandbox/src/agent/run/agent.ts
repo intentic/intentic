@@ -60,6 +60,7 @@ import { opt } from "../../opt.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
+import { heldChildrenHooks } from "../subagents/held-children-close.js";
 import { commandNotesHooks, commandWire } from "./command-turn.js";
 import { PINNED_ENV } from "./harness/pinned-env.js";
 import { reviewHooks } from "./harness/review-findings.js";
@@ -440,11 +441,11 @@ const policyBoundaryHooks = (policy: HarnessRequest["policy"]): ReturnType<typeo
     policy.allowedTools === undefined ? {} : toolAllowlistHooks(policy.allowedTools),
 ];
 
-// The harness's own asks of the session. A checklist about to be left open is said back once, since the board reads that
-// list to tell a finished session from one that stopped short. A slash command's turn sends its words alone, so the
-// CLI runs the command, and the notes cut from in front of them are said through the prompt hook (command-turn.ts).
-const sessionHooks = (spec: HarnessRequest["spec"]) => [
+// The harness's own asks of the session: a checklist left open and subagents' work left held, each said back once at Stop,
+// and a slash command's notes, cut from in front of its words, said through the prompt hook (command-turn.ts).
+const sessionHooks = (spec: HarnessRequest["spec"], children: HarnessRequest["hooks"]["children"]) => [
     checklistCloseHooks({ sessionStore: spec.sessionStore }),
+    heldChildrenHooks(children?.held),
     commandNotesHooks(commandWire(spec).notes),
 ];
 
@@ -534,8 +535,7 @@ const baseOptions = (
                 // bypassPermissions.
                 hasRules(request.policy.actionRules) ? outboundGuardHooks(request.policy.actionRules) : {},
                 ...policyBoundaryHooks(request.policy),
-                // The harness's own asks of the session: an open checklist said back, a slash command's notes said apart.
-                ...sessionHooks(request.spec),
+                ...sessionHooks(request.spec, request.hooks.children),
                 // The repositories' own `turn` checks, once, as an isolated turn is about to stop: what they found in its
                 // change is said back, and the model fixes it or says why not. Nothing waits on them.
                 turnCheckHooks(request.hooks.turnChecks, ownWorktree(request.spec.isolation), push),

@@ -132,6 +132,9 @@ SPAWN AND SUPERVISE
                                        before handing its task to another agent, so the original never resumes
   agents merge <id>                    bring a subagent's finished work into your checkout when it clashed with
                                        your edits and was held on its branch, with conflict markers to resolve
+  agents settle <id>                   record that a held subagent's work is already in your checkout because you
+                                       brought it in yourself (a patch, a port by hand), so it stops calling the
+                                       owner about a land conflict. Nothing is written; work you keep back stays held
   agents list                          the subagents THIS conversation started, live first, spawned and
                                        in-process alike, each marked which (an in-process one lives in the turn
                                        that started it, so send/answer/cancel cannot reach it). Not \`ls\`, which
@@ -868,6 +871,20 @@ const mergeChild = async (argv) => {
     process.stdout.write(`${note ?? "merged"}\n`);
 };
 
+const settleChild = async (argv) => {
+    const { positional } = parseFlags(argv, []);
+    const [id] = positional;
+    if (id === undefined) {
+        return die(`agents: settle needs a subagent's id\n\n${USAGE}`);
+    }
+    const { status, text } = await call("POST", "/children/settle", JSON.stringify({ child: id }));
+    if (status !== 200) {
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const { note } = JSON.parse(text);
+    process.stdout.write(`${note ?? "settled"}\n`);
+};
+
 const answerChild = async (argv) => {
     const { flags, positional } = parseFlags(argv, ["json"]);
     const [id, ...rest] = positional;
@@ -1004,6 +1021,7 @@ const main = async () => {
     if (command === "answer") return answerChild(rest);
     if (command === "cancel") return cancelChild(rest);
     if (command === "merge") return mergeChild(rest);
+    if (command === "settle") return settleChild(rest);
     if (command === "list") return list();
     process.stdout.write(`${USAGE}\n`);
     if (command !== undefined && command !== "--help" && command !== "-h" && command !== "help") {

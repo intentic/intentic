@@ -12,6 +12,7 @@ import { type ChildRehome, type ChildSpawnSpec, type ChildSupervisor, spawnedNot
 import type { ChildResultDoor } from "../child-records.js";
 import { ResultSchemaSchema, ResultValueSchema, resultValidator } from "../child-result.js";
 import { HALF_A_MOVE } from "../child-words.js";
+import { SETTLE_WORDS } from "../child-held.js";
 import type { SubagentWaitUntil } from "../subagents.js";
 import { type ChildrenWaitAnswer, childrenWaitAnswer, waitForChildren, waitForWork, workWaitAnswer } from "./work-wait.js";
 import { opt } from "../../../opt.js";
@@ -155,6 +156,16 @@ const resultTool = (door: ChildResultDoor) =>
                     : { ok: false, message: `Not recorded, it does not match the schema: ${taken.error}` },
             );
         },
+        { annotations: toolAnnotations("write") },
+    );
+
+// The parent's word that a held child's work is in its checkout already (child-held.ts settleHeldChild).
+const settleTool = (children: ChildSupervisor) =>
+    sdk().tool(
+        "settle",
+        SETTLE_WORDS,
+        { child: z.string().min(1).describe("The subagent's id, from spawn.") },
+        async (args) => answer(await children.settle(args.child)),
         { annotations: toolAnnotations("write") },
     );
 
@@ -407,6 +418,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                           },
                           { annotations: toolAnnotations("write") },
                       ),
+                      settleTool(deps.children),
                   ]),
             sdk().tool(
                 "wait",

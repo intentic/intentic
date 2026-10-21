@@ -110,6 +110,7 @@ export const UNSERVED = {
     "POST /children/merge": NOT_THE_EDITORS,
     "POST /children/providers/spent": NOT_THE_EDITORS,
     "POST /children/send": NOT_THE_EDITORS,
+    "POST /children/settle": NOT_THE_EDITORS,
     "POST /children/spawn": NOT_THE_EDITORS,
     "POST /children/wait": NOT_THE_EDITORS,
     "POST /ci/webhook/{host}": NOT_THE_EDITORS,

@@ -68,6 +68,8 @@ const supervisor = (over: Partial<ChildSupervisor> = {}): ChildSupervisor => ({
     result: () => undefined,
     landing: () => undefined,
     merge: async () => ({ ok: true }),
+    settle: async () => ({ ok: true }),
+    held: () => [],
     cancel: async () => ({ ok: true }),
     delegate: async () => ({ ok: false, message: "no links here" }),
     links: async () => [],
@@ -97,6 +99,7 @@ describe("which tools mount", () => {
             "answer",
             "cancel",
             "merge",
+            "settle",
         ]);
         expect(Object.keys(cursorCustomTools(request({ hooks: { children }, policy: { unattended: true } }), guard(allowing()), push()))).toEqual([
             "ask",
@@ -107,6 +110,7 @@ describe("which tools mount", () => {
             "answer",
             "cancel",
             "merge",
+            "settle",
         ]);
     });
 

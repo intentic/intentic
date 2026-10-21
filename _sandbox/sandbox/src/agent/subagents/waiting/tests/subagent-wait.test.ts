@@ -64,6 +64,7 @@ test("a delegating turn's server lists wait and keep beside every supervision to
         "cancel",
         "answer",
         "merge",
+        "settle",
         "wait",
         "keep",
     ]);
