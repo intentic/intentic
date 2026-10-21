@@ -2,7 +2,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import type http from "node:http";
 import { dirname, extname, join } from "node:path";
-import type { Readable, Transform } from "node:stream";
+import { type Readable, type Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createBrotliDecompress, createGzip } from "node:zlib";
 import { renameOver, stagingOf } from "@intentic/base/fs";
@@ -90,6 +90,47 @@ const gzipCopy = (file: string, copy: string): Promise<void> => {
     return made;
 };
 
+// Whether `relative` goes out gzip-compressed to a browser that takes it, at `size` bytes.
+const compressible = (relative: string, size: number): boolean => COMPRESSIBLE.has(extname(relative).toLowerCase()) && size >= MIN_COMPRESS_BYTES;
+
+// Reads `path` to its end and lets the bytes go.
+const readThrough = (path: string): Promise<void> =>
+    pipeline(
+        createReadStream(path),
+        new Writable({
+            write: (_chunk, _encoding, done) => done(),
+        }),
+    );
+
+// Does for `relatives` under `root`, one file at a time, what a first request for each does, so that the first document
+// opened does not wait for it: the gzip copy of a compressible file made, and the file a response would send read once.
+// On Windows that read is when the real-time scanner looks at a file it has not seen (since its last signature update),
+// which for the editor's largest scripts was seconds each, on the first open's critical path. A file that is not there,
+// or fails, is passed over: this only moves work earlier. Answers how many it read.
+export const warmStatic = async (root: StaticRoot, relatives: readonly string[]): Promise<number> => {
+    let warmed = 0;
+    for (const relative of relatives) {
+        if (!isSafeRelative(relative)) {
+            continue;
+        }
+        const file = join(root.dir, relative);
+        try {
+            const { size } = await stat(file);
+            if (root.gzipCache !== undefined && !relative.endsWith(".br") && compressible(relative, size)) {
+                const copy = join(root.gzipCache, `${relative}.gz`);
+                await gzipCopy(file, copy);
+                await readThrough(copy);
+            } else {
+                await readThrough(file);
+            }
+            warmed += 1;
+        } catch {
+            // allow(silent-catch): a file this could not warm is served the usual way on its first request.
+        }
+    }
+    return warmed;
+};
+
 // The file and what it passes through on the way out, opened only for a request that wants a body.
 type Body = () => [Readable, ...Transform[]];
 
@@ -138,11 +179,11 @@ export const serveStatic = async (req: http.IncomingMessage, res: http.ServerRes
         return;
     }
     const headers = headersFor(relative, undefined);
-    const compressible = COMPRESSIBLE.has(extname(relative).toLowerCase()) && size >= MIN_COMPRESS_BYTES;
-    if (!compressible || !accepts(req, "gzip")) {
+    const compresses = compressible(relative, size);
+    if (!compresses || !accepts(req, "gzip")) {
         const plain: http.OutgoingHttpHeaders = { ...headers, "content-length": size };
         // A compressible file goes out compressed to others: caches must keep the two apart.
-        if (compressible) {
+        if (compresses) {
             plain["vary"] = "accept-encoding";
         }
         await send(req, res, plain, () => [createReadStream(file)]);

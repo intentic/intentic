@@ -20,6 +20,8 @@ export interface KeptFrame {
     readonly holding?: () => boolean;
     // Told once the frame is let go while kept, and what its editor held with it.
     readonly dropped?: () => void;
+    // Whether its editor had its document open when it was kept (slot.ts); absent reads as open.
+    readonly ready?: boolean;
 }
 
 interface Parked extends KeptFrame {
@@ -141,7 +143,7 @@ export const keep = (id: string, kept: KeptFrame): boolean => {
 };
 
 // Moves the editor kept under `id` into `slot` and hands it over; undefined when none is kept.
-export const take = (id: string, slot: Element): KeptFrame | undefined => {
+export const take = (id: string, slot: Element): (KeptFrame & { readonly ready: boolean }) | undefined => {
     const found = parked.value.get(id);
     if (found === undefined) {
         return undefined;
@@ -154,5 +156,5 @@ export const take = (id: string, slot: Element): KeptFrame | undefined => {
         return undefined;
     }
     unpin(found.frame);
-    return { frame: found.frame, session: found.session, engine: found.engine, origin: found.origin };
+    return { frame: found.frame, session: found.session, engine: found.engine, origin: found.origin, ready: found.ready !== false };
 };

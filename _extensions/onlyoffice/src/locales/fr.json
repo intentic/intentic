@@ -21,9 +21,11 @@
         "openingInOnlyofficeDocs": "Ouverture dans ONLYOFFICE Docs…",
         "saveFailed": "Vos modifications n'ont pas pu être enregistrées.",
         "savedAsCopy": "Votre version a été enregistrée sous {path}. Cet éditeur affiche maintenant le fichier du disque.",
+        "slowToOpen": "L'éditeur met plus de temps que d'habitude à s'ouvrir.",
         "startOnlyofficeDocs": "Démarrer ONLYOFFICE Docs",
         "startSandboxNowOn": "Le préparer avec le sandbox désormais",
         "startingDocumentServerCold": "Démarrage du serveur de documents… Un démarrage à froid prend environ deux minutes : il régénère ses polices et ses thèmes à chaque fois. Il reste ensuite allumé.",
+        "textUntilEditor": "Le texte du document s'affiche en attendant que l'éditeur soit prêt.",
         "tryAgain": "Réessayer"
     }
 }

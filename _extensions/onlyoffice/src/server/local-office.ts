@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { NAMESPACE, type DocsState, type OpenRequest } from "../contract.js";
 import { documentTypeOf, extensionOf } from "../formats.js";
-import { createBrowserEngine, type BrowserEngine } from "./browser-engine.js";
+import { createBrowserEngine, warmBundle, type BrowserEngine } from "./browser-engine.js";
 import { BUNDLE_PIN } from "./bundle-pin.js";
 import { BundleStore } from "./bundle.js";
 import { createListener, type Listener } from "./listener.js";
@@ -60,6 +60,9 @@ export interface LocalOffice {
 
 // How often a download under way says how far it got.
 const PROGRESS_MS = 5_000;
+// How long after the bundle is known to be on disk its files are warmed: out of the way of the app's own start, which
+// asks for the bundle as its first window opens.
+const WARM_AFTER_MS = 5_000;
 
 const json = <Body>(status: number, body: Body): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -82,6 +85,48 @@ const pathIn = async (request: Request): Promise<string | undefined> => {
     // allow(silent-catch): a body that is not JSON names no path, answered as a 400 like any other bad body.
     const body: { readonly path?: unknown } | null = await request.json().catch(() => null);
     return workspacePath(body?.path);
+};
+
+// The bundle's download, started unless it is on disk or on its way, and where it ended, saying how far it got meanwhile.
+const downloadBundle = async (bundle: BundleStore, log: (line: string) => void): Promise<OfficePrefetch> => {
+    const progress = setInterval(() => {
+        const state = bundle.state();
+        if (state.state === "downloading") {
+            log(`[office bundle] downloading: ${state.percent ?? 0}%`);
+        }
+    }, PROGRESS_MS);
+    try {
+        await bundle.ensure();
+        const ended = await bundle.settled();
+        return ended.state === "ready" ? { state: "ready" } : { state: "failed", error: ended.state === "failed" ? ended.detail : `The editor download stopped (${ended.state}).` };
+    } catch (error) {
+        return { state: "failed", error: errorMessage(error) };
+    } finally {
+        clearInterval(progress);
+    }
+};
+
+// The editor's files read once in the background, the first time the bundle is known to be on disk (warmBundle), so the
+// first document opened in this run does not pay for a scan or a compression of them. Once per process.
+const bundleWarmer = (bundle: BundleStore, log: (line: string) => void) => {
+    let asked = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return {
+        soon: () => {
+            if (asked) {
+                return;
+            }
+            asked = true;
+            timer = setTimeout(() => {
+                const began = Date.now();
+                warmBundle(bundle)
+                    .then((count) => log(`[office bundle] warmed ${count} editor files in ${Date.now() - began} ms`))
+                    .catch((error: Error) => log(`[office bundle] warming the editor files failed: ${error.message}`));
+            }, WARM_AFTER_MS);
+            timer.unref?.();
+        },
+        stop: () => clearTimeout(timer),
+    };
 };
 
 export const createLocalOffice = (deps: LocalOfficeDeps): LocalOffice => {
@@ -192,24 +237,16 @@ export const createLocalOffice = (deps: LocalOfficeDeps): LocalOffice => {
         return json(200, { ok: true });
     };
 
+    const warmer = bundleWarmer(bundle, deps.log);
+
     // The download on its way, shared by every ask for it until it ends.
     let prefetching: Promise<OfficePrefetch> | undefined;
     const download = async (): Promise<OfficePrefetch> => {
-        const progress = setInterval(() => {
-            const state = bundle.state();
-            if (state.state === "downloading") {
-                deps.log(`[office bundle] downloading: ${state.percent ?? 0}%`);
-            }
-        }, PROGRESS_MS);
-        try {
-            await bundle.ensure();
-            const ended = await bundle.settled();
-            return ended.state === "ready" ? { state: "ready" } : { state: "failed", error: ended.state === "failed" ? ended.detail : `The editor download stopped (${ended.state}).` };
-        } catch (error) {
-            return { state: "failed", error: errorMessage(error) };
-        } finally {
-            clearInterval(progress);
+        const ended = await downloadBundle(bundle, deps.log);
+        if (ended.state === "ready") {
+            warmer.soon();
         }
+        return ended;
     };
 
     return {
@@ -246,6 +283,7 @@ export const createLocalOffice = (deps: LocalOfficeDeps): LocalOffice => {
             await closeQuietly(held);
         },
         close: async () => {
+            warmer.stop();
             const all = [...running.values()];
             running.clear();
             await Promise.all(all.map(closeQuietly));

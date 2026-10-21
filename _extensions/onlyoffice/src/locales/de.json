@@ -21,9 +21,11 @@
         "openingInOnlyofficeDocs": "Wird in ONLYOFFICE Docs geöffnet…",
         "saveFailed": "Ihre Änderungen konnten nicht gespeichert werden.",
         "savedAsCopy": "Ihre Version wurde als {path} gespeichert. Dieser Editor zeigt jetzt die Datei auf dem Datenträger.",
+        "slowToOpen": "Der Editor braucht länger als üblich zum Öffnen.",
         "startOnlyofficeDocs": "ONLYOFFICE Docs starten",
         "startSandboxNowOn": "Ab jetzt mit der Sandbox bereitstellen",
         "startingDocumentServerCold": "Der Dokumentserver wird gestartet… Ein Kaltstart dauert etwa zwei Minuten: er erzeugt jedes Mal seine Schriften und Themes neu. Danach bleibt er oben.",
+        "textUntilEditor": "Der Text des Dokuments wird angezeigt, bis der Editor bereit ist.",
         "tryAgain": "Erneut versuchen"
     }
 }

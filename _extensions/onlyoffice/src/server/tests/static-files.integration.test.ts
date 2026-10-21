@@ -3,7 +3,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { brotliCompressSync, gunzipSync } from "node:zlib";
-import { serveStatic, type StaticRoot } from "../static-files.js";
+import { serveStatic, type StaticRoot, warmStatic } from "../static-files.js";
 
 // The editor's static files over real HTTP against a temp tree: what is compressed and how, what is refused, and the
 // caching every response carries.
@@ -147,5 +147,20 @@ describe(`what is refused`, () => {
         for (const path of [`/../outside.txt`, `/web-apps/../../outside`, `/.verified`, `/web-apps`, `/missing.js`]) {
             expect([path, (await raw(path)).status]).toEqual([path, 404]);
         }
+    });
+});
+
+describe(`warming`, () => {
+    it(`makes the gzip copy a first request would, reads what it cannot compress, and passes over what is not there`, async () => {
+        root = { dir: join(dir, `tree`), gzipCache: join(dir, `warm-gz`) };
+        const warmed = await warmStatic(root, [`web-apps/apps/api/documents/api.js`, `sdkjs/common/wasm/x2t/x2t.wasm.br`, `img/icon.png`, `missing.js`, `../outside.js`]);
+        expect(warmed).toBe(3);
+        expect(gunzipSync(await readFile(join(dir, `warm-gz`, `web-apps/apps/api/documents/api.js.gz`))).toString(`utf8`)).toBe(api);
+        // Brotli goes out as it is, and an image is not compressed: neither gets a copy.
+        await expect(stat(join(dir, `warm-gz`, `sdkjs/common/wasm/x2t/x2t.wasm.br.gz`))).rejects.toThrow();
+        await expect(stat(join(dir, `warm-gz`, `img/icon.png.gz`))).rejects.toThrow();
+        // The request after it is served the copy it made.
+        const served = await raw(`/web-apps/apps/api/documents/api.js`, { "accept-encoding": `gzip` });
+        expect(gunzipSync(served.body).toString(`utf8`)).toBe(api);
     });
 });

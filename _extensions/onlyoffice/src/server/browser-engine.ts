@@ -11,6 +11,7 @@ import type { EditorPageConfig } from "../protocol.js";
 import type { BundleState, BundleStore } from "./bundle.js";
 import { browserPage } from "./browser-page.js";
 import { createBrowserRoutes, type BrowserRoutes, type FileWrite, type FileWritten, type OpenedFile } from "./browser-routes.js";
+import { warmStatic, type StaticRoot } from "./static-files.js";
 import type { FileStat, Session, Sessions } from "./sessions.js";
 
 // The browser engine's half of the backend: the bundle the editor runs from, sessions opened on it, the page each one
@@ -59,6 +60,46 @@ export const scratchBeside = (target: string): string => join(dirname(target), `
 
 // Why a copy is not written beside a document opened on its own: the window may write that document and nothing else.
 export const NO_COPY_HERE = "Only the document itself can be saved from this window, so a copy can't be kept beside it.";
+
+// Where a verified bundle's tree is served from, with its gzip copies kept beside the files inside it.
+const staticRootOf = (dir: string): StaticRoot => ({ dir, gzipCache: join(dir, ".gz") });
+
+// What every open of a document, a spreadsheet or a presentation fetches and is large: the editor's own scripts and the
+// converter, a few MB to 16 MB each. Read from a first open of each (the gzip copies it left); fonts are left out, since
+// which of them a document needs is the document's.
+const EDITORS = [
+    ["documenteditor", "word"],
+    ["spreadsheeteditor", "cell"],
+    ["presentationeditor", "slide"],
+] as const;
+const WARM_FILES: readonly string[] = [
+    "web-apps/apps/api/documents/api.js",
+    "web-apps/vendor/requirejs/require.js",
+    "web-apps/vendor/xregexp/xregexp-all-min.js",
+    "sdkjs/common/AllFonts.js",
+    "sdkjs/common/Charts/ChartStyles.js",
+    "sdkjs/common/libfont/engine/fonts.js",
+    "sdkjs/common/libfont/engine/fonts.wasm",
+    "sdkjs/common/spell/spell/spell.wasm",
+    "sdkjs/common/wasm/x2t/x2t.js",
+    "sdkjs/common/wasm/x2t/x2t_helper.js",
+    "sdkjs/common/wasm/x2t/x2t.wasm.br",
+    ...EDITORS.flatMap(([app, kind]) => [
+        `web-apps/apps/${app}/main/index.html`,
+        `web-apps/apps/${app}/main/app.js`,
+        `web-apps/apps/${app}/main/code.js`,
+        `web-apps/apps/${app}/main/resources/css/app.css`,
+        `sdkjs/${kind}/sdk-all-min.js`,
+        `sdkjs/${kind}/sdk-all.js`,
+    ]),
+];
+
+// Warms what every open fetches, once the bundle is on disk (`warmStatic`); answers how many files it read, none while
+// the bundle is not ready.
+export const warmBundle = async (bundle: BundleStore): Promise<number> => {
+    const state = bundle.state();
+    return state.state === "ready" ? warmStatic(staticRootOf(state.dir), WARM_FILES) : 0;
+};
 
 const stateOfBundle = (bundle: BundleState): DocsState => {
     switch (bundle.state) {
@@ -129,9 +170,9 @@ export const createBrowserEngine = (deps: BrowserEngineDeps): BrowserEngine => {
         }
         return page;
     };
-    const readyBundle = (): { id: string; root: { dir: string; gzipCache: string } } | undefined => {
+    const readyBundle = (): { id: string; root: StaticRoot } | undefined => {
         const state = bundle.state();
-        return state.state === "ready" ? { id: bundle.pinId, root: { dir: state.dir, gzipCache: join(state.dir, ".gz") } } : undefined;
+        return state.state === "ready" ? { id: bundle.pinId, root: staticRootOf(state.dir) } : undefined;
     };
 
     const openFile = async (session: Session): Promise<OpenedFile | undefined> => {

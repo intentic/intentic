@@ -22,6 +22,8 @@ interface Fake {
     readonly opened: OpenRequest[];
     readonly saved: string[];
     readonly framed: boolean[];
+    // Each word on whether the editor in the slot has its document open.
+    readonly readied: boolean[];
     readonly heard: PageMessage[];
     answer: (request: OpenRequest) => Promise<OpenResult>;
 }
@@ -34,6 +36,7 @@ const fake = (): Fake => {
         opened: [],
         saved: [],
         framed: [],
+        readied: [],
         heard: [],
         answer: async () => ({ url: `https://port-1.example/editor?s=one`, session: `one`, engine: `server` }),
         slot: undefined as unknown as EditorSlot,
@@ -50,6 +53,9 @@ const fake = (): Fake => {
             },
             framed: (value) => {
                 state.framed.push(value);
+            },
+            ready: (value) => {
+                state.readied.push(value);
             },
             message: (message) => {
                 state.heard.push(message);
@@ -77,13 +83,15 @@ afterEach(() => {
 
 describe(`a first visit`, () => {
     it(`frames the editor at the address this browser should use, under the session the backend opened`, async () => {
-        const { slot, element, opened, framed } = fake();
+        const { slot, element, opened, framed, readied } = fake();
         expect(await slot.load(brief)).toEqual({ framed: true });
         expect(opened).toEqual([briefRequest]);
         const [frame] = frames(element);
         expect(frame?.src).toBe(`http://port-1.localhost/editor?s=one`);
         expect(frame?.hasAttribute(`inert`)).toBe(false);
         expect(framed).toEqual([true]);
+        // The document server's page says nothing of its document: its editor is shown as soon as it is framed.
+        expect(readied).toEqual([true]);
     });
 
     it(`answers the state in the way and frames nothing while the server is not ready`, async () => {
@@ -212,9 +220,57 @@ describe(`the browser engine's page`, () => {
         state.answer = async () => ({ url: `https://port-1.example/editor?s=one`, session: `one`, engine: `browser` });
         return state;
     };
+    // What the page in `frame` says, from its own window and origin.
+    const pageSays = (frame: HTMLIFrameElement | undefined, message: PageMessage): void => {
+        window.dispatchEvent(new MessageEvent(`message`, { data: message, origin: `http://port-1.localhost`, source: frame?.contentWindow ?? null }));
+    };
 
     beforeEach(() => {
         told.length = 0;
+    });
+
+    it(`is covered until its page says the document is open, and again while the page loads itself anew`, async () => {
+        const state = browserFake();
+        await state.slot.load(browser);
+        const [frame] = frames(state.element);
+        expect(state.readied).toEqual([false]);
+        pageSays(frame, { channel: CHANNEL, type: `loading` });
+        pageSays(frame, { channel: CHANNEL, type: `ready` });
+        expect(state.readied).toEqual([false, false, true]);
+        // Discard mine: the page reloads onto the file as it is on disk.
+        pageSays(frame, { channel: CHANNEL, type: `loading` });
+        expect(state.readied).toEqual([false, false, true, false]);
+        // Every word still reaches the viewer as well.
+        expect(state.heard.map((message) => message.type)).toEqual([`loading`, `ready`, `loading`]);
+    });
+
+    it(`is let go, not kept, when left before its document opened, and the next visit starts afresh`, async () => {
+        const first = browserFake();
+        await first.slot.load(browser);
+        const [frame] = frames(first.element);
+        first.slot.leave();
+        expect(frame?.isConnected).toBe(false);
+
+        const second = browserFake();
+        await second.slot.load(browser);
+        expect(second.opened).toEqual([{ ...briefRequest, engine: `browser` }]);
+        expect(frames(second.element)[0]).not.toBe(frame);
+        expect(second.readied).toEqual([false]);
+    });
+
+    it(`is kept once its document opened, and shown again as open at once`, async () => {
+        const first = browserFake();
+        await first.slot.load(browser);
+        const [frame] = frames(first.element);
+        pageSays(frame, { channel: CHANNEL, type: `ready` });
+        first.slot.leave();
+        expect(frame?.isConnected).toBe(true);
+
+        const second = browserFake();
+        second.answer = async () => ({ resumed: true });
+        await second.slot.load(browser);
+        expect(frames(second.element)[0]).toBe(frame);
+        expect(second.readied).toEqual([true]);
     });
 
     it(`is told to save by message when left, addressed to its own origin, and the backend is not asked`, async () => {
@@ -241,6 +297,7 @@ describe(`the browser engine's page`, () => {
         const first = browserFake();
         await first.slot.load(browser);
         const [frame] = frames(first.element);
+        pageSays(frame, { channel: CHANNEL, type: `ready` });
         listen(frame);
         first.slot.leave();
         const second = browserFake();

@@ -141,6 +141,8 @@ const start = (config: EditorPageConfig, api: DocsApi): void => {
             window.parent.postMessage(message, config.parentOrigin);
         }
     };
+    // The viewer covers the frame until `ready`: an editor still booting is no picture of the document.
+    post({ channel: CHANNEL, type: `loading` });
     // Set before a reload the owner chose, so the page's own unsaved-changes prompt does not ask them again.
     let leaving = false;
     let opened = false;

@@ -28,6 +28,7 @@
         "restoreOriginalQuestion": "Przywrócić oryginał?",
         "saveFailed": "Nie udało się zapisać twoich zmian.",
         "savedAsCopy": "Twoja wersja została zapisana jako {path}. Ten edytor pokazuje teraz plik z dysku.",
+        "slowToOpen": "Edytor otwiera się dłużej niż zwykle.",
         "startOnlyofficeDocs": "Uruchom ONLYOFFICE Docs",
         "startSandboxNowOn": "Od teraz przygotowuj go razem z sandboxem",
         "startingDocumentServer": "Uruchamianie serwera dokumentów…",

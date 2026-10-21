@@ -7,10 +7,15 @@ import { forceSaveDocument, type KeptOriginal, openDocument, originalOf, restore
 import { host } from "./host.js";
 import type { ConflictChoice, PageMessage } from "./protocol.js";
 import { AUTO_START, ENGINE, engineOf } from "./settings.js";
-import { EditorSlot, reportUnsaved, type UnsavedReport } from "./slot.js";
+import { EditorSlot, reportUnsaved, type UnsavedReport, WAIT_MS } from "./slot.js";
 import { t } from "./i18n.js";
 
-/* A document in ONLYOFFICE: an editor frame on the listener's own origin once the chosen engine can open it (the browser engine's one download, or the document server's container), and until then a card saying what stands between the reader and it. The frame is placed by EditorSlot rather than by the template, so that leaving the document can keep the editor alive and coming back shows it again at once. */
+/* A document in ONLYOFFICE: an editor frame on the listener's own origin once the chosen engine can open it (the browser engine's one download, or the document server's container), and until then a card saying what stands between the reader and it. The frame is placed by EditorSlot rather than by the template, so that leaving the document can keep the editor alive and coming back shows it again at once.
+
+   The card stays over the frame until the editor has the document open (EditorSlot's `ready`). A frame shown as soon as
+   it exists is a dark, empty pane for as long as the editor takes to load, which on a cold cache, a slow tunnel or a
+   first scan of the editor's files is many seconds, and for good when a load stalls. So the reader sees the card
+   instead: the document's text once the wait is more than a moment, and past a long wait, a way to start afresh. */
 
 /* What the host may hand it beyond the path: `agent`, the conversation whose checkout the file is read from, which is never editable, like text; `readOnly`, the host's word that this window may not write the file (a desktop document window's other files); `unsaved`, where to say whether an editor of the document holds edits its file doesn't have, which EditorSlot keeps saying after this viewer has gone, for as long as a kept editor holds them; and a `text` slot, the document's text, shown while the editor can't show the document itself. */
 const { path, agent, readOnly = false, unsaved } = defineProps<{ path: string; agent?: string; readOnly?: boolean; unsaved?: UnsavedReport }>();
@@ -32,17 +37,56 @@ type Note =
     | { readonly kind: `restore-failed`; readonly detail: string };
 
 const slot = ref<HTMLElement>();
-// Whether an editor is in the slot; the card shows otherwise.
+// Whether an editor is in the slot, and whether it has its document open. The card shows until both hold: in the
+// editor's place before there is a frame, and over the frame while it boots.
 const framed = ref(false);
+const editorReady = ref(false);
+const revealed = computed(() => framed.value && editorReady.value);
 const status = ref<DocsState>();
 const failure = ref<string>();
 const note = ref<Note>();
 // Whether the editor has stood between the reader and this document since it was asked for: its download, its start,
 // a failure. From then until the editor shows, the host's reading of the document as text fills the view, if it gave one.
 const waited = ref(false);
+// The same text once an ordinary open has taken more than a moment (WAIT_MS.text), and the wait called slow once a
+// frame has booted for long (WAIT_MS.slow): the editor may still get there, and Try again is offered beside it.
+const textDue = ref(false);
+const slow = ref(false);
 // One-shot timers chained by hand, cleared on unmount; no repeating clock.
 let pending: ReturnType<typeof setTimeout> | undefined;
+let textTimer: ReturnType<typeof setTimeout> | undefined;
+let slowTimer: ReturnType<typeof setTimeout> | undefined;
 let editor: EditorSlot | undefined;
+
+// A new wait for the editor: another document, a fresh start, a page that loads itself anew.
+const startWaiting = (): void => {
+    clearTimeout(textTimer);
+    textDue.value = false;
+    textTimer = setTimeout(() => {
+        textDue.value = true;
+    }, WAIT_MS.text);
+};
+
+const stopWaiting = (): void => {
+    clearTimeout(textTimer);
+    textDue.value = false;
+    waited.value = false;
+};
+
+// The slow clock runs while a frame boots, from the moment it is framed: a download or a container start before it
+// has its own progress to show.
+watch(
+    () => framed.value && !editorReady.value,
+    (booting) => {
+        clearTimeout(slowTimer);
+        slow.value = false;
+        if (booting) {
+            slowTimer = setTimeout(() => {
+                slow.value = true;
+            }, WAIT_MS.slow);
+        }
+    },
+);
 
 // The owner's engine, kept in step with the Extensions tab through the host's settings store.
 const engine = ref(engineOf({ [ENGINE]: host().settings.get(ENGINE) }));
@@ -151,10 +195,12 @@ const retrySave = (): void => {
     editor?.save();
 };
 
-// A document that failed to open gets a new editor, not the kept one that failed.
+// A document that failed to open, or is slow to, gets a new editor, not the one in the slot. What its load fetched is
+// in the browser's cache, so the new one starts from there.
 const reopen = (): void => {
     note.value = undefined;
     editor?.reset();
+    startWaiting();
     void load();
 };
 
@@ -207,19 +253,31 @@ onMounted(() => {
         forceSave: (session) => forceSaveDocument({ session }),
         framed: (value) => {
             framed.value = value;
+            if (!value) {
+                editorReady.value = false;
+            }
+        },
+        ready: (value) => {
+            const was = editorReady.value;
+            editorReady.value = value;
             // Shown at last: what stood in the way is past, and a later reopen (a retry or restore) is a moment's wait.
             if (value) {
-                waited.value = false;
+                stopWaiting();
+            } else if (was) {
+                // The page loads itself anew (a conflict settled by taking the file on disk): covered again until it opened.
+                startWaiting();
             }
         },
         message: heard,
     });
+    startWaiting();
     void load();
 });
 const reload = (): void => {
     editor?.leave();
     status.value = undefined;
     note.value = undefined;
+    startWaiting();
     void load();
 };
 // Another document starts over, with its own original and its own wait.
@@ -259,6 +317,8 @@ const settingsLink = appLink(host().href(`/sandbox/extensions?view=installed`), 
 
 onBeforeUnmount(() => {
     clearTimeout(pending);
+    clearTimeout(textTimer);
+    clearTimeout(slowTimer);
     settingsWatch.dispose();
     editor?.leave();
     editor?.dispose();
@@ -271,11 +331,17 @@ const downloading = computed(() => {
     }
     return percent.value === undefined ? t(`onlyOfficeViewer.downloading`) : t(`onlyOfficeViewer.downloadingPercent`, { percent: percent.value });
 });
+// The editor's own word that it could not open the document, while the card still covers it; once it is on screen,
+// the notice above it says so instead.
+const openFailed = computed(() => (!revealed.value && note.value?.kind === `open-failed` ? note.value.detail : undefined));
 // What stands in the way, as the one line over the document's text: a failure first, then a state the reader can only
 // try again past. Undefined while the editor is only on its way.
 const problem = computed(() => {
     if (failure.value !== undefined) {
         return failure.value;
+    }
+    if (openFailed.value !== undefined) {
+        return `${t(`onlyOfficeViewer.couldNotOpen`)} ${openFailed.value}`;
     }
     switch (status.value?.state) {
         case `docker-off`:
@@ -295,7 +361,7 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
 <template>
     <div class="flex h-full w-full flex-col">
         <!-- Recovery is offered only after a save kept an original; opening a document needs no extra chrome. -->
-        <div v-if="framed && original !== undefined" class="flex shrink-0 items-center gap-1.5 border-b border-line px-3 py-1 text-2xs text-muted" v-tooltip.bottom="keptTitle">
+        <div v-if="revealed && original !== undefined" class="flex shrink-0 items-center gap-1.5 border-b border-line px-3 py-1 text-2xs text-muted" v-tooltip.bottom="keptTitle">
             <Icon name="history" class="shrink-0 text-xs" />
             <span class="truncate">{{ t(`onlyOfficeViewer.originalKept`) }}</span>
             <span aria-hidden="true">·</span>
@@ -304,7 +370,7 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
             </button>
         </div>
         <!-- Above the editor rather than over it: the notice's tint is translucent, and the editor's toolbar is right there. -->
-        <div v-if="framed && note !== undefined" class="shrink-0 p-2">
+        <div v-if="revealed && note !== undefined" class="shrink-0 p-2">
             <Notice v-if="note.kind === 'conflict'" tone="warning">
                 <span class="block">{{ t(`onlyOfficeViewer.changedOnDisk`) }}</span>
                 <span class="mt-1 flex flex-wrap gap-3">
@@ -336,91 +402,113 @@ const capabilitiesLink = appLink(host().href(`/capabilities`), () => host().navi
                 @dismiss="note = undefined"
             />
         </div>
-        <div ref="slot" v-show="framed" class="min-h-0 w-full flex-1" />
-        <!-- The document's text while the editor can't show it yet, under one line saying why, with the way on. -->
-        <div v-if="!framed && waited && $slots[`text`]" class="flex min-h-0 flex-1 flex-col">
-            <div class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1.5 text-2xs text-muted">
-                <template v-if="problem !== undefined">
-                    <Icon name="exclamation-circle" class="shrink-0 text-xs" />
-                    <span class="min-w-0 flex-1">{{ problem }}</span>
-                    <Button size="small" tier="quiet" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+        <!-- The frame is laid out at its size from the moment it exists, so the editor boots as it will be seen; the wait
+             covers it until its document is open, and stands in the editor's place before there is a frame at all. -->
+        <div class="relative min-h-0 w-full flex-1">
+            <div ref="slot" v-show="framed" class="h-full w-full" :aria-hidden="revealed ? undefined : `true`" />
+            <div v-if="!revealed" class="absolute inset-0 flex flex-col bg-canvas">
+                <!-- The document's text while the editor can't show it yet, under one line saying why, with the way on. -->
+                <template v-if="(waited || textDue) && $slots[`text`]">
+                    <div role="status" class="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line px-3 py-1.5 text-2xs text-muted">
+                        <template v-if="problem !== undefined">
+                            <Icon name="exclamation-circle" class="shrink-0 text-xs" />
+                            <span class="min-w-0 flex-1">{{ problem }}</span>
+                            <Button size="small" tier="quiet" @click="reopen">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                        </template>
+                        <template v-else-if="status?.state === 'pulling'">
+                            <ProgressRing :value="percent ?? 0" :size="14" :stroke="2" />
+                            <span class="min-w-0 flex-1">{{ downloading }}</span>
+                        </template>
+                        <template v-else-if="status?.state === 'not-started'">
+                            <Icon name="file-edit" class="shrink-0 text-xs" />
+                            <span class="min-w-0 flex-1">{{ t(`onlyOfficeViewer.textUntilEditor`) }}</span>
+                            <Button size="small" tier="boring" @click="start">
+                                {{ browserEngine ? t(`onlyOfficeViewer.downloadEditor`) : t(`onlyOfficeViewer.startOnlyofficeDocs`) }}
+                            </Button>
+                        </template>
+                        <template v-else-if="status?.state === 'starting'">
+                            <Icon name="spinner" spin class="shrink-0 text-xs" />
+                            <span class="min-w-0 flex-1">{{ t(`onlyOfficeViewer.startingDocumentServer`) }}</span>
+                        </template>
+                        <template v-else-if="slow">
+                            <Icon name="spinner" spin class="shrink-0 text-xs" />
+                            <span class="min-w-0 flex-1">{{ t(`onlyOfficeViewer.slowToOpen`) }}</span>
+                            <Button size="small" tier="quiet" @click="reopen">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                        </template>
+                        <template v-else>
+                            <Icon name="spinner" spin class="shrink-0 text-xs" />
+                            <span class="min-w-0 flex-1">{{ t(`onlyOfficeViewer.textUntilEditor`) }}</span>
+                        </template>
+                    </div>
+                    <div class="min-h-0 flex-1">
+                        <slot name="text" />
+                    </div>
                 </template>
-                <template v-else-if="status?.state === 'pulling'">
-                    <ProgressRing :value="percent ?? 0" :size="14" :stroke="2" />
-                    <span class="min-w-0 flex-1">{{ downloading }}</span>
-                </template>
-                <template v-else-if="status?.state === 'not-started'">
-                    <Icon name="file-edit" class="shrink-0 text-xs" />
-                    <span class="min-w-0 flex-1">{{ t(`onlyOfficeViewer.textUntilEditor`) }}</span>
-                    <Button size="small" tier="boring" @click="start">
-                        {{ browserEngine ? t(`onlyOfficeViewer.downloadEditor`) : t(`onlyOfficeViewer.startOnlyofficeDocs`) }}
-                    </Button>
-                </template>
-                <template v-else-if="status?.state === 'starting'">
-                    <Icon name="spinner" spin class="shrink-0 text-xs" />
-                    <span class="min-w-0 flex-1">{{ t(`onlyOfficeViewer.startingDocumentServer`) }}</span>
-                </template>
-                <template v-else>
-                    <Icon name="spinner" spin class="shrink-0 text-xs" />
-                    <span class="min-w-0 flex-1">{{ browserEngine ? t(`onlyOfficeViewer.openingInOnlyoffice`) : t(`onlyOfficeViewer.openingInOnlyofficeDocs`) }}</span>
-                </template>
+                <div v-else role="status" class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+                    <template v-if="failure">
+                        <Icon name="exclamation-circle" class="text-4xl text-subtle" />
+                        <p class="max-w-sm text-sm text-muted">{{ failure }}</p>
+                        <Button tier="boring" class="mt-1" @click="reopen">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                    </template>
+                    <template v-else-if="openFailed !== undefined">
+                        <Icon name="exclamation-circle" class="text-4xl text-subtle" />
+                        <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.couldNotOpen`) }}</p>
+                        <p class="max-w-sm text-xs break-words text-subtle">{{ openFailed }}</p>
+                        <Button tier="boring" class="mt-1" @click="reopen">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                    </template>
+                    <template v-else-if="status?.state === 'docker-off'">
+                        <Icon name="file-edit" class="text-4xl text-subtle" />
+                        <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.onlyofficeDocsRunsContainer`, { detail: status.detail }) }}</p>
+                        <a v-bind="capabilitiesLink" :class="ui.textButton(`mt-1`)">{{ t(`onlyOfficeViewer.openCapabilities`) }}</a>
+                    </template>
+                    <template v-else-if="status?.state === 'not-started'">
+                        <Icon name="file-edit" class="text-4xl text-subtle" />
+                        <p class="max-w-sm text-sm text-muted">
+                            {{ browserEngine ? t(`onlyOfficeViewer.openEditSaveInBrowser`) : t(`onlyOfficeViewer.openEditSaveDocument`) }}
+                        </p>
+                        <Button class="mt-1" @click="start">{{ browserEngine ? t(`onlyOfficeViewer.downloadEditor`) : t(`onlyOfficeViewer.startOnlyofficeDocs`) }}</Button>
+                        <!-- The standing choices belong to a sandbox, not a desktop app's local window. -->
+                        <template v-if="!localWindow">
+                            <label class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
+                                <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
+                                {{ t(`onlyOfficeViewer.startSandboxNowOn`) }}
+                            </label>
+                            <a v-bind="settingsLink" class="text-xs text-subtle hover:underline">{{ t(`onlyOfficeViewer.extensionSettings`) }}</a>
+                        </template>
+                    </template>
+                    <template v-else-if="status?.state === 'pulling'">
+                        <ProgressRing :value="percent ?? 0" :size="40" :stroke="3" />
+                        <p class="max-w-sm text-sm text-muted">{{ downloading }}</p>
+                    </template>
+                    <template v-else-if="status?.state === 'starting'">
+                        <Icon name="spinner" spin class="text-4xl text-subtle" />
+                        <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.startingDocumentServerCold`) }}</p>
+                        <label v-if="!localWindow" class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
+                            <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
+                            {{ t(`onlyOfficeViewer.startSandboxNowOn`) }}
+                        </label>
+                    </template>
+                    <template v-else-if="status?.state === 'no-address'">
+                        <Icon name="exclamation-circle" class="text-4xl text-subtle" />
+                        <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.editorNeedsAddressBrowser`) }}</p>
+                        <Button tier="boring" class="mt-1" @click="reopen">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                    </template>
+                    <template v-else-if="status?.state === 'error'">
+                        <Icon name="exclamation-circle" class="text-4xl text-subtle" />
+                        <p class="max-w-sm text-sm text-muted">{{ status.detail }}</p>
+                        <Button tier="boring" class="mt-1" @click="reopen">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                    </template>
+                    <template v-else-if="slow">
+                        <Icon name="spinner" spin class="text-4xl text-subtle" />
+                        <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.slowToOpen`) }}</p>
+                        <Button tier="boring" class="mt-1" @click="reopen">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
+                    </template>
+                    <template v-else>
+                        <Icon name="spinner" spin class="text-4xl text-subtle" />
+                        <p class="max-w-sm text-sm text-muted">{{ browserEngine ? t(`onlyOfficeViewer.openingInOnlyoffice`) : t(`onlyOfficeViewer.openingInOnlyofficeDocs`) }}</p>
+                    </template>
+                </div>
             </div>
-            <div class="min-h-0 flex-1">
-                <slot name="text" />
-            </div>
-        </div>
-        <div v-else-if="!framed" class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <template v-if="failure">
-                <Icon name="exclamation-circle" class="text-4xl text-subtle" />
-                <p class="max-w-sm text-sm text-muted">{{ failure }}</p>
-                <Button tier="boring" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
-            </template>
-            <template v-else-if="status?.state === 'docker-off'">
-                <Icon name="file-edit" class="text-4xl text-subtle" />
-                <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.onlyofficeDocsRunsContainer`, { detail: status.detail }) }}</p>
-                <a v-bind="capabilitiesLink" :class="ui.textButton(`mt-1`)">{{ t(`onlyOfficeViewer.openCapabilities`) }}</a>
-            </template>
-            <template v-else-if="status?.state === 'not-started'">
-                <Icon name="file-edit" class="text-4xl text-subtle" />
-                <p class="max-w-sm text-sm text-muted">
-                    {{ browserEngine ? t(`onlyOfficeViewer.openEditSaveInBrowser`) : t(`onlyOfficeViewer.openEditSaveDocument`) }}
-                </p>
-                <Button class="mt-1" @click="start">{{ browserEngine ? t(`onlyOfficeViewer.downloadEditor`) : t(`onlyOfficeViewer.startOnlyofficeDocs`) }}</Button>
-                <!-- The standing choices belong to a sandbox, not a desktop app's local window. -->
-                <template v-if="!localWindow">
-                    <label class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
-                        <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
-                        {{ t(`onlyOfficeViewer.startSandboxNowOn`) }}
-                    </label>
-                    <a v-bind="settingsLink" class="text-xs text-subtle hover:underline">{{ t(`onlyOfficeViewer.extensionSettings`) }}</a>
-                </template>
-            </template>
-            <template v-else-if="status?.state === 'pulling'">
-                <ProgressRing :value="percent ?? 0" :size="40" :stroke="3" />
-                <p class="max-w-sm text-sm text-muted">{{ downloading }}</p>
-            </template>
-            <template v-else-if="status?.state === 'starting'">
-                <Icon name="spinner" spin class="text-4xl text-subtle" />
-                <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.startingDocumentServerCold`) }}</p>
-                <label v-if="!localWindow" class="mt-2 flex cursor-pointer items-center gap-2 text-xs text-muted">
-                    <Checkbox :model-value="autoStart" binary @update:model-value="setAutoStart" />
-                    {{ t(`onlyOfficeViewer.startSandboxNowOn`) }}
-                </label>
-            </template>
-            <template v-else-if="status?.state === 'no-address'">
-                <Icon name="exclamation-circle" class="text-4xl text-subtle" />
-                <p class="max-w-sm text-sm text-muted">{{ t(`onlyOfficeViewer.editorNeedsAddressBrowser`) }}</p>
-                <Button tier="boring" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
-            </template>
-            <template v-else-if="status?.state === 'error'">
-                <Icon name="exclamation-circle" class="text-4xl text-subtle" />
-                <p class="max-w-sm text-sm text-muted">{{ status.detail }}</p>
-                <Button tier="boring" class="mt-1" @click="load">{{ t(`onlyOfficeViewer.tryAgain`) }}</Button>
-            </template>
-            <template v-else>
-                <Icon name="spinner" spin class="text-4xl text-subtle" />
-                <p class="max-w-sm text-sm text-muted">{{ browserEngine ? t(`onlyOfficeViewer.openingInOnlyoffice`) : t(`onlyOfficeViewer.openingInOnlyofficeDocs`) }}</p>
-            </template>
         </div>
         <ConfirmDialog
             :open="confirmingRestore"

@@ -28,6 +28,7 @@
         "restoreOriginalQuestion": "Restore the original?",
         "saveFailed": "Your changes couldn't be saved.",
         "savedAsCopy": "Your version was saved as {path}. This editor now shows the file on disk.",
+        "slowToOpen": "The editor is taking longer than usual to open.",
         "startOnlyofficeDocs": "Start ONLYOFFICE Docs",
         "startSandboxNowOn": "Get it ready with the sandbox from now on",
         "startingDocumentServer": "Starting the document server…",

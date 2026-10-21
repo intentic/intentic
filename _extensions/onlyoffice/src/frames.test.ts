@@ -62,7 +62,8 @@ describe(`a browser with moveBefore`, () => {
         expect(frame.style.width).toBe(`1px`);
 
         const next = slot();
-        expect(take(ids[0]!, next)).toEqual(kept(frame, `s1`));
+        // A frame kept without a word on its document reads as open.
+        expect(take(ids[0]!, next)).toEqual({ ...kept(frame, `s1`), ready: true });
         expect(next.firstElementChild).toBe(frame);
         expect(frame.style.width).toBe(`100%`);
         expect(frame.style.height).toBe(`100%`);
@@ -77,7 +78,7 @@ describe(`a browser with moveBefore`, () => {
         keep(ids[0]!, kept(older, `old`));
         keep(ids[0]!, kept(newer, `new`));
         expect(older.isConnected).toBe(false);
-        expect(take(ids[0]!, slot())).toEqual(kept(newer, `new`));
+        expect(take(ids[0]!, slot())).toEqual({ ...kept(newer, `new`), ready: true });
     });
 
     it(`holds at most a few, ending the one left longest ago`, () => {

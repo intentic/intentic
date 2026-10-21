@@ -34,6 +34,9 @@ export type ConflictChoice = "overwrite" | "copy" | "reload";
 
 // Page to viewer.
 export type PageMessage =
+    // The page's script runs and the editor is on its way, its document not open yet: the first thing a page says, and
+    // what it says again after loading itself anew (a conflict settled by taking the file on disk).
+    | { readonly channel: typeof CHANNEL; readonly type: "loading" }
     // The document is open in the editor.
     | { readonly channel: typeof CHANNEL; readonly type: "ready" }
     // Whether the editor holds edits the workspace file does not have yet.
@@ -68,6 +71,7 @@ const record = (data: unknown): Record<string, unknown> | undefined => {
 export const pageMessage = (data: unknown): PageMessage | undefined => {
     const message = record(data);
     switch (message?.["type"]) {
+        case "loading":
         case "ready":
         case "conflict":
             return { channel: CHANNEL, type: message["type"] };

@@ -7,6 +7,13 @@ import { CHANNEL, pageMessage, type ConflictChoice, type PageMessage, type Viewe
 // an earlier visit is shown at once but stays inert until the backend vouches that it still holds the file, and one
 // the backend does not vouch for is thrown away for a new one. A browser-engine editor is told things (save, how a
 // conflict was settled) by message, and what it says back reaches the viewer only from the frame it came from.
+//
+// A browser-engine page is READY once it says its document is open. Until then the frame is in the slot, laid out at
+// its size so the editor boots as it will be seen, but it is no picture of the document: blank while the page and the
+// editor's scripts load, then the editor's own skeleton in its default light theme. The viewer covers it until then
+// (`ready`), and leaving a document before then lets the frame go rather than keeping it: kept off screen, a booting
+// editor is throttled by the browser, and coming back would show the same unfinished editor instead of a new start.
+// The document server's page says nothing, so its editor counts as ready the moment it is framed.
 
 export interface SlotDeps {
     readonly open: (request: OpenRequest) => Promise<OpenResult>;
@@ -16,6 +23,9 @@ export interface SlotDeps {
     readonly forceSave: (session: string) => Promise<void>;
     // Told whenever a frame enters or leaves the slot, so the viewer shows the frame or its card.
     readonly framed: (framed: boolean) => void;
+    // Told whether the editor in the slot has its document open, each time a frame enters the slot and whenever its
+    // page says so; the viewer covers a frame that has not.
+    readonly ready: (ready: boolean) => void;
     // What the browser engine's page in the slot says.
     readonly message: (message: PageMessage) => void;
 }
@@ -30,6 +40,12 @@ export interface Opening {
     readonly lang: string;
     readonly origin: string;
 }
+
+// How long the viewer waits on a browser-engine editor before its document's text stands in for it, and before the
+// wait is called slow and a fresh start offered. An open on a warm cache is done in one to two seconds, before the first
+// (text shown and swapped out at once only flickers); the second is past an open of a large document on a cold cache
+// and a first scan of the editor's files on Windows, measured at up to 21 s. Writable for a test.
+export const WAIT_MS = { text: 3_000, slow: 20_000 };
 
 // What a load came to: the editor is in the slot, the state that stands in the way, or nothing because a later load
 // (another document, the viewer going) took over.
@@ -128,6 +144,8 @@ interface Current extends KeptFrame {
     readonly id: string;
     readonly path: string;
     readonly mode: Opening[`mode`];
+    // Whether its document is open: what its page last said, for the browser engine.
+    ready: boolean;
 }
 
 const frameFor = (url: string, title: string): HTMLIFrameElement => {
@@ -153,9 +171,14 @@ export class EditorSlot {
             return;
         }
         const message = pageMessage(event.data);
-        if (message !== undefined) {
-            this.deps.message(message);
+        if (message === undefined) {
+            return;
         }
+        if ((message.type === `ready` || message.type === `loading`) && current.engine === `browser`) {
+            current.ready = message.type === `ready`;
+            this.deps.ready(current.ready);
+        }
+        this.deps.message(message);
     };
 
     constructor(
@@ -222,13 +245,23 @@ export class EditorSlot {
         }
         const frame = frameFor(address, opening.path);
         this.element.append(frame);
-        this.show({ frame, session: result.session, engine: result.engine, origin: new URL(address).origin, id, path: opening.path, mode: opening.mode });
+        this.show({
+            frame,
+            session: result.session,
+            engine: result.engine,
+            origin: new URL(address).origin,
+            id,
+            path: opening.path,
+            mode: opening.mode,
+            ready: result.engine !== `browser`,
+        });
         return { framed: true };
     }
 
     // Leaves the document in the slot: its editor is kept for a quick return, and what was typed is written to the
     // workspace now, since a kept editor would otherwise hold it until it finally closes. Best effort both: a frame
-    // that cannot be kept goes as it always did, and a forced save that fails is the one the server makes on close.
+    // that cannot be kept goes as it always did, and a forced save that fails is the one the server makes on close. An
+    // editor whose document never opened is not kept (the head of this file says why), unless it holds edits.
     leave(): void {
         this.generation++;
         const leaving = this.current;
@@ -244,7 +277,8 @@ export class EditorSlot {
         }
         // Kept, its editor still counts for what it holds, and is not let go while it holds anything.
         const { frame } = leaving;
-        if (!keep(leaving.id, { ...leaving, holding: () => holding(frame), dropped: () => forget(frame) })) {
+        const unfinished = !leaving.ready && !holding(frame);
+        if (unfinished || !keep(leaving.id, { ...leaving, holding: () => holding(frame), dropped: () => forget(frame) })) {
             frame.remove();
             forget(frame);
             return;
@@ -286,6 +320,7 @@ export class EditorSlot {
         this.current = current;
         track(current.frame, current.path, current.origin);
         this.deps.framed(true);
+        this.deps.ready(current.ready);
     }
 
     private discard(): void {

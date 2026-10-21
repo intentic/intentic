@@ -108,7 +108,7 @@ One JSON object per line (`control.ts`). The app writes:
 | `grant` | `token`, `id`, `path`, `kind` (`folder` or `file`); optional `readOnly`, `origins`, `expiresInMs` | Serves `path` to requests bearing `token`, answered `granted` or `refused`. |
 | `revoke` | `token` | Stops serving it and closes its office editor, answered `revoked`. |
 | `answer` | `id`, `ok`, and `error` when `ok` is false | Ends the `ask` with that id: done, or why not. |
-| `prefetch-office` | | Downloads the office editor now, answered `office` when the download ends. |
+| `prefetch-office` | | Downloads the office editor now, answered `office` when the download ends; once it is on disk, its largest files are read once in the background so the first document's open does not wait on them ([onlyoffice](../../_extensions/onlyoffice)). |
 
 This process writes:
 

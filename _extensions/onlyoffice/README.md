@@ -49,9 +49,18 @@ flowchart LR
   copy and shows the file as it is on disk; Discard mine drops them and loads the file as it is on disk.
 - The legacy binary formats (doc, xls, ppt) open view-only, since x2t cannot write them; so does a conversation's
   checkout, as in the server engine. File > Download as reaches the browser as a download, never the workspace.
+- The viewer keeps its own card over the frame until the page says the document is open (`ready`; `loading` when its
+  script starts, and again when it loads itself anew). The frame is laid out at its size underneath, so the editor
+  boots as it will be seen. Past 3 s the card shows the document's text under a one-line status, where the host
+  gives one; past 20 s it says the editor is taking longer than usual and offers Try again, a fresh editor that starts
+  from what the browser has cached (`WAIT_MS` in `src/slot.ts`). An open failure the page reports shows on the card
+  with the same Try again. _(2026-10-21) The frame used to be shown as soon as it existed: a dark, empty pane for as
+  long as the editor took to load (5 to 21 s on a cold cache on Windows, measured), and for good when one of its
+  requests stalled, which a reopen fixed only because each try cached more of the editor._
 - Leaving a document keeps its editor alive where the browser has `Element.moveBefore`, as the server engine does, and
   the kept page saves what it holds first. A browser without it lets the frame go at once, so edits typed since the
-  last save are lost when a document is left within seconds of typing.
+  last save are lost when a document is left within seconds of typing. An editor left before its document opened is
+  let go rather than kept: off screen the browser throttles it, and coming back would show the same unfinished editor.
 - The page and the ported runtime corrections are AGPL-3.0, like the bundle: [editor/NOTICE](editor/NOTICE) has the
   licences, the source of both, and what was modified. The MIT code here reaches the page only through postMessage and
   HTTP.
@@ -82,7 +91,10 @@ flowchart LR
   for one folder per window inside the app's `intentic-files` sidecar ([local-files](../../_devices/local-files)).
   Its listener keeps to loopback (`host` in `listener.ts`), where a sandbox's listens on every interface for the
   document server's container, and the bundle is downloaded once into the app's cache. The app can ask for that
-  download before any document is open (`prefetch`, the sidecar's `prefetch-office`).
+  download before any document is open (`prefetch`, the sidecar's `prefetch-office`). Once the bundle is on disk, the
+  editor's largest files (`WARM_FILES` in `browser-engine.ts`) are read once in the background, five seconds later,
+  with their gzip copies made (`warmStatic`): on Windows the first read of each is when the real-time scanner looks at
+  it, seconds a file, which otherwise fell on the first document's open (5.9 s against 1.9 s warmed, measured).
   - Writable documents open directly for editing, without a mode switch. The host's permissions and the backend
     keep protected files read-only. The sidecar's `localWindow` marker hides sandbox settings in these windows.
   - **Originals** (`src/server/originals.ts`). Before the first save of a document in a run of the app (an autosave
@@ -106,7 +118,7 @@ flowchart LR
 ## Key files
 
 - [src/OnlyOfficeViewer.vue](src/OnlyOfficeViewer.vue) — the card, the wait, the conflict and failure notices, and the slot the editor goes in.
-- [src/slot.ts](src/slot.ts) — the editor frame: kept on leaving, trusted again only once the backend vouches for it, and spoken to by message.
+- [src/slot.ts](src/slot.ts) — the editor frame: covered until its document is open, kept on leaving, trusted again only once the backend vouches for it, and spoken to by message.
 - [src/server/server.ts](src/server/server.ts) — `activateServer`: the `/status`, `/start`, `/open` and `/forcesave` routes for both engines.
 - [src/server/browser-engine.ts](src/server/browser-engine.ts) — the browser engine's sessions, the page it frames, and the file reads and guarded writes.
 - [src/server/bundle.ts](src/server/bundle.ts) — the one download: streamed, hashed file by file, and served only once it matches the pin.

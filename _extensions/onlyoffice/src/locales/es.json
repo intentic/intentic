@@ -21,9 +21,11 @@
         "openingInOnlyofficeDocs": "Abriendo en ONLYOFFICE Docs…",
         "saveFailed": "No se pudieron guardar tus cambios.",
         "savedAsCopy": "Tu versión se guardó como {path}. Este editor muestra ahora el archivo del disco.",
+        "slowToOpen": "El editor está tardando más de lo habitual en abrirse.",
         "startOnlyofficeDocs": "Iniciar ONLYOFFICE Docs",
         "startSandboxNowOn": "Prepararlo con el sandbox a partir de ahora",
         "startingDocumentServerCold": "Iniciando el servidor de documentos… Un arranque en frío tarda unos dos minutos: regenera sus fuentes y temas cada vez. Después se queda levantado.",
+        "textUntilEditor": "Se muestra el texto del documento hasta que el editor esté listo.",
         "tryAgain": "Inténtalo de nuevo"
     }
 }
