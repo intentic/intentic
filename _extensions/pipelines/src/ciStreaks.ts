@@ -18,7 +18,9 @@ export interface FailureStreak {
 }
 
 // Only failed/success count as verdicts; canceled, skipped and running can't start or break a streak. A commit with no
-// verdicted run at all isn't a commit here; the walk skips straight over it.
+// verdicted run at all isn't a commit here; the walk skips straight over it. Neither is one whose finished runs all
+// passed while others on it still run: a quick workflow's pass is not the commit's, and counting it would call main
+// recovered (and the failures behind it superseded) while the push's real CI is still deciding. A failure on it stands.
 const isTerminal = (run: PipelineRun): boolean => run.status === `failed` || run.status === `success`;
 
 const branchKey = (run: PipelineRun): string => `${run.repo}\n${run.branch}`;
@@ -46,6 +48,7 @@ const commitOf = (sha: string, group: readonly PipelineRun[]): BranchCommit | un
 // Each branch's commits, newest first, ordered by their newest run: the closest proxy to push order this data has
 // (commit parentage isn't known).
 const commitsByBranch = (runs: readonly PipelineRun[]): BranchCommit[][] => {
+    const undecided = new Set(runs.filter((run) => isPipelineInFlight(run.status)).map((run) => `${branchKey(run)}\n${run.sha}`));
     const byBranch = new Map<string, Map<string, PipelineRun[]>>();
     for (const run of runs.filter(isTerminal)) {
         const key = branchKey(run);
@@ -57,7 +60,10 @@ const commitsByBranch = (runs: readonly PipelineRun[]): BranchCommit[][] => {
         [...commits.entries()]
             .flatMap(([sha, group]) => {
                 const commit = commitOf(sha, group);
-                return commit === undefined ? [] : [commit];
+                if (commit === undefined || (commit.failed.length === 0 && undecided.has(`${branchKey(commit.newest)}\n${sha}`))) {
+                    return [];
+                }
+                return [commit];
             })
             .toSorted((a, b) => b.newest.createdAt - a.newest.createdAt),
     );

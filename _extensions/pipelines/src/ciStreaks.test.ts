@@ -288,3 +288,15 @@ test("tag ref detection matches semver patterns", () => {
         expect(inFlightOnHead([branchRun]).size).toBe(1);
     }
 });
+
+test("a commit whose quick workflow passed while its CI still runs supersedes nothing yet", () => {
+    const failure = run(1, "failed", 10, "main", "broken");
+    const quick = run(2, "success", 31, "main", "next");
+    const ci = run(3, "running", 30, "main", "next");
+    expect(supersededBy([quick, ci, failure]).size).toBe(0);
+    expect(failureStreaks([quick, ci, failure])).toHaveLength(1);
+    // Once that CI passes too, the commit is a recovery.
+    expect(supersededBy([quick, run(3, "success", 30, "main", "next"), failure]).get(failure)).toBe(quick);
+    // A failure on a still-running commit is already its verdict.
+    expect(failureStreaks([run(4, "failed", 31, "main", "next"), ci])).toHaveLength(1);
+});
