@@ -143,6 +143,10 @@ export interface Pairing {
     // (2026-10-18) Set while the drive holding `localDir` is nearly full (low-disk.ts), with the reading that said so.
     // Cleared by the watcher alone, once the drive has room again.
     readonly lowDisk?: LowDiskReading | undefined;
+    // (2026-10-21) When a bring-back, a restore or a delivery of landed work paused this folder's file sync to write into
+    // it (project-transfer.ts `holdStill`), set before its pause and cleared as it lets go. One killed between the two
+    // leaves it behind, and the watcher clears it once the folder's lock names no live process (holds.ts).
+    readonly transferSince?: number | undefined;
 }
 
 // Why the bridge stopped fetching one repo: git went quiet mid-fetch (`stalled`), the fetch was still moving at its
@@ -446,6 +450,10 @@ export const setAutoHealOff = async (key: string, off: boolean): Promise<void> =
 // The owner's pause of one pairing's file sync, set or lifted; the watcher makes Mutagen agree (holds.ts).
 export const setOwnerPaused = async (key: string, at: number | undefined): Promise<void> =>
     await updatePairing(key, (held) => ({ ...held, ownerPausedAt: at }));
+
+// A bring-back, restore or delivery holding a folder still while it writes into it, begun or let go (project-transfer.ts).
+export const setTransferSince = async (key: string, since: number | undefined): Promise<void> =>
+    await updatePairing(key, (held) => ({ ...held, transferSince: since }));
 
 // The swap of a pairing's sandbox on this machine, begun or settled (holds.ts `swapStep`).
 export const setSwapSince = async (key: string, since: number | undefined): Promise<void> =>

@@ -13,18 +13,28 @@ let sandbox: ComposerDraft[] = [];
 let revision = 0;
 const writes: DraftWrite[] = [];
 let refuseAll = false;
+// Set to hold every write until it resolves, as a sandbox slow to answer does.
+let gate: Promise<void> | undefined;
+let reads = 0;
 
 const refusing = (): never => {
     throw new SandboxHttpError(404, `Request failed (404).`);
 };
 
 const agents = {
-    drafts: async () => (refuseAll ? refusing() : { drafts: [...sandbox], revision }),
+    drafts: async () => {
+        reads += 1;
+        return refuseAll ? refusing() : { drafts: [...sandbox], revision };
+    },
     writeDraft: async (write: DraftWrite) => {
         if (refuseAll) {
             return refusing();
         }
         writes.push(write);
+        await gate;
+        if (refuseAll) {
+            return refusing();
+        }
         const current = sandbox.find((draft) => draft.conversationId === write.id);
         if (write.base !== undefined && current?.revision !== write.base) {
             return current === undefined ? { conflict: true as const } : { draft: current, conflict: true as const };
@@ -34,7 +44,11 @@ const agents = {
         sandbox = [draft, ...sandbox.filter((entry) => entry.conversationId !== write.id)];
         return { draft };
     },
-    clearDraft: async ({ id }: { id: string }) => {
+    clearDraft: async ({ id, revision: only }: { id: string; revision?: number }) => {
+        const current = sandbox.find((draft) => draft.conversationId === id);
+        if (current !== undefined && only !== undefined && current.revision !== only) {
+            return { draft: current, conflict: true as const };
+        }
         sandbox = sandbox.filter((draft) => draft.conversationId !== id);
         return {};
     },
@@ -62,6 +76,7 @@ Object.defineProperty(globalThis, `localStorage`, {
 });
 
 const { closedDraftsKey, composerDraftsKey } = await import("../../../app/storage/browserStorage");
+const { useSandbox } = await import("../../../client/sandbox/useSandbox");
 const { receiveChatNote } = await import("../run/chatChannel");
 const { draftOf, draftsMoved, heldDrafts, ORPHANED_AFTER_MS, sandboxKeepsDrafts, sentFrom, writeDraft } = await import("./composerDrafts");
 
@@ -72,6 +87,9 @@ beforeEach(() => {
     revision = 0;
     writes.length = 0;
     refuseAll = false;
+    gate = undefined;
+    reads = 0;
+    useSandbox().activeSandboxId.value = `sb1`;
     stored.clear();
     resetSandboxScope();
 });
@@ -183,6 +201,64 @@ test(`hands the writing to another window once it edits the draft after this one
     writeDraft(`c1`, words(`fix the login page`));
     await waitFor(() => expect(sandbox[0]?.text).toBe(`fix the login page`));
     expect(writes).toEqual([expect.objectContaining({ text: `fix the login page`, base: 1 })]);
+});
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+test(`does not bring words back as a draft when they are sent while their first write is still out`, async () => {
+    let release = (): void => undefined;
+    gate = new Promise((resolve) => (release = resolve));
+    writeDraft(`c1`, words(`fix the login`));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    // Sent now: the send names no revision, since none has come back yet, so it clears nothing in the sandbox.
+    expect(sentFrom(`c1`)).toBeUndefined();
+    writeDraft(`c1`, words(``));
+    expect(draftOf(`c1`)).toBeUndefined();
+
+    release();
+    await waitFor(() => expect(sandbox).toEqual([]));
+    await sleep(50);
+    expect(draftOf(`c1`)).toBeUndefined();
+});
+
+test(`lets go of words cleared while their first write is out when that write never lands`, async () => {
+    let release = (): void => undefined;
+    gate = new Promise((resolve) => (release = resolve));
+    writeDraft(`c1`, words(`fix the login`));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    writeDraft(`c1`, words(``));
+    refuseAll = true;
+    release();
+
+    expect(heldDrafts.value).toEqual([]);
+    await waitFor(() => expect(JSON.parse(stored.get(composerDraftsKey(`sb1`)) ?? `{}`)).toEqual({ drafts: [] }));
+});
+
+test(`takes over from another window whose write was still out without doubling the words`, async () => {
+    sandbox = [{ conversationId: `c1`, text: `fix the login page`, since: 1, revision: 1 }];
+    revision = 1;
+    draftsMoved();
+    await waitFor(() => expect(sentFrom(`c1`)).toBe(1));
+
+    // The other window typed on and wrote from revision 1; its answer has not reached this window yet.
+    typedElsewhere(`c1`, `fix the login page now`, { revision: 1, text: `fix the login page` });
+    sandbox = [{ conversationId: `c1`, text: `fix the login page now`, since: 1, revision: 2 }];
+    revision = 2;
+    // Then the person edits here, mid-sentence.
+    writeDraft(`c1`, words(`fix the logout page now`));
+
+    await waitFor(() => expect(draftOf(`c1`)?.pending).toBe(false));
+    expect(sandbox[0]?.text).toBe(`fix the logout page now`);
+    expect(draftOf(`c1`)?.text).toBe(`fix the logout page now`);
+});
+
+test(`reads the drafts of a sandbox switched to while the last one's read was still out`, async () => {
+    draftsMoved();
+    useSandbox().activeSandboxId.value = `sb2`;
+    resetSandboxScope();
+    draftsMoved();
+
+    await waitFor(() => expect(reads).toBe(2));
 });
 
 test(`leaves this browser's copy as the only one against a sandbox that keeps no drafts`, async () => {

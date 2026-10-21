@@ -102,6 +102,24 @@ const held = sandboxShallowRef<Held>(() => ({ sandbox: activeSandboxId.value, dr
 // of words into the composer, so a message came out doubled and the caret jumped to its end.
 const editedHere = sandboxValue(() => new Set<string>());
 
+// The words each draft has held as somebody typed them in this browser, in any of its windows: the last few per draft.
+// A revision the sandbox answers with that holds one of these is this browser's own earlier write (another window's,
+// still out when this one took over), never words from another device to keep beside these.
+const TYPED_KEPT = 200;
+const typed = sandboxValue(() => new Map<string, string[]>());
+const noteTyped = (conversationId: string, text: string): void => {
+    const kept = typed.value.get(conversationId) ?? [];
+    if (kept.at(-1) !== text) {
+        kept.push(text);
+        kept.splice(0, Math.max(0, kept.length - TYPED_KEPT));
+        typed.value.set(conversationId, kept);
+    }
+};
+const typedHere =
+    (conversationId: string) =>
+    (text: string): boolean =>
+        typed.value.get(conversationId)?.includes(text) ?? false;
+
 // Applies a set of changes (undefined: gone) here, then tells storage and every other window of this browser.
 const put = (changes: ReadonlyMap<string, HeldDraft | undefined>): void => {
     if (changes.size === 0) {
@@ -136,6 +154,9 @@ onChatNote(`drafts`, (note) => {
         // writer relaying the sandbox's answer, which changes nobody's turn.
         if (mine !== undefined && draft.editedAt > mine.editedAt) {
             editedHere.value.delete(draft.conversationId);
+        }
+        if (draft.pending) {
+            noteTyped(draft.conversationId, draft.text);
         }
     }
     for (const { id, editedAt } of note.gone) {
@@ -249,7 +270,7 @@ const call = (draft: HeldDraft): Promise<DraftWritten> =>
 const writeNow = async (conversationId: string): Promise<void> => {
     timers.value.delete(conversationId);
     const sent = held.value.drafts.get(conversationId);
-    if (sent === undefined || !sent.pending || sent.box !== undefined || !sandboxKeepsDrafts.value) {
+    if (sent === undefined || !sent.pending || sent.box !== undefined) {
         return;
     }
     const now = Date.now();
@@ -263,6 +284,14 @@ const writeNow = async (conversationId: string): Promise<void> => {
         again.value.add(conversationId);
         return;
     }
+    if (!holdsWords(sent) && sent.synced === undefined) {
+        // Words let go while their first write was out, and that write never landed: nothing there to clear.
+        put(new Map([[conversationId, undefined]]));
+        return;
+    }
+    if (!sandboxKeepsDrafts.value) {
+        return;
+    }
     const sandbox = held.value.sandbox;
     inFlight.value.add(conversationId);
     try {
@@ -271,7 +300,9 @@ const writeNow = async (conversationId: string): Promise<void> => {
         if (held.value.sandbox !== sandbox) {
             return;
         }
-        const next = answered(held.value.drafts.get(conversationId) ?? sent, sent, answer);
+        // A copy gone here while the call was out was let go (sent, discarded): what the call wrote is cleared next.
+        const current = held.value.drafts.get(conversationId) ?? { ...sent, text: ``, attachments: [], editedAt: Date.now() };
+        const next = answered(current, sent, answer, typedHere(conversationId));
         put(new Map([[conversationId, next]]));
         if (next?.pending === true) {
             writeSoon(conversationId, 0);
@@ -290,7 +321,8 @@ const writeNow = async (conversationId: string): Promise<void> => {
     }
 };
 
-let pulling: Promise<void> | undefined;
+// The read under way, per sandbox: a switch mid-read leaves that read to bail out, and the next sandbox's hello reads its own.
+const pulling = sandboxValue<{ read?: Promise<void> }>(() => ({}));
 
 // Reads the sandbox's drafts back into this copy, then writes whatever this copy holds that the sandbox does not.
 const pull = async (): Promise<void> => {
@@ -331,8 +363,9 @@ const pull = async (): Promise<void> => {
 
 /** The sandbox says drafts moved (its `drafts` push), or it was (re)connected to: read them back. One read at a time. */
 export const draftsMoved = (): void => {
-    pulling ??= pull().finally(() => {
-        pulling = undefined;
+    const slot = pulling.value;
+    slot.read ??= pull().finally(() => {
+        slot.read = undefined;
     });
 };
 
@@ -369,8 +402,11 @@ export const writeDraft = (conversationId: string, words: DraftWords, options: {
         box: options.box,
     };
     editedHere.value.add(conversationId);
-    // Words the sandbox never held need no clear: they simply go.
-    put(new Map([[conversationId, holdsWords(next) || next.synced !== undefined ? next : undefined]]));
+    noteTyped(conversationId, next.text);
+    // Words the sandbox never held need no clear: they simply go. Unless their first write is out: the revision it makes
+    // is cleared once it is answered, or a message sent meanwhile (naming no revision) would come back as its draft.
+    const kept = holdsWords(next) || next.synced !== undefined || inFlight.value.has(conversationId);
+    put(new Map([[conversationId, kept ? next : undefined]]));
     writeSoon(conversationId);
 };
 

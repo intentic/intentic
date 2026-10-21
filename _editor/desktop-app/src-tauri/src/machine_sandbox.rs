@@ -2528,7 +2528,7 @@ fn follow_copies(app: &AppHandle, report: Option<&serde_json::Value>) {
         let pairings = crate::project::pairings_of(report, Path::new(&folder.path), cfg!(windows));
         let ours = pairings
             .iter()
-            .find(|pairing| pairing["sandboxId"].as_str() == record.sandbox_id.as_deref())
+            .find(|pairing| crate::bindings::platform_id(pairing, &record).is_some())
             .or_else(|| pairings.first());
         let Some(seen) = ours.and_then(|pairing| copy_seen(&folder, pairing)) else {
             continue;
@@ -3606,12 +3606,12 @@ mod tests {
             folder("/done", FolderState::Ready),
             folder("/copying", FolderState::Copying),
         ];
-        let projects = [Project {
-            path: "/attached".into(),
-            dir: "attached".into(),
-            sandbox_id: Some("cm-machine".into()),
-            slug: None,
-        }];
+        // The pairing as the agent reports it, under its own id for the sandbox (its address), never the record's row.
+        let report = serde_json::json!({ "sync": { "pairings": [{
+            "sandboxId": "sandbox-2c8eb2c5b3a5-sbx-intentic-dev", "slug": "sandbox-2c8eb2c5b3a5", "mode": "sync",
+            "localDir": "/attached", "remoteDir": "/work/attached",
+        }] } });
+        let projects = crate::bindings::read(&report, &held);
         settle_on_launch(&mut held, &projects);
         assert_eq!(
             held.folders

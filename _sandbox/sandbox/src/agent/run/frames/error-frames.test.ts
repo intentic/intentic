@@ -63,6 +63,28 @@ test("a spent allowance or a rate limit reads as one, in any vendor's words; a n
     }
 });
 
+// A crash's own sentence with what its process printed folded in behind it: the Claude runtime's thrown message and up to
+// 2000 characters of the CLI's stderr, the SDK's own tail, Pi's and ACP's. What the process printed is its diagnostics,
+// never a provider's limit, whatever number or word it happens to hold (2026-10-21: a stack frame's `cli.js:429:17` and
+// a debug line's "usage limit 61%" were each coded `rate_limit`, and filed as a refusal against a healthy account).
+test("a crash's stderr is never read as a provider's limit, by a number or a word it happens to hold", () => {
+    const stack = "TypeError: Cannot read properties of undefined (reading 'content')\n    at Ab1 (file:///opt/claude/cli.js:429:17)";
+    const debug = "[DEBUG] statusline: usage limit 61% of 5-hour window";
+    const crashes = [
+        `Claude Code process exited with code 1: ${stack}`,
+        `Claude Code process exited with code 1. stderr: ${debug}`,
+        `Claude Code process exited with code 1. stderr: ${stack}`,
+    ];
+    expect(crashes.map((message) => codedFailure({ kind: "error", message }).code)).toEqual(crashes.map(() => undefined));
+    // The failure's own words, ahead of what the process printed, are still read.
+    expect(codedFailure({ kind: "error", message: `Pi rejected the prompt: 429 Too Many Requests. stderr: ${debug}` }).code).toBe("rate_limit");
+    // A 429 is a limit where it is the status, never where it is a line number.
+    for (const sentence of ["API Error: 429", "unexpected status 429", 'upstream said {"code": 429}', "Request failed with status code 429", "HTTP/1.1 429"]) {
+        expect(isRateLimited(sentence), sentence).toBe(true);
+    }
+    expect(isRateLimited("at Ab1 (file:///opt/claude/cli.js:429:17)")).toBe(false);
+});
+
 test("a runtime's own rules are read before the shared ones, and an unsent parameter before both", () => {
     const own: readonly FailureRule[] = [[(message) => message.includes("not found"), "grok-model-invalid"]];
     expect(codedFailure({ kind: "error", message: "model not found (429)" }, own).code).toBe("grok-model-invalid");

@@ -4,8 +4,8 @@ import { findEmails, findPhones } from "./contact.js";
 import { findBankAccounts, findIdentityDocuments, findNip, findPaymentCards, findPesel } from "./identifiers.js";
 import { builtInLexicon, type Lexicon } from "./lexicon.js";
 import { findNames } from "./names.js";
-import { type Candidate, resolveSpans, type SpanSource } from "./spans.js";
-import { standsAlone } from "./standalone.js";
+import { type Candidate, resolveSpans } from "./spans.js";
+import { metAsItself, standsAlone } from "./standalone.js";
 import type { Emit } from "./text.js";
 
 // The detector: personal data in arbitrary text (tool output, database dumps, CSV, JSON, prose, code, mail), found
@@ -51,9 +51,25 @@ export const detectorCandidates = (text: string, options: Pick<DetectOptions, "c
     return found;
 };
 
-// What a candidate brings for itself: a detector read it in context, and a rule or a taught value is the owner's own
-// word. A learned value and a model's guess bring nothing of the place they stand in, so they are asked standsAlone.
-const SELF_EVIDENT: ReadonlySet<SpanSource> = new Set<SpanSource>(["detector", "rule", "taught"]);
+// What a candidate brings for itself: a detector read it in context, and a rule is the owner's own word. A value the
+// vault holds is somebody's wherever its matcher meets it as itself (metAsItself: not a list of digits, not a decimal's
+// places): a taught one is the owner's word, a learned one is asked standsAlone as the vault holds it (`known`), never as
+// the spelling met. A model's guess brings nothing of the place it stands in, so it is asked standsAlone there.
+const evidenced = (text: string, candidate: Candidate, lexicon: Lexicon): boolean => {
+    switch (candidate.by) {
+        case "detector":
+        case "rule":
+            return true;
+        case "taught":
+            return metAsItself(text, candidate.start, candidate.end);
+        case "learned": {
+            const held = candidate.known ?? candidate.value;
+            return metAsItself(text, candidate.start, candidate.end) && standsAlone(candidate.class, held, 0, held.length, lexicon);
+        }
+        case "model":
+            return standsAlone(candidate.class, text, candidate.start, candidate.end, lexicon);
+    }
+};
 
 // THE PIPELINE'S ONE GATE. Every source proposes candidates (the detectors, the owner's rules, the vault, the name
 // model) and every one passes here before anything is masked: its kind is looked for, it is not a value the owner never
@@ -68,7 +84,7 @@ export const createGate = ({ classes, allow, lexicon = builtInLexicon() }: Detec
     const admits = (text: string, candidate: Candidate): boolean =>
         classes.has(candidate.class) &&
         (allow === undefined || allow.size === 0 || !allow.has(allowKey(candidate.value))) &&
-        (SELF_EVIDENT.has(candidate.by) || standsAlone(candidate.class, text, candidate.start, candidate.end, lexicon));
+        evidenced(text, candidate, lexicon);
     return { admits, settle: (text, candidates) => resolveSpans(candidates.filter((candidate) => admits(text, candidate))) };
 };
 

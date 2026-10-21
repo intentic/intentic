@@ -87,10 +87,14 @@ const scopeOf = (provider: string, refusal: ProviderRefusal): string => `${provi
 const providerOf = (key: string): string => key.split(":", 1)[0] ?? key;
 
 // The file as scopes, each holding its newest refusal: an older release's provider slot and its account copy of one
-// refusal collapse into one entry.
-const scoped = (stored: Record<string, ProviderRefusal>): Map<string, ProviderRefusal> => {
+// refusal collapse into one entry. One filed in the future (a bench the boot step filed at its `until`, before
+// 2026-10-21) reads as filed just before this ledger opened, whenever it really came: no request sent since preceded it,
+// and filed days ahead, no answer could settle it (settledBy) until then.
+const scoped = (stored: Record<string, ProviderRefusal>, openedAt: number): Map<string, ProviderRefusal> => {
+    const now = Date.now();
     const byScope = new Map<string, ProviderRefusal>();
-    for (const [key, refusal] of Object.entries(stored)) {
+    for (const [key, filed] of Object.entries(stored)) {
+        const refusal = filed.at > now ? { ...filed, at: openedAt - 1 } : filed;
         const scope = scopeOf(providerOf(key), refusal);
         const held = byScope.get(scope);
         if (held === undefined || held.at < refusal.at) {
@@ -163,26 +167,83 @@ export const memoryProviderRefusalStore = (
     );
 };
 
+// A spent allowance naming no instant, filed with the reset of the pool it was refused in, read now while the readings
+// still show that pool open: past its reset a reading lapses it and another binds, so the instant is never read back
+// later. The verdict ends the refusal there (plan-pools.ts refusalVerdict), in the daemon and every open window at once,
+// rather than when the next reading lands.
+const stamped = async (accountsOf: ProviderRefusalStoreOptions["accountsOf"], provider: string, refusal: ProviderRefusal): Promise<ProviderRefusal> => {
+    if (accountsOf === undefined || refusal.kind !== "limit" || refusal.resetsAt !== undefined) {
+        return refusal;
+    }
+    // allow(silent-catch): accounts that cannot be read file the refusal unstamped, standing until a reading answers it
+    const poolResetsAt = refusedPoolReset(refusal, await accountsOf(provider).catch((): readonly ServiceFacts[] => []));
+    return poolResetsAt === undefined ? refusal : { ...refusal, poolResetsAt };
+};
+
+// A settle heard while a refusal was being stamped, and when.
+interface HeardSettle {
+    readonly provider: string;
+    readonly answer: RefusalAnswer;
+    readonly at: number;
+}
+
+// The ledger with a refusal filed in its scope, or undefined where it is not to be: a newer one of the scope is on file
+// already (one stating its instant is filed without the wait a stamp takes, so it can land first), or a turn answered
+// while it was being stamped proves it over, as that settle found nothing on file to settle yet (2026-10-21).
+const filedIn = (scopes: Map<string, ProviderRefusal>, provider: string, refusal: ProviderRefusal, heard: readonly HeardSettle[]): Stored | undefined => {
+    const scope = scopeOf(provider, refusal);
+    const held = scopes.get(scope);
+    const answered = heard.some((said) => said.provider === provider && refusal.at < said.at && settledBy(refusal, said.answer));
+    return (held !== undefined && held.at > refusal.at) || answered ? undefined : { ...Object.fromEntries(scopes), [scope]: refusal };
+};
+
+// When each refusal on file passes its horizon, by its provider.
+const horizonsOf = (scopes: Map<string, ProviderRefusal>): { readonly provider: string; readonly ends: number }[] =>
+    [...scopes].map(([scope, refusal]) => ({ provider: providerOf(scope), ends: refusal.at + horizon(providerOf(scope), refusal) }));
+
+/*
+ * Tells `announce` each provider whose refusal passes its horizon, at that instant. Forgotten on read, it would otherwise
+ * go unheard: nothing re-judged capacity then, and every open window kept the list last pushed to it (2026-10-21; the sweep
+ * that announced Cursor's went with the ledger it swept). Answers what (re)arms it after a change; armed while `listening`.
+ */
+const horizonWatch = (
+    read: () => Promise<Map<string, ProviderRefusal>>,
+    announce: (provider: string) => Promise<void>,
+    listening: () => boolean,
+    log: NonNullable<ProviderRefusalStoreOptions["log"]>,
+): (() => Promise<void>) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let swept = Date.now();
+    let armed = Promise.resolve();
+    // One step at a time, so an older read never sets the timer over a newer one. allow(silent-catch): a ledger that
+    // cannot be read now is read again at its next change, and the line says so meanwhile.
+    const serially = (step: () => Promise<void>): Promise<void> =>
+        (armed = armed.then(step).catch((error) => log({ err: error }, "provider refusal: horizon watch failed")));
+    const armNow = async (): Promise<void> => {
+        const next = Math.min(...horizonsOf(await read()).flatMap(({ ends }) => (ends > swept ? [ends] : [])));
+        clearTimeout(timer);
+        timer = listening() && Number.isFinite(next) ? setTimeout(() => void serially(sweep), Math.max(0, next - Date.now())).unref() : undefined;
+    };
+    const sweep = async (): Promise<void> => {
+        const now = Date.now();
+        const passed = new Set(horizonsOf(await read()).flatMap(({ provider, ends }) => (ends > swept && ends <= now ? [provider] : [])));
+        swept = now;
+        await Promise.all([...passed].map(announce));
+        await armNow();
+    };
+    return () => serially(armNow);
+};
+
 const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOptions = {}): ProviderRefusalStore => {
     const log = options.log ?? (() => undefined);
+    const openedAt = Date.now();
+    const read = async (): Promise<Map<string, ProviderRefusal>> => scoped(await file.read(), openedAt);
 
     const listeners = new Set<(provider: string, refusals: readonly ProviderRefusal[]) => void>();
-    // A spent allowance naming no instant, filed with the reset of the pool it was refused in, read now while the
-    // readings still show that pool open: past its reset a reading lapses it and another binds, so the instant is never
-    // read back later. The verdict ends the refusal there (plan-pools.ts refusalVerdict), in the daemon and every open
-    // window at once, rather than when the next reading lands.
-    const stamped = async (provider: string, refusal: ProviderRefusal): Promise<ProviderRefusal> => {
-        if (options.accountsOf === undefined || refusal.kind !== "limit" || refusal.resetsAt !== undefined) {
-            return refusal;
-        }
-        // allow(silent-catch): accounts that cannot be read file the refusal unstamped, standing until a reading answers it
-        const poolResetsAt = refusedPoolReset(refusal, await options.accountsOf(provider).catch((): readonly ServiceFacts[] => []));
-        return poolResetsAt === undefined ? refusal : { ...refusal, poolResetsAt };
-    };
     const onFile = async (): Promise<Record<string, readonly ProviderRefusal[]>> => {
         const now = Date.now();
         const byProvider: Record<string, ProviderRefusal[]> = {};
-        for (const [scope, refusal] of scoped(await file.read())) {
+        for (const [scope, refusal] of await read()) {
             const provider = providerOf(scope);
             if (refusal.at > now - horizon(provider, refusal)) {
                 (byProvider[provider] ??= []).push(refusal);
@@ -196,11 +257,12 @@ const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOpti
             listener(provider, refusals);
         }
     };
+    const rearm = horizonWatch(read, announce, () => listeners.size > 0, log);
     // Removes the provider's entries `drops` picks, answering what went; the file is re-keyed by scope as it is written.
     const remove = async (provider: string, drops: (refusal: ProviderRefusal) => boolean): Promise<ProviderRefusal[]> => {
         const removed: ProviderRefusal[] = [];
         await file.update((current) => {
-            const kept = [...scoped(current)].filter(([scope, refusal]) => {
+            const kept = [...scoped(current, openedAt)].filter(([scope, refusal]) => {
                 const drop = providerOf(scope) === provider && drops(refusal);
                 if (drop) {
                     removed.push(refusal);
@@ -211,19 +273,41 @@ const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOpti
         });
         if (removed.length > 0) {
             await announce(provider);
+            await rearm();
         }
         return removed;
     };
+    // The settles heard while each refusal is being stamped.
+    const filing = new Set<HeardSettle[]>();
 
     return {
         onFile,
         record: async (provider, asFiled) => {
-            const refusal = await stamped(provider, asFiled);
-            await file.update((current) => ({ ...Object.fromEntries(scoped(current)), [scopeOf(provider, refusal)]: refusal }));
-            log({ provider, ...described(refusal), said: refusal.message }, `provider refusal: recorded ${provider} ${refusal.kind}${refusal.account === undefined ? "" : ` for ${refusal.account}`}`);
-            await announce(provider);
+            const heard: HeardSettle[] = [];
+            filing.add(heard);
+            let refusal = asFiled;
+            let filed = false;
+            try {
+                refusal = await stamped(options.accountsOf, provider, asFiled);
+                await file.update((current) => {
+                    const next = filedIn(scoped(current, openedAt), provider, refusal, heard);
+                    filed = next !== undefined;
+                    return next ?? current;
+                });
+            } finally {
+                filing.delete(heard);
+            }
+            const what = `${provider} ${refusal.kind}${refusal.account === undefined ? "" : ` for ${refusal.account}`}`;
+            log({ provider, ...described(refusal), said: refusal.message }, filed ? `provider refusal: recorded ${what}` : `provider refusal: not filed ${what}, newer on file or answered since`);
+            if (filed) {
+                await announce(provider);
+                await rearm();
+            }
         },
         settle: async (provider, answer) => {
+            for (const heard of filing) {
+                heard.push({ provider, answer, at: Date.now() });
+            }
             for (const settled of await remove(provider, (refusal) => settledBy(refusal, answer))) {
                 log(
                     { provider, ...described(settled), ...(answer.account === undefined ? {} : { settledBy: answer.account }) },
@@ -240,6 +324,7 @@ const refusalStoreOver = (file: LedgerBacking, options: ProviderRefusalStoreOpti
         },
         onChange: (listener) => {
             listeners.add(listener);
+            void rearm();
             return () => listeners.delete(listener);
         },
     };

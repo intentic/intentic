@@ -225,9 +225,10 @@ describe(`a sandbox notice, as the chat says it`, () => {
         expect(noticeFailure(retrying!)).toEqual({ line: `The provider failed to answer.`, said, ends: true });
         // A failure the sandbox worded itself is its own line, with nothing behind it to open.
         expect(noticeFailure(FOLDED.find((row) => row.noticeCode?.params?.[`error`] === `agent-busy`)!)?.said).toBeUndefined();
-        // One nobody named is unclassified, said as such, its words behind the press.
+        // One nobody named says what its words say, and is unclassified, its words behind the press, only where they say
+        // nothing (a describe of its own below).
         const [unnamed] = turn([{ kind: `error`, message: `fetch failed` }]);
-        expect([noticeLine(unnamed!, `developer`), noticeFailure(unnamed!)?.said]).toEqual([`The agent stopped on an error this app does not recognize.`, `fetch failed`]);
+        expect([noticeLine(unnamed!, `developer`), noticeFailure(unnamed!)?.said]).toEqual([`fetch failed`, undefined]);
         // Every other notice is not a failure at all.
         expect(noticeFailure(DAEMON[0]!)).toBeUndefined();
         expect(noticeFailure(UNSPOKEN[0]!)).toBeUndefined();
@@ -238,5 +239,64 @@ describe(`a sandbox notice, as the chat says it`, () => {
         expect(noticeLine({ noticeCode: undefined }, `developer`)).toBeUndefined();
         expect(noticeLine({ noticeCode: { code: `somethingNew` } }, `developer`)).toBeUndefined();
         expect(noticeLine({ noticeCode: { code: `landConflict`, params: { files: `three`, repos: `root` } } }, `developer`)).toBeUndefined();
+    });
+});
+
+// A FAILURE NOTHING CODED SAYS WHAT ITS WORDS SAY. A row stored before failures were coded, or one a runtime left uncoded
+// (Cursor's "Connect your Cursor account again", a thrown "Claude Code returned an error result: …"), was drawn only as
+// "The agent stopped on an error this app does not recognize." with what it said behind Details (2026-10-21): a spent
+// allowance, a revoked sign-in and a safeguard flag among them, each recognised before.
+describe(`a failure nothing coded`, () => {
+    const UNRECOGNIZED = `The agent stopped on an error this app does not recognize.`;
+    const lastRow = (events: readonly AgentEvent[]): TranscriptRow => foldTurn([userRow(`go`, 0, [])], events).at(-1)!;
+
+    it(`says a row written before failures were coded by what it says, never as unrecognized`, () => {
+        const said = (text: string): string | undefined => noticeLine({ text }, `developer`);
+        expect(
+            said(
+                `Failed to authenticate. API Error: 403 You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota`,
+            ),
+        ).toBe(`You've reached your 5-hour usage limit.`);
+        expect(
+            said(`Claude Code returned an error result: Failed to authenticate: OAuth token revoked. Please log in again or contact your administrator.`),
+        ).toBe(`Failed to authenticate: OAuth token revoked.`);
+        expect(
+            said(
+                `API Error: Opus 5.5's safeguards flagged this session (https://www.anthropic.com/legal/aup). You may be seeing this for the first time.`,
+            ),
+        ).toBe(`The model's safeguards flagged this turn.`);
+        // What it said whole is still a press away.
+        expect(noticeFailure({ text: `Claude Code returned an error result: Failed to authenticate: OAuth token revoked. Please log in again.` })?.said).toBe(
+            `Claude Code returned an error result: Failed to authenticate: OAuth token revoked. Please log in again.`,
+        );
+    });
+
+    it(`draws the sandbox's own sentence a runtime left uncoded as the line, and only words that say nothing as unrecognized`, () => {
+        expect(noticeLine(lastRow([{ kind: `error`, message: `Invalid API key. Connect your Cursor account again in Sandbox ▸ Agent.` }]), `developer`)).toContain(
+            `Connect your Cursor account again`,
+        );
+        expect(noticeLine(lastRow([{ kind: `error`, message: `API Error: 500 {"type":"error"}` }]), `developer`)).toBe(UNRECOGNIZED);
+    });
+});
+
+describe(`a warning the runtime went on past`, () => {
+    const lastRow = (events: readonly AgentEvent[]): TranscriptRow => foldTurn([userRow(`go`, 0, [])], events).at(-1)!;
+
+    // A warning the runtime went on past is said in its own words while the turn goes on (2026-10-21: "The agent finished
+    // with a warning." over a turn still working, the warning itself behind Details).
+    it(`says an advisory in its own words, never as the turn having finished`, () => {
+        const said = `Codex moved this turn from gpt-5.5 to gpt-5.4 because it read as high-risk security work.`;
+        const rows = foldTurn(
+            [userRow(`go`, 0, [])],
+            [
+                { kind: `init`, model: `gpt-5.4` },
+                { kind: `error`, code: `codex-advisory`, message: said },
+                { kind: `delta`, text: `Working on it…` },
+            ],
+        );
+        const advisory = rows.find((row) => row.role === `notice` && row.noticeCode !== undefined)!;
+        expect([noticeLine(advisory, `developer`), noticeFailure(advisory)?.ends]).toEqual([said, false]);
+        const muse = `Muse Code's approval stage could not be answered: the approval socket closed.`;
+        expect(noticeLine(lastRow([{ kind: `error`, code: `codex-advisory`, message: muse }]), `developer`)).toBe(muse);
     });
 });

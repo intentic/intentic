@@ -318,10 +318,13 @@ The Changes panel stages everything and commits everything as runs, the push's s
   go, the strip warned on opening a Cursor composer and said nothing about a runner. Detection got one gate the same way
   ([`detect.ts`](../../_sandbox/privacy-detect/src/detect.ts) `createGate`): the vault, the owner's rules and the name
   model propose candidates as the detectors do, and a candidate is kept only when its kind is on, it is not on the
-  never-masked list, and its evidence holds where it stands. A value the vault learned and a model's guess bring no
-  context of their own, so each is held to the detectors' own checks for its kind (`standsAlone`): the vault had judged
-  its values once, by rules of its own, and every misread fixed in a detector (a single word, an IP, a loop's digits, a
-  decimal's places) had come back through it until fixed there too. A labelled corpus in the five shipped languages
+  never-masked list, and its evidence holds where it stands. A model's guess brings no context of its own, so it is held
+  to the detectors' own checks for its kind (`standsAlone`) where it stands; a value the vault learned is held to them as
+  the vault holds it, and any value it holds is kept only where it is met as itself, not as a loop's digits or a
+  decimal's places (`metAsItself`): the vault had judged its values once, by rules of its own, and every misread fixed in
+  a detector (a single word, an IP, a loop's digits, a decimal's places) had come back through it until fixed there too.
+  Judged by the spelling met instead (2026-10-20 to 21), a learned full name written joined and a PESEL in a CSV row
+  reached the model as they were. A labelled corpus in the five shipped languages
   ([`corpus.test.ts`](../../_sandbox/privacy-detect/src/tests/corpus.test.ts)) pins what must and must not be masked.
 - (2026-10-07) A helper job (a title, a commit subject, a verdict) is a sealed request: the turn's own arm and loop with
   `policy.sealed`, no tool, no session, nothing read past its prompt

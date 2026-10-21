@@ -2,6 +2,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import { computed } from "vue";
 import { fleetAttention } from "../../agent-status/agentStatus-lanes";
+import { withNext } from "../../agent-status/agentStatus-standing";
 import { queryClient } from "../../../lib/queryPersistence";
 import { rpcKeyAt } from "../../../lib/queryKeys";
 import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
@@ -38,7 +39,8 @@ const store = createAcrossStore<BoxFleet>({
         const body = await sandboxRpc.agents.list(undefined, { context: { at: sandbox.id, background: true } });
         // Also filed under this sandbox's key, so `sandboxQueryPredicate` sweeps it on replacement too.
         queryClient.setQueryData(rpcKeyAt(sandbox.id, `agents.list`), body);
-        return { state: `ready`, agents: body.agents, held: body.held ?? [] };
+        // Read as the board reads its own: a box older than `next` says what carries a card on in the fields it replaced.
+        return { state: `ready`, agents: body.agents.map(withNext), held: body.held ?? [] };
     },
 });
 

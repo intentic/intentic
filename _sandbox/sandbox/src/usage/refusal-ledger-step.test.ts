@@ -1,6 +1,8 @@
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { StepContext } from "../store/evolution/state-steps.js";
+import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
+import { memoryProviderRefusalStore } from "./provider-refusals.js";
 import { refusalLedgerStep } from "./refusal-ledger-step.js";
 
 // The two copies a refusal used to be filed in beside the ledger (a routed model's bench, a plan-less account's run-outs
@@ -60,4 +62,18 @@ test("keeps what the ledger already holds over either retired copy, and settles 
     );
     expect(JSON.parse(plan?.writes.get(at("provider-refusals.json")) ?? "{}")).toEqual({ "codex:limit::gpt-6.1-sol": newer });
     expect(await refusalLedgerStep.plan(contextOver({ [at("provider-refusals.json")]: { "codex:limit::gpt-6.1-sol": newer } }))).toBeUndefined();
+});
+
+// 2026-10-21: a bench from before `since` was kept was filed as refused at its `until`, days ahead, and an answer settles
+// only what was filed before its request went out: the model read spent until then, whatever turns went through.
+test("files a bench that kept no start as refused before the step ran, never in the future, so an answer since settles it", async () => {
+    const until = Date.now() + 3 * 24 * 60 * 60_000;
+    const plan = await refusalLedgerStep.plan(contextOver({ [at("model-cooldowns.json")]: { "kimi:kimi-k3-256k": { until, message: "Kimi Code usage limit reached" } } }));
+    const ledger: Record<string, ProviderRefusal> = JSON.parse(plan?.writes.get(at("provider-refusals.json")) ?? "{}");
+    const filed = Object.values(ledger);
+    expect(filed).toMatchObject([{ kind: "limit", model: "kimi-k3-256k", resetsAt: Math.ceil(until / 1000) }]);
+    expect(filed[0]?.at).toBeLessThanOrEqual(Date.now());
+    const store = memoryProviderRefusalStore({ kimi: filed });
+    await store.settle("kimi", { account: undefined, model: "kimi-k3-256k", askedAt: Date.now() });
+    expect(await store.onFile()).toEqual({});
 });

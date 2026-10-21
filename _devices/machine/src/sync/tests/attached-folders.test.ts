@@ -209,9 +209,9 @@ describe("the report of a computer whose folders attach to its sandbox", () => {
     it("reads each attached folder's own session, and none for the host", () => {
         expect(built.pairings.slice(0, 3)).toEqual([
             // Each row names the slug its sandbox goes by, which the desktop app reads a folder's sandbox off.
-            { sandboxId: SANDBOX, slug: SLUG, mode: "sync", projectsHost: true, mirroring: "on" },
-            { sandboxId: SANDBOX, slug: SLUG, mode: "sync", localDir: shop.localDir, remoteDir: `${WORKSPACE_ROOT}/shop`, deliver: "auto", mirroring: "on", mutagenStatus: "watching" },
-            { sandboxId: SANDBOX, slug: SLUG, mode: "sync", localDir: blog.localDir, remoteDir: `${WORKSPACE_ROOT}/blog`, deliver: "auto", mirroring: "on", mutagenStatus: "staging-beta" },
+            { sandboxId: SANDBOX, slug: SLUG, mode: "sync", projectsHost: true, mirroring: "on", heldBy: [] },
+            { sandboxId: SANDBOX, slug: SLUG, mode: "sync", localDir: shop.localDir, remoteDir: `${WORKSPACE_ROOT}/shop`, deliver: "auto", mirroring: "on", mutagenStatus: "watching", heldBy: [] },
+            { sandboxId: SANDBOX, slug: SLUG, mode: "sync", localDir: blog.localDir, remoteDir: `${WORKSPACE_ROOT}/blog`, deliver: "auto", mirroring: "on", mutagenStatus: "staging-beta", heldBy: [] },
         ]);
     });
 

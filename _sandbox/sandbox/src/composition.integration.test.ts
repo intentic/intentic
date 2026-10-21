@@ -1,8 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pino from "pino";
 import { createServices, type Services, servicesTeardown } from "./composition.js";
+import { NO_LOG_FILES } from "./logger.js";
 import { leafTeardown } from "./bootstrap/slices/slice-registry.js";
 import { statePath } from "./state-paths.js";
 import { testConfig } from "./env.config.testing.js";
@@ -45,4 +46,21 @@ test("the leaf slices are composed beside the core, with the stops of those that
         expect.arrayContaining(["git", "hostHub", "linkedChildren", "loops", "workflows", "needs", "orgPolicy", "history", "shares", "walletLedger"]),
     );
     expect(leafTeardown(services)).toHaveLength(1);
+});
+
+// The target image's composer composes over read-only mounts of the running sandbox's volumes (compose-overlay.ts): a
+// log file opened there fails after composing returns, as an 'error' event that ends the process (2026-10-21).
+test("composed without log files, the services open none under the history root", async () => {
+    const history = join(base, "history-read-only");
+    mkdirSync(history);
+    const composer = createServices({ ...testConfig, workspaceRoot, historyRoot: history }, pino({ level: "silent" }), NO_LOG_FILES);
+    try {
+        // A log file is opened only after its directory is made, at once, where the open itself comes a turn later.
+        expect(existsSync(join(history, "logs"))).toBe(false);
+        expect(composer.clientLogger).toBeUndefined();
+    } finally {
+        for (const stop of servicesTeardown(composer)) {
+            await stop();
+        }
+    }
 });

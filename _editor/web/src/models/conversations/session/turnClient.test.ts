@@ -149,6 +149,7 @@ const clientOf = (settings: TurnSettings = SETTINGS, selection: Partial<Composer
         error,
         session,
         turn: client,
+        failures: { crashed: ref(false) },
     });
     // Every phase the run moves through, in order, as the sync watcher sees each write.
     const phases: string[] = [];

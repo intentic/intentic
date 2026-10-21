@@ -87,6 +87,9 @@ export function usePreviewTargets(active: Ref<boolean>) {
         // Where the two always-on reads stand, as one: only their answer can say an app is gone or that nothing runs;
         // a failure is said as one. Apps fan-out is additive, never gating.
         listed: computed(() => allLoaded([panelsRead.value, publicRead.value])),
+        // Whether "the live app" can be picked: the apps have answered and the outbox read is not still out. A failed
+        // outbox read only leaves its files out of the pick; it never holds the apps that did answer.
+        pickable: computed(() => panelsRead.value.state === `ready` && publicRead.value.state !== `waiting`),
         start,
         stop,
         forward,

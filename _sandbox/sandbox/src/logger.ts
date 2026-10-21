@@ -66,7 +66,7 @@ const logFile = (historyRoot: string, name: string): DestinationStream | undefin
 
 // Perf spans (historyRoot/logs/perf.jsonl) get their own file so daemon.log stays readable for actual errors. Undefined
 // when there is no writable historyRoot; callers fall back to the main logger.
-export const createPerfLogger = (config: Pick<Config, "logLevel" | "logPretty" | "historyRoot">): Logger | undefined => {
+const createPerfLogger = (config: Pick<Config, "logLevel" | "logPretty" | "historyRoot">): Logger | undefined => {
     if (config.logPretty) {
         // Dev reads one pretty stream; a second file nobody is tailing would only hide the spans.
         return undefined;
@@ -77,10 +77,23 @@ export const createPerfLogger = (config: Pick<Config, "logLevel" | "logPretty" |
 
 // Browser-reported lines, kept out of daemon.log which is otherwise all daemon-authored. Fixed at `warn` regardless of
 // the daemon's logLevel, so stall reports are not dropped; undefined means the route records nothing.
-export const createClientLogger = (config: Pick<Config, "historyRoot">): Logger | undefined => {
+const createClientLogger = (config: Pick<Config, "historyRoot">): Logger | undefined => {
     const file = logFile(config.historyRoot, "client.jsonl");
     return file === undefined ? undefined : pino(loggerOptions({ logLevel: "warn" }), file);
 };
+
+// The log files composing opens besides daemon.log: the perf spans' and the browser's reports'. NO_LOG_FILES is for a
+// one-shot that must open nothing for writing: the target image's composer runs over read-only mounts of the running
+// sandbox's volumes, where a log's open fails after composing has returned and ends the process (compose-overlay.ts).
+export interface LogFiles {
+    readonly perf: Logger | undefined;
+    readonly client: Logger | undefined;
+}
+export const NO_LOG_FILES: LogFiles = { perf: undefined, client: undefined };
+export const openLogFiles = (config: Pick<Config, "logLevel" | "logPretty" | "historyRoot">): LogFiles => ({
+    perf: createPerfLogger(config),
+    client: createClientLogger(config),
+});
 
 export const createLogger = (config: Pick<Config, "logLevel" | "logPretty" | "historyRoot">): Logger => {
     const options = loggerOptions(config);

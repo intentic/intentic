@@ -44,6 +44,7 @@ export const historyHint = (held: readonly DeviceBridgeHoldRow[]): Tip => ({
 // (`heldBy`, its holds.ts), the owner's own pause first; only that one is a person's to lift, and every other ends by
 // itself, so a page that offered Resume for any paused session asked for a press that changed nothing (fair-moth,
 // 2026-10-19). An agent older than `heldBy` says only that Mutagen has it paused: a pause a person may lift, as it was.
+// One that says it empty (2026-10-21) means nothing holds it, whatever Mutagen has not caught up with yet.
 export interface FolderHold {
     /** The short word, where a row says its state ("paused", "held"). */
     readonly word: string;
@@ -78,7 +79,7 @@ const heldHint = (hold: string | undefined): string =>
 export const folderHold = (folder: HeldFolder | undefined): FolderHold | undefined => {
     const held = folder?.heldBy ?? [];
     const lowDisk = folder?.lowDisk;
-    if (held[0] === `owner` || (held.length === 0 && lowDisk === undefined && folder?.paused === true)) {
+    if (held[0] === `owner` || (folder?.heldBy === undefined && lowDisk === undefined && folder?.paused === true)) {
         return { word: t(`ui.deviceDetail.paused`), label: t(`ui.deviceDetail.fileSyncingPaused`), hint: t(`ui.deviceDetail.syncPaused`), tone: `quiet`, resumable: true };
     }
     if (lowDisk !== undefined) {

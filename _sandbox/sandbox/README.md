@@ -174,7 +174,10 @@ flowchart LR
   (`agent/models/limit-reset.ts` `standingReopensAt`). The ledger files such a refusal with the reset of the pool it was
   refused in, read off the account's reading as it files it (`poolResetsAt`, the contract's `refusedPoolReset`), and the
   verdict ends it there, in the daemon and every open window at the same instant. (2026-10-20) Before, it stood past
-  that reset until the next reading landed, up to the 15-minute idle sweep, while the picker already said "back at". A spent allowance in a
+  that reset until the next reading landed, up to the 15-minute idle sweep, while the picker already said "back at".
+  That reset is the sandbox's guess, not the provider's word, so a reading taken after it still outranks it: a weekly
+  pool read at a rounded 100 once the five-hour one reopened keeps the refusal standing until the weekly reset
+  (2026-10-21). A spent allowance in a
   routed refusal envelope stays a spent allowance, not a model off the plan. An admin-granted credit ("send a request to
   your admin") is filed `unmetered`, so no usage reading answers it.
 - What carries a conversation on with nobody pressing anything is one derived value on its card, `next`

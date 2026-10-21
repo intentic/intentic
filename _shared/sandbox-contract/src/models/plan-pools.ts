@@ -262,7 +262,9 @@ export const refusedPoolReset = (refusal: ProviderRefusal, accounts: readonly Se
  * yet, so the refusal stands. Judged by the daemon and every open window at the same instant from what the refusal
  * carries: nothing waits for a fresh reading or a ledger write to flip it. 2026-10-20: a refusal naming no instant stood
  * past its pool's reset until the next reading landed, up to the 15-minute idle sweep, while the picker already said
- * "back at" that reset.
+ * "back at" that reset. A stamp is this sandbox's guess, not the provider's word, so a reading taken after it outranks
+ * it: 2026-10-21, a weekly pool read at a rounded 100 once the five-hour one it was stamped with reopened, and the
+ * account read ready with no room, so every turn let through was refused again.
  */
 export const refusalVerdict = (
     refusal: ProviderRefusal,
@@ -275,9 +277,10 @@ export const refusalVerdict = (
     }
     const whose = refusal.account === undefined ? accounts : named;
     // The provider's own "try again at" is over at that instant, whichever account it refused; so, where it named none,
-    // is the refused pool's reset the ledger stamped.
+    // is the refused pool's reset the ledger stamped, unless a reading since says otherwise (read below).
     const over = refusal.resetsAt ?? refusal.poolResetsAt;
-    if (refusal.kind === "limit" && over !== undefined && over * 1000 <= now) {
+    const readSince = (instant: number): boolean => whose.some((facts) => (facts.usage?.measuredAt ?? 0) > instant * 1000);
+    if (refusal.kind === "limit" && over !== undefined && over * 1000 <= now && (refusal.resetsAt !== undefined || !readSince(over))) {
         return "answered";
     }
     // Where it is known which account it refused (it named one, or there is only one), the provider's own instant
@@ -296,9 +299,19 @@ export const refusalVerdict = (
     return accounts.some((facts) => answers(refusal, facts, true)) ? "answered" : "standing";
 };
 
+// A stamp a reading has outlived (refusalVerdict) says nothing of when the pool now holding the refusal reopens: that
+// pool's own reset does.
+const unstampedPast = (refusal: ProviderRefusal, now: number): ProviderRefusal => {
+    if (refusal.poolResetsAt === undefined || refusal.poolResetsAt * 1000 > now) {
+        return refusal;
+    }
+    const { poolResetsAt: _outlived, ...standing } = refusal;
+    return standing;
+};
+
 /** The refusals still standing over each of a provider's accounts: those naming it, and those naming none. */
 export const standingOver = (accounts: readonly ServiceFacts[], refusals: RefusalsOnFile, now: number = Date.now()): ((account: string) => RefusalsOnFile) => {
-    const standing = refusals.filter((refusal) => refusalVerdict(refusal, accounts, now) === "standing");
+    const standing = refusals.filter((refusal) => refusalVerdict(refusal, accounts, now) === "standing").map((refusal) => unstampedPast(refusal, now));
     return (account) => standing.filter((refusal) => (refusal.account ?? account) === account);
 };
 

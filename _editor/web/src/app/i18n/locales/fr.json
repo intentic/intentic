@@ -2254,7 +2254,6 @@
             "held": "Le sandbox a retenu ce tour.",
             "cutShort": "L'agent s'est arrêté avant d'avoir fini.",
             "command": "L'agent a lu ceci comme une commande qu'il n'a pas.",
-            "advisory": "L'agent a terminé avec un avertissement.",
             "unclassified": "L'agent s'est arrêté sur une erreur que cette app ne reconnaît pas.",
             "details": "Détails",
             "hideDetails": "Masquer les détails",

@@ -361,8 +361,12 @@ folded where the platform folds it). With `--json` each prints exactly one JSON 
   back included. Copy-first then carries the restored files to the sandbox, as it does any edit here, so the agent's
   versions they replace are gone from there too.
 - One bring-back, restore or delivery runs per folder at a time (`restore/<pairing key>/.operation.pid`, a pid of this
-  boot, checked alive). A pause an operation made and never lifted (the process killed in between) is recorded in
-  `restore/<pairing key>/.paused`, and the next command about that folder resumes the session.
+  boot, checked alive). Its pause is a hold like any other (`transferSince`, below): recorded on the pairing before
+  the session is paused and lifted as the operation lets go, so the watcher's pass keeps the session paused while it
+  writes. (2026-10-21: recorded nowhere, it read as a pause nothing explained, and the next pass resumed the session in
+  the middle of the write.) A pause an operation made and never lifted (the process killed in between) is recorded in
+  `restore/<pairing key>/.paused`, and the next command about that folder resumes the session; the watcher lets go of
+  its hold by itself once the folder's lock names no live process.
 
 ### Folders attached to this computer's sandbox
 
@@ -410,8 +414,10 @@ object, `{ "ok": false, "error": "<sentence>" }` and exit code 1 on failure, as 
   compare folders (2026-10-05: the desktop app finds its folder in `status --json` by the path it passed, and on Fedora
   Atomic `/home` is itself a link to `/var/home`, so a link-resolved path would never be found).
 - It returns once the pairing is recorded and the resident agent is running. The agent creates the session on its next
-  pass, and `status --json` lists the folder with its `localDir`, `remoteDir`, `slug`, `deliver`, `mutagenStatus` and,
-  while anything holds it still, `heldBy`. _(2026-10-20)_ That pairing is the desktop app's only record of which folder
+  pass, and `status --json` lists the folder with its `localDir`, `remoteDir`, `slug`, `deliver`, `mutagenStatus` and
+  `heldBy`, what holds it still, empty while nothing does. (2026-10-21: left out while nothing held it, it read as an
+  agent older than holds, and a session Mutagen had not resumed yet as the owner's pause.) _(2026-10-20)_ That pairing
+  is the desktop app's only record of which folder
   is in which sandbox: it reads it back here, and starts or forgets the sandbox by `slug` (the one this machine's ic
   listed it under, else the first label of its address).
   `mutagenStatus` is absent until the session exists, then Mutagen's own words: `connecting-beta`, `scanning`,
@@ -664,10 +670,12 @@ whose it is.
   seconds. Giving ic's record a longer life was rejected: the hold is the agent's fact, and ic's record answers whether a
   swap is going on.) A later swap of the same sandbox starts the quarter hour again. Only this environment's records
   count: a distro syncing a sandbox the Windows side swaps is not held.
-- **File sync runs or holds still by one rule** (2026-10-20, [`sync/holds.ts`](src/sync/holds.ts)). Seven facts on a
+- **File sync runs or holds still by one rule** (2026-10-20, [`sync/holds.ts`](src/sync/holds.ts)). Eight facts on a
   pairing hold its sync still: the owner's `sync pause` (`ownerPausedAt`), the sandbox said to be gone (`goneSince`),
   its container away or in ic's trash (`containerAway`), a swap (`swapSince`), an hour without an answer
-  (`unreachableSince`), and a nearly full drive (`lowDisk`). Each is kept by the one rule that observes it, and none of
+  (`unreachableSince`), a nearly full drive (`lowDisk`), and a bring-back, restore or delivery writing into the folder
+  (`transferSince`, 2026-10-21; that operation also pauses its session itself, at once, before it writes). Each is kept
+  by the one rule that observes it, and none of
   them touches Mutagen. Every pass, after the rules have run, `holdSessions` reads every session in one listing and
   makes Mutagen agree: what runs while anything holds it is paused, and what is paused while nothing does is resumed,
   one session per call and read back (`resumeSessions`), tried again each pass until Mutagen took it. A session is made

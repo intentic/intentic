@@ -3483,6 +3483,19 @@ describe(`Conversation placeAsAgent`, () => {
         expect(conversation.session.value).toBeUndefined();
     });
 
+    // The answer placed after a crashed turn is the conversation's last word: the tab stayed red until the next turn
+    // started (2026-10-21).
+    it(`takes a crashed turn's failure off the tab once an answer is placed after it`, async () => {
+        const conversation = new Conversation(`c-place-crashed`);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }, { kind: `error`, message: `Claude Code process exited with code 1` }, { kind: `done` }]));
+        await conversation.turn.send(`first`, settings);
+        expect(conversation.status.value).toBe(`error`);
+
+        daemon.mockResolvedValue({ ok: true });
+        expect(await conversation.transcript.placeAsAgent(`I checked the tests.`)).toBe(true);
+        expect(conversation.status.value).toBe(`idle`);
+    });
+
     it(`leaves the tab untouched when the daemon refuses the place`, async () => {
         const conversation = new Conversation(`c-place-busy`);
         daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }, { kind: `done` }]));

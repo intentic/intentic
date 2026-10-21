@@ -2254,7 +2254,6 @@
             "held": "Die Sandbox hat diesen Durchgang zurückgehalten.",
             "cutShort": "Der Agent hat aufgehört, bevor er fertig war.",
             "command": "Der Agent hat dies als einen Befehl gelesen, den er nicht hat.",
-            "advisory": "Der Agent ist mit einer Warnung fertig geworden.",
             "unclassified": "Der Agent ist bei einem Fehler stehen geblieben, den diese App nicht kennt.",
             "details": "Details",
             "hideDetails": "Details ausblenden",

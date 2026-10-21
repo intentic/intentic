@@ -4,7 +4,7 @@ import { otherBoxes } from "../sandbox/live/fleetAcross";
 import type { TabFacts } from "../conversations/tabs/tabFacts";
 import type { PendingAction } from "../../features/agents/board/laneDrop";
 import { NO_ATTENTION } from "../agent-status/agentStatus-lanes";
-import { awaitingUser, type EndingByHand, turnInFlight } from "../agent-status/agentStatus-standing";
+import { awaitingUser, type EndingByHand, turnInFlight, withNext } from "../agent-status/agentStatus-standing";
 import type { FleetAgent } from "./useAgents-fleet";
 import { registry } from "./useAgents-registry";
 import { sandboxNow } from "../agent-status/sandboxClock";
@@ -75,7 +75,7 @@ export const pendingOn = (id: string, at?: string): PendingAction | undefined =>
 export const optimistic = async (id: string, patch: Partial<AgentSummary>, write: () => Promise<AgentSummary>): Promise<void> => {
     const lift = hold(id, undefined, { patch });
     try {
-        const summary = await write();
+        const summary = withNext(await write());
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
     } finally {
         lift();

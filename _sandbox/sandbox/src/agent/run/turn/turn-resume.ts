@@ -16,7 +16,7 @@ import { replaceRejectedToken } from "../../providers/claude/claude-credentials.
 import { planRevision } from "../../prompt/plan-revision.js";
 import type { Services } from "../../../composition.js";
 import { openingRows, openTurnTranscript, recordInterruptedTurn, recordTurnTranscript, recordUnrecordedRuns, runLogFor } from "../../../sessions/turn-transcript.js";
-import { carriedRun, drawnOf, dropRunLog, recordSettledTurn, saidMidTurn } from "./recovery/cut-turn-rows.js";
+import { carriedRun, drawnOf, dropRunLog, saidMidTurn } from "./recovery/cut-turn-rows.js";
 import { offerAnswerWords, permissionAnswer, restoreParkedCard } from "./recovery/restored-offers.js";
 import type { Caller } from "../../../auth/auth.js";
 import { POST_PLAN_MODE } from "../agent.js";
@@ -37,7 +37,6 @@ import { recordInterrupted } from "./recovery/interrupted-ledger.js";
 import { previousRun } from "../../../system/boot/restarts/boot-marker.js";
 import { restartCost } from "../../../system/boot/restarts/restart-record.js";
 import { notResumedReason, type RestartResume } from "./recovery/restart-resume-policy.js";
-import { defineInFlight } from "../../../seams/restart/in-flight.js";
 import { spentUntil } from "./holds/allowance-gate.js";
 import { releaseRoomHolds } from "./holds/room-holds.js";
 import { limitDue } from "./holds/limit-due.js";
@@ -844,7 +843,7 @@ const parkedNotRestored = async (services: Services, entry: JournalledTurn, reas
 };
 
 // Puts a parked turn's cards back, or, once it has failed to come back as often as it may, gives it up.
-const restoreParked = async (services: Services, entry: JournalledTurn): Promise<void> => {
+export const restoreParked = async (services: Services, entry: JournalledTurn): Promise<void> => {
     // What it drew before it asked, and after: its run's log, else what the entry carried while its card was up.
     const drawn = await drawnOf(services, entry);
     if (parkedRestoreSpent(entry)) {
@@ -882,56 +881,9 @@ const settleParked = async (services: Services, entry: JournalledTurn, reason: s
     );
 };
 
-// Every turn journalled when the gate opens is one the daemon died under (bootstrap/restart/in-flight-kinds.ts), each consumed (spent or
-// deleted) before it restarts, so a turn that kills the daemon can't loop the boot; then what waited in a queue goes.
-export const interruptedTurnsInFlight = defineInFlight({
-    name: "interrupted turns",
-    read: async (services: Pick<Services, "turnJournal">) => (await services.turnJournal.list()).filter((entry): entry is JournalledTurn => entry.kind === "turn"),
-    recover: async (services: Services, left, resume) => {
-        await recoverCutTurns(services, left, resume);
-        for (const conversationId of services.agents.ids()) {
-            if ((services.agents.entry(conversationId)?.queue?.items.length ?? 0) > 0) {
-                void services.turns.drain(conversationId);
-            }
-        }
-    },
-});
-
-// `cost`: what the restart cost the turns it cut (restart-record.ts), told to each it re-runs; read off this boot's marker.
-export const recoverCutTurns = async (
-    services: Services,
-    interrupted: readonly JournalledTurn[],
-    resume: RestartResume,
-    now: number = Date.now(),
-    cost: string | undefined = restartCostNow(),
-): Promise<void> => {
-    const resumedWhy = resume.resume && resume.asked ? "the owner asked this restart to pick up after" : "autoResumeOnRestart";
-    for (const entry of interrupted) {
-        // A turn that ended but whose record refused it is written down, and never run again.
-        if (entry.run?.settled === true) {
-            await recordSettledTurn(services, entry);
-            continue;
-        }
-        // An earlier run the record missed goes down first, so the cut turn lands beneath it; still refused, the entry
-        // waits for the next boot.
-        if (!(await recordUnrecordedRuns(services, entry.turn.conversationId))) {
-            services.logger.warn({ conversationId: entry.turn.conversationId }, "interrupted turn kept for the next boot: an earlier turn's record still refuses");
-            continue;
-        }
-        // Skips every gate below: rehydration spends nothing and isn't an attempt, so autoResumeOnRestart, staleness
-        // and the attempt cap don't apply. Not cleared here either; the placeholder re-journals it, so a second restart
-        // rehydrates again.
-        if (entry.parked !== undefined && entry.parked.length > 0) {
-            await restoreParked(services, entry);
-            continue;
-        }
-        await recordOrRerun(services, entry, { resume, resumedWhy, cost }, now);
-    }
-};
-
 // A cut turn with no card up: written down from what it drew (its run's log, else the provider's own store), then run
 // again under the boot's policy, or left standing as interrupted.
-const recordOrRerun = async (
+export const recordOrRerun = async (
     services: Services,
     entry: JournalledTurn,
     { resume, resumedWhy, cost }: { readonly resume: RestartResume; readonly resumedWhy: string; readonly cost: string | undefined },
@@ -1042,7 +994,7 @@ const restartTurnOf = (entry: JournalledTurn, tail: string): TurnInput & { conve
     resumedTurn({ input: entry.turn, sessionId: entry.sessionId }, { reason: "restart", tail: tail === "" ? undefined : tail });
 
 // What the restart this boot follows cost, once the boot marker has said how the previous run ended; undefined before.
-const restartCostNow = (): string | undefined => {
+export const restartCostNow = (): string | undefined => {
     const run = previousRun();
     return run === undefined ? undefined : restartCost(run);
 };

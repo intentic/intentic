@@ -11,7 +11,7 @@ import type {
     ProjectSkipped,
     RestoreResult as PrintedRestore,
 } from "@intentic/sandbox-contract/schemas/project-bring-back";
-import { type Pairing, pairingKey, pairingRemoteDir, projectDirection } from "../config.js";
+import { type Pairing, pairingKey, pairingRemoteDir, projectDirection, setTransferSince } from "../config.js";
 import {
     capped,
     type ChangeKind,
@@ -79,12 +79,26 @@ export interface ProjectContext extends FolderContext {
 
 // What holding a folder still takes, for anything that writes into it (a bring-back, a restore, a delivery of landed
 // work, project-delivery.ts): the folder's pairing, the agent's own state dir (~/.intentic/machine), where restore
-// points, the listing record and the lock live, keyed by the pairing's key, and its Mutagen session.
+// points, the listing record and the lock live, keyed by the pairing's key, its Mutagen session, and the hold it records
+// on the pairing while the session is paused (`transferHold`).
 export interface FolderContext {
     readonly pairing: ProjectPairing;
     readonly stateDir: string;
     readonly session: SessionControl;
+    readonly recordHold: RecordHold;
 }
+
+// THE PAUSE IS A HOLD LIKE EVERY OTHER (2026-10-21). The watcher resumes any paused session no fact on its pairing
+// explains (holds.ts), so an operation that paused Mutagen and recorded nothing was resumed by the next pass in the middle
+// of writing the sandbox's files into the folder. It records the `transfer` hold before it pauses, and lifts it as it
+// lets go: a time sets it, undefined lifts it.
+export type RecordHold = (since: number | undefined) => Promise<void>;
+
+// The hold, on the folder's own pairing in this agent's state.
+export const transferHold =
+    (pairing: Pick<Pairing, "key" | "sandboxId">): RecordHold =>
+    async (since) =>
+        await setTransferSince(pairingKey(pairing), since);
 
 // What the verbs print is the contract's (project-bring-back.ts), the shapes the editor parses the desktop app's relay
 // of them with; each with what this agent always fills held to it.
@@ -197,10 +211,16 @@ const recordAgreement = async (context: ProjectContext, applied: readonly { read
 // The folder's own place under the state dir, where its lock, its pause marker and its restore points live.
 export const folderStateDir = (context: Pick<FolderContext, "pairing" | "stateDir">): string => restoreDir(context.stateDir, pairingKey(context.pairing));
 
-const lockPath = (context: Pick<FolderContext, "pairing" | "stateDir">): string => join(folderStateDir(context), ".operation.pid");
+const operationLockPath = (stateDir: string, key: string): string => join(restoreDir(stateDir, key), ".operation.pid");
 
-// Written just before an operation pauses the session and removed once it has resumed it: left behind, it is a pause
-// nobody will lift, since the watcher resumes only the pauses it made itself.
+const lockPath = (context: Pick<FolderContext, "pairing" | "stateDir">): string => operationLockPath(context.stateDir, pairingKey(context.pairing));
+
+// Whether an operation holds this folder now: its lock names a live process of this boot. A transfer's hold stands no
+// longer than that, so the watcher lets go of one whose operation died between its pause and its resume (holds.ts).
+export const operationRunning = async (stateDir: string, key: string): Promise<boolean> => (await livePidRecord(operationLockPath(stateDir, key))) !== undefined;
+
+// Written just before an operation records its hold and pauses the session, and removed once it has let go: left
+// behind, it says the operation died holding the folder, and the next command about the folder lifts what it left.
 const pausedPath = (context: Pick<FolderContext, "pairing" | "stateDir">): string => join(folderStateDir(context), ".paused");
 
 // A pause an operation made and never lifted (it was killed between the two) is lifted by the next command about this
@@ -209,6 +229,7 @@ const liftAbandonedPause = async (context: FolderContext, locked: boolean): Prom
     if (!existsSync(pausedPath(context)) || (!locked && (await livePidRecord(lockPath(context))) !== undefined)) {
         return;
     }
+    await context.recordHold(undefined);
     await context.session.resume();
     await rm(pausedPath(context), { force: true });
 };
@@ -228,12 +249,19 @@ const holdStill = async (context: FolderContext, flush: boolean): Promise<Held> 
     const standing = flush ? await flushedStanding(context) : STALE;
     await writeFile(pausedPath(context), `${process.pid}\n`, { mode: 0o600 });
     try {
+        // The hold before the pause, so no pass of the watcher between the two resumes the session.
+        await context.recordHold(Date.now());
         await context.session.pause();
     } catch (error) {
+        // allow(silent-catch): the pause's failure is the one to report; a hold left behind is let go by the watcher once
+        // this operation's lock is released.
+        await context.recordHold(undefined).catch(() => undefined);
         await rm(pausedPath(context), { force: true });
         throw error;
     }
     const release = async (): Promise<void> => {
+        // The hold lifted first: a resume that does not take here is the watcher's to make, pass after pass.
+        await context.recordHold(undefined);
         await context.session.resume();
         await rm(pausedPath(context), { force: true });
     };

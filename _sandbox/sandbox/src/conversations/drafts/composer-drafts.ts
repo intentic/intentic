@@ -1,6 +1,7 @@
 import type { ComposerDraft, DraftWrite, DraftWritten } from "@intentic/sandbox-contract/schemas/composer-drafts";
 import { ForkOfSchema, FreshOfSchema, QueuedServingSchema } from "@intentic/sandbox-contract/schemas/agent";
 import { join } from "node:path";
+import type { Logger } from "pino";
 import { z } from "zod";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openDocument } from "../../store/open-document.js";
@@ -143,15 +144,19 @@ export const draftOwnerOf = (context: Pick<OrpcContext, "identity" | "principal"
 /**
  * The answer to a send, once the draft its words were sent from has gone with the message the sandbox just took: only
  * that revision, so words typed since in another window stay, and a resend under the same id finds it already gone.
+ * The message is taken whatever the clear does: a clear that fails is logged and the send still answers as taken, since
+ * an error here would hand the words back to a composer whose turn is already running.
  */
 export const answeredAfterDraft = async <T>(
-    drafts: Pick<ComposerDrafts, "clear">,
+    services: { readonly drafts: Pick<ComposerDrafts, "clear">; readonly logger: Pick<Logger, "warn"> },
     context: Pick<OrpcContext, "identity" | "principal">,
     sent: { readonly conversationId: string; readonly draft: number | undefined },
     answer: T,
 ): Promise<T> => {
     if (sent.draft !== undefined) {
-        await drafts.clear(draftOwnerOf(context), sent.conversationId, sent.draft);
+        await services.drafts
+            .clear(draftOwnerOf(context), sent.conversationId, sent.draft)
+            .catch((error: Error) => services.logger.warn({ err: error, conversationId: sent.conversationId }, "drafts: a sent message's draft could not be cleared"));
     }
     return answer;
 };

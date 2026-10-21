@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Pairing } from "../config.js";
 
 /* FILE SYNC RUNS OR HOLDS STILL BY ONE RULE (holds.ts): what holds it is read off the pairing's facts, and every pass
@@ -11,7 +12,7 @@ import type { Pairing } from "../config.js";
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "holds-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { baseDir } = await import("../../config.js");
-const { pairingSlugs, readState, setOwnerPaused, setUnreachableSince, upsertPairing } = await import("../config.js");
+const { attachedKey, pairingSlugs, readState, setOwnerPaused, setTransferSince, setUnreachableSince, upsertPairing } = await import("../config.js");
 const {
     holdSessions,
     holdsSync,
@@ -26,7 +27,9 @@ const {
     syncHolds,
     UNREACHABLE_HOLD_MS,
 } = await import("../holds.js");
-const { resumeSessions } = await import("../mutagen.js");
+const { resumeSessions, sessionName } = await import("../mutagen.js");
+const { mutagenSession, realProjectRunner } = await import("../project/project-remote.js");
+const { exclusively, transferHold, whileHeld } = await import("../project/project-transfer.js");
 const { holdSyncDuringSwaps } = await import("../mirror.js");
 const { sandboxAnswered, sandboxSaidGone } = await import("../gone-watch.js");
 
@@ -265,6 +268,47 @@ describe("a paused session nothing holds", () => {
     });
 });
 
+// (2026-10-21) A BRING-BACK, RESTORE OR DELIVERY HOLDS ITS FOLDER STILL BY A FACT TOO. It paused Mutagen itself, and the
+// watcher's next pass resumed the session no fact explained, in the middle of writing the sandbox's files into the folder.
+describe("a folder a bring-back, restore or delivery writes into", () => {
+    const attach = async () => {
+        const key = attachedKey(SANDBOX, "shop");
+        const localDir = mkdtempSync(join(tmpdir(), "shop-"));
+        await upsertPairing({ sandboxUrl: RESUMING_URL, sandboxId: SANDBOX, key, mode: "sync", localDir, remoteDir: `${WORKSPACE_ROOT}/shop`, project: true });
+        const pairing = (await pairings()).find((held) => held.key === key);
+        return { key, session: sessionName(key), pairing: { ...pairing!, localDir } };
+    };
+    const transferOf = async (key: string) => (await pairings()).find((held) => held.key === key)?.transferSince;
+
+    it("stays paused through the watcher's passes until the transfer lets go of it", async () => {
+        const { key, session, pairing } = await attach();
+        const mutagen = await statefulMutagen([MAIN, STATE, session]);
+        const context = { pairing, stateDir: baseDir, session: mutagenSession(realProjectRunner, mutagen.path, session), recordHold: transferHold(pairing) };
+        // What the transfer sees of its session while it writes, across a pass of the watcher.
+        const writing = async (): Promise<boolean[]> => {
+            const before = await mutagen.paused(session);
+            await holdSessions(mutagen.path, await pairings(), quiet);
+            return [before, await mutagen.paused(session)];
+        };
+        const seen = await exclusively(context, async () => await whileHeld(context, false, writing, () => "done"));
+        expect(seen).toEqual([true, true]);
+        expect(await transferOf(key)).toBeUndefined();
+        await holdSessions(mutagen.path, await pairings(), quiet);
+        expect(await mutagen.paused(session)).toBe(false);
+    });
+
+    // Killed between its pause and its resume, a transfer leaves its fact behind with nothing to lift it: the folder's lock
+    // no longer names a live process, so the watcher lets go of it rather than holding the folder until the next command.
+    it("is let go by the watcher once the transfer that held it is gone", async () => {
+        const { key, session } = await attach();
+        const mutagen = await statefulMutagen([MAIN, STATE, session], [session]);
+        await setTransferSince(key, Date.now() - 1000);
+        await holdSessions(mutagen.path, await pairings(), quiet);
+        expect(await mutagen.paused(session)).toBe(false);
+        expect(await transferOf(key)).toBeUndefined();
+    });
+});
+
 describe("a session that disagrees with nothing", () => {
     it("is left alone: a pass that has nothing to change runs no pause or resume", async () => {
         const mutagen = await statefulMutagen([MAIN, STATE]);
@@ -299,8 +343,9 @@ test("every fact that holds it is named, by whose word first", () => {
         containerAway: "trashed",
         goneSince: 1,
         ownerPausedAt: 1,
+        transferSince: 1,
     });
-    expect(syncHolds(all, NOW)).toEqual(["owner", "gone", "container-trashed", "swap", "unreachable", "low-disk"]);
+    expect(syncHolds(all, NOW)).toEqual(["owner", "gone", "container-trashed", "swap", "unreachable", "low-disk", "transfer"]);
     expect(syncHolds(pairing({ containerAway: "missing" }), NOW)).toEqual(["container-missing"]);
 });
 

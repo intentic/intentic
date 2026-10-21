@@ -46,10 +46,37 @@ describe(`a failure, as one line`, () => {
         expect(failureView({ message: own, error: `trial-unavailable`, own: true })).toEqual({ line: own, ends: true });
     });
 
-    it(`names a failure nothing coded, or coded by a newer sandbox, as unclassified, its words the details`, () => {
+    it(`names a failure coded by a newer sandbox, or one whose words say nothing, as unclassified, its words the details`, () => {
         const unclassified = `The agent stopped on an error this app does not recognize.`;
-        expect(failureView({ message: `fetch failed` })).toEqual({ line: unclassified, said: `fetch failed`, ends: true });
         expect(failureView({ message: `Something new.`, error: `some-new-code` }).line).toBe(unclassified);
+        expect(failureView({ message: `401.` })).toEqual({ line: unclassified, said: `401.`, ends: true });
+        expect(failureView({ message: `API Error: 500 {"type":"error"}` }).line).toBe(unclassified);
+    });
+
+    // A failure nothing coded was drawn only as unrecognized, a spent allowance, a revoked sign-in, a safeguard flag and the
+    // sandbox's own instruction among them, on the chat's row and the board's card alike (2026-10-21).
+    it(`says what a failure nothing coded says: the sandbox's sentence whole, a provider's first claim, a flag as one`, () => {
+        const cursor = `Invalid API key. Connect your Cursor account again in Sandbox ▸ Agent.`;
+        expect(failureView({ message: cursor })).toEqual({ line: cursor, ends: true });
+        expect(failureView({ message: `fetch failed` })).toEqual({ line: `fetch failed`, ends: true });
+        const kimi = `Failed to authenticate. API Error: 403 You've reached your 5-hour usage limit. Your quota will reset when the current 5-hour window ends. To continue now, purchase extra usage or upgrade your plan: https://www.kimi.com/membership/subscription?tab=quota`;
+        expect(failureView({ message: kimi })).toEqual({ line: `You've reached your 5-hour usage limit.`, said: kimi, ends: true });
+        expect(failureView({ message: `Claude Code process exited with code 1. stderr: TypeError: x\n    at Ab1 (file:///opt/claude/cli.js:429:17)` }).line).toBe(
+            `Claude Code process exited with code 1.`,
+        );
+        expect(failureView({ message: FLAGGED_SESSION })).toEqual({ line: `The model's safeguards flagged this turn.`, said: FLAGGED_SESSION, ends: true });
+    });
+
+    // A warning the runtime went on past said "The agent finished with a warning." over a turn still working (2026-10-21).
+    it(`says a warning the runtime went on past in its own words`, () => {
+        const said = `Codex moved this turn from gpt-5.5 to gpt-5.4 because it read as high-risk security work.`;
+        expect(failureView({ message: said, error: `codex-advisory` })).toEqual({ line: said, ends: false });
+        const fallback = "Model metadata for `gpt-5.6-sol` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.";
+        expect(failureView({ message: fallback, error: `codex-advisory` })).toEqual({
+            line: "Model metadata for `gpt-5.6-sol` not found.",
+            said: fallback,
+            ends: false,
+        });
     });
 
     it(`ends the turn on every failure but a warning the runtime went on past`, () => {
@@ -64,10 +91,10 @@ describe(`a failure, as one line`, () => {
 });
 
 describe(`a row written before failures were coded`, () => {
-    it(`is the unclassified kind only by a shape no sandbox sentence takes`, () => {
-        expect(legacyFailure(FLAGGED_SESSION)?.said).toBe(FLAGGED_SESSION);
+    it(`is a failure only by a shape no sandbox sentence takes, and says what it says`, () => {
+        expect(legacyFailure(FLAGGED_SESSION)).toEqual({ line: `The model's safeguards flagged this turn.`, said: FLAGGED_SESSION, ends: true });
         expect(legacyFailure(`Claude Code process exited with code 143. stderr: Ignoring 13 permissions.allow entries`)?.line).toBe(
-            `The agent stopped on an error this app does not recognize.`,
+            `Claude Code process exited with code 143.`,
         );
         expect(legacyFailure(`Background job started: \`pnpm test\` — it outlives this turn, and its exit wakes this conversation.`)).toBeUndefined();
         expect(
@@ -86,9 +113,10 @@ describe(`a row written before failures were coded`, () => {
 describe(`a coded row written before authorship was kept`, () => {
     const SAID = `The protected execution-domain policy is unreadable: refused before any model ran.`;
 
-    it(`leads with its kind's line and keeps its sentence as the details, for every code the wire names`, () => {
+    // A warning the runtime went on past is the one code whose words are its line, whoever wrote them.
+    it(`leads with its kind's line and keeps its sentence as the details, for every code the wire names but a warning`, () => {
         const unrecognized = `The agent stopped on an error this app does not recognize.`;
-        const read = AgentErrorCodeSchema.options.map((code) => failureView({ message: SAID, error: code }));
+        const read = AgentErrorCodeSchema.options.filter((code) => code !== `codex-advisory`).map((code) => failureView({ message: SAID, error: code }));
         expect(read.filter((view) => view.line === unrecognized || view.line === SAID)).toEqual([]);
         expect(read.filter((view) => view.said !== undefined && view.said !== SAID)).toEqual([]);
     });

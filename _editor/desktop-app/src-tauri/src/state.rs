@@ -182,7 +182,8 @@ pub struct Project {
     pub path: String,
     /// Its name inside the sandbox's `/work`.
     pub dir: String,
-    /// The platform's row for the sandbox, which the workspace opens at.
+    /// The platform's row for the sandbox, which the workspace opens at: never the agent's own id for it, and none where
+    /// this app does not know the row (bindings.rs `platform_id`).
     pub sandbox_id: Option<String>,
     /// The slug this machine's ic knows the sandbox by.
     pub slug: Option<String>,

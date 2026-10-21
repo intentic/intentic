@@ -37,7 +37,7 @@ beforeEach(async () => {
         project: true,
         deliver: "auto",
     };
-    context = { pairing, stateDir: join(root, "state"), session: mutagenSession(fake.runner, FAKE_MUTAGEN, "intentic-shop") };
+    context = { pairing, stateDir: join(root, "state"), session: mutagenSession(fake.runner, FAKE_MUTAGEN, "intentic-shop"), recordHold: async () => await Promise.resolve() };
 });
 
 afterEach(async () => {

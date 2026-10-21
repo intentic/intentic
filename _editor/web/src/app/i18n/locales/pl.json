@@ -3090,7 +3090,6 @@
             "held": "Sandbox wstrzymał tę turę.",
             "cutShort": "Agent zatrzymał się, zanim skończył.",
             "command": "Agent odczytał to jako polecenie, którego nie ma.",
-            "advisory": "Agent zakończył z ostrzeżeniem.",
             "unclassified": "Agent zatrzymał się na błędzie, którego ta aplikacja nie rozpoznaje.",
             "details": "Szczegóły",
             "hideDetails": "Ukryj szczegóły",

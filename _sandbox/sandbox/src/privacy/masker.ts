@@ -209,13 +209,14 @@ export interface MaskerDeps {
     readonly warn?: (message: string) => void;
 }
 
-// A value the vault holds, as the gate is asked about it where it was met.
+// A value the vault holds, as the gate is asked about it where it was met: the spelling met, and the value as held.
 const knownSpan = (text: string, start: number, end: number, hit: VaultHit): PolicySpan => ({
     start,
     end,
     class: hit.class,
     value: text.slice(start, end),
     by: hit.taught ? "taught" : "learned",
+    known: hit.value,
 });
 
 // What the vault already knows in a stretch of text, as the gate takes it where it stands: a value is matched in its next

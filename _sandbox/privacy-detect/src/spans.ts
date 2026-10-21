@@ -16,6 +16,9 @@ export type SpanSource = "taught" | "learned" | "detector" | "rule" | "model";
 
 export interface Candidate extends PersonalDataSpan {
     readonly by: SpanSource;
+    // A value the vault holds: the value as it holds it, where the text may spell it otherwise (joined, re-cased). What a
+    // learned value is alone is asked of this, never of the spelling met.
+    readonly known?: string;
 }
 
 // Which class wins when two finds cover the same characters equally: a checksum is proof, an address or a phone is a

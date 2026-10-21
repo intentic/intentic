@@ -1,7 +1,7 @@
 import type { PersonalDataClass } from "@intentic/sandbox-contract/schemas/privacy";
 import { impersonalAddress, phoneAt } from "./contact.js";
 import { builtInLexicon, type Lexicon } from "./lexicon.js";
-import { partOfDecimal, partOfNumber } from "./text.js";
+import { isDigit, partOfDecimal, partOfNumber } from "./text.js";
 
 // Whether a value proposed without the context it was found in is still personal data where it stands: one the vault
 // learned from an earlier find and meets again, or one the local name model reads as a name. Neither brings a keyword, a
@@ -10,6 +10,9 @@ import { partOfDecimal, partOfNumber } from "./text.js";
 // somebody's, a full name no ordinary word makes up. A single word is never a name alone: nearly every name is a word in
 // some language ("Mark", "Luna", a register surname that is an English word). Before 2026-10-20 the vault judged its
 // values once, by rules of its own, and every misread a detector was fixed for came back through it.
+// A value the vault learned is asked this as the vault holds it, not as the text spells it where it is met: a spelling
+// its matcher allows (`JanKowalski`, `/home/jankowalski`) is that value, and a number beside a CSV row's cell is no
+// decimal (2026-10-21). Only whether it is met as itself (metAsItself) is asked of its place.
 
 const WORDS = /[\p{L}\p{N}]+/gu;
 
@@ -44,3 +47,13 @@ const ALONE = {
 
 export const standsAlone = (kind: PersonalDataClass, text: string, start: number, end: number, lexicon: Lexicon = builtInLexicon()): boolean =>
     !digitByDigit(text.slice(start, end)) && ALONE[kind](text, start, end, lexicon);
+
+// A number's digits continued across a decimal point (`0.601234567`, `601234567.25`). A point only: beside a number, a
+// comma is a CSV row's separator far more often than a decimal's.
+const decimalPlaces = (text: string, start: number, end: number): boolean =>
+    (isDigit(text[start]) && text[start - 1] === "." && isDigit(text[start - 2])) || (isDigit(text[end - 1]) && text[end] === "." && isDigit(text[end + 1]));
+
+// Whether a value the vault holds, taught or learned, is met as itself and not as digits of something else: a list
+// written a digit at a time (`for i in 6 0 1 …`), or a decimal's places. Asked of the spelling met, the one thing about
+// a known value its place decides; what the value is, is asked of it as the vault holds it.
+export const metAsItself = (text: string, start: number, end: number): boolean => !digitByDigit(text.slice(start, end)) && !decimalPlaces(text, start, end);

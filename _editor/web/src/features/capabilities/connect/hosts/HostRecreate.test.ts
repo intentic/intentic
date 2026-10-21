@@ -34,7 +34,9 @@ let answering: RunningSandbox | undefined = checkout(1);
 const swappedOnto = (overlay?: string): void => {
     answering = checkout((answering?.bootedAt ?? 0) + 1, overlay);
 };
-jest.mock(`./swapLanding`, () => ({ ...swapLandingOriginal, answering: async () => answering }));
+// What a daemon older than `running` says instead (answering undefined): its version, and the overlay it was built from.
+let older: swapLandingOriginal.Answered = {};
+jest.mock(`./swapLanding`, () => ({ ...swapLandingOriginal, answering: async () => answering, olderAnswer: async () => older }));
 const swapServingSandbox = jest.fn(async (_hostId: string, _slug: string, _op: string, _payload?: unknown): Promise<string | undefined> => undefined);
 // Imported statically and spread: a module loaded inside a mock factory deadlocks bun's link of the graph naming it.
 // The machine this page can ask directly; undefined is one it cannot reach, where the command is the way.
@@ -124,6 +126,7 @@ afterEach(() => {
     fleet.value = [];
     autoResume.value = false;
     answering = checkout(1);
+    older = {};
     swapServingSandbox.mockClear();
     idleWait.value = undefined;
     waitsForAgents.value = false;
@@ -192,6 +195,36 @@ it(`keeps waiting when the sandbox the press was made on answers again`, async (
     await cutover();
     expect(backs).toBe(0);
     expect(shown()).toContain(`Update running…`);
+});
+
+// A daemon older than `running` says neither its build nor its boot: a blink mid-download there is not the swap landing
+// either. An update is told by the version moving off the one it was pressed on, a rebuild by its overlay, as before.
+it(`keeps waiting through a blink on a daemon older than running, and lands once the version moves`, async () => {
+    answering = undefined;
+    older = { version: `1.316.0` };
+    neverEnds();
+    await press();
+    await cutover();
+    expect(backs).toBe(0);
+    expect(shown()).toContain(`Update running…`);
+
+    older = { version: `1.317.0` };
+    await cutover();
+    expect(backs).toBe(1);
+});
+
+it(`keeps waiting through a blink on a daemon older than running, and lands a rebuild once it runs the overlay`, async () => {
+    answering = undefined;
+    older = { version: `1.316.0` };
+    neverEnds();
+    await press({ hash: `approved` });
+    await cutover();
+    expect(backs).toBe(0);
+    expect(shown()).toContain(`Rebuild running…`);
+
+    older = { version: `1.316.0`, appliedHash: `approved` };
+    await cutover();
+    expect(backs).toBe(1);
 });
 
 // A release build is told by its digest: a new boot on the digest it was pressed on is the swap come back without taking,

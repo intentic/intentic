@@ -17,7 +17,7 @@ import { ensureMutagen } from "../binary/mutagen-binary.js";
 import { isPortablePath } from "./project-files.js";
 import { assertFolder, type Durability, hashFile, installFile, localFile, localTarget, realDurability, removeFile } from "./project-local.js";
 import { mutagenSession, realProjectRunner } from "./project-remote.js";
-import { clearStaging, exclusively, type FolderContext, folderStateDir, type ProjectPairing, whileHeld } from "./project-transfer.js";
+import { clearStaging, exclusively, type FolderContext, folderStateDir, type ProjectPairing, transferHold, whileHeld } from "./project-transfer.js";
 import { backUp, createPointDir, pruneRestorePoints, type RestoreEntry, sealPoint, writeManifest } from "../restore-points.js";
 
 // LANDED WORK WRITTEN INTO THE OWNER'S FOLDER (`deliverProject` on the device link, the contract's
@@ -473,5 +473,5 @@ export const deliverToFolder = async (context: DeliveryContext, delivery: Projec
 export const deliverProject = async (delivery: ProjectDelivery, sandboxUrl: string): Promise<ProjectDeliveryResult> => {
     const pairing = deliveryPairingFor((await readState()).pairings, sandboxUrl, delivery.remoteDir);
     const session = mutagenSession(realProjectRunner, await ensureMutagen(), sessionName(pairingKey(pairing)));
-    return await deliverToFolder({ pairing, stateDir: baseDir, session }, delivery);
+    return await deliverToFolder({ pairing, stateDir: baseDir, session, recordHold: transferHold(pairing) }, delivery);
 };

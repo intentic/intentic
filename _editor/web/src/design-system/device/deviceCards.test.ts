@@ -59,6 +59,9 @@ it(`offers Resume only for the owner's own pause, and says why the machine holds
     // An agent older than `heldBy` only says Mutagen has it paused: a pause a person may lift, as before.
     expect(folderHold(folder)).toMatchObject({ word: `paused`, resumable: true });
     expect(folderHold({ ...folder, paused: false })).toBeUndefined();
+    // (2026-10-21) One that says nothing holds it is a session Mutagen has not resumed yet: no pause, and no Resume.
+    expect(folderHold({ ...folder, heldBy: [] })).toBeUndefined();
+    expect(filesLine(running(`a`, { folder: { ...folder, heldBy: [] } })).map((part) => part.text)).toEqual([`/home/ada/a`]);
 });
 
 it(`says a folder is paused for a full drive, and that some git history lags, as warnings`, () => {

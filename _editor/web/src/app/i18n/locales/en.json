@@ -3090,7 +3090,6 @@
             "held": "The sandbox held this turn back.",
             "cutShort": "The agent stopped before it finished.",
             "command": "The agent read this as a command it does not have.",
-            "advisory": "The agent finished with a warning.",
             "unclassified": "The agent stopped on an error this app does not recognize.",
             "details": "Details",
             "hideDetails": "Hide details",

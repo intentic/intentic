@@ -32,11 +32,14 @@ const parsed = <T extends z.ZodType>(schema: T, raw: string | undefined): z.infe
 // A key's provider and the rest, split at the first colon: no provider's name holds one.
 const split = (key: string): readonly [string, string] => [key.slice(0, Math.max(0, key.indexOf(":"))), key.slice(key.indexOf(":") + 1)];
 
-// `provider:model` → its bench: the fleet's spent allowance on that model, until then.
-const fromCooldowns = (stored: z.infer<typeof CooldownsSchema>): [string, ProviderRefusal][] =>
+// `provider:model` → its bench: the fleet's spent allowance on that model, until then. One that kept no `since` began
+// some time before this step ran, never at its `until`: filed days ahead, no answer could settle it before then, since an
+// answer settles only what was filed before its request went out (2026-10-21).
+const fromCooldowns = (stored: z.infer<typeof CooldownsSchema>, before: number): [string, ProviderRefusal][] =>
     Object.entries(stored).flatMap(([key, cooldown]) => {
         const [provider, model] = split(key);
-        const refusal: ProviderRefusal = { at: cooldown.since ?? cooldown.until, kind: "limit", message: cooldown.message, model, resetsAt: Math.ceil(cooldown.until / 1000) };
+        const at = cooldown.since ?? Math.min(cooldown.until, before);
+        const refusal: ProviderRefusal = { at, kind: "limit", message: cooldown.message, model, resetsAt: Math.ceil(cooldown.until / 1000) };
         return provider === "" ? [] : [[`${provider}:limit::${model}`, refusal]];
     });
 
@@ -85,7 +88,7 @@ export const refusalLedgerStep = defineStep({
             return undefined;
         }
         const folded = [
-            ...fromCooldowns(parsed(CooldownsSchema, await read(at(COOLDOWNS))) ?? {}),
+            ...fromCooldowns(parsed(CooldownsSchema, await read(at(COOLDOWNS))) ?? {}, Date.now() - 1),
             ...fromObserved(parsed(ObservedSchema, await read(at(OBSERVED))) ?? {}),
         ];
         const ledgerPath = at(providerRefusalsDocument.path);

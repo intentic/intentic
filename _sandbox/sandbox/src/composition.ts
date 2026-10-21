@@ -99,7 +99,7 @@ import { type BootTracker, createBootTracker } from "./system/boot/boot.js";
 import { DAEMON_OWNER } from "./seams/workload-stamp.js";
 import { type PlatformTunnel, startPlatformTunnel } from "./system/listeners/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./system/boot/reaper.js";
-import { createClientLogger, createPerfLogger, inLogContext } from "./logger.js";
+import { inLogContext, openLogFiles } from "./logger.js";
 import { streamAgent } from "./agent/run/stream-agent.js";
 import { turnDoors } from "./agent/run/turn/turn-doors.js";
 import type { TurnEngine } from "./seams/turn-engine.js";
@@ -471,6 +471,7 @@ const createBridgedMembers = (deps: Pick<Services, "config" | "logger" | "worksp
 // The members Services declares itself, which no slice owns: what the daemon is, and the stores and services beside
 // the slices.
 const createDaemonMembers = (
+    clientLogger: Logger | undefined,
     deps: Pick<
         Services,
         | "config"
@@ -495,7 +496,7 @@ const createDaemonMembers = (
         config,
         logger,
         // The browser's own reports, in their own file.
-        clientLogger: createClientLogger(config),
+        clientLogger,
         boot,
         announcer: createAnnouncer(config, logger, {
             identityKey: deps.platformIdentityKey.learn,
@@ -584,7 +585,7 @@ const keyringReach = (whole: () => Services, config: Config) => ({
     publicUrl: () => config.sandbox.publicUrl,
 });
 
-export const createServices = (config: Config, logger: Logger): Services => {
+export const createServices = (config: Config, logger: Logger, logFiles = openLogFiles(config)): Services => {
     // The one late binding left. A few services do work that reaches back into most of the daemon (a turn, a land's
     // breakage route, the provider catalogs, the safety judge, filing a browser account, a host's reach); they read the
     // finished services through this per call, and none is called before composing returns.
@@ -599,7 +600,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Who may call this daemon, and how: the roster, passkeys, sessions and every per-boot and per-extension token.
     const authSlice = createAuthSlice(config, workspace.root, logger, orgPolicy);
     // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
-    const perf = createPerfTracker(logger, createPerfLogger(config));
+    const perf = createPerfTracker(logger, logFiles.perf);
     const conversationsParts = createConversationsSlice({
         historyRoot: config.historyRoot,
         workspace,
@@ -790,7 +791,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ...providers.areas,
         ...bridged,
         ...leaves,
-        ...createDaemonMembers({
+        ...createDaemonMembers(logFiles.client, {
             ...processesSlice,
             config,
             logger,

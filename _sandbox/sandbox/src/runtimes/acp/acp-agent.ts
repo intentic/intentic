@@ -34,7 +34,7 @@ import {
 import { workspacePath } from "../../sessions/vocabulary/tool-calls.js";
 import { opt } from "../../opt.js";
 import { answerVendorAsk } from "../decorators/vendor-ask.js";
-import { withStderrTail } from "../decorators/vendor-errors.js";
+import { withStderrTail } from "../../engines/failure-sentences.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
 import type { AcpLaunch, AcpSessionMeta } from "./acp-spawn.js";

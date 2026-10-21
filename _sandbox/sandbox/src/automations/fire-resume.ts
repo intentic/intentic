@@ -158,8 +158,14 @@ type InboxRow = { readonly listener: ListenerEntry } | { readonly workspace: Wor
 
 export const automationInboxesInFlight = defineInFlight({
     name: "automation inboxes",
-    read: async (services: Pick<Services, "config" | "turnJournal">): Promise<readonly InboxRow[]> => {
-        const carried = new Set(journalledFires(await services.turnJournal.list()).flatMap((entry) => entry.inboxIds ?? []));
+    read: async (services: Pick<Services, "config" | "logger" | "turnJournal">): Promise<readonly InboxRow[]> => {
+        // The journal only names the rows a cut fire carries. Unreadable, no fire is re-fired this boot (the kind above
+        // reads nothing), so none carries any and every row goes back (2026-10-21: its throw had kept them all waiting).
+        const journal = await services.turnJournal.list().catch((error: Error): JournalEntry[] => {
+            services.logger.warn({ err: error }, "turn journal: unreadable at boot, every waiting inbox row is replayed");
+            return [];
+        });
+        const carried = new Set(journalledFires(journal).flatMap((entry) => entry.inboxIds ?? []));
         const [listener, workspace] = await Promise.all([listenerInboxRows(services), workspaceInboxRows(services)]);
         return [
             ...listener.filter((row) => !carried.has(row.id)).map((row) => ({ listener: row })),

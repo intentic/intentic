@@ -36,6 +36,25 @@ describe(`useSandboxQuery`, () => {
         await waitFor(() => expect(error.value).toBe(`The sandbox is restarting.`));
     });
 
+    // A try the read makes by itself after failing (a push, an interval) clears vue-query's own error while it runs; views
+    // that say the failure from `error`, with nothing in <Await>'s failed slot, drew a blank for the whole retry cycle,
+    // under a `loaded` that still said failed (the agent review's diff is invalidated about once a second while files land).
+    it(`keeps saying the failure through a retry the read makes by itself, as loaded does`, async () => {
+        let tries = 0;
+        const { query, error, loaded } = failingRead(`changes`, async () => {
+            tries += 1;
+            if (tries === 1) {
+                throw new Error(`The sandbox is restarting.`);
+            }
+            return await new Promise(() => {});
+        });
+        await waitFor(() => expect(loaded.value.state).toBe(`failed`));
+        void queryClient.invalidateQueries({ queryKey: [`changes`] });
+        await waitFor(() => expect(query.isFetching.value).toBe(true));
+        expect(loaded.value.state).toBe(`failed`);
+        expect(error.value).toBe(`The sandbox is restarting.`);
+    });
+
     // kind-lynx-0knq (10-15): a read held while the sandbox woke had `isLoading` false, and the workspace said it was
     // empty for half a minute. Held is a wait.
     it(`says a read held while the sandbox does not answer is a wait, never an empty answer`, () => {

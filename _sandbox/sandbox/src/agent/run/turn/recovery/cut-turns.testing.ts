@@ -1,6 +1,6 @@
 import type { Services } from "../../../../composition.js";
 import type { JournalledTurn } from "../../../../store/journals/turn-journal.js";
-import { recoverCutTurns } from "../turn-resume.js";
+import { recoverCutTurns } from "./cut-turns.js";
 import { type RestartResume, restartResume } from "./restart-resume-policy.js";
 
 // The boot's recovery of the turns a restart cut (turn-resume.ts, interruptedTurnsInFlight), over what the journal holds

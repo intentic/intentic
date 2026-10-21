@@ -542,6 +542,95 @@ describe("the Agents rail count", () => {
     });
 });
 
+// A sandbox older than `next` (before 1.343.0), which the hosted editor meets for as long as that sandbox stays off the
+// release that dropped the fields it says the same things in: a spent allowance's held turn booked to go again, and the
+// bookings in its queue. Its roster is parsed by the schema the wire's answer goes through, so those fields must
+// survive it, and the board must read them as the `next` a newer one sends.
+describe("a roster from a sandbox older than `next`", () => {
+    const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+    const NOW = Date.now();
+    const RESET = Math.floor(NOW / 1_000) + 3_600;
+    const card = (id: string, extra: Record<string, unknown>) => ({
+        id,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 500,
+        seenAt: 600,
+        attention: none,
+        ...extra,
+    });
+    const message = (extra: Record<string, unknown> = {}) => ({
+        id: `m1`,
+        text: `and then the release notes`,
+        voice: `person`,
+        queuedAt: 400,
+        revision: 1,
+        ...extra,
+    });
+    const limited = { status: `error`, failureCode: `rate_limit`, limitResetsAt: RESET, limitHeld: true };
+    // Exactly what such a daemon answers, through the schema the wire's answer is parsed by.
+    const roster = (): AgentSummary[] =>
+        AgentsListSchema.parse({
+            rev: 1,
+            agents: [
+                card(`resend`, { ...limited, limitScheduled: true, limitNextAt: RESET + 60 }),
+                card(`moving`, { ...limited, limitScheduled: true, limitMoving: `acct-2`, limitNextAt: RESET - 7_200 }),
+                // Nothing booked: the press is still owed.
+                card(`waiting`, limited),
+                // A failed turn whose words are booked for later, booked whole as a sandbox older than per-message bookings did.
+                card(`failed`, {
+                    status: `error`,
+                    failureCode: `harness-incomplete`,
+                    queue: { items: [message()], revision: 1, paused: `scheduled`, until: NOW + 7_200_000 },
+                }),
+                // Finished work with a message booked per message, for after another agent lands.
+                card(`finished`, { status: `landed`, queue: { items: [message({ after: `brave-otter-k2` })], revision: 1 } }),
+            ],
+        }).agents;
+    const cards = (): Map<string, FleetAgent> => new Map(useAgents().fleet.value.map((agent) => [agent.id, agent]));
+
+    beforeEach(() => resetSandboxScope());
+
+    it("files what goes by itself in Active and leaves only the press still owed in Attention", () => {
+        setAgents(roster(), 1);
+
+        expect(useAgents().lanes.value.attention.map((agent) => agent.id)).toEqual([`waiting`]);
+        expect(
+            useAgents()
+                .lanes.value.active.map((agent) => agent.id)
+                .toSorted(),
+        ).toEqual([`failed`, `finished`, `moving`, `resend`]);
+        expect(useAgents().attention.value).toBe(1);
+    });
+
+    it("reads each booking as the `next` a newer sandbox derives", () => {
+        setAgents(roster(), 1);
+
+        const read = cards();
+        expect(read.get(`resend`)?.next).toEqual({ kind: `rerun`, at: (RESET + 60) * 1_000 });
+        expect(read.get(`moving`)?.next).toEqual({ kind: `rerun`, at: (RESET - 7_200) * 1_000, onto: `acct-2` });
+        expect(read.get(`waiting`)?.next).toBeUndefined();
+        expect(read.get(`failed`)?.next).toEqual({ kind: `send`, at: NOW + 7_200_000, count: 1 });
+        expect(read.get(`finished`)?.next).toEqual({ kind: `land`, after: `brave-otter-k2`, count: 1 });
+    });
+
+    // Clear files away only what nothing carries on: a booked message's cancel is said by a press on its own card.
+    it("leaves a finished card with a booked message out of Clear", () => {
+        setAgents(roster(), 1);
+
+        const finished = cards().get(`finished`);
+        expect(finished === undefined ? undefined : clearable(finished)).toBe(false);
+    });
+
+    // A newer sandbox's own word stands, and says nothing carries it on when it sends none.
+    it("keeps the `next` a newer sandbox sends, and derives nothing beside it", () => {
+        const newer = AgentsListSchema.parse({ rev: 2, agents: [card(`resend`, { ...limited, next: { kind: `rerun`, at: 5_000 } })] }).agents;
+        setAgents(newer, 2);
+
+        expect(cards().get(`resend`)?.next).toEqual({ kind: `rerun`, at: 5_000 });
+    });
+});
+
 // The beat's audit: a roster frame that never applied leaves the board silently frozen until reload. The
 // heartbeat states its revision, sent only when the queue is empty, so a mismatch is proof, not a race.
 describe("the beat's audit of the roster", () => {

@@ -1,6 +1,7 @@
 import { waitFor } from "@intentic/testing/bun";
 import { ref } from "vue";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { AgentsListSchema } from "@intentic/sandbox-contract/schemas/agents-list";
 import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Exercises the pure derivation only, not the store's polling: a failed read must never become a zero, since this
@@ -15,7 +16,7 @@ const seen = jest.fn();
 jest.mock("../../../client/sandbox/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { list, seen } }) }));
 jest.mock("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: jest.fn() } }));
 
-const { boxAttention, markSeenAcross, otherBoxes, subscribe } = await import("./fleetAcross");
+const { boxAttention, markSeenAcross, otherBoxes, refreshAcross, subscribe } = await import("./fleetAcross");
 type BoxFleet = Parameters<typeof boxAttention>[0];
 
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -106,5 +107,35 @@ describe("marking an agent in another box as read", () => {
         seen.mockClear();
         markSeenAcross(`sbx-unknown`, `a1`);
         expect(seen).not.toHaveBeenCalled();
+    });
+});
+
+// A box older than `next` (before 1.343.0) says what carries a card on in the fields `next` replaced; its count must not
+// call its owner for a resend already booked or a failed turn whose words are booked for later.
+describe("a box older than `next`", () => {
+    it("counts only what still owes its owner a press", async () => {
+        sandboxes.value = [
+            { id: `sbx-here`, name: `Guest`, lastSeenAt: `2026-01-01T00:00:00Z` },
+            { id: `sbx-other`, name: `Laptop`, lastSeenAt: `2026-01-01T00:00:00Z` },
+        ];
+        const limited = { status: `error`, failureCode: `rate_limit`, limitResetsAt: 2_000_000_000, limitHeld: true };
+        const queued = { id: `m1`, text: `and then the tests`, voice: `person`, queuedAt: 1, revision: 1 };
+        // Through the schema the wire's answer is parsed by, as the daemon client parses it.
+        list.mockResolvedValue(
+            AgentsListSchema.parse({
+                rev: 2,
+                agents: [
+                    { ...agent({ id: `resend` }), ...limited, limitScheduled: true, limitNextAt: 2_000_000_060 },
+                    { ...agent({ id: `failed`, status: `error` }), queue: { items: [{ ...queued, until: 4_000_000_000_000 }], revision: 1 } },
+                    { ...agent({ id: `waiting` }), ...limited },
+                ],
+            }),
+        );
+        const release = subscribe();
+        refreshAcross();
+        await waitFor(() => expect(otherBoxes.value[0]?.agents.map((card) => card.id)).toEqual([`resend`, `failed`, `waiting`]));
+
+        expect(boxAttention(otherBoxes.value[0]!)).toBe(1);
+        release();
     });
 });

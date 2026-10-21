@@ -198,6 +198,41 @@ describe("what the gate keeps of a value the vault learned", () => {
         expect(await hits(vault, "Grace period ends today")).toBe(1);
     });
 
+    // 2026-10-21: judged by the spelling met rather than the value held, a learned full name written joined (a file name,
+    // a home directory) was one word and no name, and a learned PESEL beside a CSV row's numeric cell read as a decimal's
+    // places, so both went to the model as they were.
+    test("a value the vault learned is masked wherever its matcher finds it: a full name joined, a PESEL in a CSV row", async () => {
+        const vault = filePrivacyVault(join(dir, "vault.json"));
+        await vault.load();
+        const [first, last] = ["Zenobia", "Wrzosowska"];
+        const name = vault.tokenFor(`${first} ${last}`, "person-name");
+        const number = pesel(1985, 3, 14, 4562);
+        const id = vault.tokenFor(number, "national-id");
+        const masker = createMasker({ vault, policy: { classes: [...PERSONAL_DATA_CLASSES], allow: [], names: "dictionary" }, memo: createMaskMemo() });
+        const mask = async (text: string): Promise<string> => (await masker.mask(text)).text;
+        expect(await mask(`plik ${first}${last}.pdf`)).toBe(`plik ${name}.pdf`);
+        expect(await mask(`/home/${`${first}${last}`.toLowerCase()}/notes.txt`)).toBe(`/home/${name}/notes.txt`);
+        expect(await mask(`1,${number},Warszawa`)).toBe(`1,${id},Warszawa`);
+        expect(await mask(`Warszawa,${number},1`)).toBe(`Warszawa,${id},1`);
+    });
+
+    // 2026-10-21: a taught phone was masked inside a shell loop's digits, and restoring then wrote the taught spelling into
+    // the command; and as the places of a float. The matcher refused both for every value until 2026-10-20.
+    test("a taught number is not masked written a digit at a time, nor as the places of a decimal", async () => {
+        const vault = filePrivacyVault(join(dir, "vault.json"));
+        const digits = [..."601234567"];
+        const phone = [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6)].map((group) => group.join("")).join(" ");
+        await vault.learn("crm", [{ value: phone, class: "phone" }]);
+        const masker = createMasker({ vault, policy: { classes: [...PERSONAL_DATA_CLASSES], allow: [], names: "dictionary" }, memo: createMaskMemo() });
+        const mask = async (text: string): Promise<string> => (await masker.mask(text)).text;
+        const loop = `for i in ${digits.join(" ")}; do echo $i; done`;
+        expect(await mask(loop)).toBe(loop);
+        expect(masker.restore(await mask(loop))).toBe(loop);
+        const ratio = `{"ratio": 0.${digits.join("")}}`;
+        expect(await mask(ratio)).toBe(ratio);
+        expect(await mask(`call ${digits.join("")}`)).toBe(`call ${vault.tokenFor(phone, "phone")}`);
+    });
+
     // Found once beside a "tel.", a placeholder number was matched from then on in a shell loop's `for i in 1 2 3 …`.
     test("a placeholder number is not matched alone, and no number is matched written a digit at a time", async () => {
         const vault = filePrivacyVault(join(dir, "vault.json"));

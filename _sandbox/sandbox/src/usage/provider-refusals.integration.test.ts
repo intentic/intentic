@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ProviderRefusal } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
-import { fileProviderRefusalStore } from "./provider-refusals.js";
+import type { ServiceFacts } from "@intentic/sandbox-contract/models/plan-pools";
+import { fileProviderRefusalStore, memoryProviderRefusalStore } from "./provider-refusals.js";
 
 // Path's parent directory doesn't exist yet; the store must create it on write.
 const tempStore = () => {
@@ -236,4 +237,52 @@ test("files a refusal unstamped when the accounts cannot be read, to stand until
     const spent = refusal({ model: "gpt-6.1-sol" });
     await store.record("codex", spent);
     expect((await store.onFile())[`codex`]).toEqual([spent]);
+});
+
+// 2026-10-21: filing a spent allowance that named no instant waits on the accounts (to stamp its pool's reset), and the
+// write then replaced the slot whatever it held. Refused twice in one scope, the later refusal (its instant stated, so
+// filed at once) was overwritten by the earlier one landing after it, and a turn answered meanwhile found nothing to settle.
+test("a refusal filed late never replaces a newer one of its scope, and yields to a turn answered while it was filed", async () => {
+    const reading = { measuredAt: Date.now() - 60_000, windows: [{ kind: "five_hour", utilization: 97, gates: "all" as const, resetsAt: Math.floor(Date.now() / 1000) + 3_600 }] };
+    const slowAccounts = async (): Promise<readonly ServiceFacts[]> => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return [{ account: "a", usage: reading }];
+    };
+    const store = memoryProviderRefusalStore({}, { accountsOf: slowAccounts });
+    const older = refusal({ at: Date.now() - 2_000, account: "a", model: "claude-opus-5-5", message: "rate limit" });
+    const newer = refusal({ at: Date.now() - 1_000, account: "a", model: "claude-opus-5-5", message: "try again at 1:53 PM", resetsAt: Math.floor(Date.now() / 1000) + 7_200 });
+    await Promise.all([store.record("claude", older), store.record("claude", newer)]);
+    expect((await store.onFile())[`claude`]).toEqual([newer]);
+
+    const answered = memoryProviderRefusalStore({}, { accountsOf: slowAccounts });
+    const spent = refusal({ at: Date.now() - 1_000, account: "a", model: "claude-opus-5-5" });
+    await Promise.all([answered.record("claude", spent), answered.settle("claude", { account: "a", model: "claude-opus-5-5", askedAt: Date.now() })]);
+    expect(await answered.onFile()).toEqual({});
+});
+
+// 2026-10-21: a refusal past its horizon is forgotten on read, and nothing said so (the sweep that announced Cursor's
+// went with the ledger it swept): the capacity watch never re-judged at that instant, and every open window kept the
+// list last pushed to it.
+test("tells every listener when a refusal passes its horizon, as it does every other change", async () => {
+    const { store } = tempStore();
+    const heard: (readonly ProviderRefusal[])[] = [];
+    const unhear = store.onChange((provider, refusals) => provider === "cursor" && heard.push(refusals));
+    const spent = refusal({ account: "a", model: "composer-2.5", at: Date.now() - 2 * 60 * 60_000 + 300 });
+    await store.record("cursor", spent);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    unhear();
+    expect(await store.onFile()).toEqual({});
+    expect(heard).toEqual([[spent], []]);
+});
+
+// 2026-10-21: the ledger's boot step filed a routed model's bench that kept no `since` as refused at its `until`, days
+// ahead, and only a request sent after a refusal settles it: answered turns left the model spent until that instant.
+test("reads a refusal filed in the future as filed before the ledger opened, so an answer since settles it", async () => {
+    const until = Date.now() + 3 * DAY;
+    const migrated = refusal({ at: until, model: "kimi-k3-256k", message: "Kimi Code usage limit reached", resetsAt: Math.ceil(until / 1000) });
+    const store = memoryProviderRefusalStore({ kimi: [migrated] });
+    expect((await store.onFile())[`kimi`]).toMatchObject([{ model: "kimi-k3-256k", resetsAt: migrated.resetsAt }]);
+    expect((await store.onFile())[`kimi`]?.[0]?.at).toBeLessThanOrEqual(Date.now());
+    await store.settle("kimi", { account: undefined, model: "kimi-k3-256k", askedAt: Date.now() });
+    expect(await store.onFile()).toEqual({});
 });

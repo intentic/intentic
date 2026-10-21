@@ -149,11 +149,32 @@ export const mentionsSpentAllowance = (text: string): boolean =>
 // Wider than mentionsSpentAllowance, since by the time a vendor's own retries surface a sentence they are already spent.
 // The translator's own word for a model every credential of which it benched on a 429 counts too ("All credentials for
 // model … are cooling down"): the Claude loop read it as the rate limit it is, every other loop as a dead turn.
-const RATE_LIMITED = /rate.?limit|resource.?(?:has been )?exhausted|too many requests|\b429\b|\bcredentials for model .+ are cooling down\b/i;
+// A 429 counts where it is the status: opening the words, after "status", "HTTP", "code" or "error", or bracketed on its
+// own. Anywhere, it read a stack frame's line number (`cli.js:429:17`) as a spent plan (2026-10-21).
+const RATE_LIMITED =
+    /rate.?limit|resource.?(?:has been )?exhausted|too many requests|(?:^|\n)\s*429\b|\b(?:status(?:[ _]?code)?|http(?:\/[\d.]+)?|code|error)\W{0,3}429\b|[([]429[)\]]|\bcredentials for model .+ are cooling down\b/i;
 
 // A refusal driven by quota or allowance, not a real failure: the chat offers a retry-later notice instead of a Continue
 // that would just re-fail.
 export const isRateLimited = (message: string): boolean => mentionsSpentAllowance(message) || RATE_LIMITED.test(message);
+
+// A failure with its process's stderr folded in behind it, so a bare exit code becomes the actual reason. Folded behind
+// the Claude Agent SDK's own marker ("Claude Code process exited with code 1. stderr: …"), so whichever loop folded it,
+// what the failure said is told from what its process printed (withoutStderrTail).
+const STDERR_FOLD = ". stderr: ";
+
+export const withStderrTail = (message: string, stderrTail: string): string => {
+    const detail = stderrTail.trim();
+    return detail === "" ? message : `${message.replace(/\.$/u, "")}${STDERR_FOLD}${detail}`;
+};
+
+// What a failure said, without the stderr folded in behind it. What a process printed is its diagnostics, never a
+// provider's sentence: read with them, a stack frame's `cli.js:429:17` and a debug line's "usage limit 61% of 5-hour
+// window" each coded a crash as a spent plan, filed against a healthy account (2026-10-21).
+export const withoutStderrTail = (message: string): string => {
+    const at = message.indexOf(STDERR_FOLD);
+    return at === -1 ? message : message.slice(0, at);
+};
 
 /* An allowance an organisation's admin grants, which no usage endpoint reads, so a refusal in these words stands against
    every reading: Cursor's "ask your admin to increase your limit", a team's spend limit.

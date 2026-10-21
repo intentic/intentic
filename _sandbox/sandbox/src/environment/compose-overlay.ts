@@ -4,6 +4,7 @@ import { COMPOSE_OVERLAY_FORMAT, type ComposedOverlayLine } from "@intentic/sand
 import { createServices } from "../composition.js";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { loadConfig } from "../env.config.js";
+import { NO_LOG_FILES } from "../logger.js";
 import { composedOverlay } from "./overlay.js";
 import { opt } from "../opt.js";
 
@@ -21,8 +22,9 @@ if (values.base !== undefined && values.base.trim() !== "") {
 }
 
 // Warnings (a fragment skipped, a policy unreadable) go to stderr, which ic keeps in its log; stdout is the answer alone.
+// No log files: the volumes are mounted read-only, and a file's failed open would end this process after it composed.
 const logger = pino({ level: "warn" }, destination(2));
-const composed = await composedOverlay(createServices(loadConfig(), logger));
+const composed = await composedOverlay(createServices(loadConfig(), logger, NO_LOG_FILES));
 const line: ComposedOverlayLine = {
     compose: COMPOSE_OVERLAY_FORMAT,
     overlay: composed?.content ?? null,

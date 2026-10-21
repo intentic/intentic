@@ -1,4 +1,4 @@
-import { ACP, CLAUDE_CODE, CURSOR } from "@intentic/sandbox-contract/models/agent-runtimes";
+import { ACP, CLAUDE_CODE, CODEX, CURSOR } from "@intentic/sandbox-contract/models/agent-runtimes";
 import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy, type PrivacyShieldStatus } from "@intentic/sandbox-contract/schemas/privacy";
 import { privacyStanding } from "./privacyStanding";
 
@@ -69,6 +69,21 @@ describe(`where a conversation stands with the privacy shield before the send`, 
         );
         expect(privacyStanding(statusOf({ trusted: [`cursor`] }), `cursor`, CURSOR, `c-1`, undefined, `omen`)).toBeUndefined();
         expect(privacyStanding(statusOf({ mode: `watch` }), `cursor`, CURSOR, `c-1`, undefined, `omen`)).toBeUndefined();
+    });
+
+    // 2026-10-21: whatever privacy refusal the conversation's last turn ended on was said as found, with the grant, for a
+    // runtime the gateway masks here: a runner's refusal after the conversation came back from it, or another provider's.
+    // The next turn meets none of them, and the grant would let Claude read the conversation as it is for nothing.
+    test(`a refusal is said only where the next turn would meet it: for its own provider, on a route only a turn finds`, () => {
+        const offRunner = { code: `privacy-unshielded`, text: `The privacy shield did not send this to Claude: this conversation runs on studio.` };
+        expect(privacyStanding(statusOf({}), `claude`, CLAUDE_CODE, `c-1`, offRunner)).toBeUndefined();
+        expect(privacyStanding(statusOf({}), `claude`, CLAUDE_CODE, `c-1`, { ...offRunner, route: `runner`, provider: `claude` })).toBeUndefined();
+        expect(privacyStanding(statusOf({}), `cursor`, CURSOR, `c-1`, { ...offRunner, route: `runner`, provider: `cursor` })).toBeUndefined();
+        expect(privacyStanding(statusOf({}), `claude`, CLAUDE_CODE, `c-1`, { code: `privacy-unshielded`, route: `runtime`, provider: `my-acp` })).toBeUndefined();
+        // Codex called with the container's own key goes past the gateway: only its turn finds that, and the grant clears it.
+        const ownKey = { code: `privacy-unshielded`, text: `…`, route: `own-key`, provider: `codex` } as const;
+        expect(privacyStanding(statusOf({}), `codex`, CODEX, `c-1`, ownKey)).toMatchObject({ kind: `found`, provider: `codex` });
+        expect(privacyStanding(statusOf({}), `claude`, CLAUDE_CODE, `c-1`, ownKey)).toBeUndefined();
     });
 
     // The strip reads the daemon's own verdict (privacy-egress.ts), so a grant is said wherever it lets the provider read

@@ -209,9 +209,9 @@ const windowList = computed(() => [
 
 // ===== The live apps =====
 
-const { targets, listed: appsRead, start, stop, forward, refresh } = usePreviewTargets(browsersOpened);
-// Only the list's answer can say which apps there are; until then (or while it fails) nothing is picked or promised.
-const settled = computed(() => appsRead.value.state === `ready`);
+const { targets, listed: appsRead, pickable, start, stop, forward, refresh } = usePreviewTargets(browsersOpened);
+// Only the apps list's answer can say which apps there are; until then (or while it fails) nothing is picked or promised.
+const settled = pickable;
 const previewActions = { start, stop, forward, refresh };
 
 // The app a pin is of, exactly: a `repo:` pin whose repo now runs as apps lands on its first app, as the old picker did,

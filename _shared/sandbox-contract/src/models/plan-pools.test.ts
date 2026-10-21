@@ -334,6 +334,37 @@ test("a spent allowance with no instant named is stamped with its pool's reset, 
     expect(serviceStates([{ account: "a", usage: lapsed }], [filed], undefined, reset * 1000).get("a")).toEqual({ kind: "ready", room: 60 });
 });
 
+// 2026-10-21: Claude refused at 5h 98% and weekly 97% (rounded) with no time named, so the refusal was stamped with the
+// five-hour reset, the fullest pool then. Once that window reopened the weekly pool read 100, and the passed stamp ended
+// the refusal anyway: a rounded 100 is no proof of empty, so the account read ready with no room and every turn let
+// through was refused again. A stamp ends the refusal where nothing read since says otherwise, never over a reading.
+test("a stamped reset ends a refusal only where no reading since it says the pool is still at the line", () => {
+    const fiveHourReset = 1_800_000_000;
+    const weeklyReset = 1_800_259_200;
+    const refusedIn = at(
+        1_799_989_000_000,
+        window({ kind: "five_hour", utilization: 98, rounded: true, resetsAt: fiveHourReset }),
+        window({ kind: "seven_day", utilization: 97, rounded: true, resetsAt: weeklyReset }),
+    );
+    const spent = refusal({ kind: "limit", account: "a", at: 1_799_990_000_000 });
+    expect(refusedPoolReset(spent, [{ account: "a", usage: refusedIn }])).toBe(fiveHourReset);
+    const stamped = { ...spent, poolResetsAt: fiveHourReset };
+    const now = (fiveHourReset + 700) * 1000;
+    const weeklyFull = at(
+        (fiveHourReset + 600) * 1000,
+        window({ kind: "five_hour", utilization: 4, rounded: true, resetsAt: fiveHourReset + 18_000 }),
+        window({ kind: "seven_day", utilization: 100, rounded: true, resetsAt: weeklyReset }),
+    );
+    const unstampedVerdict = serviceStates([{ account: "a", usage: weeklyFull }], [spent], undefined, now).get("a");
+    expect(unstampedVerdict).toEqual({ kind: "spent", reopensAt: weeklyReset });
+    expect(serviceStates([{ account: "a", usage: weeklyFull }], [stamped], undefined, now).get("a")).toEqual(unstampedVerdict);
+    expect(fleetCapacity([{ account: "a", usage: weeklyFull }], [stamped], undefined, now)).toMatchObject({ kind: "spent", reopensAt: weeklyReset });
+    // Nothing read since the stamp: it ends there. Read with room since: over.
+    expect(serviceStates([{ account: "a", usage: refusedIn }], [stamped], undefined, now).get("a")).toEqual({ kind: "ready", room: 2 });
+    const roomSince = at((fiveHourReset + 600) * 1000, window({ kind: "five_hour", utilization: 4, resetsAt: fiveHourReset + 18_000 }), window({ kind: "seven_day", utilization: 60, resetsAt: weeklyReset }));
+    expect(refusalVerdict(stamped, [{ account: "a", usage: roomSince }], now)).toBe("answered");
+});
+
 test("the stamp is the refused account's pool, or the soonest of any where the refusal named none", () => {
     const soon = at(500, window({ kind: "five_hour", utilization: 96, resetsAt: 10 }));
     const later = at(500, window({ kind: "five_hour", utilization: 96, resetsAt: 50 }));

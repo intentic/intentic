@@ -21,8 +21,8 @@ import { useOperation } from "../../../../workbench/operations/operations";
 import { turnInFlight } from "../../../../models/agent-status/agentStatus-standing";
 import { useAgents } from "../../../../models/fleet/useAgents";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
-import type { RunningSandbox, SwapVerdict } from "@intentic/sandbox-contract/state/sandbox-build";
-import { answering, swapStanding } from "./swapLanding";
+import type { SwapVerdict } from "@intentic/sandbox-contract/state/sandbox-build";
+import { type Answered, answering, olderAnswer, swapStanding } from "./swapLanding";
 import { followSwap, type SwapEnd, SwapGaveUp, type SwapProgress } from "./swapFollow";
 import { useRebuildWhenIdle } from "./useRebuildWhenIdle";
 import ConnectDeviceHint from "../../../../parts/sandbox/ConnectDeviceHint.vue";
@@ -258,13 +258,18 @@ const QUIET = computed((): Record<Action, RestartQuiet> => ({
     },
 }));
 
-// What answered when a follow began, read in the background: the build and boot a swap is told against (swapLanding.ts).
+// What answers now: its build and boot, or what a daemon older than `running` says instead (swapLanding.ts).
+const answered = async (overlay: string | undefined): Promise<Answered> => {
+    const running = await answering();
+    return running === undefined ? await olderAnswer(overlay) : { running };
+};
+// What answered when a follow began, read in the background: the build and boot, or the version, a swap is told against.
 // Unread, a rebuild is still told by its overlay, and anything else by the sandbox answering again after going quiet.
-const pressedOn = (): (() => RunningSandbox | undefined) => {
-    let from: RunningSandbox | undefined;
-    void answering()
-        .then((running) => {
-            from = running;
+const pressedOn = (): (() => Answered | undefined) => {
+    let from: Answered | undefined;
+    void answered(undefined)
+        .then((read) => {
+            from = read;
         })
         // allow(silent-catch): unread, the landing is told as swapStanding says for a sandbox that said nothing
         .catch(() => undefined);
@@ -272,9 +277,9 @@ const pressedOn = (): (() => RunningSandbox | undefined) => {
 };
 // Where a swap aimed at `overlay` (a rebuild) or away from what answered at the press stands, asked of what answers now.
 const standing =
-    (overlay: string | undefined, pressed: () => RunningSandbox | undefined) =>
+    (overlay: string | undefined, pressed: () => Answered | undefined) =>
     async (now: SwapProgress): Promise<SwapVerdict> =>
-        swapStanding({ from: pressed(), overlay }, await answering(), now);
+        swapStanding({ from: pressed(), overlay }, await answered(overlay), now);
 
 // A REBUILD THE SANDBOX STARTED BY ITSELF once its agents were idle. Nobody pressed anything here and the sandbox reports
 // it (`rebuilding` on /environment, read again on every mount), so it is followed for as long as this card is open,

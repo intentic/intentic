@@ -13,6 +13,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { whenAborted } from "@intentic/base/async";
 import { refreshClaudeSdk } from "../../engines/claude-sdk.js";
+import { withStderrTail } from "../../engines/failure-sentences.js";
 import { spawnAs } from "../../workload/workload-class.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -128,11 +129,10 @@ const syncOnAnswer = async (
 const STDERR_TAIL = 2000;
 
 // Folds the Claude Code subprocess's stderr tail into the surfaced error, so a bare exit code becomes the actual
-// reason.
+// reason; folded as every loop folds one, so it is never read as what the failure said (codedFailure).
 const errorMessage = (error: unknown, stderr: string): string => {
     const base = error instanceof Error ? error.message : "agent failed";
-    const detail = stderr.trim().slice(-STDERR_TAIL);
-    return detail ? `${base}: ${detail}` : base;
+    return withStderrTail(base, stderr.trim().slice(-STDERR_TAIL));
 };
 
 // Maps output-cleaner settings to env vars for the Bash filter; 'off' disables it, everything else selects which

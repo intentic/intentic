@@ -39,6 +39,8 @@ const viewOf = (rows: readonly ChatMessage[] = ROWS) => {
         error: ref<string | null>(`an older failure`),
         session: ref<SessionRef | undefined>(SESSION),
         turn: { streaming: computed(() => false), say: jest.fn<Host["turn"]["say"]>(async () => undefined) },
+        // The last turn ended on a failure nothing brings back by itself: the tab reads as failed (TurnFailures.crashed).
+        failures: { crashed: ref(true) },
     };
     const view = new TranscriptView(() => undefined, host);
     view.adopt(rows);
@@ -67,6 +69,20 @@ describe(`rewindTo`, () => {
         ]);
         expect(host.session.value).toBeUndefined();
         expect(host.error.value).toBeNull();
+    });
+
+    // Going back past a turn that crashed takes the failure with it, as it takes the error line: the tab stayed red until
+    // the next turn started (2026-10-21).
+    it(`takes a crashed turn's failure back with the rows it drops, and leaves it standing when the daemon refused`, async () => {
+        const { host, view, row } = viewOf();
+        rewind.mockImplementationOnce(async () => {
+            throw new SandboxHttpError(409, `Busy.`);
+        });
+        expect(await view.rewindTo(row(4))).toBe(false);
+        expect(host.failures.crashed.value).toBe(true);
+
+        expect(await view.rewindTo(row(4))).toBe(true);
+        expect(host.failures.crashed.value).toBe(false);
     });
 
     it(`says why the daemon refused, and leaves the transcript and session standing`, async () => {
@@ -244,7 +260,7 @@ describe(`the transcript's own lines`, () => {
         expect(view.editing.value).toBeUndefined();
         expect(view.historyFrom.value).toBe(3);
         expect(view.historyMore.value).toBe(true);
-        expect(host.error.value).toBeNull();
+        expect([host.error.value, host.failures.crashed.value]).toEqual([null, false]);
 
         view.restoreMessages(ROWS);
         expect(view.historyFrom.value).toBe(0);

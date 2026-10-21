@@ -306,6 +306,12 @@ export const AgentSummarySchema = z.object({
     // Epoch seconds the spent allowance reopens; absent means genuinely unknown (Grok, Cursor) — never guess one.
     limitResetsAt: z.number().optional().describe("When the spent allowance reopens, in epoch seconds. Absent when the provider publishes no instant."),
     limitHeld: z.boolean().optional().describe("Whether the refused turn is held whole, so sending again re-runs it instead of appending to it."),
+    // What a sandbox older than `next` (before 1.343.0) said in its place, read so the editor can derive `next` from it
+    // (agentStatus-standing.ts, withNext): the hosted editor meets such a sandbox for as long as it stays off the release
+    // that dropped them, which carried a Breaking-Note and so is never taken by itself. No sandbox sends them since.
+    limitScheduled: z.boolean().optional().describe("Sent only by sandboxes older than `next`: whether the held turn was booked to go again by itself."),
+    limitMoving: z.string().optional().describe("Sent only by sandboxes older than `next`: the account a booked move was taking the held turn to."),
+    limitNextAt: z.number().optional().describe("Sent only by sandboxes older than `next`: when the booked re-run went, in epoch seconds."),
     // The one answer to "does it go by itself, and when" (agent-next.ts), derived from what it holds every time it is read.
     next: AgentNextSchema.optional().describe(
         "What carries it on next with nobody pressing anything, and when: a held turn re-run, a message held for memory, or messages booked for later. Absent when only a press moves it.",

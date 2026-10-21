@@ -1,7 +1,7 @@
 import type { Logger } from "pino";
 import { cutChildrenInFlight, spawnedChildrenInFlight } from "../../agent/subagents/child-restore.js";
 import { scriptRunsInFlight } from "../../agent/subagents/workflows/script-runs.js";
-import { interruptedTurnsInFlight } from "../../agent/run/turn/turn-resume.js";
+import { interruptedTurnsInFlight } from "../../agent/run/turn/recovery/cut-turns.js";
 import { backgroundJobsInFlight, keptJobsInFlight } from "../../agent/tools/jobs/jobs-in-flight.js";
 import { watchesInFlight } from "../../agent/verification/watchers.js";
 import { automationInboxesInFlight, interruptedFiresInFlight } from "../../automations/fire-resume.js";

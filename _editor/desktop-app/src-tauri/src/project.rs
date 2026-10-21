@@ -1037,14 +1037,19 @@ pub(crate) fn forget_sandbox(slug: Option<&str>, sandbox_id: Option<&str>) {
 }
 
 /// The sandboxes this machine's agent syncs (`intentic-machine status --json`, `sync.pairings`): only those are told
-/// to let go, since the account's other sandboxes (hosted, shared) were never synced here. Pure.
-fn paired_sandboxes(status: &serde_json::Value) -> HashSet<String> {
+/// to let go, since the account's other sandboxes (hosted, shared) were never synced here. By their platform row, as
+/// the roster names the ones that went (bindings.rs `platform_id`, 2026-10-21; a sandbox whose row this app does not
+/// know is none of them). Pure.
+fn paired_sandboxes(
+    status: &serde_json::Value,
+    mine: &crate::machine_sandbox::Record,
+) -> HashSet<String> {
     status["sync"]["pairings"]
         .as_array()
         .map(|pairings| {
             pairings
                 .iter()
-                .filter_map(|pairing| pairing["sandboxId"].as_str().map(str::to_string))
+                .filter_map(|pairing| crate::bindings::platform_id(pairing, mine))
                 .collect()
         })
         .unwrap_or_default()
@@ -1080,7 +1085,7 @@ pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
         let Some(report) = crate::bindings::refresh(&app) else {
             return;
         };
-        let paired = paired_sandboxes(&report);
+        let paired = paired_sandboxes(&report, &crate::machine_sandbox::status(&app));
         let forgotten: Vec<_> = gone.iter().filter(|(_, id)| paired.contains(id)).collect();
         for (slug, id) in &forgotten {
             forget_sandbox(slug.as_deref(), Some(id));
@@ -2073,6 +2078,27 @@ mod tests {
         let stale = stale_projects(&projects, &listed, Some("cm-machine"));
         assert_eq!(stale, vec![project(Some("cm-gone"))]);
         assert!(stale_projects(&projects, &roster_of(&[], false), None).is_empty());
+    }
+
+    /// (2026-10-21) What this machine syncs is compared with the roster's rows, so it is named by the row too: the
+    /// agent's own id for a sandbox (its address) is in no roster. A sandbox whose row this app does not know is never
+    /// one this machine is told to let go of for a roster.
+    #[test]
+    fn the_sandboxes_this_machine_syncs_are_named_by_their_platform_row() {
+        let mine = crate::machine_sandbox::Record {
+            sandbox_id: Some("cmvc7h3cl002801mkboza1qz6".into()),
+            slug: Some("sandbox-7953ae151fa4".into()),
+            hostname: Some("sandbox-7953ae151fa4.sbx.intentic.dev".into()),
+            ..crate::machine_sandbox::Record::default()
+        };
+        let status = serde_json::json!({ "sync": { "pairings": [
+            { "sandboxId": "sandbox-7953ae151fa4-sbx-intentic-dev", "mode": "sync", "projectsHost": true },
+            { "sandboxId": "sandbox-cfde7c98599a-sbx-intentic-dev", "mode": "sync", "localDir": "/home/ada/intentic/workspace" },
+        ] } });
+        assert_eq!(
+            paired_sandboxes(&status, &mine),
+            HashSet::from(["cmvc7h3cl002801mkboza1qz6".to_string()])
+        );
     }
 
     /// Only the same account's listing losing a sandbox says it went: a sign-out or another account says nothing.

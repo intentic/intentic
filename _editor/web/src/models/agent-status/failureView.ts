@@ -1,3 +1,4 @@
+import { parseJsonOr } from "@intentic/base/json";
 import type { AgentErrorCode } from "@intentic/sandbox-contract/events/agent-events";
 import type { FailureSaid } from "@intentic/sandbox-contract/events/sandbox-notice";
 import { t } from "@intentic/ui/i18n";
@@ -6,14 +7,22 @@ import { memoryShare } from "./memoryTip";
 
 /*
  * A FAILURE AS A PERSON READS IT, IN THE CHAT AND ON THE BOARD, for every failure whatever path it came by: one line in the reader's
- * language, and what the provider or the harness said one press away. The line is never someone else's words. Where the
- * sandbox worded the failure itself (the row's `own`), its sentence is the line; where it is the provider's or the
+ * language, and what the provider or the harness said one press away. Where the sandbox worded the failure itself (the
+ * row's `own`), its sentence is the line; where a code names the failure and the words are the provider's or the
  * harness's (a six-paragraph safeguard flag, a JSON body, a stack trace, a vendor's "Click Continue"), the line is this
  * build's own for the failure's kind (agentStatus-failure.ts, the same kinds the board names), and those words are the
- * details. A failure nothing coded is the unclassified kind, said as such. Before this, the line was guessed out of the
- * provider's words by their first sentence, and rows that carried no code were recognised by marks in them: whatever
- * slipped past both reached the chat as raw text (2026-10-06, 10-19, 10-20). The board card's line is this same line
- * (agentStatus-chips.ts cardFailure), so the two surfaces cannot word one failure two ways.
+ * details. The board card's line is this same line (agentStatus-chips.ts cardFailure), so the two surfaces cannot word
+ * one failure two ways.
+ *
+ * Two failures have no kind to lead them, and say what their own words say instead. A warning the runtime went on past
+ * is a note, in its own words, while the turn goes on: the kind's line said the agent had finished, over a turn still
+ * working, and hid the note behind the press (2026-10-21). A failure nothing coded (a row stored before failures were,
+ * a runtime's sentence it left uncoded, Cursor's "Connect your Cursor account again") is a safeguard flag by the CLI's
+ * words for one, else the whole of a short sentence that is no provider's dump, else the first thing the provider said
+ * after the wrappers in front of it, its words whole behind the press; only words that say nothing (a bare status, a
+ * body with no sentence in it) are the unclassified kind. Drawn as that kind whatever they said, a spent allowance, a
+ * revoked sign-in, a safeguard flag and the sandbox's own instruction all read "an error this app does not recognize"
+ * (2026-10-21).
  *
  * Authorship is recorded, never inferred: a row or an ending from before `own` was kept (2026-10-20) reads as the
  * provider's, its kind's line leading and its words behind the press, the sandbox's sentence included. Inferring it from
@@ -31,7 +40,7 @@ export interface FailureView {
     readonly ends: boolean;
 }
 
-// The line a provider's words are led by, per kind, and for a failure nothing named.
+// The line a provider's words are led by, per kind. A warning has none: its own words are its line.
 const KIND_LINES = {
     access: () => t(`chat.failure.access`),
     signedOut: () => t(`chat.failure.signedOut`),
@@ -45,8 +54,7 @@ const KIND_LINES = {
     held: () => t(`chat.failure.held`),
     cutShort: () => t(`chat.failure.cutShort`),
     command: () => t(`chat.failure.command`),
-    advisory: () => t(`chat.failure.advisory`),
-} as const satisfies Record<FailureKind, () => string>;
+} as const satisfies Record<Exclude<FailureKind, `advisory`>, () => string>;
 
 // The sandbox's own sentences this build says in the reader's language rather than the sandbox's English: a memory hold
 // keeps its figures, in a few characters.
@@ -71,13 +79,153 @@ export const failureView = ({ message, error, own }: FailureSaid): FailureView =
         return { line: message, ends };
     }
     const kind = kindOfCode(error);
-    return { line: kind === undefined ? t(`chat.failure.unclassified`) : KIND_LINES[kind](), said: message, ends };
+    if (kind === `advisory`) {
+        return { ...(spoken(message) ?? { line: message }), ends };
+    }
+    if (kind !== undefined) {
+        return { line: KIND_LINES[kind](), said: message, ends };
+    }
+    // A code this build does not know (a newer sandbox's) is the unclassified kind: its words were coded, so the
+    // sandbox that coded them had something to say beyond them.
+    return { ...(error === undefined ? uncoded(message) : unclassified(message)), ends };
 };
 
-// Marks only a provider's or a harness's failure carries, for a row written before failures were coded: such a row is
-// the unclassified kind, its words the details. Nothing written since needs reading this way (failure-rows.ts).
+// Marks only a provider's or a harness's failure carries: a row written before failures were coded is a failure by
+// them, and words that carry one are a dump to read for the claim in it, not a sentence to draw whole.
 const PROVIDER_MARKERS = [/\bAPI Error\b/, /\bRequest ID:/, /\bsafeguards flagged this\b/i, /\berror result:/i, /\bstderr:/, /\bunexpected status \d{3}\b/i, /\n\s+at /];
+
+// The Claude CLI's sentence for a turn its provider's safety classifier stopped ("Opus 5.5's safeguards flagged this
+// session", "… stopped the response above").
+const SAFEGUARD = /\bsafeguards (?:flagged this (?:message|session)|stopped the response)\b/i;
+
+// A message this short, on one line, is already its own line: nothing is folded away from it.
+const SHORT = 120;
+// A first sentence past this is a paragraph without a full stop, and is cut at a word.
+const LONGEST = 200;
+// A parenthetical longer than this is an aside (an upstream's diagnostics, a list of providers), not part of the claim.
+const ASIDE = 30;
+
+// What stands in front of the provider's own words: the Agent SDK's result prefix, then anything up to the CLI's
+// "API Error:" and the HTTP status after it. What comes before an "API Error:" is the CLI's guess at a category
+// ("Failed to authenticate.") rather than what the provider said, so the line starts after it; the details keep it.
+const RESULT_PREFIX = /^Claude Code returned an error result:\s*/i;
+const API_ERROR = /^[\s\S]*?\bAPI Error:\s*(?:\d{3}\b\s*)?/;
+
+// A JSON error body a routed provider answered with, read for the sentence it carries.
+const BODY_MESSAGE = /"message"\s*:\s*"((?:[^"\\]|\\.)*)"/;
+
+// Where a sentence stops reading as a claim and starts reading as a dump: a colon followed by a path, a URL or a body.
+const DUMP = /:\s+(?=file:|https?:\/\/|\/|\{|\[)/;
+
+const HAS_URL = /https?:\/\//;
+// Words that say something: a bare status ("401.") or punctuation says nothing a reader can act on.
+const HAS_WORD = /\p{L}/u;
+
+// The provider's own words, without the wrappers the SDK and the CLI put in front of them.
+const unwrapped = (said: string): string => {
+    const bare = said.trim().replace(RESULT_PREFIX, ``);
+    const spokenWords = bare.replace(API_ERROR, ``).trim();
+    if (spokenWords.startsWith(`{`)) {
+        const inner = BODY_MESSAGE.exec(spokenWords)?.[1];
+        if (inner !== undefined) {
+            // An escape JSON refuses leaves the body as it was said.
+            return String(parseJsonOr(`"${inner}"`, spokenWords));
+        }
+    }
+    return spokenWords === `` ? bare : spokenWords;
+};
+
+// The line without its asides: a parenthetical that is long or holds a link goes, and one never closed (a body cut off
+// mid-way) ends the line where it opened.
+const withoutAsides = (line: string): string => {
+    const opened: number[] = [];
+    const cuts: [number, number][] = [];
+    for (let index = 0; index < line.length; index++) {
+        if (line[index] === `(`) {
+            opened.push(index);
+        } else if (line[index] === `)` && opened.length > 0) {
+            const start = opened.pop()!;
+            const inside = line.slice(start + 1, index);
+            if (opened.length === 0 && (inside.length > ASIDE || HAS_URL.test(inside))) {
+                cuts.push([start, index + 1]);
+            }
+        }
+    }
+    const end = opened[0] ?? line.length;
+    let kept = ``;
+    let from = 0;
+    for (const [start, stop] of cuts) {
+        kept += line.slice(from, start).trimEnd();
+        from = stop;
+    }
+    return (kept + line.slice(from, end)).trim();
+};
+
+// Up to the first full stop outside any parentheses that ends a word, not one inside a version ("Opus 5.5's").
+const firstSentence = (line: string): string => {
+    let depth = 0;
+    for (let index = 0; index < line.length; index++) {
+        const char = line[index];
+        if (char === `(`) {
+            depth += 1;
+        } else if (char === `)`) {
+            depth = Math.max(0, depth - 1);
+        } else if (depth === 0 && (char === `.` || char === `!` || char === `?`) && (index + 1 === line.length || /\s/.test(line[index + 1]!))) {
+            return line.slice(0, index + 1);
+        }
+    }
+    return line;
+};
+
+// Cut at a word near the limit, never mid-word; a line ending in the middle of nothing gets a full stop.
+const settled = (line: string): string => {
+    const tidy = line.replace(/[\s,;:–—-]+$/u, ``);
+    if (tidy.length > LONGEST) {
+        const room = tidy.slice(0, LONGEST - 1);
+        const space = room.lastIndexOf(` `);
+        return `${(space > LONGEST / 2 ? room.slice(0, space) : room).replace(/[\s,;:]+$/, ``)}…`;
+    }
+    return /[.!?…)"'`]$/.test(tidy) ? tidy : `${tidy}.`;
+};
+
+// The first thing the provider said, as one sentence.
+const firstClaim = (words: string): string => {
+    const line = words.split(`\n`).find((candidate) => candidate.trim() !== ``)?.trim() ?? words.trim();
+    const sentence = firstSentence(withoutAsides(line));
+    // A dump's own field name goes with it: "…, url: http://…" leaves no dangling "url".
+    const dump = DUMP.exec(sentence);
+    return settled(dump !== null && dump.index >= 12 ? sentence.slice(0, dump.index).replace(/,\s*[\w-]+$/, ``) : sentence);
+};
+
+// A sentence without its closing stop, to compare two that differ only by one.
+const unpunctuated = (text: string): string => text.replace(/[\s.!?…]+$/u, ``);
+
+// What words say as a line: the whole of a short sentence that is no provider's dump, else the first thing said after
+// the wrappers in front of it, the words whole behind the press. Undefined for words that say nothing.
+const spoken = (said: string): Pick<FailureView, `line` | `said`> | undefined => {
+    const whole = said.trim();
+    if (!HAS_WORD.test(whole)) {
+        return undefined;
+    }
+    if (whole.length <= SHORT && !whole.includes(`\n`) && !PROVIDER_MARKERS.some((marker) => marker.test(whole))) {
+        return { line: whole };
+    }
+    const words = unwrapped(whole);
+    // A body with no sentence in it ("API Error: 500 {"type":"error"}") says nothing.
+    const line = /^[{[]/.test(words) ? `` : firstClaim(words);
+    if (!HAS_WORD.test(line)) {
+        return undefined;
+    }
+    // A line that says all of it, give or take the full stop it was given, folds nothing away and opens no details.
+    return unpunctuated(line) === unpunctuated(whole) ? { line: whole } : { line, said };
+};
+
+const unclassified = (said: string): Pick<FailureView, `line` | `said`> => ({ line: t(`chat.failure.unclassified`), said });
+
+// A failure nothing coded: a safeguard flag by the CLI's words for one, else what its words say, else unclassified.
+const uncoded = (said: string): Pick<FailureView, `line` | `said`> =>
+    SAFEGUARD.test(said) ? { line: KIND_LINES.flagged(), said } : (spoken(said) ?? unclassified(said));
 
 /** The failure a row recorded before failures were coded says, by marks no sandbox sentence carries; undefined for any other. */
 export const legacyFailure = (text: string): FailureView | undefined =>
-    PROVIDER_MARKERS.some((marker) => marker.test(text)) ? { line: t(`chat.failure.unclassified`), said: text, ends: true } : undefined;
+    PROVIDER_MARKERS.some((marker) => marker.test(text)) ? { ...uncoded(text), ends: true } : undefined;

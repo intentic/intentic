@@ -17,6 +17,7 @@ import { readTranscript, saveTranscript } from "../transcript/transcriptCache";
 import { TranscriptClock } from "../transcript/transcriptClock";
 import { firstWhere, runningTotal } from "../transcript/transcriptScan";
 import type { PendingAttachment } from "../../../features/chat/drafts/useChatAttachments";
+import type { TurnFailures } from "../endings/turnFailures";
 import type { Conversation } from "./conversation";
 import type { TurnClient } from "./turnClient";
 
@@ -37,9 +38,11 @@ const rewindRefusal = (status: number): string => {
 // once one did not answer.
 export type TranscriptRefresh = { readonly kind: `reconnecting` } | { readonly kind: `failed`; readonly reason?: string };
 
-// What an edit and a rewind need from the conversation around the transcript.
+// What an edit and a rewind need from the conversation around the transcript. A redraw, a rewind and a placed answer each
+// take back the error line and a crashed turn's failure together: the turn that failed is no longer the last word.
 export type TranscriptHost = Pick<Conversation, "conversationId" | "box" | "draft" | "attachments" | "error" | "session"> & {
     readonly turn: Pick<TurnClient, "streaming" | "say">;
+    readonly failures: Pick<TurnFailures, "crashed">;
 };
 
 const NOTHING_DOOMED: ReadonlySet<number> = new Set();
@@ -184,6 +187,7 @@ export class TranscriptView extends TranscriptClock {
         this.historyFrom.value = page?.from ?? 0;
         this.historyMore.value = page?.more ?? false;
         this.host.error.value = null;
+        this.host.failures.crashed.value = false;
         this.persist(true);
     }
 
@@ -248,6 +252,7 @@ export class TranscriptView extends TranscriptClock {
         );
         this.host.session.value = undefined;
         this.host.error.value = null;
+        this.host.failures.crashed.value = false;
         this.persist(true);
         return true;
     }
@@ -323,6 +328,7 @@ export class TranscriptView extends TranscriptClock {
         this.append(placed.rowId === undefined ? row : { ...row, rowId: placed.rowId });
         this.host.session.value = undefined;
         this.host.error.value = null;
+        this.host.failures.crashed.value = false;
         this.persist(true);
         return true;
     }

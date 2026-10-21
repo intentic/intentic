@@ -23,7 +23,7 @@ import { turnCheckReports, turnChecksNote, turnChecksNotice } from "../../agent/
 import type { CommandGuard } from "../../guard/command-guard.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
 import { opt } from "../../opt.js";
-import { withStderrTail } from "../decorators/vendor-errors.js";
+import { withStderrTail } from "../../engines/failure-sentences.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
 import { createPiEventMapper } from "./pi-events.js";
 import { answerExtensionUi, type PiDialog } from "./pi-extension-ui.js";

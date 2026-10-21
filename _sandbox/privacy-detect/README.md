@@ -18,8 +18,11 @@ Finds personal data in any text on this machine, with no model and no network: t
 - One gate for every source (`createGate` in `detect.ts`): the detectors, the owner's rules, the values the daemon's
   vault already holds and its local name model each propose candidates, and the gate keeps one only when its kind is
   looked for, it is not a value the owner never masks, and its evidence holds where it stands. A detector's find and the
-  owner's own word bring their evidence; a learned value or a model's guess is held to `standsAlone` (`standalone.ts`),
-  the detectors' own checks for that kind, so a misread fixed in a detector cannot come back through the vault.
+  owner's own word bring their evidence; a model's guess is held to `standsAlone` (`standalone.ts`), the detectors' own
+  checks for that kind, where it stands. A value the vault holds is kept wherever it is met as itself (`metAsItself`:
+  not a list of digits, not a decimal's places); a learned one also only if it is its kind alone as the vault holds it,
+  never as the spelling met (`JanKowalski`, a PESEL in a CSV row), so a misread fixed in a detector cannot come back
+  through the vault.
 - Private: the daemon depends on it for the shield (`privacy/` in [`@intentic/sandbox`](../sandbox)). Subpath exports
   keep each reader to what it needs: `.` is the detector and its gate, `./text` the character tests the vault's matcher
   shares, `./data/*` the lists, `./name-lists` the registry of them the privacy page describes, `./lexicon` a word's

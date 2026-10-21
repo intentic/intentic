@@ -6,10 +6,12 @@ import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import { baseDir } from "../config.js";
 import { type Pairing, pairingKey, pairingSlugs, updateState } from "./config.js";
 import { type LiveSession, pauseSessions, readAllSessions, resumeSessions, syncSessionNames } from "./mutagen.js";
+import { operationRunning } from "./project/project-transfer.js";
 
-/* WHETHER A PAIRING'S FILE SYNC RUNS IS ONE DECISION, READ OFF FACTS (2026-10-20). Seven things hold it still: the
+/* WHETHER A PAIRING'S FILE SYNC RUNS IS ONE DECISION, READ OFF FACTS (2026-10-20). Eight things hold it still: the
    owner's Pause, the sandbox said to be gone, the container a docker pairing reaches being away or in ic's trash, a swap
-   of the sandbox on this machine, an hour of it not answering, and the drive under the folder filling up. Each is a fact
+   of the sandbox on this machine, an hour of it not answering, the drive under the folder filling up, and a bring-back,
+   restore or delivery writing into the folder (project-transfer.ts, 2026-10-21). Each is a fact
    the one rule that observes it keeps on the pairing (config.ts), and the holds are read off those facts here; nothing
    records a pause of its own. Every pass `holdSessions` then makes Mutagen agree: what runs while anything holds is
    paused, and what is paused once nothing does is resumed, tried again every pass until Mutagen took it.
@@ -39,6 +41,7 @@ export const syncHolds = (pairing: Pairing, now: number): DeviceSyncHold[] => {
         ["swap", pairing.swapSince !== undefined],
         ["unreachable", pairing.unreachableSince !== undefined && now - pairing.unreachableSince >= UNREACHABLE_HOLD_MS],
         ["low-disk", pairing.lowDisk !== undefined],
+        ["transfer", pairing.transferSince !== undefined],
     ];
     return held.flatMap(([hold, holds]) => (holds ? [hold] : []));
 };
@@ -54,6 +57,7 @@ export const HOLD_WORDS = {
     swap: "its sandbox is being swapped on this machine",
     unreachable: "its sandbox has not answered for an hour",
     "low-disk": "the drive under its folder is nearly full",
+    transfer: "a bring-back, restore or delivery is writing into its folder",
 } as const satisfies Record<DeviceSyncHold, string>;
 
 // The sessions of a pairing that disagree with its holds, by name: running while held, or paused while nothing holds.
@@ -76,7 +80,7 @@ export const holdSessions = async (mutagen: string, pairings: readonly Pairing[]
     if (live === undefined) {
         return new Set();
     }
-    const adopted = await adoptOwnerPauses(pairings, live, now);
+    const adopted = await letGoOfDeadTransfers(await adoptOwnerPauses(pairings, live, now));
     const behind = new Set<string>();
     for (const pairing of adopted) {
         const { held, names } = disagreeing(pairing, live, now);
@@ -91,6 +95,25 @@ export const holdSessions = async (mutagen: string, pairings: readonly Pairing[]
         }
     }
     return behind;
+};
+
+// A transfer's hold whose operation is gone, killed between its pause and its resume, is lifted here rather than left
+// to the next command about its folder: its fact stands only while the folder's lock names a live process. Cleared only
+// where the pairing still holds the hold that was read, so one a new operation took meanwhile stands.
+const letGoOfDeadTransfers = async (pairings: readonly Pairing[]): Promise<readonly Pairing[]> => {
+    const dead = new Map<string, number>();
+    for (const pairing of pairings) {
+        // a lock read per folder that holds one, which is rarely more than one
+        if (pairing.transferSince !== undefined && !(await operationRunning(baseDir, pairingKey(pairing)))) {
+            dead.set(pairingKey(pairing), pairing.transferSince);
+        }
+    }
+    if (dead.size === 0) {
+        return pairings;
+    }
+    const lifted = (held: Pairing): boolean => held.transferSince !== undefined && dead.get(pairingKey(held)) === held.transferSince;
+    await updateState((state) => ({ pairings: state.pairings.map((held) => (lifted(held) ? { ...held, transferSince: undefined } : held)) }));
+    return pairings.map((held) => (lifted(held) ? { ...held, transferSince: undefined } : held));
 };
 
 /* A PERSON'S PAUSE FROM BEFORE HOLDS, TAKEN ONCE. Older builds kept no record of `sync pause`: it lived in Mutagen alone.

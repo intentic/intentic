@@ -16,9 +16,10 @@ import { TOKEN_LABEL, tokenKey, tokenOf } from "./tokens.js";
 // holds the real values, so it lives with the credentials (mode 0600, off the workspace). Every value in it is matched
 // from then on, wherever it appears and in every spelling its kind allows (spellingOf), and proposed to the detectors'
 // gate (@intentic/privacy-detect detect.ts) as what it is: a dataset the owner taught is masked whether or not any
-// detector would have found it, while a value the detectors found once is masked again only where it still stands as
-// its kind alone, so a value personal only in context (an ordinary word that is also a name, a number an older detector
-// misread) is not masked again, though its token still resolves. The vault keeps tokens; it never judges a find.
+// detector would have found it, while a value the detectors found once is masked again only if, as the vault holds it,
+// it is its kind alone, so a value personal only in context (an ordinary word that is also a name, a number an older
+// detector misread) is not masked again, though its token still resolves. Either is masked wherever it is met as itself
+// (not a list of digits, not a decimal's places). The vault keeps tokens; it never judges a find.
 
 const VaultEntrySchema = z.object({
     value: z.string(),
@@ -59,6 +60,8 @@ export interface VaultHit {
     readonly key: string;
     // Taught from a dataset (the owner's word), rather than learned from a detector's find.
     readonly taught: boolean;
+    // The value as the vault holds it, whatever spelling of it was matched: what the gate asks a learned one about.
+    readonly value: string;
 }
 
 export interface PrivacyVault {
@@ -185,6 +188,7 @@ const matchedValues = (entries: Iterable<VaultEntry>): KnownValue<VaultHit>[] =>
                 token: tokenOf(TOKEN_LABEL[entry.class], entry.index),
                 key: keyOfEntry(entry),
                 taught: entry.source !== undefined,
+                value: entry.value,
             };
             const spelling = spellingOf(entry.value, entry.class);
             const escaped = escapedForm(entry.value);

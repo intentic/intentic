@@ -283,7 +283,7 @@ export const noticeLine = (row: NoticeRow, audience: Audience): string | undefin
     if (row.agentWords !== undefined) {
         return agentWordsLine(row.agentWords);
     }
-    // A row written before failures were coded, recognised as a provider's failure by its marks: the unclassified line.
+    // A row written before failures were coded, recognised as a provider's failure by its marks: what it says (legacyFailure).
     return row.text === undefined ? undefined : legacyFailure(row.text)?.line;
 };
 

@@ -119,13 +119,45 @@ describe("the gate holds a value proposed without its context to its kind", () =
         const bare = MOBILE.replaceAll(" ", "");
         expect(kept("for i in 1 2 3 4 5 6 7 8 9; do", "1 2 3 4 5 6 7 8 9", "phone", "learned")).toBe(false);
         expect(kept("echo 123456789 > counts", "123456789", "phone", "learned")).toBe(false);
-        expect(kept(`host 10.0.0.1:${bare}`, bare, "phone", "learned")).toBe(false);
+        expect(kept(`host 10.0.0.1:${bare}`, bare, "phone", "model")).toBe(false);
         expect(kept(`ratio 0.${bare}`, bare, "phone", "learned")).toBe(false);
-        expect(kept(`Zapłać ${MOBILE} zł`, MOBILE, "phone", "learned")).toBe(false);
+        expect(kept(`Zapłać ${MOBILE} zł`, MOBILE, "phone", "model")).toBe(false);
         expect(kept(`call ${bare} tonight`, bare, "phone", "learned")).toBe(true);
         expect(kept('"end": 0.5589999999999999', "5589999999999999", "payment-card", "learned")).toBe(false);
         expect(kept(`v3.${pesel(1985, 1, 1)}`, pesel(1985, 1, 1), "national-id", "learned")).toBe(false);
         expect(kept(`PESEL ${pesel(1985, 1, 1)}`, pesel(1985, 1, 1), "national-id", "learned")).toBe(true);
+    });
+
+    // 2026-10-21: judged by the spelling met, a learned full name written joined was one word and no name, and a learned
+    // PESEL beside a CSV row's numeric cell read as a decimal's places, so both reached the model. What a value the vault
+    // holds is, is asked of it as held; its place says only whether it is met as itself.
+    test("a value the vault learned is judged as it holds it, wherever its matcher meets it as itself", () => {
+        const known = (text: string, met: string, held: string, kind: PersonalDataClass): boolean =>
+            gate.admits(text, { ...candidate(text, met, kind, "learned"), known: held });
+        const joined = PERSON.replace(" ", "");
+        expect(known(`plik ${joined}.pdf`, joined, PERSON, "person-name")).toBe(true);
+        expect(known(`/home/${joined.toLowerCase()}/notes.txt`, joined.toLowerCase(), PERSON, "person-name")).toBe(true);
+        const id = pesel(1985, 3, 14);
+        expect(known(`1,${id},Warszawa`, id, id, "national-id")).toBe(true);
+        expect(known(`Warszawa,${id},1`, id, id, "national-id")).toBe(true);
+        const bare = MOBILE.replaceAll(" ", "");
+        expect(known(`host 10.0.0.1:${bare}`, bare, MOBILE, "phone")).toBe(true);
+        // Never as a list of its digits or a decimal's places, and a single word is no name however it was learned.
+        expect(known(`for i in ${[...bare].join(" ")}; do`, [...bare].join(" "), MOBILE, "phone")).toBe(false);
+        expect(known(`v3.${id}`, id, id, "national-id")).toBe(false);
+        expect(known("Grace period", "Grace", "Grace", "person-name")).toBe(false);
+    });
+
+    // 2026-10-21: a taught phone was masked inside a shell loop's digits, and restoring wrote the taught spelling into the
+    // command; and as a float's places. The vault's matcher had refused both for every value it held until 2026-10-20.
+    test("a value the owner taught is kept wherever it is met as itself, never as a list of digits or a decimal's places", () => {
+        const bare = MOBILE.replaceAll(" ", "");
+        const listed = [...bare].join(" ");
+        expect(kept(`for i in ${listed}; do`, listed, "phone", "taught")).toBe(false);
+        expect(kept(`"ratio": 0.${bare}`, bare, "phone", "taught")).toBe(false);
+        expect(kept(`${bare}.25`, bare, "phone", "taught")).toBe(false);
+        expect(kept(`call ${bare}`, bare, "phone", "taught")).toBe(true);
+        expect(kept(`1,${bare},Warszawa`, bare, "phone", "taught")).toBe(true);
     });
 
     test("an address that belongs to no one stays no one's", () => {

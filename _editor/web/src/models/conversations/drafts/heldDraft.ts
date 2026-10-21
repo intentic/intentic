@@ -138,14 +138,21 @@ export const pulled = (
 /**
  * The copy after the sandbox answered a write or a clear of `sent` (the copy as it was when the call left), where
  * `current` is the copy now. Undefined: nothing is left to keep. Never loses an edit made while the call was out.
+ * `typedHere` says whether words were typed in this browser (in any of its windows): a newer revision holding such words
+ * is this browser's own earlier write, which this copy has already gone past, not words from elsewhere to keep beside it.
  */
-export const answered = (current: HeldDraft, sent: HeldDraft, answer: DraftWritten): HeldDraft | undefined => {
+export const answered = (current: HeldDraft, sent: HeldDraft, answer: DraftWritten, typedHere: (text: string) => boolean = () => false): HeldDraft | undefined => {
     const editedSince = current.editedAt !== sent.editedAt;
     const theirs = answer.draft;
     if (answer.conflict === true) {
         if (theirs === undefined) {
             // Sent or cleared elsewhere since this copy's revision: only words typed after that agreement are kept.
             return holdsWords(current) && !unchangedHere(current) ? { ...current, synced: undefined, pending: true } : undefined;
+        }
+        if (typedHere(theirs.text) && !sameWords(current, syncedOf(theirs))) {
+            // Another window of this browser wrote these words while this one went on editing (or cleared them): this
+            // copy is the newer, and goes again from the revision that write made.
+            return { ...current, synced: syncedOf(theirs), pending: true };
         }
         if (sameWords(current, syncedOf(theirs)) || unchangedHere(current) || !holdsWords(current)) {
             // Nothing of this copy's own to keep: the same words, none typed here since, or a clear the newer words outlive.

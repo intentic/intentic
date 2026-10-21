@@ -37,13 +37,13 @@ const agentState = async (installed: string | undefined): Promise<DeviceAgent> =
 export type LiveSessions = ReadonlyMap<string, LiveSession>;
 
 // What the record says holds a pairing back, beside whatever Mutagen says: read off the pairing, so stated whether or not
-// Mutagen was consulted. Each only while it holds, as the rest of a resting pairing says nothing. `heldBy` is the one
-// answer to whether its file sync should run (holds.ts), the low-disk reading the one hold that carries a figure.
+// Mutagen was consulted. `heldBy` is the one answer to whether its file sync should run (holds.ts), and is said even when
+// empty (2026-10-21): an absent one is how a reader tells an agent older than holds, whose Mutagen pause it takes for the
+// owner's, so leaving it out while nothing held read a session Mutagen had not resumed yet as the owner's Pause. The
+// rest only while it holds, as the rest of a resting pairing says nothing; the low-disk reading is the one hold that
+// carries a figure.
 const withHolds = (row: DevicePairing, pairing: Pairing, now: number): DevicePairing => {
-    const held = syncHolds(pairing, now);
-    if (held.length > 0) {
-        row.heldBy = held;
-    }
+    row.heldBy = syncHolds(pairing, now);
     if (pairing.lowDisk !== undefined) {
         const { since, freeBytes, totalBytes } = pairing.lowDisk;
         row.lowDisk = { since, freeBytes, totalBytes };

@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import type { Pairing, SyncState } from "../config.js";
 import { skippedPortsOf } from "../mirror.js";
-import { sessionsByName } from "../mutagen.js";
+import { sessionName, sessionsByName } from "../mutagen.js";
 import { buildReport, scopedReport } from "../report.js";
 
 // The resting state: build and installed match, so nothing here quietly tests a device behind itself.
@@ -34,14 +34,25 @@ describe("buildReport", () => {
     it("says by whom a pairing's file sync is held, the owner's word first", () => {
         const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work", swapSince: 5, ownerPausedAt: 6 })] });
         expect(built.pairings[0]?.heldBy).toEqual(["owner", "swap"]);
-        expect(report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work" })] }).pairings[0]?.heldBy).toBeUndefined();
+        expect(report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work" })] }).pairings[0]?.heldBy).toEqual([]);
+    });
+
+    // (2026-10-21) Nothing holding it is said too, as an empty list. Its absence is how the desktop app and the editor tell
+    // an agent older than holds, whose Mutagen pause they read as the owner's: so a session Mutagen still had paused just
+    // after a hold lifted read as the owner's Pause, with a Resume button, and a first copy as in before it had run.
+    it("says nothing holds a pairing whose session Mutagen still has paused", () => {
+        const listing = sessionsByName([{ name: sessionName("cm1~app"), paused: true, status: "disconnected", alpha: {}, beta: {}, ignore: {} }]);
+        const attached = pairing({ sandboxId: "cm1", key: "cm1~app", localDir: "/home/me/code/app", remoteDir: `${WORKSPACE_ROOT}/app`, project: true });
+        const built = buildReport({ pairings: [attached] }, listing, AGENT, 1_700_000_000_000).pairings[0];
+        expect(built?.paused).toBe(true);
+        expect(built?.heldBy).toEqual([]);
     });
 
     it("names the folder each paired sandbox syncs into", () => {
         const built = report({ pairings: [pairing({ sandboxId: "work", localDir: "/home/me/intentic/work" })] });
         // `mirroring: "on"` is stated even untouched, since an absent port list would otherwise mean both "off" and
         // "nothing listening".
-        expect(built.pairings).toEqual([{ sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", slug: "work", mirroring: "on" }]);
+        expect(built.pairings).toEqual([{ sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", slug: "work", mirroring: "on", heldBy: [] }]);
     });
 
     // A project pairing says which sandbox folder its local one holds; every other pairing says nothing, which is /work.
@@ -53,8 +64,8 @@ describe("buildReport", () => {
             ],
         });
         expect(built.pairings).toEqual([
-            { sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", slug: "work", mirroring: "on" },
-            { sandboxId: "app", mode: "sync", localDir: "/home/me/code/app", remoteDir: "/work/app", slug: "app", mirroring: "on" },
+            { sandboxId: "work", mode: "sync", localDir: "/home/me/intentic/work", slug: "work", mirroring: "on", heldBy: [] },
+            { sandboxId: "app", mode: "sync", localDir: "/home/me/code/app", remoteDir: "/work/app", slug: "app", mirroring: "on", heldBy: [] },
         ]);
     });
 
@@ -172,7 +183,7 @@ describe("scopedReport", () => {
     // has no localDir at all, so scoping is the withholding.
     it("carries no local folder to a sandbox that only mirrors ports", () => {
         const scoped = scopedReport(report(machine), "theirs");
-        expect(scoped.pairings).toEqual([{ sandboxId: "theirs", mode: "mirror", localDir: undefined, slug: "theirs", mirroring: "on" }]);
+        expect(scoped.pairings).toEqual([{ sandboxId: "theirs", mode: "mirror", localDir: undefined, slug: "theirs", mirroring: "on", heldBy: [] }]);
         expect(scoped.ports.map((port) => port.sandboxId)).toEqual(["theirs"]);
     });
 });

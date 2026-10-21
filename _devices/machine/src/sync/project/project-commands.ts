@@ -22,6 +22,7 @@ import {
     type ProjectPairing,
     restorePoint,
     restorePoints,
+    transferHold,
 } from "./project-transfer.js";
 import type { Skipped } from "../restore-points.js";
 import { mutagenSshPath } from "../ssh.js";
@@ -142,6 +143,7 @@ const contextFor = async (pairing: ProjectPairing): Promise<ProjectContext> => (
         pairingRemoteDir(pairing),
     ),
     session: mutagenSession(realProjectRunner, await ensureMutagen(), sessionName(pairingKey(pairing))),
+    recordHold: transferHold(pairing),
 });
 
 // A path as a line shows it: plain, or quoted where it holds a character a line would lose (a newline, a tab).

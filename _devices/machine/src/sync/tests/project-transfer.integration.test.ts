@@ -35,6 +35,8 @@ const setUp = async (session: FakeSessionState = "running"): Promise<void> => {
         stateDir: join(root, "state"),
         sandbox: sandboxCopy(fake.runner, projectShell({ kind: "ssh", alias: "intentic-sync-sandbox-a" }, FAKE_SSH), remote),
         session: mutagenSession(fake.runner, FAKE_MUTAGEN, "intentic-sandbox-a"),
+        // The hold on the pairing is holds.integration.test.ts's; here there is no agent state to keep it in.
+        recordHold: async () => await Promise.resolve(),
     };
 };
 

@@ -11,7 +11,9 @@ import {
     isUsageLimitText,
     mentionsSpentAllowance,
     versionFloorOf,
+    withoutStderrTail,
     withoutToolCallStandIns,
+    withStderrTail,
 } from "./failure-sentences.js";
 
 // Pins the line between each failure condition a routed provider reports as prose and an ordinary model answer;
@@ -260,4 +262,21 @@ test("reads a vendor refusing the model, and not a tool saying the same clause a
     }
     // A runtime's own vendor sentence rides in beside the shared ones.
     expect(isModelRefusalText("Model unavailable: xai/grok-retired", /model unavailable/i)).toBe(true);
+});
+
+// A process's stderr folded into the sentence it explains, and read back without it: what the failure said is what a
+// failure's code is read from, never what its process printed (error-frames.ts codedFailure).
+test("stderr joins the sentence it explains, trimmed, and comes off it again; an empty tail adds nothing", () => {
+    const folded = withStderrTail("Pi exited mid-turn (code 1)", "  boom: missing key\n");
+    expect(folded).toBe("Pi exited mid-turn (code 1). stderr: boom: missing key");
+    expect(withoutStderrTail(folded)).toBe("Pi exited mid-turn (code 1)");
+    expect(withStderrTail("Pi did not answer the prompt within 15s. It was stopped; send again to retry.", "x")).toBe(
+        "Pi did not answer the prompt within 15s. It was stopped; send again to retry. stderr: x",
+    );
+    expect(withStderrTail("Pi exited mid-turn (code 1)", " \n ")).toBe("Pi exited mid-turn (code 1)");
+    // The Claude Agent SDK folds its own the same way.
+    expect(withoutStderrTail("Claude Code process exited with code 1. stderr: [DEBUG] statusline: usage limit 61% of 5-hour window")).toBe(
+        "Claude Code process exited with code 1",
+    );
+    expect(withoutStderrTail("You've hit your usage limit.")).toBe("You've hit your usage limit.");
 });

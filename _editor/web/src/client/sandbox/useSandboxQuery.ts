@@ -73,5 +73,7 @@ export function useSandboxQuery<T, Selected = T>(options: UseQueryOptions<T, Err
         wanted: resolved.enabled === undefined || toValue(resolved.enabled) !== false,
         retry: () => void query.refetch(),
     }));
-    return { query, error, loaded };
+    // `error` is the standing failure too, so a view that says the failure from it agrees with `loaded` and does not go
+    // blank for a retry the read makes by itself.
+    return { query, error: standingFailure, loaded };
 }

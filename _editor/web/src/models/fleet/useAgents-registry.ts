@@ -20,6 +20,7 @@ import { type ProcedureOutput, sandboxRpc } from "../../client/sandbox/sandboxRp
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import type { FleetAgent } from "./useAgents-fleet";
 import { observeRoster } from "../agent-status/sandboxClock";
+import { withNext } from "../agent-status/agentStatus-standing";
 
 // Daemon's agent registry mirrored: the roster pushed by /events, the archived half pulled separately, ordered by
 // a revision line. Bottom of the fleet store's module graph; nothing here reads a module above it. All of it belongs
@@ -285,10 +286,12 @@ const mirrorRosterRead = (agents: AgentSummary[], rev: number): void => {
     queryClient.setQueryData<ProcedureOutput<`agents.list`>>(rpcKey(`agents.list`), (held) => (held === undefined ? undefined : { ...held, agents, rev }));
 };
 
-export const setAgents = (agents: AgentSummary[], rev: number, live = false): void => {
+export const setAgents = (roster: AgentSummary[], rev: number, live = false): void => {
     if (rev < appliedRev.value) {
         return;
     }
+    // A sandbox older than `next` says what carries a card on in the fields it replaced (withNext).
+    const agents = roster.map(withNext);
     // Only a frame of a stream already following the roster restamps as it happens. A connection's first snapshot, and a
     // read, are compared against a roster that stood still for as long as the stream was gone (a sleep), which would
     // read every restamp in between as that much clock skew.
@@ -511,7 +514,7 @@ export const loadArchived = async (): Promise<void> => {
         }
         archiveFailure.value = undefined;
         // Widened to FleetAgent here: nothing archived is unread; an open entry gets its live fields from `fleet` instead.
-        archived.value = agents.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false }));
+        archived.value = agents.map((agent) => Object.assign(withNext(agent), { open: false, unread: false, unsent: false }));
     })();
     await archiveInFlight.value;
 };

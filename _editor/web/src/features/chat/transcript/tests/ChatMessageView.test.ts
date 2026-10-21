@@ -1867,17 +1867,21 @@ describe(`a provider's failure`, () => {
         expect([worded.textContent?.includes(own), worded.querySelector(`button[aria-expanded]`)]).toEqual([true, null]);
     });
 
-    // A failure nobody named is drawn as one, not as its words: the unclassified kind, the words behind the press.
-    it(`names a failure nothing coded as unclassified`, () => {
-        const element = mount({ id: 36, ...foldTurn([], [{ kind: `error`, message: `stdout maxBuffer length exceeded` }]).at(-1)! });
+    // A failure nobody named is drawn as one, in what its words say; only words that say nothing are the unclassified
+    // kind, the words behind the press (2026-10-21: every one was drawn as unrecognized, its words hidden).
+    it(`draws a failure nothing coded in what its words say, and as unclassified only where they say nothing`, () => {
+        const said = mount({ id: 36, ...foldTurn([], [{ kind: `error`, message: `stdout maxBuffer length exceeded` }]).at(-1)! });
+        expect([said.textContent?.includes(`stdout maxBuffer length exceeded`), iconsOf(said)]).toEqual([true, [`exclamation-triangle`]]);
+        app?.unmount();
+        const element = mount({ id: 37, ...foldTurn([], [{ kind: `error`, message: `API Error: 500 {"type":"error"}` }]).at(-1)! });
         expect(element.textContent).toContain(`The agent stopped on an error this app does not recognize.`);
-        expect(element.textContent).not.toContain(`maxBuffer`);
+        expect(element.textContent).not.toContain(`API Error`);
     });
 
-    // A sandbox older than its failure codes wrote the provider's words alone: the unclassified kind, by their marks.
-    it(`reads a row with no code by its marks, as the unclassified kind`, () => {
+    // A sandbox older than its failure codes wrote the provider's words alone: a failure by their marks, said for what it is.
+    it(`reads a row with no code by its marks, and names a safeguard flag as one`, () => {
         const element = mount({ id: 33, role: `notice`, text: SAID });
-        expect(element.textContent).toContain(`The agent stopped on an error this app does not recognize.`);
+        expect(element.textContent).toContain(`The model's safeguards flagged this turn.`);
         expect(element.querySelector(`button[aria-expanded="false"]`)?.textContent?.trim()).toBe(`Details`);
     });
 

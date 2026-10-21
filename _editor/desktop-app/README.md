@@ -529,7 +529,12 @@ flowchart LR
   the app's `projects.json` and in `machine-sandbox.json`'s folders: a reinstall lost both while the agent went on
   syncing, so a folder that had a sandbox was offered a new one, and a pairing the agent retired by itself left a button
   opening a sandbox that no longer had the folder. `machine-sandbox.json` keeps only what the agent cannot know yet: a
-  folder waiting for the sandbox, its failure, and how far its first copy is. Whether a copy is held is the agent's
+  folder waiting for the sandbox, its failure, and how far its first copy is. A pairing names its sandbox the agent's
+  way, by its address (`sandbox-<id>-sbx-intentic-dev`), and the app files the folder under the platform's row, which
+  the roster, the record and the workspace's address use: the row is known for this computer's sandbox, whose record
+  holds it beside its address and slug, and any other sandbox's folder has none, which reads as undecided and never as
+  gone. _(2026-10-21)_ Filed under the agent's id, every folder read as one whose sandbox the account no longer listed,
+  and the roster each workspace page sends had this computer let go of the sandbox's sync. Whether a copy is held is the agent's
   `heldBy`, not Mutagen's `paused`, which says only whether Mutagen has caught up with the agent and nothing of why: read
   that way, a session the agent was about to resume looked like one paused before the folder was asked in. _(2026-10-19)_ Only a session
   the app has seen running since the folder was asked in (`ran`): one it finds paused before that was paused before the

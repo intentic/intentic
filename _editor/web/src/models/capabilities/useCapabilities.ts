@@ -4,12 +4,14 @@ import type { RemoteRefs } from "@intentic/sandbox-contract/schemas/git/remote-r
 import type { CapabilityProbe, CapabilityRecommendation, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { Marketplace } from "@intentic/sandbox-contract/schemas/marketplace";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
+import type { Loaded } from "@intentic/extension-api";
 import { computed } from "vue";
 import { untilResult } from "../../lib/intenticStream";
 import { SandboxHttpError } from "../../client/sandbox/sandboxHttpError";
 import { type ProcedureInput, sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { ENVIRONMENT, rpcKey } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
+import { useRole } from "../../client/sandbox/useRole";
 
 // The sandbox's unified capability manifest (.intentic/config/capabilities.json), read/written via the daemon's
 // /capabilities routes. `add` streams its apply, like the provision flow. Presence of a kind means it's active (e.g.
@@ -68,12 +70,24 @@ export function useCapabilitySecret() {
 // live.
 const PENDING_POLL_MS = 3_000;
 
+// What a member below maintainer reads here: the sandbox floors this list at maintainer, so for them its answer is known
+// without asking, and it is "none". A refused read left waiting, or failed, kept the rail and extension pages from ever
+// settling for those members (sectionTiles.ts, ExtensionHost.vue).
+const NONE_READABLE: Loaded<Awaited<ReturnType<typeof fetchCapabilities>>> = {
+    state: `ready`,
+    data: { capabilities: [], recommendations: [] },
+    refreshing: false,
+    refreshError: undefined,
+};
+
 export function useCapabilities() {
     const queryClient = useQueryClient();
+    const { canShip } = useRole();
 
-    const { query, error, loaded } = useSandboxQuery({
+    const { query, error, loaded: read } = useSandboxQuery({
         queryKey: capabilitiesKey,
         queryFn: fetchCapabilities,
+        enabled: canShip,
         refetchInterval: ({ state }) =>
             (state.data?.capabilities ?? []).some((capability) => capability.status.state === `pending` && capability.status.settling === true)
                 ? PENDING_POLL_MS
@@ -125,6 +139,7 @@ export function useCapabilities() {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: capabilitiesKey }),
     });
 
+    const loaded = computed(() => (canShip.value ? read.value : NONE_READABLE));
     const capabilities = computed<CapabilitySummary[]>(() => query.data.value?.capabilities ?? []);
     const recommendations = computed<CapabilityRecommendation[]>(() => query.data.value?.recommendations ?? []);
     return {

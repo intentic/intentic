@@ -130,7 +130,7 @@ export const createAgentRoutes = (services: Services) => {
             if ("why" in receipt) {
                 throw new ORPCError("CONFLICT", { message: receipt.why });
             }
-            return answeredAfterDraft(services.drafts, context, { conversationId, draft }, receipt);
+            return answeredAfterDraft(services, context, { conversationId, draft }, receipt);
         }),
         // Re-runs a turn a spent allowance refused or a dead runtime cut short, with everything but who serves it,
         // renamed by the press. NOT_FOUND when nothing is held; never CONFLICT, since a running turn already cleared
