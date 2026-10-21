@@ -49,8 +49,6 @@ Var IntenticBoldFont
 ; What `ic uninstall` answered in the hook: nsExec's exit code ("0" is done), "timeout" or "error". "by-ic" when ic is
 ; what started this uninstaller; empty when there was no ic to run.
 Var IntenticIcResult
-; Whether some of the app's own folders could not be deleted (1): the last page then does not say nothing is left.
-Var IntenticAppFilesLeft
 
 ; The app's binary by name, for the page's reinstall check. A Function in this file is read where Tauri includes it,
 ; before the template defines ${MAINBINARYNAME}, so it cannot use that name; NSIS_HOOK_PREUNINSTALL, inserted later,
@@ -362,7 +360,7 @@ FunctionEnd
 ;   - ic gets fifteen minutes of silence before it is ended (nsExec's timeout counts from its last line, and ic prints
 ;     one per step): deleting sandboxes and unregistering the engine's WSL distro is slow. Keeping the sandboxes gets
 ;     five. When ic fails, the app still goes: the details say what to run (`ic uninstall`), folder sync is stopped
-;     through the agent directly if ic left it running, and the last page says the rest did not go.
+;     through the agent directly if ic left it running, and an error dialog says the rest did not go.
 ;   - The app's own folders go on every real uninstall, "Delete app data" ticked or not: its settings in
 ;     `%APPDATA%\<identifier>` and the webview's profile in `%LOCALAPPDATA%\<identifier>`, the signed-in session's
 ;     cookie among it, with the install location Tauri keeps in the registry. They were left unless the box was ticked,
@@ -375,7 +373,7 @@ FunctionEnd
 ;   - Without ic beside the app (a copy that lost intentic-ic.exe, to an antivirus say), the uninstaller does what it
 ;     did before ic could be asked: it asks "Also remove the Intentic machine agent from this PC?" (`intentic-machine
 ;     uninstall` removes this PC's links, sync pairings and login entry, never a container), stops folder sync where the
-;     agent stays, and says on its last page that the sandboxes stay and how to remove them.
+;     agent stays. The first page already says the sandboxes stay and how to remove them.
 ;
 ; AN UNINSTALL AN INSTALL IS ABOUT TO UNDO (2026-10-15). Running a newer setup by hand over an installed copy shows
 ; Tauri's reinstall page, whose preselected answer is "Uninstall before installing". That runs THIS uninstaller, without
@@ -675,7 +673,6 @@ FunctionEnd
   SetShellVarContext current
   DeleteRegKey HKCU "${MANUPRODUCTKEY}"
   DeleteRegKey /ifempty HKCU "${MANUKEY}"
-  StrCpy $IntenticAppFilesLeft 0
   StrCpy $1 0
   ${Do}
     RMDir /r "$LOCALAPPDATA\${BUNDLEID}"
@@ -686,7 +683,6 @@ FunctionEnd
     ${EndIf}
     IntOp $1 $1 + 1
     ${If} $1 >= 20
-      StrCpy $IntenticAppFilesLeft 1
       DetailPrint "Some of the app's own files are still in use and were left in $LOCALAPPDATA\${BUNDLEID} and $APPDATA\${BUNDLEID}."
       ${ExitDo}
     ${EndIf}
@@ -694,10 +690,8 @@ FunctionEnd
   ${Loop}
 !macroend
 
-; WHAT STAYS, said on the way out (2026-10-05, and 2026-10-18 for ic's half): an uninstall that ends in silence lets the
-; reader believe whatever they assumed went, gone or kept. Said once the app's files are gone, after an interactive
-; real uninstall only: never on an update, a reinstall, a passive or a silent run (/SD), nor when ic started this
-; uninstaller, since ic says what it did itself.
+; Successful removal ends in the wizard, without a completion MessageBox (2026-10-21): the first page already says
+; what goes and what stays. An interactive uninstall still reports an ic failure so the reader can finish removing it.
 !macro NSIS_HOOK_POSTUNINSTALL
   DeleteRegKey HKCU "Software\Classes\Directory\shell\Intentic"
   DeleteRegKey HKCU "Software\Classes\Directory\Background\shell\Intentic"
@@ -710,53 +704,20 @@ FunctionEnd
   ${AndIf} $IntenticReinstall <> 1
     !insertmacro INTENTIC_REMOVE_APP_DATA
     ${If} $PassiveMode <> 1
-      !insertmacro INTENTIC_SAY_WHAT_STAYS
+      !insertmacro INTENTIC_REPORT_UNINSTALL_FAILURE
     ${EndIf}
   ${EndIf}
 !macroend
 
-!macro INTENTIC_SAY_WHAT_STAYS
-  ${If} $IntenticIcResult == "by-ic"
-    ; ic started this uninstaller and reports for both.
-  ${ElseIf} $IntenticIcResult == ""
-    ; No ic beside the app (the agent-only path): the sandboxes stay, said where ic is installed to remove them.
-    ${If} ${FileExists} "$PROFILE\.intentic\ic\bin\ic.exe"
-      ${If} $IntenticAgentKept = 1
-        MessageBox MB_OK|MB_ICONINFORMATION "Intentic is removed, and you are signed out on this PC.$\r$\n$\r$\nYour sandboxes and their files stay on this PC. In a terminal, ic uninstall removes them and the rest of Intentic.$\r$\n$\r$\nFolder sync to this PC has stopped; the synced folders keep their files. The machine agent stays, to keep your sandboxes connected." /SD IDOK
-      ${Else}
-        MessageBox MB_OK|MB_ICONINFORMATION "Intentic is removed, and you are signed out on this PC.$\r$\n$\r$\nYour sandboxes and their files stay on this PC. In a terminal, ic uninstall removes them and the rest of Intentic." /SD IDOK
-      ${EndIf}
-    ${EndIf}
-  ${ElseIf} $IntenticIcResult != "0"
+!macro INTENTIC_REPORT_UNINSTALL_FAILURE
+  ${If} $IntenticIcResult != ""
+  ${AndIf} $IntenticIcResult != "by-ic"
+  ${AndIf} $IntenticIcResult != "0"
     ${If} $IntenticChoice == "everything"
       StrCpy $0 "The Intentic app is uninstalled, but the rest of Intentic could not be removed (ic uninstall answered $IntenticIcResult)."
     ${Else}
       StrCpy $0 "The Intentic app is uninstalled and your sandboxes stay, but stopping folder sync and deleting the caches did not finish (ic uninstall answered $IntenticIcResult)."
     ${EndIf}
     MessageBox MB_OK|MB_ICONEXCLAMATION "$0$\r$\n$\r$\nTo finish, run ic uninstall in a terminal: it shows what is left and removes it. Show details, in this window, lists what went wrong." /SD IDOK
-  ${ElseIf} $IntenticChoice == "everything"
-    StrCpy $0 "Intentic is uninstalled. Nothing of it is left on this PC."
-    ${If} $IntenticAppFilesLeft = 1
-      StrCpy $0 "Intentic is uninstalled, but a program still held some of the app's own files: they stay in $LOCALAPPDATA\${BUNDLEID} and $APPDATA\${BUNDLEID}, and can be deleted once Windows has restarted."
-    ${EndIf}
-    ${If} $IntenticStays != ""
-      StrCpy $0 "$0$\r$\n$\r$\n$IntenticStays None of that is Intentic's to remove."
-    ${EndIf}
-    MessageBox MB_OK|MB_ICONINFORMATION "$0" /SD IDOK
-  ${Else}
-    StrCpy $1 "the machine agent and ic"
-    ${If} $IntenticEngine == 1
-      StrCpy $1 "the intentic engine, the machine agent and ic"
-    ${EndIf}
-    ${If} $IntenticLook != "found"
-      StrCpy $0 "The Intentic app is uninstalled. The rest of Intentic stays as it was: your sandboxes, if this PC has any, keep running."
-    ${ElseIf} $IntenticSandboxes = 1
-      StrCpy $0 "The Intentic app is uninstalled. Your sandbox keeps running on this PC, with what keeps it up: $1."
-    ${ElseIf} $IntenticSandboxes > 1
-      StrCpy $0 "The Intentic app is uninstalled. Your $IntenticSandboxes sandboxes keep running on this PC, with what keeps them up: $1."
-    ${Else}
-      StrCpy $0 "The Intentic app is uninstalled. Your saved passwords stay on this PC, with the machine agent and ic."
-    ${EndIf}
-    MessageBox MB_OK|MB_ICONINFORMATION "$0$\r$\n$\r$\nFolder sync to this PC has stopped; the synced folders keep their files. To remove the rest later, run ic uninstall in a terminal." /SD IDOK
   ${EndIf}
 !macroend

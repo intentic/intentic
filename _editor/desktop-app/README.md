@@ -571,13 +571,15 @@ flowchart LR
   no ic and keeps the shortcuts and the session; and when ic itself started the uninstaller (`INTENTIC_UNINSTALL=done`,
   the last step of `ic uninstall`) the hook leaves the rest to it. When ic is missing, cannot look or fails, the app
   still goes, the sandboxes stay, folder sync is stopped through the machine agent (`intentic-machine sync uninstall
-  --folders`), and the last page says to run `ic uninstall` in a terminal; a copy with no `intentic-ic.exe` at all
+  --folders`), and the uninstall details say to run `ic uninstall` in a terminal; a copy with no `intentic-ic.exe` at all
   asks "Also remove the Intentic machine agent from this PC?" as before. The app's own folders
   (`%APPDATA%\dev.intentic.desktop` and `%LOCALAPPDATA%\dev.intentic.desktop`, the webview's profile with the session
   cookie in it) go on every real uninstall, "Delete app data" ticked or not; the install folder
   `%LOCALAPPDATA%\Intentic` is never deleted whole, since the engine's disk is in it. The platform's own record of the
-  session is left to expire, since the uninstaller has no way to send it. The last page says what went and what stays:
-  Docker Desktop, WSL and the synced folders' files are not Intentic's. _(2026-10-05 to 2026-10-18) The uninstaller
+  session is left to expire, since the uninstaller has no way to send it. Docker Desktop, WSL and the synced folders'
+  files are not Intentic's. _(2026-10-21)_ Successful removal finishes in the wizard without an extra summary popup
+  or its notification sound; the first page already explains what goes and what stays. An interactive uninstall
+  still shows an error if `ic uninstall` fails. _(2026-10-05 to 2026-10-18) The uninstaller
   asked about the machine agent alone, stopped folder sync, and said on its last page that the sandboxes, their data,
   the engine and `ic` stayed, with the commands that remove them. Before that it removed the app alone and said
   nothing._
