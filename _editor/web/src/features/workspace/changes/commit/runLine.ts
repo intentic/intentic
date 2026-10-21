@@ -6,15 +6,18 @@ import { computed, type ComputedRef } from "vue";
 import { cancelIndexRun, followedRuns } from "../../../../models/changes/indexRuns";
 
 // THE ONE LINE A STAGE OR COMMIT RUN GETS (models/changes/indexRuns.ts), in whichever Changes panel's press bar is open:
-// the oldest run's phase, the rest counted, each on the hover, and once a run is slow, one Stop that kills git in every
+// the oldest run's phase, the rest counted, each on the hover, and once a run looks stuck, one Stop that kills git in every
 // repo. Derived here and only here, so the panels draw it rather than each deciding when it shows (the bar used to read
 // one source for "Committing…" and this one for its phase, and drew both).
 
-// A stage run says nothing, and a commit's Stop does not show, until it has run this long. Most answer well inside it,
-// and a line or a Stop appearing and going again in under a second moved the bar for nothing: the press's own spinner
-// already says a run is under way. A commit's line is there from the press (the bar says "Committing…" in the same
-// words before the run is read), so only its Stop waits.
+// A stage run says nothing until it has run this long. Most answer well inside it, and a line appearing and going again
+// in under a second moved the bar for nothing: the press's own spinner already says a run is under way. A commit's line
+// is there from the press (the bar says "Committing…" in the same words before the run is read).
 const SLOW_RUN_MS = 1_000;
+// Stop is an escape hatch, not part of a commit: hooks and a big stage routinely take a few seconds, and a Stop that
+// showed after one crowded every ordinary commit's bar with a press nobody wanted. It shows once a run has gone long
+// enough to look stuck.
+const STUCK_RUN_MS = 10_000;
 
 export interface RunLine {
     /** The oldest run's phase, in words. */
@@ -25,8 +28,10 @@ export interface RunLine {
     readonly tip: string | undefined;
     /** The last read of a run failed: still following, said rather than a frozen phase. */
     readonly lostContact: boolean;
-    /** The oldest run has outlasted a moment: the Stop is worth its room. */
+    /** The oldest run has outlasted a moment: a stage run's line is worth its room. */
     readonly slow: boolean;
+    /** A run has gone long enough to look stuck: the Stop is worth its room. */
+    readonly stuck: boolean;
     readonly stop: () => void;
 }
 
@@ -54,7 +59,8 @@ export const useRunLine = (): ComputedRef<RunLine | undefined> => {
     return computed(() => {
         const runs = following.value;
         const [lead] = runs;
-        const slow = runs.some(([, followed]) => now.value - followed.since >= SLOW_RUN_MS);
+        const ran = (ms: number): boolean => runs.some(([, followed]) => now.value - followed.since >= ms);
+        const slow = ran(SLOW_RUN_MS);
         if (lead === undefined || !(slow || runs.some(([, followed]) => followed.run.op === `commit`))) {
             return undefined;
         }
@@ -64,6 +70,7 @@ export const useRunLine = (): ComputedRef<RunLine | undefined> => {
             tip: runs.length > 1 ? runs.map(([repo, followed]) => phaseWords(repo, followed.run)).join(`\n`) : undefined,
             lostContact: runs.some(([, followed]) => followed.lostContact),
             slow,
+            stuck: ran(STUCK_RUN_MS),
             stop: () => {
                 for (const [repo] of runs) {
                     void cancelIndexRun(repo);

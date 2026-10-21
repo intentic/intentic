@@ -15,7 +15,7 @@ const rest: BarFacts = {
     noUpstream: false,
 };
 
-const run: RunLine = { words: `Committing in root…`, others: 0, tip: undefined, lostContact: false, slow: true, stop: () => undefined };
+const run: RunLine = { words: `Committing in root…`, others: 0, tip: undefined, lostContact: false, slow: true, stuck: false, stop: () => undefined };
 
 describe(`barLine`, () => {
     it(`says nothing at rest`, () => {

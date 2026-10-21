@@ -237,7 +237,7 @@ const ROW_ACTION = `opacity-0 transition-opacity focus-visible:opacity-100 group
             <div class="flex items-center justify-end gap-1">
                 <!-- A stage or commit run, with its Stop, in the same room, so it never adds a row under the box. -->
                 <IndexRunPrompt />
-                <IndexRunLine v-if="runLine !== undefined" :line="runLine" />
+                <IndexRunLine v-if="runLine !== undefined" :line="runLine" :pressed="savingNow" />
                 <!-- What a press under way is doing, in the room beside the presses, so the presses never reword themselves:
                      each keeps its face and width under its spinner from click to answer. -->
                 <span v-else-if="savingNow || actions.backingUp.value" class="min-w-0 flex-1 truncate text-2xs text-muted" aria-live="polite">{{

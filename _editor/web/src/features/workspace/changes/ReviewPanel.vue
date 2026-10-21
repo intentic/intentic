@@ -1096,7 +1096,8 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                  rest there is no line, and it is never shorter than a press. -->
             <div class="flex min-h-6.5 flex-wrap items-center justify-end gap-x-1 gap-y-1.5 max-md:min-h-8">
                 <IndexRunPrompt />
-                <IndexRunLine v-if="bar.kind === `run`" :line="bar.line" />
+                <!-- A commit from this box spins its own press, so the line says only the words; a stage run keeps a spinner. -->
+                <IndexRunLine v-if="bar.kind === `run`" :line="bar.line" :pressed="commitRunning" />
                 <span v-else-if="bar.kind === `conflicts`" :class="BAR_LINE" class="text-danger">
                     {{ t(`workspace.reviewPanel.resolveConflictsFirst`) }}
                 </span>
@@ -1143,9 +1144,11 @@ const strayFailures = computed<readonly { repo: string; action: string; detail: 
                         <Icon name="terminal" class="text-2xs" />
                     </button>
                     <!-- Fetch lives with the number it refreshes, and there's one of it now: its scope is every repo with a
-                         remote. A cloud, not ↻, which the view header already spends on rescanning the tree. -->
+                         remote. A cloud, not ↻, which the view header already spends on rescanning the tree. Gone while a
+                         stage or commit has the line: it couldn't be pressed then, and a dead press beside the running one
+                         was clutter. -->
                     <button
-                        v-if="outgoing === `offer`"
+                        v-if="outgoing === `offer` && bar.kind !== `run` && bar.kind !== `committing`"
                         type="button"
                         :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                         :disabled="changes.actionBusy.value"

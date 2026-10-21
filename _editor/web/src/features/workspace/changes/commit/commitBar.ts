@@ -9,7 +9,7 @@ import { phaseWords, type RunLine } from "./runLine";
 // pressing first, and the template draws the case it is handed.
 
 export type BarLine =
-    /** A run this tab follows: its phase, its count and, once slow, its Stop. */
+    /** A run this tab follows: its phase, its count and, once it looks stuck, its Stop. */
     | { readonly kind: `run`; readonly line: RunLine }
     /** An unresolved conflict stops every commit. */
     | { readonly kind: `conflicts` }

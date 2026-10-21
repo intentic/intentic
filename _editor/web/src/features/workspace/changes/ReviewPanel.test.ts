@@ -115,8 +115,17 @@ const landing = (title: string): AgentSummary => ({
 });
 
 // One line for a commit however it is known: the daemon's word for it (another tab's, or this one's before its run is
-// read) and the run this tab follows say it in the same words, once, in the same place; the run adds only its Stop.
+// read) and the run this tab follows say it in the same words, once, in the same place; the run adds only its Stop, and
+// only once it looks stuck. The press spins for it, so the line never draws a second spinner beside it.
 const occurrences = (text: string, part: string): number => text.split(part).length - 1;
+const stopButton = (el: HTMLElement): HTMLButtonElement | null => el.querySelector<HTMLButtonElement>(`button[aria-label="Stop"]`);
+const followCommit = (ranMs: number): void => {
+    followedRuns.value = new Map([[`root`, {
+        run: { status: `running`, id: `run`, repo: `root`, op: `commit`, phase: `committing`, command: `git commit`, output: `` },
+        since: Date.now() - ranMs,
+        lostContact: false,
+    }]]);
+};
 
 it(`says a commit once, in the same words, whether the daemon or the run it follows is telling`, async () => {
     const el = await mount();
@@ -125,21 +134,26 @@ it(`says a commit once, in the same words, whether the daemon or the run it foll
         committing: [`root`],
     });
     expect(occurrences(el.textContent ?? ``, `Committing in root…`)).toBe(1);
-    expect(buttonNamed(el, `Stop`)).toBeUndefined();
+    expect(stopButton(el)).toBeNull();
 
-    followedRuns.value = new Map([[`root`, {
-        run: { status: `running`, id: `run`, repo: `root`, op: `commit`, phase: `committing`, command: `git commit`, output: `` },
-        since: Date.now() - 2_000,
-        lostContact: false,
-    }]]);
+    // An ordinary commit, a few seconds in: words only, no Stop crowding the bar.
+    followCommit(2_000);
     await settle();
     expect(occurrences(el.textContent ?? ``, `Committing in root…`)).toBe(1);
-    expect(buttonNamed(el, `Stop`)).toBeInstanceOf(HTMLButtonElement);
+    expect(stopButton(el)).toBeNull();
+    const line = [...el.querySelectorAll(`[aria-live]`)].find((node) => node.textContent?.includes(`Committing in root…`));
+    expect(line?.querySelector(`svg`)).toBeNull();
+
+    // One that has gone long enough to look stuck offers the way out.
+    followCommit(11_000);
+    await settle();
+    expect(occurrences(el.textContent ?? ``, `Committing in root…`)).toBe(1);
+    expect(stopButton(el)).toBeInstanceOf(HTMLButtonElement);
 
     followedRuns.value = new Map();
     await settle();
     expect(occurrences(el.textContent ?? ``, `Committing in root…`)).toBe(1);
-    expect(buttonNamed(el, `Stop`)).toBeUndefined();
+    expect(stopButton(el)).toBeNull();
 });
 
 it(`waits only for the first answer, then keeps it while the daemon is asked again`, async () => {
