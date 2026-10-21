@@ -21,6 +21,7 @@ import {
     listSandboxes,
     manageSandbox,
     reconnectSandbox,
+    removalResult,
     removeSandbox,
     reshapeSandbox,
     runnerFlow,
@@ -502,6 +503,18 @@ test("an update that found the current image reports no restart", () => {
 test("removal is refused by the sandboxes switch, like every other verb", async () => {
     await expect(removeSandbox("work", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(ScopeError);
     await expect(removeSandbox("work", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
+});
+
+// A retry after an answer that never arrived must not be refused: ic's own "already removed" is the removal done.
+test("a removal of a sandbox already in the trash answers as done, not as refused", () => {
+    expect(removalResult("work", "intentic: work is already removed: ic sandbox restore work brings it back, 6 days left.")).toMatch(
+        /^Sandbox "work" was already removed from this device\./,
+    );
+    expect(removalResult("work", "Removing work")).toMatch(/^Removed sandbox "work"\./);
+});
+
+test("removal refuses a slug ic would read as a flag, before running anything", async () => {
+    await expect(removeSandbox("--all", scopes(), () => {})).rejects.toThrow(/is not a sandbox slug/);
 });
 
 test("reading a log is covered by either grant, like listing", async () => {

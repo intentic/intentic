@@ -38,6 +38,8 @@ const props = defineProps<{
     hideLogLabel: string;
     /** Under the log while it still fills: where the run lives, so closing the page is not mistaken for stopping it. */
     logNote?: string | undefined;
+    /** Inside a surface whose own buttons put an ended run away (a dialog's footer), so there are not two. */
+    hideDismiss?: boolean;
 }>();
 
 defineEmits<{ dismiss: [] }>();
@@ -125,7 +127,7 @@ const elapsedLabel = computed(() => (props.progress.elapsedMs === undefined ? un
             <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" :aria-expanded="showLog" @click="showLog = !showLog">
                 <Icon :name="showLog ? `chevron-down` : `chevron-right`" />{{ showLog ? hideLogLabel : showLogLabel }}
             </button>
-            <button v-if="!live" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="$emit(`dismiss`)">
+            <button v-if="!live && !hideDismiss" type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" @click="$emit(`dismiss`)">
                 <Icon name="times" />{{ t(`ui.action.dismiss`) }}
             </button>
             <slot v-if="showLog" name="log-footer" />

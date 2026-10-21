@@ -722,15 +722,29 @@ export const createSandbox = async (
 // Rides `sandboxes` like every other verb: a fleet nobody may delete from is one the owner can't clean up. The
 // data outlives this by a week (`ic sandbox restore`), but the interruption does not, so the confirmation is
 // still the caller's job.
+//
+// IDEMPOTENT: asking twice is the same as asking once. No `find(slug)` first, unlike the other verbs: the fleet lists
+// only what is not yet removed, so a retry after a removal whose answer never arrived (the stream dropped, the browser
+// gave up waiting) would be refused as "no such sandbox" while the sandbox sat in the trash. ic knows its own trash:
+// it says a sandbox already put away is already removed and exits 0, and still refuses a name it has never had.
 export const removeSandbox = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxes");
-    await find(slug);
+    // What find() used to guarantee for free: a name ic will read as its positional and never as a flag.
+    if (!ADDRESSABLE_SLUG.test(slug)) {
+        throw new Error(`"${slug}" is not a sandbox slug; list_sandboxes names them.`);
+    }
     const run = await icFlow(slug, icRemoveArgs(slug), onLine, { moves: true });
     if (run.code !== 0) {
         throw new Error(`That removal failed on this device.\n\n${run.output}`);
     }
-    return `Removed sandbox "${slug}". Its files and its history are kept for a week — 'ic sandbox restore ${slug}' on this device brings it back.`;
+    return removalResult(slug, run.output);
 };
+
+/** The sentence a removal answers with: an earlier removal that already put it away is said as that. Pure. */
+export const removalResult = (slug: string, output: string): string =>
+    output.includes(`${slug} is already removed`)
+        ? `Sandbox "${slug}" was already removed from this device. Its files and its history are kept until its week is up — 'ic sandbox restore ${slug}' on this device brings it back.`
+        : `Removed sandbox "${slug}". Its files and its history are kept for a week — 'ic sandbox restore ${slug}' on this device brings it back.`;
 
 // What `diagnose_sandbox` may name: a container name's characters, never starting with the dash ic would read as a flag.
 const ADDRESSABLE_SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/;

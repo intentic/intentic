@@ -1,21 +1,17 @@
 <script setup lang="ts">
 import TourMark from "../../tour/TourMark.vue";
-import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS, type SandboxSummary } from "@intentic/api-contract";
+import type { SandboxSummary } from "@intentic/api-contract";
 import {
     AnchoredOverlay,
     browserOwnsClick,
     Button,
-    ConfirmDialog,
     Modal,
-    Notice,
     SandboxLogo,
     SectionHeader,
     StatusBadge,
     type Tip,
-    type CommandOs,
     useHoverMenu,
 } from "@intentic/ui";
-import { sandboxSubdomain } from "@intentic/sandbox-contract/ids/hostnames";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { commandShortcut } from "../../../workbench/commands/useCommands";
@@ -26,7 +22,6 @@ import { restartRunning } from "../../../models/sandbox/live/sandboxRestart";
 import { sandboxHubPath } from "../../../models/sandbox/sandboxNav";
 import { useRole } from "../../../client/sandbox/useRole";
 import { type SandboxAttentionItem, useSandboxAttention } from "../overview/sandboxAttention";
-import { sandboxIdFromToken } from "../../../models/sandbox/sandboxIdFromToken";
 import { sandboxAvailabilityVisual } from "../overview/availability";
 import { placementOf, type SandboxPlacement } from "../overview/placement";
 import { useSandboxPlacement } from "../overview/useSandboxPlacement";
@@ -35,17 +30,13 @@ import { connectedSandboxes, unfinishedSandboxes } from "../../../models/sandbox
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
-import { manageDeviceSandbox } from "../../../models/sandbox/devices/useDevices";
-import { beginDeviceWork } from "../devices/runners/deviceWork";
-import { useOperation } from "../../../workbench/operations/operations";
+import { operationRunning } from "../../../workbench/operations/operations";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
-import { oneLiner } from "../../../app/environments/scriptCommand";
-import RunCommand from "../../../components/RunCommand.vue";
-import { oneLinerFits } from "@intentic/constants";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
 import { useAuth } from "../../../client/auth/useAuth";
-import { answerNote, removalTakes } from "./switcherRows";
-import { useRemovalDoor } from "./useRemovalDoor";
+import { answerNote } from "./switcherRows";
+import { removalKey } from "./removalPlan";
+import RemoveSandboxDialog from "./RemoveSandboxDialog.vue";
 import { slotChord, useSwitchCommands } from "./useSwitchCommands";
 import { useT } from "@intentic/ui/i18n";
 
@@ -163,7 +154,13 @@ interface NotePart {
     readonly text: string;
     readonly ink?: string;
 }
+// A row whose removal is running says so, so it is not mistaken for a sandbox to switch to or remove a second time.
+const beingRemoved = (option: SandboxSummary): boolean => operationRunning(removalKey(option.id));
+
 const rowNote = (option: SandboxSummary): readonly NotePart[] => {
+    if (beingRemoved(option)) {
+        return [{ text: t(`sandbox.removeSandbox.rowRemoving`), ink: RUNNING_MARK_CLASS }];
+    }
     if (isActive(option) && restarting.value !== undefined) {
         return [{ text: restarting.value, ink: RUNNING_MARK_CLASS }];
     }
@@ -251,63 +248,14 @@ onMounted(() => {
 // Alt+0 for this computer inside the app, Alt+1…9 for the sandboxes under it (useSwitchCommands.ts).
 useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
 
-// The sandbox awaiting removal confirmation; removal is non-destructive, the daemon keeps running.
+// THE SANDBOX BEING REMOVED OR LEFT, from the question to the end of the work (RemoveSandboxDialog.vue). The run lives in
+// the operations ledger, so this only says which sandbox the dialog is about; opening it on a sandbox whose removal is
+// already under way shows that removal rather than asking again.
 const pending = ref<SandboxSummary | undefined>(undefined);
-const cleanupSlug = ref<string | undefined>(undefined);
-
-// The container slug on the hosting machine: the hostname's first label, or a sha256(token)-derived fallback.
-watch(pending, async (target) => {
-    // Owner rows only, and an owner's row is the one that carries the token (a member's says null).
-    if (target === undefined || target.role !== `owner` || target.token === null) {
-        cleanupSlug.value = undefined;
-        return;
-    }
-    if (target.daemonUrl !== null) {
-        cleanupSlug.value = new URL(target.daemonUrl).hostname.split(`.`)[0] ?? ``;
-        return;
-    }
-    cleanupSlug.value = sandboxSubdomain(await sandboxIdFromToken(target.token));
-});
-
-// The remove one-liner for the device it runs on (recoverable there for 7 days), in the shell the reader picks.
-const cleanupCommand = computed(() => {
-    const slug = cleanupSlug.value;
-    if (slug === undefined || !oneLinerFits(`remove`, [slug])) {
-        return undefined;
-    }
-    return (os: CommandOs): string => oneLiner(`remove`, [slug], os);
-});
-
-// The machine running this sandbox, when any of the owner's sandboxes reaches it: then deleting the container out there
-// is a checkbox here, and the cleanup command above is only for a machine nothing can reach. Looked up fresh as the
-// dialog opens (useRemovalDoor), so the command never stands in for a press that is merely not known yet.
-const { door: cleanupDoor, looked: machinesLooked, looking: lookingForMachine } = useRemovalDoor(
-    () => pending.value,
-    () => cleanupSlug.value,
-);
-// Never came up: a container for it exists only where a setup was started and broke, so "none of yours has it" is
-// usually the whole story rather than a command's preamble.
-const neverCameUp = computed(() => pending.value !== undefined && pending.value.lastSeenAt === null);
-const alsoDeleteThere = ref(false);
-// Deleting the container out there takes tens of seconds and then drops the account row, so it is the removal's own
-// run, per sandbox removed: closing the dialog mid-delete does not stop it, and the dialog opened again on the same
-// sandbox holds its button and keeps a refusal the device sent.
-const removal = useOperation(() => `gates/remove/${pending.value?.id ?? `none`}`);
-const deletingThere = removal.busy;
-// The device's own sentence, as the dialog has always said it.
-const thereFailed = computed(() => {
-    const failure = removal.failure.value;
-    return failure === undefined ? undefined : (failure.detail ?? failure.title);
-});
 
 const askRemove = (option: SandboxSummary): void => {
     open.value = false;
-    // Never carried over from the last dialog: this box destroys files, so it starts unticked every time.
-    alsoDeleteThere.value = false;
     pending.value = option;
-    if (!removal.busy.value) {
-        removal.dismiss();
-    }
 };
 
 // The hosted sandbox whose rollback is being asked about; the platform does it, so any row's can be, down or not.
@@ -324,57 +272,14 @@ const stillListed = ref<{ readonly name: string; readonly reason: string }>();
 // Drops the account row (a member first leaves the sandbox's own list); with none left, the setup is where the reader
 // goes next.
 const removeRow = async (target: SandboxSummary): Promise<void> => {
-    const dropped = sandbox.remove(target.id);
-    // remove() drops the row synchronously before its first await, so the empty check is valid here.
+    const outcome = await sandbox.remove(target.id);
+    // Only once the row is really gone: leaving for the setup on the optimistic drop took the reader off the shell, and
+    // the dialog with it, before a refusal could bring the row back and say why.
     if (sandbox.sandboxes.value.length === 0) {
         void router.push(`/setup`);
     }
-    const outcome = await dropped;
     if (outcome?.grant === `kept`) {
         stillListed.value = { name: target.name, reason: outcome.reason };
-    }
-};
-
-const confirmRemove = async (): Promise<void> => {
-    const target = pending.value;
-    if (target === undefined || removal.busy.value) {
-        return;
-    }
-    const slug = cleanupSlug.value;
-    const door = cleanupDoor.value;
-    if (!alsoDeleteThere.value || door === undefined || slug === undefined) {
-        pending.value = undefined;
-        await removeRow(target);
-        return;
-    }
-    // The device first, and the dialog stays open while it runs: a failure out there leaves the account row in place
-    // to retry from, rather than dropping the only handle on a container nobody deleted.
-    const { machineKey: machine, machineLabel: label } = door;
-    const doing = t(`sandbox.deviceOps.workingRemove`, { name: target.name });
-    const what = t(`sandbox.deviceOps.doingOn`, { doing, machine: label });
-    const outcome = await removal.run({
-        what,
-        failed: t(`sandbox.sandboxSwitcher.couldntDeleteThere`, { machine: label }),
-        task: async () => {
-            // The machine's card and the Devices tile carry it while the reader looks elsewhere.
-            const endMark = beginDeviceWork({ machine, sandboxes: [target.id], doing, what });
-            try {
-                // Carried by whichever of the owner's sandboxes reaches that machine. When that is the box being deleted, its
-                // daemon dies relaying the call, so the stream ends instead of answering; that is the removal landing, and
-                // only a refusal the device sent still counts as a failure.
-                await manageDeviceSandbox(door.hostId, slug, `remove`, {
-                    severing: door.severs,
-                    at: door.relay === sandbox.activeSandboxId.value ? undefined : door.relay,
-                });
-            } finally {
-                endMark();
-            }
-            // Part of the removal, not of the dialog: the row goes once the container has, dialog open or not.
-            await removeRow(target);
-        },
-    });
-    if (outcome?.state === `done` && pending.value?.id === target.id) {
-        pending.value = undefined;
     }
 };
 </script>
@@ -650,88 +555,7 @@ const confirmRemove = async (): Promise<void> => {
         </template>
     </Modal>
 
-    <ConfirmDialog
-        :open="pending !== undefined"
-        :header="pending?.role === 'owner' ? t(`sandbox.sandboxSwitcher.removeAccount2`) : t(`sandbox.sandboxSwitcher.leaveSandbox`)"
-        :description="
-            pending === undefined
-                ? undefined
-                : pending.role === 'owner'
-                  ? pending.hosted !== null
-                      ? t(`sandbox.sandboxSwitcher.removeHostedMachineDestroyed`, { name: pending.name })
-                      : t(`sandbox.sandboxSwitcher.removeAccountEveryoneLoses`, { name: pending.name })
-                  : t(`sandbox.sandboxSwitcher.leaveLoseAccessSandbox`, { name: pending.name })
-        "
-        :confirm-label="pending?.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
-        confirm-icon="trash"
-        :loading="deletingThere"
-        @cancel="pending = undefined"
-        @confirm="confirmRemove"
-    >
-        <!-- Only the owner's removal takes anything or promises anything back: a member leaving has just the
-             description, and no body is drawn under it. -->
-        <div v-if="pending?.role === 'owner'" class="flex flex-col gap-4">
-            <!-- What the reader set up lives in the sandbox, not the account, so it leaves with it (switcherRows.ts). -->
-            <div v-if="removalTakes(pending.role).length > 0" class="flex flex-col gap-1">
-                <p>{{ t(`sandbox.sandboxSwitcher.leavesWithIt`) }}</p>
-                <ul class="list-disc pl-5 text-muted">
-                    <li v-for="item in removalTakes(pending.role)" :key="item">{{ item }}</li>
-                </ul>
-            </div>
-            <!-- The promise the deletion actually makes, on the owner's own rows only: a member leaving takes nothing
-                 with them, so there is nothing to bring back. The two lanes differ in what comes back — a hosted
-                 machine keeps its disk, an own-machine sandbox comes back as a name with a new address. -->
-            <p class="text-muted">
-                {{
-                    pending.hosted !== null
-                        ? t(`sandbox.sandboxSwitcher.restorableHostedDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
-                        : t(`sandbox.sandboxSwitcher.restorableOwnDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
-                }}
-                {{ t(`sandbox.sandboxSwitcher.restoreWhere`) }}
-            </p>
-            <!-- The hosted lane is the only removal that destroys a machine; no cleanup command, since nothing else exists. -->
-            <template v-if="pending.hosted === null && cleanupCommand !== undefined">
-                <!-- One of the owner's sandboxes reaches the machine holding it, so this is a tick box rather than a command:
-                     the same removal the Devices tab's own button runs. -->
-                <div v-if="cleanupDoor !== undefined" class="flex flex-col gap-2">
-                    <label class="flex items-start gap-2 text-muted">
-                        <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
-                        <input v-model="alsoDeleteThere" type="checkbox" :disabled="deletingThere" class="mt-0.5" />
-                        <span>
-                            {{ t(`sandbox.sandboxSwitcher.alsoDelete`) }} <span class="font-medium text-content">{{ cleanupDoor.machineLabel }}</span>
-                            {{ t(`sandbox.sandboxSwitcher.containerFilesHistoryGone`) }}
-                        </span>
-                    </label>
-                    <Notice v-if="thereFailed" tone="danger" class="text-2xs">{{ thereFailed }}</Notice>
-                </div>
-                <!-- Not found YET: the fresh reads are out, and a command drawn now was most often replaced by the tick box a
-                     second later. -->
-                <p v-else-if="lookingForMachine" class="flex items-center gap-2 text-muted">
-                    <Icon name="spinner" spin class="shrink-0 text-xs" />
-                    {{ t(`sandbox.sandboxSwitcher.lookingOnMachines`) }}
-                </p>
-                <div v-else class="flex flex-col gap-2">
-                    <!-- Said only as a reading: machines that listed what they hold, and none holds it. One asleep or
-                         refusing to list said nothing, and is not named. -->
-                    <p v-if="machinesLooked.length > 0" class="text-muted">
-                        {{
-                            neverCameUp
-                                ? t(`sandbox.sandboxSwitcher.neverCameUpNotOn`, { machines: machinesLooked.join(`, `) })
-                                : t(`sandbox.sandboxSwitcher.notOnMachines`, { machines: machinesLooked.join(`, `) })
-                        }}
-                    </p>
-                    <p class="text-muted">
-                        {{
-                            neverCameUp && machinesLooked.length > 0
-                                ? t(`sandbox.sandboxSwitcher.startedElsewhere`)
-                                : t(`sandbox.sandboxSwitcher.toAlsoRemoveMachine`)
-                        }}
-                    </p>
-                    <RunCommand :command="cleanupCommand" :label="t(`sandbox.sandboxSwitcher.cleanupCommand`)" />
-                </div>
-            </template>
-        </div>
-    </ConfirmDialog>
+    <RemoveSandboxDialog :target="pending" :remove-row="removeRow" @close="pending = undefined" @reopen="(row) => (pending = row)" />
 
     <HostedRollbackDialog :sandbox="rollingBack" @close="rollingBack = undefined" />
 </template>
