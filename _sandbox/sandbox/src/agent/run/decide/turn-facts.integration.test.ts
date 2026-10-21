@@ -314,3 +314,37 @@ test("the field notes are read from the shared workspace root, not the turn's ow
         await Promise.all([root, worktree].map((dir) => rm(dir, { recursive: true, force: true })));
     }
 });
+
+// The brief rides the front of the cached prefix: a rewrite reaching a live conversation would re-write its whole cache.
+// So a conversation keeps what it was first sent, a fork keeps its parent's, and only a compaction (whose cache is gone
+// anyway) or a new conversation reads the rewrite.
+test("a conversation keeps the field notes it was first sent until a compaction", async () => {
+    const root = await mkdtemp(join(tmpdir(), "notes-pin-"));
+    const notes = (check: string): string =>
+        ["priority[1]{rank,id,title,cost}:", "  1,ground,Which tree you are in,edits land outside the branch", "ground:", `  check: ${check}`, ""].join("\n");
+    try {
+        await mkdir(join(root, FIELD_NOTES_FILE, ".."), { recursive: true });
+        await writeFile(join(root, FIELD_NOTES_FILE), notes("first"));
+        const read = async (sent: Parameters<typeof turn>[0], entry: ReturnType<typeof conversationAfter>): Promise<string | undefined> => {
+            const services = servicesWith({
+                workspace: unstubbed<Services["workspace"]>("workspace", { root }),
+                sandboxSettings: settingsOf(SandboxSettingsSchema.parse({ fieldNotes: true })),
+                agents: unstubbed<Services["agents"]>("agents", { entry: () => entry }),
+            });
+            return admitted(await gatherTurnFacts(services, turn(sent), { ...context, localCwd: root, effectiveCwd: root })).fieldNotes?.text;
+        };
+
+        expect(await read({ conversationId: "c-pin" }, conversationAfter(0, { id: "c-pin" }))).toContain("check: first");
+        await writeFile(join(root, FIELD_NOTES_FILE), notes("second"));
+
+        expect(await read({ conversationId: "c-pin" }, conversationAfter(3, { id: "c-pin" }))).toContain("check: first");
+        expect(await read({ conversationId: "c-fork", forkOf: { conversationId: "c-pin", keep: 2, files: "now" } }, conversationAfter(0, { id: "c-fork" }))).toContain(
+            "check: first",
+        );
+        expect(await read({ conversationId: "c-new" }, conversationAfter(0, { id: "c-new" }))).toContain("check: second");
+        expect(await read({ conversationId: "c-pin" }, conversationAfter(4, { id: "c-pin", compactedTurn: 3 }))).toContain("check: second");
+        expect(await read({ conversationId: "c-pin" }, conversationAfter(6, { id: "c-pin", compactedTurn: 3 }))).toContain("check: second");
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});

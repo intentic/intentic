@@ -9524,12 +9524,17 @@
                 "label": "Jak działa wyszukiwanie kodu",
                 "title": "Właściwy plik w mniejszej liczbie kroków",
                 "experience": "Agent szybciej dociera do potrzebnego kodu, więc szybciej zaczyna odpowiadać i mniej błądzi.",
-                "tokens": "Mniej wyszukiwań i odczytów plików na turę. Mapa i notatki kosztują trochę na starcie; niewielka część rozmów działa bez nich, więc oszczędność jest zmierzona, a nie zakładana.",
+                "tokens": "Mniej wyszukiwań i odczytów plików na turę. Notatki i mapa są wysyłane raz, a w kolejnych turach odczytywane z pamięci podręcznej, jak reszta rozmowy; niewielka część rozmów działa bez nich, więc oszczędność jest zmierzona, a nie zakładana.",
                 "without": "Bez iq",
                 "with": "Z iq",
                 "rightFile": "właściwy plik",
-                "ridesAlong": "Co towarzyszy rozmowie",
-                "turn": "Tura {turn}"
+                "ridesAlong": "Co wysyła każda tura",
+                "turn": "Tura {turn}",
+                "instructions": "Instrukcje",
+                "message": "Twoja wiadomość {turn}",
+                "reply": "Odpowiedź {turn}",
+                "fresh": "nowe w tej turze",
+                "cached": "odczytane z pamięci podręcznej"
             },
             "commandOutput": {
                 "label": "Jak działa czyszczenie wyjścia poleceń",

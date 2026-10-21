@@ -10006,12 +10006,17 @@
                 "label": "How code search works",
                 "title": "Finding the right file in fewer steps",
                 "experience": "The agent gets to the code it needs sooner, so answers start sooner and wander less.",
-                "tokens": "Fewer searches and file reads per turn. The map and the notes cost a little up front; a small share of conversations runs without them, so the saving is measured rather than assumed.",
+                "tokens": "Fewer searches and file reads per turn. The notes and the map are sent once and then read back from the cache on every later turn, like the rest of the conversation; a small share of conversations runs without them, so the saving is measured rather than assumed.",
                 "without": "Without iq",
                 "with": "With iq",
                 "rightFile": "right file",
-                "ridesAlong": "What rides along in a conversation",
-                "turn": "Turn {turn}"
+                "ridesAlong": "What each turn sends",
+                "turn": "Turn {turn}",
+                "instructions": "Instructions",
+                "message": "Your message {turn}",
+                "reply": "Reply {turn}",
+                "fresh": "new this turn",
+                "cached": "read back from the cache"
             },
             "commandOutput": {
                 "label": "How command output cleaning works",

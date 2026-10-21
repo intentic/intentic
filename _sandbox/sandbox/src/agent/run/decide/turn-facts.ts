@@ -28,6 +28,8 @@ import { type IqSearchTeaching, iqSearchInstruction } from "../../prompt/iq-sear
 import { type DeclaredWindow, servedEndpointModel, windowOf } from "../../prompt/window/context-budget.js";
 import { workspaceMapNote } from "@intentic/agent-context/workspace-map";
 import { workspaceMemoryNote } from "../../prompt/workspace-memory.js";
+import { fieldNotesPinsAt } from "../../prompt/field-notes-pins.js";
+import { compactedSinceLastTurn } from "../../../conversations/registry/agents-store.js";
 import type { RoutedTurn, TurnInput } from "../../../seams/turn-starter.js";
 import { retrieveTurnContext, type TurnContextOutcome } from "../turn/turn-context.js";
 import type { TurnContext } from "../../providers/adapter.js";
@@ -171,14 +173,45 @@ const iqTeachingFor = (deps: Pick<Services, "config" | "logger">, premise: TurnP
 
 // Read at the shared workspace root, never the turn's tree: the brief is daemon-kept config that git does not track, so
 // an isolated turn's worktree has no copy of it, and the settings row reads the same file to say what is sent.
-const fieldNotesFor = (deps: Pick<Services, "logger" | "workspace">, settings: SandboxSettings): FieldNotes | undefined =>
-    EXPERIMENTS.fieldNotes.on(settings)
-        ? fieldNotes({
-              file: join(deps.workspace.root, FIELD_NOTES_FILE),
-              budget: settings.fieldNotesBudget,
-              onUnreadable: (why) => deps.logger.warn({ why }, "field notes: the file is there but cannot be sent"),
-          })
-        : undefined;
+const freshFieldNotes = (deps: Pick<Services, "logger" | "workspace">, settings: SandboxSettings): FieldNotes | undefined =>
+    fieldNotes({
+        file: join(deps.workspace.root, FIELD_NOTES_FILE),
+        budget: settings.fieldNotesBudget,
+        onUnreadable: (why) => deps.logger.warn({ why }, "field notes: the file is there but cannot be sent"),
+    });
+
+// The brief rides the front of the cached prefix, so a conversation keeps the one it was first sent (field-notes-pins.ts)
+// and re-reads the file only where its cache is gone anyway: a compaction. The switch is still read every turn, since
+// turning the notes off is the owner's call and outranks the cache. A pin that cannot be read or written costs only the
+// cache, never the turn.
+const fieldNotesFor = async (
+    deps: Pick<Services, "logger" | "workspace">,
+    settings: SandboxSettings,
+    turn: { readonly conversationId: string | undefined; readonly forkOf: string | undefined; readonly refresh: boolean },
+): Promise<FieldNotes | undefined> => {
+    if (!EXPERIMENTS.fieldNotes.on(settings)) {
+        return undefined;
+    }
+    const { conversationId } = turn;
+    if (conversationId === undefined) {
+        return freshFieldNotes(deps, settings);
+    }
+    const pins = fieldNotesPinsAt(deps.workspace.root);
+    try {
+        const pinned = turn.refresh ? undefined : await pins.pinned(conversationId, turn.forkOf);
+        if (pinned !== undefined) {
+            return pinned;
+        }
+        const brief = freshFieldNotes(deps, settings);
+        if (brief !== undefined) {
+            await pins.pin(conversationId, brief);
+        }
+        return brief;
+    } catch (error) {
+        deps.logger.warn({ err: error }, "field notes: the pin could not be kept, so this turn reads the file as it is");
+        return freshFieldNotes(deps, settings);
+    }
+};
 
 // The start folder as the daemon reaches it. One the escape guard refuses maps nothing and reads rules from the root.
 const treeReads = (context: TurnContext, premise: TurnPremise): Pick<AdmittedTurnFacts, "memoryNote" | "mapNote"> => {
@@ -207,7 +240,7 @@ const accountRouteOf = async (services: TurnFactsDeps, input: RoutedTurn, entry:
     }
 };
 
-// Every seam the reads above reach; nothing here writes.
+// Every seam the reads above reach. The one write is the field-notes pin, which records what a conversation read.
 export type TurnFactsDeps = ServiceabilityDeps &
     Pick<
     Services,
@@ -287,7 +320,11 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     const iqTeaching = await iqTeachingFor(services, premise);
     // What checks the work, on the turns that owe it to a card that did not drop it (turn-premise.ts).
     const landingChecksNote = premise.send.landingChecks ? LANDING_CHECKS_NOTE : undefined;
-    const brief = fieldNotesFor(services, settings);
+    const brief = await fieldNotesFor(services, settings, {
+        conversationId: input.conversationId,
+        forkOf: input.forkOf?.conversationId,
+        refresh: compactedSinceLastTurn(entry, runtime.conversationTurns),
+    });
     const card = premise.persona.persona;
     // Only a card that asked for its own prompt is read, so an ordinary turn pays nothing for it.
     const personaPrompt = card?.systemPromptMode === "custom" ? await readPersonaPrompt(services.workspace.root, card.id) : undefined;
