@@ -6,6 +6,8 @@
         "console": {
             "couldntLoad": "Nie udało się wczytać Twoich organizacji",
             "couldntCreate": "Nie udało się założyć organizacji",
+            "fromWorkspace": "Organizacjami zarządza się w przestrzeni roboczej, która zna każdy sandbox, jaki mogą obejmować.",
+            "openInWorkspace": "Otwórz w przestrzeni roboczej",
             "yours": "Twoje organizacje",
             "summary": "{role} · {count} sandbox | {role} · {count} sandboxy | {role} · {count} sandboxów",
             "none": "Nie należysz do żadnej organizacji. Prywatne sandboxy działają bez niej.",

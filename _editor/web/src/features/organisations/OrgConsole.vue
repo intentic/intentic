@@ -3,8 +3,11 @@ import type { OrgDetail, OrgSummary } from "@intentic/api-contract";
 import { Button, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
 import { type NoticeModel, noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { onMounted, ref, shallowRef } from "vue";
+import { computed, onMounted, ref, shallowRef } from "vue";
+import { localHost } from "../../app/environments/localHost";
+import { useAccount } from "../../client/auth/useAccount";
 import { apiClient } from "../../lib/useApi";
+import { useOperation } from "../../workbench/operations/operations";
 import OrgDetailPanel from "./OrgDetailPanel.vue";
 
 // Settings ▸ Organisation (docs/architecture/organisations.md): the organisations this account is in, starting one
@@ -64,11 +67,46 @@ const changed = async (detail: OrgDetail): Promise<void> => {
     await load();
 };
 
-onMounted(load);
+// A desktop window on a folder of this computer has no platform of its own to ask (its stand-in answers the folder's
+// session and sandbox and nothing else, _editor/desktop-app/local/platform.ts), and it knows only its own folder, where
+// an organisation holds the account's sandboxes. So, as deleting the account does (SettingsData.vue), the console is
+// the workspace's, and this window opens it there rather than failing a call nothing here can answer.
+const { local } = useAccount();
+const handing = useOperation(`settings/organisation/workspace`);
+const handingError = computed(() => handing.failure.value);
+const openInWorkspace = async (): Promise<void> => {
+    await handing.run({
+        what: t(`organisations.console.openInWorkspace`),
+        failed: t(`settings.settingsData.workspaceNotOpened`),
+        // The workspace window opening is the answer.
+        quiet: true,
+        task: () => localHost().openWorkspace(`/settings/organisation`),
+    });
+};
+
+onMounted(async () => {
+    if (!local) {
+        await load();
+    }
+});
 </script>
 
 <template>
-    <div class="flex flex-col gap-6">
+    <div v-if="local" class="flex flex-col gap-6">
+        <RowGroup :label="t(`organisations.console.yours`)">
+            <Row data-setting="organisation-workspace" icon="users" :title="t(`organisations.console.yours`)" :description="t(`organisations.console.fromWorkspace`)">
+                <template #control>
+                    <Button :label="t(`organisations.console.openInWorkspace`)" tier="boring" size="small" :loading="handing.busy.value" @click="openInWorkspace">
+                        <template #icon><Icon name="arrow-up-right" /></template>
+                    </Button>
+                </template>
+                <template v-if="handingError" #below>
+                    <Notice :of="handingError" />
+                </template>
+            </Row>
+        </RowGroup>
+    </div>
+    <div v-else class="flex flex-col gap-6">
         <Notice v-if="notice" :of="notice" />
         <RowGroup :label="t(`organisations.console.yours`)">
             <Row

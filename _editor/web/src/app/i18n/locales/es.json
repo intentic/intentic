@@ -6,6 +6,8 @@
         "console": {
             "couldntLoad": "No se pudieron cargar tus organizaciones",
             "couldntCreate": "No se pudo crear la organización",
+            "fromWorkspace": "Las organizaciones se gestionan desde tu espacio de trabajo, que conoce cada sandbox que pueden contener.",
+            "openInWorkspace": "Abrir en el espacio de trabajo",
             "yours": "Tus organizaciones",
             "summary": "{role} · {count} sandbox | {role} · {count} sandboxes",
             "none": "No perteneces a ninguna organización. Los sandboxes personales funcionan sin ella.",

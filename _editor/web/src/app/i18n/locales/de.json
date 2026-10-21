@@ -6,6 +6,8 @@
         "console": {
             "couldntLoad": "Deine Organisationen konnten nicht geladen werden",
             "couldntCreate": "Die Organisation konnte nicht angelegt werden",
+            "fromWorkspace": "Organisationen werden im Arbeitsbereich verwaltet, der jede Sandbox kennt, die sie halten können.",
+            "openInWorkspace": "Im Arbeitsbereich öffnen",
             "yours": "Deine Organisationen",
             "summary": "{role} · {count} Sandbox | {role} · {count} Sandboxes",
             "none": "Du bist in keiner Organisation. Persönliche Sandboxes funktionieren ohne.",

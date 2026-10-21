@@ -6,6 +6,8 @@
         "console": {
             "couldntLoad": "Couldn't load your organisations",
             "couldntCreate": "Couldn't start the organisation",
+            "fromWorkspace": "Organisations are run from your workspace, which knows every sandbox they can hold.",
+            "openInWorkspace": "Open in workspace",
             "yours": "Your organisations",
             "summary": "{role} · {count} sandbox | {role} · {count} sandboxes",
             "none": "You are not in any organisation. Personal sandboxes work without one.",
