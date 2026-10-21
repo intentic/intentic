@@ -1,6 +1,6 @@
-import { NOT_ON_MAC } from "@intentic/keyring";
-import { supportOf } from "./keyring-status.js";
-import { approvalRefused, elevatedCommand, NEEDS_ADMIN } from "./service.js";
+import { NOT_ON_MAC,KeyringUnavailable } from "@intentic/keyring";
+import { supportOf,keyringLine } from "./keyring-status.js";
+import { approvalRefused, elevatedCommand, NEEDS_ADMIN, serviceDown } from "./service.js";
 
 /* Whether Passwords can be set up here, and how its one administrator's yes is asked: UAC on Windows, pkexec on Linux.
    Neither prompt is shown here. */
@@ -31,6 +31,8 @@ describe("the administrator's yes", () => {
         const windows = elevatedCommand(["service", "install"], "win32");
         expect(windows.command).toBe("powershell.exe");
         expect(windows.args.at(-1)).toContain("-Verb RunAs");
+        // The elevated keyring is a console program: without this, Windows opens a cmd window in the person's face.
+        expect(windows.args.at(-1)).toContain("-WindowStyle Hidden");
     });
 
     test("not given reads as such: pkexec's 126 and 127, UAC's cancel", () => {
@@ -39,5 +41,19 @@ describe("the administrator's yes", () => {
         expect(approvalRefused(1, "", "linux")).toBe(false);
         expect(approvalRefused(1, "The operation was canceled by the user.", "win32")).toBe(true);
         expect(NEEDS_ADMIN).toContain("administrator's approval once");
+    });
+});
+
+describe("a service installed and silent", () => {
+    test("is the helper answering no-keyring, not a keyring that is down or refusing something else", () => {
+        expect(serviceDown({ ok: false, code: "no-keyring", refusal: "Passwords' service is not running yet." })).toBe(true);
+        expect(serviceDown({ ok: false, code: "locked", refusal: "Locked." })).toBe(false);
+        expect(serviceDown(new KeyringUnavailable("no pipe"))).toBe(false);
+    });
+
+    test("reads as a failure that names the repair, not as a keyring waiting to be set up", () => {
+        const line = keyringLine({ installed: true, running: true, setUp: false, serviceDown: true });
+        expect(line.tone).toBe("fail");
+        expect(line.meta).toContain("keyring upgrade");
     });
 });

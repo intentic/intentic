@@ -64,8 +64,27 @@ export interface PasswordItem {
 
 export type UnlockWay = "hello" | "passphrase" | "polkit";
 
+/** One stage of a fix that takes a while (an update, a repair), as the person watches it go by. */
+export interface FixStep {
+    readonly id: string;
+    readonly label: string;
+    /** What the person does while this stage runs (a Windows prompt to answer), said beside it. */
+    readonly hint?: string | undefined;
+}
+
+/** The unavailable state's own way out. */
+export interface StatusFix {
+    readonly label: string;
+    /** The heading while it runs ("Updating Passwords"); the label where there is none. */
+    readonly doing?: string | undefined;
+    /** The stages `run` reports through `onStep`, in order. Without them the button alone says it is working. */
+    readonly steps?: readonly FixStep[] | undefined;
+    /** Reports each stage's id as it is reached; one not in `steps` is not drawn. */
+    readonly run: (onStep?: (id: string) => void) => Promise<void>;
+}
+
 export type VaultStatus =
-    | { readonly kind: "unavailable"; readonly reason: string; readonly fix?: { readonly label: string; readonly run: () => Promise<void> } | undefined }
+    | { readonly kind: "unavailable"; readonly reason: string; readonly fix?: StatusFix | undefined }
     | {
           readonly kind: "not-set-up";
           /** False where this computer cannot keep a protected vault (no administrator, macOS for now): `why` says so. */

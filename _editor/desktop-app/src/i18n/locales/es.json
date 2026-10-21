@@ -664,6 +664,19 @@
         "needsUpdate": "Contraseñas en este equipo tiene la versión {version} y necesita una actualización para funcionar con esta aplicación. Se actualiza por separado de Intentic, después de que lo confirmes en este equipo.",
         "update": "Actualizar Contraseñas",
         "offerLead": "Guarda tus contraseñas en este ordenador, a medida que las escribes, para que los agentes puedan usarlas sin verlas nunca.",
-        "offerOpen": "Configurar Contraseñas"
+        "offerOpen": "Configurar Contraseñas",
+        "updating": "Actualizando Contraseñas",
+        "repair": "Reparar Contraseñas",
+        "repairing": "Reparando Contraseñas",
+        "serviceDown": "El servicio protegido de Contraseñas en este equipo no responde, así que tus contraseñas no están accesibles ahora. Siguen seguras en su bóveda. Reparar reinstala el servicio, tras tu confirmación.",
+        "steps": {
+            "download": "Descargar y verificar la nueva versión",
+            "consent": "Confirma que eres tú",
+            "consentHint": "Contraseñas te pide que confirmes en este equipo.",
+            "install": "Instalar el servicio protegido",
+            "installHintWindows": "Windows pide la aprobación de un administrador. Elige Sí.",
+            "installHintLinux": "Tu sistema pide una contraseña de administrador.",
+            "start": "Iniciar Contraseñas"
+        }
     }
 }

@@ -243,7 +243,9 @@
             "finish": "Done"
         },
         "unavailable": {
-            "title": "Passwords isn't available"
+            "title": "Passwords isn't available",
+            "takesAWhile": "This takes a minute or two. Keep this window open.",
+            "tryAgain": "Try again"
         },
         "remember": {
             "strip": "Let Intentic remember the passwords you type?",

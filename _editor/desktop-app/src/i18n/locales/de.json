@@ -664,6 +664,19 @@
         "needsUpdate": "Passwörter auf diesem Computer hat Version {version} und braucht ein Update, um mit dieser App zu funktionieren. Es wird getrennt von Intentic aktualisiert, nachdem du auf diesem Computer zugestimmt hast.",
         "update": "Passwörter aktualisieren",
         "offerLead": "Bewahre deine Passwörter auf diesem Computer auf, gespeichert, während du sie eingibst, damit Agenten sie nutzen können, ohne sie je zu sehen.",
-        "offerOpen": "Passwörter einrichten"
+        "offerOpen": "Passwörter einrichten",
+        "updating": "Passwörter wird aktualisiert",
+        "repair": "Passwörter reparieren",
+        "repairing": "Passwörter wird repariert",
+        "serviceDown": "Der geschützte Dienst von Passwörter auf diesem Computer antwortet nicht, daher sind deine Passwörter gerade nicht erreichbar. Sie liegen sicher in seinem Tresor. Die Reparatur installiert den Dienst neu, nachdem du bestätigst.",
+        "steps": {
+            "download": "Neue Version herunterladen und prüfen",
+            "consent": "Bestätige, dass du es bist",
+            "consentHint": "Passwörter bittet dich auf diesem Computer um Bestätigung.",
+            "install": "Geschützten Dienst installieren",
+            "installHintWindows": "Windows fragt nach der Zustimmung eines Administrators. Wähle Ja.",
+            "installHintLinux": "Dein System fragt nach einem Administratorpasswort.",
+            "start": "Passwörter starten"
+        }
     }
 }

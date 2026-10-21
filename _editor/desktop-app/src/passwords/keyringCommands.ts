@@ -9,6 +9,7 @@ import type {
     KeyringState,
 } from "@intentic/sandbox-contract/schemas/keyring";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 // THE KEYRING ON THIS COMPUTER (src-tauri/src/keyring.rs), for the Passwords view (src/passwords): `intentic-machine
 // keyring … --json`, whose one line of JSON is parsed here, as the agent's status is above. A refusal (`{"ok":false,…}`)
@@ -21,6 +22,8 @@ export interface KeyringStatus {
     /** Present once the vault is set up and the keyring answers. */
     readonly state?: KeyringState;
     readonly askpass: { readonly installed: boolean; readonly path?: string };
+    /** Passwords' protected service is installed and its helper runs, but the service does not answer: nothing reaches the vault. */
+    readonly serviceDown?: boolean;
     /** Whether this computer can keep a protected vault, and how it unlocks. Absent from an agent older than 2026-10-19. */
     readonly support?: { readonly canSetUp: boolean; readonly why?: string; readonly hello: boolean; readonly platform: `windows` | `linux` | `darwin` };
 }
@@ -183,9 +186,21 @@ export const keyringUnlock = async (minutes?: number): Promise<void> => {
 export const keyringLock = async (): Promise<void> => {
     keyringAnswer<KeyringLine>(await invoke<string>(`keyring_lock`));
 };
-/** Update at the running keyring's consent, through the machine agent's verified download and service installer. */
-export const keyringUpgrade = async (): Promise<void> => {
-    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_upgrade`));
+/** The stages `keyring upgrade` reports as it reaches them (keyring.rs `UPGRADE_STEPS`), in order. */
+export const UPGRADE_STEPS = [`download`, `consent`, `install`, `start`] as const;
+export type UpgradeStep = (typeof UPGRADE_STEPS)[number];
+
+/**
+ * Update at the running keyring's consent, through the machine agent's verified download and service installer; the
+ * same run repairs a service that is installed and silent. `onStep` hears each stage as the agent reaches it.
+ */
+export const keyringUpgrade = async (onStep?: (step: UpgradeStep) => void): Promise<void> => {
+    const unlisten = onStep === undefined ? undefined : await listen<UpgradeStep>(`keyring-step`, (event) => onStep(event.payload));
+    try {
+        keyringAnswer<KeyringLine>(await invoke<string>(`keyring_upgrade`));
+    } finally {
+        unlisten?.();
+    }
 };
 /** One of the Passwords app's verbs, its input on the agent's stdin (keyring.rs `keyring_app`). */
 export const keyringApp = async <Op extends KeyringAppOp>(op: Op, input: KeyringAppOps[Op][`in`]): Promise<KeyringAppOps[Op][`out`]> =>

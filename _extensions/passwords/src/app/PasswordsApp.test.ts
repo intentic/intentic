@@ -181,7 +181,48 @@ describe(`PasswordsApp`, () => {
         await waitFor(() => expect(el.textContent).toContain(`Passwords needs an update on this computer.`));
         button(el, `Update Passwords`).click();
         await waitFor(() => expect(el.querySelector(`[role="alert"]`)?.textContent).toBe(`You declined the keyring update.`));
-        expect(button(el, `Update Passwords`).disabled).toBe(false);
+        expect(button(el, `Try again`).disabled).toBe(false);
+    });
+
+    it(`draws a long fix's stages as the port reaches them, with what the person does now`, async () => {
+        const { port } = fakePort({ status: READY });
+        let reach: ((id: string) => void) | undefined;
+        let finish: ((failure?: Error) => void) | undefined;
+        const status: PasswordsPort[`status`] = async () => ({
+            kind: `unavailable`,
+            reason: `Passwords needs an update on this computer.`,
+            fix: {
+                label: `Update Passwords`,
+                doing: `Updating Passwords`,
+                steps: [
+                    { id: `download`, label: `Download and check it` },
+                    { id: `install`, label: `Install it`, hint: `Windows asks for an administrator's yes.` },
+                    { id: `start`, label: `Start Passwords` },
+                ],
+                run: async (onStep) => {
+                    reach = onStep;
+                    await new Promise<void>((resolve, reject) => {
+                        finish = (failure) => (failure === undefined ? resolve() : reject(failure));
+                    });
+                },
+            },
+        });
+        const el = mount({ ...port, status });
+        await waitFor(() => expect(el.textContent).toContain(`Passwords needs an update on this computer.`));
+        button(el, `Update Passwords`).click();
+        await waitFor(() => expect(el.textContent).toContain(`Updating Passwords`));
+        reach?.(`download`);
+        // A stage the fix does not draw moves nothing.
+        reach?.(`consent`);
+        await waitFor(() => expect(el.querySelector(`[aria-current="step"]`)?.textContent).toContain(`Download and check it`));
+        reach?.(`install`);
+        await waitFor(() => expect(el.querySelector(`[aria-current="step"]`)?.textContent).toContain(`Windows asks for an administrator's yes.`));
+        finish?.(new Error(`You declined the administrator's prompt.`));
+        await waitFor(() => expect(el.querySelector(`[role="alert"]`)?.textContent).toBe(`You declined the administrator's prompt.`));
+        // Stopped where it failed, the list stays up, and the way out is to try again.
+        expect(el.querySelector(`[aria-current="step"]`)).toBeNull();
+        expect(el.textContent).toContain(`Install it`);
+        expect(button(el, `Try again`).disabled).toBe(false);
     });
 
     it(`turns Passwords on, shows the recovery key once, and asks once to remember`, async () => {

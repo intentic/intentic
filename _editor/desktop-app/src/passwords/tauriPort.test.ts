@@ -8,7 +8,7 @@ import type { KeyringEntry, KeyringStatus } from "./keyringCommands";
 
 const { registerDesktopCatalog } = await import("../i18n");
 await registerDesktopCatalog();
-const { itemOf, sandboxLabel, tauriPasswordsPort, vaultOf } = await import("./tauriPort");
+const { itemOf, sandboxLabel, tauriPasswordsPort, upgradeFix, vaultOf } = await import("./tauriPort");
 
 const KEYS = { seal: `A`.repeat(43), inbox: `B`.repeat(43) };
 const SHOP = `https://shop-574ea8038415.intentic.app`;
@@ -41,6 +41,30 @@ describe(`vaultOf`, () => {
             state: { version: `1`, locked: true, unlock: [`hello`], keys: KEYS, pendingInbox: 0, pendingCaptures: 2 },
         };
         expect(vaultOf(ready, `rog`, false)).toMatchObject({ kind: `ready`, locked: true, pendingCaptures: 2, rememberAsked: false, computer: `rog` });
+    });
+
+    // Set up, and its service silent: not "turn on", which could only fail, but a repair that says what is happening.
+    it(`offers a repair, drawn stage by stage, where the service is installed and does not answer`, () => {
+        const silent: KeyringStatus = { installed: true, running: true, setUp: false, serviceDown: true, askpass: { installed: true }, support: { canSetUp: true, hello: true, platform: `windows` } };
+        const status = vaultOf(silent, `rog`, true);
+        if (status.kind !== `unavailable` || status.fix === undefined) {
+            throw new Error(`A silent service must offer its repair.`);
+        }
+        expect(status.reason).toContain(`isn't answering`);
+        expect(status.fix.label).toBe(`Repair Passwords`);
+        // The keyring's own yes cannot be asked while its service is silent: the repair does not draw that stage.
+        expect(status.fix.steps?.map((step) => step.id)).toEqual([`download`, `install`, `start`]);
+        expect(status.fix.steps?.find((step) => step.id === `install`)?.hint).toContain(`Choose Yes`);
+    });
+});
+
+describe(`upgradeFix`, () => {
+    it(`draws every stage the agent reports, with the prompt each one waits on said for this platform`, () => {
+        const fix = upgradeFix(`update`, `linux`);
+        expect(fix.label).toBe(`Update Passwords`);
+        expect(fix.doing).toBe(`Updating Passwords`);
+        expect(fix.steps?.map((step) => step.id)).toEqual([`download`, `consent`, `install`, `start`]);
+        expect(fix.steps?.find((step) => step.id === `install`)?.hint).toContain(`administrator's password`);
     });
 });
 

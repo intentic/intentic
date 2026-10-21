@@ -664,6 +664,19 @@
         "needsUpdate": "Mots de passe sur cet ordinateur utilise la version {version} et doit être mis à jour pour fonctionner avec cette application. Sa mise à jour est distincte de celle d'Intentic, après votre confirmation sur cet ordinateur.",
         "update": "Mettre à jour Mots de passe",
         "offerLead": "Gardez vos mots de passe sur cet ordinateur, enregistrés au fil de la saisie, pour que les agents puissent s'en servir sans jamais les voir.",
-        "offerOpen": "Configurer Mots de passe"
+        "offerOpen": "Configurer Mots de passe",
+        "updating": "Mise à jour de Mots de passe",
+        "repair": "Réparer Mots de passe",
+        "repairing": "Réparation de Mots de passe",
+        "serviceDown": "Le service protégé de Mots de passe sur cet ordinateur ne répond pas, vos mots de passe sont donc inaccessibles pour l'instant. Ils restent en sécurité dans son coffre. La réparation réinstalle le service, après votre confirmation.",
+        "steps": {
+            "download": "Télécharger et vérifier la nouvelle version",
+            "consent": "Confirmez que c'est vous",
+            "consentHint": "Mots de passe vous demande de confirmer sur cet ordinateur.",
+            "install": "Installer le service protégé",
+            "installHintWindows": "Windows demande l'accord d'un administrateur. Choisissez Oui.",
+            "installHintLinux": "Votre système demande un mot de passe administrateur.",
+            "start": "Démarrer Mots de passe"
+        }
     }
 }

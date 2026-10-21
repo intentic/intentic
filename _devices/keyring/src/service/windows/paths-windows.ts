@@ -18,6 +18,8 @@ export const SYSTEM_SID = "S-1-5-18";
 export const LOCAL_SERVICE_SID = "S-1-5-19";
 export const ADMINISTRATORS_SID = "S-1-5-32-544";
 export const USERS_SID = "S-1-5-32-545";
+// CREATOR OWNER: a grant to it on a folder lands, on each file made there, as a grant to whoever made the file.
+export const CREATOR_OWNER_SID = "S-1-3-0";
 
 export interface WindowsServicePaths {
     readonly root: string;

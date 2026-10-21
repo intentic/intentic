@@ -1,4 +1,4 @@
-import { ADMINISTRATORS_SID, type WindowsServicePaths, LOCAL_SERVICE_SID, SYSTEM_SID, USERS_SID } from "./paths-windows.js";
+import { ADMINISTRATORS_SID, CREATOR_OWNER_SID, type WindowsServicePaths, LOCAL_SERVICE_SID, SYSTEM_SID, USERS_SID } from "./paths-windows.js";
 
 // The access lists the protected service's install sets with icacls, every account by SID (`*S-1-…`) so a localised Windows reads them the
 // same. Inheritance is cut on each so nothing the parent allows leaks in.
@@ -12,10 +12,21 @@ export interface IcaclsCall {
 
 export const windowsServiceAcls = (paths: WindowsServicePaths): readonly IcaclsCall[] => [
     // The root: SYSTEM and administrators everywhere below; the service may create its door file here; every user may
-    // read the folder itself to find their marker and door, and nothing below it by this grant.
+    // read the folder itself to find their marker and door, and nothing below it by this grant. The service writes its
+    // door as a staging file renamed into place, and a file it creates here inherits only SYSTEM's and administrators'
+    // grants: without CREATOR OWNER it could not rename (or delete) the very file it just wrote, and never published a
+    // door (found 2026-10-21, a service up and unreachable). Files only, this folder's own, so nothing deeper is touched.
     {
         path: paths.root,
-        args: ["/inheritance:r", "/grant:r", grant(SYSTEM_SID, "(OI)(CI)F"), grant(ADMINISTRATORS_SID, "(OI)(CI)F"), grant(LOCAL_SERVICE_SID, "(M)"), grant(USERS_SID, "(RX)")],
+        args: [
+            "/inheritance:r",
+            "/grant:r",
+            grant(SYSTEM_SID, "(OI)(CI)F"),
+            grant(ADMINISTRATORS_SID, "(OI)(CI)F"),
+            grant(LOCAL_SERVICE_SID, "(M)"),
+            grant(CREATOR_OWNER_SID, "(OI)(IO)(NP)F"),
+            grant(USERS_SID, "(RX)"),
+        ],
     },
     // The service's program: run by the service and by the user's session helper, replaced only by an administrator.
     {

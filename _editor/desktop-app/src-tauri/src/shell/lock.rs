@@ -50,7 +50,7 @@ fn change(args: &[&str], pin: Option<crate::keyring::Secret>) -> Result<Value, S
         .map_err(|_| "The screen lock is already changing. Try again in a moment.")?;
     let command = lock_command(args)?;
     let (code, timed_out) = if let Some(pin) = pin {
-        let ran = crate::keyring::capture_fed(command, &pin, Duration::from_secs(25))
+        let ran = crate::keyring::capture_fed(command, &pin, Duration::from_secs(25), None)
             .map_err(|_| "The screen lock could not be changed.")?;
         (ran.code, ran.timed_out)
     } else {

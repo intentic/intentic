@@ -40,6 +40,16 @@ const carry = async (from: string, to: string): Promise<boolean> => {
     return true;
 };
 
+// writeFileAtomic's staging names for a door file: `.<SID>.door.json.<hex>.tmp`.
+const STAGED_DOOR_RE = /^\.S-1-[\d-]+\.door\.json\.[\da-f]+\.tmp$/u;
+
+const sweepStagedDoors = async (root: string): Promise<void> => {
+    // allow(silent-catch): a root not made yet holds nothing to sweep
+    const names: readonly string[] = await readdir(root).catch(() => []);
+    // allow(silent-catch): one that will not go now is swept by the next install, and harms nothing meanwhile
+    await Promise.all(names.filter((name) => STAGED_DOOR_RE.test(name)).map(async (name) => await rm(join(root, name), { force: true }).catch(() => undefined)));
+};
+
 export const installService = async (runner: Runner, program: string = process.execPath): Promise<{ readonly sid: string; readonly moved: readonly string[] }> => {
     if (!basename(program).toLowerCase().startsWith("intentic-keyring")) {
         throw new Error("The service installs the compiled keyring itself: run it as intentic-keyring.exe.");
@@ -51,6 +61,9 @@ export const installService = async (runner: Runner, program: string = process.e
     for (const call of windowsServiceAcls(paths)) {
         await icacls(runner, call);
     }
+    // Door files a service before could not finish publishing (staging files it was left unable to rename, acl-windows.ts):
+    // only an administrator can remove them, and this is the run that has one.
+    await sweepStagedDoors(paths.root);
     // A running task holds the old program open: stopped (and started again below) so the copy can land.
     await runPowerShell(runner, { script: STOP_TASK_SCRIPT, input: taskInput(paths, sid), timeoutMs: 60_000 }, TaskAnswerSchema);
     await copyFile(program, paths.exe);

@@ -243,7 +243,9 @@
             "finish": "Hecho"
         },
         "unavailable": {
-            "title": "Contraseñas no está disponible"
+            "title": "Contraseñas no está disponible",
+            "takesAWhile": "Tarda uno o dos minutos. Deja esta ventana abierta.",
+            "tryAgain": "Intentar de nuevo"
         },
         "remember": {
             "strip": "¿Quieres que Intentic recuerde las contraseñas que escribes?",

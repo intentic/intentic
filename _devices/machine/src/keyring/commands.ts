@@ -25,7 +25,7 @@ import {
 } from "./flags.js";
 import { readConfirmed, readStdin } from "./secret-input.js";
 import { type AskpassAnswer, clock, keyringLine, keyringStatusLine, readAskpassAnswer, readKeyringStatus, supportOf } from "./keyring-status.js";
-import { ensureService, installKeyring, keyringState, uninstallKeyring, upgradeKeyring } from "./service.js";
+import { ensureService, installKeyring, keyringState, type StepReport, uninstallKeyring, upgradeKeyring } from "./service.js";
 import { appCommands } from "./app-commands.js";
 import { uninstallGitHelper } from "./git-helper.js";
 import { uninstallNativeHost } from "./native-host-install.js";
@@ -527,6 +527,15 @@ const syncStatus = buildCommand<JsonFlags>({
 
 // ---- upgrade, uninstall ----
 
+// Under --json, each stage of a long change as one line on stderr, `intentic-step {"step":…}`: the desktop app draws
+// them as the steps the person watches (keyring.rs streams stderr), where stdout stays the one answer.
+const stepLine =
+    (cli: CommandContext): StepReport =>
+    (step) => {
+        // allow(terminal-output): the progress line the desktop app reads while the answer is still coming
+        cli.process.stderr.write(`intentic-step ${JSON.stringify({ step })}\n`);
+    };
+
 const upgrade = buildCommand<JsonFlags>({
     docs: { brief: "Move the keyring to this agent's release, once the running keyring has asked you" },
     parameters: { flags: { json } },
@@ -535,7 +544,7 @@ const upgrade = buildCommand<JsonFlags>({
             this,
             flags.json,
             { doing: `Updating the keyring to ${MACHINE_VERSION}`, failed: "The keyring was not updated." },
-            async (ui) => await upgradeKeyring(MACHINE_VERSION, ui.note),
+            async (ui) => await upgradeKeyring(MACHINE_VERSION, ui.note, flags.json ? stepLine(this) : undefined),
             (result, ui) => ui.done(result.upgraded ? `Updated the keyring from ${result.from} to ${result.to}.` : `The keyring is already on ${result.to}. Nothing to do.`),
         );
     },

@@ -243,7 +243,9 @@
             "finish": "Terminé"
         },
         "unavailable": {
-            "title": "Mots de passe n'est pas disponible"
+            "title": "Mots de passe n'est pas disponible",
+            "takesAWhile": "Cela prend une minute ou deux. Gardez cette fenêtre ouverte.",
+            "tryAgain": "Réessayer"
         },
         "remember": {
             "strip": "Laisser Intentic mémoriser les mots de passe que vous saisissez ?",

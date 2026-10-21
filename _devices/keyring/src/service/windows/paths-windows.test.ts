@@ -27,6 +27,14 @@ describe("hardened mode's places", () => {
         expect(vault?.args.join(" ")).not.toContain("S-1-5-32-545");
     });
 
+    // The service publishes its door as a staging file renamed into place: whoever creates a file in the root must keep
+    // the right to rename it, or the service runs and nobody can reach it.
+    test("let the service rename the door file it wrote in the root", () => {
+        const paths = windowsServicePaths(SID, env);
+        const root = windowsServiceAcls(paths).find((call) => call.path === paths.root);
+        expect(root?.args).toContain("*S-1-3-0:(OI)(IO)(NP)F");
+    });
+
     test("are off where no marker was written", () => {
         expect(windowsServiceInstalled(SID, { ProgramData: "/nonexistent" })).toBe(false);
     });

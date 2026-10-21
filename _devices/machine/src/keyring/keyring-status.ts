@@ -5,7 +5,7 @@ import type { Item } from "@intentic/local-agent";
 import type { KeyringState } from "@intentic/sandbox-contract/schemas/keyring";
 import { localZone, wallClockIn } from "@intentic/sandbox-contract/time/zone";
 import { askpassStatus } from "./askpass.js";
-import { keyringInstalled, keyringState } from "./service.js";
+import { keyringInstalled, keyringState, serviceDown, serviceHere } from "./service.js";
 
 // THE KEYRING AS EVERY SURFACE SAYS IT: `keyring status`, and the one line `status` and `doctor` give it. Installed is
 // the binary beside this agent; running is its pipe answering within a moment; set up and locked are its own answer.
@@ -15,12 +15,18 @@ export interface KeyringSummary {
     readonly running: boolean;
     readonly setUp: boolean;
     readonly state?: KeyringState;
+    // Passwords' protected service is installed, and its session helper runs, but the service behind it does not
+    // answer: the vault is there and nothing can reach it. Only ever `true` (an agent from before says nothing).
+    readonly serviceDown?: true;
 }
 
 export const readKeyringSummary = async (): Promise<KeyringSummary> => {
     const state = await keyringState();
     const running = !(state instanceof KeyringUnavailable);
     const summary: KeyringSummary = { installed: keyringInstalled(), running, setUp: running && state.ok && state.setUp };
+    if (serviceDown(state) && (await serviceHere())) {
+        return { ...summary, serviceDown: true };
+    }
     return running && state.ok ? { ...summary, state: state.state } : summary;
 };
 
@@ -111,6 +117,9 @@ export const keyringLine = (line: KeyringStatusLine): Item => {
     if (!line.running) {
         return { tone: "fail", name: "keyring", meta: "installed, not running (`intentic-machine keyring setup` starts it)" };
     }
+    if (line.serviceDown === true) {
+        return { tone: "fail", name: "keyring", meta: "its service does not answer (`intentic-machine keyring upgrade` repairs it)" };
+    }
     if (!line.setUp) {
         return { tone: "warn", name: "keyring", meta: "running, not set up (`intentic-machine keyring setup`)" };
     }
@@ -126,10 +135,12 @@ export interface KeyringStatusLine {
     readonly locked?: boolean;
     readonly unlockedUntil?: number;
     readonly version?: string;
+    readonly serviceDown?: true;
 }
 
 export const keyringStatusLine = (summary: KeyringSummary): KeyringStatusLine => {
-    const line: KeyringStatusLine = { installed: summary.installed, running: summary.running, setUp: summary.setUp };
+    const base: KeyringStatusLine = { installed: summary.installed, running: summary.running, setUp: summary.setUp };
+    const line: KeyringStatusLine = summary.serviceDown === true ? { ...base, serviceDown: true } : base;
     if (summary.state === undefined) {
         return line;
     }

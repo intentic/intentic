@@ -243,7 +243,9 @@
             "finish": "Gotowe"
         },
         "unavailable": {
-            "title": "Hasła są niedostępne"
+            "title": "Hasła są niedostępne",
+            "takesAWhile": "To potrwa minutę lub dwie. Nie zamykaj tego okna.",
+            "tryAgain": "Spróbuj ponownie"
         },
         "remember": {
             "strip": "Niech Intentic zapamiętuje hasła, które wpisujesz?",

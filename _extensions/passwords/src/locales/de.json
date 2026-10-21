@@ -243,7 +243,9 @@
             "finish": "Fertig"
         },
         "unavailable": {
-            "title": "Passwörter ist nicht verfügbar"
+            "title": "Passwörter ist nicht verfügbar",
+            "takesAWhile": "Das dauert ein bis zwei Minuten. Lass dieses Fenster offen.",
+            "tryAgain": "Erneut versuchen"
         },
         "remember": {
             "strip": "Soll Intentic sich die Passwörter merken, die du eingibst?",

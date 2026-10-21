@@ -3,11 +3,13 @@ import {
     ACCESS_OF_MODE,
     type ActivityLine,
     categoryOf,
+    type FixStep,
     MODE_OF_ACCESS,
     type PasswordItem,
     type PasswordRequest,
     type PasswordsPort,
     type SandboxRef,
+    type StatusFix,
     type VaultStatus,
 } from "@intentic/ext-passwords/app";
 import { originsOfRules, REMEMBER_NOTHING, titleForOrigin } from "@intentic/sandbox-contract/policy/keyring-origins";
@@ -83,9 +85,35 @@ export const itemOf = (entry: KeyringEntry, sandboxOf: (sandbox: string) => Sand
 };
 
 /** The machine's status as the app's. Pure, so each state is a test. */
+/**
+ * `keyring upgrade` as the app's fix, with the stages the agent reports drawn for the person: an update asks the running
+ * keyring first; a repair cannot (its service is what is silent), so that stage is left out. Pure.
+ */
+export const upgradeFix = (kind: `update` | `repair`, platform: NonNullable<KeyringStatus[`support`]>[`platform`] | undefined): StatusFix => {
+    const steps: FixStep[] = [{ id: `download`, label: t(`desktop.passwords.steps.download`) }];
+    if (kind === `update`) {
+        steps.push({ id: `consent`, label: t(`desktop.passwords.steps.consent`), hint: t(`desktop.passwords.steps.consentHint`) });
+    }
+    steps.push(
+        { id: `install`, label: t(`desktop.passwords.steps.install`), hint: platform === `linux` ? t(`desktop.passwords.steps.installHintLinux`) : t(`desktop.passwords.steps.installHintWindows`) },
+        { id: `start`, label: t(`desktop.passwords.steps.start`) },
+    );
+    return {
+        label: kind === `update` ? t(`desktop.passwords.update`) : t(`desktop.passwords.repair`),
+        doing: kind === `update` ? t(`desktop.passwords.updating`) : t(`desktop.passwords.repairing`),
+        steps,
+        run: async (onStep) => await keyringUpgrade(onStep),
+    };
+};
+
 export const vaultOf = (status: KeyringStatus | undefined, computer: string, rememberAsked: boolean): VaultStatus => {
     if (status === undefined) {
         return { kind: `unavailable`, reason: t(`desktop.passwords.noAgent`) };
+    }
+    // Set up, and its service silent: the vault is there and nothing reaches it, which an update's reinstall repairs.
+    // Read before `setUp`, which a silent service cannot say.
+    if (status.serviceDown === true) {
+        return { kind: `unavailable`, reason: t(`desktop.passwords.serviceDown`), fix: upgradeFix(`repair`, status.support?.platform) };
     }
     if (status.setUp && status.state !== undefined) {
         return {
@@ -179,7 +207,7 @@ const readStatus = async (readHere: () => Promise<Here>): Promise<VaultStatus> =
                 return {
                     kind: `unavailable`,
                     reason: t(`desktop.passwords.needsUpdate`, { version: read.state.version }),
-                    fix: { label: t(`desktop.passwords.update`), run: keyringUpgrade },
+                    fix: upgradeFix(`update`, read.support?.platform),
                 };
             }
             throw failure;

@@ -20,6 +20,8 @@ use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use tauri::Emitter;
+
 use crate::scripts::{self, Host};
 
 type CommandResult<T> = Result<T, String>;
@@ -253,19 +255,36 @@ pub struct Fed {
     pub stderr: String,
 }
 
-/// Read one stream to its end on a thread of its own, reporting on `drained` when it gets there.
-fn drain(handle: Option<impl Read + Send + 'static>, drained: Sender<()>) -> Arc<Mutex<Vec<u8>>> {
+/// Told each whole line a child prints on stderr, as it prints it: how a long verb's progress reaches the webview.
+pub type LineSink = Arc<dyn Fn(&str) + Send + Sync>;
+
+/// Read one stream to its end on a thread of its own, reporting on `drained` when it gets there, and handing each
+/// whole line to `lines` as it arrives where one is given.
+fn drain(
+    handle: Option<impl Read + Send + 'static>,
+    drained: Sender<()>,
+    lines: Option<LineSink>,
+) -> Arc<Mutex<Vec<u8>>> {
     let bytes = Arc::new(Mutex::new(Vec::new()));
     let sink = Arc::clone(&bytes);
     std::thread::spawn(move || {
         if let Some(mut handle) = handle {
             let mut chunk = [0u8; 8192];
+            // What came after the last newline, waiting for the rest of its line.
+            let mut partial: Vec<u8> = Vec::new();
             while let Ok(read) = handle.read(&mut chunk) {
                 if read == 0 {
                     break;
                 }
                 if let Ok(mut held) = sink.lock() {
                     held.extend_from_slice(&chunk[..read]);
+                }
+                if let Some(tell) = &lines {
+                    partial.extend_from_slice(&chunk[..read]);
+                    while let Some(end) = partial.iter().position(|byte| *byte == b'\n') {
+                        let line: Vec<u8> = partial.drain(..=end).collect();
+                        tell(String::from_utf8_lossy(&line).trim_end());
+                    }
                 }
             }
         }
@@ -274,12 +293,31 @@ fn drain(handle: Option<impl Read + Send + 'static>, drained: Sender<()>) -> Arc
     bytes
 }
 
+/// The stages `keyring upgrade` reports, in the order it reaches them (machine agent `KeyringStep`).
+pub const UPGRADE_STEPS: &[&str] = &["download", "consent", "install", "start"];
+
+/// Event the webview hears each upgrade stage on, its payload the stage's name.
+pub const STEP_EVENT: &str = "keyring-step";
+
+/// The stage a stderr line announces (`intentic-step {"step":"download"}`), when it is one of the known ones. Pure.
+pub fn step_of(line: &str) -> Option<&'static str> {
+    let json = line.trim().strip_prefix("intentic-step ")?;
+    let value: serde_json::Value = serde_json::from_str(json).ok()?;
+    let step = value.get("step")?.as_str()?;
+    UPGRADE_STEPS.iter().copied().find(|known| *known == step)
+}
+
 /// Run `command` with `input` on its standard input, then closed, to its exit or its whole tree killed at `limit`: the
 /// bounded crate's `capture` (which closes stdin) with a feed. The input is written on a thread of its own, so a child
 /// that does not read it cannot hold this call past its deadline, and a child that refuses at once and closes the pipe
 /// is answered with what it said. `Err` only when the child could not be started; the caller's value is left whole, for
 /// the next place the program might be.
-pub fn capture_fed(mut command: Command, input: &Secret, limit: Duration) -> std::io::Result<Fed> {
+pub fn capture_fed(
+    mut command: Command,
+    input: &Secret,
+    limit: Duration,
+    stderr_lines: Option<LineSink>,
+) -> std::io::Result<Fed> {
     intentic_bounded::own_group(&mut command);
     let mut child = command
         .stdin(Stdio::piped())
@@ -287,8 +325,8 @@ pub fn capture_fed(mut command: Command, input: &Secret, limit: Duration) -> std
         .stderr(Stdio::piped())
         .spawn()?;
     let (drained, drains) = channel::<()>();
-    let stdout = drain(child.stdout.take(), drained.clone());
-    let stderr = drain(child.stderr.take(), drained);
+    let stdout = drain(child.stdout.take(), drained.clone(), None);
+    let stderr = drain(child.stderr.take(), drained, stderr_lines);
     if let Some(mut stdin) = child.stdin.take() {
         let input = input.copy();
         std::thread::spawn(move || {
@@ -355,7 +393,12 @@ pub fn answer_of(stdout: &str, stderr: &str) -> Result<String, String> {
 /// Run one keyring verb against this computer's machine agent, in the places it is installed. `Ok(None)`: there is no
 /// machine agent here, an ordinary state. `what` names the command for a sentence about it, and is argv, which never
 /// holds a secret.
-fn run(args: &[String], input: Option<Secret>, limit: Duration) -> CommandResult<Option<String>> {
+fn run(
+    args: &[String],
+    input: Option<Secret>,
+    limit: Duration,
+    stderr_lines: Option<LineSink>,
+) -> CommandResult<Option<String>> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .ok();
@@ -364,16 +407,22 @@ fn run(args: &[String], input: Option<Secret>, limit: Duration) -> CommandResult
         let mut command = Command::new(&candidate);
         intentic_bounded::no_window(&mut command);
         command.args(args);
-        let ran = match &input {
-            Some(secret) => capture_fed(command, secret, limit),
-            None => intentic_bounded::capture(command, limit, intentic_bounded::Reach::Tree).map(
-                |ran| Fed {
-                    code: ran.code,
-                    timed_out: ran.timed_out,
-                    stdout: ran.stdout,
-                    stderr: ran.stderr,
-                },
-            ),
+        let ran = match (&input, &stderr_lines) {
+            (Some(secret), _) => capture_fed(command, secret, limit, stderr_lines.clone()),
+            // Streamed as it comes: fed nothing, its stdin closed at once like the bounded crate's.
+            (None, Some(lines)) => {
+                capture_fed(command, &Secret(Vec::new()), limit, Some(Arc::clone(lines)))
+            }
+            (None, None) => {
+                intentic_bounded::capture(command, limit, intentic_bounded::Reach::Tree).map(
+                    |ran| Fed {
+                        code: ran.code,
+                        timed_out: ran.timed_out,
+                        stdout: ran.stdout,
+                        stderr: ran.stderr,
+                    },
+                )
+            }
         };
         match ran {
             // Not at this path: the next one, fed the same value.
@@ -393,7 +442,7 @@ fn run(args: &[String], input: Option<Secret>, limit: Duration) -> CommandResult
 
 /// A verb whose answer is needed: one the webview only offers once the agent is known to be here.
 fn run_present(args: Vec<String>, input: Option<Secret>, limit: Duration) -> CommandResult<String> {
-    run(&args, input, limit)?
+    run(&args, input, limit, None)?
         .ok_or_else(|| "There is no Intentic agent on this computer.".to_string())
 }
 
@@ -408,7 +457,7 @@ async fn blocking<T: Send + 'static>(
 /// `keyring status --json`, raw. `None`: no machine agent on this computer.
 #[tauri::command]
 pub async fn keyring_status() -> CommandResult<Option<String>> {
-    blocking(|| run(&plain_args("status"), None, READ_LIMIT)).await
+    blocking(|| run(&plain_args("status"), None, READ_LIMIT, None)).await
 }
 
 /// `keyring list --json`, raw: names, rules and shares, never a value.
@@ -457,10 +506,21 @@ pub async fn keyring_lock() -> CommandResult<String> {
     blocking(|| run_present(plain_args("lock"), None, READ_LIMIT)).await
 }
 
-/// The keyring's own update: verified download, the person's consent, then the protected service installer.
+/// The keyring's own update: verified download, the person's consent, then the protected service installer. Each stage
+/// the agent reaches is told to the webview as it happens ([`STEP_EVENT`]), so Passwords draws the update's progress
+/// rather than leaving a person watching a button for minutes.
 #[tauri::command]
-pub async fn keyring_upgrade() -> CommandResult<String> {
-    blocking(|| run_present(plain_args("upgrade"), None, UPGRADE_LIMIT)).await
+pub async fn keyring_upgrade(app: tauri::AppHandle) -> CommandResult<String> {
+    let lines: LineSink = Arc::new(move |line: &str| {
+        if let Some(step) = step_of(line) {
+            let _ = app.emit(STEP_EVENT, step);
+        }
+    });
+    blocking(move || {
+        run(&plain_args("upgrade"), None, UPGRADE_LIMIT, Some(lines))?
+            .ok_or_else(|| "There is no Intentic agent on this computer.".to_string())
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -557,6 +617,53 @@ mod tests {
     }
 
     #[test]
+    fn an_upgrade_stage_is_a_known_step_line_and_nothing_else() {
+        assert_eq!(
+            step_of("intentic-step {\"step\":\"download\"}"),
+            Some("download")
+        );
+        assert_eq!(
+            step_of("intentic-step {\"step\":\"start\"}\r"),
+            Some("start")
+        );
+        assert_eq!(step_of("intentic-step {\"step\":\"reboot\"}"), None);
+        assert_eq!(
+            step_of("intentic: downloading intentic-keyring 1.346.0…"),
+            None
+        );
+        assert_eq!(step_of("intentic-step not json"), None);
+    }
+
+    /// Each line a child prints on stderr reaches the sink whole, even when it arrives in two writes, and stdout is
+    /// left to be the answer.
+    #[cfg(unix)]
+    #[test]
+    fn stderr_lines_are_told_as_they_come() {
+        let mut command = Command::new("sh");
+        command.args([
+            "-c",
+            r#"printf 'intentic-step {"step":"down' >&2; sleep 0.1; printf 'load"}\nnote\n' >&2; printf '{"ok":true}\n'"#,
+        ]);
+        let heard = Arc::new(Mutex::new(Vec::<String>::new()));
+        let sink = Arc::clone(&heard);
+        let lines: LineSink =
+            Arc::new(move |line: &str| sink.lock().expect("held").push(line.to_string()));
+        let fed = capture_fed(
+            command,
+            &Secret(Vec::new()),
+            Duration::from_secs(20),
+            Some(lines),
+        )
+        .expect("sh runs");
+        assert_eq!(fed.code, Some(0));
+        assert_eq!(fed.stdout, "{\"ok\":true}\n");
+        assert_eq!(
+            *heard.lock().expect("held"),
+            [r#"intentic-step {"step":"download"}"#, "note"]
+        );
+    }
+
+    #[test]
     fn a_secret_says_nothing_of_itself() {
         let secret = Secret::from(VALUE.to_string());
         assert_eq!(format!("{secret:?}"), "Secret(..)");
@@ -579,6 +686,7 @@ mod tests {
             command,
             &Secret::from(VALUE.to_string()),
             Duration::from_secs(20),
+            None,
         )
         .expect("sh runs");
         assert_eq!(fed.code, Some(0));
@@ -598,6 +706,7 @@ mod tests {
             command,
             &Secret::from("x".repeat(256 * 1024)),
             Duration::from_millis(300),
+            None,
         )
         .expect("sh runs");
         assert!(fed.timed_out);

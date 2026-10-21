@@ -664,6 +664,19 @@
         "needsUpdate": "Hasła na tym komputerze mają wersję {version} i wymagają aktualizacji, aby działać z tą aplikacją. Aktualizują się niezależnie od Intentic, po Twoim potwierdzeniu na tym komputerze.",
         "update": "Zaktualizuj Hasła",
         "offerLead": "Trzymaj hasła na tym komputerze, zapisywane w trakcie wpisywania, aby agenci mogli z nich korzystać, nigdy ich nie widząc.",
-        "offerOpen": "Skonfiguruj Hasła"
+        "offerOpen": "Skonfiguruj Hasła",
+        "updating": "Aktualizowanie Haseł",
+        "repair": "Napraw Hasła",
+        "repairing": "Naprawianie Haseł",
+        "serviceDown": "Chroniona usługa Haseł na tym komputerze nie odpowiada, więc twoje hasła są teraz niedostępne. Są bezpieczne w jej sejfie. Naprawa ponownie instaluje usługę, gdy to potwierdzisz.",
+        "steps": {
+            "download": "Pobierz i zweryfikuj nową wersję",
+            "consent": "Potwierdź, że to ty",
+            "consentHint": "Hasła proszą o potwierdzenie na tym komputerze.",
+            "install": "Zainstaluj chronioną usługę",
+            "installHintWindows": "Windows prosi o zgodę administratora. Wybierz Tak.",
+            "installHintLinux": "System prosi o hasło administratora.",
+            "start": "Uruchom Hasła"
+        }
     }
 }

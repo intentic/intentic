@@ -16,6 +16,7 @@ import RequestsView from "./RequestsView.vue";
 import SettingsView from "./SettingsView.vue";
 import { usePasswordsState } from "./state.js";
 import ToastStack from "./ToastStack.vue";
+import UnavailablePanel from "./UnavailablePanel.vue";
 
 const { port, selection = {} } = defineProps<{ port: PasswordsPort; selection?: PasswordsSelection }>();
 const emit = defineEmits<{ "update:selection": [selection: PasswordsSelection] }>();
@@ -145,27 +146,6 @@ const toggleLock = async (): Promise<void> => {
     }
 };
 
-// The unavailable state's own way out, when the port offers one: the fix, then a fresh read either way.
-const fixing = ref(false);
-const fixError = ref<string | undefined>(undefined);
-const runFix = async (): Promise<void> => {
-    if (fixing.value) {
-        return;
-    }
-    fixing.value = true;
-    fixError.value = undefined;
-    try {
-        if (status.value?.kind === `unavailable`) {
-            await status.value.fix?.run();
-        }
-    } catch (failure) {
-        fixError.value = messageOr(failure, t(`app.error.act`));
-    } finally {
-        await state.load();
-        fixing.value = false;
-    }
-};
-
 /* FIRST RUN: shown while the vault is not set up, and kept through its later steps after it is. */
 const firstRun = ref(false);
 watch(
@@ -228,19 +208,14 @@ watch(item, async (found) => {
     <div class="relative flex h-full min-h-0 flex-col" @keydown="onKey">
         <p v-if="status === undefined && state.readError.value === undefined" class="m-auto text-sm text-muted" role="status">{{ t(`app.loading`) }}</p>
 
-        <div v-else-if="status === undefined || status.kind === `unavailable`" class="m-auto flex max-w-md flex-col items-center gap-3 px-6 text-center">
-            <Icon name="key" class="text-4xl text-subtle" />
-            <p class="text-base font-semibold text-content">{{ t(`app.unavailable.title`) }}</p>
-            <p class="text-sm text-muted">{{ status?.kind === `unavailable` ? status.reason : state.readError.value }}</p>
-            <p v-if="fixError" class="text-sm text-danger" role="alert">{{ fixError }}</p>
-            <Button
-                v-if="status?.kind === `unavailable` && status.fix"
-                :label="status.fix.label"
-                :disabled="fixing"
-                @click="runFix()"
-            />
-            <Button v-else tier="boring" :label="t(`app.retry`)" @click="state.load()" />
-        </div>
+        <!-- The unavailable state's own way out, when the port offers one: the fix with its stages, then a fresh read. -->
+        <UnavailablePanel
+            v-else-if="status === undefined || status.kind === `unavailable`"
+            :reason="(status?.kind === `unavailable` ? status.reason : state.readError.value) ?? ``"
+            :fix="status?.kind === `unavailable` ? status.fix : undefined"
+            @retry="state.load()"
+            @settled="state.load()"
+        />
 
         <FirstRun
             v-else-if="manage && (firstRun || status.kind === `not-set-up`)"

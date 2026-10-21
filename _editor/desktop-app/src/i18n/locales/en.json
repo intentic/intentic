@@ -664,6 +664,19 @@
         "needsUpdate": "Passwords on this computer is version {version} and needs an update to work with this app. It updates separately from Intentic, after you confirm on this computer.",
         "update": "Update Passwords",
         "offerLead": "Keep your passwords on this computer, saved as you type them, so agents can use them without ever seeing them.",
-        "offerOpen": "Set up Passwords"
+        "offerOpen": "Set up Passwords",
+        "updating": "Updating Passwords",
+        "repair": "Repair Passwords",
+        "repairing": "Repairing Passwords",
+        "serviceDown": "Passwords' protected service on this computer isn't answering, so your passwords can't be reached right now. They are safe in its vault. Repairing reinstalls the service, after you confirm.",
+        "steps": {
+            "download": "Download and verify the new version",
+            "consent": "Confirm it's you",
+            "consentHint": "Passwords is asking you to confirm on this computer.",
+            "install": "Install the protected service",
+            "installHintWindows": "Windows is asking for an administrator's approval. Choose Yes.",
+            "installHintLinux": "Your system is asking for an administrator's password.",
+            "start": "Start Passwords"
+        }
     }
 }

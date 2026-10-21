@@ -1,6 +1,7 @@
 import { appendFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { sleep } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import { type KeyringPaths, keyringPaths } from "../address.js";
 import { fileAudit } from "../audit.js";
 import { BackendReader } from "../backends.js";
@@ -116,7 +117,14 @@ export const runService = async (run: ServiceRun, runner: Runner): Promise<never
         run.place,
     );
     const door: DoorFile = run.place.kind === "unix" ? { socket: run.place.path, token, pid: process.pid } : { port: port ?? 0, token, pid: process.pid };
-    await run.publish(door, log);
+    try {
+        await run.publish(door, log);
+    } catch (error) {
+        // A service nobody can find is worse than one that is down: Task Scheduler and systemd both restart one that
+        // exits, and the log says why, where a process left listening behind no door would sit there unreachable.
+        log(`could not publish the door file, so nothing could reach this keyring: ${errorMessage(error)}`);
+        process.exit(1);
+    }
     log(`keyring ${KEYRING_VERSION} listening on ${run.place.kind === "unix" ? run.place.path : `127.0.0.1:${String(port)}`}`);
     return await new Promise<never>(() => undefined);
 };

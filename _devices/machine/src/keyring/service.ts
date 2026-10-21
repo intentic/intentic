@@ -33,6 +33,17 @@ const START_POLL_MS = 300;
 const STOP_TIMEOUT_MS = 5_000;
 // A person may take their time with a UAC prompt.
 const ELEVATED_TIMEOUT_MS = 10 * 60_000;
+// How long the protected service may take to publish its door once its task or unit was started.
+const SERVICE_TIMEOUT_MS = 30_000;
+
+/**
+ * The stages a long keyring change goes through, in order, as the desktop app draws them for the person (`--json` runs
+ * print each on stderr as `intentic-step {"step":…}`): the release downloaded and checked, the running keyring's yes,
+ * the administrator's yes and the install, the new keyring started and answering.
+ */
+export type KeyringStep = "download" | "consent" | "install" | "start";
+export type StepReport = (step: KeyringStep) => void;
+const noSteps: StepReport = () => undefined;
 
 export const keyringInstalled = (): boolean => existsSync(keyringPath);
 
@@ -177,10 +188,24 @@ const psQuoted = (text: string): string => `'${text.replaceAll("'", "''")}'`;
 /** What setup says when the administrator's yes is not given, or cannot be. */
 export const NEEDS_ADMIN = "Passwords needs an administrator's approval once, to install its protected service. Nothing was changed.";
 
-/** The command that runs the keyring binary as an administrator: UAC on Windows, pkexec on Linux. Pure. */
+/**
+ * The command that runs the keyring binary as an administrator: UAC on Windows, pkexec on Linux. Pure. On Windows the
+ * elevated keyring is a console program, which ShellExecute would give a console window of its own: `-WindowStyle
+ * Hidden` keeps that window off the screen, so the person sees the UAC prompt and the app's own progress, nothing else.
+ */
 export const elevatedCommand = (args: readonly string[], platform: NodeJS.Platform = process.platform): { readonly command: string; readonly args: readonly string[] } =>
     platform === "win32"
-        ? { command: "powershell.exe", args: ["-NoProfile", "-Command", `$p = Start-Process -FilePath ${psQuoted(keyringPath)} -ArgumentList ${args.map(psQuoted).join(",")} -Verb RunAs -Wait -PassThru; exit $p.ExitCode`] }
+        ? {
+              command: "powershell.exe",
+              args: [
+                  "-NoProfile",
+                  "-NonInteractive",
+                  "-WindowStyle",
+                  "Hidden",
+                  "-Command",
+                  `$p = Start-Process -FilePath ${psQuoted(keyringPath)} -ArgumentList ${args.map(psQuoted).join(",")} -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode`,
+              ],
+          }
         : { command: "pkexec", args: [keyringPath, ...args] };
 
 /**
@@ -243,6 +268,31 @@ export const startKeyring = async (log: Log): Promise<{ readonly autostart: Auto
     return { autostart: kind, state: came };
 };
 
+/** What a session helper answers while the service behind it has published no door: it runs, and nothing can reach it. */
+export const serviceDown = (state: KeyringStateAnswer | KeyringUnavailable): boolean => !(state instanceof KeyringUnavailable) && !state.ok && state.code === "no-keyring";
+
+/**
+ * Where Passwords' protected service is installed, waits for the session helper to reach it, and answers the helper's
+ * state once it does; `undefined` when it never did. Without a service there is nothing behind the helper to wait for.
+ */
+export const awaitService = async (first: KeyringStateAnswer): Promise<KeyringStateAnswer | undefined> => {
+    if (!serviceDown(first)) {
+        return first;
+    }
+    let answer: KeyringStateAnswer | undefined;
+    await pollUntil(
+        async () => {
+            const state = await keyringState();
+            answer = state instanceof KeyringUnavailable || serviceDown(state) ? undefined : state;
+            return answer !== undefined;
+        },
+        { intervalMs: START_POLL_MS, timeoutMs: SERVICE_TIMEOUT_MS },
+    );
+    return answer;
+};
+
+const SERVICE_SILENT = `Passwords' service was started but does not answer, so nothing can reach your passwords yet. Restarting the computer starts it again; updating Passwords repairs it.`;
+
 /** Stops the running keyring, if one runs; answers its pid. Its login entry stays, and starts it again at the next sign-in. */
 export const stopKeyring = async (): Promise<number | undefined> => {
     const pid = await keyringPid();
@@ -287,7 +337,7 @@ const previousOf = (path: string): string => `${path}.previous`;
  * said the person agreed (`consent-upgrade`). The binary replaced stays as `.previous`, and comes back if the new one
  * does not answer.
  */
-export const upgradeKeyring = async (version: string, log: Log): Promise<KeyringUpgrade> => {
+export const upgradeKeyring = async (version: string, log: Log, step: StepReport = noSteps): Promise<KeyringUpgrade> => {
     if (!keyringInstalled()) {
         throw new KeyringCliError("no-keyring", "No keyring is installed on this computer: `intentic-machine keyring setup` installs one.");
     }
@@ -295,18 +345,29 @@ export const upgradeKeyring = async (version: string, log: Log): Promise<Keyring
     if (before instanceof KeyringUnavailable) {
         throw new KeyringCliError("no-keyring", "The keyring is not running, and only a running keyring can ask you about an upgrade: `intentic-machine keyring setup` starts it.");
     }
+    // A service installed but silent is what an upgrade repairs: its install runs again, from the new program.
+    const repairing = serviceDown(before) && (await serviceHere());
     const from = before.ok ? before.state.version : "unknown";
-    if (from === version && version !== DEV_VERSION) {
+    if (from === version && version !== DEV_VERSION && !repairing) {
         return { ok: true, upgraded: false, from, to: version };
     }
+    step("download");
     const staged = await stageKeyring(version, log);
-    log("Asking the keyring, which asks you, before anything is replaced…");
-    const consent = await askKeyring({ address: keyringPaths().address }, { op: "consent-upgrade", version });
-    if (!consent.ok) {
-        // allow(silent-catch): the person's no is the answer; a download left behind is swept by the next one
-        await rm(staged, { force: true }).catch(() => undefined);
-        return consent;
+    step("consent");
+    if (repairing) {
+        // Nothing can ask the vault's own question while the service is silent. The administrator's yes below is still
+        // asked, and nothing but a release checked against its signed sums is put in place.
+        log("Passwords' service does not answer, so the administrator's yes stands for the keyring's own.");
+    } else {
+        log("Asking the keyring, which asks you, before anything is replaced…");
+        const consent = await askKeyring({ address: keyringPaths().address }, { op: "consent-upgrade", version });
+        if (!consent.ok) {
+            // allow(silent-catch): the person's no is the answer; a download left behind is swept by the next one
+            await rm(staged, { force: true }).catch(() => undefined);
+            return consent;
+        }
     }
+    step("install");
     await stopKeyring();
     await rm(previousOf(keyringPath), { force: true });
     await renameIfPresent(keyringPath, previousOf(keyringPath));
@@ -316,10 +377,10 @@ export const upgradeKeyring = async (version: string, log: Log): Promise<Keyring
     // computer still on the per-user keyring from before moves to the service now, its vault with it.
     log((await serviceHere()) ? "Asking for an administrator's yes to put the new keyring in place for Passwords' service…" : "Asking for an administrator's yes, once, to move Passwords under its protected service…");
     await runElevated(["service", "install"]);
+    step("start");
+    let started: KeyringStateAnswer;
     try {
-        const { state } = await startKeyring(log);
-        const to = state.ok ? state.state.version : version;
-        return { ok: true, upgraded: true, from, to };
+        started = (await startKeyring(log)).state;
     } catch (error) {
         log(`The new keyring did not answer (${errorMessage(error)}): putting the one before it back.`);
         await stopKeyring();
@@ -328,6 +389,13 @@ export const upgradeKeyring = async (version: string, log: Log): Promise<Keyring
         await startKeyring(log);
         throw new KeyringCliError("failed", `The keyring ${version} did not start, so ${from} was put back and is running again.`, { cause: error });
     }
+    // The helper answering is not the update landing: the service behind it must answer too, or Passwords reads as
+    // updated and then cannot be turned on.
+    const state = await awaitService(started);
+    if (state === undefined) {
+        throw new KeyringCliError("no-keyring", SERVICE_SILENT);
+    }
+    return { ok: true, upgraded: true, from, to: state.ok ? state.state.version : version };
 };
 
 // ---- the service, set up ----
@@ -342,14 +410,31 @@ export const ensureService = async (log: Log): Promise<{ readonly autostart: Aut
         throw new KeyringCliError("no-keyring", "No keyring is installed on this computer: `intentic-machine keyring setup` installs one.");
     }
     if (await serviceHere()) {
-        return { ...(await startKeyring(log)), installedNow: false };
+        const running = await startKeyring(log);
+        const state = await awaitService(running.state);
+        if (state !== undefined) {
+            return { ...running, state, installedNow: false };
+        }
+        // Installed and silent: its install, run again, puts its folders' access right and starts it afresh.
+        log("Passwords' service does not answer: asking for an administrator's yes to repair it…");
+        await runElevated(["service", "install"]);
+        const repaired = await awaitService((await startKeyring(log)).state);
+        if (repaired === undefined) {
+            throw new KeyringCliError("no-keyring", SERVICE_SILENT);
+        }
+        return { ...running, state: repaired, installedNow: false };
     }
     // A per-user keyring from before holds the vault until now and writes it on every change: stopped first, so the copy
     // the service takes is the last one written.
     await stopKeyring();
     log("Asking for an administrator's yes, once, to install Passwords' protected service…");
     await runElevated(["service", "install"]);
-    return { ...(await startKeyring(log)), installedNow: true };
+    const running = await startKeyring(log);
+    const state = await awaitService(running.state);
+    if (state === undefined) {
+        throw new KeyringCliError("no-keyring", SERVICE_SILENT);
+    }
+    return { ...running, state, installedNow: true };
 };
 
 // ---- uninstall ----
