@@ -674,8 +674,8 @@ pub enum Link {
     },
     /// `intentic://setup-stop?sandbox=<id>`: the workspace's setup page took this sandbox to a machine of ours, whose
     /// address it now is, so the install This device runs for it stops rather than download on to an announce the
-    /// platform will refuse (windows.rs). App-window only, like `update`: from anywhere else it could stop an install
-    /// somebody is watching.
+    /// platform will refuse (windows.rs); or its reader pressed Cancel beside "Set it up now". App-window only, like
+    /// `update`: from anywhere else it could stop an install somebody is watching.
     SetupStop {
         sandbox_id: String,
     },

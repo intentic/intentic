@@ -1,74 +1,50 @@
 <script setup lang="ts">
 import { Button, DeviceRunLog, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
-import { useOperation } from "../../workbench/operations/operations";
-import { manageDeviceSandbox } from "../../models/sandbox/devices/useDevices";
-import { type MachineDoor, setupDoors } from "../sandbox/live/sandboxDoors";
-import { useDeviceRelays } from "../sandbox/live/useDeviceRelays";
+import type { MachineDoor } from "../sandbox/live/sandboxDoors";
+import type { SetupOnMachineApi } from "./flow/useSetupOnMachine";
 
-// SET IT UP ON A COMPUTER THAT IS ALREADY CONNECTED, with a press instead of the command. Any of the owner's sandboxes
-// that reaches an online machine able to list its containers (so `ic` and an engine answer there) can run the same
-// `ic sandbox connect` the command runs, with this row's code: the `create` op `sandboxes create --on` already uses.
-// What the machine prints streams under the press; once it claims the code, the page's own handoff says the rest, as it
-// does for a pasted command. The caller offers this only where the press does what the command would.
+// SET IT UP ON A COMPUTER THAT IS ALREADY CONNECTED: the card's one button once the "Runs on" row picked such a machine
+// (flow/useSetupOnMachine.ts), and what that machine prints while it runs. Once it claims the code, the page's own
+// handoff line says the rest, as it does for a pasted command.
 
-const props = defineProps<{
-    // The row being set up, which keys the run in the ledger.
-    sandboxId: string;
-    // The minted code and the hostname it names; the slug is that hostname's first label.
-    code: string;
-    hostname: string;
-    // Desktop sync was asked for: the press does not set it up, so it says so rather than dropping it silently.
-    syncAsked: boolean;
+const {
+    door,
+    machine,
+    locked = false,
+} = defineProps<{
+    // The machine picked.
+    door: MachineDoor;
+    // Its run, kept in the operations ledger under this row.
+    machine: Pick<SetupOnMachineApi, `run` | `setUpOn`>;
+    // Something else is already on its way to a machine for this row (the app's install, a claimed code).
+    locked?: boolean;
 }>();
 
 const t = useT();
-
-// Every sandbox of the owner's, read fresh as the page opens and kept read while it stays.
-const { relays, look } = useDeviceRelays({ follow: true });
-void look();
-const doors = computed(() => setupDoors(relays.value));
-
-const run = useOperation<string>(() => `setup/${props.sandboxId}/on-machine`);
-const pressedOn = ref<string>();
-const setUpOn = async (door: MachineDoor): Promise<void> => {
-    if (run.busy.value) {
-        return;
-    }
-    pressedOn.value = door.machineLabel;
-    const slug = props.hostname.split(`.`)[0] ?? ``;
-    await run.run({
-        what: t(`setup.setupOnMachine.settingUpOn`, { machine: door.machineLabel }),
-        failed: t(`setup.setupOnMachine.couldntOn`, { machine: door.machineLabel }),
-        task: async (report) => await manageDeviceSandbox(door.hostId, slug, `create`, { setupCode: props.code, at: door.relay, onLine: report.line }),
-    });
-};
 </script>
 
 <template>
-    <div v-if="doors.length > 0" class="flex flex-col gap-2" data-setup-on-machine>
-        <p class="text-xs text-muted">{{ t(`setup.setupOnMachine.alreadyConnected`) }}</p>
-        <div class="flex flex-wrap gap-2">
+    <div class="flex flex-col gap-2" data-setup-on-machine>
+        <!-- The caption shares the button's row, as "Set it up now"'s does: one row per way, not a sentence above each. -->
+        <div class="flex flex-col items-stretch gap-x-4 gap-y-2 md:flex-row md:items-center">
             <Button
-                v-for="door in doors"
-                :key="door.machineKey"
-                :tier="doors.length > 1 ? `boring` : undefined"
                 :label="t(`setup.setupOnMachine.setUpOn`, { machine: door.machineLabel })"
-                :loading="run.busy.value && pressedOn === door.machineLabel"
-                :disabled="run.busy.value"
-                @click="setUpOn(door)"
+                class="w-full shrink-0 justify-center md:w-fit"
+                :loading="machine.run.busy.value"
+                :disabled="machine.run.busy.value || locked"
+                @click="machine.setUpOn"
             >
                 <template #icon><Icon name="bolt" /></template>
             </Button>
+            <p class="min-w-0 text-xs text-muted">{{ t(`setup.setupOnMachine.caption`) }}</p>
         </div>
-        <p v-if="syncAsked" class="text-2xs text-subtle">{{ t(`setup.setupOnMachine.syncAfter`) }}</p>
         <DeviceRunLog
-            v-if="run.busy.value || run.lines.value.length > 0"
-            :lines="run.lines.value"
-            :running="run.busy.value"
-            :empty="t(`setup.setupOnMachine.startingOn`, { machine: pressedOn ?? `` })"
+            v-if="machine.run.busy.value || machine.run.lines.value.length > 0"
+            :lines="machine.run.lines.value"
+            :running="machine.run.busy.value"
+            :empty="t(`setup.setupOnMachine.startingOn`, { machine: door.machineLabel })"
         />
-        <Notice v-if="run.failure.value" :of="run.failure.value" />
+        <Notice v-if="machine.run.failure.value" :of="machine.run.failure.value" />
     </div>
 </template>

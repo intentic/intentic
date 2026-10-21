@@ -100,12 +100,18 @@ const listed = (device: Device): boolean => device.hostId !== undefined && devic
 // How many of the containers this side lists are its own to keep (`keptElsewhere` names the other side that keeps one).
 const keeps = (device: Device): number => (device.sandboxes ?? []).filter((box) => box.keptElsewhere === undefined).length;
 
+// A side a new sandbox can be made on: one that listed, and whose card lets a container be made there. Listing rides
+// "Run commands" as well as "Manage sandboxes on this device", and making one only the second, so a machine with the
+// first alone was offered a press its agent refused ("Manage sandboxes ... is switched off"). An older daemon does not
+// say (`manages` absent), and is offered as before, where the refusal still names the switch.
+const takesNew = (device: Device): boolean => listed(device) && device.manages !== false;
+
 // WHICH SIDE OF A PC A NEW SANDBOX IS MADE FROM. Windows and its WSL distros drive one engine, but only the side whose
 // `ic` created a sandbox runs its background rounds; so the side already keeping the owner's sandboxes there is the
 // one to add to. With none kept yet, a Linux side over Windows, as the owner's own sandboxes on such a PC live there.
 const setupSide = (environments: readonly Device[]): Device | undefined =>
     environments
-        .filter(listed)
+        .filter(takesNew)
         .toSorted((left, right) => keeps(right) - keeps(left) || Number(left.platform === `windows`) - Number(right.platform === `windows`))[0];
 
 /** One door per machine a new sandbox could be brought up on now, through the first relay that reaches it. */

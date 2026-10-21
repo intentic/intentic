@@ -278,6 +278,9 @@ export const HostSummarySchema = z.object({
     // Epoch ms of the last held socket; absent means not since this daemon booted (liveness resets on restart).
     lastSeen: z.number().optional(),
     facts: DeviceFactsSchema.optional(),
+    // The card's "Manage sandboxes on this device" switch is on: a container verb sent to this machine (create, start,
+    // remove…) is let through rather than refused by the machine. Absent from a daemon older than it.
+    manages: z.boolean().optional(),
 });
 export type HostSummary = z.infer<typeof HostSummarySchema>;
 export const HostsListSchema = z.object({ hosts: z.array(HostSummarySchema) });

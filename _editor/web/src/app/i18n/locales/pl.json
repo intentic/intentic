@@ -9991,7 +9991,7 @@
             "hideCommand": "Ukryj polecenie",
             "hostedSandboxesSwitchedOff": "Hostowane sandboxy są wyłączone dla tego konta; e-mail, który wysłaliśmy, mówi dlaczego i gdzie napisać. Uruchamianie na własnym komputerze działa bez zmian.",
             "httpsAddressSandboxAlready": "Adres https, pod którym Twój sandbox już odpowiada (https:// jest opcjonalne).",
-            "installsDockerNeedStarts": "Instaluje Dockera, jeśli go potrzebujesz, uruchamia Twój sandbox i jego tunel i otwiera Twoją przestrzeń roboczą, gdy tylko odpowie. Bez terminala.",
+            "installsDockerNeedStarts": "Instaluje Dockera, jeśli trzeba, i otwiera przestrzeń roboczą, gdy będzie gotowa. Bez terminala.",
             "keepAddress": "Zostaw ten adres",
             "localDevBuildsCheckout": "Lokalny dev: buduje z Twojego checkoutu",
             "machinePickedUp": "Twoja maszyna to podjęła.",
@@ -10000,8 +10000,6 @@
             "noScriptRunsRead": "Żaden skrypt się nie wykonuje: przeczytaj cały plik i uruchom go samodzielnie",
             "notAvailableToAccount": "Niedostępne dla tego konta",
             "nothingAnswered": "Pod tym adresem nic nie odpowiedziało.",
-            "nothingRunsUntilInstall": "Nic się nie uruchomi, dopóki nie zainstalujesz aplikacji powyżej.",
-            "nothingRunsUntilPress": "Nic się nie uruchomi, dopóki nie naciśniesz „Skonfiguruj teraz” powyżej.",
             "nothingToDoAccount": "Nie ma to nic wspólnego z Twoim kontem, a my dokładamy kolejne. Konfiguracja na własnym komputerze zajmuje dwie minuty i nie ma żadnych limitów — albo zajrzyj trochę później, wtedy będziemy mieć miejsce.",
             "nothingToForwardTo": "i nie ma dokąd przekierowywać. Uruchom kontener sandboxa",
             "openChat": "Otwórz czat",
@@ -10038,6 +10036,7 @@
             "setUpBeforeLastSeen": "Ten sandbox był już skonfigurowany, ostatnio odpowiedział {when}.",
             "setUpFromComputer": "Konfiguracja na komputerze",
             "setUpNow": "Skonfiguruj teraz",
+            "stoppedHere": "Konfiguracja zatrzymana.",
             "setUpOnMy": "Skonfiguruj na moim własnym komputerze",
             "setUpWorkspace": "Skonfiguruj swoją przestrzeń roboczą",
             "settingOneUpNothing": "Stawiamy jeden dla Ciebie. Nic do wypełnienia.",
@@ -10066,7 +10065,6 @@
             "usedOnceToClaim": "Używany raz, żeby zgłosić sandbox jako swój. Demon przestaje o niego pytać, gdy tylko jesteś związany, więc intentic nigdy go nie przechowuje.",
             "waitingToClaimedConnection": "Czeka, aż ktoś zgłosi go tokenem połączenia, z którym został uruchomiony. Wklej to",
             "waitingToRunCommand": "Czekamy, aż uruchomisz polecenie.",
-            "waitingToStart": "Czekamy, aż go uruchomisz.",
             "webOriginMustName": "{variable} demona musi też wskazywać {origin}. Inaczej przeglądarka zablokuje wywołanie, zanim zostanie wysłane.",
             "wellConnectTo": "Połączymy się z",
             "wellNoticeMomentSandbox": "Zauważymy to w chwili, gdy Twój sandbox wystartuje.",
@@ -10122,12 +10120,14 @@
             "waitingOnInstaller": "Czekamy na instalator."
         },
         "setupOnMachine": {
-            "alreadyConnected": "Albo skonfiguruj ją jednym kliknięciem na swoim już podłączonym komputerze:",
+            "runsOn": "Działa na",
+            "thisComputer": "Ten komputer",
+            "byEmail": "Link e-mailem",
             "setUpOn": "Skonfiguruj na {machine}",
+            "caption": "Uruchamia ją tam przez połączenie tego komputera. Bez terminala.",
             "settingUpOn": "Konfiguruję ją na {machine}",
             "couldntOn": "Nie udało się jej skonfigurować na {machine}.",
-            "startingOn": "Uruchamiam na {machine}…",
-            "syncAfter": "Ta droga nie włącza synchronizacji plików: włącz ją na stronie Urządzeń, gdy piaskownica już działa."
+            "startingOn": "Uruchamiam na {machine}…"
         },
         "setupRunDetails": {
             "dials": "Pokrętła",

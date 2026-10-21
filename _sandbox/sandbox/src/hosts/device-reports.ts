@@ -20,6 +20,7 @@ import { ORPCError } from "@orpc/server";
 import { refuseUnsupported } from "./device-feature-gates.js";
 import type { Services } from "../composition.js";
 import { composeEnvironment } from "../environment/overlay.js";
+import { opt } from "../opt.js";
 import type { SyncEnrollmentRow } from "../peers/desktop-sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../definition/definition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
@@ -288,6 +289,7 @@ const pulledHost = (
             ...(host.facts === undefined ? {} : { facts: host.facts }),
             ...(host.version === undefined ? {} : { agentVersion: host.version }),
             ...(host.lastSeen === undefined ? {} : { lastSeen: host.lastSeen }),
+            ...opt("manages", host.manages),
             ...(result.sandboxes === undefined ? {} : { sandboxes: [...result.sandboxes] }),
             ...(result.sandboxesUnread === undefined ? {} : { sandboxesUnread: result.sandboxesUnread }),
         },

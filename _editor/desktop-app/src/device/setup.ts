@@ -96,10 +96,7 @@ export const setupLog = ref<string | undefined>(undefined);
 export const setupLogOpen = ref(false);
 /** A stop has been asked for: the exit it produces reads as an answer, not a failure. */
 export const stopping = ref(false);
-/**
- * Who asked for a stop: the card's own Stop, or the workspace's setup page taking the sandbox to a machine of ours
- * (`intentic://setup-stop`, `stopForHosted`).
- */
+// Who asked for a stop: the card's own Stop, or the setup page (`intentic://setup-stop`, `stopForPage`).
 type StopReason = `card` | `hosted`;
 // Why the run being stopped was, for its events and its ending: a run stopped for a machine of ours does not bring This
 // device up over the page the reader is watching that machine start on.
@@ -601,20 +598,23 @@ const stopRun = async (reason: StopReason): Promise<void> => {
 /** The card's Stop. Takes no argument: the press hands its handler the click. */
 export const stopSetup = (): Promise<void> => stopRun(`card`);
 
-/* THE SANDBOX TAKEN TO A MACHINE OF OURS (2026-10-12). The setup page offers a machine of ours beside a download too slow
-   to wait for, and the reader who took it left this PC downloading two gigabytes for the same sandbox. The machine of
-   ours adopts the sandbox's address, so that download ended in an announce the platform refused, and a failed setup on a
-   row that was by then hosted. The page now says so to the app (`intentic://setup-stop`, windows.rs) before it starts
-   the machine, and the run stops as the card's Stop stops it: told as `stopped`, never as a failure. The run's mark
-   (scripts.rs `RunMark`) goes as for any run followed to its end, once the stopped run has exited (commands.rs
-   `setup_run`). */
-
-/** Stop the install this window runs for `sandboxId`; a request for another sandbox, or with no install running, does nothing. */
-export const stopForHosted = async (sandboxId: string): Promise<void> => {
-    if (activeRun.value !== `setup` || stopping.value || pending.value?.sandboxId !== sandboxId) {
+/* THE PAGE CALLING THE INSTALL OFF (2026-10-12, 2026-10-21): `intentic://setup-stop` (windows.rs), sent as the setup page
+   takes the sandbox to a machine of ours (a download left going ends in a refused announce) and by its Cancel. A run
+   stops as the card's Stop stops it, told as `stopped`, never as a failure; a setup with no run whose card still asks
+   this PC something is given up as dismissing that card gives it up, and no restart brings it back. The reader is on
+   that page either way, so This device is not brought up over it; the page's events say which it was. */
+export const stopForPage = async (sandboxId: string): Promise<void> => {
+    if (stopping.value || pending.value?.sandboxId !== sandboxId) {
         return;
     }
-    await stopRun(`hosted`);
+    if (activeRun.value === `setup`) {
+        return await stopRun(`hosted`);
+    }
+    // Another run is this PC's own (its Docker, its WSL) and goes on. `closeSetup` forgets only a park for that.
+    if (setupOpen.value && !running.value) {
+        void (pcParked.value || forgetResumableSetup());
+        closeSetup();
+    }
 };
 
 /**

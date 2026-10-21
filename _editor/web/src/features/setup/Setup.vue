@@ -42,6 +42,7 @@ import { useProjectHandoff } from "./hostedProject";
 import SetupCompose from "./SetupCompose.vue";
 import SetupAccount from "./SetupAccount.vue";
 import SetupHandoff from "./SetupHandoff.vue";
+import SetupHereButton from "./SetupHereButton.vue";
 import SetupNeedsGoogle from "./SetupNeedsGoogle.vue";
 import SetupNudge from "./SetupNudge.vue";
 import SetupOnMachine from "./SetupOnMachine.vue";
@@ -63,6 +64,8 @@ import { useRegistryWatch } from "./flow/useRegistryWatch";
 import { justSetUp, markJustSetUp } from "../../models/sandbox/live/justSetUp";
 import { useRunStep } from "./flow/useRunStep";
 import { useSetupArrival } from "./flow/useSetupArrival";
+import { useAppStop } from "./flow/useAppStop";
+import { useSetupOnMachine } from "./flow/useSetupOnMachine";
 import { useSetupRow } from "./flow/useSetupRow";
 
 // Template and wiring over the setup flows in ./flow: the row this visit sets up, the hosted lane and the command lane
@@ -197,15 +200,27 @@ const { status } = useRegistryWatch({ sandbox, row, hosted, mintedFor: command.m
 // The app's install under way: "Set it up now" waits for it to end rather than starting a second one (desktopSetup.ts).
 // Ticks only while a claim with no word from the app is what holds the button, so that hold can run out.
 const claimClock = useNow(() => handoff.value === `claimed` && desktopReport.value === undefined && claimedAt.value !== null);
-const installUnderWay = computed(() =>
+const appRunUnderWay = (): boolean =>
     setupUnderWay({
         report: desktopReport.value,
         claimed: handoff.value === `claimed`,
         failed: reportFailures.value !== null,
         ended: desktopEnded.value,
         claimedFor: claimedAt.value === null ? undefined : claimClock.value - Date.parse(claimedAt.value),
-    }),
+    });
+const onMachineOffered = computed(
+    () => commandReady.value && machine.value !== `hosted` && project === undefined && mode.value === `intentic` && !buildsFromCheckout.value,
 );
+const onMachine = useSetupOnMachine({ offered: () => onMachineOffered.value, created, setup, mobile });
+const { doors: machineDoors, target: runsOn, door: runsOnMachine, here: hereChosen, options: runsOnOptions, run: machineRun } = onMachine;
+const appStop = useAppStop({ inApp: desktop, created, launched, handoff, report: desktopReport, underWay: appRunUnderWay, machineRun, runHere });
+const { stopped: stoppedHere, installUnderWay } = appStop;
+// Where it runs is settled once something is on its way: the app's install, a machine's press, a claimed code.
+const runsOnLocked = computed(() => installUnderWay.value || machineRun.busy.value || (handoff.value === `claimed` && !stoppedHere.value));
+// The status line: not before anything started here (its button is the instruction), nor beside a picked machine's log.
+const quietHere = computed(() => stoppedHere.value || (handoff.value === `yours` && !commandVisible.value && (throughApp.value || installing.value)));
+const statusShown = computed(() => reportFailures.value === null && !quietHere.value && (hereChosen.value || handoff.value === `claimed`));
+const nudgeShown = computed(() => nudging.value && !desktopParked.value && hereChosen.value && !stoppedHere.value);
 
 // Another sandbox to go back to: not this one, and not one that has never reported in.
 const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => entry.id !== created.value?.id && entry.lastSeenAt !== null));
@@ -329,6 +344,8 @@ const addressFact = computed<`hosted` | `none` | `intentic` | `own`>(() =>
 // The address row's quiet label, styled as a band opener rather than body copy; values sit on its baseline, in mono
 // only for a real hostname.
 const factLabel = `fact-label shrink-0`;
+// The facts' rows (address, where it runs) share one label column's floor, wide enough for every language's label.
+const factRow = `grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 sm:min-h-8 sm:grid-cols-[minmax(5.75rem,max-content)_minmax(0,1fr)] sm:content-center`;
 const factSlot = `flex min-w-0 items-baseline text-sm text-content`;
 const factHost = `${factSlot} fact-host font-mono`;
 
@@ -826,10 +843,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                         <div class="flex flex-col gap-2">
                             <!-- One group keeps the escape hatch reachable in every state. -->
                             <!-- Stacked on a phone: a label column left too little room for a hostname, read character by character. -->
-                            <div
-                                v-if="addressFact !== `own`"
-                                class="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 sm:min-h-8 sm:grid-cols-facts sm:content-center sm:items-baseline"
-                            >
+                            <div v-if="addressFact !== `own`" :class="factRow" class="sm:items-baseline">
                                 <span :class="factLabel">{{ t(`shared.address`) }}</span>
                                 <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
                                     <!-- Address facts are keyed by the selected rung, not machine state. -->
@@ -923,6 +937,18 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                     >
                                 </label>
                             </template>
+                            <!-- Where it runs, a fact beside the address: a pick only, so a stray click starts nothing. -->
+                            <div v-if="machineDoors.length > 0" :class="factRow" class="sm:items-center" data-setup-runs-on>
+                                <span :class="factLabel">{{ t(`setup.setupOnMachine.runsOn`) }}</span>
+                                <fieldset :disabled="runsOnLocked" class="min-w-0">
+                                    <SegmentedControl
+                                        v-model="runsOn"
+                                        :options="runsOnOptions"
+                                        :wrap="true"
+                                        :aria-label="t(`setup.setup.whereSandboxRuns`)"
+                                    />
+                                </fieldset>
+                            </div>
                         </div>
 
                         <!-- Kept separate from the arrival notice so a lane change doesn't erase it; a full fleet isn't shown twice. -->
@@ -1053,22 +1079,10 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                 <span>{{ lockedReason }}</span>
                             </div>
                         </template>
+                        <SetupOnMachine v-else-if="runsOnMachine" :door="runsOnMachine" :machine="onMachine" :locked="runsOnLocked" />
                         <template v-else>
                             <!-- In-app setup hands the command to the app; so does a project's, from wherever this page is. -->
-                            <template v-if="throughApp">
-                                <p class="text-xs text-muted">
-                                    {{ t(`setup.setup.installsDockerNeedStarts`) }}
-                                </p>
-                                <Button
-                                    :label="t(`setup.setup.setUpNow`)"
-                                    class="w-full justify-center md:w-fit"
-                                    :loading="installUnderWay"
-                                    :disabled="installUnderWay"
-                                    @click="runHere"
-                                >
-                                    <template #icon><Icon name="bolt" /></template>
-                                </Button>
-                            </template>
+                            <SetupHereButton v-if="throughApp" :app="appStop" />
 
                             <!-- Browser setup exposes one install-earlier action. -->
                             <Button
@@ -1081,17 +1095,6 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             >
                                 <template #icon><Icon name="download" /></template>
                             </Button>
-
-                            <!-- A computer of the owner's that is already connected takes a press instead of the command: offered
-                                 where the press does what the command would (the platform's address, no checkout image), and put
-                                 away once a machine has claimed the code, when the page's own handoff says the rest. -->
-                            <SetupOnMachine
-                                v-if="project === undefined && mode === `intentic` && !buildsFromCheckout && created && setup && handoff !== `claimed`"
-                                :sandbox-id="created.id"
-                                :code="setup.code"
-                                :hostname="setup.hostname"
-                                :sync-asked="syncOffered && syncEnabled"
-                            />
 
                             <!-- Phone's real next step, placed above the command it redirects from; a correction below goes unread. -->
                             <SetupHandoff v-if="mobile && created" :sandbox-id="created.id" :email="user?.email ?? ``" @sent="onEmailed" />
@@ -1199,7 +1202,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                         <div v-if="commandReady" class="flex flex-col gap-2">
                             <!-- Spinner doesn't survive a failure report; spinning beside 'here is what broke' would contradict itself. -->
                             <p
-                                v-if="reportFailures === null"
+                                v-if="statusShown"
                                 class="flex items-center gap-2 text-xs"
                                 :class="handoff === `claimed` ? `text-content` : `text-muted`"
                             >
@@ -1231,16 +1234,6 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                     <template v-else-if="handoff === `handed`">
                                         <span class="font-medium text-content">{{ t(`setup.setup.copied`) }}</span>
                                         {{ t(`setup.setup.pasteIntoTerminalPress`) }}
-                                    </template>
-                                    <!-- This names the actor responsible for the next setup step. -->
-                                    <template v-else-if="throughApp && !commandVisible">
-                                        <span class="font-medium text-content">{{ t(`setup.setup.waitingToStart`) }}</span>
-                                        {{ t(`setup.setup.nothingRunsUntilPress`) }}
-                                    </template>
-                                    <!-- Browser and app setup use the same action sentence. -->
-                                    <template v-else-if="installing">
-                                        <span class="font-medium text-content">{{ t(`setup.setup.waitingToStart`) }}</span>
-                                        {{ t(`setup.setup.nothingRunsUntilInstall`) }}
                                     </template>
                                     <template v-else>
                                         <span class="font-medium text-content">{{ t(`setup.setup.waitingToRunCommand`) }}</span>
@@ -1293,7 +1286,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
 
                             <!-- Wide screens move this explanation into the reference column. -->
                             <SetupNudge
-                                v-if="nudging && !desktopParked"
+                                v-if="nudgeShown"
                                 class="xl:hidden"
                                 :variant="nudgeVariant"
                                 :stalled="stalled"
@@ -1303,7 +1296,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                             />
 
                             <!-- Claimed-but-silent differs from never-run: the command ran, so the terminal has the answer. -->
-                            <p v-if="slowBuild" class="flex items-start gap-2 text-xs text-warning">
+                            <p v-if="slowBuild && !stoppedHere" class="flex items-start gap-2 text-xs text-warning">
                                 <Icon name="exclamation-circle" class="shrink-0" />
                                 <!-- Check launch state, not visibility, before handing a command to the app. -->
                                 <!-- A re-run is safe only from a terminal: the app's second press starts a second install
@@ -1328,11 +1321,18 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                     <div class="entry-card flex flex-col gap-3 p-4">
                         <SetupRunDetails :cleanup="cleanupCommand" :downloads="!appFirst" />
                         <!-- Sync belongs with what the command does, not the path to it; gated on the command, like its twin under it. -->
-                        <SetupSyncOption v-if="syncOffered" v-model="syncEnabled" :folder="syncDir" :project="project?.name" class="pt-1" />
+                        <!-- Not beside a machine's press, which sets no sync up. -->
+                        <SetupSyncOption
+                            v-if="syncOffered && hereChosen"
+                            v-model="syncEnabled"
+                            :folder="syncDir"
+                            :project="project?.name"
+                            class="pt-1"
+                        />
                     </div>
                     <!-- Correction as this column's second card, once the wait reads as a misunderstanding, beside the command. -->
                     <SetupNudge
-                        v-if="nudging && !desktopParked"
+                        v-if="nudgeShown"
                         :variant="nudgeVariant"
                         :stalled="stalled"
                         :command="selectedCommand"

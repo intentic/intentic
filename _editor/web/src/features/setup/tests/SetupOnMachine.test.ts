@@ -1,65 +1,61 @@
-// Setting a new sandbox up on a computer of the owner's that is already connected: one press per such machine, which
-// runs the same `ic sandbox connect` the command would, with this row's code, through the sandbox that reaches it.
+// The card's one button once the "Runs on" row picked a connected machine: it names that machine, sends the press only
+// when pressed, and stands down while something else is already on its way to a machine for this row.
 import "@intentic/testing/dom";
-import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { installI18n } from "@intentic/ui/i18n";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
-import { type App, computed, createApp, h, nextTick, ref } from "vue";
-import { listedDevice } from "../../../testing/listedDevice";
-
-const omen = listedDevice({ key: `omen`, label: `omen`, hostId: `omen`, online: true, sandboxes: [] });
-const relays = ref<{ sandboxId: string; devices: Device[] }[]>([]);
-const look = jest.fn(async () => {});
-jest.mock(`../../sandbox/live/useDeviceRelays`, () => ({ useDeviceRelays: () => ({ relays: computed(() => relays.value), looking: ref(false), look }) }));
-const manageDeviceSandbox = jest.fn(async () => `Set up.`);
-jest.mock(`../../../models/sandbox/devices/useDevices`, () => ({ manageDeviceSandbox }));
+import { type App, computed, createApp, h, nextTick } from "vue";
+import type { MachineDoor } from "../../sandbox/live/sandboxDoors";
 
 const { default: SetupOnMachine } = await import("../SetupOnMachine.vue");
 
+const omen: MachineDoor = { relay: `intentic`, hostId: `omen`, machineKey: `omen`, machineLabel: `omen`, severs: false };
+
 let app: App | undefined;
-const mount = async (syncAsked = false): Promise<HTMLElement> => {
+const mount = async (over: { locked?: boolean; lines?: string[]; busy?: boolean } = {}) => {
+    const setUpOn = jest.fn(async () => {});
+    const run = {
+        busy: computed(() => over.busy ?? false),
+        lines: computed(() => over.lines ?? []),
+        failure: computed(() => undefined),
+    };
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({
-        render: () => h(SetupOnMachine, { sandboxId: `row-1`, code: `ABCD-1234`, hostname: `sandbox-7e8d0ffa8bed.radarsu.com`, syncAsked }),
+        // SAFETY: the component reads only `busy`, `lines` and `failure` of the run, which this stand-in holds.
+        render: () => h(SetupOnMachine, { door: omen, machine: { run, setUpOn } as never, locked: over.locked ?? false }),
     });
     app.use(PrimeVue);
     app.component(`Icon`, IconStub);
     installI18n(app);
     app.mount(el);
     await nextTick();
-    return el;
+    return { el, setUpOn };
 };
 
 afterEach(() => {
-    look.mockClear();
     app?.unmount();
     app = undefined;
-    relays.value = [];
-    manageDeviceSandbox.mockClear();
     document.body.innerHTML = ``;
 });
 
-it(`draws nothing while no sandbox of the owner's reaches a machine that could hold it`, async () => {
-    const el = await mount();
-    expect(el.querySelector(`[data-setup-on-machine]`)).toBeNull();
-    // Asked fresh as the page opens, rather than trusting lists read before a machine was connected.
-    expect(look).toHaveBeenCalledTimes(1);
-});
-
-it(`sets it up on the machine pressed, through the sandbox that reaches it, with this row's code`, async () => {
-    relays.value = [{ sandboxId: `intentic`, devices: [omen] }];
-    const el = await mount();
+it(`is one button naming the machine picked, which sends the press only when pressed`, async () => {
+    const { el, setUpOn } = await mount();
     const buttons = [...el.querySelectorAll(`button`)];
     expect(buttons.map((each) => each.textContent?.trim())).toEqual([`Set it up on omen`]);
+    expect(setUpOn).not.toHaveBeenCalled();
     buttons[0]?.click();
     await nextTick();
-    expect(manageDeviceSandbox).toHaveBeenCalledWith(`omen`, `sandbox-7e8d0ffa8bed`, `create`, expect.objectContaining({ setupCode: `ABCD-1234`, at: `intentic` }));
+    expect(setUpOn).toHaveBeenCalledTimes(1);
 });
 
-// The press does not carry the sync folder the command would: said, rather than dropped without a word.
-it(`says file sync is left for afterwards when it was asked for`, async () => {
-    relays.value = [{ sandboxId: `intentic`, devices: [omen] }];
-    expect((await mount(true)).textContent).toContain(`File syncing isn't set up this way`);
+it(`stands down while something else is on its way to a machine for this row`, async () => {
+    const { el } = await mount({ locked: true });
+    expect(el.querySelector(`button`)?.hasAttribute(`disabled`)).toBe(true);
+});
+
+it(`shows what the machine prints while it runs`, async () => {
+    const { el } = await mount({ busy: true, lines: [`pulling the sandbox image`] });
+    expect(el.textContent).toContain(`pulling the sandbox image`);
+    expect(el.querySelector(`button`)?.hasAttribute(`disabled`)).toBe(true);
 });

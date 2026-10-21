@@ -547,6 +547,10 @@ export const DeviceSchema = z.object({
     // (a switch that is off, an `ic` too old to list). Absent when it listed, or when nothing answered at all. What a
     // card falling back to a command says instead of "connect the computer": that computer IS connected (2026-10-07).
     sandboxesUnread: z.string().optional(),
+    // Whether its card's "Manage sandboxes on this device" switch is on (HostSummary.manages). Not the same fact as
+    // `sandboxes`: "Run commands" alone lists the containers, and only this switch lets one be made, started or removed,
+    // so a screen offering such a press asks here first. Absent on a sync-only row and from a daemon older than it.
+    manages: z.boolean().optional(),
     gap: DeviceGapSchema.optional(),
 });
 export type Device = z.infer<typeof DeviceSchema>;

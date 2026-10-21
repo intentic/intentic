@@ -362,7 +362,12 @@ const answer = (text: string, isError = false): unknown => ({ result: { content:
 const readLog = recordingLogger();
 
 // Both doors of one machine, every call recorded: `report` on its connection, `list_sandboxes` on its MCP door.
-const fakeServices = (id: string, respond: (call: FakeCall) => Promise<unknown>): { services: Services; calls: FakeCall[] } => {
+// `card` is the rest of the machine's card config, past its platform: the switches the owner set on it.
+const fakeServices = (
+    id: string,
+    respond: (call: FakeCall) => Promise<unknown>,
+    card: Record<string, string> = {},
+): { services: Services; calls: FakeCall[] } => {
     const calls: FakeCall[] = [];
     const ask = async (call: FakeCall): Promise<unknown> => {
         calls.push(call);
@@ -374,7 +379,7 @@ const fakeServices = (id: string, respond: (call: FakeCall) => Promise<unknown>)
         // The real reader over a history root that holds nothing, which is the empty fleet these cases assume.
         syncFleet: () => enrolledFleet(NO_HISTORY),
         perf: { track: async <T>(_op: string, _fields: unknown, run: () => Promise<T>): Promise<T> => await run() },
-        capabilities: { list: async () => [{ kind: "device", id, config: { platform: "linux" } }] },
+        capabilities: { list: async () => [{ kind: "device", id, config: { platform: "linux", ...card } }] },
         // One enrollment per card here, named after it: these machines have a single OS install.
         hosts: { list: async () => [{ id, ...HOST_CARD_RULE.pairing(id) }] },
         hostHub: {
@@ -698,6 +703,16 @@ test("carries no container list at all when the machine refuses to list them", a
     expect(row?.sandboxes).toBeUndefined();
     // Said, though: the card that falls back to a command names this connected machine and its reason.
     expect(row?.sandboxesUnread).toBe(`This device has no tool called "list_sandboxes".`);
+});
+
+// Listing the containers rides either switch ("Run commands" lists them too), and making one rides only "Manage
+// sandboxes on this device": setup offers a press on a machine only where the row says the press is let through.
+test("says whether the card lets a container be made there, beside the list either switch reads", async () => {
+    const { services } = fakeServices("plain-pc", async (call) => (call.tool === "report" ? report("plain") : answer("[]")));
+    expect((await devices(services))[0]).toMatchObject({ hostId: "plain-pc", sandboxes: [], manages: false });
+
+    const managed = fakeServices("managed-pc", async (call) => (call.tool === "report" ? report("managed") : answer("[]")), { sandboxes: "on" });
+    expect((await devices(managed.services))[0]).toMatchObject({ hostId: "managed-pc", manages: true });
 });
 
 // Runner lifecycle: the two ops the daemon fills in for.

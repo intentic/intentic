@@ -168,8 +168,9 @@ const startOnce = async (options: DeviceOptions): Promise<void> => {
               onPendingRecreate(() => void sandboxes.drainRecreate()),
               onPendingSync(() => void sync.drainSync()),
               onPendingFix(() => void fixing.drainFix()),
-              // The setup page took a sandbox to a machine of ours: its install here stops, if this window runs one.
-              onSetupStop((sandboxId) => void setup.stopForHosted(sandboxId)),
+              // The setup page took a sandbox to a machine of ours, or its reader called the install off there: the
+              // install here stops, or the setup waiting on this PC is given up, if this window holds one.
+              onSetupStop((sandboxId) => void setup.stopForPage(sandboxId)),
               // The sandbox image fetched ahead of a setup (prefetch.rs) has ended: heard by every window, told once.
               onPrefetch((ended) => track(`desktop_image_prefetch`, { ...ended })),
           ]

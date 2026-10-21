@@ -97,4 +97,37 @@ describe(`setupDoors`, () => {
         ];
         expect(setupDoors(relays).map((door) => [door.machineLabel, door.relay])).toEqual([[`omen`, `here`]]);
     });
+
+    // "Run commands" alone lists the containers; making one needs "Manage sandboxes on this device", so a machine whose
+    // card says it is off is no offer, and a daemon too old to say leaves the machine offered.
+    it(`leaves out a machine whose card refuses to make a sandbox there`, () => {
+        const relays = [{ sandboxId: `here`, devices: [empty(`omen`, { manages: false }), empty(`rog`, { manages: true }), empty(`air`)] }];
+        expect(setupDoors(relays).map((door) => door.machineLabel)).toEqual([`rog`, `air`]);
+    });
+
+    it(`makes it on the side of a PC that lets it, when only one does`, () => {
+        const devices = [
+            listedDevice({
+                key: `rog`,
+                label: `rog`,
+                hostId: `rog`,
+                machineId: `m-rog`,
+                online: true,
+                platform: `windows`,
+                sandboxes: [],
+                manages: true,
+            }),
+            listedDevice({
+                key: `rog:wsl`,
+                label: `Arch`,
+                hostId: `rog::wsl:arch`,
+                machineId: `m-rog`,
+                online: true,
+                platform: `linux`,
+                sandboxes: [],
+                manages: false,
+            }),
+        ];
+        expect(setupDoors([{ sandboxId: `here`, devices }])).toMatchObject([{ hostId: `rog` }]);
+    });
 });

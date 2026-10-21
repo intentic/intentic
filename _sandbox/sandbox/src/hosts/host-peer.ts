@@ -15,6 +15,7 @@ import type { deviceContract } from "@intentic/sandbox-contract/contracts/device
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { ContractRouterClient } from "@orpc/contract";
 import { capabilityCtx } from "../capabilities/capability.js";
+import { opt } from "../opt.js";
 import { deviceHandler, refreshDeviceSkill } from "../capabilities/handlers/device.handler.js";
 import type { Services } from "../composition.js";
 import type { CardRule } from "../peers/enrollment.js";
@@ -146,6 +147,8 @@ export const hostSummaries = async (services: Services): Promise<HostSummary[]> 
                 ...(native?.version === undefined ? {} : { version: native.version }),
                 ...(native?.facts === undefined ? {} : { facts: native.facts }),
                 ...(native?.lastSeen === undefined ? {} : { lastSeen: native.lastSeen }),
+                // One card, one switch: every environment of the machine answers to it.
+                manages: capability.config.sandboxes === "on",
             },
         ];
     });
@@ -170,6 +173,7 @@ export const hostConnections = (summaries: readonly HostSummary[]): HostSummary[
             ...(environment.version === undefined ? {} : { version: environment.version }),
             ...(environment.facts === undefined ? {} : { facts: environment.facts }),
             ...(environment.lastSeen === undefined ? {} : { lastSeen: environment.lastSeen }),
+            ...opt("manages", summary.manages),
         })),
     );
 

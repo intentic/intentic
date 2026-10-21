@@ -337,7 +337,7 @@ describe(`a sandbox taken to a machine of ours`, () => {
 
     it(`stops the install it runs for that sandbox as the card's Stop does, told as stopped, and stays off the page`, async () => {
         const { setup, run } = await pulling();
-        await setup.stopForHosted(`cmsandbox0001`);
+        await setup.stopForPage(`cmsandbox0001`);
         await run;
         expect(calls.filter((call) => call.command === `run_stop`).map((call) => call.args)).toEqual([{ id: `setup` }]);
         expect(told(`desktop_install_stopped`)).toEqual([{ percent: expect.any(Number), reason: `hosted` }]);
@@ -358,18 +358,42 @@ describe(`a sandbox taken to a machine of ours`, () => {
 
     it(`does nothing for another sandbox, nor with no install running`, async () => {
         const idle = await started();
-        await idle.stopForHosted(`cmsandbox0001`);
+        await idle.stopForPage(`cmsandbox0001`);
         expect(asked(`run_stop`)).toBe(0);
 
         const { setup, run } = await pulling();
-        await setup.stopForHosted(`cmsandbox0002`);
+        await setup.stopForPage(`cmsandbox0002`);
         expect(asked(`run_stop`)).toBe(0);
         expect(told(`desktop_install_stopped`)).toEqual([]);
         expect(setup.stopping.value).toBe(false);
         finishRun?.();
         await run;
-        await setup.stopForHosted(`cmsandbox0001`);
+        await setup.stopForPage(`cmsandbox0001`);
         expect(asked(`run_stop`)).toBe(0);
+    });
+
+    // The page's Cancel beside "Set it up now", pressed while the card waits on this PC rather than runs: the question goes
+    // with it, and nothing comes back by itself once the PC is ready.
+    it(`gives up a setup that waits on this PC, its card put away and nothing run once the PC is ready`, async () => {
+        os = `windows`;
+        const setup = await started();
+        await setup.loadPending();
+        expect(setup.pcParked.value).toBe(true);
+        await setup.stopForPage(`cmsandbox0002`);
+        expect(setup.pcParked.value).toBe(true);
+
+        await setup.stopForPage(`cmsandbox0001`);
+        expect(asked(`run_stop`)).toBe(0);
+        expect(setup.pcParked.value).toBe(false);
+        expect(asked(`forget_resumable_setup`)).toBe(1);
+        expect(setup.setupMode.value).toBe(false);
+        expect(told(`desktop_install_closed`)).toHaveLength(1);
+        await nextTick();
+        expect(lastReport()).toMatchObject({ state: `closed`, name: `work` });
+        pc.check.value = check(`ready`);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(codesRun()).toEqual([]);
+        expect(asked(`setup_alert`)).toBe(0);
     });
 
     it(`leaves the card's own Stop as it was: said to be the card's, and This device brought back with the run`, async () => {

@@ -10466,7 +10466,7 @@
             "hideCommand": "Hide the command",
             "hostedSandboxesSwitchedOff": "Hosted sandboxes are switched off for this account; the email we sent says why and where to write. Running it on your own computer is unaffected.",
             "httpsAddressSandboxAlready": "The https address your sandbox already answers on (https:// is optional).",
-            "installsDockerNeedStarts": "Installs Docker if you need it, starts your sandbox and its tunnel, and opens your workspace the moment it answers. No terminal.",
+            "installsDockerNeedStarts": "Installs Docker if needed and opens your workspace when it's ready. No terminal.",
             "keepAddress": "Keep this address",
             "localDevBuildsCheckout": "Local dev: builds from your checkout",
             "machinePickedUp": "Your machine picked it up.",
@@ -10475,8 +10475,6 @@
             "noScriptRunsRead": "No script runs: read the whole file, then start it yourself",
             "notAvailableToAccount": "Not available to this account",
             "nothingAnswered": "Nothing answered at that address.",
-            "nothingRunsUntilInstall": "Nothing runs until you install the app above.",
-            "nothingRunsUntilPress": "Nothing runs until you press \"Set it up now\" above.",
             "nothingToDoAccount": "Nothing to do with your account, and we're adding more. Setting it up on your own computer takes a couple of minutes and has no limits at all, or check back a little later and we'll have room.",
             "nothingToForwardTo": "with nothing to forward to. Start the sandbox container",
             "openChat": "Open chat",
@@ -10513,6 +10511,7 @@
             "setUpBeforeLastSeen": "This sandbox was set up before and last answered {when}.",
             "setUpFromComputer": "Set up from a computer",
             "setUpNow": "Set it up now",
+            "stoppedHere": "Setup stopped.",
             "setUpOnMy": "Set it up on my own computer",
             "setUpWorkspace": "Set up your workspace",
             "settingOneUpNothing": "Setting one up for you. Nothing to fill in.",
@@ -10541,7 +10540,6 @@
             "usedOnceToClaim": "Used once to claim the sandbox. The daemon stops asking once you're bound, so intentic never stores it.",
             "waitingToClaimedConnection": "It's waiting to be claimed with the connection token it was started with. Paste that",
             "waitingToRunCommand": "Waiting for you to run the command.",
-            "waitingToStart": "Waiting for you to start it.",
             "webOriginMustName": "The daemon's {variable} also has to name {origin}. Otherwise your browser blocks the call before it's sent.",
             "wellConnectTo": "We'll connect to",
             "wellNoticeMomentSandbox": "We'll notice the moment your sandbox starts.",
@@ -10597,12 +10595,14 @@
             "waitingOnInstaller": "Waiting on the installer."
         },
         "setupOnMachine": {
-            "alreadyConnected": "Or set it up with a press on a computer of yours that is already connected:",
+            "runsOn": "Runs on",
+            "thisComputer": "This computer",
+            "byEmail": "By email link",
             "setUpOn": "Set it up on {machine}",
+            "caption": "Starts it there through that computer's connection. No terminal.",
             "settingUpOn": "Setting it up on {machine}",
             "couldntOn": "Couldn't set it up on {machine}.",
-            "startingOn": "Starting on {machine}…",
-            "syncAfter": "File syncing isn't set up this way: turn it on from its Devices page once it is running."
+            "startingOn": "Starting on {machine}…"
         },
         "setupRunDetails": {
             "dials": "Dials",

@@ -4,7 +4,7 @@ import "@intentic/testing/dom";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { waitFor, advanceTimersByTimeAsync, realYield, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import PrimeVue from "primevue/config";
-import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { installI18n } from "@intentic/ui/i18n";
 import * as actualVueRouter from "vue-router";
@@ -13,6 +13,8 @@ import * as actualUi from "@intentic/ui";
 import * as actualDesktop from "../../../app/environments/desktop";
 import * as actualDesktopDownloads from "../../../app/environments/desktopDownloads";
 import { DESKTOP_SETUP_EVENT } from "../../../app/environments/desktopSetupReport";
+import { scriptSource } from "../../../app/environments/scriptCommand";
+import { listedDevice } from "../../../testing/listedDevice";
 
 // Both useDevice (matchMedia) and environment.ts (window.env) read globals at module scope on import.
 
@@ -150,6 +152,13 @@ jest.mock(`../../../app/environments/desktopDownloads`, () => ({
     ...actualDesktopDownloads,
     desktopInstaller: () => desktopInstaller(),
 }));
+// The owner's connected machines, as every sandbox of theirs reaches them: none unless a test connects one.
+const relays = ref<{ sandboxId: string; devices: import("@intentic/sandbox-contract/schemas/devices").Device[] }[]>([]);
+jest.mock(`../../sandbox/live/useDeviceRelays`, () => ({
+    useDeviceRelays: () => ({ relays: computed(() => relays.value), looking: ref(false), look: jest.fn(async () => {}) }),
+}));
+const manageDeviceSandbox = jest.fn(async () => `Set up.`);
+jest.mock(`../../../models/sandbox/devices/useDevices`, () => ({ manageDeviceSandbox }));
 // Steps 2-3's own components, stubbed out: none of their concerns belong to step 1's tests.
 jest.mock(`../SetupCompose.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 jest.mock(`../SetupHandoff.vue`, () => ({ default: defineComponent({ render: () => null }) }));
@@ -226,6 +235,8 @@ const MINTED = { code: `vphf-3wk`, hostname: `sandbox-fa0b431303b8.sbx.intentic.
 
 beforeEach(() => {
     query.value = {};
+    relays.value = [];
+    manageDeviceSandbox.mockClear();
     nowAt.value = 0;
     wake.mockReset().mockResolvedValue({ ok: true });
     mobileDevice.value = false;
@@ -668,8 +679,8 @@ it(`offers the app first on a machine we ship a build for, with the command one 
     // Nothing about a terminal on the first frame, not the paste instruction, not the `sudo` switch.
     expect(el.textContent).not.toContain(`Paste it into a terminal`);
     expect(el.textContent).not.toContain(`I already have Docker`);
-    // The wait under it also names the move it's actually waiting on.
-    expect(el.textContent).toContain(`Nothing runs until you install the app above`);
+    // The download is the instruction: no line under it restates that nothing runs until it is used.
+    expect(el.textContent).not.toContain(`Nothing runs until`);
 
     // Alternatives are named on screen, not behind a question; the opener that reveals the command says so.
     expect(el.textContent).toContain(`Other ways to set up`);
@@ -1373,5 +1384,124 @@ describe(`a download too slow to wait for, given up for a machine of ours`, () =
         offerButton()!.click();
         await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
         expect(order).toEqual([`intentic://setup-stop?sandbox=new`, `provision new`]);
+    });
+});
+
+/* WHERE IT RUNS, AND CALLING IT OFF (2026-10-21). Each connected machine was a gold button beside "Set it up now": two
+   primaries, a misclick that started a sandbox on another machine with no way back, and a sentence above each. Now
+   one "Runs on" row picks where, the card holds one button for the pick, and the app's install has a Cancel. */
+describe(`where it runs`, () => {
+    const omen = listedDevice({ key: `omen`, label: `omen`, hostId: `omen`, online: true, sandboxes: [] });
+    // This test run's platform is local, whose default command builds the image from a checkout only this computer
+    // holds: the published one-liner is what a connected machine can run, as in production.
+    beforeEach(() => {
+        scriptSource.value = `published`;
+    });
+    const settled = async (): Promise<HTMLElement> => {
+        setupCode.mockResolvedValue(MINTED);
+        const el = await mount();
+        jest.useFakeTimers();
+        await advanceTimersByTimeAsync(500);
+        return el;
+    };
+    afterEach(() => {
+        jest.useRealTimers();
+        scriptSource.value = `checkout`;
+    });
+
+    it(`asks nothing while no connected machine could take it`, async () => {
+        const el = await settled();
+        await waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
+        expect(el.querySelector(`[data-setup-runs-on]`)).toBeNull();
+    });
+
+    it(`offers a connected machine as a pick beside this computer, and only its one button starts anything`, async () => {
+        relays.value = [{ sandboxId: `intentic`, devices: [omen] }];
+        const el = await settled();
+        await waitFor(() => expect(el.querySelector(`[data-setup-runs-on]`)).not.toBeNull());
+        expect(el.querySelector(`[data-setup-runs-on]`)!.textContent).toContain(`This computer`);
+        expect(el.textContent).toContain(`Paste it into a terminal`);
+        expect(buttonLabelled(`Set it up on omen`)).toBeUndefined();
+
+        buttonLabelled(`omen`)!.click();
+        await nextTick();
+        // The pick swaps the card's action for that machine's; nothing has been sent anywhere yet.
+        expect(buttonLabelled(`Set it up on omen`)?.tagName).toBe(`BUTTON`);
+        expect(el.textContent).not.toContain(`Paste it into a terminal`);
+        expect(manageDeviceSandbox).not.toHaveBeenCalled();
+
+        buttonLabelled(`Set it up on omen`)!.click();
+        await waitFor(() =>
+            expect(manageDeviceSandbox).toHaveBeenCalledWith(
+                `omen`,
+                `sandbox-fa0b431303b8`,
+                `create`,
+                expect.objectContaining({ setupCode: `vphf-3wk` }),
+            ),
+        );
+    });
+
+    it(`keeps one gold button inside the app, and no line saying nothing runs until it is pressed`, async () => {
+        desktopApp.value = `1.340.0`;
+        relays.value = [{ sandboxId: `intentic`, devices: [omen] }];
+        const el = await settled();
+        await waitFor(() => expect(buttonLabelled(`Set it up now`)?.tagName).toBe(`BUTTON`));
+        expect(buttonLabelled(`Set it up on omen`)).toBeUndefined();
+        expect(el.textContent).not.toContain(`Nothing runs until`);
+    });
+});
+
+describe(`calling the app's install off from the page`, () => {
+    // The app's card asking this PC a question before anything changes on it: the screenshot's "4%" wait.
+    const askConsent = (): void => {
+        window.dispatchEvent(
+            new CustomEvent(DESKTOP_SETUP_EVENT, {
+                detail: { name: `workspace`, state: `waiting`, waitingFor: `consent`, percent: 4, at: Date.now() },
+            }),
+        );
+    };
+    afterEach(() => {
+        window.dispatchEvent(new CustomEvent(DESKTOP_SETUP_EVENT, { detail: { state: `closed`, percent: 0 } }));
+        jest.useRealTimers();
+    });
+
+    it(`stops it, hands the button back at once, and says so; pressing it again starts afresh`, async () => {
+        desktopApp.value = `1.340.0`;
+        setupCode.mockResolvedValue(MINTED);
+        const el = await mount();
+        jest.useFakeTimers();
+        await advanceTimersByTimeAsync(500);
+        await waitFor(() => expect(el.textContent).toContain(`Handed to the app`));
+        // The app's card asks this PC a question: the run waits, and the page's button with it.
+        askConsent();
+        await waitFor(() => expect(el.querySelector(`[data-setup-stop]`)).not.toBeNull());
+        expect(buttonLabelled(`Set it up now`)?.disabled).toBe(true);
+
+        openDesktopLink.mockClear();
+        el.querySelector<HTMLButtonElement>(`[data-setup-stop]`)!.click();
+        await nextTick();
+        expect(openDesktopLink.mock.calls).toEqual([[`intentic://setup-stop?sandbox=new`]]);
+        expect(buttonLabelled(`Set it up now`)?.disabled).toBe(false);
+        expect(el.querySelector(`[data-setup-stopped]`)?.textContent).toContain(`Setup stopped.`);
+        expect(el.querySelector(`[data-setup-stop]`)).toBeNull();
+        // An app too old to hear the stop keeps reporting its run: the page does not take it back up.
+        askConsent();
+        await nextTick();
+        expect(buttonLabelled(`Set it up now`)?.disabled).toBe(false);
+        expect(el.textContent).not.toContain(`Waiting for your answer`);
+
+        buttonLabelled(`Set it up now`)!.click();
+        await nextTick();
+        expect(openDesktopLink).toHaveBeenCalledTimes(2);
+        expect(el.querySelector(`[data-setup-stopped]`)).toBeNull();
+    });
+
+    it(`is not offered in a browser, where the app cannot hear the stop`, async () => {
+        setupCode.mockResolvedValue(MINTED);
+        const el = await mount();
+        jest.useFakeTimers();
+        await advanceTimersByTimeAsync(500);
+        await waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
+        expect(el.querySelector(`[data-setup-stop]`)).toBeNull();
     });
 });

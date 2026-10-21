@@ -2318,9 +2318,9 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
                 show_folder_that_asked(app, asked_in.as_deref());
             }
         }
-        // The setup page took this sandbox to a machine of ours: the main window stops the install it runs for it, if it
-        // runs one, as the card's own Stop does (src/device/setup.ts `stopForHosted`). Nothing is shown or swapped: the
-        // reader stays on that page, watching the machine start.
+        // The setup page took this sandbox to a machine of ours, or its reader called the install off there: the main
+        // window stops the install it runs for it as the card's own Stop does, or gives up the setup waiting on this PC
+        // (src/device/setup.ts `stopForPage`). Nothing is shown or swapped: the reader stays on that page.
         Some(Link::SetupStop { sandbox_id }) => {
             let _ = tauri::Emitter::emit(app, "desktop://setup-stop", sandbox_id);
         }

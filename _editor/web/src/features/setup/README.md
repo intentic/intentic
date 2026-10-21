@@ -30,12 +30,22 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   opens Sandbox ▸ Models (`/sandbox/models?found=…`) instead of `/`, which offers each one as a single press. No login is copied: the sandbox signs
   in afresh, and the browser already signed in answers it.
 
+- **Where it runs on the owner's side.** The run card's facts are its address and, when a computer of the owner's is
+  already connected and its card has "Manage sandboxes on this device" on, a "Runs on" row: this computer's own way
+  (the app's button, the installer, the command) or that machine (`flow/useSetupOnMachine.ts`). Picking is only a pick;
+  the card holds one button for it, so a stray click starts nothing. A machine whose switch is off is not offered
+  (`setupDoors`, read off the device row's `manages`): its agent would refuse the press. The app's install has a Cancel
+  beside its button, sent to the app as `intentic://setup-stop` (the app stops the run, or gives up a setup still
+  waiting on the PC); a press on a machine has no stop, since the machine's flow takes none, which is why choosing it
+  is a separate step from starting it.
+
 ## Key files
 
 - [setupArrival.ts](setupArrival.ts) — what an arrival does by itself, a project's included, and the folder's name in the sandbox.
 - [../../client/sandbox/sandboxName.ts](../../client/sandbox/sandboxName.ts) — the name a new sandbox gets, numbered past the account's own; the desktop app's folder dialog names one the same way.
 - [flow/useSetupArrival.ts](flow/useSetupArrival.ts) — reads the offers and the row, decides the arrival and takes it.
 - [flow/machineLadder.ts](flow/machineLadder.ts) — the picker's rungs, and which of them a project may have.
+- [flow/useSetupOnMachine.ts](flow/useSetupOnMachine.ts) — the "Runs on" pick and the press on a connected machine.
 - [flow/useHostedLane.ts](flow/useHostedLane.ts) — the machine of ours on the row: provision, wait, restart, hand back.
 - [hostedProject.ts](hostedProject.ts) — the hand-over of a hosted project's folder to the desktop app.
 - [desktopRun.ts](desktopRun.ts) — the desktop app's install as its reports tell it: how long each kind of app may go

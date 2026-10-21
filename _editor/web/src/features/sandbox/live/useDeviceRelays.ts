@@ -1,5 +1,5 @@
 import { within } from "@intentic/base/async";
-import { computed, type ComputedRef, onScopeDispose, type Ref, ref } from "vue";
+import { computed, type ComputedRef, onScopeDispose, type Ref, ref, watch } from "vue";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useDevices } from "../../../models/sandbox/devices/useDevices";
 import { devicesAcross, readDevicesAcross, subscribeDevicesAcross } from "./devicesAcross";
@@ -24,8 +24,11 @@ export interface DeviceRelays {
 export interface DeviceRelaysOptions {
     /** Leave the open sandbox out: it is the one not answering, so it can carry nothing (the recovery panel). */
     readonly withoutActive?: boolean;
-    /** Keep the other sandboxes' lists polled for as long as this scope lives, for a screen that stays open. */
-    readonly follow?: boolean;
+    /**
+     * Keep the other sandboxes' lists polled for as long as this scope lives, for a screen that stays open; or, as a
+     * getter, only while it answers true, for a screen where the question comes and goes (setup's "Runs on" row).
+     */
+    readonly follow?: boolean | (() => boolean);
 }
 
 export function useDeviceRelays(options: DeviceRelaysOptions = {}): DeviceRelays {
@@ -41,8 +44,19 @@ export function useDeviceRelays(options: DeviceRelaysOptions = {}): DeviceRelays
             ...devicesAcross.value.map((box) => ({ sandboxId: box.sandbox.id, devices: box.devices })),
         ];
     });
-    if (options.follow === true) {
+    const { follow = false } = options;
+    if (follow === true) {
         onScopeDispose(subscribeDevicesAcross());
+    } else if (follow !== false) {
+        watch(
+            follow,
+            (on, _was, onCleanup) => {
+                if (on) {
+                    onCleanup(subscribeDevicesAcross());
+                }
+            },
+            { immediate: true },
+        );
     }
     const looking = ref(false);
     let asked = 0;
