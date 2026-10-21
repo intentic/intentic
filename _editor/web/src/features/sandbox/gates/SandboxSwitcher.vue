@@ -35,8 +35,8 @@ import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
 import { useAuth } from "../../../client/auth/useAuth";
 import { answerNote } from "./switcherRows";
-import { removalKey } from "./removalPlan";
-import RemoveSandboxDialog from "./RemoveSandboxDialog.vue";
+import { removalKey } from "./removal/removalPlan";
+import RemoveSandboxDialog from "./removal/RemoveSandboxDialog.vue";
 import { slotChord, useSwitchCommands } from "./useSwitchCommands";
 import { useT } from "@intentic/ui/i18n";
 

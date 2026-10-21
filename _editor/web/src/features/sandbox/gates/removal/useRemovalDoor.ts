@@ -1,7 +1,7 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import { computed, type ComputedRef, type Ref, watch } from "vue";
-import { machinesLooked, type MachineDoor, sandboxDoor } from "../live/sandboxDoors";
-import { useDeviceRelays } from "../live/useDeviceRelays";
+import { machinesLooked, type MachineDoor, sandboxDoor } from "../../live/sandboxDoors";
+import { useDeviceRelays } from "../../live/useDeviceRelays";
 
 // THE REMOVE DIALOG'S QUESTION: can the container out there be deleted with a press, and through which sandbox. Asked
 // fresh each time the dialog opens, of the sandbox open and of every other one the owner has, since the switcher reads

@@ -2,24 +2,24 @@
 import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS, type SandboxSummary } from "@intentic/api-contract";
 import { sandboxSubdomain } from "@intentic/sandbox-contract/ids/hostnames";
 import { oneLinerFits } from "@intentic/constants";
-import { Button, type CommandOs, Meter, Modal, Notice } from "@intentic/ui";
+import { Button, type CommandOs, Meter, Modal, Notice, toneWash } from "@intentic/ui";
 import { type NoticeModel, noticeFrom, useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import RunCommand from "../../../components/RunCommand.vue";
-import StagedProgress from "../../../components/progress/StagedProgress.vue";
-import type { ProgressStep, ProgressStatus } from "../../../components/progress/stagedSteps";
-import { useProgress } from "../../../components/progress/useProgress";
-import { oneLiner } from "../../../app/environments/scriptCommand";
-import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { manageDeviceSandbox } from "../../../models/sandbox/devices/useDevices";
-import { DELETED_PATH } from "../../../models/sandbox/devices/deviceLinks";
-import { sandboxIdFromToken } from "../../../models/sandbox/sandboxIdFromToken";
-import { useNotifications } from "../../../workbench/notifications/notifications";
-import { dismissOperation, useOperation } from "../../../workbench/operations/operations";
-import { beginDeviceWork } from "../devices/runners/deviceWork";
-import type { MachineDoor } from "../live/sandboxDoors";
+import RunCommand from "../../../../components/RunCommand.vue";
+import StagedProgress from "../../../../components/progress/StagedProgress.vue";
+import type { ProgressStep, ProgressStatus } from "../../../../components/progress/stagedSteps";
+import { useProgress } from "../../../../components/progress/useProgress";
+import { oneLiner } from "../../../../app/environments/scriptCommand";
+import { useSandbox } from "../../../../client/sandbox/useSandbox";
+import { manageDeviceSandbox } from "../../../../models/sandbox/devices/useDevices";
+import { DELETED_PATH } from "../../../../models/sandbox/devices/deviceLinks";
+import { sandboxIdFromToken } from "../../../../models/sandbox/sandboxIdFromToken";
+import { useNotifications } from "../../../../workbench/notifications/notifications";
+import { dismissOperation, useOperation } from "../../../../workbench/operations/operations";
+import { beginDeviceWork } from "../../devices/runners/deviceWork";
+import type { MachineDoor } from "../../live/sandboxDoors";
 import {
     enterStep,
     expectedMs,
@@ -36,7 +36,9 @@ import {
     stepsLeft,
     stepWeight,
 } from "./removalPlan";
-import { removalTakes } from "./switcherRows";
+import RemovalMap from "./RemovalMap.vue";
+import RemovalTakes from "./RemovalTakes.vue";
+import { removalMap } from "./removalMap";
 import { useRemovalDoor } from "./useRemovalDoor";
 
 // REMOVING OR LEAVING A SANDBOX, from the question to the end of the work. One dialog through four moments, because a
@@ -385,7 +387,7 @@ const onOpen = (open: boolean): void => {
 const header = computed(() => {
     const name = shown.value?.name ?? ``;
     if (phase.value === `ask`) {
-        return owner.value ? t(`sandbox.sandboxSwitcher.removeAccount2`) : t(`sandbox.sandboxSwitcher.leaveSandbox`);
+        return owner.value ? t(`sandbox.removeAsk.titleRemove`, { name }) : t(`sandbox.removeAsk.titleLeave`, { name });
     }
     if (phase.value === `failed`) {
         return owner.value ? t(`sandbox.removeSandbox.stoppedRemoving`, { name }) : t(`sandbox.removeSandbox.couldntLeave`, { name });
@@ -393,18 +395,10 @@ const header = computed(() => {
     return owner.value ? t(`sandbox.removeSandbox.removing`, { name }) : t(`sandbox.removeSandbox.leaving`, { name });
 });
 
-const description = computed(() => {
-    const row = shown.value;
-    if (row === undefined || phase.value !== `ask`) {
-        return undefined;
-    }
-    if (row.role !== `owner`) {
-        return t(`sandbox.sandboxSwitcher.leaveLoseAccessSandbox`, { name: row.name });
-    }
-    return row.hosted !== null
-        ? t(`sandbox.sandboxSwitcher.removeHostedMachineDestroyed`, { name: row.name })
-        : t(`sandbox.sandboxSwitcher.removeAccountEveryoneLoses`, { name: row.name });
-});
+// The question as a picture (removalMap.ts); ticking "also delete it there" cuts its second link live.
+const picture = computed(() =>
+    shown.value === undefined ? undefined : removalMap(shown.value, { deletes: deletesThere.value, label: cleanupDoor.value?.machineLabel }),
+);
 
 // The one sentence beside the clock: what can still be done about it.
 const heading = computed(() => {
@@ -438,63 +432,60 @@ const confirmLabel = computed(() => {
 </script>
 
 <template>
-    <Modal :open="target !== undefined" size="sm" class="ui-dialog-confirm" :header="header" :description="description" @update:open="onOpen">
+    <Modal :open="target !== undefined" size="md" class="ui-dialog-confirm" :header="header" @update:open="onOpen">
         <template v-if="shown !== undefined">
-            <!-- THE QUESTION. Only the owner's removal takes anything or promises anything back: a member leaving has just
-                 the description, and no body is drawn under it. -->
-            <div v-if="phase === 'ask' && shown.role === 'owner'" class="flex flex-col gap-4">
-                <!-- What the reader set up lives in the sandbox, not the account, so it leaves with it (switcherRows.ts). -->
-                <div v-if="removalTakes(shown.role).length > 0" class="flex flex-col gap-1">
-                    <p>{{ t(`sandbox.sandboxSwitcher.leavesWithIt`) }}</p>
-                    <ul class="list-disc pl-5 text-muted">
-                        <li v-for="item in removalTakes(shown.role)" :key="item">{{ item }}</li>
-                    </ul>
-                </div>
-                <!-- The promise the deletion actually makes. The two lanes differ in what comes back — a hosted machine
-                     keeps its disk, an own-machine sandbox comes back as a name with a new address. -->
-                <p class="text-muted">
-                    {{
-                        shown.hosted !== null
-                            ? t(`sandbox.sandboxSwitcher.restorableHostedDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
-                            : t(`sandbox.sandboxSwitcher.restorableOwnDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
-                    }}
-                    {{ t(`sandbox.sandboxSwitcher.restoreWhere`) }}
-                </p>
-                <!-- The hosted lane is the only removal that destroys a machine; no cleanup command, since nothing else exists. -->
-                <template v-if="shown.hosted === null && cleanupCommand !== undefined">
-                    <!-- One of the owner's sandboxes reaches the machine holding it, so this is a tick box rather than a
-                         command: the same removal the Devices tab's own button runs. -->
-                    <label v-if="cleanupDoor !== undefined" class="flex items-start gap-2 text-muted">
-                        <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
-                        <input v-model="alsoDeleteThere" type="checkbox" class="mt-0.5" />
-                        <span>
-                            {{ t(`sandbox.sandboxSwitcher.alsoDelete`) }} <span class="font-medium text-content">{{ cleanupDoor.machineLabel }}</span>
-                            {{ t(`sandbox.sandboxSwitcher.containerFilesHistoryGone`) }}
-                        </span>
-                    </label>
-                    <!-- Not found YET: the fresh reads are out, and a command drawn now was most often replaced by the tick
-                         box a second later. -->
-                    <p v-else-if="lookingForMachine" class="flex items-center gap-2 text-muted">
-                        <Icon name="spinner" spin class="shrink-0 text-xs" />
-                        {{ t(`sandbox.sandboxSwitcher.lookingOnMachines`) }}
-                    </p>
-                    <div v-else class="flex flex-col gap-2">
-                        <!-- Said only as a reading: machines that listed what they hold, and none holds it. -->
-                        <p v-if="machinesLooked.length > 0" class="text-muted">
-                            {{
-                                neverCameUp
-                                    ? t(`sandbox.sandboxSwitcher.neverCameUpNotOn`, { machines: machinesLooked.join(`, `) })
-                                    : t(`sandbox.sandboxSwitcher.notOnMachines`, { machines: machinesLooked.join(`, `) })
-                            }}
+            <!-- THE QUESTION, read top to bottom in one pass: a picture of what the press cuts, what goes with it, what can
+                 come back, and the one choice. Words are labels under marks, never paragraphs: the reader skims this
+                 dialog on the way to its button, and a sentence they skip is a fact they do not have. -->
+            <div v-if="phase === 'ask'" class="flex flex-col gap-5">
+                <RemovalMap v-if="picture !== undefined" :picture="picture" />
+
+                <!-- Only the owner's removal takes anything or promises anything back; a member leaving has the picture. -->
+                <template v-if="shown.role === 'owner'">
+                    <RemovalTakes :hosted="shown.hosted !== null" />
+
+                    <!-- The hosted lane's machine goes with it anyway, so the choice below is only for a box of the reader's own. -->
+                    <div v-if="shown.hosted === null && cleanupCommand !== undefined" class="border-t border-line pt-4">
+                        <!-- One of the owner's sandboxes reaches the machine holding it, so this is a tick box rather than a
+                             command: the same removal the Devices tab's own button runs. Ticking it turns the picture's
+                             machine red, so the consequence is seen where it lands. -->
+                        <label v-if="cleanupDoor !== undefined" class="flex cursor-pointer items-start gap-2.5">
+                            <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
+                            <input v-model="alsoDeleteThere" type="checkbox" class="mt-2 shrink-0" />
+                            <span :class="toneWash(alsoDeleteThere ? `danger` : `neutral`, `grid size-8 shrink-0 place-items-center rounded-lg transition-colors`)">
+                                <Icon name="server" />
+                            </span>
+                            <span class="flex min-w-0 flex-col">
+                                <span class="text-content">
+                                    {{ t(`sandbox.removeAsk.alsoDelete`) }} <span class="font-medium">{{ cleanupDoor.machineLabel }}</span>
+                                </span>
+                                <span class="text-xs text-subtle">{{ t(`sandbox.removeAsk.alsoDeleteNote`) }}</span>
+                            </span>
+                        </label>
+                        <!-- Not found YET: the fresh reads are out, and a command drawn now was most often replaced by the tick
+                             box a second later. -->
+                        <p v-else-if="lookingForMachine" class="flex items-center gap-2 text-subtle">
+                            <Icon name="spinner" spin class="shrink-0 text-xs" />
+                            {{ t(`sandbox.sandboxSwitcher.lookingOnMachines`) }}
                         </p>
-                        <p class="text-muted">
-                            {{
-                                neverCameUp && machinesLooked.length > 0
-                                    ? t(`sandbox.sandboxSwitcher.startedElsewhere`)
-                                    : t(`sandbox.sandboxSwitcher.toAlsoRemoveMachine`)
-                            }}
-                        </p>
-                        <RunCommand :command="cleanupCommand" :label="t(`sandbox.sandboxSwitcher.cleanupCommand`)" />
+                        <div v-else class="flex flex-col gap-2">
+                            <!-- Said only as a reading: machines that listed what they hold, and none holds it. -->
+                            <p v-if="machinesLooked.length > 0" class="text-subtle">
+                                {{
+                                    neverCameUp
+                                        ? t(`sandbox.sandboxSwitcher.neverCameUpNotOn`, { machines: machinesLooked.join(`, `) })
+                                        : t(`sandbox.sandboxSwitcher.notOnMachines`, { machines: machinesLooked.join(`, `) })
+                                }}
+                            </p>
+                            <p class="text-subtle">
+                                {{
+                                    neverCameUp && machinesLooked.length > 0
+                                        ? t(`sandbox.sandboxSwitcher.startedElsewhere`)
+                                        : t(`sandbox.removeAsk.runThere`)
+                                }}
+                            </p>
+                            <RunCommand :command="cleanupCommand" :label="t(`sandbox.sandboxSwitcher.cleanupCommand`)" />
+                        </div>
                     </div>
                 </template>
             </div>
@@ -512,7 +503,7 @@ const confirmLabel = computed(() => {
             </div>
 
             <!-- THE WORK, and where it stopped: the steps, the one it is on, the machine's own latest word. -->
-            <div v-else-if="phase !== 'ask' && run !== undefined && runProgress !== undefined" class="flex flex-col gap-3">
+            <div v-else-if="run !== undefined && runProgress !== undefined" class="flex flex-col gap-3">
                 <StagedProgress
                     v-model:log="showLog"
                     :heading="heading"

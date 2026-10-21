@@ -1,6 +1,6 @@
 // A SANDBOX'S REMOVAL AS THE FEW STEPS IT TAKES, so the dialog can say which one it is on, and a second press after a
 // failure picks up where the first stopped instead of doing again what already happened. Pure, so the order, the
-// resume and the countdown are pinned by a test (tests/removalPlan.test.ts) instead of by clicking through a dialog.
+// resume and the countdown are pinned by a test (removalPlan.test.ts) instead of by clicking through a dialog.
 //
 // The ORDER is the safety: the container out there goes first and the account row last. A failure on the machine leaves
 // the row in place, the one handle there is to retry from; a failure on the account leaves a row whose container is

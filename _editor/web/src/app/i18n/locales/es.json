@@ -3923,27 +3923,16 @@
             "fewer": "Mostrar menos"
         },
         "sandboxSwitcher": {
-            "alsoDelete": "Eliminarlo también de",
             "cleanupCommand": "Comando para quitar",
-            "containerFilesHistoryGone": "— su contenedor allí se detiene, y sus archivos y su historial se conservan una semana antes de eliminarse.",
-            "leaveLoseAccessSandbox": "¿Salir de «{name}»? Pierdes el acceso; el sandbox sigue funcionando.",
-            "leaveSandbox": "¿Salir del sandbox?",
             "needsYou": "Te necesita",
             "asleep": "en reposo: se abre al seleccionarlo",
             "starting": "iniciándose: listo en un momento",
             "notAnswering": "No responde",
-            "removeAccount2": "¿Quitar de la cuenta?",
-            "removeAccountEveryoneLoses": "¿Quitar «{name}» de tu cuenta? Todos pierden el acceso aquí; el sandbox en sí sigue funcionando donde esté.",
-            "removeHostedMachineDestroyed": "¿Eliminar «{name}»? Su máquina se detiene ahora y todos aquí pierden el acceso.",
-            "restorableHostedDays": "Puedes restaurarlo durante {count} día; su máquina y sus archivos se conservan hasta entonces. | Puedes restaurarlo durante {count} días; su máquina y sus archivos se conservan hasta entonces.",
-            "restorableOwnDays": "Puedes restaurarlo durante {count} día, aunque vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina de allí. | Puedes restaurarlo durante {count} días, aunque vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina de allí.",
-            "restoreWhere": "Puedes restaurarlo desde Dispositivos ▸ Eliminados recientemente.",
             "rollBack": "Revertir",
             "sandboxes": "Sandboxes",
             "sandboxSettings": "Ajustes del sandbox",
             "status": "Estado",
             "switchSandbox": "Cambiar de sandbox: {switcherLabel}",
-            "toAlsoRemoveMachine": "Para quitarla también del dispositivo donde se ejecuta, ejecuta esto allí. Seguirá siendo recuperable allí durante 7 días.",
             "undoLastUpdate": "Deshace la última actualización"
         },
         "removeSandbox": {

@@ -1,13 +1,25 @@
+import type { IconName } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 
 // What a removal takes with it is about words rather than wiring. Pure, so it is pinned by a test instead of by
 // reading a template.
 
 // WHAT LEAVES WITH A REMOVED SANDBOX. Everything the reader set up lives inside the sandbox, not on the account, so a
-// removal takes it along; the dialog used to say only that the box keeps running. A member leaving takes nothing.
-export const removalTakes = (role: string): readonly string[] =>
+// removal takes it along; the dialog used to say only that the box keeps running. A member leaving takes nothing. Each is
+// a mark, a name and a few words of example, drawn as a tile: three short tiles are read where three sentences were not.
+export interface RemovalTake {
+    readonly icon: IconName;
+    readonly label: string;
+    readonly note: string;
+}
+
+export const removalTakes = (role: string): readonly RemovalTake[] =>
     role === `owner`
-        ? [t(`sandbox.sandboxSwitcher.takesAccounts`), t(`sandbox.sandboxSwitcher.takesSettings`), t(`sandbox.sandboxSwitcher.takesChats`)]
+        ? [
+              { icon: `key`, label: t(`sandbox.removeAsk.accounts`), note: t(`sandbox.removeAsk.accountsNote`) },
+              { icon: `cog`, label: t(`sandbox.removeAsk.settings`), note: t(`sandbox.removeAsk.settingsNote`) },
+              { icon: `comments`, label: t(`sandbox.removeAsk.chats`), note: t(`sandbox.removeAsk.chatsNote`) },
+          ]
         : [];
 
 // WHETHER A ROW'S MACHINE ANSWERS, in words and ink. A hosted machine asleep wakes when it is picked and one booting is on
