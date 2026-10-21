@@ -25,7 +25,8 @@ import { MODELS_PATH } from "../../../lib/routes/modelsPath";
 import { useExtensions } from "../../../models/extensions/useExtensions";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read
-// by the rail chip and the mobile menu so they agree. Lives as a badge on the chip, not a dismissible bar, since
+// by the getting-started ring on the desktop rail (gettingStarted/SandboxErrands.vue) and the mobile menu so they agree.
+// Lives as a badge on that tile, not a dismissible bar, since
 // none of these is urgent and each is a standing condition rather than an event.
 
 // Whether anything can run a turn: a stored provider account, a translator subscription, an ACP agent, or a ready

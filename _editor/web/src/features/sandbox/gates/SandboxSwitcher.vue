@@ -12,21 +12,19 @@ import {
     type Tip,
     useHoverMenu,
 } from "@intentic/ui";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { commandShortcut } from "../../../workbench/commands/useCommands";
-import ViewBadgeChip from "../../../workbench/views/ViewBadgeChip.vue";
 import { RUNNING_MARK_CLASS } from "../../../workbench/views/viewBadge";
 import TileMark from "../../../components/TileMark.vue";
 import { restartRunning } from "../../../models/sandbox/live/sandboxRestart";
 import { sandboxHubPath } from "../../../models/sandbox/sandboxNav";
 import { useRole } from "../../../client/sandbox/useRole";
-import { type SandboxAttentionItem, useSandboxAttention } from "../overview/sandboxAttention";
 import { sandboxAvailabilityVisual } from "../overview/availability";
 import { placementOf, type SandboxPlacement } from "../overview/placement";
 import { useSandboxPlacement } from "../overview/useSandboxPlacement";
 import { attentionByBox, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
-import { connectedSandboxes, unfinishedSandboxes } from "../../../models/sandbox/live/roster";
+import { connectedSandboxes } from "../../../models/sandbox/live/roster";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
@@ -47,8 +45,11 @@ import { useT } from "@intentic/ui/i18n";
 // RESTING ON THE LOGO OPENS IT, as a press does. Switching is the errand this corner is visited for, and it should
 // not cost a press first. A pointer passing over raises nothing (the hover clock's dwell), the way across the rail
 // to a lower row keeps it up (useHoverMenu's corridor), and a press pins it. The sandboxes come first and always stand
-// in the same place, so the Nth one is the same reach every time. What concerns only the sandbox in use (what it
-// needs, what is worth knowing, its settings) is gathered under them, beside its settings.
+// in the same place, so the Nth one is the same reach every time.
+//
+// PLACES ONLY. What the sandbox in use needs, what is worth knowing and setups never finished used to hang under the
+// list as three headed sections, with the badge for them on the logo; they turned a menu for picking a place into a
+// to-do list. They live on the getting-started ring now (gettingStarted/SandboxErrands.vue), badge and all.
 
 const t = useT();
 
@@ -58,10 +59,8 @@ const availability = useSandboxAvailability(hasSnapshot);
 const availabilityVisual = computed(() => sandboxAvailabilityVisual(availability.value));
 const router = useRouter();
 const route = useRoute();
-// Everything the sandbox needs from its owner: a badge from `needs`, plus rows for `needs` and `notes`.
-const { needs: attention, notes: attentionNotes, badge: attentionBadge } = useSandboxAttention();
-// WORK THAT ENDS BY REPLACING THIS SANDBOX, while it is still running. Not on the attention badge, which counts what
-// the sandbox needs from its owner: this needs nothing, interrupts nothing yet, and is over in minutes — a standing
+// WORK THAT ENDS BY REPLACING THIS SANDBOX, while it is still running. Not on the attention badge (now on the
+// getting-started ring), which counts what the sandbox needs from its owner: this needs nothing, interrupts nothing yet, and is over in minutes — a standing
 // badge for it would teach the reader to stop reading the badge. A mark of its own, on its own corner, saying only
 // that something is moving. What it will do is said when it does it, by the lane.
 const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value));
@@ -76,13 +75,12 @@ const hubPath = computed(() => sandboxHubPath(isGuest.value));
 // control's own label, because a glyph alone cannot be the only place a reader can learn this.
 const placement = useSandboxPlacement();
 
-// One label for the whole control, badge included, since a tooltip on the badge would nest inside this one.
+// One label for the whole control, its marks included, since a tooltip on a mark would nest inside this one.
 const switcherLabel = computed(() => {
     const name = sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`);
-    const tooltip = attentionBadge.value?.tooltip;
     const status =
         availability.value === `live` || availability.value === `stale` ? undefined : t(`sandbox.sandboxSwitcher.sandboxState`, { state: availabilityVisual.value.label.toLowerCase() });
-    return [name, placement.value?.detail, status, restarting.value, tooltip].filter((part) => part !== undefined).join(` · `);
+    return [name, placement.value?.detail, status, restarting.value].filter((part) => part !== undefined).join(` · `);
 });
 
 // Live, or a retry too short to mention: the connection says nothing anywhere until it is something else.
@@ -93,11 +91,6 @@ const connectionInkClass = computed(() => availabilityVisual.value.inkClass);
 const connectionLabel = computed(() => availabilityVisual.value.label.toLowerCase());
 
 const isActive = (option: SandboxSummary): boolean => option.id === sandbox.activeSandboxId.value;
-
-const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
-    info: `text-link`,
-    warning: `text-warning`,
-};
 
 // Anchored rather than PrimeVue's Popover, so one overlay alone decides where a panel goes.
 const trigger = ref<HTMLButtonElement | null>(null);
@@ -127,9 +120,8 @@ onUnmounted(() => {
 });
 
 // A sandbox that never reported in has no daemon, so switching to it can only paint a connecting gate that never
-// resolves; those rows are unfinished errands with their own section, not places to switch to.
+// resolves; those rows are unfinished errands on the getting-started ring, not places to switch to.
 const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
-const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
 // How much is waiting in every other sandbox; absent for the active row since its badge is already on the rail.
 // An unanswered box gets undefined, which draws nothing rather than a zero.
@@ -194,25 +186,6 @@ const dismiss = (event: MouseEvent): void => {
         open.value = false;
     }
 };
-
-// A row that points at a control rather than a page (`/sandbox#sandbox-update-action`, the update's own button) is an
-// action: its link alone does nothing while that page is already open, which is where the reader clicked it five times.
-// So once the page is there, the control is scrolled to and focused. Ctrl/⌘-click still just opens the tab.
-const followRow = async (event: MouseEvent, to: string): Promise<void> => {
-    dismiss(event);
-    const anchor = to.split(`#`)[1];
-    if (anchor === undefined || browserOwnsClick(event)) {
-        return;
-    }
-    await router.push(to);
-    await nextTick();
-    const target = document.getElementById(anchor);
-    target?.scrollIntoView({ block: `center`, behavior: `smooth` });
-    target?.querySelector<HTMLElement>(`button:not([disabled])`)?.focus({ preventScroll: true });
-};
-
-// Resumes this row's setup rather than offering a blank create form.
-const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sandbox: option.id } });
 
 // THIS COMPUTER, the desktop app's other face: its own window on a folder of this computer, with This device beside it
 // (the app's local shell). Offered only inside the app, whose workspace window this page then is; the app swaps the
@@ -315,13 +288,9 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
             :class="connectionInkClass"
             aria-hidden="true"
         >
-            <!-- Plate and glyph measure as the attention badge does, so the corners weigh the same; only the ink differs. -->
+            <!-- Plate and glyph measure as every rail badge does, so the corners weigh the same; only the ink differs. -->
             <Icon :name="placement.icon" class="text-[0.9em]" />
         </span>
-        <!-- One corner badge: a count when the amount is the message, a glyph otherwise; aria-hidden as redundant. -->
-        <!-- Inside the tile, on the same corner and at the same size as every badge on the rail below it: this is
-             the same object saying the same kind of thing, and hanging it outside made it look like a different one. -->
-        <ViewBadgeChip :badge="attentionBadge" class="sandbox-switcher-mark pointer-events-none absolute right-0.5 top-0.5" aria-hidden="true" />
         <!-- Getting started's way to connecting a model: the sandbox's own settings start here. Its hint leads to them. -->
         <TourMark step="models" place="rail" still side="right" class="absolute left-0.5 top-0.5" />
         <!-- The rail's running mark, on the bottom-right corner as on every other rail icon: it is an errand in flight,
@@ -457,78 +426,9 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
                 <span class="min-w-0 flex-1">{{ t(`sandbox.words.addSandbox`) }}</span>
             </RouterLink>
 
-            <!-- Setups that were never finished, as their own section below Add sandbox, since they're errands, not places to go. -->
-            <template v-if="unfinished.length > 0">
-                <div class="my-1 border-t border-line-subtle"></div>
-                <SectionHeader :label="t(`shared.unfinishedSetup`)" density="dense" class="px-2 py-1.5" />
-                <RouterLink
-                    v-for="option in unfinished"
-                    :key="option.id"
-                    :to="resumeSetup(option)"
-                    data-menu-row
-                    class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="dismiss"
-                >
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
-                        <Icon name="wrench" class="text-xs" />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate text-muted">{{ t(`sandbox.words.finishSettingUp`, { name: option.name }) }}</span>
-                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle transition-opacity group-hover:opacity-0" />
-                    <!-- In flow, not overlaid, so hovering never shifts the text; `.prevent` stops the anchor firing too. -->
-                    <Icon
-                        name="trash"
-                        @click.prevent.stop="askRemove(option)"
-                        v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
-                        class="shrink-0 text-xs opacity-0 transition hover:text-danger group-hover:opacity-60"
-                    />
-                </RouterLink>
-            </template>
-
             <div class="my-1 border-t border-line-subtle"></div>
 
-            <!-- THE SANDBOX IN USE, under the list: what it needs, what is worth knowing, and its settings, kept
-                 together because they are about one box. Below the sandboxes rather than above them, so how much one box
-                 needs never moves where the others are. -->
-            <!-- The badge's detail: one row per pending item, routing to the hub tab that resolves it. -->
-            <template v-if="attention.length > 0">
-                <SectionHeader :label="t(`shared.needs`)" density="dense" class="px-2 py-1.5" />
-                <RouterLink
-                    v-for="item in attention"
-                    :key="item.message"
-                    :to="item.to"
-                    data-menu-row
-                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="dismiss"
-                >
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center" :class="ROW_TONE[item.tone]">
-                        <Icon :name="item.icon" class="text-xs" />
-                    </span>
-                    <span class="min-w-0 flex-1 text-content">{{ item.message }}</span>
-                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                </RouterLink>
-            </template>
-
-            <!-- Things simply true (a contended port, a newer image): found on arrival, not advertised by the badge. -->
-            <template v-if="attentionNotes.length > 0">
-                <SectionHeader :label="t(`shared.worthKnowing`)" density="dense" class="px-2 py-1.5" />
-                <RouterLink
-                    v-for="item in attentionNotes"
-                    :key="item.message"
-                    :to="item.to"
-                    data-menu-row
-                    class="flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                    @click="(event: MouseEvent) => followRow(event, item.to)"
-                >
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
-                        <Icon :name="item.icon" class="text-xs" />
-                    </span>
-                    <span class="min-w-0 flex-1 text-muted">{{ item.message }}</span>
-                    <Icon name="chevron-right" class="shrink-0 text-2xs text-subtle" />
-                </RouterLink>
-            </template>
-            <div v-if="attention.length > 0 || attentionNotes.length > 0" class="my-1 border-t border-line-subtle"></div>
-
-            <!-- The sandbox management hub has no rail tile; this chip is its home, and every attention row lands here too. -->
+            <!-- The sandbox management hub has no rail tile; this chip is its home. -->
             <RouterLink
                 :to="hubPath"
                 data-menu-row

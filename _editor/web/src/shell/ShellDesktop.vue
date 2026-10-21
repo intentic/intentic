@@ -479,7 +479,8 @@ useGettingStarted();
                  one control on this rail that really does add something. -->
             <!-- Empty for an owner means "everything is on the rail", which is worth a tile and a sentence. Empty for a guest
                  means there is nothing to put there and never will be, so the door itself goes. -->
-            <!-- A first run's checklist, until it is done or put away (gettingStarted/). -->
+            <!-- A first run's checklist, until it is done or put away, and what the sandbox needs or is worth knowing for as
+                 long as any of that is left (gettingStarted/). -->
             <GettingStartedRing v-if="!isGuest" />
             <button
                 v-if="!isGuest"

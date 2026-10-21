@@ -92,6 +92,8 @@ const hide = (): void => {
             </Row>
         </RowGroup>
         <CommunityInvite v-if="tour.finished.value && invite.onFinished.value" place="finished" look="inline" class="mx-1" />
+        <!-- Whatever the surface carries besides the steps (the rail's ring: SandboxErrands), above the list's own footer. -->
+        <slot />
         <div class="flex items-center justify-end px-1 pb-1">
             <Button v-if="tour.finished.value" size="small" @click="hide">{{ t(`gettingStarted.panel.done`) }}</Button>
             <button v-else type="button" :class="ui.textButton({ tone: 'quiet', size: 'xs' })" @click="hide">
