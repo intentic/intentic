@@ -588,10 +588,6 @@
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_editor/web/src/features/sandbox/gates/SandboxSwitcher.vue": {
-        "count": 750,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_editor/web/src/features/sandbox/overview/sandboxAttention.ts#useSandboxAttention.<anonymous>#lines": {
         "count": 134,
         "why": "standing when the check arrived (2026-10-16)"
