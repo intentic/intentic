@@ -96,6 +96,12 @@ const writeOut = (held: Held): void => {
 // sandbox switch, a replaced workspace whose storage was just swept) writes nothing back.
 const held = sandboxShallowRef<Held>(() => ({ sandbox: activeSandboxId.value, drafts: read(activeSandboxId.value) }));
 
+// The drafts whose last edit was made in this window, which makes this window their writer. Every window holds every
+// draft (`held`, kept the same by `drafts` notes) and reads them all back on each `drafts` push, but only the one
+// typing may write: two windows writing one draft from the same revision raced, and the loser's conflict joined both sets
+// of words into the composer, so a message came out doubled and the caret jumped to its end.
+const editedHere = sandboxValue(() => new Set<string>());
+
 // Applies a set of changes (undefined: gone) here, then tells storage and every other window of this browser.
 const put = (changes: ReadonlyMap<string, HeldDraft | undefined>): void => {
     if (changes.size === 0) {
@@ -126,11 +132,17 @@ onChatNote(`drafts`, (note) => {
         if (mine === undefined || draft.editedAt >= mine.editedAt) {
             drafts.set(draft.conversationId, draft);
         }
+        // An edit made there after this window's last one makes that window the writer. The same edit time is that
+        // writer relaying the sandbox's answer, which changes nobody's turn.
+        if (mine !== undefined && draft.editedAt > mine.editedAt) {
+            editedHere.value.delete(draft.conversationId);
+        }
     }
     for (const { id, editedAt } of note.gone) {
         const mine = drafts.get(id);
         if (mine !== undefined && mine.editedAt <= editedAt) {
             drafts.delete(id);
+            editedHere.value.delete(id);
         }
     }
     held.value = { sandbox: held.value.sandbox, drafts };
@@ -193,12 +205,20 @@ export const sandboxKeepsDrafts: ComputedRef<boolean> = computed(() => supportsR
 // Typing pauses this long before the words are written; a send or a close in between is answered by the sandbox anyway.
 const WRITE_AFTER_MS = 400;
 
+// A copy still waiting to be written this long after its last edit has no window writing it: the one that typed it
+// closed, or could not reach the sandbox. Any window may write it then, and every window's copy holds the same words by
+// now, so two of them writing it costs one harmless conflict rather than a doubled message.
+export const ORPHANED_AFTER_MS = 5_000;
+
 const timers = sandboxValue(
     () => new Map<string, ReturnType<typeof setTimeout>>(),
     (previous) => previous.forEach((timer) => clearTimeout(timer)),
 );
 const inFlight = sandboxValue(() => new Set<string>());
 const again = sandboxValue(() => new Set<string>());
+
+// Whether this window writes the draft now: it edited it last, or nobody is writing it any more.
+const writesHere = (draft: HeldDraft, now: number): boolean => editedHere.value.has(draft.conversationId) || now - draft.editedAt >= ORPHANED_AFTER_MS;
 
 const writeSoon = (conversationId: string, after = WRITE_AFTER_MS): void => {
     if (!sandboxKeepsDrafts.value) {
@@ -230,6 +250,13 @@ const writeNow = async (conversationId: string): Promise<void> => {
     timers.value.delete(conversationId);
     const sent = held.value.drafts.get(conversationId);
     if (sent === undefined || !sent.pending || sent.box !== undefined || !sandboxKeepsDrafts.value) {
+        return;
+    }
+    const now = Date.now();
+    if (!writesHere(sent, now)) {
+        // Another window is typing it and writes it. Looked at again once it would count as left behind, in case that
+        // window closes first; by then its answer has usually reached this copy and there is nothing to write.
+        writeSoon(conversationId, sent.editedAt + ORPHANED_AFTER_MS - now);
         return;
     }
     if (inFlight.value.has(conversationId)) {
@@ -341,6 +368,7 @@ export const writeDraft = (conversationId: string, words: DraftWords, options: {
         pending: true,
         box: options.box,
     };
+    editedHere.value.add(conversationId);
     // Words the sandbox never held need no clear: they simply go.
     put(new Map([[conversationId, holdsWords(next) || next.synced !== undefined ? next : undefined]]));
     writeSoon(conversationId);

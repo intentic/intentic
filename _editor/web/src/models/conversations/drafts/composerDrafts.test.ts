@@ -63,7 +63,7 @@ Object.defineProperty(globalThis, `localStorage`, {
 
 const { closedDraftsKey, composerDraftsKey } = await import("../../../app/storage/browserStorage");
 const { receiveChatNote } = await import("../run/chatChannel");
-const { draftOf, draftsMoved, heldDrafts, sandboxKeepsDrafts, sentFrom, writeDraft } = await import("./composerDrafts");
+const { draftOf, draftsMoved, heldDrafts, ORPHANED_AFTER_MS, sandboxKeepsDrafts, sentFrom, writeDraft } = await import("./composerDrafts");
 
 const words = (text: string) => ({ text, attachments: [] });
 
@@ -121,6 +121,68 @@ test(`keeps the copy a window edited last when another window's older copy arriv
 
     receiveChatNote({ sandbox: `sb1`, note: { kind: `drafts`, changed: [{ ...mine, text: `newest`, editedAt: mine.editedAt + 1 }], gone: [] } });
     expect(draftOf(`c1`)?.text).toBe(`newest`);
+});
+
+// Another window of this browser typing: its copy arrives by note, edited after anything here.
+const typedElsewhere = (conversationId: string, text: string, from: { readonly revision: number; readonly text: string }, editedAt = Date.now()): void => {
+    receiveChatNote({
+        sandbox: `sb1`,
+        note: {
+            kind: `drafts`,
+            changed: [{ conversationId, text, attachments: [], since: 1, editedAt, synced: { ...from, paths: [] }, pending: true }],
+            gone: [],
+        },
+    });
+};
+
+test(`leaves a draft another window is typing to that window, however often the sandbox says drafts moved`, async () => {
+    sandbox = [{ conversationId: `c1`, text: `fix the`, since: 1, revision: 1 }];
+    revision = 1;
+    draftsMoved();
+    await waitFor(() => expect(sentFrom(`c1`)).toBe(1));
+
+    // The window typing writes from revision 1 itself; this one writing too raced it, and the loser's conflict joined
+    // both sets of words into the composer.
+    typedElsewhere(`c1`, `fix the login`, { revision: 1, text: `fix the` });
+    draftsMoved();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(writes).toEqual([]);
+    expect(draftOf(`c1`)).toMatchObject({ text: `fix the login`, pending: true });
+});
+
+test(`writes a draft another window left waiting once nobody has edited it for a while`, async () => {
+    sandbox = [{ conversationId: `c1`, text: `fix the`, since: 1, revision: 1 }];
+    revision = 1;
+    draftsMoved();
+    await waitFor(() => expect(sentFrom(`c1`)).toBe(1));
+
+    // The window that typed it closed before it wrote it.
+    typedElsewhere(`c1`, `fix the login`, { revision: 1, text: `fix the` });
+    jest.setSystemTime(Date.now() + ORPHANED_AFTER_MS);
+    try {
+        draftsMoved();
+        await waitFor(() => expect(sandbox[0]?.text).toBe(`fix the login`));
+    } finally {
+        jest.setSystemTime();
+    }
+    expect(writes).toEqual([expect.objectContaining({ id: `c1`, text: `fix the login`, base: 1 })]);
+});
+
+test(`hands the writing to another window once it edits the draft after this one`, async () => {
+    writeDraft(`c1`, words(`fix the`));
+    await waitFor(() => expect(sentFrom(`c1`)).toBe(1));
+    writes.length = 0;
+
+    typedElsewhere(`c1`, `fix the login`, { revision: 1, text: `fix the` }, draftOf(`c1`)!.editedAt + 1);
+    draftsMoved();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(writes).toEqual([]);
+
+    // Typed here again: this window writes it, from the revision it last agreed with.
+    writeDraft(`c1`, words(`fix the login page`));
+    await waitFor(() => expect(sandbox[0]?.text).toBe(`fix the login page`));
+    expect(writes).toEqual([expect.objectContaining({ text: `fix the login page`, base: 1 })]);
 });
 
 test(`leaves this browser's copy as the only one against a sandbox that keeps no drafts`, async () => {

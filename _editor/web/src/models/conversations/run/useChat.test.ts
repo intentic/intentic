@@ -1127,6 +1127,26 @@ describe(`per-tab drafts`, () => {
         expect(chat.draft.value).toBe(`hello A`);
     });
 
+    // Two windows of one browser bind the same chats. Words typed in the other one are shown here and left that
+    // window's to write: taking them as an edit made here (this window's picks differ from the draft's) made both
+    // windows write one draft, and the loser's conflict doubled the message.
+    it(`shows words typed in another window without taking them as an edit made here`, async () => {
+        const { receiveChatNote } = await import("./chatChannel");
+        const chat = useChat();
+        const id = chat.active.value.conversationId;
+        chat.draft.value = `hello`;
+        const editedAt = draftOf(id)!.editedAt + 1_000;
+
+        receiveChatNote({
+            sandbox: `sb1`,
+            note: { kind: `drafts`, changed: [{ conversationId: id, text: `hello world`, attachments: [], since: 1, editedAt, pending: true }], gone: [] },
+        });
+        await nextTick();
+
+        expect(chat.draft.value).toBe(`hello world`);
+        expect(draftOf(id)).toMatchObject({ text: `hello world`, editedAt });
+    });
+
     it(`restores tabs, drafts, attachment metadata, and the active tab from the persisted snapshot`, async () => {
         const chat = useChat();
         chat.draft.value = `draft one`;

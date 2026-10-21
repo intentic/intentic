@@ -70,13 +70,30 @@ export const seedComposer = (conversation: Conversation, legacy?: Pick<StoredTab
 export const bindComposer = (conversation: Conversation): (() => void) => {
     const scope = effectScope(true);
     const id = conversation.conversationId;
+    // Set while words written elsewhere are put in the composer: showing them is no edit made here, and writing them
+    // back would make this window a second writer of a draft another window is typing (composerDrafts.ts `editedHere`).
+    let showing = false;
+    const shown = (show: () => void): void => {
+        showing = true;
+        try {
+            show();
+        } finally {
+            showing = false;
+        }
+    };
     scope.run(() => {
         seedComposer(conversation);
         // Typed here: the draft, in the same tick, so a chat closed right after a programmatic write (a take-back, a
-        // suggestion) cannot leave before its words are kept. Also the words a composer held before it was bound.
+        // suggestion) cannot leave before its words are kept. Also the words a composer held before it was bound, when
+        // they are not simply the draft it was just seeded with.
         watch(
             () => composerWords(conversation),
-            (words) => writeDraft(id, words, { since: conversation.draftAt.value, box: conversation.box.value }),
+            (words, before) => {
+                const seeded = before === undefined && sameWords(draftOf(id) ?? { text: ``, attachments: [] }, composerHolds(conversation));
+                if (!showing && !seeded) {
+                    writeDraft(id, words, { since: conversation.draftAt.value, box: conversation.box.value });
+                }
+            },
             { immediate: true, flush: `sync` },
         );
         // Written elsewhere: the composer.
@@ -84,9 +101,9 @@ export const bindComposer = (conversation: Conversation): (() => void) => {
             () => draftOf(id),
             (draft, before) => {
                 if (draft !== undefined) {
-                    showDraft(conversation, draft);
+                    shown(() => showDraft(conversation, draft));
                 } else if (before !== undefined && sameWords(before, composerHolds(conversation))) {
-                    clearComposer(conversation);
+                    shown(() => clearComposer(conversation));
                 }
             },
         );
