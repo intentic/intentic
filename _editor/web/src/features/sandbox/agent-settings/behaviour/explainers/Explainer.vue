@@ -19,7 +19,7 @@ const { label, title, experience, tokens } = defineProps<{
 </script>
 
 <template>
-    <InfoHint :label wide class="text-2xs">
+    <InfoHint :label wide>
         <div class="flex flex-col gap-3 text-xs">
             <p class="font-medium text-content">{{ title }}</p>
             <!-- The diagram on a ground of its own, so its boxes read as one figure rather than as more of the card. -->
