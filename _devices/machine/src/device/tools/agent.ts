@@ -144,8 +144,8 @@ const started = (op: DeviceAgentOp, installed: string | undefined): string => {
     return `Dropping this device's links to sandboxes that have stopped answering. The agent closes them on its next pass; this connection stays up.`;
 };
 
-// What the reader is left with once the run is out of this process's hands. Never a claim about the outcome: the work is
-// detached, and this connection usually dies before it ends.
+// What the reader is left with once the run is out of this process's hands and ended without a stop (runStop). Never a
+// claim that it landed: the work is detached, and this connection usually dies before it ends.
 const settled: Record<DeviceAgentOp, string> = {
     upgrade: `The update ran on this machine. Whether each side's new agent is the one serving shows in its version, which this view re-reads on its own.`,
     restart: `The agent was restarted on this device.`,
@@ -165,6 +165,20 @@ const waitOutOwnSwaps = async (onLine: (line: string) => void): Promise<void> =>
     await pollUntil(() => icSwapsInFlight.size === 0, { intervalMs: 1_000, timeoutMs: SWAP_WAIT_MAX_MS });
 };
 
+// How the detached run ended, read from its own lines: a run that stops says so as `error: <headline>` with its indented
+// `problem:`/`fix:` lines after it (cli-ui.ts failRun, plain mode, since its stderr is this log). The last stop is the
+// run's; undefined when it ended without one. (2026-10-21) An update whose launcher swap was refused with EPERM still
+// answered the settled sentence below, so the page said "Update finished" over the error that stopped it.
+export const runStop = (lines: readonly string[]): string | undefined => {
+    const at = lines.findLastIndex((line) => line.startsWith("error: "));
+    if (at === -1) {
+        return undefined;
+    }
+    const rest = lines.slice(at + 1);
+    const end = rest.findIndex((line) => !/^\s/u.test(line));
+    return [(lines[at] ?? "").slice("error: ".length), ...(end === -1 ? rest : rest.slice(0, end))].join("\n");
+};
+
 export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => void): Promise<string> => {
     if (RESTARTS.has(op)) {
         await waitOutOwnSwaps(onLine);
@@ -175,6 +189,19 @@ export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => vo
     const argv = AGENT_VERB[op];
     const pid = await spawnDetached(agentLogPath, machineLauncher(), argv, { finishes: true });
     onLine(`Started ${argv.join(" ")} (pid ${pid}), detached from this connection so it finishes either way. Log: ${agentLogPath}`);
-    await followLog({ path: agentLogPath, from: at, isAlive: () => isProcessAlive(pid), onLine });
+    const lines: string[] = [];
+    await followLog({
+        path: agentLogPath,
+        from: at,
+        isAlive: () => isProcessAlive(pid),
+        onLine: (line) => {
+            lines.push(line);
+            onLine(line);
+        },
+    });
+    const stop = runStop(lines);
+    if (stop !== undefined) {
+        throw new Error(stop);
+    }
     return settled[op];
 };
