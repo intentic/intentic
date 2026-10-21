@@ -1123,6 +1123,12 @@
       "since": "v1.313.0"
     }
   ],
+  "workspace:.intentic/local/cache/field-notes-pins.json": [
+    {
+      "type": "{ briefs: Record<string, { chars: number; ranksSent: number; ranksTotal: number; revision: string; text: string; unlisted: string[]; writtenAt: number }>; pins: Record<string, { at: number; brief: string }> }",
+      "since": "unreleased"
+    }
+  ],
   "workspace:.intentic/local/extension-dev.json": [
     {
       "type": "Record<string, { conversation?: string; path: string; reloadedAt?: string; setAt: string; setBy?: string }>",

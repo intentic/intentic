@@ -6,6 +6,7 @@
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { activityLogDocument } from "../activity/activity-store.js";
+import { fieldNotesPinsDocument } from "../agent/prompt/field-notes-pins.js";
 import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
 import { burnRatesDocument } from "../agent/run/spend/burn-rates.js";
 import { readingsLogDocument } from "../agent/run/spend/readings-log.js";
@@ -125,6 +126,7 @@ import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js"
 
 const documentsPart1 = (): readonly DocumentSpec[] => [
     activityLogDocument,
+    fieldNotesPinsDocument,
     claudeSeatsDocument,
     burnRatesDocument,
     readingsLogDocument,
@@ -167,10 +169,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
-    engineStateDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
+    engineStateDocument,
     runtimeInstallsDocument,
     extensionSettingsDocument,
     extensionUpdatePolicyDocument,
@@ -214,10 +216,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
-    keyringNeedsDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    keyringNeedsDocument,
     keyringCopiesDocument,
     keyringDevicesDocument,
     keyringSyncMailboxDocument,
