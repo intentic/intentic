@@ -18,6 +18,9 @@ export type EndpointKind = "local" | "local-insecure" | "public";
 export interface Endpoint {
     readonly kind: EndpointKind;
     readonly base: string;
+    // Chosen because no candidate answered (the sandbox asleep, stopped or still booting), not because this one did: the
+    // tunnel by default, re-probed once `UNANSWERED_RETRY_MS` has passed rather than kept for good.
+    readonly unanswered?: true;
 }
 
 // What endpoint selection needs about a sandbox: its public address, the token the loopback port derives from,
@@ -73,12 +76,21 @@ export const candidatesFor = async (sandbox: Addressing): Promise<Endpoint[]> =>
 // network heals, so it is re-probed on this interval rather than trusted indefinitely.
 export const PROMOTION_INTERVAL_MS = 60_000;
 
+// A default nothing vouched for is re-asked far sooner. 2026-10-21: a tab that opened a sleeping sandbox found every
+// candidate silent, defaulted to the tunnel and kept it for good, so when the edge then sat on that sandbox's requests
+// for minutes after the wake, the tab waited on the tunnel while its own loopback answered.
+export const UNANSWERED_RETRY_MS = 10_000;
+
 export const settledEndpoint = (endpoint: Endpoint | undefined, resolvedAt: number | undefined, now: number): boolean => {
     if (endpoint === undefined) {
         return false;
     }
     // A missing timestamp reads as "just now": an undated answer is not aged out on evidence that does not exist.
-    return endpoint.kind !== `local-insecure` || now - (resolvedAt ?? now) < PROMOTION_INTERVAL_MS;
+    const age = now - (resolvedAt ?? now);
+    if (endpoint.unanswered === true) {
+        return age < UNANSWERED_RETRY_MS;
+    }
+    return endpoint.kind !== `local-insecure` || age < PROMOTION_INTERVAL_MS;
 };
 
 // Generous versus the loopback budget, so a slow-but-alive tunnel is not mistaken for a dead one.
@@ -131,7 +143,7 @@ export const shortcutFailedAlone = async (
 
 // Returns the first candidate that answers; the tunnel is trusted without a probe only when nothing follows it
 // (the registry's own address). Loopback forms are never trusted untested: a port answering there is not proof it is
-// this sandbox.
+// this sandbox. When none answers, the tunnel is the default, marked `unanswered` so it is asked again.
 export const selectEndpoint = async (sandbox: Addressing, fetchImpl: FetchLike = fetch): Promise<Endpoint> => {
     const candidates = await candidatesFor(sandbox);
     const expected = sandbox.token === undefined || sandbox.token === `` ? `` : await sandboxIdOf(sandbox.token);
@@ -144,5 +156,5 @@ export const selectEndpoint = async (sandbox: Addressing, fetchImpl: FetchLike =
             return candidate;
         }
     }
-    return { kind: `public`, base: sandbox.daemonUrl };
+    return { kind: `public`, base: sandbox.daemonUrl, unanswered: true };
 };

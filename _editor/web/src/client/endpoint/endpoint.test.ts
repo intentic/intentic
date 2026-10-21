@@ -9,6 +9,7 @@ import {
     sandboxIdOf,
     selectEndpoint,
     settledEndpoint,
+    UNANSWERED_RETRY_MS,
     shortcutFailedAlone,
 } from "./endpoint";
 
@@ -207,7 +208,16 @@ it(`selects the shortcut when it answers as us, and always resolves to something
                 throw new TypeError(`Failed to fetch`);
             }),
         ),
-    ).toEqual({ kind: `public`, base: TUNNEL });
+    ).toEqual({ kind: `public`, base: TUNNEL, unanswered: true });
+});
+
+it(`asks again soon when it settled on the tunnel only because nothing answered`, () => {
+    const now = 1_000_000;
+    const fallback = { kind: `public` as const, base: TUNNEL, unanswered: true as const };
+    expect(settledEndpoint(fallback, now - 1, now)).toBe(true);
+    expect(settledEndpoint(fallback, now - UNANSWERED_RETRY_MS - 1, now)).toBe(false);
+    // The tunnel that answered its probe stays chosen.
+    expect(settledEndpoint({ kind: `public`, base: TUNNEL }, now - UNANSWERED_RETRY_MS - 1, now)).toBe(true);
 });
 
 it(`keeps the tunnel and the certified shortcut for good, and only ages out the plain one`, () => {
