@@ -1393,15 +1393,15 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cognitive": {
-        "count": 24,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cyclomatic": {
         "count": 22,
         "why": "standing when the check arrived (2026-10-16)"
     },
+    "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#cyclomatic": {
+        "count": 21,
+        "why": "standing when the check arrived (2026-10-16)"
+    },
     "_sandbox/sandbox/src/agent/run/agent.ts#baseOptions#lines": {
-        "count": 147,
+        "count": 141,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#permissionGate#lines": {
@@ -1413,7 +1413,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/agent.ts#runAgent#lines": {
-        "count": 196,
+        "count": 188,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/harness/harness-servers.ts#release#cognitive": {
@@ -1478,11 +1478,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/children.routes.ts#createChildrenRoutes#lines": {
-        "count": 215,
+        "count": 195,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/children.ts": {
-        "count": 1793,
+        "count": 1758,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/subagents/subagent-wait.ts#subagentWaitServer#lines": {
