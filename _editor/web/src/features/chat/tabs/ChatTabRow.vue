@@ -63,7 +63,6 @@ const emit = defineEmits<{
     hover: [event: MouseEvent];
     leave: [];
     close: [];
-    keep: [];
     middleClose: [];
 }>();
 
@@ -79,15 +78,10 @@ const chip = computed(() => (props.agent === undefined ? props.view.chip : setti
 // keystroke redrew the card and all it carries, which is the rail around the draft that chat-typing's budget keeps still.
 const unsentWords = (): string | undefined => draftPreview(props.conversation.draft.value);
 
-// The × and the pin sit inside the card's click target; stop propagation or the press also selects the row.
-// Spelled out per verb: `emit` is an overload set, and a union argument matches none of them.
-const act = (event: Event, verb: "close" | "keep"): void => {
+// The × sits inside the card's click target; stop propagation or the press also selects the row.
+const closeRow = (event: Event): void => {
     event.stopPropagation();
-    if (verb === `close`) {
-        emit(`close`);
-        return;
-    }
-    emit(`keep`);
+    emit(`close`);
 };
 </script>
 
@@ -125,23 +119,12 @@ const act = (event: Event, verb: "close" | "keep"): void => {
                 <Icon name="pin" class="text-2xs text-subtle" />
             </span>
             <!-- The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. -->
-            <!-- The peeked card keeps its pin action in the trailing slot. -->
             <span
-                v-if="props.conversation.peek.value"
-                role="button"
-                :aria-label="t(`chat.words.keepChatOpen`)"
-                v-tooltip.top="{ title: t(`chat.words.keepOpen`), note: t(`chat.words.nextChatReplaces`) }"
-                class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
-                @click="act($event, `keep`)"
-            >
-                <Icon name="pin" class="text-2xs" />
-            </span>
-            <span
-                v-else-if="props.closable"
+                v-if="props.closable"
                 role="button"
                 :aria-label="t(`chat.words.closeChat`)"
                 class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
-                @click="act($event, `close`)"
+                @click="closeRow"
             >
                 <Icon name="times" class="text-2xs" />
             </span>

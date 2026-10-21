@@ -103,7 +103,6 @@ onBeforeUnmount(actions.registerDrawn(() => drawnIds.value));
                 @hover="actions.showPreview($event, { conversation: c, agent })"
                 @leave="actions.hidePreview()"
                 @close="actions.close(c.conversationId)"
-                @keep="actions.keep(c.conversationId)"
                 @middle-close="actions.middleClose(c.conversationId)"
             />
             <ChildRows v-if="agent !== undefined && props.trays" :agent="agent" :focused="selected(c.conversationId)" rail />

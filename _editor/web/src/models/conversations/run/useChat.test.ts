@@ -165,7 +165,7 @@ const newChat = () => {
     return conversation;
 };
 
-const { draftOf, heldDrafts } = await import("../drafts/composerDrafts");
+const { draftOf, heldDrafts, writeDraft } = await import("../drafts/composerDrafts");
 // Asserts the projection the board reads (tabFacts.unasked, over a live conversation), not an internal flag.
 const { unaskedDraft } = await import("../tabs/tabFacts");
 const { usageByAccount } = await import("../../providers/providerAccounts");
@@ -1700,6 +1700,22 @@ describe(`chats opened for a look`, () => {
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first, `agent-a`]);
     });
 
+    // A stored draft shown on opening is the chat as it was left, not the reader acting on it: the look still goes, and
+    // the words stay the sandbox's draft for the next time it opens.
+    it(`still sweeps a looked-at chat whose only words are the draft it opened on`, async () => {
+        const chat = useChat();
+        const first = working();
+        writeDraft(`agent-a`, { text: `left for later`, attachments: [] });
+        const looked = peekAgent(`agent-a`);
+        await nextTick();
+
+        expect(looked.draft.value).toBe(`left for later`);
+        expect(looked.peek.value).toBe(true);
+        chat.setActive(first);
+        expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first]);
+        expect(draftOf(`agent-a`)?.text).toBe(`left for later`);
+    });
+
     it(`keeps it when a pick is made in it: acting on a chat is not looking at one`, () => {
         const chat = useChat();
         const first = working();
@@ -1712,7 +1728,7 @@ describe(`chats opened for a look`, () => {
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first, `agent-a`]);
     });
 
-    // Same verb behind the card's pin and the right-click's Keep Open row (summon.ts's `keep`).
+    // Same verb behind the board card's pin and the right-click's Keep Open row (summon.ts's `keep`).
     it(`keeps it when the pin is pressed`, () => {
         const chat = useChat();
         const first = working();

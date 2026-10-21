@@ -2032,8 +2032,6 @@
             }
         },
         "words": {
-            "keepOpen": "Offen lassen",
-            "nextChatReplaces": "Nächster Chat ersetzt ihn",
             "openFile": "Datei öffnen",
             "openFileNamed": "{name} öffnen",
             "reconnectNeeded": "Neu verbinden",

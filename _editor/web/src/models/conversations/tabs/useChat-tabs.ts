@@ -24,13 +24,17 @@ export const scopedSandboxId = sandboxRef<string | undefined>(() => activeSandbo
 // seed, or none. Read once per scope, for `conversations`, `activeId` and `panes`.
 const opening = sandboxValue(() => readTabSnapshot(scopedSandboxId.value));
 
-// Tabs that exist only while focused: an untouched draft, or a peeked chat with nothing unsent. An untouched draft
-// only exists while focused (else it's swept): the tab and the board's draft card are one conversation, so an
-// abandoned one squats in Active looking like real work. A sweep destroys nothing (card and History survive, a
-// running turn just detaches). Words in the composer spare a peek regardless of its flag. The peek flag arrives three
-// ways: a card or History row opening a chat for a look, the roster releasing one it has finished with
-// (`releaseDone`), and a person landing its work by hand (`releaseLanded`).
-const transient = (conversation: Conversation): boolean => untouchedDraft(conversation) || (conversation.peek.value && !conversation.unsent.value);
+// Tabs that exist only while focused: an untouched draft, or a peeked chat. An untouched draft only exists while
+// focused (else it's swept): the tab and the board's draft card are one conversation, so an abandoned one squats in
+// Active looking like real work. A sweep destroys nothing (card and History survive, a running turn just detaches, and
+// a draft is the sandbox's, there again when the chat next opens), so a peek opened on a chat with a stored draft goes
+// like any other look. Words typed here keep the chat outright (composerBinding.ts); what still spares a peek is only
+// what this window alone holds: words on their way out, or a file still uploading. The peek flag arrives three ways: a
+// card or History row opening a chat for a look, the roster releasing one it has finished with (`releaseDone`), and a
+// person landing its work by hand (`releaseLanded`).
+const holdsHere = (conversation: Conversation): boolean =>
+    conversation.turn.outbox.entries.value.length > 0 || conversation.attachments.value.some((file) => file.status !== `done`);
+const transient = (conversation: Conversation): boolean => untouchedDraft(conversation) || (conversation.peek.value && !holdsHere(conversation));
 
 // The blank a window shows with nothing open (Conversation.standIn), minted here so both call sites (no tabs
 // to restore, or a close taking the last card) leave the same thing. Unflagged, the board would card and ring
@@ -334,20 +338,6 @@ watch(
     { immediate: true },
 );
 
-// Words in a peeked chat keep it (Conversation.peek) — the one promotion this store makes for the user.
-// Watches the same unsent flag as the stamp above, so it can't miss the same five arrival routes.
-watch(
-    () => conversations.value.map((conversation) => `${conversation.conversationId}:${conversation.unsent.value ? 1 : 0}`).join(`,`),
-    () => {
-        for (const conversation of conversations.value) {
-            if (conversation.unsent.value) {
-                conversation.peek.value = false;
-            }
-        }
-    },
-    { immediate: true },
-);
-
 // Touches every persisted field, so any change writes through automatically; registered after the stamp watch
 // so a keystroke's stamp lands in the same flush. Writes per keystroke; throttle later if profiling shows jank.
 watch(
@@ -526,7 +516,7 @@ export const closeRetired = (ids: ReadonlySet<string>): void => {
 /**
  * The daemon's counterpart to `keepChat`: chats the roster is done with (useAgents-fleet.doneWith) go back to the
  * peek slot, so the focus-leave sweep takes them with no press at all. Nothing is closed here — the card turns
- * italic and wears its pin, the one press that stops it.
+ * italic, and its menu's Keep Open (or anything typed or sent in it) is what stops it.
  *
  * Takes the whole verdict, not what changed in it, and releases only the newcomers: said twice, it would undo a
  * pin the reader pressed in between. The focused chat is released like any other, since the sweep never takes the

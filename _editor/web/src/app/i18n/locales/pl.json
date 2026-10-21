@@ -3952,8 +3952,6 @@
         },
         "words": {
             "connectAModel": "Podłącz model",
-            "keepOpen": "Zostaw otwarty",
-            "nextChatReplaces": "Następny czat go zastąpi",
             "openFile": "Otwórz plik",
             "openFileNamed": "Otwórz {name}",
             "reconnectNeeded": "Połącz ponownie",

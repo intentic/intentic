@@ -86,12 +86,18 @@ export const bindComposer = (conversation: Conversation): (() => void) => {
         // Typed here: the draft, in the same tick, so a chat closed right after a programmatic write (a take-back, a
         // suggestion) cannot leave before its words are kept. Also the words a composer held before it was bound, when
         // they are not simply the draft it was just seeded with.
+        // Words changed here are the reader acting on the chat, so they keep a peek (Conversation.peek); a draft merely
+        // shown on opening, or a pick settling who it is for, is no such act.
         watch(
             () => composerWords(conversation),
             (words, before) => {
                 const seeded = before === undefined && sameWords(draftOf(id) ?? { text: ``, attachments: [] }, composerHolds(conversation));
                 if (!showing && !seeded) {
                     writeDraft(id, words, { since: conversation.draftAt.value, box: conversation.box.value });
+                    const edited = before === undefined ? holdsWords(words) : !sameWords(words, { text: before.text, paths: before.attachments.map((file) => file.path) });
+                    if (edited) {
+                        conversation.peek.value = false;
+                    }
                 }
             },
             { immediate: true, flush: `sync` },

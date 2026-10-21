@@ -4000,8 +4000,6 @@
         },
         "words": {
             "connectAModel": "Connect a model",
-            "keepOpen": "Keep open",
-            "nextChatReplaces": "Next chat replaces it",
             "openFile": "Open file",
             "openFileNamed": "Open {name}",
             "reconnectNeeded": "Reconnect needed",

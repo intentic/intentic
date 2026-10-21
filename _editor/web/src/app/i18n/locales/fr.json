@@ -2032,8 +2032,6 @@
             }
         },
         "words": {
-            "keepOpen": "Garder ouvert",
-            "nextChatReplaces": "Le prochain chat le remplace",
             "openFile": "Ouvrir le fichier",
             "openFileNamed": "Ouvrir {name}",
             "reconnectNeeded": "Reconnexion requise",

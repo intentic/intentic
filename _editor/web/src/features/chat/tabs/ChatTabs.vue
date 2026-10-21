@@ -53,7 +53,6 @@ const {
     sessions,
     sessionsFailure,
     loadSessions,
-    keepChat,
     setPinned,
     reopenClosed,
     hasClosed,
@@ -520,17 +519,6 @@ onBeforeUnmount(() => {
         <!-- The docked toolbar: creation, then the chat's two other homes (the rail, its own window). Past chats live in the
              switcher's sheet, not here. -->
         <div v-if="!vertical" class="flex shrink-0 items-center gap-1">
-            <!-- Shown only while there's something to keep: the docked column has no card of its own to carry the rail's pin. -->
-            <button
-                v-if="active.peek.value"
-                type="button"
-                class="composer-ghost h-7 w-7 shrink-0"
-                @click="keepChat(active.conversationId)"
-                v-tooltip.bottom="{ title: t(`chat.words.keepOpen`), note: t(`chat.words.nextChatReplaces`) }"
-                :aria-label="t(`chat.words.keepChatOpen`)"
-            >
-                <Icon name="pin" class="text-sm" />
-            </button>
             <button
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"

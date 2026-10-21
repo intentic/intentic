@@ -247,7 +247,6 @@ export const createChatRowActions = (host: ChatRowHost) => {
         closable,
         close: closeRow,
         closeSet: (ids: ReadonlySet<string>): void => host.close(ids),
-        keep: (id: string): void => keepChat(id),
     };
 };
 
