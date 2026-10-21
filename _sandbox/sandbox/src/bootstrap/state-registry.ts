@@ -94,6 +94,7 @@ import { sharesDocument } from "../share/share-store.js";
 import { conversationsSchemaStep } from "../store/conversations-db.js";
 import { conversionsDocument } from "../store/evolution/state-convergence.js";
 import { landCheckLeftoversStep } from "../store/evolution/steps/land-check-leftovers.js";
+import { projectsHostLeftoversStep } from "../store/evolution/steps/projects-host-leftovers.js";
 import { pushChecksLeftoversStep } from "../store/evolution/steps/push-checks-leftovers.js";
 import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
@@ -102,7 +103,6 @@ import { turnStartsDocument } from "../store/start-window.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
 import { bootHistoryDocument } from "../system/boot/restarts/boot-history.js";
 import { choreClockDocument } from "../system/chore-clock.js";
-import { attachedProjectsDocument } from "../system/projects-registry.js";
 import { restartResumeDocument } from "../system/restart-resume.js";
 import { stagedUpdateDocument, updateOutcomeDocument, updatePreparingDocument } from "../system/updates/staged-update.js";
 import { updatePolicyDocument } from "../system/updates/update-policy.js";
@@ -239,7 +239,6 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
     bootFailureDocument,
     bootHistoryDocument,
     choreClockDocument,
-    attachedProjectsDocument,
     restartResumeDocument,
     stagedUpdateDocument,
     updateOutcomeDocument,
@@ -280,6 +279,7 @@ export const stateSteps = (): readonly StructuralStep[] =>
         safetyCardLinesStep,
         conversationsSchemaStep,
         landCheckLeftoversStep,
+        projectsHostLeftoversStep,
         pushChecksLeftoversStep,
         stateRegroupStep,
         refusalLedgerStep,

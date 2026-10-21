@@ -45,7 +45,6 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "phone-pairings.json", portability: "identity" },
     { path: "phone-wake.json", portability: "identity" },
     { path: "project-deliveries.json", portability: "identity" },
-    { path: "projects.json", portability: "identity", note: "Attach the folders again from the desktop app on the computer that holds them." },
     { path: "provider-answers.json", portability: "carry" },
     { path: "provider-refusals.json", portability: "carry" },
     { path: "push.json", portability: "identity", note: "Re-enable notifications in the browsers you use, a push subscription is bound to the sandbox that minted it." },
