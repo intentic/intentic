@@ -16,12 +16,12 @@ it(`builds one part per phase the setup reaches, in the order the setup runs the
         `pulling-image`,
         `starting-sandbox`,
         `waiting-health`,
-        `verifying`,
         `desktop-sync`,
+        `verifying`,
         `connecting-machine`,
     ];
     const stages = phases.map((phase) => houseStageOf({ state: `building`, phase }));
-    expect(stages).toEqual([`plan`, `plan`, `plan`, `plan`, `plan`, `ground`, `walls`, `roof`, `lit`, `moving`, `home`]);
+    expect(stages).toEqual([`plan`, `plan`, `plan`, `plan`, `plan`, `ground`, `walls`, `roof`, `lit`, `moving`, `moving`]);
     // Never backwards: the stages come in the order the house is drawn in.
     const order = stages.map((stage) => HOUSE_STAGES.indexOf(stage));
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -34,6 +34,8 @@ it(`stands at the plans before any phase, and at a phase it does not know`, () =
 
 it(`stands finished once ready, and as far as it got when it stopped`, () => {
     expect(houseStageOf({ state: `ready`, phase: `verifying` })).toBe(`home`);
+    // A folder's setup that finished is its copy moving in until the folder is in.
+    expect(houseStageOf({ state: `copying`, phase: undefined })).toBe(`moving`);
     expect(houseStageOf({ state: `failed`, phase: `starting-sandbox` })).toBe(`walls`);
 });
 
@@ -58,6 +60,11 @@ it(`stacks the materials as the image arrives, the first as soon as it starts`, 
 const SHARED = JSON.parse(
     readFileSync(join(repoRoot(import.meta.url), `_shared/sandbox-run/src/setup-progress.fixture.json`), `utf8`),
 ) as { phases: string[]; plans: { steps: [string, number][] }[] };
+
+it(`never builds backwards in the order the shared record runs the phases`, () => {
+    const order = SHARED.phases.filter((phase) => phase in STAGE_OF_PHASE).map((phase) => HOUSE_STAGES.indexOf(STAGE_OF_PHASE[phase] ?? `plan`));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+});
 
 it(`places exactly the phases the shared setup-progress record lists for a setup's plan`, () => {
     expect(Object.keys(STAGE_OF_PHASE).filter((phase) => !SHARED.phases.includes(phase))).toEqual([]);

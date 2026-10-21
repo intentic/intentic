@@ -35,11 +35,11 @@ export const revokeEnrollment = async (sandboxUrl: string, syncToken: string): P
 };
 
 // The pairings that sync a folder to this device: what `sync uninstall --folders` (the app's uninstaller) ends. A
-// mirror-only enrollment and the projects host, which holds no folder of its own, keep mirroring ports.
-export const syncsAFolder = (pairing: Pairing): boolean => pairing.mode === "sync" && pairing.projectsHost !== true;
+// mirror-only enrollment keeps mirroring ports.
+export const syncsAFolder = (pairing: Pairing): boolean => pairing.mode === "sync";
 
 // The sandboxes this device leaves: those whose every pairing is being dropped. Only these are told to forget it and
-// lose their forwards; one whose projects host stays (`--folders` keeps it) still mirrors over that enrollment.
+// lose their forwards.
 export const sandboxesLeft = (dropped: readonly Pairing[], remaining: readonly Pairing[]): ReadonlySet<string> =>
     new Set(dropped.map((pairing) => pairing.sandboxId).filter((id) => !remaining.some((held) => held.sandboxId === id)));
 
@@ -95,8 +95,7 @@ export const uninstallPairings = async (
         startMutagenDaemon(mutagen);
     }
     const remaining = state.pairings.filter((held) => !dropped.some((pairing) => pairingKey(pairing) === pairingKey(held)));
-    // One enrollment per sandbox, however many of its pairings go (its projects host and its attached folders), and only
-    // once none of them stays.
+    // One enrollment per sandbox, revoked once none of its pairings stays.
     const leaving = sandboxesLeft(dropped, remaining);
     const gone = new Set<string>();
     // Self-revoke each dropped enrollment so its sandbox drops the key + token. An unreachable sandbox doesn't block

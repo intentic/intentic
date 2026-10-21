@@ -1,5 +1,4 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
@@ -74,19 +73,9 @@ export const ownershipOf = (labels: Readonly<Record<string, string>> | undefined
 };
 
 // The Mutagen session name (letters/digits/dashes) that `sync list/pause/resume/terminate` target, from a pairing's key
-// (config.ts `pairingKey`). A key that is a sandbox id names its session as it always has. An attached folder's
-// (`<sandboxId>~<name>`) is `intentic-<sandbox>--<name>-<hash>`: a sanitized id never holds `--`, so it can be no
-// sandbox's session nor its `-state` backup, and the hash of the exact name keeps `my.app` and `my_app`, which sanitize
-// alike, two sessions.
-export const sessionName = (key: string): string => {
-    const at = key.lastIndexOf("~");
-    if (at === -1) {
-        return `${SESSION_PREFIX}${sanitizeId(key)}`;
-    }
-    const name = key.slice(at + 1);
-    const hash = createHash("sha256").update(name).digest("hex").slice(0, 8);
-    return `${SESSION_PREFIX}${sanitizeId(key.slice(0, at))}--${sanitizeId(name)}-${hash}`;
-};
+// (config.ts `pairingKey`, its sandbox id). (2026-10-21) A folder attached to one sandbox per computer had a session
+// named `intentic-<sandbox>--<name>-<hash>`; none is made any more, and the orphan sweep ends one left behind.
+export const sessionName = (key: string): string => `${SESSION_PREFIX}${sanitizeId(key)}`;
 
 // The backup session's name, carrying the sandbox's state dir one-way. Hangs off the workspace session's name
 // rather than its own prefix, so prefix-based sweeps (oursIn, parseOrphanSyncNames) still find it.
@@ -94,13 +83,9 @@ export const backupSessionName = (key: string): string => `${sessionName(key)}-s
 
 // A pairing's sync sessions, workspace then backup; pause, resume, terminate and the orphan sweep all act on these names
 // together. A project pairing has the workspace session alone: its folder is the owner's project, and the backup would
-// write the sandbox's state into it. The projects host has none at all: it holds no folder, only the token its attached
-// folders share. Naming a session that does not exist is not harmless either, since `sync terminate a b` fails whole on
-// one unresolved name.
-export const syncSessionNames = (pairing: Pick<Pairing, "sandboxId" | "project" | "key" | "projectsHost">): readonly string[] => {
-    if (pairing.projectsHost === true) {
-        return [];
-    }
+// write the sandbox's state into it. Naming a session that does not exist is not harmless either, since
+// `sync terminate a b` fails whole on one unresolved name.
+export const syncSessionNames = (pairing: Pick<Pairing, "sandboxId" | "project">): readonly string[] => {
     const key = pairingKey(pairing);
     return isProjectPairing(pairing) ? [sessionName(key)] : [sessionName(key), backupSessionName(key)];
 };
@@ -889,7 +874,7 @@ export const sessionSpecs = (pairing: Pairing & { readonly localDir: string }, s
 // A state backup a project pairing should never have had, found and terminated: an older agent's, or one left from when
 // this sandbox was paired as a workspace. Surplus rather than a choice, since it writes the sandbox's state dir into the
 // owner's own project folder for as long as it runs.
-export const strayBackupSessions = (pairing: Pick<Pairing, "sandboxId" | "project" | "key">, live: readonly string[]): string[] =>
+export const strayBackupSessions = (pairing: Pick<Pairing, "sandboxId" | "project">, live: readonly string[]): string[] =>
     isProjectPairing(pairing) ? live.filter((name) => name === backupSessionName(pairingKey(pairing))) : [];
 
 const retireStrayBackup = (mutagen: string, pairing: Pairing, log: Log): void => {

@@ -601,11 +601,20 @@ Invoke-IntenticScript {
     $Ic = Get-IntenticIc
 
     # Docker, made ready by ic itself, and only then the connect. A prepare that stops has already said why.
-    Suspend-IntenticLine
-    & $Ic docker prepare
-    if ($LASTEXITCODE -ne 0) {
-        Set-IntenticExit $LASTEXITCODE
-        return
+    # The desktop app looks at this PC (ic docker prepare --dry-run) before it starts a setup, and passes
+    # INTENTIC_PC_READY=1 when that look found everything ready moments ago: the same examination again is seconds of
+    # PowerShell and WMI on every setup (4 s at the median, 10 s at p90, 2026-10-21). connect's own preflight still
+    # checks that Docker answers. The one-liner never sets it, so a person's run always prepares.
+    if ($env:INTENTIC_PC_READY -eq '1') {
+        Write-IntenticStep 'checking-docker' 'this PC was found ready moments ago, so it is not checked again.' 'Check Docker'
+        Complete-IntenticStep
+    } else {
+        Suspend-IntenticLine
+        & $Ic docker prepare
+        if ($LASTEXITCODE -ne 0) {
+            Set-IntenticExit $LASTEXITCODE
+            return
+        }
     }
     $env:INTENTIC_PREPARED = '1'
 

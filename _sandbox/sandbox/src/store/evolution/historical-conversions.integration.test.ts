@@ -13,6 +13,7 @@ import { clearNewestRun } from "../newest-run.js";
 import { commitState, convergeState, resetStateStatus, type StateRoots } from "./state-convergence.js";
 import type { StructuralStep } from "./state-steps.js";
 import { landCheckLeftoversStep } from "./steps/land-check-leftovers.js";
+import { projectsHostLeftoversStep } from "./steps/projects-host-leftovers.js";
 import { pushChecksLeftoversStep } from "./steps/push-checks-leftovers.js";
 import { stateRegroupStep } from "./steps/state-regroup.js";
 
@@ -219,4 +220,27 @@ test("what the retired push checks kept is deleted, and nothing else is touched"
     await commitState(roots);
     clearNewestRun();
     expect((await converge(roots, [], [pushChecksLeftoversStep])).plan?.steps ?? []).toEqual([]);
+});
+
+// The folder registry of the retired one sandbox per computer (2026-10-21): deleted, and the folders it named, their
+// repos and every other file on /history are left as they were.
+test("the retired projects host's folder registry is deleted, and nothing else is touched", async () => {
+    const roots = await volumes();
+    const registry = join(roots.history, "projects.json");
+    const kept = join(roots.history, "project-deliveries.json");
+    const folder = join(roots.workspace, "my-app", "index.ts");
+    await put(registry, [{ name: "my-app", attachedAt: 1, hostPath: "C:\\Users\\ada\\my-app", machine: "ADA" }]);
+    await put(kept, { queue: [], attached: [] });
+    await put(folder, "export {};");
+
+    const outcome = await converge(roots, [], [projectsHostLeftoversStep]);
+
+    expect(outcome.plan?.steps).toEqual([{ document: "projects-host-leftovers", change: "deletes the folder registry the retired one sandbox per computer left behind" }]);
+    expect(await readdir(roots.history)).not.toContain("projects.json");
+    expect(await json(kept)).toEqual({ queue: [], attached: [] });
+    expect(await json(folder)).toBe("export {};");
+    // Its own output is nothing to do, for the next boot as for this one.
+    await commitState(roots);
+    clearNewestRun();
+    expect((await converge(roots, [], [projectsHostLeftoversStep])).plan?.steps ?? []).toEqual([]);
 });

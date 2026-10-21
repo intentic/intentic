@@ -149,6 +149,22 @@ pub enum Report {
         reason: Option<String>,
         version: String,
     },
+    /// `desktop_install_step` with `run: folder`: one step of a folder's own setup (folder_setup.rs) and how long it
+    /// took, in tenths of a second, as the handed-over setup's steps are sent from its window (installTelemetry.ts).
+    FolderStep {
+        step: String,
+        tenths: u64,
+        outcome: String,
+        version: String,
+    },
+    /// `desktop_folder_sandbox_ready`: a folder's first copy in its own sandbox finished, so many tenths of a second
+    /// after its press (`tenths`), the copy itself the last `copy_tenths` of them.
+    FolderReady {
+        tenths: u64,
+        #[serde(default)]
+        copy_tenths: Option<u64>,
+        version: String,
+    },
 }
 
 /// A running copy is only ever ended once it has had this long to come up: a copy that is still starting may be
@@ -160,7 +176,7 @@ pub const STUCK_AFTER: Duration = Duration::from_secs(60);
 pub const ANSWER_WITHIN: Duration = Duration::from_secs(10);
 
 /// At most this many reports wait on disk: a machine that never gets a network must not grow a file forever.
-const KEPT_REPORTS: usize = 10;
+const KEPT_REPORTS: usize = 40;
 
 /// What a launch found about a copy already running, as far as the decision needs.
 #[cfg_attr(not(windows), allow(dead_code))]
@@ -520,6 +536,37 @@ pub fn note_engine_restart(
     send_reports(app);
 }
 
+/// One step of a folder's own setup, kept and sent right away (folder_setup.rs).
+pub fn note_folder_step(app: &AppHandle, step: &str, tenths: u64, outcome: &str) {
+    if let Some(dir) = config_dir() {
+        keep_report(
+            &dir,
+            Report::FolderStep {
+                step: step.to_string(),
+                tenths,
+                outcome: outcome.to_string(),
+                version: crate::commands::VERSION.to_string(),
+            },
+        );
+    }
+    send_reports(app);
+}
+
+/// A folder's first copy into its own sandbox finished: how long after its press, and how long the copy took.
+pub fn note_folder_ready(app: &AppHandle, tenths: u64, copy_tenths: Option<u64>) {
+    if let Some(dir) = config_dir() {
+        keep_report(
+            &dir,
+            Report::FolderReady {
+                tenths,
+                copy_tenths,
+                version: crate::commands::VERSION.to_string(),
+            },
+        );
+    }
+    send_reports(app);
+}
+
 fn keep_report(dir: &Path, report: Report) {
     let _guard = REPORTS
         .lock()
@@ -738,6 +785,33 @@ pub fn event_body(key: &str, install_id: &str, report: &Report) -> serde_json::V
                 "launchVersion": version,
             }),
         ),
+        Report::FolderStep {
+            step,
+            tenths,
+            outcome,
+            version,
+        } => (
+            "desktop_install_step",
+            serde_json::json!({
+                "step": step,
+                "seconds": *tenths as f64 / 10.0,
+                "outcome": outcome,
+                "run": "folder",
+                "launchVersion": version,
+            }),
+        ),
+        Report::FolderReady {
+            tenths,
+            copy_tenths,
+            version,
+        } => (
+            "desktop_folder_sandbox_ready",
+            serde_json::json!({
+                "seconds": *tenths as f64 / 10.0,
+                "copySeconds": copy_tenths.map(|tenths| tenths as f64 / 10.0),
+                "launchVersion": version,
+            }),
+        ),
     };
     properties["client"] = "desktop".into();
     properties["desktop_surface"] = "app".into();
@@ -778,11 +852,22 @@ fn alive(marker: &Marker) -> bool {
     }
 }
 
+/// The start time field of a `/proc/<pid>/stat` line (the 22nd, in clock ticks since boot), or none for a zombie,
+/// which is a process that has ended. The command name is skipped by its closing parenthesis, since it may hold spaces.
+/// Pure.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn start_time_in_stat(stat: &str) -> Option<String> {
+    let (_, fields) = stat.rsplit_once(')')?;
+    let mut fields = fields.split_whitespace();
+    if fields.next()? == "Z" {
+        return None;
+    }
+    fields.nth(18).map(str::to_string)
+}
+
 #[cfg(target_os = "linux")]
 pub(crate) fn process_identity(pid: u32) -> Option<String> {
-    crate::machine_sandbox::start_time_in_stat(
-        &std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?,
-    )
+    start_time_in_stat(&std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?)
 }
 
 #[cfg(windows)]
@@ -1118,6 +1203,45 @@ mod tests {
         assert!(Stage::Ready < Stage::Window);
         assert!(Stage::Window < Stage::Shown);
         assert!(Stage::Shown < Stage::Exited);
+    }
+
+    #[test]
+    fn a_processs_start_is_read_past_a_command_name_that_holds_spaces() {
+        let stat = "4242 (power shell (x)) S 1 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 987654 1000 10";
+        assert_eq!(start_time_in_stat(stat).as_deref(), Some("987654"));
+        let zombie = "4242 (sh) Z 1 4242 4242 0 -1 4194560 100 0 0 0 1 2 0 0 20 0 1 0 987654 0 0";
+        assert_eq!(start_time_in_stat(zombie), None);
+        assert_eq!(start_time_in_stat("garbage"), None);
+    }
+
+    /// A folder's setup step is sent as the handed-over setup's are, marked as a folder's, in seconds to a tenth.
+    #[test]
+    fn a_folders_setup_step_is_an_install_step_of_its_own_run() {
+        let body = event_body(
+            "key",
+            "install-1",
+            &Report::FolderStep {
+                step: "desktop-sync".to_string(),
+                tenths: 123,
+                outcome: "done".to_string(),
+                version: "1.0.0".to_string(),
+            },
+        );
+        assert_eq!(body["event"], "desktop_install_step");
+        assert_eq!(body["properties"]["run"], "folder");
+        assert_eq!(body["properties"]["seconds"], 12.3);
+        let ready = event_body(
+            "key",
+            "install-1",
+            &Report::FolderReady {
+                tenths: 250,
+                copy_tenths: Some(40),
+                version: "1.0.0".to_string(),
+            },
+        );
+        assert_eq!(ready["event"], "desktop_folder_sandbox_ready");
+        assert_eq!(ready["properties"]["seconds"], 25.0);
+        assert_eq!(ready["properties"]["copySeconds"], 4.0);
     }
 
     #[test]

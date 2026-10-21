@@ -134,13 +134,10 @@ enum Command {
         /// Show what is here and what each outcome would remove, and change nothing
         #[arg(long)]
         dry_run: bool,
-        /// With --dry-run: one line of JSON on stdout (what the desktop app reads)
-        #[arg(long, requires = "dry_run")]
-        json: bool,
         /// With --dry-run: the inventory as an INI file (what the Windows uninstaller's page reads)
         #[arg(long, requires = "dry_run", hide = true, value_name = "PATH")]
         ini: Option<std::path::PathBuf>,
-        /// The desktop app removes itself (its uninstaller, or its own dialog): leave the app alone
+        /// Run by the desktop app's own uninstaller, which removes the app itself: leave the app alone
         #[arg(long, hide = true)]
         without_app: bool,
         /// Run by an outer `ic uninstall` that has already asked (inside a WSL distro)
@@ -1450,7 +1447,6 @@ fn main() {
             confirm,
             yes,
             dry_run,
-            json,
             ini,
             without_app,
             nested,
@@ -1460,7 +1456,6 @@ fn main() {
             confirm,
             yes,
             dry_run,
-            json,
             ini,
             without_app,
             nested,

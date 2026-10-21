@@ -43,17 +43,13 @@ const choices = [
 <DocsLayout
     pageId="uninstall"
     heading="Uninstall Intentic"
-    lead="Take Intentic off a computer from Windows Settings, from the desktop app, or with one command in a terminal. Every way shows what it found first, and asks before it removes anything."
+    lead="Take Intentic off a computer the way you remove any program, or with one command in a terminal. Both show what they found first, and ask before they remove anything."
 >
-    <h2 id="start">Three ways to start</h2>
+    <h2 id="start">Two ways to start</h2>
     <ul>
         <li>
             <strong>Windows Settings.</strong> Open <strong>Apps</strong>, find <strong>Intentic</strong> in the list and choose{" "}
             <strong>Uninstall</strong>. Intentic's uninstaller opens on a page with the two choices below.
-        </li>
-        <li>
-            <strong>The desktop app.</strong> Open <strong>This device</strong> and choose <strong>Uninstall Intentic…</strong>. The same two
-            choices, in the app's window.
         </li>
         <li>
             <strong>A terminal, on any system.</strong> Run one command on the computer you want to clean up:
@@ -70,6 +66,12 @@ const choices = [
     <p>
         On a Windows PC, run it in PowerShell rather than inside a WSL distro. Removing everything from the Windows side also removes Intentic
         from the PC's WSL distros.
+    </p>
+    <p>
+        On Linux, removing the desktop app's package (<code>sudo apt remove intentic</code>, <code>sudo dnf remove intentic</code>, or your
+        software center) removes the app alone. A package cannot reach into your home folder, where your sandboxes, the machine agent and
+        folder sync live, so it says so and points you to the command above. Run it as yourself, not as root: it removes the app's package
+        too, so it can be the only step. An AppImage has no uninstaller, and the same command removes it with the rest.
     </p>
 
     <h2 id="choices">The two choices</h2>
@@ -104,7 +106,7 @@ const choices = [
     <p>
         Removing everything deletes the sandboxes for good, including any you removed in the last 7 days that could still have been
         restored. So when there are sandboxes, pressing Enter is not enough: the terminal asks you to type how many there are, and the
-        Windows uninstaller and the app ask you to confirm. Until you do, nothing has been deleted.
+        Windows uninstaller asks you to confirm. Until you do, nothing has been deleted.
     </p>
     <p>
         Keeping your sandboxes keeps everything they need to run: the engine they run on, the machine agent that starts them when you sign in
@@ -165,7 +167,7 @@ const choices = [
                 <td><code>--dry-run</code></td>
                 <td>
                     Lists what it found and what each choice would remove, and removes nothing. It also says the number{" "}
-                    <code>--confirm</code> needs. With <code>--json</code>, the same as one JSON document for a program to read.
+                    <code>--confirm</code> needs.
                 </td>
             </tr>
             <tr>

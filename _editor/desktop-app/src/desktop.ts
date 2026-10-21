@@ -480,100 +480,79 @@ export type ProjectPreview =
           readonly more: boolean;
           readonly large: boolean;
           readonly cautions: readonly ProjectCaution[];
-          /** How far this computer's own sandbox is, which the folder goes into. */
-          readonly machine: MachineStanding;
+          /** Someone is signed in, as the workspace last said: the press makes the sandbox at once, else signs in first. */
+          readonly signedIn: boolean;
       };
 
-/** The folder's name inside the sandbox's /work, derived by the page from the folder's (project.rs `AttachAsk`). */
+/** The folder's name inside its sandbox's /work, derived by the page from the folder's (project.rs `CreateAsk`). */
 export interface ProjectAsk {
     readonly project: string;
-    /** The names it may take instead when `project` is taken, best first (sandbox-contract's `projectDirCandidates`). */
-    readonly alternatives?: readonly string[];
 }
 
-/** What came of the press (project.rs `Attached`): in line for this computer's sandbox, or opened on its own sandbox. */
-export type ProjectAttached = { readonly kind: `queued`; readonly name: string } | { readonly kind: `opened` };
+/** What came of the press (project.rs `Created`): its own sandbox on its way, or the one it has opened. */
+export type ProjectCreated = { readonly kind: `started`; readonly name: string } | { readonly kind: `opened` };
 
 export const projectPreview = (): Promise<ProjectPreview> => invoke(`project_preview`);
-// Answers at once, whatever this computer's sandbox is doing: the folder waits for it. Rejects with a sentence for the
-// reader only for a folder that cannot go in (a refusal, a name the sandbox would not take).
-export const projectAttach = (ask: ProjectAsk): Promise<ProjectAttached> => invoke(`project_attach`, { ask });
+// Answers at once, whatever is under way: the folder's own setup waits for a sign-in, Docker or another folder's setup by
+// itself. Rejects with a sentence for the reader only for a folder that cannot have one (a refusal, a name the sandbox
+// would not take).
+export const projectCreate = (ask: ProjectAsk): Promise<ProjectCreated> => invoke(`project_create`, { ask });
 
-/* THIS COMPUTER'S OWN SANDBOX (src-tauri/src/machine_sandbox.rs): made once, after sign-in, in the background, by the
-   app rather than any window; folders attach to it. Every window reads it on opening and hears every change. */
+/* A FOLDER'S OWN SANDBOX (src-tauri/src/folder_setup.rs, 2026-10-21): made on the folder's press by the app rather than
+   any window, one setup at a time on this computer, its first copy followed until the folder is in. Every window reads
+   every folder's record on opening and hears every change, and draws its own folder's. */
 
 /** Why Docker is in the way of it. */
 export type DockerReason = `notInstalled` | `notRunning` | `notAllowed`;
 
-/** Where it stands (machine_sandbox.rs `Standing`). `signedIn`: a sign-in came back from the browser and the
- * workspace has not said who yet; `starting`: its stopped container being started; `asleep`: put to sleep by this
- * computer's keeper for want of use, woken by opening it or by a folder on its way in. */
-export type MachineStanding =
-    | { readonly state: `signedOut` | `signedIn` | `ready` | `stopped` | `asleep` | `starting` | `interrupted` | `gone` }
+/** Where a folder's setup stands (folder_setup.rs `Standing`). `signedIn`: a sign-in came back from the browser and
+ * the workspace has not said who yet; `queued`: in line, `behind` another folder's setup when one goes first;
+ * `copying`: the sandbox is made and the first copy runs; `ready`: the folder is in. */
+export type FolderStanding =
+    | { readonly state: `signedOut` | `signedIn` | `copying` | `ready` | `interrupted` }
+    | { readonly state: `queued`; readonly behind?: string }
     | { readonly state: `needsDocker`; readonly reason: DockerReason }
     | { readonly state: `creating`; readonly phase?: string; readonly step?: string; readonly percent: number }
     | { readonly state: `waiting`; readonly for: SetupWaitingFor }
     | { readonly state: `failed`; readonly reason: string };
 
-/** A folder on its way into it (machine_sandbox.rs `Folder`), by the path its windows are told (`face.path`). */
-export interface MachineFolder {
+/** One folder's record (folder_setup.rs `Record`), as `folder-setups.json` holds it. */
+export type FolderSetup = FolderStanding & {
+    /** The folder, by the path its windows are told (`face.path`). */
     readonly path: string;
-    /** Its name inside the sandbox's /work. */
+    /** Its name inside its sandbox's /work. */
     readonly name: string;
-    readonly state: `queued` | `attaching` | `copying` | `ready` | `failed`;
-    readonly reason?: string;
+    readonly sandboxName?: string;
+    readonly sandboxId?: string;
+    readonly slug?: string;
+    readonly hostname?: string;
+    readonly logPath?: string;
+    /** A setup finished for it: only the copy is left. */
+    readonly made: boolean;
+    readonly attempt: number;
+    /** Unix milliseconds of the press. */
+    readonly askedAt: number;
+    /** Unix milliseconds of the last change: an older answer never replaces a newer one. */
+    readonly updatedAt: number;
+    /** What a setup stopped on a question said this computer needs, as `intentic-requirement:` objects. */
+    readonly requirements?: readonly unknown[];
     /** The first copy's status: paused, or Mutagen's word while it runs. */
     readonly status?: string;
     /** While it is paused, why the machine agent holds its sync still (its `heldBy`), the reader's own pause first. */
     readonly heldBy?: readonly string[];
-    /** Its first copy's session has been seen running since it was asked in. */
-    readonly ran?: boolean;
-}
-
-/** The whole record (machine_sandbox.rs `Record`), as `machine-sandbox.json` holds it. */
-export type MachineSandbox = MachineStanding & {
-    readonly sandboxId?: string;
-    readonly slug?: string;
-    readonly hostname?: string;
-    readonly name?: string;
-    readonly logPath?: string;
-    readonly made: boolean;
-    readonly attempt: number;
-    readonly startedAt?: number;
-    /** Unix seconds of the last change: an older answer never replaces a newer one. */
-    readonly updatedAt: number;
-    readonly consented: boolean;
-    readonly resumeOnLaunch: boolean;
-    /** What a setup stopped on a question said this computer needs, as `intentic-requirement:` objects. */
-    readonly requirements: readonly unknown[];
-    readonly folders: readonly MachineFolder[];
-    /** Why the last start of its stopped container failed, in `ic`'s words. */
-    readonly startError?: string;
 };
 
-export const machineSandboxStatus = (): Promise<MachineSandbox> => invoke(`machine_sandbox_status`);
-/** "Try again"; `consent` is the requirements card's go-ahead, false its "Check again". */
-export const machineSandboxRetry = (consent = false): Promise<void> => invoke(`machine_sandbox_retry`, { consent });
+export const folderSetups = (): Promise<readonly FolderSetup[]> => invoke(`folder_setups`);
+/** "Try again" on this window's folder; `consent` is the card's go-ahead for what this computer needs first. */
+export const folderSetupRetry = (consent = false): Promise<void> => invoke(`folder_setup_retry`, { consent });
 /** Look again now: Docker was just started here. */
-export const machineSandboxCheck = (): Promise<void> => invoke(`machine_sandbox_check`);
-/** Set up again where its container is gone: on the same row, or a new one where the account no longer has it. */
-export const machineSandboxRecreate = (): Promise<void> => invoke(`machine_sandbox_recreate`);
-/** A sandbox of the account this computer left behind before it kept one (machine_sandbox.rs `Leftover`). */
-export interface LeftoverSandbox {
-    readonly id: string;
-    readonly name: string;
-}
-/** The ones this computer left behind; none when the platform or this machine's listing does not answer. */
-export const machineSandboxLeftovers = (): Promise<readonly LeftoverSandbox[]> => invoke(`machine_sandbox_leftovers`);
-/** Those of `ids` still left behind taken off the account (the platform's trash keeps each a week). How many went. */
-export const machineSandboxRemoveLeftovers = (ids: readonly string[]): Promise<number> =>
-    invoke(`machine_sandbox_remove_leftovers`, { ids });
-/** Its stopped container started (`ic`), by the app's supervisor: resolves at once, the record saying `starting`. */
-export const machineSandboxStart = (): Promise<void> => invoke(`machine_sandbox_start`);
-/** The restart or sign-out its setup's first pass asked of Windows; the next launch runs it again, agreed to. */
-export const machineSandboxEndSession = (how: SessionEnd): Promise<void> => invoke(`machine_sandbox_end_session`, { how });
-export const onMachineSandbox = (handler: (record: MachineSandbox) => void): Promise<UnlistenFn> =>
-    listen<MachineSandbox>(`desktop://machine-sandbox`, (event) => handler(event.payload));
+export const folderSetupCheck = (): Promise<void> => invoke(`folder_setup_check`);
+/** The restart or sign-out this window's folder's setup asked of Windows; the next launch runs it again, agreed to. */
+export const folderSetupEndSession = (how: SessionEnd): Promise<void> => invoke(`folder_setup_end_session`, { how });
+/** This window's folder no longer asked for (a setup that stopped, put away). */
+export const folderSetupDismiss = (): Promise<void> => invoke(`folder_setup_dismiss`);
+export const onFolderSetups = (handler: (records: readonly FolderSetup[]) => void): Promise<UnlistenFn> =>
+    listen<readonly FolderSetup[]>(`desktop://folder-setups`, (event) => handler(event.payload));
 
 /* WHAT THE SHELL AND THIS DEVICE ARE DRAWN FROM: facts the app keeps across launches (src-tauri/src/state.rs). */
 
@@ -698,7 +677,7 @@ export const parseRequirementState = (line: string): RequirementProgress | undef
     }
 };
 
-/** A requirement's object, as a line carries it or the app kept it (machine_sandbox.rs `requirements`), made whole. */
+/** A requirement's object, as a line carries it or the app kept it (folder_setup.rs `requirements`), made whole. */
 export const requirementOf = (value: unknown): Requirement | undefined => {
     if (typeof value !== `object` || value === null) {
         return undefined;

@@ -79,7 +79,6 @@ const world = (): World => {
         devRoot: undefined,
         prewarm: false,
         projectDir: "",
-        projectsHost: false,
     };
     const ledgerPath = join(mkdtempSync(join(tmpdir(), "lifecycle-ledger-")), "runtime-installs.json");
     const services: Services = unstubbed<Services>("services", {

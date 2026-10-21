@@ -36,7 +36,7 @@ export interface Siblings {
 }
 
 // The folders a `sync.json` holds, read leniently: only `localDir` and `sandboxId` matter here, a pairing without a
-// folder (the projects host, a mirror-only one) has none, and a file this build cannot parse is unread rather than empty.
+// folder (a mirror-only one) has none, and a file this build cannot parse is unread rather than empty.
 const SiblingStateSchema = z.object({ pairings: z.array(z.unknown()) });
 const SiblingPairingSchema = z.object({ localDir: z.string(), sandboxId: z.string() });
 

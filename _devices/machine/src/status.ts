@@ -77,7 +77,6 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
     if (!working) {
         return "nothing connected";
     }
-    // Sandboxes, not pairings: the folders attached to this computer's sandbox are several pairings of one.
     const sandboxes = new Set(sync.pairings.map((pairing) => pairing.sandboxId)).size;
     const halves = [linksHalf(links, connected), sync.pairings.length === 0 ? undefined : `syncing ${sandboxes} sandbox${sandboxes === 1 ? "" : "es"}`].filter(
         (part) => part !== undefined,
@@ -235,14 +234,6 @@ const WORST: readonly Tone[] = ["fail", "warn", "ok"];
 // One pairing's row, pure and exported since every word of it has been wrong at least once. The glyph is the worst
 // thing the row says.
 export const pairingItem = (pairing: DeviceReport["pairings"][number]): Item => {
-    // This device's own sandbox holds no folder: the folders attached to it have rows of their own.
-    if (pairing.projectsHost === true) {
-        return {
-            tone: pairing.mirroring === "off" ? "warn" : "ok",
-            name: pairing.sandboxId,
-            meta: `this device's sandbox: folders attach to it${pairing.mirroring === "off" ? " · port mirroring off" : ""}`,
-        };
-    }
     const folder = pairing.localDir ?? "no folder";
     const where = pairing.mode === "sync" ? (reportedKind(pairing).project === true ? `${folder} ↔ ${pairing.remoteDir}` : folder) : "ports only";
     const state = [
@@ -374,11 +365,11 @@ const drawSync = (ui: Ui, report: DeviceReport): Footnote[] => {
     return later;
 };
 
-// Mutagen's sessions, judged from the state rather than the report, which carries no key to name an attached folder's
-// session by: a pairing whose session does not exist is named as a failure. `mutagen sync list a b` is
+// Mutagen's sessions, judged from the state rather than the report: a pairing whose session does not exist is named
+// as a failure. `mutagen sync list a b` is
 // all-or-nothing, so the raw listing (--verbose) asks only for the sessions that exist.
 const drawSessions = async (ui: Ui, mutagen: string, verbose: boolean): Promise<void> => {
-    const syncing = (await readState()).pairings.filter((pairing) => pairing.mode === "sync" && pairing.projectsHost !== true);
+    const syncing = (await readState()).pairings.filter((pairing) => pairing.mode === "sync");
     // Both of a pairing's sessions: the workspace and the state backup that rides beside it. Listing only the first
     // would report a healthy sync while the backup was not running at all.
     const wanted = syncing.flatMap((pairing) => syncSessionNames(pairing));

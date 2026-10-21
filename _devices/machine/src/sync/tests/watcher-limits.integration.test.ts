@@ -103,11 +103,10 @@ describe("lowDiskStep", () => {
 
 describe("writesToDisk", () => {
     const base: Pairing = { sandboxUrl: "https://s.example.dev", sandboxId: "s", mode: "sync", localDir: "/home/me/intentic/s" };
-    it("guards a workspace folder and a two-way project, never a copy-first project, the projects host or a mirror", () => {
+    it("guards a workspace folder and a two-way project, never a copy-first project or a mirror", () => {
         expect(writesToDisk(base)).toBe(true);
         expect(writesToDisk({ ...base, project: true, remoteDir: "/work/app", direction: "both" })).toBe(true);
         expect(writesToDisk({ ...base, project: true, remoteDir: "/work/app" })).toBe(false);
-        expect(writesToDisk({ ...base, projectsHost: true })).toBe(false);
         expect(writesToDisk({ ...base, mode: "mirror" })).toBe(false);
     });
 });

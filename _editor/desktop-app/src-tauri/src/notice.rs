@@ -148,10 +148,14 @@ pub fn clear_before_exit(app: &AppHandle) {
     let _ = finished.recv_timeout(CLEAR_ON_EXIT);
 }
 
-/// Where a press on a notification the app put up about this computer itself goes (machine_sandbox.rs): This device,
-/// in the main window, rather than a route of the workspace. Never a page's: a page's path is held to a rooted route
-/// (setup_link.rs), which this is not.
+/// Where a press on a notification the app put up about this computer itself goes (folder_setup.rs, Docker): This
+/// device, in the main window, rather than a route of the workspace. Never a page's: a page's path is held to a rooted
+/// route (setup_link.rs), which this is not.
 pub const THIS_DEVICE: &str = "intentic-app:device";
+
+/// Where a press on a notification about a folder's own sandbox goes (folder_setup.rs): the folder's window, opened or
+/// brought back, with the folder's path after the prefix. The app's own, as [`THIS_DEVICE`] is: never a page's.
+pub const FOLDER: &str = "intentic-app:folder:";
 
 /// A press on one of the app's notifications: the workspace, at the route it was about, or This device for one about
 /// this computer. A token this run did not issue, or one already pressed, is the workspace as it stands.
@@ -159,6 +163,9 @@ pub fn open(app: &AppHandle, token: &str) {
     let posted = app.state::<Notices>().0.lock().unwrap().take_token(token);
     match posted.and_then(|posted| posted.path) {
         Some(path) if path == THIS_DEVICE => crate::windows::show_device(app),
+        Some(path) if path.starts_with(FOLDER) => {
+            crate::local::open_later(app, std::path::PathBuf::from(&path[FOLDER.len()..]));
+        }
         Some(path) => crate::windows::show_workspace_at(app, Some(&path)),
         None => crate::windows::show_workspace(app),
     }

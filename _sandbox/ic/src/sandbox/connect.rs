@@ -72,21 +72,17 @@ fn connect(
     let drop_previous_key = env("INTENTIC_AT_REST_DROP_PREVIOUS_KEY").as_deref() == Some("1");
     let sync_dir = env("SYNC_DIR");
     // A project sandbox's folder (a sandbox made for one folder), refused before anything starts when it is not a shape
-    // the sync agent accepts: a wrong one would sync the owner's folder somewhere they were not told. SYNC_PROJECTS_HOST
-    // is the other shape, this computer's own sandbox that folders attach to later, and takes none of those variables.
-    let placement = if env("SYNC_PROJECTS_HOST").is_some() {
-        project_dir::projects_host(
-            env("SYNC_REMOTE_DIR").as_deref(),
-            env("SYNC_PROJECT").is_some(),
-            sync_dir.is_some(),
-        )
-    } else {
-        project_dir::placement(
-            env("SYNC_REMOTE_DIR").as_deref(),
-            env("SYNC_PROJECT").is_some(),
-            sync_dir.is_some(),
-        )
-    }?;
+    // the sync agent accepts: a wrong one would sync the owner's folder somewhere they were not told. An app older than
+    // 2026-10-21 may still ask for this computer's one sandbox that folders attached to, which no longer exists.
+    if env("SYNC_PROJECTS_HOST").is_some() {
+        return Err(util::Fail(project_dir::retired_projects_host()));
+    }
+    let placement = project_dir::placement(
+        env("SYNC_REMOTE_DIR").as_deref(),
+        env("SYNC_PROJECT").is_some(),
+        sync_dir.is_some(),
+    )?;
+    let syncing = sync_dir.is_some();
     let self_host = env("SELF_HOST").is_some();
 
     let mut connect_token = env("CONNECT_TOKEN").unwrap_or_default();
@@ -139,24 +135,29 @@ fn connect(
             label: "Wait for it to come up",
             weight: 40,
         },
-        ui::PlanStep {
-            phase: "verifying",
-            label: "Check it answers",
-            weight: 20,
-        },
     ]);
-    if placement.syncs(sync_dir.is_some()) {
+    // The folder's sync starts as soon as the daemon answers here: it needs only this machine's Docker and the daemon's
+    // loopback, never the public address, so a large folder's first copy runs while that is checked (2026-10-21).
+    if syncing {
         plan.push(ui::PlanStep {
             phase: "desktop-sync",
             label: "Set up folder sync",
-            weight: 45,
+            weight: 46,
         });
     }
-    plan.push(ui::PlanStep {
-        phase: "connecting-machine",
-        label: "Connect this device",
-        weight: 20,
-    });
+    plan.extend([
+        ui::PlanStep {
+            phase: "verifying",
+            label: "Check it answers",
+            weight: 8,
+        },
+        ui::PlanStep {
+            phase: "connecting-machine",
+            label: "Connect this device",
+            // The machine agent's download, when it has none, falls in whichever of the two agent steps comes first.
+            weight: if syncing { 13 } else { 20 },
+        },
+    ]);
     let promise = format!(
         "{} One long download in the middle is most of it.",
         ui::plan_summary(plan.len(), plan.iter().map(|step| step.weight).sum())
@@ -533,9 +534,6 @@ fn connect(
             "SANDBOX_PROJECT_DIR",
             placement.project_dir.as_deref().unwrap_or(""),
         ),
-        // This computer's own sandbox, which folders attach to later: no starter site, and its projects learned from the
-        // machine agent's reports. Replayed for the same reason as the folder above.
-        ("SANDBOX_PROJECTS_HOST", placement.projects_host_env()),
         // The connected-device seed: the pairing the machine agent below redeems, plus what to call this
         // machine and which OS card it gets. The daemon cannot learn either for itself — it is in a container
         // with its own hostname, on a Linux however this machine is spelled.
@@ -751,6 +749,24 @@ fn connect(
         }
     }
 
+    /* Desktop sync chosen at setup (a folder in SYNC_DIR), BEFORE the postflight below (2026-10-21): the folder's sync
+    reaches the daemon over this machine's Docker and its loopback, never the public address, so its first copy is
+    under way while the edge's DNS and the public URL are checked, which can take up to two minutes. Before, the copy
+    waited on all of it. */
+    let synced = syncing && !sync_pair_token.is_empty() && !sandbox_public_url.is_empty() && {
+        let finished = run_desktop_sync(
+            &container,
+            &sandbox_public_url,
+            &sync_pair_token,
+            sync_dir.as_deref(),
+            &placement,
+        );
+        if !finished {
+            ui::warn(sync_unfinished(&placement));
+        }
+        finished
+    };
+
     /* POSTFLIGHT — a daemon answering INSIDE the container proves only half the chain. */
     step(
         "verifying",
@@ -770,28 +786,17 @@ fn connect(
         /* WHOSE VERDICT THIS IS. */
         if setup_code.is_some() {
             reporter.findings_failed("verifying", checks::wire_failures(&findings));
-            bail!("{summary}\nThe sandbox itself is running on this machine — fix the above, then re-check with: ic sandbox doctor {slug}");
+            let folder = if synced {
+                ", and your folder syncs with it"
+            } else {
+                ""
+            };
+            bail!("{summary}\nThe sandbox itself is running on this machine{folder} — fix the above, then re-check with: ic sandbox doctor {slug}");
         }
         ui::warn(&format!("the sandbox is running, but the links above are not reachable from this machine — re-check any time with: ic sandbox doctor {slug}"));
     }
 
     reporter.stage("done");
-
-    /* Desktop sync chosen at setup: the same paste covers it, gated on the opt-in the command carried (a folder in
-    SYNC_DIR, or SYNC_PROJECTS_HOST's folderless pairing). */
-    if placement.syncs(sync_dir.is_some())
-        && !sync_pair_token.is_empty()
-        && !sandbox_public_url.is_empty()
-        && !run_desktop_sync(
-            &container,
-            &sandbox_public_url,
-            &sync_pair_token,
-            sync_dir.as_deref(),
-            &placement,
-        )
-    {
-        ui::warn(sync_unfinished(&placement));
-    }
 
     /* Connect this machine as a device — not gated on an opt-in, unlike sync above, because it needs no decision from the user. */
     let kept_device = replacing
@@ -1245,10 +1250,7 @@ fn fetch_image(image: &str, log: &Log) -> std::result::Result<(), docker::PullSt
 
 /// What a desktop sync that did not finish leaves undone, said in the words of whoever set it up.
 fn sync_unfinished(placement: &project_dir::Placement) -> &'static str {
-    if placement.projects_host {
-        // The folderless pairing is what an attached folder syncs under, so without it no folder can attach.
-        "folder sync for this computer's sandbox didn't finish. Your sandbox is fine, but folders can't attach to it until it's set up again from the desktop app."
-    } else if placement.project_dir.is_some() {
+    if placement.project_dir.is_some() {
         // A project folder is synced by the app that picked it: the Desktop sync card would sync /work instead.
         "folder sync didn't finish. Your sandbox is fine; set it up again from the desktop app to sync your folder."
     } else {
@@ -1259,7 +1261,7 @@ fn sync_unfinished(placement: &project_dir::Placement) -> &'static str {
 /// Wait for the daemon INSIDE the container (no tunnel/DNS in the loop), then run the standard sync
 /// bootstrap — as the INVOKING user when running under sudo: the agent is per-user state (~/.intentic, the
 /// user's Mutagen daemon). The sync agent connects over the public URL and retries transient tunnel errors
-/// itself, so this local gate need not wait for the tunnel. A projects host passes no folder at all.
+/// itself, so this local gate need not wait for the tunnel.
 fn run_desktop_sync(
     container: &str,
     public_url: &str,
@@ -1814,17 +1816,7 @@ mod tests {
     }
 
     #[test]
-    fn a_projects_host_runs_the_sync_installer_with_no_folder() {
-        let host = project_dir::projects_host(None, false, false).unwrap();
-        assert_eq!(
-            installer_env("https://x.test", "tok", None, &host),
-            vec![
-                ("SANDBOX_URL", "https://x.test"),
-                ("PAIR_TOKEN", "tok"),
-                ("SYNC_PROJECTS_HOST", "1"),
-            ]
-        );
-        // A folder's own setup still hands its folder over, and the project flags after it.
+    fn a_folders_setup_hands_the_sync_installer_its_folder_and_the_project_flags() {
         let project = project_dir::placement(Some("/work/my-app"), true, true).unwrap();
         assert_eq!(
             installer_env("https://x.test", "tok", Some("/home/ada/my-app"), &project),
@@ -1840,10 +1832,6 @@ mod tests {
 
     #[test]
     fn an_unfinished_sync_names_what_it_leaves_undone_for_each_shape() {
-        let host = project_dir::projects_host(None, false, false).unwrap();
-        assert!(
-            sync_unfinished(&host).contains("folders can't attach to it until it's set up again")
-        );
         let project = project_dir::placement(Some("/work/my-app"), true, true).unwrap();
         assert!(sync_unfinished(&project).contains("to sync your folder"));
         let workspace = project_dir::placement(None, false, true).unwrap();

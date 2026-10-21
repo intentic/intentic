@@ -12,7 +12,7 @@ import type { Pairing } from "../config.js";
 process.env["HOME"] = mkdtempSync(join(tmpdir(), "holds-"));
 process.env["USERPROFILE"] = process.env["HOME"];
 const { baseDir } = await import("../../config.js");
-const { attachedKey, pairingSlugs, readState, setOwnerPaused, setTransferSince, setUnreachableSince, upsertPairing } = await import("../config.js");
+const { pairingSlugs, readState, setOwnerPaused, setTransferSince, setUnreachableSince, upsertPairing } = await import("../config.js");
 const {
     holdSessions,
     holdsSync,
@@ -271,14 +271,15 @@ describe("a paused session nothing holds", () => {
 // (2026-10-21) A BRING-BACK, RESTORE OR DELIVERY HOLDS ITS FOLDER STILL BY A FACT TOO. It paused Mutagen itself, and the
 // watcher's next pass resumed the session no fact explained, in the middle of writing the sandbox's files into the folder.
 describe("a folder a bring-back, restore or delivery writes into", () => {
+    // A project folder with a sandbox of its own, beside the workspace pairing every case here starts from.
     const attach = async () => {
-        const key = attachedKey(SANDBOX, "shop");
+        const key = "sandbox-5a1b2c3d4e5f-example-com";
         const localDir = mkdtempSync(join(tmpdir(), "shop-"));
-        await upsertPairing({ sandboxUrl: RESUMING_URL, sandboxId: SANDBOX, key, mode: "sync", localDir, remoteDir: `${WORKSPACE_ROOT}/shop`, project: true });
-        const pairing = (await pairings()).find((held) => held.key === key);
+        await upsertPairing({ sandboxUrl: "https://sandbox-5a1b2c3d4e5f.example.com", sandboxId: key, mode: "sync", localDir, remoteDir: `${WORKSPACE_ROOT}/shop`, project: true });
+        const pairing = (await pairings()).find((held) => held.sandboxId === key);
         return { key, session: sessionName(key), pairing: { ...pairing!, localDir } };
     };
-    const transferOf = async (key: string) => (await pairings()).find((held) => held.key === key)?.transferSince;
+    const transferOf = async (key: string) => (await pairings()).find((held) => held.sandboxId === key)?.transferSince;
 
     it("stays paused through the watcher's passes until the transfer lets go of it", async () => {
         const { key, session, pairing } = await attach();
@@ -354,11 +355,9 @@ test("an outage holds it only once it has lasted an hour", () => {
     expect(syncHolds(pairing({ unreachableSince: NOW - UNREACHABLE_HOLD_MS }), NOW)).toEqual(["unreachable"]);
 });
 
-// Only file sync is ever held: a mirror-only pairing has none, and the projects host's folders are pairings of their own.
+// Only file sync is ever held: a mirror-only pairing has none.
 test("nothing holds a pairing that syncs no files", () => {
-    expect(syncHolds(pairing({ mode: "mirror", ownerPausedAt: 1 }), NOW)).toEqual([]);
-    const host: Pairing = { sandboxUrl: "https://sandbox-0123456789ab.intentic.dev", sandboxId: "sandbox-0123456789ab-intentic-dev", mode: "sync", projectsHost: true, swapSince: 1 };
-    expect(syncHolds(host, NOW)).toEqual([]);
+    expect(syncHolds(pairing({ mode: "mirror", ownerPausedAt: 1, swapSince: 1 }), NOW)).toEqual([]);
 });
 
 

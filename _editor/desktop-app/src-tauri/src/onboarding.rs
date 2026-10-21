@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::PoisonError;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -49,9 +49,9 @@ const PREFETCH_RETRY_DELAY: Duration = Duration::from_secs(30);
  * on a file, held by the `ic` process) and comes back after it only if there is still something to fetch. */
 
 /// Runs that set a sandbox up on this machine and pull its image as they go: the setup handed over from the workspace
-/// (commands.rs `setup_run`) and this computer's own sandbox (machine_sandbox.rs). This PC's own setup (`pc-setup`,
-/// WSL and the engine) is not one of them: the download exists to overlap exactly that wait.
-const INSTALL_RUNS: [&str; 2] = ["setup", crate::machine_sandbox::RUN];
+/// (commands.rs `setup_run`) and a folder's own (folder_setup.rs, whose ids begin `folder-setup:`). This PC's own
+/// setup (`pc-setup`, WSL and the engine) is not one of them: the download exists to overlap exactly that wait.
+const INSTALL_RUNS: [&str; 1] = ["setup"];
 /// How long a setup announced by prefetch.rs `begin_for_setup` counts as running before its run is registered.
 const INSTALL_ANNOUNCE_GRACE: Duration = Duration::from_secs(30);
 
@@ -350,9 +350,24 @@ fn settled(prefetch: &Prefetch) -> bool {
     }
 }
 
-/// The check alone, for the machine sandbox supervisor.
+/// The check alone, for the folders' setups (folder_setup.rs).
 pub fn check_snapshot() -> Option<Check> {
     lock_store(|store| store.check.clone())
+}
+
+/// When the last check found this PC ready (`ic docker prepare --dry-run` on Windows).
+static READY_AT: Mutex<Option<Instant>> = Mutex::new(None);
+/// How long a check that found this PC ready is taken at its word by a setup that starts after it.
+const READY_FOR: Duration = Duration::from_secs(10 * 60);
+
+/// Whether this PC was found ready moments ago and its engine answers now: a setup then skips examining it again
+/// (commands.rs `setup_script`, `INTENTIC_PC_READY`), which is seconds of PowerShell and WMI on every setup.
+pub fn ready_moments_ago() -> bool {
+    READY_AT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .is_some_and(|at| at.elapsed() < READY_FOR)
+        && scripts::engine_listening()
 }
 
 /// Whether the PC's own setup is still running.
@@ -360,7 +375,7 @@ pub fn setup_running() -> bool {
     SETUP_RUNNING.load(Ordering::SeqCst)
 }
 
-/// The machine sandbox's consent on a PC that still needs Docker/WSL: run the PC setup instead of a sandbox connect.
+/// A folder's setup's consent on a PC that still needs Docker/WSL: run the PC setup instead of a sandbox connect.
 pub fn start_pc_setup_if_needed(app: &AppHandle, consent: bool) -> bool {
     let needs = check_snapshot()
         .is_some_and(|check| matches!(check.state.as_str(), "needsSetup" | "unknown" | "checking"))
@@ -761,9 +776,13 @@ fn run_check(app: &AppHandle) {
             check_unix()
         }
     };
+    *READY_AT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) =
+        (check.state == "ready").then(Instant::now);
     lock_store(|store| store.check = Some(check));
     emit(app);
-    crate::machine_sandbox::kick();
+    crate::folder_setup::kick();
 }
 
 #[cfg(not(windows))]
@@ -963,7 +982,7 @@ fn run_pc_setup(app: &AppHandle) -> Result<(), String> {
     settle_setup(app, setup, apply.check_state);
     if recheck {
         run_check(app);
-        crate::machine_sandbox::kick();
+        crate::folder_setup::kick();
         crate::sidecar::try_office_after_prefetch(app);
         return Ok(());
     }
@@ -1296,6 +1315,7 @@ fn step_aside(app: &AppHandle) {
 fn installing() -> bool {
     install_announced(now_ms(), INSTALL_ANNOUNCED_MS.load(Ordering::SeqCst))
         || INSTALL_RUNS.iter().any(|id| scripts::is_running(id))
+        || crate::folder_setup::running()
 }
 
 /// Whether a setup announced at `announced_ms` (0: never) still counts as starting at `now_ms`. Pure.

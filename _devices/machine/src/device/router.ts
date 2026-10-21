@@ -178,8 +178,8 @@ const flowFor: FlowFor = (input, scopes) =>
           }
         : FLOWS[input.op](input, scopes);
 
-// LANDED WORK INTO A FOLDER ATTACHED TO THIS COMPUTER'S SANDBOX (sync/project/project-delivery.ts). Behind no switch of the
-// grant: the folder's own opt-in (`deliver: "auto"`, which `sync attach` records) is the permission, and only a folder of
+// LANDED WORK INTO A PROJECT FOLDER (sync/project/project-delivery.ts). Behind no switch of the
+// grant: the folder's own opt-in (`deliver: "auto"`, which `sync setup --project` records) is the permission, and only a folder of
 // the sandbox on this link's other end is ever found. Not a tool either, so no agent can call it; the daemon does, after
 // a land. Logged and audited like every call, and a refusal travels as its own sentence for the land's card.
 const deliverOverLink = async (runtime: HostRuntime, delivery: ProjectDelivery): Promise<ProjectDeliveryResult> => {

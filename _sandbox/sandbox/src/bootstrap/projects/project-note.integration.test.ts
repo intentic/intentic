@@ -1,8 +1,8 @@
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MEMORY_FILE, WORKSPACE_ROOT } from "@intentic/constants";
-import { convergeProjectNote, PROJECT_NOTE_FENCE, projectNote } from "./project-note.js";
+import { MEMORY_FILE } from "@intentic/constants";
+import { convergeProjectNote, dropProjectNote, PROJECT_NOTE_FENCE, projectNote, withoutProjectNote } from "./project-note.js";
 
 // Against a real workspace root on disk: the file is the owner's, and what this may never do is lose a byte of it.
 
@@ -23,12 +23,12 @@ const workspaceRoot = async (): Promise<string> => {
 
 // The block as it sits in the file, derived from the note this build writes.
 const fenced = (root: string): string =>
-    `<!-- ${PROJECT_NOTE_FENCE}:start -->\n${projectNote([join(root, NAME)])}\n<!-- ${PROJECT_NOTE_FENCE}:end -->`;
+    `<!-- ${PROJECT_NOTE_FENCE}:start -->\n${projectNote(join(root, NAME))}\n<!-- ${PROJECT_NOTE_FENCE}:end -->`;
 
 // A bulk deletion inside it reaches their disk whole: the git pointer file the folder keeps here is sync-ignored but still
 // counts as content, so Mutagen's halt on a one-sided root emptying never fires (measured against Mutagen 0.18.1).
 test("the note names the folder, what syncing it means, that a deletion travels too, where its history is, and where to work", () => {
-    expect(projectNote(["/work/my-app"])).toBe(
+    expect(projectNote("/work/my-app")).toBe(
         "## The owner's project folder\n\n" +
             "`/work/my-app` is the owner's own folder, synced live with their computer: an edit made there is on their disk " +
             "at once, and theirs arrive here the same way. So does a deletion: clearing it out (`rm -rf` of what it holds, " +
@@ -42,7 +42,7 @@ test("the note names the folder, what syncing it means, that a deletion travels 
 test("a workspace with no AGENTS.md gets one holding the note alone", async () => {
     const root = await workspaceRoot();
 
-    expect(await convergeProjectNote(root, [NAME])).toBe(true);
+    expect(await convergeProjectNote(root, NAME)).toBe(true);
 
     expect(await readFile(join(root, MEMORY_FILE), "utf8")).toBe(`${fenced(root)}\n`);
 });
@@ -51,7 +51,7 @@ test("the owner's own rules stay exactly as they were, with the note after them"
     const root = await workspaceRoot();
     await writeFile(join(root, MEMORY_FILE), "# House rules\n\nTabs, never spaces.\n");
 
-    expect(await convergeProjectNote(root, [NAME])).toBe(true);
+    expect(await convergeProjectNote(root, NAME)).toBe(true);
 
     expect(await readFile(join(root, MEMORY_FILE), "utf8")).toBe(`# House rules\n\nTabs, never spaces.\n\n${fenced(root)}\n`);
 });
@@ -60,11 +60,11 @@ test("the owner's own rules stay exactly as they were, with the note after them"
 test("a second boot finds the note current and leaves the file untouched", async () => {
     const root = await workspaceRoot();
     await writeFile(join(root, MEMORY_FILE), "# House rules\n");
-    await convergeProjectNote(root, [NAME]);
+    await convergeProjectNote(root, NAME);
     const before = await stat(join(root, MEMORY_FILE));
     const text = await readFile(join(root, MEMORY_FILE), "utf8");
 
-    expect(await convergeProjectNote(root, [NAME])).toBe(false);
+    expect(await convergeProjectNote(root, NAME)).toBe(false);
 
     expect((await stat(join(root, MEMORY_FILE))).mtimeMs).toBe(before.mtimeMs);
     expect(await readFile(join(root, MEMORY_FILE), "utf8")).toBe(text);
@@ -76,61 +76,38 @@ test("an earlier release's note is replaced in place, the owner's lines around i
     const earlier = `<!-- ${PROJECT_NOTE_FENCE}:start -->\n## Old wording\n<!-- ${PROJECT_NOTE_FENCE}:end -->`;
     await writeFile(join(root, MEMORY_FILE), `# House rules\n\n${earlier}\n\nAdded by the owner after it.\n`);
 
-    expect(await convergeProjectNote(root, [NAME])).toBe(true);
+    expect(await convergeProjectNote(root, NAME)).toBe(true);
 
     expect(await readFile(join(root, MEMORY_FILE), "utf8")).toBe(`# House rules\n\n${fenced(root)}\n\nAdded by the owner after it.\n`);
 });
 
-// A projects host's folders, every one named in the one block: what each attach rewrites, in the order they came.
-test("several attached folders are named together, with everything the one-folder note says said of each", () => {
-    expect(projectNote(["/work/site", "/work/api", "/work/docs"])).toBe(
-        "## The owner's project folders\n\n" +
-            "`/work/site`, `/work/api` and `/work/docs` are the owner's own folders, each synced live with their computer: an " +
-            "edit made in one is on their disk at once, and theirs arrive here the same way. So does a deletion: clearing one " +
-            "out (`rm -rf` of what it holds, `git clean`, `git stash -u`, `git reset --hard`) clears their copy, and nothing on " +
-            "the way stops it, so never do that unless they ask. Their git history stays on their computer. The sandbox tracks " +
-            "each folder in a repository of its own, so their commits and branches are not here, and nothing committed here " +
-            "reaches theirs. Work inside the folder the task is about, not at the workspace root, unless they ask otherwise.",
-    );
-    expect(projectNote(["/work/site", "/work/api"])).toContain("`/work/site` and `/work/api` are the owner's own folders");
-});
-
-// The folder map the sandbox keeps (system/projects-registry.ts), said where agents read it: one line a folder, so a path
-// here turns into the one the owner opens. Only folders it knows the place of are listed; none known, no list.
-test("the note says where each folder is on the owner's computer, when that is known", () => {
-    const codeApp = `${WORKSPACE_ROOT}/code-app`;
-    const app = `${WORKSPACE_ROOT}/app`;
-    const note = projectNote([codeApp, `${WORKSPACE_ROOT}/api`], [{ path: codeApp, hostPath: "C:\\Users\\ada\\code\\app", machine: "ADA-LAPTOP" }]);
-    expect(
-        note.endsWith(
-            "\n\nWhere each is on their computer, for turning a path here into the one they open, and back:\n\n" +
-                `- \`${codeApp}\` is \`C:\\Users\\ada\\code\\app\` on ADA-LAPTOP`,
-        ),
-    ).toBe(true);
-    expect(projectNote([app], [{ path: app, hostPath: "/home/ada/app", machine: undefined }])).toContain(`- \`${app}\` is \`/home/ada/app\``);
-    expect(projectNote([app])).not.toContain("Where each is");
-});
-
-// The block is replaced where it stands as the list grows, so a second attach never leaves the first one's note behind.
-test("a second folder attached rewrites the one block to name both, the owner's lines kept", async () => {
+// A sandbox folders were attached to (the desktop app's one sandbox per computer, retired 2026-10-21) keeps no project
+// folder of its own: its block goes, and the owner's lines on either side stay as they were.
+test("a sandbox with no project folder drops the note, the owner's lines around it kept", async () => {
     const root = await workspaceRoot();
-    await writeFile(join(root, MEMORY_FILE), "# House rules\n");
-    await convergeProjectNote(root, [NAME]);
+    const block = `<!-- ${PROJECT_NOTE_FENCE}:start -->\n## The owner's project folders\n\nOld words.\n<!-- ${PROJECT_NOTE_FENCE}:end -->`;
+    await writeFile(join(root, MEMORY_FILE), `# House rules\n\n${block}\n\nAdded by the owner after it.\n`);
 
-    expect(await convergeProjectNote(root, [NAME, "api"])).toBe(true);
+    expect(await dropProjectNote(root)).toBe(true);
 
-    const text = await readFile(join(root, MEMORY_FILE), "utf8");
-    expect(text).toBe(
-        `# House rules\n\n<!-- ${PROJECT_NOTE_FENCE}:start -->\n${projectNote([join(root, NAME), join(root, "api")])}\n<!-- ${PROJECT_NOTE_FENCE}:end -->\n`,
-    );
-    expect(text.split(`${PROJECT_NOTE_FENCE}:start`)).toHaveLength(2);
+    expect(await readFile(join(root, MEMORY_FILE), "utf8")).toBe("# House rules\n\nAdded by the owner after it.\n");
+    expect(await dropProjectNote(root)).toBe(false);
 });
 
-// A projects host nothing has attached to yet: no folder to name, and no file written.
-test("an empty list writes nothing, not even a file", async () => {
+test("dropping the note from a file that never had one writes nothing, not even a file", async () => {
     const root = await workspaceRoot();
 
-    expect(await convergeProjectNote(root, [])).toBe(false);
-
+    expect(await dropProjectNote(root)).toBe(false);
     await expect(stat(join(root, MEMORY_FILE))).rejects.toThrow();
+
+    await writeFile(join(root, MEMORY_FILE), "# House rules\n");
+    expect(await dropProjectNote(root)).toBe(false);
+    expect(await readFile(join(root, MEMORY_FILE), "utf8")).toBe("# House rules\n");
+});
+
+test("a note alone in the file, or last in it, leaves only what was around it", () => {
+    const block = `<!-- ${PROJECT_NOTE_FENCE}:start -->\nx\n<!-- ${PROJECT_NOTE_FENCE}:end -->`;
+    expect(withoutProjectNote(`${block}\n`)).toBe("");
+    expect(withoutProjectNote(`# Rules\n\n${block}\n`)).toBe("# Rules\n");
+    expect(withoutProjectNote(`${block}\n\n# Rules\n`)).toBe("# Rules\n");
 });

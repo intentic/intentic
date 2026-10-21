@@ -26,5 +26,7 @@ test("the replay order is the table's order, each name once", () => {
     expect(REPLAY_ENV).toEqual(REPLAY_VARS.map((entry) => entry.name));
     expect(new Set(REPLAY_ENV).size).toBe(REPLAY_ENV.length);
     expect(REPLAY_ENV.slice(0, 3)).toEqual(["WORKSPACE_ROOT", "HISTORY_ROOT", "AGENT_AUTH_DIR"]);
-    expect(REPLAY_ENV.at(-1)).toBe("SANDBOX_PROJECTS_HOST");
+    expect(REPLAY_ENV.at(-1)).toBe("SANDBOX_PROJECT_DIR");
+    // The retired projects host's flag is not carried by a recreate any more (2026-10-21).
+    expect(REPLAY_ENV).not.toContain("SANDBOX_PROJECTS_HOST");
 });

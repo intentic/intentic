@@ -61,7 +61,6 @@ export const readDisk = async (dir: string): Promise<DiskReading | undefined> =>
 export const writesToDisk = (pairing: Pairing): pairing is Pairing & { readonly localDir: string } =>
     pairing.mode === "sync" &&
     pairing.localDir !== undefined &&
-    pairing.projectsHost !== true &&
     !(isProjectPairing(pairing) && projectDirection(pairing) === "to-sandbox");
 
 const gigabytes = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GB`;

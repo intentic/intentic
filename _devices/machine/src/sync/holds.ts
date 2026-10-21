@@ -27,10 +27,9 @@ import { operationRunning } from "./project/project-transfer.js";
 export const UNREACHABLE_HOLD_MS = 60 * 60_000;
 
 // What holds a pairing's file sync still right now, by whose word first: the owner's, then what says the sandbox is not
-// there, then what passes by itself. Empty means it runs. A mirror-only pairing and the projects host hold no file sync,
-// so nothing holds them.
+// there, then what passes by itself. Empty means it runs. A mirror-only pairing holds no file sync, so nothing holds it.
 export const syncHolds = (pairing: Pairing, now: number): DeviceSyncHold[] => {
-    if (pairing.mode !== "sync" || pairing.projectsHost === true) {
+    if (pairing.mode !== "sync") {
         return [];
     }
     const held: [DeviceSyncHold, boolean][] = [

@@ -43,8 +43,7 @@ export const sameFolder = (first: string, second: string, platform: NodeJS.Platf
     folded(first, platform) === folded(second, platform);
 
 // ANOTHER pairing whose folder this one would be, hold, or sit inside; undefined when none. The pairing filed under the
-// same key is not a clash: setting it up (or attaching it) again, here or in a new folder, replaces it. Another folder
-// attached to the same sandbox is one, since each is a sync of its own.
+// same key is not a clash: setting it up again, here or in a new folder, replaces it.
 export const overlappingPairing = async (
     folder: string,
     key: string,
@@ -60,11 +59,11 @@ export const overlappingPairing = async (
     return others.find((other) => foldersOverlap(wanted, other.folder, platform))?.held;
 };
 
-// WHAT A FOLDER MAY NOT BE, attached to this machine's sandbox: a whole disk, the home folder itself or one holding it,
+// WHAT A PROJECT FOLDER MAY NOT BE (`sync setup --project`): a whole disk, the home folder itself or one holding it,
 // everyone's homes or a whole one of them, or the system's own folders. The desktop app refuses the same folders before
 // it asks (`refusal` in its project.rs), in the same words; this side refuses them again because the command is
 // reachable without the app, and a folder copied into the sandbox and written into by delivery must be one project.
-// Pure, home and platform passed in, so each rule is checkable from any host. Undefined when the folder may attach.
+// Pure, home and platform passed in, so each rule is checkable from any host. Undefined when the folder may sync.
 export const folderRefusal = (folder: string, home: string | undefined, platform: NodeJS.Platform = process.platform): string | undefined => {
     const path = platform === "win32" ? win32 : posix;
     const resolved = path.resolve(folder);

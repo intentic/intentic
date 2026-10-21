@@ -18,7 +18,7 @@ const said = (item: Item | undefined): string | undefined =>
     item === undefined ? undefined : `${item.tone} ${item.name}  ${item.meta ?? ""}`.trimEnd();
 const pairingLine = (pairing: DevicePairing): string => said(pairingItem(pairing))!;
 const linkLine = (link: Parameters<typeof linkItem>[0]): string => said(linkItem(link))!;
-import { enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, transportFor } from "../commands.js";
+import { deliveryOf, enrollKey, placementChange, placementOf, projectAskedWithoutFlag, selectPairings, transportFor } from "../commands.js";
 import { sandboxesLeft, syncsAFolder } from "../uninstall.js";
 import type { Pairing, SyncState } from "../config.js";
 
@@ -566,19 +566,27 @@ describe("conflictItems", () => {
 });
 
 // What the desktop app's uninstaller ends when the machine agent stays (`sync uninstall --folders`): folder sync, never
-// the port mirroring that keeps sandboxes connected, and never the enrollment a kept pairing of the same sandbox rides.
+// the port mirroring that keeps sandboxes connected.
 describe("folders-only uninstall", () => {
     const own: Pairing = { sandboxUrl: "https://a.example.dev/", sandboxId: "a", mode: "sync", localDir: "/home/me/intentic/a" };
-    const host: Pairing = { sandboxUrl: "https://b.example.dev/", sandboxId: "b", mode: "sync", projectsHost: true };
-    const attached: Pairing = { ...host, projectsHost: undefined, key: "b~app", localDir: "/home/me/code/app", remoteDir: `${WORKSPACE_ROOT}/app`, project: true };
+    const project: Pairing = { sandboxUrl: "https://b.example.dev/", sandboxId: "b", mode: "sync", localDir: "/home/me/code/app", remoteDir: `${WORKSPACE_ROOT}/app`, project: true };
     const ports: Pairing = { sandboxUrl: "https://c.example.dev/", sandboxId: "c", mode: "mirror" };
 
-    it("takes the pairings that sync a folder, never a mirror-only one or the projects host", () => {
-        expect([own, host, attached, ports].filter(syncsAFolder)).toEqual([own, attached]);
+    it("takes the pairings that sync a folder, never a mirror-only one", () => {
+        expect([own, project, ports].filter(syncsAFolder)).toEqual([own, project]);
     });
 
-    it("leaves a sandbox only once none of its pairings stays, so a kept projects host keeps its enrollment", () => {
-        expect([...sandboxesLeft([own, attached], [host, ports])]).toEqual(["a"]);
-        expect([...sandboxesLeft([own, host, attached, ports], [])].toSorted()).toEqual(["a", "b", "c"]);
+    it("leaves the sandboxes whose pairing goes, and only those", () => {
+        expect([...sandboxesLeft([own, project], [ports])].toSorted()).toEqual(["a", "b"]);
+        expect([...sandboxesLeft([own, project, ports], [])].toSorted()).toEqual(["a", "b", "c"]);
+    });
+});
+
+// (2026-10-21) A folder with a sandbox of its own takes the work its agents land by itself, as a folder attached to one
+// sandbox per computer did; a workspace folder syncs both ways and has nothing to take.
+describe("deliveryOf", () => {
+    it("opts a project folder into delivery, and nothing else", () => {
+        expect(deliveryOf({ project: true })).toEqual({ deliver: "auto" });
+        expect(deliveryOf({})).toEqual({});
     });
 });

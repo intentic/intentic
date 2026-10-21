@@ -500,7 +500,7 @@ it(`names the agent that took landed work out, offering Land now for what is new
     expect(landButton(card)?.textContent?.trim()).toBe(`Land now`);
 });
 
-// A land into a folder attached to this computer's sandbox also reached the folder on the computer: the card says
+// A land in a sandbox made for one folder also reached the folder on the computer: the card says
 // where, and which files it left as the owner had them, as a fact with no press of its own.
 it(`says what a land did in the owner's own folder, and what it kept out`, () => {
     const delivered = mount({

@@ -149,7 +149,7 @@ describe(`a step with nothing but the clock to go by`, () => {
     });
 });
 
-/* THE SETUP-PROGRESS RECORD: the phases, weights and pull lines ic's ui.rs, machine_sandbox.rs and the web's agentHouse.ts
+/* THE SETUP-PROGRESS RECORD: the phases, weights and pull lines ic's ui.rs, setup_progress.rs and the web's agentHouse.ts
 are tested against as well, so the three tables of docker's layer states cannot drift apart again. */
 // SAFETY: the fixture is this repository's own file, and the assertions below fail on any field it lacks.
 const SHARED = JSON.parse(

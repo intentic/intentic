@@ -1,12 +1,12 @@
 import { localHost } from "@intentic/web/local-host";
 import { computed } from "vue";
-import { info } from "../machine";
-import { machineSandbox } from "../machineSandbox";
+import { facts, info } from "../machine";
+import { signedIn } from "../roster";
 import { pcCardPhase, type PcCardPhase } from "./pcCard";
 
 // The card for this PC's own setup as this window has it, from what the app last said: the card draws it
-// (PcSetupCard.vue), and what else This computer says stands back while it is up (DeviceView.vue's no-sandbox card,
-// MachineSandboxSection.vue's requirements), so the reader is told one way forward, not two.
+// (PcSetupCard.vue), and what else This computer says stands back while it is up (DeviceView.vue's no-sandbox card), so
+// the reader is told one way forward, not two.
 
 export const pcCard = computed((): PcCardPhase => {
     const onboarding = localHost().onboarding;
@@ -14,7 +14,8 @@ export const pcCard = computed((): PcCardPhase => {
         os: info.value?.os,
         check: onboarding?.check.value,
         setup: onboarding?.setup.value ?? { state: `idle` },
-        machine: machineSandbox.value?.state,
+        signedIn: signedIn.value,
+        hostsSandboxes: facts.value?.hostsSandboxes === true,
         firstTask: onboarding?.firstTask.value,
     });
 });

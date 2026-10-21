@@ -226,7 +226,7 @@ describe("siblingClash", () => {
                 JSON.stringify({
                     pairings: [
                         { sandboxId: "a", localDir: "/x" },
-                        { sandboxId: "b", projectsHost: true },
+                        { sandboxId: "b", mode: "mirror" },
                     ],
                 }),
                 "wsl:Ubuntu",

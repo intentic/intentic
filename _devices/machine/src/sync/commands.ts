@@ -19,7 +19,6 @@ import { wslEnvironment } from "../environments/wsl.js";
 import { ensureResident, readResidentBuild, readResidentPid } from "../resident/resident.js";
 import { MACHINE_VERSION } from "../version.js";
 import {
-    isAttachedPairing,
     isProjectPairing,
     type Pairing,
     pairingKey,
@@ -34,14 +33,14 @@ import {
     upsertPairing,
 } from "./config.js";
 import { type TransportAsk, transportFor } from "./endpoint.js";
-import { overlappingPairing } from "./folders.js";
+import { canonicalFolder, folderRefusal, overlappingPairing } from "./folders.js";
 import { retireMirroredPort, retirePairingMirror } from "./mirror.js";
 import { asidePrefix } from "./project/adopt.js";
-import { attachCommands } from "./attach-commands.js";
 import { projectCommands } from "./project/project-commands.js";
 import { existingSyncSessions, healDerivedConflicts, readAllSessions, retireOrphanSessions, sessionName, startMutagenDaemon } from "./mutagen.js";
 import { adoptOwnerPauses, HOLD_WORDS, holdSessions, syncHeld, syncHolds } from "./holds.js";
 import { ensureMutagen } from "./binary/mutagen-binary.js";
+import { wakeWatcher } from "./wake.js";
 import { forget } from "./forget-command.js";
 import { revokeEnrollment, syncsAFolder, uninstallPairings } from "./uninstall.js";
 import { refuseAcrossPc } from "./siblings.js";
@@ -63,8 +62,8 @@ import {
 export { transportFor } from "./endpoint.js";
 
 // Which pairings a command acts on. No selector means every one this machine holds; `--sandbox` takes the
-// sandbox id or any substring matching exactly one (real ids are `sandbox-<hex>-<zone>`-shaped), and selects every
-// pairing of that sandbox: its own, and each folder attached to it.
+// sandbox id or any substring matching exactly one (real ids are `sandbox-<hex>-<zone>`-shaped), and selects that
+// sandbox's pairing.
 // The host of a sandbox's address, or undefined for anything that is not one.
 const urlHost = (value: string): string | undefined => {
     if (!value.includes("://")) {
@@ -193,8 +192,6 @@ interface SetupFlags {
     readonly remoteDir?: string;
     readonly project: boolean;
     readonly transport?: TransportAsk;
-    // This computer's own sandbox, enrolled with no folder of its own: folders attach to it (`sync attach`).
-    readonly projectsHost?: boolean;
 }
 
 const parseTransport = (value: string): TransportAsk => {
@@ -230,6 +227,11 @@ export const placementOf = (flags: Pick<SetupFlags, "remoteDir" | "project">): P
     }
     return flags.project ? { remoteDir, project: true } : {};
 };
+
+// (2026-10-21) A project folder takes the work its agents land by itself (project-delivery.ts), a restore point first and
+// never over an edit of the owner's own: each folder now has a sandbox of its own, made for it, and this is what folders
+// attached to one sandbox per computer did. A workspace folder syncs both ways and needs no delivery.
+export const deliveryOf = (placement: Pick<Pairing, "project">): Pick<Pairing, "deliver"> => (placement.project === true ? { deliver: "auto" } : {});
 
 // The folder this setup will sync, before enrollment decides whether it syncs any: a `~` prefix can reach us verbatim
 // (SYNC_DIR travels as data, no shell expands it), and the default is named for the id in the sandbox's own URL, never
@@ -275,11 +277,6 @@ const setup = buildCommand<SetupGiven>({
                 parse: parseTransport,
                 optional: true,
                 brief: "How the sandbox is reached: auto (the default: Docker for a project whose sandbox runs on this device's engine, ssh otherwise), ssh or docker",
-            },
-            projectsHost: {
-                kind: "boolean",
-                optional: true,
-                brief: "Enroll this computer's own sandbox with no folder of its own, for folders to attach to (`sync attach`); takes no --dir, --remote-dir or --project",
             },
         },
     },
@@ -346,41 +343,6 @@ export const projectAskedWithoutFlag = (flags: Pick<SetupFlags, "project">, env:
         : undefined;
 };
 
-// THE PROJECTS HOST, this computer's own sandbox that folders attach to, is a pairing of its own kind: it holds the
-// sync token and mirrors the ports, and holds no folder. Setting a sandbox up again as the other kind would either leave
-// its attached folders with no sandbox pairing, or drop the folder it syncs; either is an unpair first, said out loud.
-// `--projects-host` takes no folder flag at all. Undefined when nothing disagrees.
-export const projectsHostChange = (
-    held: Pick<Pairing, "sandboxId" | "localDir" | "projectsHost"> | undefined,
-    flags: Pick<SetupFlags, "projectsHost" | "dir" | "remoteDir" | "project">,
-): string | undefined => {
-    if (flags.projectsHost === true && (flags.dir !== undefined || flags.remoteDir !== undefined || flags.project)) {
-        return explain(
-            "Nothing was enrolled.",
-            "--projects-host enrolls this device's sandbox with no folder of its own, so it takes no --dir, --remote-dir or --project; folders attach to it afterwards.",
-            "run the same command again without --dir, --remote-dir and --project.",
-        );
-    }
-    if (held === undefined) {
-        return undefined;
-    }
-    if (flags.projectsHost === true && held.localDir !== undefined) {
-        return explain(
-            `${held.sandboxId} was not set up again.`,
-            `it already syncs ${held.localDir}; setting it up as this device's sandbox for folders would stop that. Unpair it first, then set it up again.`,
-            unpairCommand(held.sandboxId),
-        );
-    }
-    if (flags.projectsHost !== true && held.projectsHost === true) {
-        return explain(
-            `${held.sandboxId} was not set up again.`,
-            "it is this device's sandbox for folders, which attach to it; setting it up for a folder of its own would leave them without it. Set it up again with --projects-host, or unpair it first.",
-            unpairCommand(held.sandboxId),
-        );
-    }
-    return undefined;
-};
-
 // Everything that can refuse this setup, asked before the single-use pairing token is spent on it: where the folder
 // syncs to, whether this sandbox already syncs it somewhere else, and whether another pairing holds it.
 const planSetup = async (
@@ -388,36 +350,29 @@ const planSetup = async (
 ): Promise<{
     readonly sandboxId: string;
     readonly placement: Pick<Pairing, "remoteDir" | "project">;
-    readonly folder: string | undefined;
+    readonly folder: string;
     readonly reach: Pick<Pairing, "transport" | "container">;
     // The other environments of this PC whose folders could not be read, so the overlap check could not include them.
     readonly unread?: readonly string[];
 }> => {
-    const skewed = flags.projectsHost === true ? undefined : projectAskedWithoutFlag(flags);
+    const skewed = projectAskedWithoutFlag(flags);
     if (skewed !== undefined) {
         throw new Error(skewed);
     }
     const sandboxId = flags.sandboxId ?? sanitizeId(new URL(flags.url).host);
     const { pairings } = await readState();
-    // The sandbox's own pairing, never a folder attached to it: those are filed under keys of their own.
     const held = pairings.find((pairing) => pairingKey(pairing) === sandboxId);
-    const hostChange = projectsHostChange(held, flags);
-    if (hostChange !== undefined) {
-        throw new Error(hostChange);
-    }
-    if (flags.projectsHost === true) {
-        return {
-            sandboxId,
-            placement: {},
-            folder: undefined,
-            reach: await transportFor(flags.transport ?? "auto", { projectsHost: true }, flags.url),
-        };
-    }
     const placement = placementOf(flags);
     const folder = wantedFolder(flags, sandboxId);
     const changed = placementChange(held, placement);
     if (changed !== undefined) {
         throw new Error(changed);
+    }
+    // A project folder is copied into its sandbox and written into by delivery, so it must be one project: never a whole
+    // disk, a home folder or the system's own (folders.ts). The desktop app refuses the same folders before it asks.
+    const refusal = placement.project === true ? folderRefusal(await canonicalFolder(folder), await canonicalFolder(homeDir())) : undefined;
+    if (refusal !== undefined) {
+        throw new Error(refusal);
     }
     const clash = await overlappingPairing(folder, sandboxId, pairings);
     if (clash !== undefined) {
@@ -443,7 +398,7 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     const { sandboxId, placement, folder, reach, unread = [] } = await planSetup(flags);
     if (unread.length > 0) {
         ui.warn(
-            `${unread.join(", ")} could not be asked which folders ${unread.length === 1 ? "it syncs" : "they sync"}, so ${folder ?? "this folder"} was not checked against ${unread.length === 1 ? "it" : "them"}.`,
+            `${unread.join(", ")} could not be asked which folders ${unread.length === 1 ? "it syncs" : "they sync"}, so ${folder} was not checked against ${unread.length === 1 ? "it" : "them"}.`,
         );
     }
     const publicKey = await ensureSshKey();
@@ -463,9 +418,8 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     await pinHostKey(sandboxId, hostKey, container);
 
     // A project folder is only ever file sync: an enrollment that came back ports-only (another machine holds this
-    // sandbox's sync) would leave the owner's project unsynced under a card that says it is, so it is handed back. The
-    // projects host likewise: the folders that attach to it are file sync.
-    if ((placement.project === true || flags.projectsHost === true) && mode !== "sync") {
+    // sandbox's sync) would leave the owner's project unsynced under a card that says it is, so it is handed back.
+    if (placement.project === true && mode !== "sync") {
         await revokeEnrollment(flags.url, syncToken).catch((error: unknown) =>
             ui.warn(
                 `${flags.url} could not be told to forget this device (${errorMessage(error)}), so its sync key is still authorized there. Remove this device from that sandbox's Devices view.`,
@@ -473,15 +427,14 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         );
         throw new Error(
             explain(
-                flags.projectsHost === true ? "No folder can attach to this sandbox here." : "This project folder cannot sync here.",
+                "This project folder cannot sync here.",
                 "another device holds file sync for this sandbox.",
                 "run the same command again with --takeover to move sync to this device.",
             ),
         );
     }
 
-    // File sync exists only in "sync" mode; a mirror-only enrollment has no local dir, just port forwards, and the
-    // projects host has none by design.
+    // File sync exists only in "sync" mode; a mirror-only enrollment has no local dir, just port forwards.
     const localDir = mode === "sync" ? folder : undefined;
     // A folder that already holds files is made to agree with the sandbox's copy before the first session compares them
     // (adopt.ts): a session with no history would carry every stale file into the sandbox and stop on every difference.
@@ -492,23 +445,21 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
         await mkdir(localDir, { recursive: true });
     }
 
-    const pairing: Pairing =
-        flags.projectsHost === true
-            ? { sandboxUrl: flags.url, sandboxId, mode, syncToken, projectsHost: true, ...reach }
-            : {
-                  sandboxUrl: flags.url,
-                  sandboxId,
-                  mode,
-                  syncToken,
-                  ...(localDir === undefined ? {} : { localDir, ...placement, ...reach }),
-                  ...(adopt ? { adoptFolder: true as const } : {}),
-              };
+    const pairing: Pairing = {
+        sandboxUrl: flags.url,
+        sandboxId,
+        mode,
+        syncToken,
+        ...(localDir === undefined ? {} : { localDir, ...placement, ...reach, ...deliveryOf(placement) }),
+        ...(adopt ? { adoptFolder: true as const } : {}),
+    };
 
     ui.step("sync-linking", "linking the folder to your sandbox…");
     // ADD this pairing to whatever this machine already holds: pairing a second sandbox used to overwrite the
-    // first, dropping its ssh alias, folder and file-sync session. A new token reaches every folder attached to the
-    // sandbox too (config.ts withPairing).
+    // first, dropping its ssh alias, folder and file-sync session.
     await upsertPairing(pairing);
+    // The resident watcher prepares the new pairing's session on its next pass: told now, rather than up to a poll later.
+    await wakeWatcher();
     const pairings = (await readState()).pairings;
 
     // The ssh fragment is regenerated from the whole pairing list, so every paired sandbox keeps its alias.
@@ -594,23 +545,8 @@ const finishSetup = (ui: Ui, sandboxUrl: string, pairing: Pairing, pairings: rea
     if (pairings.length > 1) {
         ui.note(`This device now syncs ${pairings.length} pairings:`);
         for (const held of pairings) {
-            ui.note(
-                `  ${pairingKey(held)}${held.projectsHost === true ? " (this device's sandbox, for folders)" : held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`,
-            );
+            ui.note(`  ${pairingKey(held)}${held.localDir === undefined ? " (ports only)" : ` → ${held.localDir}`}`);
         }
-    }
-    if (pairing.projectsHost === true) {
-        ui.finished(
-            "This device's sandbox is ready for folders.",
-            undefined,
-            `Ports from ${sandboxUrl} answer on this device's localhost, and folders attach to it as ${WORKSPACE_ROOT}/<name>.`,
-            [
-                ["attach a folder", `intentic-machine sync attach --sandbox-url ${sandboxUrl} --dir <folder> --name <name>`],
-                ["check it", "intentic-machine status"],
-                ...later,
-            ],
-        );
-        return;
     }
     const syncing = pairing.mode === "sync";
     ui.finished(
@@ -671,7 +607,7 @@ const sandboxFlag = {
     },
 } as const;
 
-// Each pairing by its key: the sandbox id, or `<sandboxId>~<name>` for a folder attached to it.
+// Each pairing by its key, its sandbox id.
 const named = (pairings: readonly Pairing[]): string => pairings.map(pairingKey).join(", ");
 
 // A command over the pairings `--sandbox` selects; `none` is what it says when that selects nothing.
@@ -715,8 +651,7 @@ const fileSyncSwitch = (brief: string, verb: "pause" | "resume") =>
         sandboxFlag,
         `No sandbox is paired on this device, so there is nothing to ${verb}. Desktop sync starts from a sandbox's Desktop sync card.`,
         async (selected, _flags, ui) => {
-            // The projects host holds no folder of its own: its folders' sessions are theirs.
-            const syncing = selected.filter((pairing) => pairing.mode === "sync" && pairing.projectsHost !== true);
+            const syncing = selected.filter((pairing) => pairing.mode === "sync");
             if (syncing.length === 0) {
                 ui.quiet(
                     `${selected.length > 1 ? "These enrollments only mirror ports" : "This enrollment only mirrors ports"}, so there is no file sync to ${verb}.`,
@@ -754,8 +689,7 @@ const mirrorSwitch = (brief: string, off: boolean) =>
     pairingCommand<SandboxFlags>(brief, sandboxFlag, NONE_TO_MIRROR, async (selected, _flags, ui) => {
         ui.act(off ? "Turning port mirroring off" : "Turning port mirroring on");
         const mutagen = await ensureMutagen();
-        // Every pairing of the sandbox carries the switch (a folder attached to it reports it), and the forwards are the
-        // sandbox's, torn down once.
+        // The pairing carries the switch, and the forwards are the sandbox's, torn down once.
         for (const pairing of selected) {
             // state is a single file; serial keeps the writes ordered
             await setMirrorOff(pairingKey(pairing), off);
@@ -799,8 +733,7 @@ const mirrorPortSwitch = (brief: string, ignored: boolean) =>
             ui.act(ignored ? `Leaving port ${flags.port} off this device` : `Mirroring port ${flags.port} again`);
             const mutagen = await ensureMutagen();
             let taken = 0;
-            // Only the pairing that mirrors its sandbox's ports (never a folder attached to it) holds the number.
-            for (const pairing of selected.filter((held) => !isAttachedPairing(held))) {
+            for (const pairing of selected) {
                 // state is a single file; serial keeps the writes ordered
                 await setPortIgnored(pairingKey(pairing), flags.port, ignored);
                 if (ignored) {
@@ -905,7 +838,7 @@ const autoheal = buildRouteMap({
 
 // The sync half's teardown, callable from the top-level `uninstall` too (uninstall.ts). With a selector it unpairs ONE
 // sandbox and leaves every other pairing served; with `foldersOnly` (the app's uninstaller), every pairing that syncs a
-// folder here, leaving port mirroring and the projects host; bare, it removes everything, self-revoking each dropped
+// folder here, leaving port mirroring; bare, it removes everything, self-revoking each dropped
 // enrollment so a device walking away cleans up after itself.
 export const syncUninstall = async (
     say: Narration,
@@ -929,7 +862,7 @@ const uninstall = buildCommand<UninstallFlags>({
             folders: {
                 kind: "boolean",
                 default: false,
-                brief: "Only the pairings that sync a folder here; port mirroring and the projects host stay (the app's uninstaller)",
+                brief: "Only the pairings that sync a folder here; port mirroring stays (the app's uninstaller)",
             },
         },
     },
@@ -943,4 +876,4 @@ const uninstall = buildCommand<UninstallFlags>({
 const pause = fileSyncSwitch("Pause file syncing", "pause");
 const resume = fileSyncSwitch("Resume file syncing", "resume");
 
-export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall, forget, ...attachCommands, ...projectCommands };
+export const syncCommands = { setup, pause, resume, mirror, clean, autoheal, uninstall, forget, ...projectCommands };

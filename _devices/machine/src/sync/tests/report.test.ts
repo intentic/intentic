@@ -41,9 +41,9 @@ describe("buildReport", () => {
     // an agent older than holds, whose Mutagen pause they read as the owner's: so a session Mutagen still had paused just
     // after a hold lifted read as the owner's Pause, with a Resume button, and a first copy as in before it had run.
     it("says nothing holds a pairing whose session Mutagen still has paused", () => {
-        const listing = sessionsByName([{ name: sessionName("cm1~app"), paused: true, status: "disconnected", alpha: {}, beta: {}, ignore: {} }]);
-        const attached = pairing({ sandboxId: "cm1", key: "cm1~app", localDir: "/home/me/code/app", remoteDir: `${WORKSPACE_ROOT}/app`, project: true });
-        const built = buildReport({ pairings: [attached] }, listing, AGENT, 1_700_000_000_000).pairings[0];
+        const listing = sessionsByName([{ name: sessionName("cm1"), paused: true, status: "disconnected", alpha: {}, beta: {}, ignore: {} }]);
+        const project = pairing({ sandboxId: "cm1", localDir: "/home/me/code/app", remoteDir: `${WORKSPACE_ROOT}/app`, project: true });
+        const built = buildReport({ pairings: [project] }, listing, AGENT, 1_700_000_000_000).pairings[0];
         expect(built?.paused).toBe(true);
         expect(built?.heldBy).toEqual([]);
     });

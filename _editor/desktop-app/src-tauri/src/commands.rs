@@ -242,6 +242,9 @@ pub struct SetupContext {
     pub version: String,
     /* The install flow asks its one question exactly once, and on this path there is no terminal to ask it on — so the run happens TWICE. */
     pub consented: bool,
+    /// This PC's check (`ic docker prepare --dry-run`, onboarding.rs) found it ready moments ago and its engine answers:
+    /// connect.ps1 skips examining it again (`INTENTIC_PC_READY`, 2026-10-21).
+    pub pc_ready: bool,
 }
 
 impl SetupContext {
@@ -262,6 +265,7 @@ impl SetupContext {
             host,
             version: VERSION.to_string(),
             consented,
+            pc_ready: host == Host::Windows && crate::onboarding::ready_moments_ago(),
         }
     }
 }
@@ -332,6 +336,12 @@ pub fn setup_script(args: &SetupArgs, ctx: &SetupContext) -> ScriptRun {
     if elevate || (ctx.host == Host::Windows && ctx.consented) {
         env.push(("INSTALL_DOCKER".into(), "1".into()));
     }
+    // Found ready moments ago, by the same `ic docker prepare` the script would run again: seconds of PowerShell and
+    // WMI saved on every setup (4 s at the median, 10 s at p90). Never for a consented run, which is there to change
+    // this PC.
+    if ctx.host == Host::Windows && ctx.pc_ready && !ctx.consented {
+        env.push(("INTENTIC_PC_READY".into(), "1".into()));
+    }
 
     ScriptRun {
         file: ctx.host.script("connect.sh", "connect.ps1"),
@@ -396,8 +406,8 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
         // The sandbox image, fetched ahead while the setup installs Docker (prefetch.rs); left running however it ends.
         crate::prefetch::begin_for_setup(&handle, install);
         // This computer's own sandbox going up drives the same docker: a setup handed over meanwhile waits its turn
-        // (machine_sandbox.rs waits for this one the same way).
-        while scripts::is_running(crate::machine_sandbox::RUN) {
+        // (folder_setup.rs waits for this one the same way).
+        while crate::folder_setup::running() {
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
         // A setup an earlier launch left going (a crash, or a quit from before a quit stopped it) is stopped first: two
@@ -527,8 +537,7 @@ pub async fn forget_resumable_setup(app: AppHandle) {
  *
  * A code lives thirty minutes from its minting (the platform's setup-code.ts), and a Windows setup with two restarts in
  * it can take longer than that: it came back to a code the claim refused, and "Try again" ran the same dead code again.
- * The app mints one itself, with the workspace's session, as it does for this computer's own sandbox
- * (machine_sandbox.rs). */
+ * The app mints one itself, with the workspace's session, as it does for a folder's own sandbox (folder_setup.rs). */
 
 /// What asking for a fresh code came back with.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -741,7 +750,7 @@ pub async fn sandbox_list(app: AppHandle) -> CommandResult<Vec<serde_json::Value
     {
         state.remember_hosts_sandboxes();
     } else if state.hosts_sandboxes() {
-        let machine_holds = crate::machine_sandbox::kept_sandbox_id(&app).is_some();
+        let machine_holds = crate::folder_setup::underway(&app);
         let trash_empty = tauri::async_runtime::spawn_blocking(ic_trash_empty)
             .await
             .unwrap_or(None);
@@ -1282,7 +1291,48 @@ mod tests {
             // The default is the FIRST attempt of any setup — nothing agreed to yet. Every test that cares
             // about the second one says so.
             consented: false,
+            pc_ready: false,
         }
+    }
+
+    /// A Windows PC found ready moments ago is not examined again by the script; a consented run, which is there to
+    /// change the PC, always is, and so is every run elsewhere.
+    #[test]
+    fn a_pc_found_ready_moments_ago_is_not_examined_again() {
+        let ready = SetupContext {
+            pc_ready: true,
+            ..context(Host::Windows, true)
+        };
+        assert_eq!(
+            env_of(&setup_script(&setup_args("c"), &ready), "INTENTIC_PC_READY"),
+            Some("1")
+        );
+        let agreed = SetupContext {
+            consented: true,
+            ..ready
+        };
+        assert_eq!(
+            env_of(
+                &setup_script(&setup_args("c"), &agreed),
+                "INTENTIC_PC_READY"
+            ),
+            None
+        );
+        assert_eq!(
+            env_of(
+                &setup_script(&setup_args("c"), &context(Host::Windows, true)),
+                "INTENTIC_PC_READY"
+            ),
+            None
+        );
+        let unix = SetupContext {
+            pc_ready: true,
+            ..context(Host::Unix, true)
+        };
+        assert_eq!(
+            env_of(&setup_script(&setup_args("c"), &unix), "INTENTIC_PC_READY"),
+            None
+        );
     }
 
     #[test]

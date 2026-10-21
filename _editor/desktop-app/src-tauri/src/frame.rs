@@ -172,11 +172,6 @@ fn watch(app: &AppHandle, frame: &Window) {
                 crate::windows::announce_frame(&face, false);
             }
         }
-        // The reader back on this computer's window: its card is read again from what the sandbox is now, rather than
-        // what it was minutes ago (machine_sandbox.rs `reader_returned`).
-        WindowEvent::Focused(true) if shown() == Some(HOME) => {
-            crate::machine_sandbox::reader_returned(HOME);
-        }
         _ => {}
     });
 }

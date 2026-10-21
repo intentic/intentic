@@ -466,7 +466,8 @@ impl AppState {
 
     /* THE FOLDERS IN A SANDBOX: the machine agent's pairings as last read (bindings.rs). */
 
-    /// None bound until the agent has been read once since launch, which the supervisor does first (machine_sandbox.rs).
+    /// None bound until the agent has been read once since launch, which the folders' supervisor does first
+    /// (folder_setup.rs).
     pub fn projects(&self) -> Vec<Project> {
         self.bindings.lock().unwrap().clone().unwrap_or_default()
     }
@@ -587,8 +588,8 @@ impl AppState {
 /// removed still started Docker). All three must say so: `ic sandbox list --json` answered (`rows`, which a failed
 /// listing never is) with no sandbox of this side's own (a row the other side of this computer keeps, `keptElsewhere`,
 /// is that side's to start Docker for); `ic`'s trash holds nothing a `restore` could bring back (`trash_empty`, `None`
-/// when it could not be read, which is a doubt and keeps the flag); and this computer's own sandbox is not one the app
-/// is making or keeps (`machine_holds`, machine_sandbox.rs). Pure.
+/// when it could not be read, which is a doubt and keeps the flag); and no folder's own sandbox is on its way here
+/// (`machine_holds`, folder_setup.rs). Pure.
 pub fn forgets_hosting(
     rows: &[serde_json::Value],
     trash_empty: Option<bool>,

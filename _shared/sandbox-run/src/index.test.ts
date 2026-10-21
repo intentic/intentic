@@ -272,10 +272,10 @@ test("replayableEnv carries a project sandbox's folder across a recreate", () =>
     expect(replayableEnv([["SANDBOX_PROJECT_DIR", ""]])).toEqual([]);
 });
 
-// So is being this computer's own sandbox, which folders attach to: a recreate that dropped it would seed a starter site.
-test("replayableEnv carries a projects host's flag across a recreate", () => {
-    expect(replayableEnv([["SANDBOX_PROJECTS_HOST", "1"]])).toEqual([["SANDBOX_PROJECTS_HOST", "1"]]);
-    expect(replayableEnv([["SANDBOX_PROJECTS_HOST", ""]])).toEqual([]);
+// The desktop app's one sandbox per computer went on 2026-10-21: a recreate of one made as it drops the flag, and the
+// sandbox carries on as an ordinary one.
+test("replayableEnv drops a retired projects host's flag", () => {
+    expect(replayableEnv([["SANDBOX_PROJECTS_HOST", "1"]])).toEqual([]);
 });
 
 test("runtime directives: allowlisted tokens pass, anything else stops the recreate by name", () => {

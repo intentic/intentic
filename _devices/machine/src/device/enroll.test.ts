@@ -1,5 +1,5 @@
 import { stubGlobal } from "@intentic/testing/bun";
-import { enroll } from "./commands.js";
+import { enroll, linkWait } from "./commands.js";
 
 const jsonResponse = (status: number, body: unknown): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -43,4 +43,18 @@ test("a 401 is the expired pairing, said once and not retried", async () => {
     stubGlobal("fetch", fetchMock);
     await expect(enroll("https://sandbox-abc.example.dev/", "pair-token")).rejects.toThrow("that pairing has expired");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+// (2026-10-21) An agent already running, already holding other links, dials the new one by itself: setup closes after a
+// glance rather than sitting out the dial, which every new sandbox's setup now ends on.
+describe("how long device setup waits to see its link open", () => {
+    it("waits the whole dial for this device's first link, or an agent this setup started or restarted", () => {
+        expect(linkWait(0, 41, 41)).toBe(20_000);
+        expect(linkWait(2, undefined, 41)).toBe(20_000);
+        expect(linkWait(2, 40, 41)).toBe(20_000);
+    });
+
+    it("glances where the same agent goes on running and holds other links", () => {
+        expect(linkWait(1, 41, 41)).toBe(2_000);
+    });
 });

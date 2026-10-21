@@ -33,24 +33,15 @@ describe(`the This device tile`, () => {
         });
     });
 
-    it(`spins while this computer's own sandbox is made, behind a setup or a fix running here`, () => {
-        expect(deviceBadge({ ...AT_REST, machine: `creating`, updateReady: true })).toEqual({ running: `desktop.device.machineBadge` });
-        expect(deviceBadge({ ...AT_REST, machine: `interrupted` })).toEqual({ running: `desktop.device.machineBadge` });
-        expect(deviceBadge({ ...AT_REST, machine: `creating`, fixing: `shop` })).toEqual({ running: `desktop.fix.fixing` });
+    it(`spins while a folder's own sandbox is made, behind a setup or a fix running here`, () => {
+        expect(deviceBadge({ ...AT_REST, folderSetup: true, updateReady: true })).toEqual({ running: `desktop.device.folderSetupBadge` });
+        expect(deviceBadge({ ...AT_REST, folderSetup: true, fixing: `shop` })).toEqual({ running: `desktop.fix.fixing` });
+        expect(deviceBadge({ ...AT_REST, folderSetup: false })).toBeUndefined();
     });
 
-    it(`marks this computer's own sandbox waiting on the reader, and says nothing of one made or not yet asked for`, () => {
-        for (const machine of [`waiting`, `failed`, `needsDocker`, `stopped`, `gone`] as const) {
-            expect(deviceBadge({ ...AT_REST, machine })).toEqual({ mark: `exclamation`, tone: `warning`, tooltip: `desktop.device.needsYouBadge` });
-        }
-        expect(deviceBadge({ ...AT_REST, machine: `needsDocker`, startingDocker: true })).toEqual({ running: `desktop.device.startingDockerBadge` });
-        expect(deviceBadge({ ...AT_REST, machine: `ready` })).toBeUndefined();
-        expect(deviceBadge({ ...AT_REST, machine: `signedOut` })).toBeUndefined();
-    });
-
-    it(`spins while this PC's own setup runs, beside this computer's sandbox being made and behind a setup or a fix`, () => {
+    it(`spins while this PC's own setup runs, beside a folder's sandbox being made and behind a setup or a fix`, () => {
         expect(deviceBadge({ ...AT_REST, pc: `settingUp`, waiting: true, updateReady: true })).toEqual({ running: `desktop.device.pcSettingUpBadge` });
-        expect(deviceBadge({ ...AT_REST, pc: `settingUp`, machine: `creating` })).toEqual({ running: `desktop.device.machineBadge` });
+        expect(deviceBadge({ ...AT_REST, pc: `settingUp`, folderSetup: true })).toEqual({ running: `desktop.device.folderSetupBadge` });
         expect(deviceBadge({ ...AT_REST, pc: `settingUp`, settingUp: true })).toEqual({ running: `desktop.device.settingUpBadge` });
     });
 
@@ -62,9 +53,9 @@ describe(`the This device tile`, () => {
         });
     });
 
-    it(`offers this PC's own setup quietly, behind everything this computer's sandbox says and ahead of the update`, () => {
+    it(`offers this PC's own setup quietly, behind a setup waiting on the reader and ahead of the update`, () => {
         expect(deviceBadge({ ...AT_REST, pc: `needsSetup`, updateReady: true })).toEqual({ mark: `bolt`, tone: `info`, tooltip: `desktop.device.pcSetupBadge` });
-        expect(deviceBadge({ ...AT_REST, pc: `needsSetup`, machine: `waiting` })).toEqual({ mark: `exclamation`, tone: `warning`, tooltip: `desktop.device.needsYouBadge` });
+        expect(deviceBadge({ ...AT_REST, pc: `needsSetup`, waiting: true })).toEqual({ mark: `exclamation`, tone: `warning`, tooltip: `desktop.device.needsYouBadge` });
         expect(deviceBadge({ ...AT_REST, pc: `needsSetup`, startingDocker: true })).toEqual({ running: `desktop.device.startingDockerBadge` });
         expect(deviceBadge({ ...AT_REST, pc: undefined })).toBeUndefined();
     });

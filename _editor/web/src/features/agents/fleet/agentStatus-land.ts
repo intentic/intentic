@@ -80,7 +80,7 @@ const removedBy = (by: LandedRemover | undefined, me: string | undefined): Remov
         : { line: t(`agents.agentStatus.removedBy`, { who }), note: t(`agents.agentStatus.takenOutBy`, { who }) };
 };
 
-// What a land did in the folder on the owner's computer, for a project folder attached to this computer's own sandbox
+// What a land did in the folder on the owner's computer, for a sandbox made for one folder
 // (AgentSummary.delivery): one line under the card's facts. Quiet once the work is there or on its way; warm where the
 // owner has something to look at (files kept as they had them) or to do (Bring back, in the folder's window). A land
 // into any other folder has no delivery and no line.

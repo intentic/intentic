@@ -134,9 +134,9 @@ pub fn complete(app: &AppHandle, args: &crate::setup_link::AuthArgs) {
     app.state::<crate::state::AppState>()
         .remember_account_seen();
     crate::offer_workspace(app);
-    // A session the platform turned away before is a new one now: this computer's sandbox reads signed in at once, and is
-    // asked for again once the workspace says who signed in (machine_sandbox.rs).
-    crate::machine_sandbox::signed_in(app);
+    // A session the platform turned away before is a new one now: a folder waiting on the sign-in reads signed in at
+    // once, and its sandbox is made once the workspace says who signed in (folder_setup.rs).
+    crate::folder_setup::signed_in(app);
     let path = complete_path(
         &args.handoff,
         &attempt.verifier,

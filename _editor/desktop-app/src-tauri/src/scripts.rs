@@ -331,7 +331,7 @@ pub fn still_running(mark: &RunMark, started_now: Option<&str>, now: u64) -> boo
     }
 }
 
-/// Where a run of `id` keeps its mark: the app's data folder, beside this computer's own sandbox's run lock.
+/// Where a run of `id` keeps its mark: the app's data folder, beside each folder's own setup's run lock.
 fn mark_path(app: &AppHandle, id: &str) -> Option<PathBuf> {
     let dir = app.path().app_data_dir().ok()?;
     std::fs::create_dir_all(&dir).ok()?;
@@ -1088,7 +1088,7 @@ pub fn daemon_refusal() -> Option<String> {
 }
 
 /// Whether this machine has a docker CLI at all: what tells "Docker isn't installed" from "Docker isn't running" for an
-/// engine that does not answer (machine_sandbox.rs). Only a CLI that would not start says no; one that ran and
+/// engine that does not answer (folder_setup.rs). Only a CLI that would not start says no; one that ran and
 /// complained is an installed Docker.
 pub fn docker_cli_present() -> bool {
     let mut command = docker();
@@ -1312,23 +1312,6 @@ pub fn run_command_heard(
     run_spooled(app, id, what, command, spool, limit, heard)
 }
 
-/// [`run_command_heard`], with its transcript and its child's two files in `dir` rather than ~/.intentic/logs: for a run
-/// that deletes that folder itself (`ic uninstall`, uninstall.rs). Windows refuses to delete a file a process holds open,
-/// and this process and the child hold all three open until the end; the transcript would go with the folder besides.
-pub fn run_command_heard_in(
-    app: &AppHandle,
-    id: &str,
-    what: &str,
-    command: Command,
-    dir: &Path,
-    heard: Option<Heard>,
-) -> Result<Ended, String> {
-    let spool = Spool::open_in(id, dir).map_err(|error| {
-        format!("could not start {what}: nowhere to write what it says ({error})")
-    })?;
-    run_spooled(app, id, what, command, spool, None, heard)
-}
-
 fn run_spooled(
     app: &AppHandle,
     id: &str,
@@ -1380,13 +1363,6 @@ impl Spool {
     /// the system's temporary folder under a name no other run has.
     fn open(id: &str) -> std::io::Result<Spool> {
         Spool::with_log(id, log_path(id))
-    }
-
-    /// [`open`](Self::open), the transcript and the two files in `dir` rather than the logs folder.
-    fn open_in(id: &str, dir: &Path) -> std::io::Result<Spool> {
-        std::fs::create_dir_all(dir)?;
-        let log = dir.join(format!("desktop-{}-{}.log", safe_name(id), stamp()));
-        Spool::with_log(id, Some(log))
     }
 
     fn with_log(id: &str, log: Option<PathBuf>) -> std::io::Result<Spool> {
@@ -1479,7 +1455,7 @@ fn followed() -> &'static Mutex<HashMap<String, Followed>> {
 
 /// The app is ending with runs still going (the person chose "Quit now", windows.rs `hold_quit`): each carries on writing
 /// to its own files, and its transcript says so, and where, since nothing will copy the rest into it. `except` are the
-/// runs the quit stops instead (machine_sandbox.rs `before_exit`).
+/// runs the quit stops instead (folder_setup.rs `before_exit`).
 pub fn note_quit(except: &[&str]) {
     let Ok(live) = followed().lock() else {
         return;
@@ -1544,7 +1520,7 @@ pub fn run_told(
 /// the line.
 pub type Heard = Arc<dyn Fn(Stream, &str) + Send + Sync>;
 
-/// A run's child, the moment it started: its pid and the two files it writes to (machine_sandbox.rs keeps them in its
+/// A run's child, the moment it started: its pid and the two files it writes to (folder_setup.rs keeps them in its
 /// run lock, so a launch after a crash finds the run still going and follows it there).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spawned {
@@ -1556,7 +1532,7 @@ pub struct Spawned {
 /// What is told of a run's start: see [`Spawned`].
 pub type OnSpawn = Box<dyn FnOnce(&Spawned) + Send>;
 
-/// [`run`], with every line also handed to `heard` (machine_sandbox.rs reads its setup's progress in Rust, since no
+/// [`run`], with every line also handed to `heard` (folder_setup.rs reads its setup's progress in Rust, since no
 /// window need be there to read it), `spawned` told the child's pid and files once it starts, and how it ended answered
 /// whatever the exit: a designed stop (exit 3 or 4) is an answer for the caller to read, not an error. `Err` only when
 /// the script never started. BLOCKING.

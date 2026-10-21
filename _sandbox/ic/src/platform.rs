@@ -205,22 +205,69 @@ pub fn farewell(
     }
 }
 
-/* SETUP TELEMETRY FOR THE WIZARD — the terminal is not where the user is looking. */
+/* SETUP TELEMETRY FOR THE WIZARD — the terminal is not where the user is looking.
+ *
+ * (2026-10-21) Sent from a thread of its own, in order, rather than on the setup's own path: each report waited up to
+ * five seconds for the platform at every stage, five times a setup, for a page the person is not looking at while the
+ * desktop app runs it. The queue keeps the order (a failure is never overtaken by the stage before it), and the run's
+ * end waits for it to drain, a few seconds at most, so a failure or the last stage still reaches the wizard. */
 pub struct Reporter {
-    platform_url: String,
     code: Option<String>,
     stage: std::cell::RefCell<String>,
     // A structured failure already went out — the flow's closing prose must not overwrite it with less.
     reported: std::cell::Cell<bool>,
+    // The sender's thread; none without a code, which reports nothing.
+    sending: Option<Sending>,
+}
+
+/// The thread that sends the reports, and how its end is heard.
+struct Sending {
+    queue: std::sync::mpsc::Sender<serde_json::Value>,
+    drained: std::sync::mpsc::Receiver<()>,
+}
+
+/// How long a run's end waits for its last reports to go out.
+const DRAIN: Duration = Duration::from_secs(8);
+
+impl Drop for Reporter {
+    fn drop(&mut self) {
+        if let Some(Sending { queue, drained }) = self.sending.take() {
+            drop(queue);
+            let _ = drained.recv_timeout(DRAIN);
+        }
+    }
 }
 
 impl Reporter {
     pub fn new(platform_url: &str, code: Option<String>) -> Self {
+        let sending = code.as_ref().map(|_| {
+            let (queue, reports) = std::sync::mpsc::channel::<serde_json::Value>();
+            let (done, drained) = std::sync::mpsc::channel();
+            let url = format!("{platform_url}/setup/report");
+            let local = is_local(platform_url);
+            std::thread::spawn(move || {
+                // Not agent_for's 30s: a slow platform must not stall the setup it is only narrating.
+                let agent = ureq::Agent::config_builder()
+                    .timeout_global(Some(Duration::from_secs(5)))
+                    .tls_config(
+                        ureq::tls::TlsConfig::builder()
+                            .disable_verification(local)
+                            .build(),
+                    )
+                    .build()
+                    .new_agent();
+                for body in reports {
+                    let _ = agent.post(&url).send_json(&body);
+                }
+                let _ = done.send(());
+            });
+            Sending { queue, drained }
+        });
         Reporter {
-            platform_url: platform_url.to_string(),
             code,
             stage: std::cell::RefCell::new("preflight".to_string()),
             reported: std::cell::Cell::new(false),
+            sending,
         }
     }
 
@@ -274,20 +321,10 @@ impl Reporter {
                 remedy: clip(failure.remedy, 2000),
             })
             .collect();
-        // Not agent_for's 30s: a slow platform must not stall the setup it is only narrating.
-        let agent = ureq::Agent::config_builder()
-            .timeout_global(Some(Duration::from_secs(5)))
-            .tls_config(
-                ureq::tls::TlsConfig::builder()
-                    .disable_verification(is_local(&self.platform_url))
-                    .build(),
-            )
-            .build()
-            .new_agent();
         let body = serde_json::json!({ "code": code, "stage": stage, "failed": failed });
-        let _ = agent
-            .post(format!("{}/setup/report", self.platform_url))
-            .send_json(&body);
+        if let Some(sending) = &self.sending {
+            let _ = sending.queue.send(body);
+        }
     }
 }
 
@@ -366,5 +403,59 @@ mod tests {
         assert!(!is_local("https://evil.example/x//127.0.0.1"));
         assert!(!is_local("https://evil.example/?next=//localhost"));
         assert!(!is_local("https://localhost.evil.example"));
+    }
+
+    /// The reports leave the setup's path but not their order, and the run's end waits for the last of them.
+    #[test]
+    fn reports_go_out_in_order_and_the_last_before_the_run_ends() {
+        use std::io::{BufRead, BufReader, Read as _, Write as _};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let heard = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let into = std::sync::Arc::clone(&heard);
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let mut reader = BufReader::new(stream);
+                let mut length = 0usize;
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                        break;
+                    }
+                    if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                        length = value.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut body = vec![0; length];
+                let _ = reader.read_exact(&mut body);
+                let report: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+                let failed = report["failed"].as_array().map_or(0, Vec::len);
+                into.lock().unwrap().push(format!(
+                    "{}:{failed}",
+                    report["stage"].as_str().unwrap_or("")
+                ));
+                let _ = reader.get_mut().write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
+            }
+        });
+        let reporter = Reporter::new(&url, Some("code".to_string()));
+        reporter.stage("pulling-image");
+        reporter.stage("starting-sandbox");
+        reporter.failure("it stopped");
+        drop(reporter);
+        assert_eq!(
+            *heard.lock().unwrap(),
+            [
+                "pulling-image:0",
+                "starting-sandbox:0",
+                "starting-sandbox:1"
+            ]
+        );
+        // Without a code nothing is reported, and nothing is waited for.
+        let quiet = Reporter::new(&url, None);
+        quiet.stage("preflight");
+        drop(quiet);
+        assert_eq!(heard.lock().unwrap().len(), 3);
     }
 }

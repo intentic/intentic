@@ -12,13 +12,13 @@ mod engine;
 mod engine_keeper;
 mod first_task;
 mod fix;
+mod folder_setup;
 mod found;
 mod frame;
 mod keyring;
 mod launch;
 mod local;
 mod machine_face;
-mod machine_sandbox;
 mod microphone;
 mod notice;
 mod offline;
@@ -32,11 +32,11 @@ mod resume;
 mod sandbox_wakes;
 mod scripts;
 mod setup_link;
+mod setup_progress;
 mod shell;
 mod shown;
 mod sidecar;
 mod state;
-mod uninstall;
 mod update;
 mod wake;
 mod webview_sync;
@@ -256,15 +256,13 @@ pub fn run() {
             local::local_title,
             account::account_relay,
             project::project_preview,
-            project::project_attach,
-            machine_sandbox::machine_sandbox_status,
-            machine_sandbox::machine_sandbox_retry,
-            machine_sandbox::machine_sandbox_check,
-            machine_sandbox::machine_sandbox_recreate,
-            machine_sandbox::machine_sandbox_leftovers,
-            machine_sandbox::machine_sandbox_remove_leftovers,
-            machine_sandbox::machine_sandbox_start,
-            machine_sandbox::machine_sandbox_end_session,
+            project::project_create,
+            // A folder's own sandbox, made on its press (folder_setup.rs).
+            folder_setup::folder_setups,
+            folder_setup::folder_setup_retry,
+            folder_setup::folder_setup_check,
+            folder_setup::folder_setup_end_session,
+            folder_setup::folder_setup_dismiss,
             found::found_on_machine,
             agents::machine_agents,
             // FIRST RUN (2026-10-09): this PC's check, download and setup (onboarding.rs).
@@ -275,7 +273,7 @@ pub fn run() {
             onboarding::onboarding_restart,
             onboarding::onboarding_sign_out,
             onboarding::onboarding_use_cloud,
-            // The first task, kept until this computer's sandbox is ready (first_task.rs).
+            // The first task, kept until its folder's own sandbox has the folder in (first_task.rs).
             first_task::first_task_read,
             first_task::first_task_queue,
             first_task::first_task_clear,
@@ -292,11 +290,6 @@ pub fn run() {
             engine::engine_move,
             engine::engine_prefer,
             engine::engine_cleanup,
-            // Uninstalling Intentic from this computer, This device's "Uninstall Intentic…" (uninstall.rs).
-            uninstall::uninstall_inventory,
-            uninstall::uninstall_run,
-            uninstall::uninstall_state,
-            uninstall::uninstall_finish,
             // Intentic OS: this computer's system, and the changes This device makes to it (os.rs).
             os::os_status,
             os::os_update_check,
@@ -342,7 +335,7 @@ pub fn run() {
             app.manage(sidecar::Sidecar::default());
             app.manage(badge::Badge::default());
             app.manage(notice::Notices::default());
-            app.manage(machine_sandbox::MachineSandbox::load(app.handle())?);
+            app.manage(folder_setup::FolderSetups::load(app.handle())?);
             // Before the tray, whose rows it titles (wake.rs).
             app.manage(wake::Wake::load(app.handle())?);
             create_tray(app.handle())?;
@@ -456,10 +449,10 @@ pub fn run() {
             });
             // What earlier launches left to report (a launch that never showed a window, a panic), sent off this thread.
             launch::send_reports(app.handle());
-            // This computer's own sandbox, made after sign-in and kept, by a thread of its own rather than any window
-            // (machine_sandbox.rs): a setup the last quit cut short is picked up here.
+            // Each folder's own sandbox, made on its press by a thread of its own rather than any window
+            // (folder_setup.rs): a setup the last quit cut short is picked up here.
             onboarding::begin(app.handle());
-            machine_sandbox::start(app.handle());
+            folder_setup::start(app.handle());
             // Intentic's engine, started again when it stops while this app runs (engine_keeper.rs).
             engine_keeper::start(app.handle());
             shell::start(app.handle());
@@ -509,8 +502,8 @@ pub fn run() {
             // tao 0.37.1 calls process::exit after WM_ENDSESSION's LoopDestroyed callback, so
             // cleanup finishes here and no later message can enter a Destroyed runner (tao #1157).
             launch::exited();
-            // A setup of this computer's sandbox under way is stopped with all it started, and run again next launch.
-            machine_sandbox::before_exit();
+            // A folder's setup under way is stopped with all it started, and run again next launch.
+            folder_setup::before_exit();
             // Nothing the app put up can be answered once it has gone.
             notice::clear_before_exit(app);
             sidecar::shutdown(app);

@@ -8,6 +8,12 @@
 // cache into Docker instead (`load_if_cached`), fetching only what is still missing. Anything unusual (an image this
 // cannot resolve anonymously, a load Docker refuses) falls back to `docker pull`, which is where every setup was before.
 //
+// Where Docker's engine already answers, there is nothing to stand in for: `ic image prefetch` pulls the image into Docker
+// itself, ahead of the first setup (2026-10-21), and says how far it is in the same markers, its bytes read off docker's
+// own layer lines against the sizes the registry lists ([`pull_ahead`]). Before, it skipped such a device on the
+// grounds that Docker would pull the image itself, which it did only once a setup had started: the median first setup
+// waited 96 s on that pull (199 s at p90).
+//
 // The cache is `~/.intentic/image-cache/<image>/`: `blobs/sha256/<hex>` (an OCI layout's own blob paths), `state.json`
 // (what a watcher reads: the manifest being fetched, bytes done and due), and `lock`, held by whichever process is
 // fetching, so a prefetch the app started and the connect run that needs its result never write the same blob twice.
@@ -629,8 +635,9 @@ fn marker(state: &str, done: u64, total: u64) -> String {
     serde_json::json!({ "state": state, "done": done, "total": total }).to_string()
 }
 
-/// Whether Docker Desktop (or a docker CLI) is installed here, engine running or not. On a device that has it, Docker pulls
-/// the image itself as soon as its engine is up, and very likely has it already: fetching 1.8 GB ahead there is waste.
+/// Whether Docker Desktop (or a docker CLI) is installed here, engine running or not. On a device that has it, the image
+/// goes into Docker by Docker's own pull (now, when its engine answers: [`pull_ahead`]), and fetching 1.8 GB into a cache
+/// of our own beside it is waste.
 fn docker_installed() -> bool {
     #[cfg(windows)]
     {
@@ -708,9 +715,13 @@ pub fn prefetch(image: &str) -> crate::util::Result<()> {
         crate::util::bail!("could not find this account's home folder to keep the image in.");
     };
     sweep_stale(&dir);
-    // Worth it only where Docker is still to come: a device with Docker installed pulls when its engine is up. A fetch an
-    // earlier run started (before the restart that installed Docker) is still carried on with.
+    // The cache is worth it only where Docker is still to come. A device whose engine answers gets the image by Docker's
+    // own pull, now rather than in front of the first setup; one with Docker installed but its engine down is left to
+    // pull when it is up. A fetch an earlier run started (before the restart that installed Docker) is still carried on.
     if read_state(&dir).is_none() && docker_installed() {
+        if crate::docker::daemon_refusal().is_none() {
+            return pull_ahead(&reference, image, &say);
+        }
         say("skipped", 0, 0);
         return Ok(());
     }
@@ -749,6 +760,125 @@ pub fn prefetch(image: &str) -> crate::util::Result<()> {
                 say("failed", 0, 0);
                 crate::util::bail!("could not fetch {} ahead: {error}", reference.full());
             }
+        }
+    }
+}
+
+/// A pull ahead of the first setup, as its markers count it: each layer's bytes as the registry lists them, and how far
+/// through each docker's own lines say it is.
+#[derive(Debug, Default)]
+pub struct Pulling {
+    /// Each layer's bytes, by the short id docker's lines name it by (the digest's first twelve hex digits).
+    sizes: std::collections::HashMap<String, u64>,
+    /// How far through each layer it is, 0..1, never going back.
+    done: std::collections::HashMap<String, f32>,
+    total: u64,
+}
+
+impl Pulling {
+    /// From the image's plan; with none (a registry that would not say), the pull still runs and counts nothing.
+    pub fn of(plan: Option<&Plan>) -> Pulling {
+        let Some(plan) = plan else {
+            return Pulling::default();
+        };
+        Pulling {
+            sizes: plan
+                .layers
+                .iter()
+                .filter_map(|layer| {
+                    let hex = layer.digest.strip_prefix("sha256:")?;
+                    Some((hex.get(..12)?.to_string(), layer.size))
+                })
+                .collect(),
+            done: std::collections::HashMap::new(),
+            total: plan.total(),
+        }
+    }
+
+    /// One line of docker's pull. A layer it names that the plan does not list counts nothing. Pure.
+    pub fn observe(&mut self, line: &str) {
+        let Some((id, fraction)) = crate::ui::parse_layer(line) else {
+            return;
+        };
+        let short: String = id.chars().take(12).collect();
+        if !self.sizes.contains_key(&short) {
+            return;
+        }
+        let at = self.done.entry(short).or_insert(0.0);
+        *at = at.max(fraction);
+    }
+
+    /// Bytes in, as far as the layers' states say. Pure.
+    pub fn bytes(&self) -> u64 {
+        let layers: f64 = self
+            .done
+            .iter()
+            .map(|(id, fraction)| {
+                self.sizes.get(id).copied().unwrap_or(0) as f64 * f64::from(*fraction)
+            })
+            .sum();
+        (layers as u64).min(self.total)
+    }
+}
+
+/// The pull ahead being counted, for docker's output pump to feed ([`observe_pull`]); none outside `pull_ahead`.
+static PULLING: Mutex<Option<(Pulling, Instant)>> = Mutex::new(None);
+
+/// One line of any pull this process runs, counted for the prefetch's markers while [`pull_ahead`] runs one: every two
+/// seconds, how many bytes are in.
+pub fn observe_pull(line: &str) {
+    let Ok(mut pulling) = PULLING.lock() else {
+        return;
+    };
+    let Some((pulling, told)) = pulling.as_mut() else {
+        return;
+    };
+    pulling.observe(line);
+    if told.elapsed() >= Duration::from_secs(2) {
+        *told = Instant::now();
+        // allow(terminal-output): a column-0 marker the desktop app parses (onboarding.rs, prefetch.rs).
+        println!(
+            "intentic-prefetch: {}",
+            marker("fetching", pulling.bytes(), pulling.total)
+        );
+    }
+}
+
+/// The image into Docker by Docker's own pull, ahead of the first setup, where its engine already answers: the setup then
+/// finds it there (`INTENTIC_REUSE_IMAGE`) instead of pulling it in front of the person. Its bytes are read off docker's
+/// layer lines against the registry's sizes, so the app's bar fills as the cache's would; a registry that will not say
+/// leaves the pull running with nothing counted. Docker shares one pull of an image between everyone asking for it, so
+/// a setup that starts meanwhile joins this one rather than starting over.
+fn pull_ahead(
+    reference: &Reference,
+    image: &str,
+    say: &dyn Fn(&str, u64, u64),
+) -> crate::util::Result<()> {
+    let plan = Registry::new(reference).resolve().ok();
+    let pulling = Pulling::of(plan.as_ref());
+    let total = pulling.total;
+    say("fetching", 0, total);
+    if let Ok(mut slot) = PULLING.lock() {
+        *slot = Some((pulling, Instant::now()));
+    }
+    let log = crate::logfile::Log::create("image-prefetch")?;
+    let started = Instant::now();
+    let pulled = crate::docker::pull(image, &log);
+    if let Ok(mut slot) = PULLING.lock() {
+        *slot = None;
+    }
+    match pulled {
+        Ok(()) => {
+            say("ready", total, total);
+            crate::ui::note(&format!(
+                "pulled {image} into Docker in {}s, ahead of the first setup",
+                started.elapsed().as_secs()
+            ));
+            Ok(())
+        }
+        Err(stop) => {
+            say("failed", 0, 0);
+            crate::util::bail!("could not pull {image} ahead: {stop}")
         }
     }
 }
@@ -1126,6 +1256,35 @@ mod tests {
             &digest,
         )
         .unwrap()
+    }
+
+    /* A pull ahead of the first setup counts its bytes off docker's own lines, against the sizes the registry lists. */
+    #[test]
+    fn a_pull_ahead_counts_each_layer_by_its_state_and_its_size() {
+        let mut plan = plan();
+        // Real digests are 64 hex digits, and docker names a layer by the first twelve.
+        plan.layers[0].digest = format!("sha256:{}", "a".repeat(64));
+        plan.layers[1].digest = format!("sha256:{}", "b".repeat(64));
+        let mut pulling = Pulling::of(Some(&plan));
+        assert_eq!(pulling.total, 708);
+        assert_eq!(pulling.bytes(), 0);
+        pulling.observe("aaaaaaaaaaaa: Pull complete");
+        pulling.observe("bbbbbbbbbbbb: Downloading [==>    ] 70MB/700MB");
+        assert_eq!(pulling.bytes(), 5 + 105);
+        // Never backwards: a later line about an earlier state of the same layer counts nothing.
+        pulling.observe("aaaaaaaaaaaa: Waiting");
+        assert_eq!(pulling.bytes(), 110);
+        // A layer the plan does not list, and lines that are not a layer's, count nothing.
+        pulling.observe("cccccccccccc: Pull complete");
+        pulling.observe("stable: Pulling from intentic/sandbox");
+        pulling.observe("Digest: sha256:1234");
+        assert_eq!(pulling.bytes(), 110);
+        pulling.observe("bbbbbbbbbbbb: Pull complete");
+        assert_eq!(pulling.bytes(), 705);
+        // No plan (a registry that would not say): the pull runs and counts nothing.
+        let mut blind = Pulling::of(None);
+        blind.observe("aaaaaaaaaaaa: Pull complete");
+        assert_eq!((blind.bytes(), blind.total), (0, 0));
     }
 
     #[test]

@@ -175,10 +175,10 @@ describe("tunnelTargets", () => {
 
     // The target carries the resolved base, not the pairing's public address; that's how the loopback shortcut
     // reaches Mutagen's stream.
-    it("carries the base this pass resolved rather than the pairing's public address", () => {
-        const pairing = { sandboxId: "a", sandboxUrl: "https://a.dev", mode: "sync" as const, syncToken: "tok" };
+    it("carries the base this pass resolved, with the public address to fall back to", () => {
+        const pairing = { sandboxId: "a", sandboxUrl: "https://a.dev/", mode: "sync" as const, syncToken: "tok" };
         expect(tunnelTargets([{ pairing, base: "http://127.0.0.1:29293" }])).toEqual([
-            { sandboxId: "a", base: "http://127.0.0.1:29293", syncToken: "tok" },
+            { sandboxId: "a", base: "http://127.0.0.1:29293", syncToken: "tok", fallback: "https://a.dev" },
         ]);
     });
 
@@ -280,6 +280,56 @@ describe("bridgeConnection", () => {
 
         expect(await ended).toBeUndefined();
         expect(said[0]).toContain("did not open within 10s");
+    });
+});
+
+// (2026-10-21) A loopback daemon that does not open a stream costs that stream a few seconds, not ten, and the stream goes
+// through the public address instead; the caller hears so, to probe the loopback again.
+describe("a stream the loopback daemon does not open", () => {
+    const loopback = { ...target, base: "http://127.0.0.1:29293", fallback: "https://sandbox-0738cd6b5027.intentic.dev" };
+
+    it("is dialled again at the public address when the loopback socket fails, with ssh's early bytes kept", async () => {
+        stubGlobal("WebSocket", FakeSocket);
+        const { ssh, accepted, server } = await socketPair();
+        open.push(server, ssh, accepted);
+        const failed: string[] = [];
+        const said: string[] = [];
+
+        bridgeConnection(accepted, loopback, (message) => said.push(message), () => failed.push("loopback"));
+        const first = FakeSocket.last;
+        expect(first?.url).toBe("ws://127.0.0.1:29293/system/sync/ssh");
+        ssh.write("SSH-2.0-OpenSSH_9.6\r\n");
+        await sleep(50);
+        first?.fail();
+
+        const second = FakeSocket.last;
+        expect(second).not.toBe(first);
+        expect(second?.url).toBe("wss://sandbox-0738cd6b5027.intentic.dev/system/sync/ssh");
+        expect(failed).toEqual(["loopback"]);
+        expect(said).toEqual([]);
+        second?.open();
+        await sleep(50);
+        expect(second?.sentText).toBe("SSH-2.0-OpenSSH_9.6\r\n");
+    });
+
+    it("waits three seconds at the loopback address before the public one, and ten there before it gives up", async () => {
+        jest.useFakeTimers();
+        stubGlobal("WebSocket", FakeSocket);
+        const { ssh, accepted, server } = await socketPair();
+        open.push(server, ssh, accepted);
+        const ended = new Promise<void>((resolve) => ssh.once("close", () => resolve()));
+        const said: string[] = [];
+
+        bridgeConnection(accepted, loopback, (message) => said.push(message));
+        const first = FakeSocket.last;
+        await advanceTimersByTimeAsync(3_000);
+        expect(FakeSocket.last).not.toBe(first);
+        expect(FakeSocket.last?.url).toBe("wss://sandbox-0738cd6b5027.intentic.dev/system/sync/ssh");
+        await advanceTimersByTimeAsync(10_000);
+        jest.useRealTimers();
+
+        expect(await ended).toBeUndefined();
+        expect(said).toEqual([`the sync transport to ${target.sandboxId} did not open within 10s: the sandbox is not answering`]);
     });
 });
 

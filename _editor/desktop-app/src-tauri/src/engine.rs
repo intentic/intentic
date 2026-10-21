@@ -206,7 +206,6 @@ impl MoveReading {
 }
 
 /// The `ic` this app runs `ic engine` with: its own, which knows every field the card reads, else the one installed.
-/// `ic uninstall` too (uninstall.rs): the one beside this app is the same release, and is never the copy it removes.
 pub(crate) fn ic_program() -> Option<PathBuf> {
     commands::bundled_ic().or_else(|| {
         let home = std::env::var("USERPROFILE")

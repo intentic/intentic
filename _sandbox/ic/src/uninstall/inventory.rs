@@ -1,6 +1,6 @@
 /* WHAT INTENTIC HAS ON THIS DEVICE, read before anything is asked or touched. It is what the question names (so a
-person deciding knows what goes), what the steps are planned from, and what `--dry-run --json` and `--ini` hand the
-desktop app and the Windows uninstaller's page, which show the same choice.
+person deciding knows what goes), what the steps are planned from, and what `--dry-run --ini` hands the Windows
+uninstaller's page, which shows the same choice.
 
 It only reads, and every reading is bounded: an inventory that waits on a docker that does not answer would hold up
 the uninstaller's first page. What could not be read is said as unknown (no size), never guessed. */
@@ -8,20 +8,16 @@ the uninstaller's first page. What could not be read is said as unknown (no size
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use serde::Serialize;
-
 use super::host::{self, App};
 use super::plan::{self, Facts};
 use crate::docker;
 use crate::engine::leave as engine;
 use crate::sandbox::trash;
 
-/// One sandbox or runner as the inventory lists it.
-#[derive(Debug, Clone, Serialize)]
+/// One sandbox or runner as the inventory lists it, the recoverable ones included.
+#[derive(Debug, Clone)]
 pub struct SandboxRow {
     pub slug: String,
-    pub kind: &'static str,
-    pub state: String,
     pub bytes: Option<u64>,
 }
 
@@ -84,8 +80,6 @@ fn sandbox_rows(docker_up: bool) -> Vec<SandboxRow> {
         let size_of = |slug: &str| sizes.as_ref().map(|sizes| slug_bytes(sizes, slug));
         for slug in crate::sandbox::list_slugs() {
             rows.push(SandboxRow {
-                kind: kind_of(&slug),
-                state: state_word(&crate::sandbox::container_status(&slug)).to_string(),
                 bytes: size_of(&slug),
                 slug,
             });
@@ -95,8 +89,6 @@ fn sandbox_rows(docker_up: bool) -> Vec<SandboxRow> {
                 continue;
             }
             rows.push(SandboxRow {
-                kind: kind_of(&entry.slug),
-                state: "removed".to_string(),
                 bytes: size_of(&entry.slug),
                 slug: entry.slug,
             });
@@ -104,32 +96,9 @@ fn sandbox_rows(docker_up: bool) -> Vec<SandboxRow> {
         return rows;
     }
     for slug in recorded_slugs(&crate::logfile::intentic_home()) {
-        rows.push(SandboxRow {
-            kind: kind_of(&slug),
-            state: "unknown".to_string(),
-            bytes: None,
-            slug,
-        });
+        rows.push(SandboxRow { bytes: None, slug });
     }
     rows
-}
-
-/// docker's container state as the inventory says it: `running`, or `stopped` for every other state a container can be
-/// in (exited, created, paused, dead). Pure.
-pub fn state_word(docker_state: &str) -> &'static str {
-    if docker_state.trim() == "running" {
-        "running"
-    } else {
-        "stopped"
-    }
-}
-
-fn kind_of(slug: &str) -> &'static str {
-    if slug.starts_with("runner-") {
-        "runner"
-    } else {
-        "sandbox"
-    }
 }
 
 /// The slugs ic keeps a record for (`sandbox-<slug>.channel`, record.rs). Pure but for the listing.
@@ -249,8 +218,9 @@ fn synced_folders(agent_dir: &Path) -> usize {
         .unwrap_or(0)
 }
 
-/// The pairings of `sync.json` that sync a folder: `mode: "sync"`, not the projects host (sync/uninstall.ts
-/// `syncsAFolder`). Pure.
+/// The pairings of `sync.json` that sync a folder: `mode: "sync"`. One marked `projectsHost` held no folder: it was this
+/// computer's one sandbox that folders attached to, retired on 2026-10-21, and a `sync.json` the agent has not rewritten
+/// since may still carry it, so it is still not counted. Pure.
 pub fn folders_in(sync_json: &str) -> usize {
     serde_json::from_str::<serde_json::Value>(sync_json)
         .ok()
@@ -331,101 +301,7 @@ fn stays(engine_here: bool) -> Vec<String> {
     stays
 }
 
-/// The JSON `--dry-run --json` answers (the desktop app's dialog reads it: uninstall.rs there).
-#[derive(Serialize)]
-pub struct Document<'a> {
-    pub version: u32,
-    pub os: &'static str,
-    pub sandboxes: &'a [SandboxRow],
-    #[serde(rename = "deleteCount")]
-    pub delete_count: usize,
-    pub passwords: bool,
-    pub engine: Option<EngineDoc>,
-    pub agent: Option<AgentDoc>,
-    pub app: Option<AppDoc>,
-    #[serde(rename = "cacheBytes")]
-    pub cache_bytes: u64,
-    pub stays: Vec<String>,
-    pub found: Vec<String>,
-    pub steps: StepsDoc,
-}
-
-#[derive(Serialize)]
-pub struct EngineDoc {
-    pub bytes: Option<u64>,
-    #[serde(rename = "holdsOthers")]
-    pub holds_others: bool,
-}
-
-#[derive(Serialize)]
-pub struct AgentDoc {
-    pub folders: usize,
-    pub distros: Vec<String>,
-}
-
-#[derive(Serialize)]
-pub struct AppDoc {
-    pub version: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct StepDoc {
-    pub step: &'static str,
-    pub label: String,
-}
-
-#[derive(Serialize)]
-pub struct StepsDoc {
-    pub everything: Vec<StepDoc>,
-    #[serde(rename = "keep-sandboxes")]
-    pub keep_sandboxes: Vec<StepDoc>,
-}
-
 impl Inventory {
-    pub fn document(&self, without_app: bool) -> Document<'_> {
-        let facts = &self.facts;
-        let steps = |choice| {
-            plan::steps(facts, choice, without_app)
-                .into_iter()
-                .map(|planned| StepDoc {
-                    step: planned.step.id(),
-                    label: planned.label,
-                })
-                .collect()
-        };
-        Document {
-            version: 1,
-            os: if cfg!(windows) {
-                "windows"
-            } else if cfg!(target_os = "macos") {
-                "macos"
-            } else {
-                "linux"
-            },
-            sandboxes: &self.rows,
-            delete_count: facts.sandboxes,
-            passwords: facts.passwords,
-            engine: facts.engine.then_some(EngineDoc {
-                bytes: facts.engine_bytes,
-                holds_others: facts.engine_holds_others,
-            }),
-            agent: facts.agent.then(|| AgentDoc {
-                folders: facts.folders,
-                distros: facts.distros.clone(),
-            }),
-            app: self.app.as_ref().map(|app| AppDoc {
-                version: app.version.clone(),
-            }),
-            cache_bytes: facts.cache_bytes,
-            stays: plan::stays(facts),
-            found: plan::found(facts),
-            steps: StepsDoc {
-                everything: steps(plan::Choice::Everything),
-                keep_sandboxes: steps(plan::Choice::KeepSandboxes),
-            },
-        }
-    }
-
     /// The sandboxes' names for a report row: the first three, and how many more.
     pub fn sandbox_list_names(&self) -> String {
         let names: Vec<&str> = self.rows.iter().map(|row| row.slug.as_str()).collect();
@@ -454,13 +330,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn container_states_are_said_in_two_words() {
-        assert_eq!(state_word("running"), "running");
-        assert_eq!(state_word("exited"), "stopped");
-        assert_eq!(state_word("created"), "stopped");
-    }
-
-    #[test]
     fn docker_sizes_are_read_in_its_own_units() {
         assert_eq!(parse_docker_size("0B"), Some(0));
         assert_eq!(parse_docker_size("512kB"), Some(512_000));
@@ -480,6 +349,7 @@ mod tests {
 
     #[test]
     fn only_folder_pairings_count_as_synced_folders() {
+        // A retired projects host's folderless pairing, in a sync.json from before 2026-10-21, is not a folder.
         let json = r#"{"pairings":[{"mode":"sync","localDir":"/a"},{"mode":"sync","projectsHost":true},{"mode":"mirror"}]}"#;
         assert_eq!(folders_in(json), 1);
         assert_eq!(folders_in("not json"), 0);

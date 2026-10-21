@@ -465,7 +465,7 @@ pub struct SetupArgs {
     #[serde(default)]
     pub project: Option<String>,
     /// The slug `ic` names this sandbox's container by, where the app knows it before the run: a setup the app made
-    /// itself (machine_sandbox.rs) reads it off the address its code was minted for. Never from a link: a
+    /// itself (folder_setup.rs) reads it off the address its code was minted for. Never from a link: a
     /// finished setup without one finds its container as the newest (commands.rs `newest_slug`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub slug: Option<String>,
@@ -598,8 +598,8 @@ pub enum LauncherTo {
     Device,
     /// `to=files`: the folder the window is on.
     Files,
-    /// `to=agent`: whichever of the two the folder's way to an agent is standing at (windows.rs resolves it against
-    /// this computer's sandbox as it is at the moment of the press, not as it was when the link was written).
+    /// `to=agent`: back to the folder whose way to an agent began the sign-in, whose own sandbox's setup starts by
+    /// itself once the workspace says who signed in (windows.rs).
     Agent,
 }
 

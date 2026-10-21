@@ -57,7 +57,7 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
         // drawn from ic's byte readings (`parseDownload`) or docker's layers (`parseLayer`) whenever there are any, and
         // the estimate from the throughput measured over the last minute; only with neither does the weight time the
         // step, and then the bar creeps on towards its cap rather than stopping at it (`approach`). Kept at 240 because
-        // ic's ui.rs, machine_sandbox.rs and the web's agentHouse.ts draw the same plan from the shared
+        // ic's ui.rs, setup_progress.rs and the web's agentHouse.ts draw the same plan from the shared
         // setup-progress.fixture.json: a truer weight (~480) is a change to all four at once. An image already here is a
         // docker answer away, and weighted so: at 240 it held half the bar for a step that takes none.
         input.imageReady === true
@@ -65,15 +65,19 @@ export const setupPlan = (input: PlanInput): readonly PlanStep[] => {
             : { phase: `pulling-image`, label: () => t(`desktop.setupPlan.downloadSandboxImage`), weight: 240 },
         { phase: `starting-sandbox`, label: () => t(`desktop.setupPlan.startSandbox`), weight: 25 },
         { phase: `waiting-health`, label: () => t(`desktop.setupPlan.waitToComeUp`), weight: 40 },
-        { phase: `verifying`, label: () => t(`desktop.setupPlan.checkAnswers`), weight: 20 },
-        ...(input.syncing ? [{ phase: `desktop-sync`, label: () => t(`desktop.setupPlan.setUpFolderSync`), weight: 45 }] : []),
-        // Covers a silent ~100 MB agent download; sized against pulling-image so the bar doesn't stall near 99%.
-        { phase: `connecting-machine`, label: () => t(`desktop.setupPlan.connectDevice`), weight: 75 },
+        // The folder's sync starts as soon as the daemon answers, ahead of the public address's checks, so its first copy
+        // runs while they wait on the edge (ic's connect.rs, 2026-10-21). Weights from the step timings the funnel heard
+        // (`desktop_install_step`, 10-09 to 10-21): folder sync 46 s, verifying 8 s, connecting the device 13 s at the median.
+        ...(input.syncing ? [{ phase: `desktop-sync`, label: () => t(`desktop.setupPlan.setUpFolderSync`), weight: 46 }] : []),
+        { phase: `verifying`, label: () => t(`desktop.setupPlan.checkAnswers`), weight: 8 },
+        // The machine agent's ~100 MB download, when this computer has none, falls in the first of the two agent steps:
+        // folder sync when there is one, else this one, sized against pulling-image so the bar doesn't stall near 99%.
+        { phase: `connecting-machine`, label: () => t(`desktop.setupPlan.connectDevice`), weight: input.syncing ? 13 : 75 },
     ];
 };
 
 // Fraction complete per layer state; only Downloading and Extracting actually take time. The same table ic's ui.rs and
-// machine_sandbox.rs read docker's pull with, all three held to sandbox-run's setup-progress.fixture.json.
+// setup_progress.rs read docker's pull with, all three held to sandbox-run's setup-progress.fixture.json.
 export const LAYER_DONE: Readonly<Record<string, number>> = {
     "Pulling fs layer": 0,
     Waiting: 0,

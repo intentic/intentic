@@ -1,5 +1,5 @@
 {
-    "$comment": "The setup-progress lines a setup prints (ic's ui.rs `step`, `intentic: [<phase>] <sentence>`, and docker's pull, one line per layer per state) and how every reader takes them: ic's ui.rs, the desktop app's machine_sandbox.rs, desktop.ts and setupPlan.ts, and the web's agentHouse.ts. Each reader's tests read this file, so a phase, a weight or a layer state changed in one place and not the others fails a test.",
+    "$comment": "The setup-progress lines a setup prints (ic's ui.rs `step`, `intentic: [<phase>] <sentence>`, and docker's pull, one line per layer per state) and how every reader takes them: ic's ui.rs, the desktop app's setup_progress.rs, desktop.ts and setupPlan.ts, and the web's agentHouse.ts. Each reader's tests read this file, so a phase, a weight or a layer state changed in one place and not the others fails a test.",
     "phases": [
         "fetching-ic",
         "checking-docker",
@@ -10,8 +10,8 @@
         "creating-tunnel",
         "starting-sandbox",
         "waiting-health",
-        "verifying",
         "desktop-sync",
+        "verifying",
         "connecting-machine"
     ],
     "plans": [
@@ -25,9 +25,9 @@
                 ["pulling-image", 240],
                 ["starting-sandbox", 25],
                 ["waiting-health", 40],
-                ["verifying", 20],
-                ["desktop-sync", 45],
-                ["connecting-machine", 75]
+                ["desktop-sync", 46],
+                ["verifying", 8],
+                ["connecting-machine", 13]
             ]
         },
         {
@@ -40,9 +40,9 @@
                 ["pulling-image", 2],
                 ["starting-sandbox", 25],
                 ["waiting-health", 40],
-                ["verifying", 20],
-                ["desktop-sync", 45],
-                ["connecting-machine", 75]
+                ["desktop-sync", 46],
+                ["verifying", 8],
+                ["connecting-machine", 13]
             ]
         },
         {
@@ -56,7 +56,7 @@
                 ["pulling-image", 240],
                 ["starting-sandbox", 25],
                 ["waiting-health", 40],
-                ["verifying", 20],
+                ["verifying", 8],
                 ["connecting-machine", 75]
             ]
         },
@@ -71,9 +71,9 @@
                 ["pulling-image", 2],
                 ["starting-sandbox", 25],
                 ["waiting-health", 40],
-                ["verifying", 20],
-                ["desktop-sync", 45],
-                ["connecting-machine", 75]
+                ["desktop-sync", 46],
+                ["verifying", 8],
+                ["connecting-machine", 13]
             ]
         }
     ],

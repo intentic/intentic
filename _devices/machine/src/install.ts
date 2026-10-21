@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rm, symlink } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { errorMessage } from "@intentic/base/errors";
+import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { parseJsonWith } from "@intentic/base/json";
 import { runBounded } from "@intentic/base/process";
 import { renameOver } from "@intentic/base/fs";
 import { homeDir, type Log } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
-import { binDir } from "./config.js";
+import { baseDir, binDir } from "./config.js";
 import { adoptRunningDistros } from "./environments/commands.js";
 import { launchUpgrade, UPGRADE_ENV, upgradeHereToMachine } from "./environments/machine-upgrade.js";
 import { machineId } from "./machine-id.js";
@@ -17,6 +18,7 @@ import { verifyReleaseFiles } from "./release/release-verify.js";
 import { type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 import { readRegistryValue, type RegistryValue } from "./windows-registry.js";
+import { z } from "zod";
 
 // Everything an installer used to decide, decided once, here: the shims put a first agent down and exec `setup`.
 
@@ -27,7 +29,25 @@ export interface SelfUpdateIo {
     readonly installedAgent: () => boolean;
     readonly upgrade: () => Promise<UpgradeOutcome>;
     readonly reexec: (args: readonly string[], version: string) => never;
+    // When a setup last found this very release the newest, and the remembering of it; absent where nothing is kept.
+    readonly checkedCurrent?: () => Promise<CurrentCheck | undefined>;
+    readonly rememberCurrent?: (check: CurrentCheck) => Promise<void>;
 }
+
+// A setup's finding that the release it runs is the newest.
+export interface CurrentCheck {
+    readonly version: string;
+    readonly at: number;
+}
+
+// (2026-10-21) HOW LONG "THE NEWEST" HOLDS FOR THE NEXT SETUP. `ic` runs `sync setup` and then `device setup` back to back
+// for every new sandbox, and each asked the release channel again over the network, seconds apart; a folder getting a
+// sandbox of its own makes that every folder. A release a few minutes old is no reason to ask twice.
+export const CURRENT_FOR_MS = 10 * 60_000;
+
+// Whether a setup may skip asking: this same release was found the newest a moment ago. Pure.
+export const recentlyCurrent = (check: CurrentCheck | undefined, installed: string, now: number): boolean =>
+    check !== undefined && check.version === installed && now - check.at >= 0 && now - check.at < CURRENT_FOR_MS;
 
 // Setup runs on the machine's newest agent: this environment first, the rest of the PC right after (completeSetup).
 // A failed update is a note, never a refusal: the pairing token expires in minutes.
@@ -36,11 +56,18 @@ export const selfUpdateBeforeSetup = async (
     env: Record<string, string | undefined>,
     args: readonly string[],
     out: Log,
+    now: number = Date.now(),
 ): Promise<void> => {
     if (env[UPGRADE_ENV] !== undefined || io.installed === DEV_VERSION || !io.installedAgent()) {
         return;
     }
+    if (recentlyCurrent(await io.checkedCurrent?.(), io.installed, now)) {
+        return;
+    }
     const outcome = await io.upgrade();
+    if (outcome.kind === "current") {
+        await io.rememberCurrent?.({ version: io.installed, at: now });
+    }
     if (outcome.kind === "upgraded") {
         out(upgradeMessage(outcome));
         io.reexec(args, outcome.to);
@@ -50,10 +77,27 @@ export const selfUpdateBeforeSetup = async (
     }
 };
 
+// Where the finding is kept: one small file beside the agent's state, read and written by setup alone.
+const currentCheckPath = join(baseDir, "setup-current.json");
+
+const CurrentCheckSchema = z.object({ version: z.string(), at: z.number() });
+
 export const realSelfUpdateIo = (out: Log): SelfUpdateIo => ({
     installed: MACHINE_VERSION,
     installedAgent: runningAsInstalledAgent,
     upgrade: async () => await upgradeHereToMachine(out),
+    checkedCurrent: async () => {
+        const raw = await readFile(currentCheckPath, "utf8").catch(undefinedIfMissing);
+        return raw === undefined ? undefined : parseJsonWith(raw, CurrentCheckSchema);
+    },
+    rememberCurrent: async (check) => {
+        // A finding that could not be kept only means the next setup asks again.
+        try {
+            await writeFile(currentCheckPath, JSON.stringify(check));
+        } catch (error) {
+            out(`Couldn't note that this agent is current (${errorMessage(error)}).`);
+        }
+    },
     // The person's own `setup`, re-run on the new build in their terminal and for as long as it takes, so no deadline of
     // this process's own: setup bounds its own steps, and in this process's group their Ctrl-C reaches it.
     reexec: (args, version) => {

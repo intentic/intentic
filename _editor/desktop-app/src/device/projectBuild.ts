@@ -1,23 +1,25 @@
-import type { LocalFolderSandbox, LocalMachineSandbox, LocalMachineState } from "@intentic/web/local-host";
-import type { MachineSandbox, MachineStanding } from "../desktop";
-import { machineFolderOf } from "./machineSandbox";
+import type { LocalFolderSetup, LocalSetupState } from "@intentic/web/local-host";
+import { type FolderSetup, type FolderStanding, requirementOf } from "../desktop";
 
-// THIS COMPUTER'S SANDBOX AND A FOLDER ON ITS WAY INTO IT, AS THE WINDOW'S CARD AND BUTTON DRAW THEM (the web's
-// local/LocalMachineCard.vue, local/LocalFiles.vue): the app's record (machine_sandbox.rs, device/machineSandbox.ts),
-// read into the few facts the shell takes. Pure, so what each state comes to is tested by value.
+// A FOLDER ON ITS WAY TO ITS OWN SANDBOX, AS THE WINDOW'S CARD AND BUTTON DRAW IT (the web's local/LocalSetupCard.vue,
+// local/LocalFiles.vue): the app's record (folder_setup.rs, device/folderSetups.ts), read into the few facts the shell
+// takes. Pure, so what each state comes to is tested by value.
 
-/** Where it stands, in the shell's shape: what the record leaves out is said as undefined. A stopped one carries why its
- * last start failed, where the record says. */
-export const machineStateOf = (standing: MachineStanding & { readonly startError?: string | undefined }): LocalMachineState => {
+/** What a setup stopped on a question said this computer needs, in its own words (each requirement's title). */
+export const needsOf = (requirements: readonly unknown[] | undefined): readonly string[] =>
+    (requirements ?? []).map(requirementOf).flatMap((requirement) => (requirement === undefined || requirement.title === `` ? [] : [requirement.title]));
+
+/** Where it stands, in the shell's shape: what the record leaves out is said as undefined. */
+export const setupStateOf = (standing: FolderStanding & { readonly requirements?: readonly unknown[] | undefined }): LocalSetupState => {
     switch (standing.state) {
-        case `stopped`:
-            return standing.startError === undefined ? { state: `stopped` } : { state: `stopped`, reason: standing.startError };
+        case `queued`:
+            return { state: `queued`, behind: standing.behind };
         case `creating`:
             return { state: `creating`, phase: standing.phase, step: standing.step, percent: standing.percent };
         case `needsDocker`:
             return { state: `needsDocker`, reason: standing.reason };
         case `waiting`:
-            return { state: `waiting`, for: standing.for };
+            return { state: `waiting`, for: standing.for, needs: needsOf(standing.requirements) };
         case `failed`:
             return { state: `failed`, reason: standing.reason };
         default:
@@ -25,22 +27,18 @@ export const machineStateOf = (standing: MachineStanding & { readonly startError
     }
 };
 
-/** The record as every window's card draws it; nothing before the app has said. */
-export const machineOf = (record: MachineSandbox | undefined): LocalMachineSandbox | undefined =>
+/** The record as the window's card draws it; nothing for a folder not on its way. */
+export const folderSetupFor = (record: FolderSetup | undefined): LocalFolderSetup | undefined =>
     record === undefined
         ? undefined
         : {
-              ...machineStateOf(record),
+              ...setupStateOf(record),
               name: record.name,
-              waiting: record.folders.filter((folder) => folder.state === `queued`).length,
+              status: record.status,
+              heldBy: record.heldBy ?? [],
+              made: record.made,
               hasLog: record.logPath !== undefined,
           };
-
-/** The folder this window shows (its face's `path`) on its way into this computer's sandbox; nothing when it is not. */
-export const folderOf = (record: MachineSandbox | undefined, path: string | undefined): LocalFolderSandbox | undefined => {
-    const folder = machineFolderOf(record, path);
-    return folder === undefined ? undefined : { name: folder.name, state: folder.state, reason: folder.reason, status: folder.status, heldBy: folder.heldBy };
-};
 
 /** The workspace's address for a folder's sandbox, opened on the folder (the app's project.rs `project_path`). */
 export const projectPathOf = (args: { readonly sandboxId: string | undefined; readonly project: string | undefined }): string | undefined => {

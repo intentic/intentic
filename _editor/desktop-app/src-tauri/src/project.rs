@@ -6,13 +6,13 @@
 //! the folder changes until the window's "Bring back changes" brings what they did back, keeping a restore point first
 //! ([`work`]).
 //!
-//! A folder ATTACHES to this computer's own sandbox (machine_sandbox.rs), which the app makes once, after sign-in, in
-//! the background: [`project_preview`] says what the window's dialog draws (the folder's size, what to beware of, why
-//! it cannot have one, how far this computer's sandbox is), and [`project_attach`] puts the folder in line for it and
-//! answers at once. The supervisor attaches it the moment the sandbox is ready (`intentic-machine sync attach`) and
-//! follows its first copy; the window's card and button draw both. A folder that already has a sandbox of its own (a
-//! per-folder one from before) keeps opening that one: nothing is moved. Which folder is in which sandbox is the machine
-//! agent's pairings alone (bindings.rs). A hosted sandbox's project is
+//! A folder BECOMES ITS OWN SANDBOX (folder_setup.rs, 2026-10-21): [`project_preview`] says what the window's dialog
+//! draws (the folder's size, what to beware of, why it cannot have one, whether a sign-in comes first), and
+//! [`project_create`] puts the folder in line for a sandbox of its own and answers at once. The app makes it, whichever
+//! window is open, and follows its first copy; the window's card and button draw both. A folder that already has a
+//! sandbox keeps opening that one, including one attached to the one-per-computer sandbox earlier versions made (an
+//! ordinary sandbox now): nothing is moved. Which folder is in which sandbox is the machine agent's pairings alone
+//! (bindings.rs). A hosted sandbox's project is
 //! enrolled as `intentic://sync?…&project=<name>` ([`sync_project`]), and the workspace's own `/setup` page can still
 //! hand a project's setup back as `intentic://setup?…&project=<name>` ([`bind`]). The path never rides a link or a
 //! command, so no page can point a sandbox at a folder the user did not pick: it is always the folder of the window
@@ -444,14 +444,6 @@ fn opening_event(stage: &str) -> String {
     format!("window.dispatchEvent(new CustomEvent('intentic:sandbox-opening', {{ detail: {detail} }}));")
 }
 
-/// Whether `slug` is this computer's own sandbox and the app last found it running. The app keeps watch on that one
-/// (machine_sandbox.rs, re-read every few minutes while it is ready), so a press on a folder in it need not wait on a
-/// listing of its own before the workspace goes up.
-fn known_running(record: &crate::machine_sandbox::Record, slug: &str) -> bool {
-    record.slug.as_deref() == Some(slug)
-        && record.standing == crate::machine_sandbox::Standing::Ready
-}
-
 /// The workspace's address for a project's sandbox: the sandbox, and its folder to open on.
 pub fn project_path(sandbox_id: &str, dir: &str) -> String {
     format!(
@@ -473,18 +465,13 @@ fn stopped_in(rows: &[serde_json::Value], slug: &str) -> bool {
 /// minute (one with a shape saved for its next restart is recreated with it, `ic sandbox start`). `asked_in` is the
 /// window that pressed, which is told how far it has come and whose place the workspace takes ([`show_project`]).
 ///
-/// The listing that finds out is `ic sandbox list`, a second or two of Docker calls, which every press waited on with
-/// nothing on screen moving (2026-10-17). This computer's own sandbox, which the app already watches, goes up at once
-/// when the app last found it running; the listing still runs behind it, to start one stopped since that look.
+/// The listing that finds out is `ic sandbox list`, a second or two of Docker calls; the window's button says it is
+/// opening from the press on (`intentic:sandbox-opening`), so nothing on screen stands still meanwhile.
 fn open_existing(app: &AppHandle, asked_in: Option<&str>, project: &Project) {
     let Some(slug) = project.slug.clone() else {
         show_project(app, asked_in, project);
         return;
     };
-    let shown = known_running(&crate::machine_sandbox::status(app), &slug);
-    if shown {
-        show_project(app, asked_in, project);
-    }
     let app = app.clone();
     let project = project.clone();
     let asked_in = asked_in.map(str::to_owned);
@@ -492,22 +479,18 @@ fn open_existing(app: &AppHandle, asked_in: Option<&str>, project: &Project) {
         let version = crate::commands::VERSION;
         let host = crate::scripts::Host::current();
         let listed = crate::scripts::ic_listing(&app, crate::commands::list_script(host, version));
+        if let Ok(rows) = &listed {
+            crate::bindings::heard_listing(rows);
+        }
         if listed.is_ok_and(|rows| stopped_in(&rows, &slug)) {
-            if !shown {
-                tell_opening(&app, asked_in.as_deref(), "starting");
-            }
+            tell_opening(&app, asked_in.as_deref(), "starting");
             let started = crate::commands::power_script(&slug, "start", host, version)
                 .and_then(|run| crate::scripts::run(&app, &format!("power:{slug}"), run));
             if let Err(error) = started {
                 eprintln!("could not start {slug}: {error}");
             }
-            // Started here, behind the record's back: it looks again now rather than in a few minutes, so every
-            // window stops saying it is stopped or asleep (the app's own look had it running, or not).
-            crate::machine_sandbox::kick();
         }
-        if !shown {
-            show_project(&app, asked_in.as_deref(), &project);
-        }
+        show_project(&app, asked_in.as_deref(), &project);
     });
 }
 
@@ -535,8 +518,8 @@ pub(crate) fn is_live(roster: &Roster, project: &Project) -> bool {
 }
 
 /// The live project that holds `root`, and where `root` is inside it: the folder itself (""), or the nearest folder
-/// around it that went into a sandbox. A folder inside one that is in this computer's sandbox is in it already, so it is
-/// opened, told and brought back from as that one, never attached a second time beside it (2026-10-12).
+/// around it that went into a sandbox. A folder inside one that has a sandbox is in it already, so it is opened, told
+/// and brought back from as that one, never given a second sandbox beside it (2026-10-12).
 pub(crate) fn covering_project(app: &AppHandle, root: &Path) -> Option<(Project, String)> {
     let roster = app.state::<AppState>().roster();
     holding(
@@ -590,7 +573,7 @@ pub(crate) fn narrowed(mut result: serde_json::Value, inside: &str) -> serde_jso
 }
 
 /// The project holding `root`, while its sandbox is still there ([`covering_project`]).
-fn live_project_of(app: &AppHandle, root: &Path) -> Option<Project> {
+pub(crate) fn live_project_of(app: &AppHandle, root: &Path) -> Option<Project> {
     covering_project(app, root).map(|(project, _)| project)
 }
 
@@ -604,13 +587,10 @@ fn refusal_here(app: &AppHandle, root: &Path) -> Option<Refusal> {
         .filter(|project| is_live(&roster, project))
         .map(|project| PathBuf::from(&project.path))
         .collect();
-    // And the folders on their way in: two in line, one inside the other, would sync the same files twice.
+    // And the folders on their way to a sandbox of their own: two, one inside the other, would sync the same files twice.
     taken.extend(
-        crate::machine_sandbox::status(app)
-            .folders
-            .iter()
-            .filter(|folder| folder.state != crate::machine_sandbox::FolderState::Failed)
-            .map(|folder| PathBuf::from(&folder.path))
+        crate::folder_setup::on_their_way(app)
+            .into_iter()
             .filter(|path| path != root),
     );
     let home = app.path().home_dir().ok();
@@ -684,7 +664,7 @@ pub enum Preview {
     Document,
     /// The folder cannot have a sandbox, and why.
     Refused { refusal: Refusal },
-    /// It can go into this computer's sandbox.
+    /// It can have a sandbox of its own.
     #[serde(rename_all = "camelCase")]
     New {
         /// The folder's own name, which the sandbox is called after.
@@ -699,34 +679,27 @@ pub enum Preview {
         /// Enough that the first copy is a long upload.
         large: bool,
         cautions: Vec<Caution>,
-        /// How far this computer's own sandbox is, which the folder goes into (machine_sandbox.rs): the dialog says
-        /// whether the copy starts now or once it is ready.
-        machine: crate::machine_sandbox::Standing,
+        /// Someone is signed in, as the workspace last said: the press makes the sandbox at once, else signs in first.
+        signed_in: bool,
     },
 }
 
-/// What the folder's dialog asks for when its button is pressed: the folder's name inside `/work`, which the page
-/// derived from the folder's own (sandbox-contract's `projectDirNameFor`) and which is held to its rule here and made
-/// unique among the folders already in this computer's sandbox. Never a folder: that is always the window's own.
+/// What the folder's dialog asks for when its button is pressed: the folder's name inside its sandbox's `/work`, which
+/// the page derived from the folder's own (sandbox-contract's `projectDirNameFor`) and which is held to its rule here.
+/// The sandbox is the folder's alone, so the name never has to step aside for another's. Never a folder: that is always
+/// the window's own.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AttachAsk {
+pub struct CreateAsk {
     pub project: String,
-    /// The names it may take instead when `project` is taken, best first (sandbox-contract's `projectDirCandidates`:
-    /// `code-app` for a second `app`). Each is held to the same rule; an older page sends none.
-    #[serde(default)]
-    pub alternatives: Vec<String>,
 }
-
-/// The most alternatives a press is held to: the page sends three at most, and a page is never trusted with more.
-const ALTERNATIVES_MAX: usize = 3;
 
 /// What came of the press. It never waits on the sandbox: the window's card and button follow the folder from here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
-pub enum Attached {
-    /// In line for this computer's sandbox under `name`: attached as soon as it is ready, at once when it is.
-    Queued { name: String },
+pub enum Created {
+    /// Its sandbox is on its way, the folder in it as `name`.
+    Started { name: String },
     /// The folder had its sandbox by the time the press arrived, and it was opened.
     Opened,
 }
@@ -740,8 +713,8 @@ pub(crate) fn is_sandbox_name(name: &str) -> bool {
 
 const DOCUMENT: &str = "A sandbox works on a whole folder. Open the folder this document is in, then ask again from there.";
 
-/// What the folder's dialog draws: the sandbox the folder has, why it cannot have one, or what going into this
-/// computer's sandbox involves.
+/// What the folder's dialog draws: the sandbox the folder has, why it cannot have one, or what a sandbox of its own
+/// involves.
 #[tauri::command]
 pub async fn project_preview(app: AppHandle, window: Webview) -> Result<Preview, String> {
     let Some(root) = crate::local::folder_of(&app, window.label()) else {
@@ -766,64 +739,39 @@ pub async fn project_preview(app: AppHandle, window: Webview) -> Result<Preview,
         more: files >= COUNT_LIMIT,
         large: files >= MANY_FILES || bytes >= MANY_BYTES,
         cautions: cautions(&root),
-        machine: crate::machine_sandbox::status(&app).standing,
+        signed_in: app.state::<AppState>().roster().account.is_some(),
     })
 }
 
-/// "Work on this with an agent" in the folder's dialog: the folder put in line for this computer's sandbox, and the
-/// supervisor told. Answered at once, whatever the sandbox is doing: nobody signed in, no Docker, a sandbox still going
-/// up all leave the folder waiting, and the window's card says what it waits for (2026-10-05).
+/// "Work on this with an agent" in the folder's dialog: a sandbox of the folder's own, put in line, and the supervisor
+/// told (folder_setup.rs). Answered at once, whatever is under way: nobody signed in, no Docker, another folder's setup
+/// running all leave the folder waiting, and the window's card says what for.
 #[tauri::command]
-pub async fn project_attach(
+pub async fn project_create(
     app: AppHandle,
     window: Webview,
-    ask: AttachAsk,
-) -> Result<Attached, String> {
+    ask: CreateAsk,
+) -> Result<Created, String> {
     let Some(root) = crate::local::folder_of(&app, window.label()) else {
         return Err(DOCUMENT.to_string());
     };
     if let Some(project) = live_project_of(&app, &root) {
         open_existing(&app, Some(window.label()), &project);
-        return Ok(Attached::Opened);
+        return Ok(Created::Opened);
     }
-    // Remembered against a sandbox that is gone: its folder goes into this computer's, once the old one lets go of it.
-    let stale = project_of(&app, &root).is_some();
-    if let Some(why) = refusal_here(&app, &root) {
-        return Err(why.sentence(&root));
-    }
-    if !is_project_dir_name(&ask.project) {
-        return Err(format!(
-            "{} can't be used to name a folder in a sandbox. Rename the folder and try again.",
-            folder_name(&root)
-        ));
-    }
-    if stale {
-        let folder = root.clone();
-        let held = app.clone();
-        let _ = tauri::async_runtime::spawn_blocking(move || release_folder(&held, &folder)).await;
-    }
-    let alternatives: Vec<String> = ask
-        .alternatives
-        .into_iter()
-        .filter(|name| is_project_dir_name(name))
-        .take(ALTERNATIVES_MAX)
-        .collect();
-    attach_named(&app, &root, &ask.project, &alternatives)
+    let held = app.clone();
+    tauri::async_runtime::spawn_blocking(move || create_named(&held, &root, &ask.project))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
-/// A folder put in line for this computer's sandbox by path alone (first_task.rs) as well as by a window's press: the
-/// same queueing as [`project_attach`], with the names the folder may take instead of `project` when it is taken.
-pub fn attach_named(
-    app: &AppHandle,
-    root: &Path,
-    project: &str,
-    alternatives: &[String],
-) -> Result<Attached, String> {
+/// A folder put in line for a sandbox of its own by path alone (first_task.rs) as well as by a window's press: the
+/// same checks as [`project_create`]. BLOCKING: a folder remembered against a sandbox that is gone is let go of first.
+pub fn create_named(app: &AppHandle, root: &Path, project: &str) -> Result<Created, String> {
     if let Some(existing) = live_project_of(app, root) {
         open_existing(app, None, &existing);
-        return Ok(Attached::Opened);
+        return Ok(Created::Opened);
     }
-    let stale = project_of(app, root).is_some();
     if let Some(why) = refusal_here(app, root) {
         return Err(why.sentence(root));
     }
@@ -833,11 +781,12 @@ pub fn attach_named(
             folder_name(root)
         ));
     }
-    if stale {
+    // Remembered against a sandbox that is gone: the agent keeps one sync per folder, so the dead one lets go first.
+    if project_of(app, root).is_some() {
         release_folder(app, root);
     }
-    let name = crate::machine_sandbox::queue(app, root, project, alternatives);
-    Ok(Attached::Queued { name })
+    let record = crate::folder_setup::begin(app, root, project);
+    Ok(Created::Started { name: record.name })
 }
 
 /// Why a folder cannot be the first task's project, in the reader's words.
@@ -890,8 +839,8 @@ pub(crate) fn folder_paths_same(a: &Path, b: &Path, windows: bool) -> bool {
 }
 
 /// The machine agent's pairings (`intentic-machine status --json`, `sync.pairings`) whose folder is `folder`, spelled
-/// as the platform compares one (case folded, either slash, on Windows): what a folder's first copy into this
-/// computer's sandbox is followed by too (machine_sandbox.rs).
+/// as the platform compares one (case folded, either slash, on Windows): what a folder's first copy into its sandbox is
+/// followed by too (folder_setup.rs).
 pub(crate) fn pairings_of<'a>(
     status: &'a serde_json::Value,
     folder: &Path,
@@ -951,13 +900,13 @@ pub(crate) fn release_folder(app: &AppHandle, folder: &Path) {
  * and nothing of this app's is left to say otherwise (2026-10-20). The account listing a sandbox no more is the
  * platform's record of it, not an absence guessed here; a roster with nobody signed in decides nothing. */
 
-/// The projects whose sandbox the account no longer lists, read off a roster that names who is signed in. Never the
-/// sandbox this computer's own supervisor keeps (`kept`, machine_sandbox.rs), which says for itself when that one is
-/// gone, nor an entry with no sandbox id. Pure.
+/// The projects whose sandbox the account no longer lists, read off a roster that names who is signed in. Never a
+/// sandbox a folder's setup made moments ago (`kept`, folder_setup.rs), which the workspace may not list yet, nor an
+/// entry with no sandbox id. Pure.
 pub(crate) fn stale_projects(
     projects: &[Project],
     roster: &Roster,
-    kept: Option<&str>,
+    kept: &[String],
 ) -> Vec<Project> {
     if roster.account.is_none() {
         return Vec::new();
@@ -966,7 +915,8 @@ pub(crate) fn stale_projects(
         .iter()
         .filter(|project| {
             project.sandbox_id.as_deref().is_some_and(|id| {
-                Some(id) != kept && !roster.sandboxes.iter().any(|entry| entry.id == id)
+                !kept.iter().any(|held| held == id)
+                    && !roster.sandboxes.iter().any(|entry| entry.id == id)
             })
         })
         .cloned()
@@ -991,8 +941,8 @@ pub(crate) fn dropped_sandboxes(before: &Roster, after: &Roster) -> Vec<String> 
         .collect()
 }
 
-/// The platform id of the sandbox whose container is `slug` here, as this app remembers it: a folder's project, or this
-/// computer's own sandbox.
+/// The platform id of the sandbox whose container is `slug` here, as this app remembers it: a folder's project, or a
+/// folder's sandbox still being made.
 pub(crate) fn sandbox_id_of_slug(app: &AppHandle, slug: &str) -> Option<String> {
     app.state::<AppState>()
         .projects()
@@ -1000,12 +950,10 @@ pub(crate) fn sandbox_id_of_slug(app: &AppHandle, slug: &str) -> Option<String> 
         .find(|project| project.slug.as_deref() == Some(slug))
         .and_then(|project| project.sandbox_id)
         .or_else(|| {
-            let record = crate::machine_sandbox::status(app);
-            record
-                .slug
-                .as_deref()
-                .filter(|held| *held == slug)
-                .and(record.sandbox_id)
+            crate::folder_setup::known_rows(app)
+                .into_iter()
+                .find(|row| row.slug.as_deref() == Some(slug))
+                .map(|row| row.id)
         })
 }
 
@@ -1017,12 +965,10 @@ fn slug_of_sandbox(app: &AppHandle, id: &str) -> Option<String> {
         .find(|project| project.sandbox_id.as_deref() == Some(id))
         .and_then(|project| project.slug)
         .or_else(|| {
-            let record = crate::machine_sandbox::status(app);
-            record
-                .sandbox_id
-                .as_deref()
-                .filter(|held| *held == id)
-                .and(record.slug)
+            crate::folder_setup::known_rows(app)
+                .into_iter()
+                .find(|row| row.id == id)
+                .and_then(|row| row.slug)
         })
 }
 
@@ -1040,16 +986,13 @@ pub(crate) fn forget_sandbox(slug: Option<&str>, sandbox_id: Option<&str>) {
 /// to let go, since the account's other sandboxes (hosted, shared) were never synced here. By their platform row, as
 /// the roster names the ones that went (bindings.rs `platform_id`, 2026-10-21; a sandbox whose row this app does not
 /// know is none of them). Pure.
-fn paired_sandboxes(
-    status: &serde_json::Value,
-    mine: &crate::machine_sandbox::Record,
-) -> HashSet<String> {
+fn paired_sandboxes(status: &serde_json::Value, rows: &[crate::bindings::Row]) -> HashSet<String> {
     status["sync"]["pairings"]
         .as_array()
         .map(|pairings| {
             pairings
                 .iter()
-                .filter_map(|pairing| crate::bindings::platform_id(pairing, mine))
+                .filter_map(|pairing| crate::bindings::platform_id(pairing, rows))
                 .collect()
         })
         .unwrap_or_default()
@@ -1064,8 +1007,9 @@ pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let kept = crate::machine_sandbox::kept_sandbox_id(&app);
-        let stale = stale_projects(&app.state::<AppState>().projects(), &after, kept.as_deref());
+        let rows = crate::folder_setup::known_rows(&app);
+        let kept: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
+        let stale = stale_projects(&app.state::<AppState>().projects(), &after, &kept);
         let mut gone: Vec<(Option<String>, String)> = Vec::new();
         for project in stale {
             if let Some(id) = project.sandbox_id {
@@ -1075,7 +1019,7 @@ pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
             }
         }
         for id in dropped_sandboxes(&before, &after) {
-            if Some(&id) != kept.as_ref() && !gone.iter().any(|(_, held)| *held == id) {
+            if !kept.contains(&id) && !gone.iter().any(|(_, held)| *held == id) {
                 gone.push((slug_of_sandbox(&app, &id), id));
             }
         }
@@ -1085,7 +1029,17 @@ pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
         let Some(report) = crate::bindings::refresh(&app) else {
             return;
         };
-        let paired = paired_sandboxes(&report, &crate::machine_sandbox::status(&app));
+        let mut known = rows;
+        for project in app.state::<AppState>().projects() {
+            if let Some(id) = project.sandbox_id {
+                known.push(crate::bindings::Row {
+                    id,
+                    slug: project.slug,
+                    hostname: None,
+                });
+            }
+        }
+        let paired = paired_sandboxes(&report, &known);
         let forgotten: Vec<_> = gone.iter().filter(|(_, id)| paired.contains(id)).collect();
         for (slug, id) in &forgotten {
             forget_sandbox(slug.as_deref(), Some(id));
@@ -1126,7 +1080,7 @@ pub(crate) enum Minted {
     Code {
         code: String,
         slug: Option<String>,
-        /// The sandbox's public address, which a folder attaches to (`--sandbox-url https://<hostname>`).
+        /// The sandbox's public address, by which the machine agent names it (bindings.rs `agent_id_of`).
         hostname: Option<String>,
     },
     SignedOut,
@@ -1146,8 +1100,8 @@ fn is_hostname(hostname: &str) -> bool {
 }
 
 /// Ask the platform for a setup code for the row `sandbox_id`, with the workspace's session the webview of `window`
-/// holds: this computer's own sandbox (machine_sandbox.rs), and a setup whose code ran out (commands.rs
-/// `setup_fresh_code`). [`minted_code`] reads the answer.
+/// holds: a folder's own sandbox (folder_setup.rs), and a setup whose code ran out (commands.rs `setup_fresh_code`).
+/// [`minted_code`] reads the answer.
 pub(crate) async fn mint_code(
     app: &AppHandle,
     window: &Webview,
@@ -1740,9 +1694,9 @@ mod tests {
         }
     }
 
-    // A folder inside one already in the sandbox is that one's: the nearest around it, never a second attach.
+    // A folder inside one that has a sandbox is that one's: the nearest around it, never a second sandbox.
     #[test]
-    fn a_folder_inside_an_attached_one_is_held_by_the_nearest() {
+    fn a_folder_inside_one_with_a_sandbox_is_held_by_the_nearest() {
         let projects = vec![
             project_at("/home/me/code", "code"),
             project_at("/home/me/code/app", "app"),
@@ -1908,11 +1862,7 @@ mod tests {
             cautions: vec![Caution::Synced {
                 service: "OneDrive".into(),
             }],
-            machine: crate::machine_sandbox::Standing::Creating {
-                phase: Some("pulling-image".into()),
-                step: None,
-                percent: 42,
-            },
+            signed_in: true,
         };
         assert_eq!(
             serde_json::to_value(preview).unwrap(),
@@ -1925,7 +1875,7 @@ mod tests {
                 "more": false,
                 "large": false,
                 "cautions": [{ "kind": "synced", "service": "OneDrive" }],
-                "machine": { "state": "creating", "phase": "pulling-image", "percent": 42 },
+                "signedIn": true,
             })
         );
         assert_eq!(
@@ -1997,7 +1947,7 @@ mod tests {
                 hostname: Some("-x.example".into())
             }
         );
-        // An address that is not a plain hostname is no address to attach a folder to.
+        // An address that is not a plain hostname is no address to name a sandbox by.
         assert_eq!(
             minted_code(ok(
                 serde_json::json!({ "code": "c0de", "hostname": "evil.example/x?y" })
@@ -2064,8 +2014,8 @@ mod tests {
     }
 
     /// A folder's entry goes once the account's own listing no longer has its sandbox; never on a roster with nobody
-    /// signed in, never one with no sandbox id, and never this computer's own sandbox, whose supervisor says when it is
-    /// gone.
+    /// signed in, never one with no sandbox id, and never one a folder's setup made moments ago, which the workspace may
+    /// not list yet.
     #[test]
     fn a_projects_entry_goes_with_the_sandbox_the_account_no_longer_lists() {
         let projects = vec![
@@ -2075,9 +2025,9 @@ mod tests {
             project(Some("cm-machine")),
         ];
         let listed = roster_of(&["cm-live"], true);
-        let stale = stale_projects(&projects, &listed, Some("cm-machine"));
+        let stale = stale_projects(&projects, &listed, &["cm-machine".to_string()]);
         assert_eq!(stale, vec![project(Some("cm-gone"))]);
-        assert!(stale_projects(&projects, &roster_of(&[], false), None).is_empty());
+        assert!(stale_projects(&projects, &roster_of(&[], false), &[]).is_empty());
     }
 
     /// (2026-10-21) What this machine syncs is compared with the roster's rows, so it is named by the row too: the
@@ -2085,14 +2035,13 @@ mod tests {
     /// one this machine is told to let go of for a roster.
     #[test]
     fn the_sandboxes_this_machine_syncs_are_named_by_their_platform_row() {
-        let mine = crate::machine_sandbox::Record {
-            sandbox_id: Some("cmvc7h3cl002801mkboza1qz6".into()),
+        let mine = vec![crate::bindings::Row {
+            id: "cmvc7h3cl002801mkboza1qz6".into(),
             slug: Some("sandbox-7953ae151fa4".into()),
             hostname: Some("sandbox-7953ae151fa4.sbx.intentic.dev".into()),
-            ..crate::machine_sandbox::Record::default()
-        };
+        }];
         let status = serde_json::json!({ "sync": { "pairings": [
-            { "sandboxId": "sandbox-7953ae151fa4-sbx-intentic-dev", "mode": "sync", "projectsHost": true },
+            { "sandboxId": "sandbox-7953ae151fa4-sbx-intentic-dev", "mode": "sync", "localDir": "/home/ada/code/app", "remoteDir": "/work/app" },
             { "sandboxId": "sandbox-cfde7c98599a-sbx-intentic-dev", "mode": "sync", "localDir": "/home/ada/intentic/workspace" },
         ] } });
         assert_eq!(
@@ -2399,27 +2348,6 @@ mod tests {
         assert!(!stopped_in(&rows, "web"));
         assert!(!stopped_in(&rows, "odd"));
         assert!(!stopped_in(&rows, "elsewhere"));
-    }
-
-    #[test]
-    fn only_this_computers_sandbox_found_running_skips_the_listing() {
-        use crate::machine_sandbox::{Record, Standing};
-        let ready = Record {
-            standing: Standing::Ready,
-            slug: Some("ada-local".to_string()),
-            ..Record::default()
-        };
-        assert!(known_running(&ready, "ada-local"));
-        // Another sandbox on this machine is not one the app watches: its state is the listing's to say.
-        assert!(!known_running(&ready, "acme-shop"));
-        // Stopped, or anything short of ready, is started (or waited on) before the workspace goes up.
-        for standing in [Standing::Stopped, Standing::SignedOut] {
-            let record = Record {
-                standing,
-                ..ready.clone()
-            };
-            assert!(!known_running(&record, "ada-local"));
-        }
     }
 
     #[test]

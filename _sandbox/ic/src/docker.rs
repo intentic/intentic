@@ -1294,20 +1294,27 @@ fn is_layer_chatter(line: &str) -> bool {
 fn pull_once(image: &str, log: &Log) -> Result<Streamed> {
     // Every layer line also reaches a prepare's progress marker, if one is running (sandbox/preparing.rs): the
     // background prepare has no terminal, and it is the download the update card most needs to see.
+    // So does a pull ahead of the first setup, counted for its own markers (image_cache.rs `pull_ahead`).
     let shown = if crate::ui::is_rich() {
         Shown::Lines {
             keep: |line| {
-                crate::sandbox::preparing::observe(line);
+                observe_pull(line);
                 !crate::ui::pull_line(line)
             },
             show: crate::ui::note,
         }
     } else {
         Shown::Watched {
-            watch: crate::sandbox::preparing::observe,
+            watch: observe_pull,
         }
     };
     stream(&["pull", image], None, shown, log)
+}
+
+/// One line of a pull, to whoever is counting one: a prepare being announced, a pull ahead of the first setup.
+fn observe_pull(line: &str) {
+    crate::sandbox::preparing::observe(line);
+    crate::image_cache::observe_pull(line);
 }
 
 #[cfg(test)]

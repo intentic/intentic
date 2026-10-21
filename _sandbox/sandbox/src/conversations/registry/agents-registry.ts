@@ -992,7 +992,7 @@ export const createFleet = (
             ...opt("landedPresence", presenceOnCard(presences.of(entry.id), entryOf)),
             // Stands until a land runs to a verdict, whatever turns run meanwhile.
             ...opt("landFailure", entry.landing.failure === undefined ? undefined : landFailureOnCard(entry.landing.failure)),
-            // What its last land did in the owner's folder, for a project attached to this computer's sandbox.
+            // What its last land did in the owner's folder, on a project sandbox.
             ...opt("delivery", entry.landing.delivery),
         };
     };

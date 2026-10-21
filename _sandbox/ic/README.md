@@ -93,12 +93,14 @@ flowchart LR
 - A sandbox for one folder of the owner's (`SYNC_REMOTE_DIR=/work/<name>` with `SYNC_PROJECT=1`, beside `SYNC_DIR`)
   is checked before anything starts (`project_dir.rs`, the contract's name rule), hands the sync installer both, and
   tells the container `SANDBOX_PROJECT_DIR`, which the run contract replays across every later swap.
-- The desktop app's one sandbox per computer, which folders attach to later, is asked for with `SYNC_PROJECTS_HOST=1`
-  and no folder at all: any of `SYNC_DIR`, `SYNC_REMOTE_DIR` or `SYNC_PROJECT` beside it is refused before anything
-  starts. The container is told `SANDBOX_PROJECTS_HOST=1` (replayed like the folder above), and desktop sync still runs,
-  with the installer handed `SYNC_PROJECTS_HOST=1` instead of a folder, so the machine agent holds the sync token the
-  attached folders will sync under. If that step fails, the sandbox stays up and the warning says no folder can attach
-  until it is set up again. The step names and phases are the same as any setup's.
+  The folder's sync is set up as soon as the daemon answers inside the container, before the public address is
+  checked (`verifying`): it reaches the daemon over this machine's Docker and its loopback, so a large folder's first
+  copy runs while the edge's DNS and URL are checked, which can take up to two minutes (2026-10-21). With a setup code
+  a failed check still fails the run, and its message says the folder already syncs.
+- _(2026-10-21)_ `SYNC_PROJECTS_HOST=1`, the desktop app's one sandbox per computer that folders attached to, is
+  refused before anything starts, with a sentence saying every folder now gets a sandbox of its own: a sandbox made for
+  it would be one no folder ever reaches. A container that was made as one keeps its `SANDBOX_PROJECTS_HOST=1` until
+  its next recreate, which no longer replays it.
 - **ic is the one host authority for what runs and what should run.** Every door onto a sandbox's container (the
   machine agent, the desktop app, the web's pasted fallback lines) calls ic's verbs rather than docker: `start`,
   `stop` and `restart` power the tunnel sidecar with its sandbox, and `ic sandbox list --json` answers each
@@ -361,9 +363,10 @@ flowchart LR
   - Data is never deleted unattended. `--yes` means keep the sandboxes when there is data, and deleting it takes
     `--delete-data` with `--confirm <n>` (sandboxes and runners, recoverable ones counted) or the count typed. Docker
     Desktop, WSL, the docker group, synced folders' files and `~/intentic/local` always stay.
-  - `--dry-run` reports what is here (`--json` for the app, `--ini <path>` for the uninstaller page's ReadINIStr), and a
-    plain run prints `intentic-uninstall:` markers ([docs/ops/cli-output-protocol.md](../../docs/ops/cli-output-protocol.md)).
-    The app uninstaller ic starts gets `INTENTIC_UNINSTALL=done`, so its own hook does not call ic back. The person's
+  - `--dry-run` reports what is here (`--ini <path>` for the Windows uninstaller page's ReadINIStr), and a plain run's
+    human lines fill that uninstaller's details list. _(2026-10-21) The desktop app's own "Uninstall Intentic…" went:
+    the system's uninstaller is the one way to remove the app, so the `--json` inventory and the `intentic-uninstall:`
+    markers that dialog read went with it._ The app uninstaller ic starts gets `INTENTIC_UNINSTALL=done`, so its own hook does not call ic back. The person's
     page is [/docs/uninstall/](../../_site/site/src/pages/docs/uninstall.astro).
 - `ic docker prepare` checks and, with consent, installs what Docker needs; `ic machine enroll` makes the host a deploy
   target (`ic machine remove` takes it off again); `ic runner up` starts a runner container for a parent sandbox.
@@ -380,7 +383,10 @@ flowchart LR
   exists, resumable and locked against a second fetcher, printing `intentic-prefetch: {json}` readings. The desktop app
   starts it while Docker is being set up. `ic sandbox connect`, at its pull, finishes that cache (waiting for a prefetch
   still running) and loads it with `docker load`, then deletes it; with no cache, or one it cannot use, it pulls as
-  before (2026-10-08). A PC that already has Docker Desktop skips the prefetch (Docker pulls it there), a cache is
+  before (2026-10-08). Where Docker's engine already answers (any OS), it pulls the image into Docker itself ahead of
+  the first setup (`pull_ahead`), with the same readings counted off docker's layer lines against the registry's sizes,
+  so the desktop app's first-launch download gets it there before anyone presses anything (2026-10-21: the median first
+  setup waited 96 s on that pull, 199 s at p90). Docker installed with its engine down still skips it. A cache is
   dropped once Docker has the image by any route, and one untouched for two weeks is swept. Measured on a fresh
   Windows 11 VM at about 50 MB/s: the 1.8 GB finished before the restart; loading it took 237 s where a pull took 192 s,
   since `docker load` takes the archive in before it unpacks while a pull overlaps the two, so the prefetch pays off on

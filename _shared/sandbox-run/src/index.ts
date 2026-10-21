@@ -303,9 +303,8 @@ export const REPLAY_VARS = [
     // The folder of the owner's computer this sandbox was made for, synced into `/work/<name>` (connect.rs). What the
     // sandbox IS rather than a setting: a recreate that dropped it would seed a starter site beside the owner's project.
     { name: "SANDBOX_PROJECT_DIR", role: "purpose" },
-    // This computer's own sandbox, which folders attach to later (connect.rs). Also what the sandbox is: a recreate that
-    // dropped it would seed a starter site and stop taking the folders the machine agent attaches.
-    { name: "SANDBOX_PROJECTS_HOST", role: "purpose" },
+    // (2026-10-21) SANDBOX_PROJECTS_HOST, the desktop app's one sandbox per computer that folders attached to, is no
+    // longer replayed: every folder gets a sandbox of its own, and such a sandbox's next recreate is an ordinary one.
 ] as const satisfies readonly ReplayVar[];
 
 type ReplayName = (typeof REPLAY_VARS)[number]["name"];

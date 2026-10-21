@@ -195,60 +195,10 @@
         "needsYouBadge": "te necesita",
         "startingDockerBadge": "iniciando Docker",
         "updateReadyBadge": "hay una actualización lista",
-        "machineBadge": "preparando el sandbox de este ordenador",
+        "folderSetupBadge": "creando el sandbox de una carpeta",
         "agentsElsewhere": "El agente de máquina de Intentic también se ejecuta en {places} en este ordenador, y se ocupa de los sandboxes configurados allí.",
         "pcSettingUpBadge": "preparando este PC",
         "pcSetupBadge": "este PC se puede preparar para agentes"
-    },
-    "machineSandbox": {
-        "title": "El sandbox de este ordenador",
-        "state": {
-            "signedOut": "se crea al iniciar sesión",
-            "signedIn": "sesión iniciada, preparándose",
-            "needsDocker": "necesita Docker",
-            "creating": "preparándose",
-            "waiting": "necesita tu OK",
-            "ready": "listo",
-            "stopped": "detenido",
-            "asleep": "dormido",
-            "starting": "iniciándose",
-            "failed": "sin configurar",
-            "interrupted": "retomando donde lo dejó",
-            "gone": "ya no está"
-        },
-        "detail": {
-            "signedOut": "Inicia sesión e Intentic crea un sandbox en este ordenador para las carpetas en las que trabajas con un agente.",
-            "signedIn": "Has iniciado sesión. Intentic lo configura, o lo inicia, en un momento.",
-            "needsDocker": {
-                "notInstalled": "Se ejecuta en Docker, que no está en este ordenador. Instala Docker Desktop e Intentic configurará el sandbox en cuanto esté en marcha.",
-                "notRunning": "Se ejecuta en Docker, que no está en marcha. Inícialo e Intentic seguirá solo.",
-                "notAllowed": "Docker está en marcha pero rechaza esta cuenta. Añade tu cuenta al grupo de Docker (docker-users en Windows) y luego cierra sesión y vuelve a entrar."
-            },
-            "creating": "Intentic lo está configurando en segundo plano. Tus carpetas entran en él en cuanto esté listo.",
-            "interrupted": "Intentic se cerró mientras se estaba configurando, así que retoma donde lo dejó.",
-            "waiting": "Este ordenador necesita algunas cosas antes de poder ejecutar un sandbox.",
-            "ready": "Las carpetas en las que trabajas con un agente entran en él, cada una en su propia carpeta.",
-            "stopped": "Está en este ordenador pero no está en marcha. Inícialo para trabajar en tus carpetas con un agente.",
-            "asleep": "Nadie lo usó durante un rato, así que está dormido y no ocupa memoria. Abrirlo, o el sandbox de una carpeta, lo despierta.",
-            "starting": "Estaba detenido, así que Intentic lo está iniciando. Tus carpetas entran en él en cuanto esté en marcha.",
-            "failed": "Su configuración se detuvo. El registro indica qué estaba haciendo.",
-            "gone": "Ya no está en este ordenador. Vuelve a configurarlo y tus carpetas volverán a entrar en él, con sus archivos si este ordenador aún los tiene."
-        },
-        "percent": "{percent} %",
-        "open": "Abrir",
-        "signIn": "Iniciar sesión",
-        "getDocker": "Conseguir Docker Desktop",
-        "showLog": "Mostrar el registro",
-        "start": "Iniciar",
-        "recreate": "Configurarlo de nuevo",
-        "folder": {
-            "queued": "en espera",
-            "attaching": "añadiendo",
-            "copying": "copiando",
-            "ready": "dentro",
-            "failed": "no se pudo añadir"
-        },
-        "waitsForPc": "Se crea en cuanto este PC esté preparado para agentes."
     },
     "machineFace": {
         "backOnline": "Vuelves a tener internet.",
@@ -659,10 +609,11 @@
         },
         "ready": "Listo para agentes",
         "signIn": {
-            "now": "Los agentes trabajan con tu cuenta de Intentic. Cuando inicies sesión, Intentic preparará su sandbox aquí por sí solo.",
+            "now": "Los agentes trabajan con tu cuenta de Intentic. Cuando inicies sesión, cada carpeta que des a un agente tendrá aquí su propio sandbox.",
             "meanwhile": "Los agentes trabajan con tu cuenta de Intentic. Inicia sesión ahora o más tarde: la preparación de este PC no lo espera.",
             "title": "Inicia sesión",
-            "done": "Has iniciado sesión."
+            "done": "Has iniciado sesión.",
+            "button": "Iniciar sesión"
         },
         "prefetch": {
             "label": "Descargando lo que necesitan los agentes",
@@ -701,14 +652,9 @@
             "noFolder": "Aún no has elegido carpeta",
             "start": "Iniciar tarea",
             "sent": "Tu primera tarea ha empezado."
-        }
-    },
-    "leftovers": {
-        "title": "{count} sandbox antiguo de este ordenador sigue en tu cuenta | {count} sandboxes antiguos de este ordenador siguen en tu cuenta",
-        "detail": "{names}. Ya nada los ejecuta: este ordenador ahora tiene un solo sandbox.",
-        "remove": "Eliminar",
-        "confirmHeader": "¿Eliminar {count} sandbox antiguo? | ¿Eliminar {count} sandboxes antiguos?",
-        "confirmDetail": "Quitaremos {names} de tu cuenta. Puedes restaurarlos desde la papelera durante 7 días."
+        },
+        "percent": "{percent} %",
+        "showLog": "Mostrar el registro"
     },
     "passwords": {
         "title": "Contraseñas",

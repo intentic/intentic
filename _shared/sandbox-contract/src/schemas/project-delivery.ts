@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// LANDED WORK DELIVERED TO THE OWNER'S FOLDER. A folder attached to this computer's own sandbox is copied one way into
+// LANDED WORK DELIVERED TO THE OWNER'S FOLDER. A folder with a sandbox made for it is copied one way into
 // `/work/<name>`; when a conversation's work lands there, the daemon hands the same change to the machine agent that
 // holds the folder, which applies it file by file under a restore point and never over an edit of the owner's own.
 // The daemon asks (`deliverProject` on the device contract), the machine decides and writes; nothing an agent runs can

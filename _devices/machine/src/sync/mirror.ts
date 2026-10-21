@@ -1,5 +1,4 @@
 import net from "node:net";
-import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { writeFileAtomic } from "@intentic/base/fs";
@@ -7,7 +6,6 @@ import type { Log } from "@intentic/local-agent";
 import type { DeviceReport, PortSkipReason } from "@intentic/sandbox-contract/schemas/devices";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract/schemas/ports";
 import {
-    isAttachedPairing,
     mirrorHeartbeatPath,
     type MirroredPort,
     type Pairing,
@@ -15,6 +13,7 @@ import {
     pairingTransport,
     readState,
     removeSandboxPairings,
+    retireLegacyPairings,
     setSandboxGone,
     setSwapSince,
     setUnreachableSince,
@@ -55,6 +54,7 @@ import {
 import { ensureMutagen } from "./binary/mutagen-binary.js";
 import { moveOffSharedMutagen } from "./mutagen-move.js";
 import { quieted } from "./repeats.js";
+import { sleepUnlessWoken } from "./wake.js";
 import { deviceReport, scopedReport } from "./report.js";
 import { pairingSshConfig, writeManagedSshConfig } from "./ssh.js";
 import { createTunnelPool, tunnelTargets } from "./tunnel.js";
@@ -453,11 +453,6 @@ const servePairing = async (context: PassContext, pairing: Pairing, base: string
     // Ports are polled even with mirroring off: the read doubles as the pairing's liveness probe and the only way a
     // revoked enrollment is noticed. The switch only changes what's done with the answer.
     const ports = pairing.syncToken === undefined ? [] : await fetchWorkspacePorts(base, pairing.syncToken);
-    // A folder attached to its sandbox polls only when nothing else of that sandbox does (`pollingPairings`), as its
-    // liveness probe; the projects host is what mirrors the sandbox's ports, once, whatever number of folders it holds.
-    if (isAttachedPairing(pairing)) {
-        return [];
-    }
     if (pairing.mirrorOff === true) {
         await retireSwitchedOff(mutagen, pairing, log);
         return [];
@@ -474,9 +469,7 @@ const servePairing = async (context: PassContext, pairing: Pairing, base: string
     return next;
 };
 
-// One report per sandbox, carried by the first of its pairings that holds a token (they share one): several pairings
-// of one sandbox (its projects host and the folders attached to it) are one machine to its daemon, which keeps one
-// report per machine, so posting each would only send the same slice again.
+// One report per sandbox, carried by the first of its pairings that holds a token.
 // (2026-10-05) Never to a sandbox said to be gone: a dead sandbox took 5,760 report posts a day, none of them logged.
 export const reportCarriers = <T extends { readonly pairing: Pick<Pairing, "sandboxId" | "syncToken" | "goneSince"> }>(
     dialed: readonly T[],
@@ -536,16 +529,13 @@ const postReports = async (
     }
 };
 
-// Forgets a revoked sandbox's pairings, every one of them since they share its one enrollment (the projects host and
-// the folders attached to it), and lets the orphan sweep terminate their file sync and forwards. Its ssh-config block
+// Forgets a revoked sandbox's pairing, and lets the orphan sweep terminate its file sync and forwards. Its ssh-config block
 // is left in place (an unreached alias is inert) until the next setup or uninstall regenerates the fragment.
 const dropRevokedPairing = async (mutagen: string, sandboxId: string, log: Log): Promise<void> => {
     await removeSandboxPairings(sandboxId);
     retireOrphanSessions(mutagen, (await readState()).pairings, log);
 };
 
-// Whether a pairing key is one of this sandbox's: its own id, or a folder attached to it.
-const keyOfSandbox = (key: string, sandboxId: string): boolean => key === sandboxId || key.startsWith(`${sandboxId}~`);
 
 // Isolates one fallible step: a rejection here costs only this step, not the whole agent, and is always logged.
 const guard = async (log: Log, what: string, step: () => void | Promise<void>): Promise<boolean> => {
@@ -586,9 +576,7 @@ const absorbRejectedPoll = async (
     log(`${pairing.sandboxId} rejected the sync token ${REVOKED_POLLS} polls in a row: this machine's enrollment was revoked.`);
     rejectedPolls.delete(pairing.sandboxId);
     repos.delete(pairing.sandboxId);
-    for (const key of [...sessionsPending].filter((held) => keyOfSandbox(held, pairing.sandboxId))) {
-        sessionsPending.delete(key);
-    }
+    sessionsPending.delete(pairingKey(pairing));
     await dropRevokedPairing(mutagen, pairing.sandboxId, log);
     return true;
 };
@@ -755,86 +743,10 @@ const dormant = (mutagen: string, pairing: Pairing): boolean =>
     pairing.containerAway !== undefined ||
     (syncHolds(pairing, Date.now()).includes("unreachable") && (existingSyncSessions(mutagen, syncSessionNames(pairing)) ?? [undefined]).length > 0);
 
-// BEFORE A FOLDER'S FIRST COPY, ITS SANDBOX IS TOLD OF IT. The daemon makes an attached folder's `/work/<name>` a
-// repository of its own once a report names it. A session that began filling `/work/<name>` first would leave those
-// files untracked in the sandbox's root repository for a while, where a commit there could take them. So a folder
-// attached to a sandbox whose session does not exist yet gets one only after a report naming it was taken, and is
-// tried again on the next tick when it was not. One report per sandbox and pass, however many of its folders wait.
-// Pure over its two seams, so "never a first copy before the report" is a rule with a test.
-export const readyToPrepare = async (
-    setups: readonly Pairing[],
-    firstCopyAhead: (pairing: Pairing) => boolean,
-    announce: (pairing: Pairing) => Promise<boolean>,
-): Promise<Pairing[]> => {
-    const told = new Map<string, boolean>();
-    const ready: Pairing[] = [];
-    for (const pairing of setups) {
-        if (isAttachedPairing(pairing) && pairing.mode === "sync" && pairing.localDir !== undefined && firstCopyAhead(pairing)) {
-            // one report per sandbox, and the folders of one wait on it
-            const said = told.get(pairing.sandboxId) ?? (await announce(pairing));
-            told.set(pairing.sandboxId, said);
-            if (!said) {
-                continue;
-            }
-        }
-        ready.push(pairing);
-    }
-    return ready;
-};
-
-// The real announcement: the report as it stands (the new folder in it, with no session yet), posted to the folder's
-// sandbox. A daemon with no report route (404) cannot be waiting for one, so the folder goes ahead; a sandbox whose
-// polls are backing off is not asked more often than they are.
-const announcer =
-    (
-        mutagen: string,
-        bases: DaemonBases,
-        unsupported: Set<string>,
-        unreachable: ReadonlyMap<string, Unreachable>,
-        gone: (pairing: Pairing) => Promise<void>,
-        say: Log,
-    ) =>
-    async (pairing: Pairing): Promise<boolean> => {
-        // Nothing is announced to a sandbox said to be gone; its folder waits with it.
-        if (pairing.goneSince !== undefined) {
-            return false;
-        }
-        if (pairing.syncToken === undefined || unsupported.has(pairing.sandboxId)) {
-            return true;
-        }
-        if (!pollDue(unreachable.get(pairing.sandboxId), Date.now())) {
-            return false;
-        }
-        try {
-            const response = await sendReport(await bases.resolve(pairing), pairing, await deviceReport(mutagen));
-            if (response.status === 404) {
-                unsupported.add(pairing.sandboxId);
-                say(`  ${pairing.sandboxId}: this sandbox is running a daemon without machine reports, its Devices view will stay empty.`);
-                return true;
-            }
-            if (answeredGone(response)) {
-                await gone(pairing);
-                return false;
-            }
-            if (!response.ok) {
-                say(
-                    `  ${pairingKey(pairing)}: ${pairing.sandboxId} did not take the report naming this folder (${response.status}); its first copy waits for it.`,
-                );
-            }
-            return response.ok;
-        } catch (error) {
-            say(
-                `  ${pairingKey(pairing)}: ${pairing.sandboxId} could not be told of this folder (${errorMessage(error)}); its first copy waits until it can.`,
-            );
-            return false;
-        }
-    };
-
 // Every pairing this watcher has not prepared yet. At startup that is all of them, which is where an upgraded agent's
 // inherited sessions pick up the new rules, since Mutagen bakes them in at creation. After that it is each pairing a
-// `setup` or an `attach` adds or sets up again while the watcher runs. Per pairing, so one dead sandbox costs only
-// itself; a dormant one is left pending for the cadence below, and a folder whose sandbox has not been told of it yet
-// stays unprepared, to be tried again next pass (`readyToPrepare`).
+// `setup` adds or sets up again while the watcher runs. Per pairing, so one dead sandbox costs only itself; a dormant
+// one is left pending for the cadence below.
 // THE WATCHER IS THE ONLY THING THAT CREATES SESSIONS. `setup` used to create them too, at the same moment the agent it
 // had just started was preparing the same pairing, so each create found no session and both went ahead: one name came
 // to hold two identical sessions over the same folder, each flagging the other's writes as conflicts.
@@ -845,12 +757,9 @@ const prepareSessions = async (
     pairings: readonly Pairing[],
     prepared: Set<string>,
     pending: Set<string>,
-    announce: (pairing: Pairing) => Promise<boolean>,
     passes: Pick<PassContext, "fate" | "relabels" | "tracking">,
     say: Log,
 ): Promise<void> => {
-    // A listing that did not answer reads as a first copy ahead: announcing again costs one report.
-    const firstCopyAhead = (pairing: Pairing): boolean => (existingSyncSessions(mutagen, syncSessionNames(pairing)) ?? []).length === 0;
     const unprepared = unpreparedSetups(pairings, prepared);
     const docker = unprepared.filter((pairing) => pairingTransport(pairing) === "docker");
     if (docker.length > 0) {
@@ -860,7 +769,7 @@ const prepareSessions = async (
             async () => await checkContainers(passes.fate, docker, answeringOf(passes.tracking)),
         );
     }
-    for (const pairing of await readyToPrepare(unprepared, firstCopyAhead, announce)) {
+    for (const pairing of unprepared) {
         markPrepared(prepared, pairing);
         if (dormant(mutagen, pairing)) {
             pending.add(pairingKey(pairing));
@@ -972,8 +881,7 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         const mirrored = await servePairing(context, pairing, base);
         rejectedPolls.delete(pairing.sandboxId);
         unreachable.delete(pairing.sandboxId);
-        // It answered: whatever said it was gone is withdrawn, from every pairing of it (a folder attached to it keeps
-        // the mark when its projects host was set up again), and the outage clock on disk stops. So is a pause the mark
+        // It answered: whatever said it was gone is withdrawn, and the outage clock on disk stops. So is a pause the mark
         // left behind because Mutagen did not take its resume the first time.
         if (goneLingers(context.pairings, pairing.sandboxId)) {
             await sandboxAnswered(fate, pairing.sandboxId);
@@ -982,17 +890,14 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
         if (context.pairings.some((held) => held.sandboxId === pairing.sandboxId && held.unreachableSince !== undefined)) {
             await setUnreachableSince(pairing.sandboxId, undefined);
         }
-        // A folder attached to its sandbox mirrors nothing, and its sandbox's forwards are not its to hand over or sweep.
-        if (!isAttachedPairing(pairing)) {
-            for (const port of mirrored) {
-                claimedBy.set(port.port, pairing.sandboxId);
-            }
-            handOver(holding, pairing.sandboxId, mirrored);
-            // Only on a pass that reconciled, and with the list that pass produced: against a stale record this would
-            // take down live forwards rather than stranded ones.
-            if (tick % STRANDED_SWEEP_EVERY_TICKS === 0) {
-                sweepStrandedForwards(mutagen, pairing.sandboxId, mirrored, say);
-            }
+        for (const port of mirrored) {
+            claimedBy.set(port.port, pairing.sandboxId);
+        }
+        handOver(holding, pairing.sandboxId, mirrored);
+        // Only on a pass that reconciled, and with the list that pass produced: against a stale record this would
+        // take down live forwards rather than stranded ones.
+        if (tick % STRANDED_SWEEP_EVERY_TICKS === 0) {
+            sweepStrandedForwards(mutagen, pairing.sandboxId, mirrored, say);
         }
     } catch (error) {
         // Reports that this pass's resolved base failed, which daemon-base.ts can't detect itself; matters only for a
@@ -1019,35 +924,6 @@ const runPairingPass = async (context: PassContext, pairing: Pairing, base: stri
     // The bridge has its own catch inside: it rides ssh, while the ports read above rides https (which 502s through
     // Cloudflare often enough), so one must not cost the other a whole pass.
     startBridge(tracking, pairing, tick, say);
-};
-
-// WHICH PAIRINGS POLL their sandbox's ports, which is also how a sandbox's liveness and a revoked enrollment are
-// noticed: one per sandbox. That is the sandbox's own pairing (the projects host, or any pairing made before folders
-// could attach), else the first folder attached to it. Every other folder attached to that sandbox follows what the
-// poll found (`followSandbox`) rather than asking again, so ten folders cost the daemon one poll, not eleven.
-export const pollingPairings = (pairings: readonly Pick<Pairing, "sandboxId" | "key">[]): ReadonlySet<string> => {
-    const polling = new Set<string>();
-    for (const sandboxId of new Set(pairings.map((pairing) => pairing.sandboxId))) {
-        const own = pairings.filter((pairing) => pairing.sandboxId === sandboxId);
-        const poller = own.find((pairing) => !isAttachedPairing(pairing)) ?? own[0];
-        if (poller !== undefined) {
-            polling.add(pairingKey(poller));
-        }
-    }
-    return polling;
-};
-
-// The whole pass of a folder attached to a sandbox that another pairing polls: the heal, unless anything holds its file
-// sync still (holds.ts), the poller's outage among them, which it shares with every pairing of that sandbox. No ports,
-// no git bridge: the folder is the owner's project, and the projects host mirrors.
-const followSandbox = async (context: PassContext, pairing: Pairing): Promise<void> => {
-    const { mutagen, tick, tracking, swapHeld, say } = context;
-    // The outage as the poller's pass recorded it, or as it stands on disk from before this agent started.
-    const outage = { ...pairing, unreachableSince: tracking.unreachable.get(pairing.sandboxId)?.since ?? pairing.unreachableSince };
-    if (syncHeld(outage, Date.now()) || swapHeld.has(pairing.sandboxId) || context.diskHeld.has(pairingKey(pairing))) {
-        return;
-    }
-    await healPairing(mutagen, pairing, tick, say);
 };
 
 // What a pass does about a polling pairing whose sandbox was said to be gone (gone.ts `goneStep`): nothing until its
@@ -1077,23 +953,14 @@ const passGone = async (context: PassContext, pairing: Pairing): Promise<"pass" 
         tracking.unreachable.delete(pairing.sandboxId);
         tracking.rejectedPolls.delete(pairing.sandboxId);
         tracking.repos.delete(pairing.sandboxId);
-        for (const key of [...tracking.sessionsPending].filter((held) => keyOfSandbox(held, pairing.sandboxId))) {
-            tracking.sessionsPending.delete(key);
-        }
+        tracking.sessionsPending.delete(pairingKey(pairing));
     }
     return "skip";
 };
 
-// Every pairing's pass for one tick. The pairings that poll go first, so a folder following its sandbox reads this
-// tick's answer.
-const runPasses = async (
-    context: PassContext,
-    dialed: readonly Dialed<Pairing>[],
-    pairings: readonly Pairing[],
-    live: () => boolean,
-): Promise<void> => {
-    const polling = pollingPairings(pairings);
-    for (const { pairing, base } of dialed.filter((held) => polling.has(pairingKey(held.pairing)))) {
+// Every pairing's pass for one tick, one sandbox at a time.
+const runPasses = async (context: PassContext, dialed: readonly Dialed<Pairing>[], live: () => boolean): Promise<void> => {
+    for (const { pairing, base } of dialed) {
         if (!live()) {
             return;
         }
@@ -1111,13 +978,6 @@ const runPasses = async (
         // One sandbox at a time keeps tunnel state ordered.
         await runPairingPass(context, pairing, base);
         context.progress(`${pairingKey(pairing)}'s pass`);
-    }
-    for (const { pairing } of dialed.filter((held) => !polling.has(pairingKey(held.pairing)))) {
-        if (!live()) {
-            return;
-        }
-        // one folder at a time, as every pass here
-        await guard(context.say, `${pairingKey(pairing)}: following its sandbox`, async () => await followSandbox(context, pairing));
     }
 };
 
@@ -1245,7 +1105,6 @@ interface Watch {
     readonly reportUnsupported: Set<string>;
     readonly fate: FateSeams;
     readonly gone: (pairing: Pairing) => Promise<void>;
-    readonly announce: (pairing: Pairing) => Promise<boolean>;
     readonly holders: HolderMemory;
     // The ssh config fragment as last written, so a tick writes it again only when its pairings' transports changed.
     sshConfig: string;
@@ -1262,7 +1121,7 @@ const watchLoop = async (log: Log, generation: Generation): Promise<void> => {
             return;
         }
         // ditto
-        await sleep(POLL_MS, { signal: generation.signal });
+        await sleepUnlessWoken(POLL_MS, generation.signal);
     }
 };
 
@@ -1274,9 +1133,19 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
     const say = quieted(log);
     sayDaemonEventsTo(say);
     await guard(say, "moving off Mutagen's shared data directory", async () => await moveOffSharedMutagen(mutagen, say));
+    // (2026-10-21) The pairings of the folders that attached to one sandbox per computer, and that sandbox's own, retired
+    // once (config.ts `retireLegacyPairings`): no read keeps them, and the orphan sweep below ends their sessions.
+    let retired = 0;
+    await guard(say, "retiring the pairings of this computer's old sandbox for folders", async () => {
+        retired = (await retireLegacyPairings(log)).length;
+    });
     // Nothing paired is terminal, logged once, not spammed every tick for the life of the session.
     const initial = await readState();
     if (initial.pairings.length === 0) {
+        // What the retired pairings left running still goes when nothing else is paired: the sweep below never runs then.
+        if (retired > 0 && startMutagenDaemon(mutagen)) {
+            await guard(say, "retiring orphaned sessions", () => retireOrphanSessions(mutagen, [], say));
+        }
         log("no sandboxes are paired: nothing to mirror. Enable it from a sandbox's Desktop sync card.");
         return undefined;
     }
@@ -1292,11 +1161,12 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
     // is made of change their transport (a docker pairing moved onto ssh, a pairing retired).
     const sshConfig = pairingSshConfig(initial.pairings);
     await guard(say, "refreshing the ssh configuration", async () => await writeManagedSshConfig(sshConfig));
-    const tunnels = createTunnelPool(say, generation.signal);
-    generation.stopTransports = tunnels.stopAll;
     // Where each pairing's daemon is dialled, held for the watcher's lifetime (daemon-base.ts owns the policy) and
-    // cached per sandbox, so most ticks cost only a map lookup.
+    // cached per sandbox, so most ticks cost only a map lookup. A stream the loopback daemon would not open marks that
+    // verdict stale (tunnel.ts), so the next pass probes it again.
     const bases = createDaemonBases(say);
+    const tunnels = createTunnelPool(say, generation.signal, (sandboxId) => bases.failed(sandboxId));
+    generation.stopTransports = tunnels.stopAll;
     await guard(
         say,
         "opening the sync transports",
@@ -1335,7 +1205,6 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
         reportUnsupported,
         fate,
         gone,
-        announce: announcer(mutagen, bases, reportUnsupported, tracking.unreachable, gone, say),
         // What the bind probe cannot see, kept for the watcher's lifetime: Docker's answer, cached, and the grace each
         // port a pass found busy is serving. Only the busy rows reach the disk, so a restart starts every grace over.
         holders: { dockerPorts: publishedPortsReader(say), freeSince: new Map() },
@@ -1346,7 +1215,6 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
         initial.pairings,
         watch.sessionsPrepared,
         tracking.sessionsPending,
-        watch.announce,
         { fate, relabels: relabelBudget(1), tracking },
         say,
     );
@@ -1397,7 +1265,6 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
         state.pairings,
         watch.sessionsPrepared,
         tracking.sessionsPending,
-        watch.announce,
         { fate, relabels, tracking },
         say,
     );
@@ -1433,7 +1300,7 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
         pairings: state.pairings,
         say,
     };
-    await runPasses(context, dialed, state.pairings, watch.live);
+    await runPasses(context, dialed, watch.live);
     if (!watch.live()) {
         return "stop";
     }
@@ -1455,8 +1322,7 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
 };
 
 // Terminates one sandbox's forward sessions (or every one this agent owns with no id given), read from the
-// daemon, not a config baseline: Mutagen keeps a forward's listener bound even after its sandbox is gone. The record
-// that moves with them is the sandbox's own pairing's: a folder attached to it holds none.
+// daemon, not a config baseline: Mutagen keeps a forward's listener bound even after its sandbox is gone.
 // A listing that did not answer falls back to what the record says is mirrored, by name: the forwards this agent knows
 // it made, rather than none.
 const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<number> => {
@@ -1473,7 +1339,7 @@ const teardownForwards = async (mutagen: string, sandboxId?: string): Promise<nu
     // reading: mirroring switched off and back on must not silently take back a number somebody released.
     await updateState((state) => ({
         pairings: state.pairings.map((held) =>
-            (sandboxId === undefined || held.sandboxId === sandboxId) && !isAttachedPairing(held)
+            sandboxId === undefined || held.sandboxId === sandboxId
                 ? { ...held, mirroredPorts: [], skippedPorts: [] }
                 : held,
         ),
@@ -1494,7 +1360,7 @@ export const retireMirroredPort = async (mutagen: string, sandboxId: string, por
     let wasMirrored = false;
     await updateState((state) => ({
         pairings: state.pairings.map((held) => {
-            if (held.sandboxId !== sandboxId || isAttachedPairing(held)) {
+            if (held.sandboxId !== sandboxId) {
                 return held;
             }
             const mirrored = held.mirroredPorts ?? [];

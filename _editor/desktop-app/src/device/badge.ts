@@ -1,12 +1,11 @@
 import type { LocalView } from "@intentic/web/local-host";
 import { t } from "@intentic/ui/i18n";
-import type { MachineStanding } from "../desktop";
 import type { PcStanding } from "../onboarding/pc";
 
 // WHAT THE RAIL'S THIS DEVICE TILE SAYS while the reader is elsewhere (host.ts): a setup, a fix or a move between engines
-// running here (the rail's spinning mark), this computer's own sandbox or this PC's own setup being made, a setup, a
-// sync, this computer's sandbox or this PC's setup stopped for the reader, Docker being started, this PC's setup offered
-// and not started, an update waiting for a restart. Nothing at rest. Pure, so each case is tested by value
+// running here (the rail's spinning mark), a folder's own sandbox or this PC's own setup being made, a setup, a sync or
+// this PC's setup stopped for the reader, Docker being started, this PC's setup offered and not started, an update
+// waiting for a restart. Nothing at rest. A folder's setup stopped for the reader is said on that folder's own card. Pure, so each case is tested by value
 // (badge.test.ts).
 
 export type DeviceBadge = NonNullable<LocalView[`badge`]>[`value`];
@@ -25,18 +24,14 @@ export interface DeviceSigns {
     readonly waiting: boolean;
     readonly startingDocker: boolean;
     readonly updateReady: boolean;
-    /** Where this computer's own sandbox stands (machineSandbox.ts), once the app has said. */
-    readonly machine?: MachineStanding[`state`] | undefined;
+    /** A folder's own sandbox is being made (folderSetups.ts). */
+    readonly folderSetup?: boolean;
     /**
      * Where this Windows PC's own setup stands (onboarding/pc.ts `pcStanding`, the card on This computer): undefined off
      * Windows, once it is done, and on a PC that cannot run a sandbox at all.
      */
     readonly pc?: PcStanding | undefined;
 }
-
-// This computer's sandbox waiting on the reader: a question, a failure, Docker, a stopped container, one that is gone.
-// Nobody signed in is not one: it is made after sign-in.
-const MACHINE_NEEDS_YOU: ReadonlySet<MachineStanding[`state`]> = new Set([`waiting`, `failed`, `needsDocker`, `stopped`, `gone`]);
 
 /** One badge for the tile, the most pressing first: work in flight, then what waits for the reader, then news. */
 export const deviceBadge = (signs: DeviceSigns): DeviceBadge => {
@@ -49,8 +44,8 @@ export const deviceBadge = (signs: DeviceSigns): DeviceBadge => {
     if (signs.movingSandboxes === true) {
         return { running: t(`desktop.engine.movingBadge`) };
     }
-    if (signs.machine === `creating` || signs.machine === `interrupted`) {
-        return { running: t(`desktop.device.machineBadge`) };
+    if (signs.folderSetup === true) {
+        return { running: t(`desktop.device.folderSetupBadge`) };
     }
     if (signs.pc === `settingUp`) {
         return { running: t(`desktop.device.pcSettingUpBadge`) };
@@ -62,10 +57,6 @@ export const deviceBadge = (signs: DeviceSigns): DeviceBadge => {
     }
     if (signs.startingDocker) {
         return { running: t(`desktop.device.startingDockerBadge`) };
-    }
-    // Behind a start of Docker: that start is what most of these are waiting for.
-    if (signs.machine !== undefined && MACHINE_NEEDS_YOU.has(signs.machine)) {
-        return { mark: `exclamation`, tone: `warning`, tooltip: t(`desktop.device.needsYouBadge`) };
     }
     // Offered, not started: the way to agents on this PC, said quietly, since nothing is wrong yet.
     if (signs.pc === `needsSetup`) {

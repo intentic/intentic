@@ -20,8 +20,6 @@
 #                       your own, which also needs SYNC_PROJECT
 #   SYNC_PROJECT        any non-empty value: SYNC_DIR is your own project, synced into SYNC_REMOTE_DIR with no sandbox
 #                       state backup and no git bridge writing into it
-#   SYNC_PROJECTS_HOST  any non-empty value: pair this device's own sandbox with no folder at all, so folders can attach
-#                       to it later. Takes none of SYNC_DIR, SYNC_REMOTE_DIR and SYNC_PROJECT.
 #   TAKEOVER            any non-empty value takes over sync from another device already connected to this sandbox
 #   AGENT_BIN           local dev: run this command instead of the installed agent, whitespace-separated
 #
@@ -740,7 +738,6 @@ Invoke-IntenticScript {
     $takeover = $env:TAKEOVER
     $remoteDir = $env:SYNC_REMOTE_DIR
     $project = $env:SYNC_PROJECT
-    $projectsHost = $env:SYNC_PROJECTS_HOST
     # A mangled command, or an env-var one missing a value, fails before the download. The code itself is spent after
     # it (below), so a download that breaks leaves it valid for the same command.
     $redeeming = [bool]($Sandbox -or $Code)
@@ -749,9 +746,11 @@ Invoke-IntenticScript {
     } elseif ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
         Stop-Intentic 'Desktop sync could not be set up.' "the command is missing the sandbox's address or its pairing token." 'copy the command again from the Desktop sync card.'
     }
-    # This device's own sandbox holds no folder: folders attach to it later, each as /work/<name>.
-    if (-not [string]::IsNullOrEmpty($projectsHost) -and -not ([string]::IsNullOrEmpty($dir) -and [string]::IsNullOrEmpty($remoteDir) -and [string]::IsNullOrEmpty($project))) {
-        Stop-Intentic 'Desktop sync could not be set up.' "SYNC_PROJECTS_HOST pairs this device's own sandbox, which holds no folder, and SYNC_DIR, SYNC_REMOTE_DIR or SYNC_PROJECT names one." 'unset SYNC_DIR, SYNC_REMOTE_DIR and SYNC_PROJECT, then run the same command again.' 2
+    # (2026-10-21) Folders no longer attach to one sandbox per computer: each gets a sandbox of its own. A desktop app older
+    # than that still asks for that sandbox (SYNC_PROJECTS_HOST), which without the word it relied on would read as a
+    # folder for the sandbox's whole /work; it is refused instead, and the sandbox itself is left running.
+    if (-not [string]::IsNullOrEmpty($env:SYNC_PROJECTS_HOST)) {
+        Stop-Intentic 'Desktop sync could not be set up.' 'this desktop app sets up one sandbox per computer for folders, which Intentic no longer does: each folder now gets a sandbox of its own.' 'update the desktop app, then open the folder again.' 2
     }
 
     # THE HANDOVER'S NEWER WORDS: the flags below that an agent older than them refuses outright, so an installed agent
@@ -759,7 +758,6 @@ Invoke-IntenticScript {
     $speaks = @()
     if (-not [string]::IsNullOrEmpty($remoteDir)) { $speaks += '--remote-dir' }
     if (-not [string]::IsNullOrEmpty($project)) { $speaks += '--project' }
-    if (-not [string]::IsNullOrEmpty($projectsHost)) { $speaks += '--projects-host' }
 
     $bin = Get-IntenticAgent -Route $route -Flags $speaks
     # Still not spoken after the bootstrap: the newest release predates the handover's words, and the agent would refuse
@@ -767,9 +765,6 @@ Invoke-IntenticScript {
     # connected. A dev AGENT_BIN is taken as it is.
     if ($bin -and $speaks.Count -gt 0 -and -not (Test-IntenticAgentSpeaks -Path $bin -Route $route -Flags $speaks)) {
         $version = Get-IntenticAgentVersion -Path $bin
-        if (-not [string]::IsNullOrEmpty($projectsHost)) {
-            Stop-Intentic 'Desktop sync could not be set up.' "intentic-machine $version on this device cannot set up this device's own sandbox yet, so folders cannot attach to it." 'update the desktop app, or run this again once a newer agent is released.'
-        }
         Stop-Intentic 'Desktop sync could not be set up.' "intentic-machine $version on this device does not understand $($speaks -join ' ') yet." 'update the desktop app, or run this again once a newer agent is released.'
     }
 
@@ -788,7 +783,6 @@ Invoke-IntenticScript {
     if (-not [string]::IsNullOrEmpty($dir)) { $syncArgs += @('--dir', $dir) }
     if (-not [string]::IsNullOrEmpty($remoteDir)) { $syncArgs += @('--remote-dir', $remoteDir) }
     if (-not [string]::IsNullOrEmpty($project)) { $syncArgs += @('--project') }
-    if (-not [string]::IsNullOrEmpty($projectsHost)) { $syncArgs += @('--projects-host') }
     if (-not [string]::IsNullOrEmpty($takeover)) { $syncArgs += @('--takeover') }
     Invoke-IntenticAgent -Bin $bin -Arguments $syncArgs
 }

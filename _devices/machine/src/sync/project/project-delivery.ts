@@ -21,11 +21,11 @@ import { clearStaging, exclusively, type FolderContext, folderStateDir, type Pro
 import { backUp, createPointDir, pruneRestorePoints, type RestoreEntry, sealPoint, writeManifest } from "../restore-points.js";
 
 // LANDED WORK WRITTEN INTO THE OWNER'S FOLDER (`deliverProject` on the device link, the contract's
-// schemas/project-delivery.ts). A folder attached to this computer's sandbox is copied one way into `/work/<name>`; when
-// a conversation's work lands there, the daemon hands the same change here, and this agent decides, file by file, what
-// the folder takes. The rules are a bring-back's (project-transfer.ts), and so is everything that keeps them:
-// - Only a folder that opted in (`deliver: "auto"`, which `sync attach` records), of the sandbox on the other end of the
-//   link that asks. Nothing an agent runs can ask: this is a procedure of the link, not one of its tools.
+// schemas/project-delivery.ts). A folder with a sandbox of its own is copied one way into its `/work/<name>`; when a
+// conversation's work lands there, the daemon hands the same change here, and this agent decides, file by file, what the
+// folder takes. The rules are a bring-back's (project-transfer.ts), and so is everything that keeps them:
+// - Only a folder that opted in (`deliver: "auto"`, which `sync setup --project` records), of the sandbox on the other end
+//   of the link that asks. Nothing an agent runs can ask: this is a procedure of the link, not one of its tools.
 // - Under the folder's lock, with its session flushed and held still, as a bring-back is.
 // - A restore point before the first write, in the bring-back's own shape, so `sync restore --point <id>` undoes a
 //   delivery unchanged. None when nothing is written.
@@ -61,7 +61,7 @@ export const deliveryPairingFor = (pairings: readonly Pairing[], sandboxUrl: str
     );
     const first = paired[0];
     if (first === undefined) {
-        throw new DeliveryRefused(`No folder on this computer is attached as ${remoteDir} of ${sandboxUrl}.`, "NOT_FOUND");
+        throw new DeliveryRefused(`No folder on this computer syncs with ${remoteDir} of ${sandboxUrl}.`, "NOT_FOUND");
     }
     const delivering = paired.find(deliversByItself);
     if (delivering === undefined) {

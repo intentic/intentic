@@ -60,11 +60,23 @@ export const sshSocketUrl = (base: string): string => `${base.replace(/\/$/, "")
 // Mutagen redials anyway.
 const OPEN_TIMEOUT_MS = 10_000;
 
+// (2026-10-21) A LOOPBACK STREAM THAT DOES NOT OPEN FALLS BACK TO THE PUBLIC ADDRESS, for that very connection. On a
+// fresh sandbox the daemon's loopback listener answers /health, so this agent dials it, and a few seconds later moves
+// that listener onto TLS (its loopback certificate arrives); on rog that day every ssh stream dialled through it for the
+// next 36 seconds either failed at once or hung for the whole 10 s above, while the daemon's public address answered,
+// and a new sandbox's first copy waited behind Mutagen's redials. The loopback verdict was kept for the watcher's life
+// and nothing told it a stream had failed. Now a loopback daemon gets the few seconds a loopback answer takes; past them,
+// or on its failure, the same connection is dialled again at the public address, and the verdict is marked stale so the
+// next pass probes again (daemon-base.ts `failed`).
+const LOOPBACK_OPEN_TIMEOUT_MS = 3_000;
+
 export interface TunnelTarget {
     readonly sandboxId: string;
     // Where this pairing's daemon is dialled this pass (daemon-base.ts), not necessarily its public address.
     readonly base: string;
     readonly syncToken: string;
+    // The public address, when `base` is the loopback shortcut: where a stream that will not open there is dialled next.
+    readonly fallback?: string;
 }
 
 // Only pairings with a sync token get a transport; otherwise a bound listener would accept ssh and fail every
@@ -73,75 +85,152 @@ export interface TunnelTarget {
 // (2026-10-05) Nor does a sandbox the platform or this machine says is gone (gone.ts): a listener for it only answers
 // ssh with a socket that fails, and the watcher no longer dials it. It comes back with the sandbox's first answer.
 export const tunnelTargets = (dialed: readonly Dialed<Pairing>[]): readonly TunnelTarget[] =>
-    dialed.flatMap(({ pairing, base }) =>
-        pairing.syncToken === undefined || pairingTransport(pairing) === "docker" || pairing.goneSince !== undefined
-            ? []
-            : [{ sandboxId: pairing.sandboxId, base, syncToken: pairing.syncToken }],
-    );
+    dialed.flatMap(({ pairing, base }) => {
+        if (pairing.syncToken === undefined || pairingTransport(pairing) === "docker" || pairing.goneSince !== undefined) {
+            return [];
+        }
+        const target: TunnelTarget = { sandboxId: pairing.sandboxId, base, syncToken: pairing.syncToken };
+        const floor = pairing.sandboxUrl.replace(/\/$/, "");
+        return [floor === base ? target : { ...target, fallback: floor }];
+    });
 
-// Bridges one accepted TCP connection to one WebSocket. Exported so a test can drive it without binding a real
-// listener.
-export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: (message: string) => void): void => {
+// One TCP connection's bridge while it is being dialled and once it is open: what both halves below share.
+interface Bridge {
+    readonly socket: Socket;
+    readonly target: TunnelTarget;
+    readonly onError: (message: string) => void;
+    readonly onLoopbackFailed: () => void;
+    // ssh's version banner can arrive before the socket opens, so early bytes are queued, not dropped; the socket
+    // stays paused until open, bounding the queue to one read. A fallback dial keeps the same queue.
+    readonly queued: Buffer[];
+    readonly early: (chunk: Buffer) => void;
+    pump: Pump | undefined;
+    ws: WebSocket | undefined;
+    handshake: NodeJS.Timeout | undefined;
+    closed: boolean;
+}
+
+const closeBridge = (bridge: Bridge): void => {
+    if (bridge.closed) {
+        return;
+    }
+    bridge.closed = true;
+    bridge.pump?.stop();
+    clearTimeout(bridge.handshake);
+    bridge.socket.destroy();
+    const { ws } = bridge;
+    if (ws !== undefined && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        ws.close();
+    }
+};
+
+// One dial of the stream at `base`; `next` is where it goes when this one does not open, none for the last.
+const dialStream = (bridge: Bridge, base: string, timeoutMs: number, next: string | undefined): void => {
+    const { socket, target } = bridge;
     // The credential goes on the request, not the URL, since a query string ends up in logs. The cast works around
     // the DOM lib typing this argument as subprotocols; both Node's undici and Bun accept a headers object there.
-    const ws = new WebSocket(sshSocketUrl(target.base), { headers: { "x-intentic-sync": target.syncToken } } as never);
-    ws.binaryType = "arraybuffer";
-    // ssh's version banner can arrive before the socket opens, so early bytes are queued, not dropped; the socket
-    // stays paused until open, bounding the queue to one read.
-    const queued: Buffer[] = [];
-    const early = (chunk: Buffer): void => {
-        queued.push(chunk);
-    };
-    let pump: Pump | undefined;
-    socket.pause();
-
-    const close = (): void => {
-        pump?.stop();
-        clearTimeout(handshake);
-        socket.destroy();
-        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-            ws.close();
+    const current = new WebSocket(sshSocketUrl(base), { headers: { "x-intentic-sync": target.syncToken } } as never);
+    current.binaryType = "arraybuffer";
+    bridge.ws = current;
+    let opened = false;
+    // Whether this dial already ended, one way or the other: an error is followed by a close, and only one counts.
+    let settled = false;
+    const unopened = (message: string): void => {
+        if (settled || bridge.closed) {
+            return;
         }
+        settled = true;
+        clearTimeout(bridge.handshake);
+        if (next === undefined) {
+            bridge.onError(message);
+            closeBridge(bridge);
+            return;
+        }
+        bridge.onLoopbackFailed();
+        if (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING) {
+            current.close();
+        }
+        dialStream(bridge, next, OPEN_TIMEOUT_MS, undefined);
     };
-
     // A handshake that never resolves is invisible to ssh; ending the TCP connection is the only way to surface it,
     // so the caller fails in seconds instead of hanging on its own timeout.
-    const handshake = setTimeout(() => {
-        onError(`the sync transport to ${target.sandboxId} did not open within ${OPEN_TIMEOUT_MS / 1000}s: the sandbox is not answering`);
-        close();
-    }, OPEN_TIMEOUT_MS);
-
-    socket.on("data", early);
-    socket.on("close", close);
-    socket.on("error", close);
-
+    bridge.handshake = setTimeout(
+        () => unopened(`the sync transport to ${target.sandboxId} did not open within ${timeoutMs / 1000}s: the sandbox is not answering`),
+        timeoutMs,
+    );
     // Both directions through the pump the daemon's end runs too (@intentic/base/ws-tcp-pump). This WebSocket cannot
     // pause, so a Mutagen that stops reading costs this stream past the pump's ceiling rather than unbounded memory.
-    ws.addEventListener("open", () => {
-        clearTimeout(handshake); // the stream is up; from here a long-lived connection is the point, not a symptom
-        socket.off("data", early);
-        pump = pumpTcpWebSocket(
+    current.addEventListener("open", () => {
+        if (settled || bridge.closed) {
+            return;
+        }
+        opened = true;
+        settled = true;
+        clearTimeout(bridge.handshake); // the stream is up; from here a long-lived connection is the point, not a symptom
+        socket.off("data", bridge.early);
+        bridge.pump = pumpTcpWebSocket(
             socket,
-            { send: (frame) => ws.send(frame), bufferedAmount: () => ws.bufferedAmount },
+            { send: (frame) => current.send(frame), bufferedAmount: () => current.bufferedAmount },
             {
-                queued: queued.splice(0),
+                queued: bridge.queued.splice(0),
                 onOverflow: () => {
-                    onError(`the sync transport to ${target.sandboxId} was dropped: ssh stopped reading what the sandbox sent`);
-                    close();
+                    bridge.onError(`the sync transport to ${target.sandboxId} was dropped: ssh stopped reading what the sandbox sent`);
+                    closeBridge(bridge);
                 },
             },
         );
     });
-    ws.addEventListener("message", (event: MessageEvent) => {
-        pump?.inbound(event.data);
+    current.addEventListener("message", (event: MessageEvent) => {
+        if (opened) {
+            bridge.pump?.inbound(event.data);
+        }
     });
-    ws.addEventListener("error", () => {
-        // A WebSocket error event's message says nothing useful; a user needs which sandbox failed, which the log line
-        // already carries.
-        onError(`the sync transport to ${target.sandboxId} could not be opened`);
-        close();
+    // A WebSocket error event's message says nothing useful; a user needs which sandbox failed, which the log line
+    // already carries. An error is followed by a close; an unopened dial's goes to the fallback, if it has one.
+    const ended = (): void => {
+        if (opened) {
+            closeBridge(bridge);
+            return;
+        }
+        unopened(`the sync transport to ${target.sandboxId} could not be opened`);
+    };
+    current.addEventListener("error", () => {
+        if (opened) {
+            bridge.onError(`the sync transport to ${target.sandboxId} could not be opened`);
+        }
+        ended();
     });
-    ws.addEventListener("close", close);
+    current.addEventListener("close", ended);
+};
+
+// Bridges one accepted TCP connection to one WebSocket. Exported so a test can drive it without binding a real
+// listener. `onLoopbackFailed` hears that the loopback base let a stream down, so the caller can probe it again.
+export const bridgeConnection = (
+    socket: Socket,
+    target: TunnelTarget,
+    onError: (message: string) => void,
+    onLoopbackFailed: () => void = () => undefined,
+): void => {
+    const queued: Buffer[] = [];
+    const bridge: Bridge = {
+        socket,
+        target,
+        onError,
+        onLoopbackFailed,
+        queued,
+        early: (chunk) => {
+            queued.push(chunk);
+        },
+        pump: undefined,
+        ws: undefined,
+        handshake: undefined,
+        closed: false,
+    };
+    socket.pause();
+    socket.on("data", bridge.early);
+    socket.on("close", () => closeBridge(bridge));
+    socket.on("error", () => closeBridge(bridge));
+    dialStream(bridge, target.base, target.fallback === undefined ? OPEN_TIMEOUT_MS : LOOPBACK_OPEN_TIMEOUT_MS, target.fallback);
 };
 
 // Don't add an HTTP-GET diagnosis for a WebSocket error: this route exists only as an upgrade, so a plain GET
@@ -149,13 +238,25 @@ export const bridgeConnection = (socket: Socket, target: TunnelTarget, onError: 
 
 // Starts listening for this pairing; resolves once bound, so a caller handing the port to ssh doesn't race it.
 // EADDRINUSE is reported, not thrown, so one taken port doesn't take down other pairings' tunnels.
-export const startSshTunnel = async (target: TunnelTarget, log: Log): Promise<(() => Promise<void>) | undefined> => {
+export const startSshTunnel = async (
+    target: TunnelTarget,
+    log: Log,
+    onLoopbackFailed: (sandboxId: string) => void = () => undefined,
+): Promise<(() => Promise<void>) | undefined> => {
     const port = syncSshPort(target.sandboxId);
     const sockets = new Set<Socket>();
+    let toldFallback = false;
     const server: Server = createServer((socket) => {
         sockets.add(socket);
         socket.on("close", () => sockets.delete(socket));
-        bridgeConnection(socket, target, (message) => log(message));
+        bridgeConnection(socket, target, (message) => log(message), () => {
+            onLoopbackFailed(target.sandboxId);
+            // Said once per listener: Mutagen dials several streams, and each would say the same.
+            if (!toldFallback) {
+                toldFallback = true;
+                log(`  sync transport for ${target.sandboxId}: the loopback daemon did not open the stream, so it went through ${target.fallback ?? "the public address"}`);
+            }
+        });
     });
     const bound = await new Promise<boolean>((resolve) => {
         server.once("error", (error: NodeJS.ErrnoException) => {
@@ -185,7 +286,7 @@ export const startSshTunnel = async (target: TunnelTarget, log: Log): Promise<((
 // `signal` retires the pool for good: a reconcile after it binds nothing, and a bind it lands on midway is released at
 // once. A watcher loop abandoned for a stall (mirror.ts) has its pool stopped, and may come back from its stuck step
 // still mid-pass; it must not take a sandbox's port again from the loop that replaced it.
-export const createTunnelPool = (log: Log, signal?: AbortSignal) => {
+export const createTunnelPool = (log: Log, signal?: AbortSignal, onLoopbackFailed?: (sandboxId: string) => void) => {
     // The base each live listener was bound for, beside its stop: a listener closes over the address it dials, so
     // the pool must remember what it was told.
     const running = new Map<string, { readonly base: string; readonly stop: () => Promise<void> }>();
@@ -221,7 +322,7 @@ export const createTunnelPool = (log: Log, signal?: AbortSignal) => {
                     log(`  sync transport for ${target.sandboxId} moving to ${target.base}`);
                 }
                 // ditto: a bind per pairing, serialized on purpose
-                const stop = await startSshTunnel(target, log);
+                const stop = await startSshTunnel(target, log, onLoopbackFailed);
                 if (stop !== undefined && retired()) {
                     await stop();
                     return;

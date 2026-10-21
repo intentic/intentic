@@ -1,6 +1,6 @@
-<!-- HOW FAR THIS COMPUTER'S SANDBOX'S SETUP IS, on its card (LocalMachineCard.vue): the setup's own estimate as a bar,
-     held back from 100 until it says it is done, its running step in its own words, and the number. Drawn under the
-     sandbox's step when the card lists a folder's steps, under the title when it does not. -->
+<!-- HOW FAR A FOLDER'S SANDBOX'S SETUP IS, on its card (LocalSetupCard.vue): the setup's own estimate as a bar, held
+     back from 100 until it says it is done, its running step in its own words, and the number. Drawn under the
+     sandbox's step of the folder's steps. -->
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
 

@@ -1,13 +1,13 @@
 //! WHICH FOLDER OF THIS COMPUTER IS IN WHICH SANDBOX: the machine agent's pairings, and nothing else (2026-10-20).
 //!
-//! The agent keeps one pairing per synced folder (`intentic-machine sync attach`, `sync setup`), and that pairing is
-//! what syncs the folder: it is the binding. This app reads it through the agent (`intentic-machine status --json`,
-//! scripts.rs [`crate::scripts::sync_report`]) and writes it only through the agent's own verbs (attach, detach,
-//! uninstall, forget), then reads again. What it last read is held in memory alone ([`crate::state::AppState`]
+//! The agent keeps one pairing per synced folder (`intentic-machine sync setup`), and that pairing is what syncs the
+//! folder: it is the binding. This app reads it through the agent (`intentic-machine status --json`, scripts.rs
+//! [`crate::scripts::sync_report`]) and writes it only through the agent's own verbs (a folder's setup, uninstall,
+//! forget), then reads again. What it last read is held in memory alone ([`crate::state::AppState`]
 //! `bindings`), never written to a file of its own.
 //!
 //! Before, the same fact lived in three places: `projects.json` (written by this app after an attach or a project's
-//! setup), the folders of `machine-sandbox.json`, and the agent's pairings. Each could be lost or outlive the others: a
+//! setup), the folders of the one-per-computer sandbox's record, and the agent's pairings. Each could be lost or outlive the others: a
 //! reinstall took the app's two files and left the agent syncing, so a folder that had a sandbox was offered "Start a
 //! sandbox" again (quick-lantern, 2026-10-19); a pairing the agent retired by itself stayed in `projects.json`, whose
 //! folder's button opened a sandbox that no longer had it. Rejected: keeping `projects.json` as a cache refreshed from the
@@ -15,14 +15,88 @@
 //! sync tokens and may sit inside a WSL distro the agent alone resolves.
 //!
 //! A pairing names its sandbox the agent's way ([`agent_id_of`] its address), and a binding the platform's way, by the
-//! row the roster, the record and the workspace's address name ([`platform_id`], 2026-10-21).
+//! row the roster, the records and the workspace's address name ([`platform_id`], 2026-10-21). The rows this app knows
+//! beside a slug or an address are every folder's own sandbox it made (folder_setup.rs) and what `ic sandbox list` last
+//! said of each sandbox here (its `platformId`, as the sandbox's last announce had it, [`listed_rows`]).
 
 use std::path::Path;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Manager};
 
-use crate::machine_sandbox::Record;
 use crate::state::{AppState, Project};
+
+/// A sandbox's platform row, with what this machine knows it by: its slug here and its public address.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Row {
+    pub id: String,
+    pub slug: Option<String>,
+    pub hostname: Option<String>,
+}
+
+/// The rows a listing (`ic sandbox list --json`) names: each sandbox's slug beside the platform's id for it. Pure.
+pub fn rows_listed(rows: &[serde_json::Value]) -> Vec<Row> {
+    rows.iter()
+        .filter_map(|row| {
+            Some(Row {
+                id: row["platformId"]
+                    .as_str()
+                    .filter(|id| crate::setup_link::is_sandbox_id(id))?
+                    .to_string(),
+                slug: row["slug"].as_str().map(str::to_string),
+                hostname: None,
+            })
+        })
+        .collect()
+}
+
+/// What the last listing said, and when.
+static LISTED: Mutex<Option<(Instant, Vec<Row>)>> = Mutex::new(None);
+/// A listing this fresh is not asked again for a pairing whose row it did not name.
+const LISTED_FOR: Duration = Duration::from_secs(120);
+
+/// A listing this app made for its own reasons (Devices, commands.rs `sandbox_list`), taken in.
+pub fn heard_listing(rows: &[serde_json::Value]) {
+    *LISTED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) =
+        Some((Instant::now(), rows_listed(rows)));
+}
+
+/// What the last listing said; asked again (seconds of `ic`) only when a pairing's sandbox is one no row names and the
+/// last listing is older than [`LISTED_FOR`].
+fn listed_rows(app: &AppHandle, wanted: bool) -> Vec<Row> {
+    let held = LISTED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    let stale = held
+        .as_ref()
+        .is_none_or(|(at, _)| at.elapsed() > LISTED_FOR);
+    if wanted && stale {
+        let listing = crate::scripts::ic_listing(
+            app,
+            crate::commands::list_script(crate::scripts::Host::current(), crate::commands::VERSION),
+        );
+        if let Ok(rows) = listing {
+            heard_listing(&rows);
+            return rows_listed(&rows);
+        }
+    }
+    held.map(|(_, rows)| rows).unwrap_or_default()
+}
+
+/// Every row this app knows: the folders' own sandboxes first, then the last listing's.
+fn known_rows(app: &AppHandle, wanted: bool) -> Vec<Row> {
+    let mut rows = crate::folder_setup::known_rows(app);
+    for row in listed_rows(app, wanted) {
+        if !rows.iter().any(|held| held.id == row.id) {
+            rows.push(row);
+        }
+    }
+    rows
+}
 
 /// The sandbox folder a project pairing syncs, `/work/<name>`, read back to `<name>`. Anything else (`/work` itself, a
 /// deeper path) is no project folder. Pure.
@@ -49,25 +123,25 @@ pub fn agent_id_of(hostname: &str) -> String {
 
 /// The platform's row for the sandbox a pairing syncs with, where this app knows it (2026-10-21). The agent never learns
 /// the row: it names a sandbox by [`agent_id_of`] its address. Everything here that asks whether a folder's sandbox is
-/// live, gone or this computer's compares rows (the roster's, the record's), and read as the row, the agent's own id made
-/// every folder one whose sandbox the account no longer lists: the next roster had this machine let go of the sandbox's
-/// sync. The one row this app holds beside an address is this computer's own sandbox's (`mine`, its `hostname` and the
-/// `slug` this machine's ic lists it under), so a pairing of it is told by either; any other sandbox's row is unknown
-/// here, which every reader takes as undecided, never as gone. Pure.
-pub fn platform_id(pairing: &serde_json::Value, mine: &Record) -> Option<String> {
-    let row = mine.sandbox_id.as_deref()?;
-    let agent_id = mine.hostname.as_deref().map(agent_id_of);
+/// live or gone compares rows (the roster's), and read as the row, the agent's own id made every folder one whose
+/// sandbox the account no longer lists: the next roster had this machine let go of the sandbox's sync. A pairing is told
+/// by its slug or its address against the rows this app knows ([`Row`]); a sandbox whose row is unknown here is
+/// undecided, which every reader takes as live, never as gone. Pure.
+pub fn platform_id(pairing: &serde_json::Value, rows: &[Row]) -> Option<String> {
     let named = |said: Option<&str>, held: Option<&str>| said.is_some() && said == held;
-    (named(pairing["sandboxId"].as_str(), agent_id.as_deref())
-        || named(pairing["slug"].as_str(), mine.slug.as_deref()))
-    .then(|| row.to_string())
+    rows.iter()
+        .find(|row| {
+            let agent_id = row.hostname.as_deref().map(agent_id_of);
+            named(pairing["sandboxId"].as_str(), agent_id.as_deref())
+                || named(pairing["slug"].as_str(), row.slug.as_deref())
+        })
+        .map(|row| row.id.clone())
 }
 
 /// The bindings the agent's report (`intentic-machine status --json`) holds: every pairing that syncs a folder of this
 /// computer into a project folder of a sandbox, filed under the sandbox's platform row ([`platform_id`]). A pairing of a
-/// whole `/work` (an older desktop sync), the projects host (no folder of its own) and a mirror-only pairing bind no
-/// folder. Pure.
-pub fn read(report: &serde_json::Value, mine: &Record) -> Vec<Project> {
+/// whole `/work` (an older desktop sync) and a mirror-only pairing bind no folder. Pure.
+pub fn read(report: &serde_json::Value, rows: &[Row]) -> Vec<Project> {
     report["sync"]["pairings"]
         .as_array()
         .map(|pairings| {
@@ -78,7 +152,7 @@ pub fn read(report: &serde_json::Value, mine: &Record) -> Vec<Project> {
                     Some(Project {
                         path: pairing["localDir"].as_str()?.to_string(),
                         dir: project_dir(pairing["remoteDir"].as_str()?)?.to_string(),
-                        sandbox_id: platform_id(pairing, mine),
+                        sandbox_id: platform_id(pairing, rows),
                         slug: pairing["slug"].as_str().map(str::to_string),
                     })
                 })
@@ -95,7 +169,7 @@ pub fn newly_bound<'a>(before: &[Project], now: &'a [Project]) -> Vec<&'a Projec
 }
 
 /// The agent's report read again, its bindings taken in, and every window on a folder newly bound told so. Answers the
-/// report for a caller that reads more of it (machine_sandbox.rs follows first copies off the same one), or None when
+/// report for a caller that reads more of it (folder_setup.rs follows first copies off the same one), or None when
 /// there is no agent or it could not be read, which leaves what was last read as it was: a doubt changes nothing.
 pub fn refresh(app: &AppHandle) -> Option<serde_json::Value> {
     let report = match crate::scripts::sync_report() {
@@ -106,8 +180,24 @@ pub fn refresh(app: &AppHandle) -> Option<serde_json::Value> {
             return None;
         }
     };
-    let mine = crate::machine_sandbox::status(app);
-    let before = app.state::<AppState>().hear_bindings(read(&report, &mine));
+    let mut rows = known_rows(app, false);
+    // A project pairing whose sandbox no row names yet: the listing is asked (at most every two minutes).
+    let unnamed = report["sync"]["pairings"]
+        .as_array()
+        .is_some_and(|pairings| {
+            pairings.iter().any(|pairing| {
+                pairing["mode"].as_str() == Some("sync")
+                    && pairing["remoteDir"]
+                        .as_str()
+                        .and_then(project_dir)
+                        .is_some()
+                    && platform_id(pairing, &rows).is_none()
+            })
+        });
+    if unnamed {
+        rows = known_rows(app, true);
+    }
+    let before = app.state::<AppState>().hear_bindings(read(&report, &rows));
     for project in newly_bound(&before, &app.state::<AppState>().projects()) {
         crate::local::mark_sandbox(app, Path::new(&project.path));
     }
@@ -126,20 +216,19 @@ pub fn refresh_soon(app: &AppHandle) {
 mod tests {
     use super::*;
 
-    /// What the agent and the app hold of this computer's sandbox, as on a real computer (rog, 2026-10-21): the agent names
-    /// it by its address (`sandboxId`, `sync setup` given no `--sandbox-id`, which nothing passes), the app's record and
-    /// the roster by the platform's row.
+    /// What the agent and the app hold of a sandbox, as on a real computer (rog, 2026-10-21): the agent names it by its
+    /// address (`sandboxId`, `sync setup` given no `--sandbox-id`, which nothing passes), the app's records and the
+    /// roster by the platform's row.
     const AGENT_ID: &str = "sandbox-7953ae151fa4-sbx-intentic-dev";
     const SLUG: &str = "sandbox-7953ae151fa4";
     const ROW: &str = "cmvc7h3cl002801mkboza1qz6";
 
-    fn mine() -> Record {
-        Record {
-            sandbox_id: Some(ROW.to_string()),
+    fn mine() -> Vec<Row> {
+        vec![Row {
+            id: ROW.to_string(),
             slug: Some(SLUG.to_string()),
             hostname: Some("sandbox-7953ae151fa4.sbx.intentic.dev".to_string()),
-            ..Record::default()
-        }
+        }]
     }
 
     fn pairing(local: Option<&str>, remote: Option<&str>) -> serde_json::Value {
@@ -180,7 +269,7 @@ mod tests {
     fn a_folder_is_bound_by_the_agents_pairing_and_by_nothing_else() {
         let report = serde_json::json!({ "sync": { "pairings": [
             pairing(Some("/home/ada/code/app"), Some("/work/app")),
-            // The whole /work of an older desktop sync, a deeper folder, the projects host and a mirror bind no folder.
+            // The whole /work of an older desktop sync, a deeper folder, a folderless pairing and a mirror bind no folder.
             pairing(Some("/home/ada/intentic/cm1"), None),
             pairing(Some("/home/ada/x"), Some("/work/a/b")),
             serde_json::json!({ "sandboxId": AGENT_ID, "mode": "sync", "projectsHost": true }),
@@ -223,13 +312,13 @@ mod tests {
             .collect();
         assert_eq!(rows, vec![Some(ROW), None]);
         let listed = roster(&[ROW, "cmvhzf5fr001501nteemkn3r9"]);
-        assert!(crate::project::stale_projects(&bound, &listed, None).is_empty());
+        assert!(crate::project::stale_projects(&bound, &listed, &[]).is_empty());
         assert!(bound
             .iter()
             .all(|project| crate::project::is_live(&listed, project)));
         // Once the account no longer lists it, its folder is one whose sandbox went; the hosted one stays undecided.
         let gone =
-            crate::project::stale_projects(&bound, &roster(&["cmvhzf5fr001501nteemkn3r9"]), None);
+            crate::project::stale_projects(&bound, &roster(&["cmvhzf5fr001501nteemkn3r9"]), &[]);
         assert_eq!(
             gone.iter()
                 .map(|project| project.path.as_str())
@@ -239,7 +328,18 @@ mod tests {
         // An agent older than `slug` is told by the address alone, and a record with no row files nothing.
         let older = serde_json::json!({ "sandboxId": AGENT_ID, "mode": "sync" });
         assert_eq!(platform_id(&older, &mine()).as_deref(), Some(ROW));
-        assert_eq!(platform_id(&pairing(None, None), &Record::default()), None);
+        assert_eq!(platform_id(&pairing(None, None), &[]), None);
+        // A sandbox only the listing names is told by its slug.
+        let listed = rows_listed(&[
+            serde_json::json!({ "slug": "sandbox-0123456789ab", "platformId": "cmvhzf5fr001501nteemkn3r9" }),
+            serde_json::json!({ "slug": "lab", "platformId": null }),
+        ]);
+        assert_eq!(listed.len(), 1);
+        let hosted = serde_json::json!({ "sandboxId": "sandbox-0123456789ab-sbx-intentic-dev", "slug": "sandbox-0123456789ab" });
+        assert_eq!(
+            platform_id(&hosted, &listed).as_deref(),
+            Some("cmvhzf5fr001501nteemkn3r9")
+        );
     }
 
     #[test]

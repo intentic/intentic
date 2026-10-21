@@ -26,6 +26,7 @@ import { reportedPairings } from "../hosts/device-reports.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { onRuntimeChange } from "../seams/runtime-feed.js";
+import { projectDirOf } from "../system/project-dir.js";
 
 // What a child's report reads off the daemon: the doors a wake goes through, the child's and parent's entries, how a
 // killed runtime reads, and where the child's work went.
@@ -87,10 +88,11 @@ const projectDeliveryDeps = (services: BootPhase["services"]): ProjectDeliveryDe
         }),
 });
 
-// Work landing in a folder attached to this computer's own sandbox goes to the folder on the computer as well
-// (land/project-delivery.ts): only on that sandbox, and only from the daemon that owns the container.
+// Work landing in a project sandbox's folder goes to the folder on the owner's computer as well
+// (land/project-delivery.ts): only on a sandbox made for one folder (system/project-dir.ts), and only from the daemon
+// that owns the container.
 const startProjectDelivery = ({ role, services, shutdown }: Pick<BootPhase, "role" | "services" | "shutdown">): void => {
-    if (role.container && services.config.sandbox.projectsHost) {
+    if (role.container && projectDirOf(services.config) !== undefined) {
         shutdown.push(createProjectDelivery(projectDeliveryDeps(services)).start());
     }
 };

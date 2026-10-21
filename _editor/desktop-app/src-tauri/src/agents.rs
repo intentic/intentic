@@ -9,9 +9,8 @@
 //!
 //! What is read is only whether files are there: an agent's binary (`~/.intentic/machine/bin/intentic-machine`), its
 //! pidfile (`machine.pid`, which a running agent holds and a stopped one removes), and `ic` (`~/.intentic/ic/bin/ic`,
-//! or a root install). Nothing is started, asked or changed. This device draws it beside the sandboxes, the tray's agent
-//! row names the other environments' agents (agent_status.rs), and this computer's own sandbox is not set up unasked
-//! where another environment's agent keeps this computer's sandboxes already (machine_sandbox.rs `decide`).
+//! or a root install). Nothing is started, asked or changed. This device draws it beside the sandboxes, and the tray's
+//! agent row names the other environments' agents (agent_status.rs).
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -88,19 +87,6 @@ pub fn environment_of(
             )
         }) || system_ic.iter().any(|path| exists(path)),
     }
-}
-
-/// The environment another one's agent keeps this computer's sandboxes from, when this app's own environment has no
-/// agent of its own: what stops this computer's sandbox being set up here unasked (machine_sandbox.rs). One that only
-/// has an agent installed and not running is not keeping anything. Pure.
-pub fn elsewhere(environments: &[Environment]) -> Option<String> {
-    if environments.iter().any(|env| env.here && env.agent) {
-        return None;
-    }
-    environments
-        .iter()
-        .find(|env| !env.here && env.agent && env.running)
-        .map(Environment::label)
 }
 
 /// The other environments whose agent runs, by name: what the tray's agent row adds after this one's. Pure.
@@ -273,28 +259,13 @@ mod tests {
         }
     }
 
-    /// The setup checks first: another environment's running agent keeps this computer's sandboxes only while this one
-    /// has no agent of its own. With one here, the setup uses it and installs nothing.
+    /// The tray's agent row names the other environments whose agent runs, never one only installed.
     #[test]
-    fn another_environments_agent_counts_only_where_this_one_has_none() {
-        let windows_bare = env("windows", None, true, false, false);
+    fn the_other_environments_running_an_agent_are_named() {
         let windows_agent = env("windows", None, true, true, true);
         let arch = env("wsl", Some("archlinux"), false, true, true);
         let ubuntu_installed_only = env("wsl", Some("ubuntu"), false, true, false);
-        assert_eq!(
-            elsewhere(&[
-                windows_bare.clone(),
-                ubuntu_installed_only.clone(),
-                arch.clone()
-            ]),
-            Some("WSL (archlinux)".to_string())
-        );
-        assert_eq!(elsewhere(&[windows_agent.clone(), arch.clone()]), None);
-        assert_eq!(
-            elsewhere(&[windows_bare.clone(), ubuntu_installed_only]),
-            None
-        );
-        assert_eq!(elsewhere(&[windows_bare]), None);
+        assert!(others_running(&[windows_agent.clone(), ubuntu_installed_only]).is_empty());
         assert_eq!(
             others_running(&[windows_agent, arch]),
             vec!["WSL (archlinux)".to_string()]

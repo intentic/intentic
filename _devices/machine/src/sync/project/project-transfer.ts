@@ -96,7 +96,7 @@ export type RecordHold = (since: number | undefined) => Promise<void>;
 
 // The hold, on the folder's own pairing in this agent's state.
 export const transferHold =
-    (pairing: Pick<Pairing, "key" | "sandboxId">): RecordHold =>
+    (pairing: Pick<Pairing, "sandboxId">): RecordHold =>
     async (since) =>
         await setTransferSince(pairingKey(pairing), since);
 

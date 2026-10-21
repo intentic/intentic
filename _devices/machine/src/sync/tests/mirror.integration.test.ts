@@ -244,7 +244,7 @@ describe("reportCarriers", () => {
 
     // A dead sandbox took 5,760 report posts a day, none of them logged.
     it("posts once per sandbox, and never to one said to be gone", () => {
-        const carried = reportCarriers([pairing("a"), pairing("a", { key: "a~blog" }), pairing("b", { goneSince: 1 }), pairing("c")], new Set());
+        const carried = reportCarriers([pairing("a"), pairing("a", { localDir: "/home/me/a" }), pairing("b", { goneSince: 1 }), pairing("c")], new Set());
         expect(carried.map((entry) => entry.pairing.sandboxId)).toEqual(["a", "c"]);
     });
 });

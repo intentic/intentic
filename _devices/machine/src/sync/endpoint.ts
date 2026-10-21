@@ -118,20 +118,19 @@ export const dockerEndpointAnswers = async (container: string, sandboxUrl: strin
 export type TransportAsk = "auto" | SyncTransport;
 
 // HOW A NEW PAIRING REACHES ITS SANDBOX. A project folder whose sandbox container runs on this machine's
-// own Docker engine is reached through Docker, with nothing on ssh, the tunnel or a public address on the data path;
-// so are the projects host (whose forwards ride the same way) and a folder attached to it. Every other pairing over
-// ssh, as before. `--transport` overrides the choice, and docker asked for where it cannot work is refused before the
+// own Docker engine is reached through Docker, with nothing on ssh, the tunnel or a public address on the data path.
+// Every other pairing over ssh, as before. `--transport` overrides the choice, and docker asked for where it cannot work is refused before the
 // pairing token is spent. Stored as absent for ssh, the shape every earlier pairing has.
 export const transportFor = async (
     asked: TransportAsk,
-    placement: Pick<Pairing, "project" | "projectsHost">,
+    placement: Pick<Pairing, "project">,
     sandboxUrl: string,
     locate: (sandboxUrl: string) => Promise<string | undefined> = localSandboxContainer,
 ): Promise<Pick<Pairing, "transport" | "container">> => {
     if (asked === "ssh") {
         return {};
     }
-    if (!isProjectPairing(placement) && placement.projectsHost !== true) {
+    if (!isProjectPairing(placement)) {
         if (asked === "docker") {
             throw new Error("--transport docker is for a project folder (--project): a workspace pairing's git bridge and state backup ride ssh.");
         }

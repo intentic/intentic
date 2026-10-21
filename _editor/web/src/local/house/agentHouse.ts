@@ -1,7 +1,7 @@
-// THE AGENT'S HOUSE, built as the sandbox is: the picture on the card of this computer's sandbox (AgentHouse.vue,
-// LocalMachineCard.vue) is drawn by its setup's real phases, never by a clock of its own. Each stage is something the
+// THE AGENT'S HOUSE, built as the sandbox is: the picture on the card of a folder's own sandbox (AgentHouse.vue,
+// LocalSetupCard.vue) is drawn by its setup's real phases, never by a clock of its own. Each stage is something the
 // setup has actually reached, so a card that shows a roof is a sandbox whose daemon is coming up, and one with the
-// lights on is a sandbox that answers; a folder's copy moving in is the folder's own first copy.
+// lights on is a sandbox that answers with the folder's link made; the folder's copy moving in is its own first copy.
 
 export const HOUSE_STAGES = [
     // Nothing built yet: the plans drawn up (the installer fetched, Docker checked, the setup code redeemed).
@@ -12,7 +12,7 @@ export const HOUSE_STAGES = [
     `walls`,
     // The daemon coming up inside it.
     `roof`,
-    // The sandbox answering, end to end: lights on, and the lotus over the door.
+    // The sandbox answering, the folder's link to it made: lights on, and the lotus over the door.
     `lit`,
     // The folder's copy moving in.
     `moving`,
@@ -34,18 +34,24 @@ export const STAGE_OF_PHASE: Readonly<Record<string, HouseStage>> = {
     "pulling-image": `ground`,
     "starting-sandbox": `walls`,
     "waiting-health": `roof`,
-    verifying: `lit`,
-    "desktop-sync": `moving`,
-    // The device's own connection runs once the folder is in: the house is lived in from here.
-    "connecting-machine": `home`,
+    // The folder's link comes right after the daemon answers (ic's connect.rs, 2026-10-21), and its first copy runs while
+    // the public address is checked and this computer is connected, so those two are the folder moving in.
+    "desktop-sync": `lit`,
+    verifying: `moving`,
+    "connecting-machine": `moving`,
 };
 
 /** The stage a setup's phase builds, or `plan` for one this list does not know (or none yet). */
-export const stageOfPhase = (phase: string | undefined): HouseStage => (phase === undefined ? undefined : STAGE_OF_PHASE[phase]) ?? `plan`;
+const stageOfPhase = (phase: string | undefined): HouseStage => (phase === undefined ? undefined : STAGE_OF_PHASE[phase]) ?? `plan`;
 
-/** The stage a build has reached: by its running phase, and `home` once it is ready, whatever phase it ended on. */
-export const houseStageOf = (build: { readonly state: string; readonly phase: string | undefined }): HouseStage =>
-    build.state === `ready` ? `home` : stageOfPhase(build.phase);
+/** The stage a build has reached: by its running phase, and `home` once it is ready, whatever phase it ended on. A
+ * folder's setup that finished is its copy moving in until the folder is in (`copying`). */
+export const houseStageOf = (build: { readonly state: string; readonly phase: string | undefined }): HouseStage => {
+    if (build.state === `ready`) {
+        return `home`;
+    }
+    return build.state === `copying` ? `moving` : stageOfPhase(build.phase);
+};
 
 /** Whether the house has reached `stage`: what each part of the drawing is shown by. */
 export const reached = (current: HouseStage, stage: HouseStage): boolean => HOUSE_STAGES.indexOf(current) >= HOUSE_STAGES.indexOf(stage);

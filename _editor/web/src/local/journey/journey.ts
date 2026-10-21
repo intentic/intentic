@@ -1,12 +1,12 @@
 import { t } from "@intentic/ui/i18n";
-import type { LocalFolderSandbox, LocalMachineState } from "../../app/environments/localHost";
+import type { LocalFolderSetup } from "../../app/environments/localHost";
 
-// A FOLDER'S WAY TO AN AGENT, AS STEPS: sign in, get this computer's sandbox ready, copy the folder in. The dialog that
-// asks (LocalProjectDialog.vue) lists them before the press, and the card in the window's corner (LocalMachineCard.vue)
-// ticks them off as the app goes, so each step is said for what it is and only while it is the one under way. They
-// used to run together: the dialog drew the folder being carried into the house over a button that only signed the
-// reader in, and the card went from "finish signing in" to a copy to "stopped" with nothing saying which step was
-// which (2026-10-18). Pure, so every state's steps are tested by value (journey.test.ts).
+// A FOLDER'S WAY TO AN AGENT, AS STEPS: sign in, make the folder's own sandbox, copy the folder in. The dialog that asks
+// (LocalProjectDialog.vue) lists them before the press, and the card in the window's corner (LocalSetupCard.vue) ticks
+// them off as the app goes, so each step is said for what it is and only while it is the one under way. They used to
+// run together: the dialog drew the folder being carried into the house over a button that only signed the reader in,
+// and the card went from "finish signing in" to a copy to "stopped" with nothing saying which step was which
+// (2026-10-18). Pure, so every state's steps are tested by value (journey.test.ts).
 
 /** How a step stands: done, the reader's next press, under way by itself, waiting on the reader, failed, or not yet. */
 export type JourneyStepState = `done` | `current` | `running` | `attention` | `failed` | `todo`;
@@ -22,10 +22,10 @@ export interface JourneyStep {
 }
 
 export interface JourneyFacts {
-    /** This computer's sandbox, as the app says. */
-    readonly machine: LocalMachineState | undefined;
-    /** The folder on its way into it; none before it is asked in. */
-    readonly folder: LocalFolderSandbox | undefined;
+    /** The folder's setup, as the app says; none before it is asked for. */
+    readonly setup: LocalFolderSetup | undefined;
+    /** Before the press: whether someone is signed in (the dialog's preview). */
+    readonly signedIn: boolean;
     /** The folder's name, for its step. */
     readonly name: string;
     /** The reader is in the browser signing in, sent there from this window. */
@@ -36,72 +36,65 @@ export interface JourneyFacts {
 
 const step = (key: JourneyStepKey, title: string, state: JourneyStepState, note?: string): JourneyStep => ({ key, title, state, note });
 
-const signInStep = (machine: LocalMachineState | undefined, signingIn: boolean): JourneyStep => {
+const signedOutNow = (facts: JourneyFacts): boolean => (facts.setup === undefined ? !facts.signedIn : facts.setup.state === `signedOut`);
+
+const signInStep = (facts: JourneyFacts): JourneyStep => {
     const title = t(`local.journey.signIn.title`);
-    if (machine?.state !== `signedOut`) {
+    if (!signedOutNow(facts)) {
         return step(`signIn`, title, `done`);
     }
-    return signingIn ? step(`signIn`, title, `running`, t(`local.journey.signIn.inBrowser`)) : step(`signIn`, title, `current`, t(`local.journey.signIn.opens`));
+    return facts.signingIn ? step(`signIn`, title, `running`, t(`local.journey.signIn.inBrowser`)) : step(`signIn`, title, `current`, t(`local.journey.signIn.opens`));
 };
 
-const sandboxStep = (machine: LocalMachineState | undefined): JourneyStep => {
+const sandboxStep = (setup: LocalFolderSetup | undefined): JourneyStep => {
     const title = t(`local.journey.sandbox.title`);
-    switch (machine?.state) {
+    switch (setup?.state) {
         case undefined:
         case `signedOut`:
             return step(`sandbox`, title, `todo`, t(`local.journey.sandbox.once`));
         case `signedIn`:
             return step(`sandbox`, title, `running`, t(`local.journey.sandbox.signedIn`));
+        case `queued`:
+            return setup.behind === undefined
+                ? step(`sandbox`, title, `running`, t(`local.journey.sandbox.signedIn`))
+                : step(`sandbox`, title, `running`, t(`local.journey.sandbox.behind`));
         case `creating`:
-            return step(`sandbox`, title, `running`, t(`local.journey.sandbox.creating`, { percent: machine.percent }));
+            return step(`sandbox`, title, `running`, t(`local.journey.sandbox.creating`, { percent: setup.percent }));
         case `interrupted`:
             return step(`sandbox`, title, `running`, t(`local.journey.sandbox.interrupted`));
-        case `starting`:
-            return step(`sandbox`, title, `running`, t(`local.journey.sandbox.starting`));
-        case `asleep`:
-            return step(`sandbox`, title, `todo`, t(`local.journey.sandbox.asleep`));
-        case `stopped`:
-            return machine.reason === undefined
-                ? step(`sandbox`, title, `todo`, t(`local.journey.sandbox.stopped`))
-                : step(`sandbox`, title, `failed`, t(`local.journey.sandbox.startFailed`));
         case `needsDocker`:
-            return step(`sandbox`, title, `attention`, t(`local.journey.sandbox.needsDocker.${machine.reason}`));
+            return step(`sandbox`, title, `attention`, t(`local.journey.sandbox.needsDocker.${setup.reason}`));
         case `waiting`:
-            return step(`sandbox`, title, `attention`, t(`local.journey.sandbox.waiting.${machine.for}`));
+            return step(`sandbox`, title, `attention`, t(`local.journey.sandbox.waiting.${setup.for}`));
         case `failed`:
-            return step(`sandbox`, title, `failed`, t(`local.journey.sandbox.failed`));
-        case `gone`:
-            return step(`sandbox`, title, `failed`, t(`local.journey.sandbox.gone`));
+            return setup.made ? step(`sandbox`, title, `done`) : step(`sandbox`, title, `failed`, t(`local.journey.sandbox.failed`));
+        case `copying`:
         case `ready`:
             return step(`sandbox`, title, `done`);
     }
 };
 
-const copyStep = (machine: LocalMachineState | undefined, folder: LocalFolderSandbox | undefined, name: string): JourneyStep => {
+const copyStep = (setup: LocalFolderSetup | undefined, name: string): JourneyStep => {
     const title = t(`local.journey.copy.title`, { name });
-    // Nothing moves before the sandbox is up: the folder stays where it is, and waits.
-    if (machine?.state !== `ready` || folder === undefined) {
-        return step(`copy`, title, `todo`, t(`local.journey.copy.stays`));
-    }
-    switch (folder.state) {
-        case `queued`:
-        case `attaching`:
-            return step(`copy`, title, `running`, t(`local.journey.copy.adding`));
+    switch (setup?.state) {
         case `copying`:
-            return folder.status === `paused`
+            return setup.status === `paused`
                 ? step(`copy`, title, `attention`, t(`local.journey.copy.paused`))
                 : step(`copy`, title, `running`, t(`local.journey.copy.copying`));
-        case `failed`:
-            return step(`copy`, title, `failed`, t(`local.journey.copy.failed`));
         case `ready`:
             return step(`copy`, title, `done`);
+        case `failed`:
+            return setup.made ? step(`copy`, title, `failed`, t(`local.journey.copy.failed`)) : step(`copy`, title, `todo`, t(`local.journey.copy.stays`));
+        // Nothing moves before the sandbox is up: the folder stays where it is, and waits.
+        default:
+            return step(`copy`, title, `todo`, t(`local.journey.copy.stays`));
     }
 };
 
 /** The steps from this folder to an agent, as far as they have gone. */
 export const journeyOf = (facts: JourneyFacts): readonly JourneyStep[] => {
-    const steps = [sandboxStep(facts.machine), copyStep(facts.machine, facts.folder, facts.name)];
-    return facts.withSignIn ? [signInStep(facts.machine, facts.signingIn), ...steps] : steps;
+    const steps = [sandboxStep(facts.setup), copyStep(facts.setup, facts.name)];
+    return facts.withSignIn ? [signInStep(facts), ...steps] : steps;
 };
 
 /** The step under way or waiting on the reader: the first one not done. */

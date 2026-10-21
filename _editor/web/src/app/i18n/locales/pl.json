@@ -12432,9 +12432,9 @@
             "syncedSandbox": "Sandbox zsynchronizowany",
             "toggleFolder": "Przełącz folder",
             "dropFilesToAdd": "Upuść pliki, żeby dodać je do {name}",
-            "machineSandbox": "Sandbox tego komputera",
             "opening": "Otwieranie {name}…",
-            "openingSlow": "Folder wciąż jest wczytywany. Duży folder lub folder w WSL za pierwszym razem potrzebuje chwili."
+            "openingSlow": "Folder wciąż jest wczytywany. Duży folder lub folder w WSL za pierwszym razem potrzebuje chwili.",
+            "ownSandbox": "Własna piaskownica"
         },
         "folderMenu": {
             "switchFolder": "{name}: otwórz inny folder",
@@ -12491,7 +12491,7 @@
         },
         "project": {
             "dialogTitle": "Popracuj nad {name} z agentem",
-            "lede": "Jego kopia trafia do sandboxa tego komputera, gdzie pracują na niej agenci. Nic tutaj się nie zmieni, dopóki nie przeniesiesz ich pracy z powrotem.",
+            "lede": "Dostaje własną piaskownicę na tym komputerze, z kopią w środku, nad którą pracują agenci. Nic tutaj się nie zmieni, dopóki nie przyniesiesz ich pracy z powrotem.",
             "files": "{count} plik do skopiowania | {count} pliki do skopiowania | {count} plików do skopiowania",
             "moreFiles": "Plików do skopiowania: ponad {count}",
             "weight": "{files}, {size}",
@@ -12526,9 +12526,9 @@
             "percent": "{percent}%",
             "hide": "Ukryj",
             "show": "Pokaż budowę",
-            "attach": "Pracuj nad tym w sandboxie tego komputera",
-            "signInAttach": "Zaloguj się, aby kontynuować",
-            "attachFailed": "Nie udało się dodać tego folderu"
+            "create": "Utwórz jej piaskownicę",
+            "signInCreate": "Zaloguj się, aby kontynuować",
+            "createFailed": "Nie udało się utworzyć piaskownicy tego folderu"
         },
         "journey": {
             "heading": "Co będzie dalej",
@@ -12539,115 +12539,101 @@
                 "inBrowser": "Dokończ w przeglądarce"
             },
             "sandbox": {
-                "title": "Przygotuj sandbox tego komputera",
-                "once": "Konfigurowany raz, potem służy wszystkim folderom",
-                "signedIn": "Przygotowanie…",
-                "creating": "Konfiguracja, {percent}%",
-                "interrupted": "Wznawianie od miejsca przerwania",
-                "starting": "Uruchamianie",
-                "asleep": "Śpi. Intentic obudzi go za Ciebie",
-                "stopped": "Zatrzymany. Intentic uruchomi go za Ciebie",
-                "startFailed": "Nie udało się uruchomić",
+                "title": "Utwórz piaskownicę tego folderu",
+                "once": "Własna piaskownica, na tym komputerze",
+                "signedIn": "Przygotowuję…",
+                "behind": "Następna, po innym folderze",
+                "creating": "Tworzę, {percent}%",
+                "interrupted": "Wznawiam od miejsca przerwania",
                 "needsDocker": {
                     "notInstalled": "Potrzebuje Dockera",
                     "notRunning": "Czeka na uruchomienie Dockera",
-                    "notAllowed": "Docker odrzuca to konto"
+                    "notAllowed": "Docker odmawia temu kontu dostępu"
                 },
                 "waiting": {
-                    "consent": "Ten komputer najpierw potrzebuje jednorazowej konfiguracji",
+                    "consent": "Ten komputer potrzebuje jednorazowej konfiguracji",
                     "restart": "Ten komputer wymaga ponownego uruchomienia",
                     "signOut": "Wyloguj się z Windows i zaloguj ponownie"
                 },
-                "failed": "Nie udało się skonfigurować",
-                "gone": "Nie ma go już na tym komputerze"
+                "failed": "Nie udało się jej utworzyć"
             },
             "copy": {
                 "title": "Skopiuj {name} do środka",
                 "stays": "Twój folder zostaje na miejscu",
-                "adding": "Dodawanie",
                 "copying": "Kopiowanie. Agenci mogą zacząć, gdy tylko będzie w środku",
                 "paused": "Wstrzymane",
-                "failed": "Nie udało się dodać"
+                "failed": "Nie synchronizuje się"
             }
         },
-        "machine": {
-            "ready": "Sandbox tego komputera jest gotowy",
-            "readyDetail": "Foldery, nad którymi pracujesz z agentem, trafiają do niego.",
-            "signedOut": "Zaloguj się, aby skonfigurować sandbox tego komputera",
-            "signedOutDetail": "Intentic utworzy go na tym komputerze zaraz po zalogowaniu.",
+        "setup": {
+            "signedOut": "Zaloguj się, aby utworzyć piaskownicę dla {name}",
+            "signedOutDetail": "Intentic utworzy ją zaraz po zalogowaniu, na tym komputerze.",
             "signingIn": "Dokończ logowanie w przeglądarce",
-            "signingInDetail": "Intentic sam dokończy resztę, gdy tylko się zalogujesz.",
-            "signedIn": "Zalogowano",
-            "signedInDetail": "Przygotowywanie sandboxa tego komputera…",
+            "signingInDetail": "Po zalogowaniu Intentic sam przejdzie dalej.",
+            "signedIn": "Jesteś zalogowany",
+            "signedInDetail": "Przygotowuję piaskownicę dla {name}…",
+            "queued": "Przygotowuję piaskownicę dla {name}",
+            "queuedDetail": "Zacznie się za chwilę.",
+            "behind": "Czeka na piaskownicę dla {behind}",
+            "behindDetail": "Ten komputer tworzy jedną piaskownicę naraz. Następna jest {name}.",
             "needsDocker": {
-                "notInstalled": "Sandbox tego komputera potrzebuje Dockera",
-                "notRunning": "Sandbox tego komputera czeka na Dockera",
+                "notInstalled": "Piaskownica dla {name} potrzebuje Dockera",
+                "notRunning": "Piaskownica dla {name} czeka na Dockera",
                 "notAllowed": "Docker odmawia temu kontu dostępu"
             },
             "needsDockerDetail": {
-                "notInstalled": "Zainstaluj Docker Desktop, a Intentic skonfiguruje sandbox, gdy tylko Docker zadziała.",
-                "notRunning": "Uruchom Dockera, a Intentic sam dokończy resztę.",
-                "notAllowed": "Strona Ten komputer podpowiada, jak dać temu kontu dostęp do Dockera."
+                "notInstalled": "Zainstaluj Docker Desktop, a Intentic utworzy piaskownicę, gdy tylko ruszy.",
+                "notRunning": "Uruchom Dockera, a Intentic sam przejdzie dalej.",
+                "notAllowed": "W Urządzeniach jest opisane, jak pozwolić temu kontu używać Dockera."
             },
-            "creating": "Konfiguracja sandboxa tego komputera",
-            "creatingShort": "Konfiguracja sandboxa tego komputera",
-            "interrupted": "Wznawianie sandboxa tego komputera",
-            "interruptedDetail": "Intentic został zamknięty w trakcie konfiguracji, więc kontynuuje od miejsca, w którym przerwał.",
-            "waiting": "Sandbox tego komputera czeka",
+            "creating": "Tworzę piaskownicę dla {name}",
+            "creatingShort": "Tworzę piaskownicę dla {name}",
+            "interrupted": "Wznawiam piaskownicę dla {name}",
+            "interruptedDetail": "Intentic zamknął się w trakcie jej tworzenia, więc kontynuuje od miejsca, w którym przerwał.",
+            "waiting": "Piaskownica dla {name} czeka",
             "waitingDetail": {
-                "consent": "Najpierw trzeba przygotować ten komputer dla agentów. Zrób to na stronie Urządzenia.",
-                "restart": "Ten komputer trzeba uruchomić ponownie, zanim uruchomi sandbox.",
-                "signOut": "Musisz się wylogować i zalogować ponownie, zanim ten komputer uruchomi sandbox."
+                "consent": "Ten komputer trzeba najpierw przygotować dla agentów. Zrób to w Urządzeniach, a piaskownica powstanie zaraz potem.",
+                "needs": "Ten komputer najpierw potrzebuje: {needs}. Windows może poprosić o zgodę.",
+                "restart": "Uruchom ponownie ten komputer, a Intentic przejdzie dalej.",
+                "signOut": "Wyloguj się z Windows i zaloguj ponownie, a Intentic przejdzie dalej."
             },
-            "failed": "Nie udało się skonfigurować sandboxa tego komputera",
-            "stopped": "Sandbox tego komputera jest zatrzymany",
-            "stoppedDetail": "Uruchom go, aby pracować nad folderami z agentem.",
-            "starting": "Uruchamianie sandboxa tego komputera",
-            "startingDetail": "Był zatrzymany, więc Intentic go uruchamia. Potrwa to do minuty.",
-            "startFailed": "Sandbox tego komputera się nie uruchomił",
-            "asleep": "Sandbox tego komputera śpi",
-            "asleepDetail": "Zasnął, gdy nikt z niego nie korzystał, a kopiowanie {name} jest wstrzymane. Uruchom go, aby kontynuować.",
-            "waking": "Budzenie sandboxa tego komputera",
-            "wakingDetail": "Zasnął, gdy nikt z niego nie korzystał. Intentic budzi go, aby skopiować {name}.",
-            "gone": "Sandbox tego komputera został usunięty",
-            "goneDetail": "Nie ma go już na tym komputerze. Skonfiguruj go ponownie, a Twoje foldery do niego wrócą, razem z jego plikami, jeśli ten komputer wciąż je ma.",
-            "folder": {
-                "adding": "Dodawanie {name} do sandboxa tego komputera",
-                "copying": "Kopiowanie {name} do sandboxa tego komputera",
-                "copyingDetail": "Agenci mogą zacząć, gdy pierwsza kopia będzie gotowa. Zmiany wprowadzane tutaj są przenoszone na bieżąco.",
-                "paused": "Kopiowanie {name} jest wstrzymane",
-                "pausedDetail": "Otwórz stronę Urządzenia w sandboxie, aby wznowić synchronizację plików.",
-                "heldLowDisk": "Na dysku z tym folderem prawie brakuje miejsca. Kopiowanie wznowi się samo, gdy miejsce się zwolni.",
-                "heldSwap": "Sandbox tego komputera jest aktualizowany. Kopiowanie wznowi się samo, gdy wróci.",
-                "heldUnreachable": "Sandbox tego komputera nie odpowiada od godziny. Kopiowanie wznowi się samo, gdy odpowie.",
-                "heldAway": "Sandbox tego komputera nie działa teraz na tym komputerze. Kopiowanie wznowi się, gdy wróci.",
-                "preparing": "Przygotowywanie sandboxa na ten folder…",
-                "failed": "Nie udało się dodać {name}",
-                "ready": "{name} jest w sandboxie tego komputera",
-                "readyDetail": "Gdy zaakceptujesz pracę agenta, wraca ona do tego folderu sama. Plik, który też zmieniłeś, zostaje do Twojego przejrzenia.",
-                "readyShort": "{name} jest gotowy"
-            },
+            "failed": "Nie udało się utworzyć piaskownicy dla {name}",
+            "noSync": "{name} nie synchronizuje się ze swoją piaskownicą",
+            "copying": "Kopiuję {name} do jej piaskownicy",
+            "copyingDetail": "Agenci mogą zacząć, gdy pierwsza kopia będzie gotowa. Zmiany wprowadzone tutaj są przenoszone na bieżąco.",
+            "preparing": "Przygotowuję piaskownicę na ten folder…",
+            "paused": "Kopiowanie {name} jest wstrzymane",
+            "pausedDetail": "Otwórz stronę Urządzenia w piaskownicy, aby wznowić synchronizację plików.",
+            "heldLowDisk": "Dysk z tym folderem jest prawie pełny. Kopiowanie wznowi się samo, gdy zrobi się miejsce.",
+            "heldSwap": "Jej piaskownica jest aktualizowana. Kopiowanie wznowi się samo, gdy wróci.",
+            "heldUnreachable": "Jej piaskownica nie odpowiada od godziny. Kopiowanie wznowi się samo, gdy odpowie.",
+            "heldAway": "Jej piaskownica nie działa teraz na tym komputerze. Kopiowanie wznowi się, gdy wróci.",
+            "ready": "Piaskownica dla {name} jest gotowa",
+            "readyDetail": "Gdy zaakceptujesz pracę agenta, wróci ona do tego folderu sama. Plik, który też zmieniłeś, zostanie do przejrzenia.",
+            "readyShort": "{name} jest gotowa",
             "button": {
-                "waiting": "Czekam na sandbox tego komputera",
-                "waitingPercent": "Czekam na sandbox tego komputera ({percent}%)",
-                "copying": "Kopiowanie folderu…",
-                "paused": "Kopiowanie jest wstrzymane",
-                "failed": "Nie udało się dodać tego folderu",
-                "setUpComputer": "Przygotuj ten komputer do pracy z agentami",
+                "waiting": "Tworzę piaskownicę tego folderu…",
+                "waitingPercent": "Tworzę piaskownicę tego folderu ({percent}%)",
+                "behind": "Czeka na piaskownicę innego folderu…",
+                "copying": "Kopiuję folder…",
+                "paused": "Kopiowanie wstrzymane",
+                "failed": "Nie udało się utworzyć piaskownicy tego folderu",
+                "setUpComputer": "Przygotuj ten komputer dla agentów",
                 "signingIn": "Czekam na zalogowanie…",
-                "signedIn": "Przygotowanie…",
-                "starting": "Uruchamianie sandboxa tego komputera…"
+                "signedIn": "Przygotowuję…"
             },
             "action": {
                 "signIn": "Zaloguj się",
                 "signInAgain": "Otwórz logowanie ponownie",
                 "startDocker": "Uruchom Dockera",
                 "retry": "Spróbuj ponownie",
+                "consent": "Kontynuuj",
+                "restart": "Uruchom ponownie teraz",
+                "signOut": "Wyloguj teraz",
                 "log": "Pokaż log",
-                "start": "Uruchom",
-                "recreate": "Skonfiguruj ponownie",
+                "dismiss": "Anuluj",
                 "details": "Otwórz Urządzenia",
-                "open": "Otwórz sandbox"
+                "open": "Otwórz piaskownicę"
             }
         },
         "repair": {

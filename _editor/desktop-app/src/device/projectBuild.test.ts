@@ -1,70 +1,78 @@
-import type { MachineSandbox } from "../desktop";
-import { folderOf, machineOf, machineStateOf, projectPathOf } from "./projectBuild";
+import type { FolderSetup } from "../desktop";
+import { folderSetupOf } from "./folderSetups";
+import { folderSetupFor, needsOf, projectPathOf, setupStateOf } from "./projectBuild";
 
-// This computer's sandbox and a folder on its way into it, read off the app's record into what a window's card and
-// button draw: every state the record can be in, the folder found by the path its window is told, and where
-// "Open sandbox" goes.
+// A folder on its way to its own sandbox, read off the app's records into what its window's card and button draw: every
+// state a record can be in, the folder found by the path its window is told, and where "Open sandbox" goes.
 
-const RECORD: MachineSandbox = {
+const RECORD: FolderSetup = {
+    path: `C:\\Users\\ada\\code\\shop`,
+    name: `shop`,
     state: `creating`,
     phase: `pulling-image`,
     step: `using the sandbox image already here`,
     percent: 42,
-    sandboxId: `cmmachine0001`,
+    sandboxId: `cmshop0001`,
     slug: `sandbox-2c8eb2c5b3a5`,
     hostname: `sandbox-2c8eb2c5b3a5.sbx.intentic.dev`,
-    name: `ada-laptop sandbox`,
+    sandboxName: `shop`,
     made: false,
     attempt: 1,
-    updatedAt: 1_790_000_000,
-    consented: false,
-    resumeOnLaunch: false,
-    requirements: [],
-    folders: [
-        { path: `C:\\Users\\ada\\code\\shop`, name: `shop`, state: `queued` },
-        { path: `C:\\Users\\ada\\code\\api`, name: `api`, state: `copying`, status: `staging-beta` },
-        { path: `C:\\Users\\ada\\notes`, name: `notes`, state: `failed`, reason: `That folder is already attached.` },
-    ],
+    askedAt: 1_790_000_000_000,
+    updatedAt: 1_790_000_000_500,
 };
 
-it(`draws nothing before the app has said`, () => {
-    expect(machineOf(undefined)).toBeUndefined();
+it(`draws nothing for a folder not on its way`, () => {
+    expect(folderSetupFor(undefined)).toBeUndefined();
 });
 
-it(`says how far it is being made, how many folders wait for it, and whether it has a log`, () => {
-    expect(machineOf(RECORD)).toEqual({
+it(`says how far it is being made, and whether it has a log`, () => {
+    expect(folderSetupFor(RECORD)).toEqual({
         state: `creating`,
         phase: `pulling-image`,
         step: `using the sandbox image already here`,
         percent: 42,
-        name: `ada-laptop sandbox`,
-        waiting: 1,
+        name: `shop`,
+        status: undefined,
+        heldBy: [],
+        made: false,
         hasLog: false,
     });
-    expect(machineOf({ ...RECORD, logPath: `/home/ada/.intentic/logs/desktop-machine-setup.log` })?.hasLog).toBe(true);
+    expect(folderSetupFor({ ...RECORD, logPath: `/home/ada/.intentic/logs/desktop-folder-setup.log` })?.hasLog).toBe(true);
 });
 
 // Fields a state does not have are said as undefined, never carried over from the record.
 it(`reads every state the app can be in`, () => {
-    expect(machineStateOf({ state: `creating`, percent: 0 })).toEqual({ state: `creating`, phase: undefined, step: undefined, percent: 0 });
-    expect(machineStateOf({ state: `needsDocker`, reason: `notRunning` })).toEqual({ state: `needsDocker`, reason: `notRunning` });
-    expect(machineStateOf({ state: `waiting`, for: `restart` })).toEqual({ state: `waiting`, for: `restart` });
-    expect(machineStateOf({ state: `failed`, reason: `docker refused` })).toEqual({ state: `failed`, reason: `docker refused` });
-    for (const state of [`signedOut`, `ready`, `stopped`, `asleep`, `interrupted`, `gone`] as const) {
-        expect(machineStateOf({ state })).toEqual({ state });
+    expect(setupStateOf({ state: `creating`, percent: 0 })).toEqual({ state: `creating`, phase: undefined, step: undefined, percent: 0 });
+    expect(setupStateOf({ state: `queued` })).toEqual({ state: `queued`, behind: undefined });
+    expect(setupStateOf({ state: `queued`, behind: `notes` })).toEqual({ state: `queued`, behind: `notes` });
+    expect(setupStateOf({ state: `needsDocker`, reason: `notRunning` })).toEqual({ state: `needsDocker`, reason: `notRunning` });
+    expect(setupStateOf({ state: `waiting`, for: `restart` })).toEqual({ state: `waiting`, for: `restart`, needs: [] });
+    expect(setupStateOf({ state: `failed`, reason: `docker refused` })).toEqual({ state: `failed`, reason: `docker refused` });
+    for (const state of [`signedOut`, `signedIn`, `copying`, `ready`, `interrupted`] as const) {
+        expect(setupStateOf({ state })).toEqual({ state });
     }
 });
 
+it(`names what a setup stopped on a question said this computer needs, by each requirement's own title`, () => {
+    const asked = [
+        { id: `wsl-features`, title: `Turn on WSL`, problem: `x`, remedy: `y`, action: `fixElevated` },
+        { title: `no id` },
+    ];
+    expect(needsOf(asked)).toEqual([`Turn on WSL`]);
+    expect(setupStateOf({ state: `waiting`, for: `consent`, requirements: asked })).toEqual({ state: `waiting`, for: `consent`, needs: [`Turn on WSL`] });
+});
+
 it(`finds the window's own folder by the path it is told, and no other`, () => {
-    expect(folderOf(RECORD, `C:\\Users\\ada\\code\\api`)).toEqual({ name: `api`, state: `copying`, reason: undefined, status: `staging-beta` });
-    expect(folderOf(RECORD, `C:\\Users\\ada\\notes`)).toEqual({ name: `notes`, state: `failed`, reason: `That folder is already attached.`, status: undefined });
-    expect(folderOf(RECORD, `C:\\Users\\ada\\code`)).toBeUndefined();
-    expect(folderOf(RECORD, undefined)).toBeUndefined();
-    expect(folderOf(undefined, `C:\\Users\\ada\\code\\api`)).toBeUndefined();
+    const records = [RECORD, { ...RECORD, path: `C:\\Users\\ada\\notes`, name: `notes`, state: `failed` as const, reason: `no` }];
+    expect(folderSetupOf(records, `C:\\Users\\ada\\notes`)?.name).toBe(`notes`);
+    expect(folderSetupOf(records, `C:\\Users\\ada\\code`)).toBeUndefined();
+    expect(folderSetupOf(records, undefined)).toBeUndefined();
+    expect(folderSetupOf(undefined, `C:\\Users\\ada\\code\\shop`)).toBeUndefined();
 });
 
 it(`opens a folder's sandbox on the folder, and nowhere without a sandbox to name`, () => {
-    expect(projectPathOf({ sandboxId: `cmmachine0001`, project: `shop` })).toBe(`/?sandbox=cmmachine0001&project=shop`);
+    expect(projectPathOf({ sandboxId: `cmshop0001`, project: `shop` })).toBe(`/?sandbox=cmshop0001&project=shop`);
     expect(projectPathOf({ sandboxId: `a b`, project: `x&y` })).toBe(`/?sandbox=a+b&project=x%26y`);
     expect(projectPathOf({ sandboxId: undefined, project: `x` })).toBeUndefined();
 });

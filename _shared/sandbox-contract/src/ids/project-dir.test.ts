@@ -59,8 +59,8 @@ test("a project dir is exactly one valid name under the workspace root", () => {
     expect(projectDirNameOf("/srv/work/my-app", "/srv/work")).toBe("my-app");
 });
 
-// A second folder of the same name takes a name that says which one it is: its parent's in front (machine_sandbox.rs
-// `unique_name` takes the first one free). Where a folder is (a drive, a network share) never lends a name.
+// A second folder of the same name takes a name that says which one it is: its parent's in front. Where a folder is (a
+// drive, a network share) never lends a name.
 const NAMED: readonly { readonly path: string; readonly names: string[] }[] = [
     { path: "C:\\Users\\ada\\code\\app", names: ["app-project", "code-app", "ada-code-app"] },
     { path: "C:\\Users\\ada\\work\\My App", names: ["My-App", "work-My-App", "ada-work-My-App"] },

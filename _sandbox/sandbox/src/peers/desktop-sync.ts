@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { within } from "@intentic/base/async";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
 import { type DeviceReport, environmentOf } from "@intentic/sandbox-contract/schemas/devices";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
@@ -274,28 +273,6 @@ const rowsOf = (enrollments: readonly SyncEnrollment[]): SyncEnrollmentRow[] =>
 // key (`keyMaterialOf`), never its name: two environments of one PC that share a name each keep their own.
 const reports = new Map<string, { readonly report: DeviceReport; readonly receivedAt: number }>();
 
-// Who is told of each report taken in, so this store never imports what one sets in motion: on a projects host, the
-// folders it names are attached (bootstrap/projects/projects-host.ts). The report is answered only once every listener settled,
-// or REPORT_LISTENER_WAIT_MS passed: the machine agent starts copying a newly attached folder only after the sandbox
-// answered a report naming it, so a folder's repo stands before its first file arrives and the root repo never reads
-// those files as its own. A listener past the wait goes on; the machine reads the slow answer as a failed post and
-// reports again on its next pass.
-type ReportListener = (report: DeviceReport) => void | Promise<void>;
-const reportListeners = new Set<ReportListener>();
-export const REPORT_LISTENER_WAIT_MS = 30_000;
-export const subscribeDeviceReports = (listener: ReportListener): (() => void) => {
-    reportListeners.add(listener);
-    return () => reportListeners.delete(listener);
-};
-
-const heardBy = async (report: DeviceReport): Promise<void> => {
-    if (reportListeners.size === 0) {
-        return;
-    }
-    const settled = Promise.allSettled([...reportListeners].map(async (listener) => listener(report)));
-    await within(settled, REPORT_LISTENER_WAIT_MS, undefined, { unref: true });
-};
-
 // Files a report under the enrollment the token matched, never the hostname it claims, so a machine can't post under
 // another's name. The first report that says which computer and install it is from stamps the enrollment with both:
 // how an enrollment made by an agent too old to say learns it, once, without re-pairing. Only the matched record moves.
@@ -305,8 +282,6 @@ export const recordDeviceReport = async (historyRoot: string, presented: string,
         return false;
     }
     reports.set(keyMaterialOf(matched.key), { report, receivedAt: Date.now() });
-    // Only a report its own enrollment's token vouched for reaches a listener.
-    await heardBy(report);
     const environment = environmentOf(undefined, report);
     if (report.machineId !== undefined && (matched.machineId !== report.machineId || matched.environment !== environment)) {
         // Once both sides of a PC have said which they are, two that shared a name stop sharing it (`distinctLabels`).

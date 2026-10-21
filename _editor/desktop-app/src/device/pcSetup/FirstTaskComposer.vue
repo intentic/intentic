@@ -5,7 +5,7 @@ import type { LocalFirstTask } from "@intentic/web/local-host";
 import { computed } from "vue";
 import type { TaskStart } from "./pcCard";
 
-// THE FIRST TASK, written while this PC is set up and kept by the app until this computer's sandbox can take it
+// THE FIRST TASK, written while this PC is set up and kept by the app until its folder's own sandbox can take it
 // (first_task.rs): a folder and what to do in it. The body of the card's third step (PcStep.vue), whose title is its one
 // heading (2026-10-13: it had headings of its own, and the Agents view it came from said one twice). The folder comes
 // first, as the place the work happens, then what to do there, then when it starts beside the one press. Every press is

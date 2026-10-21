@@ -56,10 +56,10 @@ export const projectDirNameFor = (folderBasename: string): string => {
     return RESERVED_PROJECT_DIR_NAMES.includes(name) ? `${name}-project` : name;
 };
 
-// The names a folder may take in this computer's sandbox, best first: its own name, then its parent's name in front of
-// it, then its grandparent's too (`app`, `code-app`, `radar-code-app`), each one `isProjectDirName` accepts and none
-// twice. The desktop app takes the first one free (machine_sandbox.rs `unique_name`) and numbers only past all of them,
-// so a second folder called `app` reads as `code-app`, which says which one it is, rather than `app-2` (2026-10-12). A
+// The names a folder may take in a sandbox's /work, best first: its own name, then its parent's name in front of it,
+// then its grandparent's too (`app`, `code-app`, `radar-code-app`), each one `isProjectDirName` accepts and none
+// twice. Written (2026-10-12) for the desktop app's one sandbox per computer, where a second folder called `app` read as
+// `code-app` rather than `app-2`; since 2026-10-21 each folder has a sandbox of its own and takes its own name. A
 // drive (`C:`) and a network share's server and share (`\\server\share`, `\\wsl.localhost\<distro>`) are where a folder
 // is, not what it is called, so they never lend a name.
 export const projectDirCandidates = (hostPath: string): string[] => {

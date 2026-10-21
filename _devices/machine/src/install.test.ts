@@ -1,5 +1,14 @@
 import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
-import { addToWindowsPathValue, removeFromWindowsPathValue, selfUpdateBeforeSetup, type SelfUpdateIo, windowsPathFrom } from "./install.js";
+import {
+    addToWindowsPathValue,
+    type CurrentCheck,
+    CURRENT_FOR_MS,
+    recentlyCurrent,
+    removeFromWindowsPathValue,
+    selfUpdateBeforeSetup,
+    type SelfUpdateIo,
+    windowsPathFrom,
+} from "./install.js";
 import type { UpgradeOutcome } from "./upgrade.js";
 
 const io = (
@@ -25,6 +34,8 @@ const io = (
                 // The real one replaces the process; the test one has to stop the caller the same way.
                 throw new Error("reexec");
             }),
+        checkedCurrent: overrides.checkedCurrent ?? (async () => await Promise.resolve(undefined)),
+        rememberCurrent: overrides.rememberCurrent ?? (async () => await Promise.resolve()),
     };
     return { io: built, upgraded: () => ran, reexeced: () => reexecArgs, reexecedAs: () => reexecVersion };
 };
@@ -68,6 +79,34 @@ describe("selfUpdateBeforeSetup", () => {
         const joined = lines.join("\n");
         expect(joined).toContain(installed);
         expect(joined).toContain(reason);
+    });
+
+    // (2026-10-21) `ic` runs sync setup and device setup back to back for every new sandbox: the second asks nothing when
+    // the first found this same release the newest moments ago, and an older finding, or another release's, is asked again.
+    it("asks the release channel once for two setups minutes apart, and keeps what it found", async () => {
+        let kept: CurrentCheck | undefined;
+        const t = io({
+            checkedCurrent: async () => await Promise.resolve(kept),
+            rememberCurrent: async (check) => {
+                kept = check;
+                await Promise.resolve();
+            },
+        });
+        await selfUpdateBeforeSetup(t.io, {}, ["sync", "setup"], () => undefined, 1_000_000);
+        expect(t.upgraded()).toBe(true);
+        expect(kept).toEqual({ version: "1.2.3", at: 1_000_000 });
+        const second = io({ checkedCurrent: async () => await Promise.resolve(kept) });
+        await selfUpdateBeforeSetup(second.io, {}, ["device", "setup"], () => undefined, 1_000_000 + 60_000);
+        expect(second.upgraded()).toBe(false);
+    });
+
+    it("reads a finding as current only for the same release and only for a while", () => {
+        const check = { version: "1.2.3", at: 1_000 };
+        expect(recentlyCurrent(check, "1.2.3", 1_000 + CURRENT_FOR_MS - 1)).toBe(true);
+        expect(recentlyCurrent(check, "1.2.3", 1_000 + CURRENT_FOR_MS)).toBe(false);
+        expect(recentlyCurrent(check, "1.2.4", 1_001)).toBe(false);
+        expect(recentlyCurrent(check, "1.2.3", 999)).toBe(false);
+        expect(recentlyCurrent(undefined, "1.2.3", 1_001)).toBe(false);
     });
 
     it("says nothing and continues when already current", async () => {

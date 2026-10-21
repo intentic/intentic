@@ -63,8 +63,8 @@ import { sleep, within } from "@intentic/base/async";
 // app for the main window, windows.rs `park_setup`). It runs on arrival, unasked: installing and signing in to run a
 // sandbox here already is the consent; administrator is still asked, on the requirements card. It leads This device
 // while it is here, and reports its progress back to the workspace's page (`setup_progress`), which shows the same bar.
-// This computer's own sandbox, which folders attach to, is not one of these: the app makes it by itself
-// (machineSandbox.ts, the app's machine_sandbox.rs), whichever window is open.
+// A folder's own sandbox is not one of these: the app makes it by itself on the folder's press (folderSetups.ts, the
+// app's folder_setup.rs), whichever window is open.
 
 // Setup codes last 30 minutes (the platform's setup-code.ts). A setup resumed on one older than 20 asks for a fresh one
 // first, since its claim is still minutes of Docker ahead of it; one that cannot be had (signed out, offline, refused)

@@ -72,7 +72,7 @@ flowchart LR
   shell's own account control (who is signed in, Settings, Sign out), or the sign-in in the default browser until
   there is an account. The **first task** the reader writes on Devices' card
   for this PC (below) is kept in `first-task.json` under the app config dir, announced on `desktop://first-task`,
-  attached to this computer's sandbox when it is ready, and opened in the workspace with `?task=`; the workspace answers
+  given its folder's own sandbox, and opened in the workspace with `?task=` once the folder is in; the workspace answers
   on `intentic://first-task?do=sent|failed&id=…`. "Ask about this" while no sandbox can answer leaves a draft of one
   (`first_task.rs` `prefill_from_ask`: announced on `desktop://first-task-draft`, and kept in memory for a main window
   still being built, which takes it with `first_task_take_draft`) and opens Devices on it. Settings open in the window itself (`#/settings`), and
@@ -131,15 +131,14 @@ flowchart LR
   used to be. It is the workspace's page for one machine, opened on this one: the same masthead (`DeviceEnvironmentRow`
   from `@intentic/ui`: the computer's name, its OS, its engine's size, its agent's build and Restart), the same
   Sandboxes list with every verb the workspace has for them (start, stop, restart, update, rollback, resources, logs,
-  remove), and the same Danger zone at the foot, which here holds Remove Intentic from this computer
-  (`src/device/uninstall/`). There is no board to go back to: All devices opens the workspace's. Between the masthead and
-  the list stand the Docker engine the sandboxes run in and the app's own work here, which leads while it runs: a
-  setup handed over from the workspace, with its requirements and its plan, and a sync enrollment. Above them stands
-  this computer's own sandbox (below), once there is an account or a folder waiting for one: its state, the press that
-  moves it on, the requirements its setup stopped on and the folders on their way into it. Its state is a store
+  remove). It has no Danger zone: the app comes off a computer the way every app does, through the system's own
+  uninstaller (below), and not from a page inside it. There is no board to go back to: All devices opens the
+  workspace's. Between the masthead and the list stand the Docker engine the sandboxes run in and the app's own work here, which leads while it runs: a
+  setup handed over from the workspace, with its requirements and its plan, and a sync enrollment. A folder's own
+  sandbox being made is said in that folder's window, not here (below). Its state is a store
   (`src/device/useDevice.ts`) rather than the page's, so a setup keeps running and reporting while the reader is on
-  their files, and the rail's tile carries it (`src/device/badge.ts`: the running mark for a setup, this computer's
-  sandbox being made or a Docker start, a warning mark for one that stopped for the reader, a dot for an update). A computer that runs no sandbox is told what
+  their files, and the rail's tile carries it (`src/device/badge.ts`: the running mark for a setup, a folder's sandbox
+  being made or a Docker start, a warning mark for one that stopped for the reader, a dot for an update). A computer that runs no sandbox is told what
   one is for and offered the way to one, and nothing about Docker. Only the main window takes the work the app parks
   for its face (a setup, a recreate, a sync, a sleeping engine); every local window draws the same view and runs its
   verbs. The machine is read when the page opens and every 30 seconds while it is on screen.
@@ -155,8 +154,8 @@ flowchart LR
   home alone: blind to a WSL agent, it drew WSL's sandboxes as its own, and its setup put a second agent beside it._
 
   A listing proves when this machine hosts no sandbox any more: `ic` answered with no row of this side's own, `ic`'s
-  trash holds nothing a restore could bring back (its `intentic-trashed-*` volumes), and this computer's own sandbox is
-  not one the app is making or keeps. Then `hosts-sandboxes.json` is cleared, and a launch stops starting Docker Desktop
+  trash holds nothing a restore could bring back (its `intentic-trashed-*` volumes), and no folder's own sandbox is on
+  its way here. Then `hosts-sandboxes.json` is cleared, and a launch stops starting Docker Desktop
   for one (`state.rs` `forgets_hosting`). A listing that failed, or a trash that could not be read, clears nothing.
   _(2026-10-05) It was written once and never cleared, so every launch after the last sandbox was removed still started
   Docker Desktop._
@@ -265,8 +264,7 @@ flowchart LR
   starts only what the platform says somebody asked for. Links that land while one collection runs make one more after
   it. The init script's `sandboxWakes: true` is what tells the page to send it; an older app is sent nothing, and the
   keeper's poll wakes the sandbox as before. _(2026-10-15) Opening the app on a sleeping sandbox waited out that poll
-  on top of the start and the boot._ Each collection then has this computer's own sandbox looked at again
-  (`machine_sandbox::kick`), so its card stops calling it asleep the moment it is up.
+  on top of the start and the boot._
 - **Tray-resident.** The × of either face hides it into the tray, once the first × has asked whether that is what
   closing should do (`close-action.json`, "Keep Intentic in the tray" or "Quit Intentic"). While a folder or document
   window is on screen beside it, a face's × hides that face alone and asks nothing, since the app is not closing
@@ -445,167 +443,94 @@ flowchart LR
   A Quit while the app is still working on this computer (a setup handed over, a start, a recreate, a removal, a fix,
   a sync's setup, a folder's bring-back) asks too, after the unsaved windows: "Quit when it's done" waits in the tray and
   quits once nothing runs, "Quit now" quits and leaves the work to finish on its own (each run's transcript says where the
-  rest of its words went), "Cancel" stays. This computer's own sandbox's setup is not asked about: a quit stops it and the
+  rest of its words went), "Cancel" stays. A folder's own sandbox's setup is not asked about: a quit stops it and the
   next launch runs it again. _(2026-10-05) Quit used to ask about unsaved windows alone, and abandoned every run under
   way with a dead pipe (`windows.rs` `hold_quit`)._
-- **A folder in this computer's sandbox, copy-first.** "Work on this with an agent" in a folder's window asks in the
-  window's own dialog (the web's `local/LocalProject.vue`), drawn from `project_preview` (`src-tauri/src/project.rs`):
-  the folder's name and path, what its first copy carries, anything to beware of (another sync service, a network
-  drive, a large first copy) and how far this computer's sandbox is, or why it cannot have one (a disk, a home folder, a
-  system folder, one inside or around a folder that already has a sandbox), each by kind for the page to word. Its
-  picture is the folder's copy carried into the agent's house (`local/house/AgentHouse.vue`). "Work on this in this computer's
-  sandbox" is `project_attach`: the folder is put in line for this computer's own sandbox under its name in `/work`
-  (sandbox-contract's `projectDirNameFor`, numbered past a name another folder there has), and the press is answered at
-  once, whatever the sandbox is doing; nobody signed in is sent to sign in by the same press, and the window's card says
-  to finish in the browser until the app hears who signed in. Once the folder is in, the window that asked opens its
+- **A folder becomes its own sandbox, copy-first** (2026-10-21). "Work on this with an agent" in a folder's window asks
+  in the window's own dialog (the web's `local/LocalProject.vue`), drawn from `project_preview`
+  (`src-tauri/src/project.rs`): the folder's name and path, what its first copy carries, anything to beware of (another
+  sync service, a network drive, a large first copy), whether a sign-in comes first, or why it cannot have one (a disk,
+  a home folder, a system folder, one inside or around a folder that already has a sandbox, or one on its way to one),
+  each by kind for the page to word. Its steps are listed (sign in where nobody is, make the sandbox, copy the folder
+  in). "Make its sandbox" is `project_create`: the folder's name in `/work` is its own (sandbox-contract's
+  `projectDirNameFor`; the sandbox is the folder's alone, so it never steps aside for another's), and the press is
+  answered at once, whatever is under way; nobody signed in is sent to sign in by the same press, and the window's card
+  says to finish in the browser until the app hears who signed in. Once the folder is in, the window that asked opens its
   sandbox on the folder by itself when the reader is looking at it, and otherwise keeps the "ready" card up with its
-  Open. "Open this folder's sandbox" opens the workspace in that window's place, as the card's Open does, at once for
-  this computer's sandbox when the app last found it running, and after `ic sandbox list` (starting it if stopped) for
-  any other.
+  Open. A folder that already has a sandbox opens that one (after `ic sandbox list`, starting it if stopped).
 
-  This computer's sandbox is one sandbox the app makes once, after sign-in, in the background, and keeps
-  (`src-tauri/src/machine_sandbox.rs`). A thread started at launch owns it, not a window. It reads who the workspace last
-  said is signed in (`roster.json`) and whether Docker's engine answers, makes the platform row (named after the
-  computer, "ada-laptop sandbox") and mints its setup code with the workspace's session (`account.rs` `platform_post`,
-  fixed paths, never a page's), then runs the connect script as the run `machine-setup` with `SYNC_PROJECTS_HOST=1`: a
-  sandbox with no folder of its own, whose desktop-sync step enrolls this machine as the holder of its sync token. The
-  script's `intentic: [phase]` lines are read in Rust into a step and a percent. One setup runs at a time on this
-  docker: a setup handed over from the workspace and this one each wait for the other. The state is
-  `machine-sandbox.json`, written on every change and sent whole to every window (`desktop://machine-sandbox`, and
-  `machine_sandbox_status` for a window that opens later): `signedOut`, `needsDocker` (not installed, not running, or
-  turning this account away), `creating`, `waiting` (the yes, restart or sign-out a setup stopped on, exit 3 or 4),
-  `ready`, `stopped`, `asleep`, `failed` (with its log), `interrupted`, and `gone` (its container is not on this
-  computer). It looks again at launch, at every roster the workspace sends, at a sign-in or a sign-out, at a press, when
-  a window of this computer comes back to the reader (focused, or shown again; at most every 15 seconds,
-  `reader_returned`), after a wake collection or a folder's own start of it, every 15 seconds while Docker is awaited,
-  every minute while it is not ready and every five once it is.
+  The app makes the folder's sandbox, not the window (`src-tauri/src/folder_setup.rs`). A thread started at launch runs
+  every folder's setup, one at a time on this docker (a folder in line says whose goes first), and a handed-over setup
+  and a folder's each wait for the other. A setup makes the platform row (named after the folder) and mints its setup
+  code with the workspace's session (`account.rs` `platform_post`, fixed paths, never a page's), then runs the connect
+  script as the run `folder-setup:<key>` with the folder as its project (`SYNC_DIR`, `SYNC_REMOTE_DIR=/work/<name>`,
+  `SYNC_PROJECT=1`, `commands.rs` `setup_script`, which also passes `INTENTIC_PC_READY=1` on a Windows PC its check
+  found ready moments ago, so connect.ps1 does not examine it again). Its `intentic: [phase]` lines are read in Rust
+  into a step and a percent (`setup_progress.rs`, held to sandbox-run's setup-progress.fixture.json): the folder's
+  link comes right after the daemon answers, ahead of the public address's checks, so its first copy runs while they
+  wait on the edge. Each folder's record is a line of `folder-setups.json`, written on every change and sent whole to
+  every window (`desktop://folder-setups`, and `folder_setups` for a window that opens later), which draws its own
+  folder's: `queued` (`behind` another folder's), `signedOut`, `signedIn`, `needsDocker` (not installed, not running,
+  or turning this account away), `creating`, `waiting` (this PC's own setup, a yes to what the setup's first pass
+  found, or a restart or sign-out), `copying` (made; its first copy followed in `intentic-machine status --json` until
+  Mutagen watches for changes, with the agent's `heldBy` when held), `ready`, `failed` (with its log; a made sandbox
+  whose folder never started syncing says so and offers the sandbox), and `interrupted`. A quit stops a setup under way
+  with everything it started; the next launch finds it `creating`, and runs it again on the same row with its code
+  minted afresh. A run holds a lock in the app's data folder (`folder-setup-<key>.pid.json`), so a launch after a hard
+  crash follows that run from its files rather than starting a second. A setup that fails before it started its
+  container takes its row off the account (`/rpc/sandbox/delete`), so a Try again makes a fresh one. Docker is never
+  installed or started unasked: the folder's card offers Start Docker, and the next round notices. The records of
+  folders that went in are forgotten at the next launch: which folder is in which sandbox is the agent's pairing. The
+  system's notification says once that a folder is in and once each time it newly needs the reader, and nothing while a
+  window of this computer has the focus; a press on one about the folder opens its window (`notice.rs` `FOLDER`).
+  Each step's seconds are sent as `desktop_install_step` with `run: folder`, and the press-to-copied time as
+  `desktop_folder_sandbox_ready` (`launch.rs` reports), so the time to a folder's first copy is measured.
 
-  _(2026-10-19)_ **Asleep is not stopped.** The machine agent's keeper puts a sandbox nobody used for half an hour to
-  sleep (`ic sandbox sleep`), and `ic sandbox list` says `asleep` for it while it is down. Read as `stopped`, every
-  window of this computer asked the reader to Start it after each such half hour, and went on asking after the
-  workspace had woken it, since nothing told the record of either. Now it is `asleep`, which asks nothing of the reader:
-  opening a folder's sandbox wakes it (`open_existing`), and so does a folder on its way in (`wakes_by_itself`: one in
-  line, or one whose copy the sleep cut off; not one whose copy is paused, which would only be put to sleep again half
-  an hour later). A start of it that failed is a `stopped` with its reason, as any other. A quit stops a
-  setup under way with everything it started; the next launch finds the record `creating`, says it was interrupted, and
-  runs it again on the same row with its code minted afresh (the platform hands back the live one). The system's
-  notification says once that it is ready and once each time it newly needs the reader, and nothing while a window of
-  this computer has the focus, where the card says it already.
+  _(2026-10-21) **One sandbox per computer went.** From 2026-10-05 the app made one sandbox for the whole computer after
+  sign-in ("Local", `machine_sandbox.rs`), with `SYNC_PROJECTS_HOST=1` and no folder of its own, and attached every
+  folder into it (`intentic-machine sync attach`). It was a failure: every folder's agents shared one house, a stuck or
+  removed "Local" stood between every folder and an agent, and Devices led with a card about it ("This computer's
+  sandbox · gone · Set it up again"). A folder now becomes its own sandbox on its press, and the work goes into making
+  that fast. A "Local" sandbox a computer still runs is an ordinary sandbox, listed on Devices like any other: the machine
+  agent stopped syncing its attached folders, whose copies and agents' history stay in it, and pressing such a folder
+  again makes it a sandbox of its own. The record and lock it left (`machine-sandbox.json`, `machine-setup.pid.json`)
+  are removed at launch._
 
-  _(2026-10-12)_ **One row per computer, called "Local".** The sandbox is named `Local` on every computer
-  (`SANDBOX_NAME`): the account's switcher names the device on the row's second line, and the old "<COMPUTER> sandbox",
-  numbered past one already taken, said the computer twice and read as the third of three. A sandbox named that old way
-  is renamed once it is ready (`/rpc/sandbox/update`), unless the account shows a name the reader gave it. "Set it up
-  again" on a sandbox that is gone runs the setup on the SAME row (`recreated`), so its volumes, keyed by the row's slug,
-  bring `/work` and `/history` back if this computer still has them; only a row the platform no longer has
-  (`row_gone`) makes way for a new one. A record that holds no row (its file unreadable, the app reinstalled) first takes
-  up the row this computer still runs (`adoptable`: owned, not hosted, named by this app, its container listed here)
-  instead of making a second. The rows earlier versions left behind are offered for removal on Devices
-  (`LeftoverSandboxes.vue`, `machine_sandbox_leftovers`): named the old way for this computer, not the current one, run
-  nowhere here and silent for a day; removed only on the reader's press, into the platform's week-long trash.
-
-  _(2026-10-05)_ Three changes. **One run, across launches too:** a setup run holds a lock in the app's data folder
-  (`machine-setup.pid.json`: the script's pid, the start time its system gives that process, and the two files it writes
-  to). A launch after a hard crash that finds the lock's process alive, with the same start time, follows that run from
-  its files until it ends and then decides again, which runs the setup once more on the same row as after an interrupted
-  one; it never starts a second beside it, which it used to. A lock whose process is gone, or whose pid another process
-  has since, is taken over. **A row that never ran goes:** a setup that fails (a code the platform would not mint, a
-  script that stopped) before it got as far as starting its container (`starting-sandbox`, from which the daemon may have
-  announced itself; the record keeps `announced`) takes its row off the account (`/rpc/sandbox/delete`, into the
-  platform's own trash), so a Try again makes a fresh one. A row a setup ever finished, one that may have announced, or
-  one whose container is here or could not be looked for, is never discarded. Before, only a failed minting in the
-  per-folder flow discarded its row, and every other failure left an unfinished sandbox in the account's switcher.
-  **Checked first:** where another environment of this computer already runs a machine agent that keeps its sandboxes
-  (a WSL distro's, `agents.rs`) and this one has none, the first setup is not run unasked, which would put a second agent
-  and a second sandbox on the same Docker. The card says where the sandboxes are kept, and its Try again sets one up here
-  all the same.
-
-  A folder's name in `/work` is its own (`projectDirNameFor`), or, when another folder already has that, the first free
-  of the names its parents lend it (`projectDirCandidates`: `code-app`, then `ada-code-app`), which says which one it
-  is; only past those is it numbered. A folder inside one already attached is covered by it (`covering_project`): its
-  window is told it has a sandbox (`partOf` names the folder it went in with), its button opens that one, and Bring back
-  runs on that folder's sync, narrowed to this folder's own files; its sync direction is that folder's to change. A
-  folder around one already attached, or one still in line, is refused, so no file is ever synced twice.
-
-  Once it is ready, each folder in line is attached by the machine agent (`intentic-machine sync attach --sandbox-url
-  https://<hostname> --dir <folder> --name <name> --json`, which only records the pairing), and every window on it hears
-  so (`intentic:sandbox`) once the app reads that pairing back. The app then follows the folder's first copy in
-  `intentic-machine status --json` until the agent's word for its Mutagen session is `watching`. A held session stays
-  followed, with the copy card and folder button saying it is paused instead of showing progress, and why: the agent's
-  `heldBy`, owner first. The reader's own pause sends them to the sandbox, where Devices resumes file syncing; a hold
-  that passes by itself (the drive filling up, the sandbox being updated, not answering, or away) says that it will.
-
-  _(2026-10-20)_ **The agent's pairings are the one record of which folder is in which sandbox** (`src-tauri/src/bindings.rs`).
-  The app reads them through the agent (`intentic-machine status --json`) at launch, every round of this computer's
-  sandbox while it is up or a folder is on its way, and after each write it makes through the agent (attach, detach,
-  uninstall, forget, a project's sync script), and keeps what it read in memory only. Before, the same fact was also in
-  the app's `projects.json` and in `machine-sandbox.json`'s folders: a reinstall lost both while the agent went on
-  syncing, so a folder that had a sandbox was offered a new one, and a pairing the agent retired by itself left a button
-  opening a sandbox that no longer had the folder. `machine-sandbox.json` keeps only what the agent cannot know yet: a
-  folder waiting for the sandbox, its failure, and how far its first copy is. A pairing names its sandbox the agent's
-  way, by its address (`sandbox-<id>-sbx-intentic-dev`), and the app files the folder under the platform's row, which
-  the roster, the record and the workspace's address use: the row is known for this computer's sandbox, whose record
-  holds it beside its address and slug, and any other sandbox's folder has none, which reads as undecided and never as
-  gone. _(2026-10-21)_ Filed under the agent's id, every folder read as one whose sandbox the account no longer listed,
-  and the roster each workspace page sends had this computer let go of the sandbox's sync. Whether a copy is held is the agent's
-  `heldBy`, not Mutagen's `paused`, which says only whether Mutagen has caught up with the agent and nothing of why: read
-  that way, a session the agent was about to resume looked like one paused before the folder was asked in. _(2026-10-19)_ Only a session
-  the app has seen running since the folder was asked in (`ran`): one it finds paused before that was paused before the
-  ask, so the folder was synced in before (asked in again after a reinstall took the app's record with it), and it is
-  in (`copy_seen`). Followed as a first copy, such a folder said "Copying … is paused" in every window for good, about a
-  sandbox that had had it for days. A new session the drive holds still (`lowDisk`) is still a copy waiting. Every local window carries a
-  card in its corner while this computer's sandbox is not ready, in the
-  notification lane (the web's `local/LocalMachineCard.vue`, worded by `local/machineCard.ts`): the house goes up stage
-  by stage as the setup's real phases arrive (the plans, the ground and its materials as the image arrives, the walls as
-  the container starts, the roof as the daemon comes up, the lights as it answers), then the folder's copy moves in
-  through the door. It says every state with the one press that moves it on (Sign in, Start Docker, This computer for
-  the requirements, Try again beside the log, Start, Set it up again), folds to a line, and remembers the fold for what it
-  showed in every window. The folder's button says how far it is ("Waiting for this computer's sandbox (42%)", "Copying
-  your folder…") and then opens the sandbox on the folder (`/?sandbox=<id>&project=<name>`, the web's
-  `router/sandboxArrival.ts`), never on the `/work` around it. Devices leads with the same states and presses
-  (`src/device/machineSandbox/MachineSandboxSection.vue`), and the rail's tile spins while it is made and marks it while it needs the
-  reader.
+  **The agent's pairings are the one record of which folder is in which sandbox** (`src-tauri/src/bindings.rs`,
+  2026-10-20). The app reads them through the agent (`intentic-machine status --json`) at launch, every round while a
+  folder's copy is followed, and after each write it makes through the agent (a folder's setup, uninstall, forget, a
+  project's sync script), and keeps what it read in memory only. A pairing names its sandbox the agent's way, by its
+  address (`sandbox-<id>-sbx-intentic-dev`), and the app files the folder under the platform's row, which the roster and
+  the workspace's address use: the rows it knows are each folder setup's (row, slug, address) and what `ic sandbox list
+  --json` last said of each sandbox here (its `platformId`; asked again, at most every two minutes, when a pairing names
+  a sandbox no row does). A sandbox whose row is unknown reads as undecided, never as gone.
 
   The folder is copied into the sandbox's `/work/<name>` and kept up to date from here; agents change the copy, and
   nothing in the folder changes until the window's "Bring back changes", which keeps a restore point first. The window
   asks `changes` on its own once the folder's first copy is done, and again when the reader comes back to it (at most
-  once a minute), and draws Bring back only when the sandbox holds something to bring back. A folder
-  that already has a sandbox of its own, made for it alone before this, keeps opening that one. The workspace's own
+  once a minute), and draws Bring back only when the sandbox holds something to bring back. A folder inside one that has
+  a sandbox is covered by it (`covering_project`): its window is told it has a sandbox, its button opens that one, and
+  Bring back runs on that folder's sync, narrowed to this folder's own files. A folder around one that has a sandbox, or
+  one on its way to one, is refused, so no file is ever synced twice. The workspace's own
   `/setup?project=<name>&machine=mine` can still hand a project's setup back as `intentic://setup?…&project=<name>`, for
   the folder this app parked. A hosted sandbox's project, asked for by name, is enrolled with
-  `intentic://sync?…&project=<name>&sandbox=<id>`, whose sync script runs here on the parked folder with the same three
-  values (a folder is asked for in a system dialog when none is parked). Either way the folder is the window's own or
-  the one this app parked (never a path on a link or a command), and the pairing the sync makes is what opening the folder
-  again reaches the same sandbox by; every window on the folder hears so once the app reads it (`intentic:sandbox`). A project whose
-  sandbox the account no longer lists (the workspace's last roster, which a new row joins the moment it is made) is a
-  folder with none: its button asks again, and putting it in line first has the machine agent let go of the dead one's
-  sync of the folder (`intentic-machine sync uninstall --sandbox <id>`), since the agent keeps one sync per folder. The
-  window's project verbs (`changes`, `bring-back`, `restore`, `direction`) each run the machine agent,
-  `intentic-machine sync <verb> --dir <folder> … --json`, and hand its JSON object back to the window as
-  `intentic:project`. The paths a bring-back is limited to go in a JSON file (`--paths-file`, in the app's cache,
-  removed after the run), never on the command line, which Windows caps at 32,767 characters. One bring-back, restore
-  or direction change runs per folder at a time, and an update waits for it.
+  `intentic://sync?…&project=<name>&sandbox=<id>`, whose sync script runs here on the parked folder (a folder is asked for
+  in a system dialog when none is parked). Either way the folder is the window's own or the one this app parked (never a
+  path on a link or a command). A project whose sandbox the account no longer lists is a folder with none: its button
+  asks again, and asking first has the machine agent let go of the dead one's sync of the folder (`intentic-machine sync
+  uninstall --sandbox <id>`), since the agent keeps one sync per folder. The window's project verbs (`changes`,
+  `bring-back`, `restore`, `direction`) each run the machine agent, `intentic-machine sync <verb> --dir <folder> …
+  --json`, and hand its JSON object back to the window as `intentic:project`. The paths a bring-back is limited to go in
+  a JSON file (`--paths-file`, in the app's cache, removed after the run), never on the command line, which Windows caps
+  at 32,767 characters. One bring-back, restore or direction change runs per folder at a time, and an update waits for
+  it.
 
   _(2026-10-05)_ A paths file older than a day is swept at launch: only a run that ended removed its own, so a crash mid
   bring-back left one naming the reader's files for good. When the workspace's roster no longer lists a sandbox (a
   roster that names who is signed in, compared with the same account's last one), this machine's sync lets go of it
   (`intentic-machine sync forget <slug>`, falling back to `sync uninstall --sandbox <id>` on an agent older than the
-  verb), but only for a sandbox the agent syncs, and its folders' pairings go with it. This computer's own
-  sandbox is left to its supervisor, which says for itself when that one is gone. Before, `projects.json` was never
-  pruned, and the agent let go of a folder's dead sandbox only when a new one was made for that folder.
-
-  (2026-10-05) Each folder used to get a sandbox of its own. The question was first the system's own message box, two
-  paragraphs in its look, whose press took the reader to the workspace's full-screen `/setup` and then to Devices;
-  then the window's own dialog, whose press made a sandbox for that folder and ran its setup in that window's store,
-  drawn as a build card over the folder. A pane beside the folder for the build was rejected (it takes the reader's
-  width for a minute of watching), as was a bare toast (no room to show what is happening). The owner then chose one
-  sandbox for the whole computer, made after sign-in, which every folder goes into. Its state lives in the app's Rust
-  rather than a window's store because a window closes and the app quits: a setup a window ran was seen by that window
-  alone, and a quit mid-setup left the folder remembered against nothing, since the dying process remembered it after
-  its script. Docker is never installed or started for it unasked: a computer whose engine is off has its own reasons,
-  so the reader starts it (Devices, or the card), and the next look notices. Folders that already have a sandbox of
-  their own keep it: it holds their agents' work and conversations, and moving them into another sandbox is a migration
-  nobody asked for.
+  verb), but only for a sandbox the agent syncs, and its folders' pairings go with it. A sandbox a folder's setup made
+  moments ago, which the workspace may not list yet, is never let go of for a roster.
 - **"Ask about this".** A local window can hand one of its files to the workspace: the app grants it to the sidecar
   read-only, for the workspace's origin alone and for fifteen minutes (a handoff grant, never a window), and opens
   the workspace at `/?handoff=<base64url of { url, token, name }>`, where `url` is the sidecar's
@@ -634,6 +559,18 @@ flowchart LR
   asked about the machine agent alone, stopped folder sync, and said on its last page that the sandboxes, their data,
   the engine and `ic` stayed, with the commands that remove them. Before that it removed the app alone and said
   nothing._
+
+  _(2026-10-21)_ **The system's uninstaller is the one way to remove the app.** Devices used to end on a Danger zone
+  with "Uninstall Intentic…", a dialog of its own that ran the same `ic uninstall` with the same two choices and then
+  removed the app (`uninstall.rs`, `src/device/uninstall/`). Two doors to one job drifted apart, and nobody looks for
+  an app's removal inside the app, so the dialog went with everything it needed (the stand-downs of the engine keeper
+  and this computer's sandbox, the quit that skipped the update, `ic uninstall --dry-run --json` and its
+  `intentic-uninstall:` lines). Windows keeps this uninstaller, which already offered all of it. On Linux the app
+  comes off with its package (`apt remove intentic`, `dnf remove intentic`); the package's scripts run as root and
+  keep out of the home folder where the sandboxes, the agent and folder sync are each user's own, so the removal
+  (`src-tauri/linux/after-remove.sh`, the deb's `postrm` and the rpm's `%postun`) says what stays and that
+  `curl -fsSL https://intentic.dev/uninstall | sh`, run as that user, removes the rest with the same two choices. An
+  AppImage has no uninstaller: the same command removes it with the rest.
 - **"Open with Intentic" in Windows 11's own menu** ([explorer-menu](explorer-menu), 2026-10-07). The installer used to
   register it as classic registry verbs only, which Windows 11 shows under "Show more options" and never in its new
   menu: that menu lists only commands declared by an app package. `intentic_explorer_menu.dll`, installed beside the
@@ -726,7 +663,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `fix?slug=…[&code=…]` | app windows | Runs `ic sandbox fix` for that sandbox here and shows it on Devices; `code` is the recovery panel's fix code, which `ic` claims so the panel follows the run. A slug or code that is not a plain token drops the link. |
 | `update` | app windows | Installs the downloaded update and restarts. |
 | `setup-stop?sandbox=<id>` | app windows | Stops the setup Devices runs for that sandbox, as its card's Stop does, and shows nothing: the setup page sends it when the reader takes a slow download's offer of a machine of ours, which takes over the sandbox's address. A setup for another sandbox, or none running, is left alone; an id that is not a plain token drops the link. |
-| `launcher[?to=files\|agent]` | app windows | Brings the main window back in the workspace's place: at Devices (a setup's way back to its run, a sandbox's restart), at its folder with `to=files` (the sandbox switcher's "This computer"), or with `to=agent` at whichever of the two this computer's sandbox is standing at when the link arrives — Devices while it is stopped on the reader (`Standing::wants_the_reader_after_sign_in`), otherwise the folder window the sign-in was pressed in, while the sandbox comes up by itself. Signed out counts as coming up: the link arrives before the workspace has said who signed in. An app that predates a `to` reads the bare link, which is Devices. |
+| `launcher[?to=files\|agent]` | app windows | Brings the main window back in the workspace's place: at Devices (a setup's way back to its run, a sandbox's restart), at its folder with `to=files` (the sandbox switcher's "This computer"), or with `to=agent` at the folder window the sign-in was pressed in, whose own sandbox's setup starts by itself once the workspace says who signed in, its card saying how far or what it waits for. An app that predates a `to` reads the bare link, which is Devices. |
 | `badge?mark=…[&count=…][&tooltip=…][&icon=…][&overlay=…]` | app windows | The workspace tab's mark (`none`, `asks`, `done`, `working`, `offline`) on the app's icon: `icon` for the tray and `overlay` for the Windows taskbar button, each a PNG as unpadded URL-safe base64 of at most 64 KiB and 256 pixels a side; `count` for a Linux dock, heard only with `asks`; `tooltip` after the app's name in the tray's, one line of at most 100 characters. A value out of shape drops the link. |
 | `notice?do=show&key=…&kind=asks\|finished&title=…[&body=…][&path=…][&silent=1]` | app windows | Puts up one of the system's notifications, replacing the one under the same `key`. `path` is a workspace route (`/?sandbox=<id>&conversation=<id>`) a press opens, `silent` asks for no sound. `do=withdraw&key=…` takes one down, `do=clear` all of them, and `do=status` asks whether the system shows them at all (answered as `intentic-desktop-notices`). A line that is empty, too long or holds a control character, or a path that is not rooted or starts `//`, drops the link. |
 | `wake?state=off\|listening\|paused\|blocked\|error&word=…[&until=…]` | the workspace window | What the workspace page's wake-word listening is doing, whenever that changes: kept for the tray's rows, and whether it is wanted (any state but `off`) and the word written to `wake.json` for the next launch. `word` is one line of 1 to 40 characters; `until` (epoch milliseconds, a positive whole number) rides only with `paused`. A value out of shape drops the link. |
@@ -769,8 +706,8 @@ Nothing is returned over a link. The app answers with DOM events it dispatches i
 
 A local window also hears the app's Tauri events, which Devices listens on: `desktop://run` (a script run's
 `started`, `line` and `exit`), `desktop://pending-setup`, `desktop://setup-stop` (a sandbox id),
-`desktop://pending-recreate`, `desktop://pending-sync`, `desktop://update`, `desktop://machine-sandbox` (this
-computer's own sandbox, its whole record on every change), and on Intentic OS `desktop://os-run` (a change to the
+`desktop://pending-recreate`, `desktop://pending-sync`, `desktop://update`, `desktop://folder-setups` (every folder's
+own sandbox's setup, the whole list on every change), `desktop://roster` (who is signed in), and on Intentic OS `desktop://os-run` (a change to the
 system's `started`, each `line` and its `exit`), `desktop://os-drives` (the drives plugged in, `{ drives, fresh }`,
 whenever that changes) and `desktop://os-drive-import` (a copy off a drive: `started`, `progress` with `bytes` and
 `total`, and its `exit`).
@@ -875,8 +812,9 @@ reloaded onto their new address and token.
 - [src-tauri/src/wake.rs](src-tauri/src/wake.rs), [src-tauri/src/microphone.rs](src-tauri/src/microphone.rs) and [src-tauri/src/autostart.rs](src-tauri/src/autostart.rs) — the wake word with the window in the tray: what the page says and is told, the tray's rows, the microphone for the workspace alone, and the start at sign-in.
 - [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.
 - [src-tauri/src/agents.rs](src-tauri/src/agents.rs) — the machine agents of this computer's environments: this app's own, and each running WSL distro's.
-- [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder and its sandbox: what its dialog draws, the folder put in line for this computer's sandbox, and the project verbs its window runs.
-- [src-tauri/src/machine_sandbox.rs](src-tauri/src/machine_sandbox.rs) — this computer's own sandbox: the record every window hears, the thread that makes and watches it, and the folders it attaches.
+- [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder and its sandbox: what its dialog draws, the folder asked for a sandbox of its own, and the project verbs its window runs.
+- [src-tauri/src/folder_setup.rs](src-tauri/src/folder_setup.rs) — each folder's own sandbox: the records every window hears, the thread that makes them one at a time, and each first copy followed in.
+- [src-tauri/src/setup_progress.rs](src-tauri/src/setup_progress.rs) — a setup's own lines read into a step, a percent, what it asks for and why it stopped.
 - [explorer-menu](explorer-menu) — "Open with Intentic" in Windows 11's own context menu: the menu command and the identity package it needs.
 - [src-tauri/cli](src-tauri/cli) — `intentic .` in a terminal on Windows: the launchers for cmd/PowerShell and for WSL/Git Bash that the installer puts on PATH.
 - [src/host.ts](src/host.ts) — this app's half of the local shell: its places, the account and its sandboxes, and the Devices view it adds to the rail.
@@ -938,7 +876,7 @@ rest the stand-in lists), so every phase of Devices' card for it can be looked a
 
 At launch the app runs a read-only `ic docker prepare --dry-run` and streams the result to every local window as
 `desktop://onboarding` (`onboarding.rs`, `src/onboarding/pc.ts`). The reader sees it on Devices, in a card of its
-own ahead of this computer's sandbox (`src/device/pcSetup/PcSetupCard.vue`, its phase from the pure
+own (`src/device/pcSetup/PcSetupCard.vue`, its phase from the pure
 `pcSetup/pcCard.ts`): only on Windows, for as long as the PC is not ready, or nobody is signed in, or the first task
 failed to start. Under a heading that says what agents are and where they run, it walks three numbered steps
 (`pcCard.ts` `pcSteps`, drawn by `PcStep.vue`): **Prepare this PC**, **Sign in**, **Give agents a first task**. Each
@@ -950,8 +888,8 @@ steps. While the card leads a computer with no sandboxes, the page's own lead li
 rows still to do; the met ones are a count beside the machine. Rows are labelled in
 the desktop app's i18n (`desktop.onboarding.rows.*`), falling back to `ic`'s own `title` for an id the catalog does not
 name; a row is ours, the reader's or blocked by `ic`'s `action` (`onboarding.rs` `row_state`). While the card is up,
-Devices' no-sandbox card stands back and this computer's sandbox, held for the PC's setup with nothing of its own
-to ask, says only that it waits for it; the rail's tile spins while the setup runs, marks it needing the reader while
+Devices' no-sandbox card stands back, and a folder asked for meanwhile says on its own card that it waits for this PC's
+setup; the rail's tile spins while the setup runs, marks it needing the reader while
 it waits or failed, and shows a quiet mark while it is offered (`src/device/badge.ts`).
 
 > 2026-10-12: this card replaced the local shell's **Agents** view (`/agents`, a rail tile of its own), whose
@@ -969,8 +907,8 @@ it from Devices' card; a metered connection waits until unmetered or the reader 
 
 "Set up this PC", the `/device` setup flow, and a folder's "Work on this with an agent" when Docker is not ready all
 run the same consenting setup: `ic docker prepare --yes` with `INSTALL_DOCKER=1` (`onboarding_set_up`). When the PC is
-ready and someone is signed in, `machine_sandbox.rs` makes this computer's sandbox as before; until then the machine
-card waits on the PC setup and offers a hosted machine when this PC cannot run a sandbox.
+ready and someone is signed in, `folder_setup.rs` makes the folder's own sandbox; until then the folder's card waits on
+the PC setup, and a PC that cannot run a sandbox is offered a hosted machine.
 
 Restarts use `/r /t 0` only — never a timed `/t` above zero, because Windows then implies `/f` and force-closes unsaved
 work elsewhere (`commands.rs` `end_session`). Both a restart and a sign-out wait are parked in `~/.intentic/onboarding-pc-parked.json` as soon as setup

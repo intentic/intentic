@@ -22,9 +22,6 @@
 #                your own, which also needs SYNC_PROJECT.
 #   SYNC_PROJECT any non-empty value (the desktop app sends 1): SYNC_DIR is your own project, synced into
 #                SYNC_REMOTE_DIR with no sandbox state backup and no git bridge writing into it.
-#   SYNC_PROJECTS_HOST  any non-empty value (the desktop app sends 1, through `ic`): pair this device's own sandbox with
-#                no folder at all, so folders can attach to it later (`intentic-machine sync attach`). Takes none of
-#                SYNC_DIR, SYNC_REMOTE_DIR and SYNC_PROJECT.
 #   TAKEOVER     any non-empty value takes over sync from another device already connected to this sandbox.
 #   AGENT_BIN    run THIS agent command instead of the installed one: for local dev / dogfooding an unreleased build,
 #                e.g. AGENT_BIN="node /path/to/intentic/_devices/machine/dist/cli.js".
@@ -546,10 +543,11 @@ elif [ -z "${SANDBOX_URL:-}" ] || [ -z "${PAIR_TOKEN:-}" ]; then
 fi
 REMOTE_DIR="${SYNC_REMOTE_DIR:-}"
 PROJECT="${SYNC_PROJECT:-}"
-PROJECTS_HOST="${SYNC_PROJECTS_HOST:-}"
-# This device's own sandbox holds no folder: folders attach to it later, each as /work/<name>.
-if [ -n "$PROJECTS_HOST" ] && { [ -n "${SYNC_DIR:-}" ] || [ -n "$REMOTE_DIR" ] || [ -n "$PROJECT" ]; }; then
-    kit_stop "Desktop sync could not be set up." "SYNC_PROJECTS_HOST pairs this device's own sandbox, which holds no folder, and SYNC_DIR, SYNC_REMOTE_DIR or SYNC_PROJECT names one." "unset SYNC_DIR, SYNC_REMOTE_DIR and SYNC_PROJECT, then run the same command again." 2
+# (2026-10-21) Folders no longer attach to one sandbox per computer: each gets a sandbox of its own. A desktop app older
+# than that still asks for that sandbox (SYNC_PROJECTS_HOST), which without the word it relied on would read as a folder
+# for the sandbox's whole /work; it is refused instead, and the sandbox itself is left running.
+if [ -n "${SYNC_PROJECTS_HOST:-}" ]; then
+    kit_stop "Desktop sync could not be set up." "this desktop app sets up one sandbox per computer for folders, which Intentic no longer does: each folder now gets a sandbox of its own." "update the desktop app, then open the folder again." 2
 fi
 
 # THE HANDOVER'S NEWER WORDS: the flags below that an agent older than them refuses outright, so the bootstrap block
@@ -557,7 +555,6 @@ fi
 SPEAKS=""
 [ -n "$REMOTE_DIR" ] && SPEAKS="--remote-dir"
 [ -n "$PROJECT" ] && SPEAKS="$SPEAKS --project"
-[ -n "$PROJECTS_HOST" ] && SPEAKS="$SPEAKS --projects-host"
 
 agent_fetch
 
@@ -565,9 +562,6 @@ agent_fetch
 # them with a parser error that names a flag and nothing else. Said here instead, in words, before anything is
 # connected. A dev AGENT_BIN is taken as it is.
 if [ -z "${AGENT_BIN:-}" ] && [ -n "${SPEAKS:-}" ] && ! agent_speaks "$BIN" "$ROUTE" "$SPEAKS"; then
-    if [ -n "$PROJECTS_HOST" ]; then
-        kit_stop "Desktop sync could not be set up." "intentic-machine $(agent_version "$BIN") on this device cannot set up this device's own sandbox yet, so folders cannot attach to it." "update the desktop app, or run this again once a newer agent is released."
-    fi
     kit_stop "Desktop sync could not be set up." "intentic-machine $(agent_version "$BIN") on this device does not understand ${SPEAKS# } yet." "update the desktop app, or run this again once a newer agent is released."
 fi
 
@@ -585,7 +579,6 @@ set -- "$ROUTE" setup --url "$URL" --pair "$PAIR"
 [ -n "$DIR" ] && set -- "$@" --dir "$DIR"
 [ -n "$REMOTE_DIR" ] && set -- "$@" --remote-dir "$REMOTE_DIR"
 [ -n "$PROJECT" ] && set -- "$@" --project
-[ -n "$PROJECTS_HOST" ] && set -- "$@" --projects-host
 [ -n "${TAKEOVER:-}" ] && set -- "$@" --takeover
 kit_suspend
 # AGENT_BIN is a dev command (`node /path/to/cli.js`), split into its words on purpose; the installed agent is one path,

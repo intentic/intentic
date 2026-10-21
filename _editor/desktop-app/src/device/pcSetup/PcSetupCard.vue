@@ -7,7 +7,7 @@ import { type LocalCheckRow, type LocalFirstTask, localHost, type LocalRestartWh
 import { computed, ref, watch } from "vue";
 import { firstTaskTakeDraft, signIn } from "../../desktop";
 import { draft } from "../../onboarding/firstTask";
-import { machineSandbox } from "../machineSandbox";
+import { signedIn } from "../roster";
 import FirstTaskComposer from "./FirstTaskComposer.vue";
 import PcPrefetch from "./PcPrefetch.vue";
 import PcStep from "./PcStep.vue";
@@ -29,7 +29,7 @@ const phase = pcCard;
 const check = computed(() => onboarding?.check.value);
 const setup = computed(() => onboarding?.setup.value ?? { state: `idle` as const });
 const firstTask = computed(() => onboarding?.firstTask.value);
-const signedOut = computed(() => machineSandbox.value?.state === `signedOut`);
+const signedOut = computed(() => signedIn.value === false);
 const working = computed(() => offersWork(phase.value));
 
 // One ask of the app at a time, by what it is, and what it refused, in its own words (a folder gone since it was picked,
@@ -217,7 +217,7 @@ const signInLine = computed(() => {
     return steps.value.pc === `done` ? t(`desktop.pcSetup.signIn.now`) : t(`desktop.pcSetup.signIn.meanwhile`);
 });
 
-/* STEP 3, THE FIRST TASK: written here while the PC is set up, kept by the app until this computer's sandbox can take it. */
+/* STEP 3, THE FIRST TASK: written here while the PC is set up, kept by the app until its folder's own sandbox can take it. */
 
 const folder = ref(``);
 const text = ref(``);
@@ -449,7 +449,7 @@ const retryTask = (): Promise<void> =>
                             </span>
                             <span v-else class="min-w-0 flex-1 truncate text-muted" v-tooltip.top="step">{{ step }}</span>
                             <span class="shrink-0 text-2xs tabular-nums text-subtle">
-                                <template v-if="left !== undefined">{{ t(`desktop.pcSetup.minutesLeft`, { count: left }) }} · </template>{{ t(`desktop.machineSandbox.percent`, { percent }) }}
+                                <template v-if="left !== undefined">{{ t(`desktop.pcSetup.minutesLeft`, { count: left }) }} · </template>{{ t(`desktop.pcSetup.percent`, { percent }) }}
                             </span>
                         </div>
                         <div
@@ -470,7 +470,7 @@ const retryTask = (): Promise<void> =>
                         <span class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
                             <Button size="small" tier="boring" :label="t(`desktop.pcSetup.quiet.again`)" @click="startSetup(true)" />
                             <button v-if="onboarding?.showSetupLog" type="button" :class="ui.textButton({ tone: `quiet` })" @click="showLog">
-                                {{ t(`desktop.machineSandbox.showLog`) }}
+                                {{ t(`desktop.pcSetup.showLog`) }}
                             </button>
                         </span>
                     </Notice>
@@ -543,14 +543,14 @@ const retryTask = (): Promise<void> =>
             </PcStep>
 
             <!-- 2. THE SIGN-IN, which this PC's setup does not wait for: agents run under an account, and once there is one and
-                 the PC is ready, this computer's sandbox is made by itself. -->
+                 the PC is ready, the first task's folder gets its own sandbox by itself. -->
             <PcStep :n="2" :state="steps.account" :title="t(`desktop.pcSetup.signIn.title`)">
                 <template #line>{{ signInLine }}</template>
                 <template v-if="signedOut" #aside>
                     <Button
                         size="small"
                         :tier="steps.account === `current` ? undefined : `boring`"
-                        :label="t(`desktop.machineSandbox.signIn`)"
+                        :label="t(`desktop.pcSetup.signIn.button`)"
                         :disabled="busy !== undefined"
                         @click="signInNow"
                     >

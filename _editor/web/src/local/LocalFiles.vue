@@ -29,8 +29,8 @@ import { useQuietChecks } from "./bring-back/useBringBack";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import LocalFolderMenu from "./LocalFolderMenu.vue";
 import { type LocalChord, localChord } from "./localKeys";
-import { runMachineAction } from "./machineAction";
-import { folderButtonOf } from "./machineCard";
+import { runSetupAction } from "./setupAction";
+import { folderButtonOf } from "./setupCard";
 import { nameOf } from "./places";
 import { useLocalProject } from "./useLocalProject";
 
@@ -121,19 +121,15 @@ const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDr
     accepts: () => face !== undefined && face.file === undefined && supportsRoute(`POST /workspace/upload`),
 });
 
-// THE WAY FROM THIS FOLDER TO AN AGENT: its sandbox, opened once it has one (its own from before, or this computer's it
-// went into); otherwise asked for in this window's own dialog and put into this computer's sandbox while the reader keeps
-// working (LocalProject.vue), the button saying how far it is (machineCard.ts `folderButtonOf`).
+// THE WAY FROM THIS FOLDER TO AN AGENT: its sandbox, opened once it has one; otherwise asked for in this window's own
+// dialog and made for it while the reader keeps working (LocalProject.vue), the button saying how far it is
+// (setupCard.ts `folderButtonOf`).
 const hasSandbox = useFolderSandbox();
-const { machine, folder, signingIn, ask: askForSandbox, fold } = useLocalProject();
-const sandboxButton = computed(() =>
-    folderButtonOf({ hasSandbox: hasSandbox.value, machine: machine.value, folder: folder.value, signingIn: signingIn.value }),
-);
+const { setup, signingIn, ask: askForSandbox, fold } = useLocalProject();
+const sandboxButton = computed(() => folderButtonOf({ hasSandbox: hasSandbox.value, setup: setup.value, signingIn: signingIn.value }));
 // What agents changed there, looked for once the folder is in its sandbox (its first copy done), so Bring back appears
 // when there is something to bring back.
-useQuietChecks(
-    () => face !== undefined && face.file === undefined && hasSandbox.value && (folder.value === undefined || folder.value.state === `ready`),
-);
+useQuietChecks(() => face !== undefined && face.file === undefined && hasSandbox.value && (setup.value === undefined || setup.value.state === `ready`));
 // The press that opens the sandbox, seen at once: the app looks whether the sandbox is stopped before the workspace goes
 // up, and the button says so from the press on, spinning and locked, until the app says it is up (folderSandbox.ts).
 const { stage: opening, begin: beginOpening } = useSandboxOpening();
@@ -155,7 +151,7 @@ const sandboxTip = computed<Tip | undefined>(() => {
         case `open`:
             return { title: t(`local.localFiles.syncedSandbox`), note: t(`local.localFiles.startsIfStopped`) };
         case `ask`:
-            return { title: t(`local.localFiles.machineSandbox`), note: t(`local.localFiles.keepsFolderSynced`) };
+            return { title: t(`local.localFiles.ownSandbox`), note: t(`local.localFiles.keepsFolderSynced`) };
         default:
             return undefined;
     }
@@ -181,9 +177,9 @@ const toSandbox = (): void => {
         case `ask`:
             void askForSandbox();
             return;
-        // The sandbox is stopped on the reader: the button carries the card's own next step (machineAction.ts).
+        // The setup is stopped on the reader: the button carries the card's own next step (setupAction.ts).
         default:
-            void runMachineAction(press, (path) => void router.push(path));
+            void runSetupAction(press, (path) => void router.push(path));
     }
 };
 
@@ -371,7 +367,7 @@ onUnmounted(() => {
             </div>
             <!-- What agents changed in the folder's own sandbox, brought back on request (bring-back/LocalBringBack.vue). -->
             <LocalBringBack v-if="face !== undefined && face.file === undefined && hasSandbox" />
-            <!-- The way from this folder to an agent: this computer's sandbox, its copy kept in sync with it (the app's project.rs). Not for
+            <!-- The way from this folder to an agent: its own sandbox, its copy kept in sync with it (the app's project.rs). Not for
                  a folder with nothing in it yet, which would hand an agent nothing to work on. -->
             <div v-if="face !== undefined && face.file === undefined && !folderEmpty && !folderLoading" class="shrink-0 border-t border-line p-2">
                 <Button

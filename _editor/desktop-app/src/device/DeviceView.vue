@@ -8,7 +8,6 @@ import {
     DeviceRunLog,
     Notice,
     Page,
-    RowGroup,
     Section,
     SandboxResourcesDialog,
     SandboxVerbs,
@@ -25,9 +24,7 @@ import FixProgress from "../components/FixProgress.vue";
 import Requirements from "../components/Requirements.vue";
 import SetupProgress from "../components/SetupProgress.vue";
 import { openUrl, signIn, workspaceOpen } from "../desktop";
-import LeftoverSandboxes from "./machineSandbox/LeftoverSandboxes.vue";
-import MachineSandboxSection from "./machineSandbox/MachineSandboxSection.vue";
-import { machineNeedsDocker, machineShown } from "./machineSandbox";
+import { folderSetups } from "./folderSetups";
 import SystemCard from "./intenticOs/SystemCard.vue";
 import { showOsLog } from "./intenticOs/system";
 import SandboxWindowsCard from "./intenticOs/screen/SandboxWindowsCard.vue";
@@ -35,7 +32,6 @@ import SecurityCard from "./intenticOs/screen/SecurityCard.vue";
 import ThisComputer from "./intenticOs/ThisComputer.vue";
 import { followOnScreen, onScreen } from "../onScreen";
 import PcSetupCard from "./pcSetup/PcSetupCard.vue";
-import UninstallRow from "./uninstall/UninstallRow.vue";
 import PasswordsOffer from "../passwords/PasswordsOffer.vue";
 import { pcCardShown } from "./pcSetup/livePcCard";
 import { DEVICES_PATH, DOCKER_DOCS, REFRESH_EVERY_MS, useDevice } from "./useDevice";
@@ -45,11 +41,12 @@ import { moveTargetOf } from "./engineMove";
 // DEVICES, IN A LOCAL WINDOW: the page the app adds to a local window's rail (host.ts), where the launcher window's card
 // used to be. It is the workspace's Devices view opened on one machine, the one this window runs on: the same masthead
 // (the kit's DeviceEnvironmentRow: the computer's name, its OS, its engine's size, its agent and the agent's verb), the
-// same Sandboxes list with every verb the workspace has for them, and the same Danger zone at the foot, holding what only
-// this computer can do to itself (removing Intentic from it). There is no board to go back to here: "All devices" opens
+// same Sandboxes list with every verb the workspace has for them, and no Danger zone: Intentic comes off a computer through
+// the system's own uninstaller (2026-10-21). There is no board to go back to here: "All devices" opens
 // the workspace's. Between the masthead and the list sits what only the app on this computer can do: the recovery
 // panel's fix and a setup handed over from the workspace, which lead for as long as they are here, this PC's own setup
-// (pcSetup/PcSetupCard.vue), this computer's own sandbox, and the Docker engine they run in. A computer that runs no
+// (pcSetup/PcSetupCard.vue), and the Docker engine the sandboxes run in. A folder's own sandbox being made is said in
+// that folder's window, not here. A computer that runs no
 // sandbox is told what one is for and offered the way to one, and nothing about Docker: somebody here for their files
 // has no business with it. Until 2026-10-20 this page was "This computer", headed and laid out on its own, and had
 // drifted from the workspace's page about the very same machine.
@@ -174,10 +171,12 @@ const {
     dismissFix,
 } = device;
 
+// A folder's own sandbox waits on Docker (folder_setup.rs): the engine's card here is its way forward too.
+const folderNeedsDocker = computed(() => (folderSetups.value ?? []).some((record) => record.state === `needsDocker`));
 // Whether this machine's Docker is this page's business: a sandbox runs or has run here, or one is being set up. On a
 // machine that only opens files, an engine that is off is nobody's problem, and saying so was the launcher's old nag.
 const dockerMatters = computed(
-    () => facts.value?.hostsSandboxes === true || groups.value.length > 0 || pending.value !== undefined || machineNeedsDocker.value,
+    () => facts.value?.hostsSandboxes === true || groups.value.length > 0 || pending.value !== undefined || folderNeedsDocker.value,
 );
 
 // Which engine the sandboxes run on, and the move to the other (engine.ts). It stands back while Docker's own card is up,
@@ -325,13 +324,10 @@ onMounted(() => {
             />
 
             <!-- THIS PC'S OWN SETUP, ITS SIGN-IN AND THE FIRST TASK, on a Windows PC until it is ready and someone is signed in:
-                 ahead of this computer's sandbox, which waits for it. -->
+                 ahead of any folder's own sandbox, which waits for it. A folder's sandbox being made is said in that
+                 folder's window, never here: this page is the machine, its sandboxes, its agent and its engine
+                 (2026-10-21; it used to lead with a card about the one sandbox the app kept for the whole computer). -->
             <PcSetupCard />
-
-            <!-- THIS COMPUTER'S OWN SANDBOX, made by the app in the background for the folders worked on with an agent. -->
-            <MachineSandboxSection v-if="machineShown" />
-            <!-- What this computer left on the account before it kept one sandbox: offered for removal, never removed by itself. -->
-            <LeftoverSandboxes :signed-in="signedIn" />
 
             <!-- A SETUP HANDED OVER FROM THE WORKSPACE leads the page while it is here: the one thing on it with minutes of its own. -->
             <section v-if="setupMode" class="flex flex-col gap-4 rounded-xl bg-card shadow-sm p-5">
@@ -552,9 +548,8 @@ onMounted(() => {
                     <span class="mt-0.5 block font-mono break-words text-subtle">{{ listError }}</span>
                     <Button class="mt-2" size="small" tier="boring" :label="t(`desktop.docker.checkAgain`)" :disabled="running" @click="refresh" />
                 </Notice>
-                <!-- Docker is down and nothing here started it on its own: the start is offered rather than taken. This
-                     computer's own sandbox offers the same start in its section, which is not said twice. -->
-                <Notice v-else-if="engineListening === false && !machineNeedsDocker" tone="warning" icon="box" class="items-center">
+                <!-- Docker is down and nothing here started it on its own: the start is offered rather than taken. -->
+                <Notice v-else-if="engineListening === false" tone="warning" icon="box" class="items-center">
                     <span class="min-w-0 flex-1">{{ engineDownSentence }}</span>
                     <Button
                         class="ml-2 shrink-0"
@@ -623,7 +618,7 @@ onMounted(() => {
                  and the notice above says its sandboxes are not running (seen on omen, 2026-10-10). Nor beside this PC's
                  own card, which carries the sign-in and the way to agents here: one way forward, not two. -->
             <section
-                v-else-if="read && !setupMode && !syncSetup && !listError && !machineShown && !engineDownWithSandboxes && !pcCardShown"
+                v-else-if="read && !setupMode && !syncSetup && !listError && !engineDownWithSandboxes && !pcCardShown"
                 class="flex flex-col items-start gap-3 rounded-xl border border-dashed border-line p-5"
             >
                 <div class="flex items-start gap-3">
@@ -661,12 +656,6 @@ onMounted(() => {
             </p>
             <!-- PASSWORDS, offered while this computer has not set it up: it has no rail tile until then. -->
             <PasswordsOffer />
-            <!-- THE DANGER ZONE, last of all and in the group the workspace's page ends on, where it revokes a machine's
-                 access: what only this computer can do to itself is remove Intentic, and it asks before anything goes.
-                 Not on Intentic OS, where Intentic is the system itself. -->
-            <RowGroup v-if="!osState" :label="t(`ui.devicePage.dangerZone`)">
-                <UninstallRow :app-version="info?.version" />
-            </RowGroup>
         </div>
 
         <!-- The sandbox's shape as ic reports it (running and saved for the next restart) and this engine's size for the form's rails. -->

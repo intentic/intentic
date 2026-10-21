@@ -11,10 +11,9 @@ import { headSha } from "../changes/changes.js";
 import { commitWorktreeRemainder } from "./root-repo.js";
 
 // A project folder as a repo in the daemon's own layout, like one it cloned or created: a project sandbox's one folder
-// (system/project-dir.ts), or each folder attached to a projects host (system/projects-registry.ts). It gets its git
-// dir on /history and a `.git` pointer in the folder, so the Changes review, history and isolated turns read it as they
-// read any repo. The owner's own history never arrives, since file sync leaves every `.git` out, so this repo arrives
-// unborn and is given its first commit here.
+// (system/project-dir.ts). It gets its git dir on /history and a `.git` pointer in the folder, so the Changes review,
+// history and isolated turns read it as they read any repo. The owner's own history never arrives, since file sync
+// leaves every `.git` out, so this repo arrives unborn and is given its first commit here.
 //
 // THAT FIRST COMMIT IS WHAT MAKES THE FOLDER A REPOSITORY RATHER THAN A HOLE. An unborn HEAD has nothing to branch
 // from, so a conversation's composition leaves such a repo out (conversations/worktrees/worktrees.ts): its checkout

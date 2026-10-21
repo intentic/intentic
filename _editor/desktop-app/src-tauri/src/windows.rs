@@ -1082,9 +1082,6 @@ pub fn show_files_window(
                 announce_frame(&page, false);
             }
         }
-        // The reader back on this computer's window: its card is read again from what the sandbox is now, rather than
-        // what it was minutes ago (machine_sandbox.rs `reader_returned`).
-        WindowEvent::Focused(true) => crate::machine_sandbox::reader_returned(&own),
         // Unsaved changes hold the close, whoever asked for it (the platform's ×, the page's own, Alt+F4): the
         // window comes to the front and its page asks what to do with them, answering with a confirmed close — or,
         // for a page that never takes the question, the app asks in its place (`close_turn`).
@@ -1454,8 +1451,7 @@ pub fn unsaved_windows() -> usize {
 /// A restart cannot be held (Tauri ignores a prevented restart), which is why an update refuses to start while
 /// anything is unsaved or running (update.rs `refusal`) rather than relying on this.
 pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
-    // The quit that ends an uninstall (uninstall.rs `finish`): nothing is left to save or to wait for.
-    if code == tauri::RESTART_EXIT_CODE || crate::uninstall::leaving() {
+    if code == tauri::RESTART_EXIT_CODE {
         return false;
     }
     let count = unsaved_windows();
@@ -1490,9 +1486,9 @@ pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
  * app under a recreate, a removal or a bring-back as readily as under nothing: the scripts and the `ic` under them were
  * abandoned mid-flow, a bring-back's machine agent with them. Now a Quit with work under way asks first: wait for it and
  * quit then, quit now, or cancel. A run's child no longer writes to a pipe of this process (scripts.rs `Spool`), so a
- * "Quit now" leaves it to finish on its own with its own words in its files, which its transcript names. This
- * computer's own sandbox's setup is not asked about: a quit stops it and the next launch runs it again by design
- * (machine_sandbox.rs `before_exit`).
+ * "Quit now" leaves it to finish on its own with its own words in its files, which its transcript names. A folder's own
+ * sandbox's setup is not asked about: a quit stops it and the next launch runs it again by design (folder_setup.rs
+ * `before_exit`).
  *
  * A SETUP HANDED OVER STOPS WITH THE APP (2026-10-12). Left to carry on, it went on unwatched: a reader who quit mid-
  * download and set the sandbox up again had two `ic connect`s racing for one sandbox, and the first reported its failure
@@ -1501,12 +1497,12 @@ pub fn hold_quit(app: &AppHandle, code: i32) -> bool {
  * to send where it was left (`desktop_install_abandoned`, [`tell_quitting`]). A setup a crash left going is stopped by
  * the next one instead (scripts.rs `stop_left_running`). */
 
-/// What still runs that a Quit should ask about: every script and `ic` run but this computer's own sandbox's setup, and
-/// a folder's bring-back, restore or direction change (`project_busy`). Pure.
+/// What still runs that a Quit should ask about: every script and `ic` run but a folder's own sandbox's setup, and a
+/// folder's bring-back, restore or direction change (`project_busy`). Pure.
 pub fn quit_waits_for(runs: &[String], project_busy: bool) -> Vec<String> {
     let mut waits: Vec<String> = runs
         .iter()
-        .filter(|run| run.as_str() != crate::machine_sandbox::RUN)
+        .filter(|run| !run.starts_with(crate::folder_setup::RUN_PREFIX))
         .cloned()
         .collect();
     if project_busy {
@@ -1534,8 +1530,6 @@ pub fn run_said(run: &str) -> String {
             "updating this computer's system".to_string()
         }
         "project" => "bringing changes back to a folder".to_string(),
-        // This device's "Uninstall Intentic…" (uninstall.rs): stopped half way, it leaves half an install behind.
-        "uninstall" => "uninstalling Intentic".to_string(),
         _ => "a task on this computer".to_string(),
     }
 }
@@ -1608,7 +1602,8 @@ fn quit_now(app: &AppHandle, code: i32) {
     use crate::commands::SETUP_RUN;
     if !crate::scripts::is_running(SETUP_RUN) {
         RUNS_ANSWERED.store(true, Ordering::SeqCst);
-        crate::scripts::note_quit(&[crate::machine_sandbox::RUN]);
+        let stopped = folder_setup_runs();
+        crate::scripts::note_quit(&stopped.iter().map(String::as_str).collect::<Vec<_>>());
         app.exit(code);
         return;
     }
@@ -1625,11 +1620,22 @@ fn quit_now(app: &AppHandle, code: i32) {
         if let Err(error) = crate::scripts::stop(SETUP_RUN) {
             eprintln!("intentic: the setup did not stop with the app: {error}");
         }
-        crate::scripts::note_quit(&[crate::machine_sandbox::RUN, SETUP_RUN]);
+        let mut stopped = folder_setup_runs();
+        stopped.push(SETUP_RUN.to_string());
+        crate::scripts::note_quit(&stopped.iter().map(String::as_str).collect::<Vec<_>>());
         RUNS_ANSWERED.store(true, Ordering::SeqCst);
         ASKING_QUIT.store(false, Ordering::SeqCst);
         handle.exit(code);
     });
+}
+
+/// The folders' setups running now: a quit stops them (folder_setup.rs `before_exit`), so their transcripts are not told
+/// they carry on.
+fn folder_setup_runs() -> Vec<String> {
+    crate::scripts::running_ids()
+        .into_iter()
+        .filter(|id| id.starts_with(crate::folder_setup::RUN_PREFIX))
+        .collect()
 }
 
 /// How long a Quit with a setup running waits for the setup's window to send where the run was left. The window
@@ -2355,22 +2361,13 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             to: LauncherTo::Device,
         }) => show_device(app),
         // The way back from a sign-in that began on a folder (auth.rs `complete_path`): the folder asked for an agent,
-        // so the reader is put down wherever that is standing right now — This device while this computer's sandbox is
-        // stopped on them, which is where its card is answered, and the folder that asked while it is coming up by
-        // itself, its card saying how far. Signed out is the second: the page sends this before the workspace has
-        // said who signed in, so the record cannot know yet (`wants_the_reader_after_sign_in`).
+        // so the reader is put back on it, its own sandbox's setup starting by itself and its card saying how far, or
+        // what it waits for.
         Some(Link::Launcher {
             to: LauncherTo::Agent,
         }) => {
             let asked_in = crate::auth::take_asked_in();
-            if crate::machine_sandbox::status(app)
-                .standing
-                .wants_the_reader_after_sign_in()
-            {
-                show_home_route(app, DEVICE_ROUTE);
-            } else {
-                show_folder_that_asked(app, asked_in.as_deref());
-            }
+            show_folder_that_asked(app, asked_in.as_deref());
         }
         // The setup page took this sandbox to a machine of ours, or its reader called the install off there: the main
         // window stops the install it runs for it as the card's own Stop does, or gives up the setup waiting on this PC
@@ -2387,8 +2384,8 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
             app.state::<AppState>().remember_roster(roster.clone());
             let _ = tauri::Emitter::emit(app, "desktop://roster", &roster);
             crate::shell::roster_changed(app);
-            // Who is signed in is what this computer's sandbox is made for (machine_sandbox.rs).
-            crate::machine_sandbox::account_changed();
+            // Who is signed in is what a folder's sandbox waits for (folder_setup.rs).
+            crate::folder_setup::account_changed();
         }
         // The workspace tab's mark, for the app's icon (badge.rs); its notifications, for the system's (notice.rs).
         Some(Link::Badge(args)) => crate::badge::show(app, args),
@@ -2619,12 +2616,12 @@ mod unsaved_tests {
         );
     }
 
-    /// A Quit asks about every run under way but this computer's own sandbox's setup, which a quit stops and the next
+    /// A Quit asks about every run under way but a folder's own sandbox's setup, which a quit stops and the next
     /// launch runs again by design, and about a folder's bring-back; and says what each is doing.
     #[test]
     fn a_quit_asks_about_the_work_still_under_way_and_names_it() {
         let runs = vec![
-            crate::machine_sandbox::RUN.to_string(),
+            crate::folder_setup::run_id("/home/ada/shop"),
             "recreate:work".to_string(),
             "remove:old".to_string(),
         ];
@@ -2632,7 +2629,7 @@ mod unsaved_tests {
             quit_waits_for(&runs, false),
             vec!["recreate:work".to_string(), "remove:old".to_string()]
         );
-        assert!(quit_waits_for(&[crate::machine_sandbox::RUN.to_string()], false).is_empty());
+        assert!(quit_waits_for(&[crate::folder_setup::run_id("/a")], false).is_empty());
         assert_eq!(quit_waits_for(&[], true), vec!["project".to_string()]);
         assert_eq!(
             runs_question(&quit_waits_for(&runs, true)),

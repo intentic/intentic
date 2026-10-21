@@ -4,13 +4,13 @@ import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { PROJECT_DELIVERY_MAX_BYTES, type ProjectDelivery } from "@intentic/sandbox-contract/schemas/project-delivery";
 import { FAKE_MUTAGEN, FAKE_SSH, type FakeProject, fakeProject } from "../../testing.js";
-import { attachedKey, type Pairing } from "../config.js";
+import type { Pairing } from "../config.js";
 import { decodeDelivery, type DeliveryContext, type DeliveryRefused, deliveryPairingFor, deliverToFolder } from "../project/project-delivery.js";
 import { mutagenSession, projectShell, sandboxCopy } from "../project/project-remote.js";
 import { type ProjectPairing, restorePoint, restorePoints } from "../project/project-transfer.js";
 import { restoreDir } from "../restore-points.js";
 
-// LANDED WORK DELIVERED INTO AN ATTACHED FOLDER, end to end on a temp folder: the session is the fake Mutagen the
+// LANDED WORK DELIVERED INTO A PROJECT FOLDER, end to end on a temp folder: the session is the fake Mutagen the
 // copy-first suites share (src/testing.ts), git is this machine's own, and restore is the bring-back's own command.
 
 const SANDBOX = "sandbox-5a1b2c3d4e5f-intentic-dev";
@@ -30,7 +30,6 @@ beforeEach(async () => {
     pairing = {
         sandboxUrl: URL_OF,
         sandboxId: SANDBOX,
-        key: attachedKey(SANDBOX, "shop"),
         mode: "sync",
         localDir: local,
         remoteDir: `${WORKSPACE_ROOT}/shop`,
@@ -93,7 +92,7 @@ describe("deliverProject", () => {
         // Flushed, then paused for the writes and let go again, as a bring-back holds it.
         expect(fake.calls).toEqual(["mutagen list", "mutagen flush", "mutagen list", "mutagen pause", "mutagen resume"]);
         expect(fake.session).toBe("running");
-        const manifest = JSON.parse(await readFile(join(restoreDir(context.stateDir, pairing.key!), result.point!, "manifest.json"), "utf8")) as { landing: unknown; entries: unknown[] };
+        const manifest = JSON.parse(await readFile(join(restoreDir(context.stateDir, pairing.sandboxId), result.point!, "manifest.json"), "utf8")) as { landing: unknown; entries: unknown[] };
         expect(manifest.landing).toEqual({ agentId: "agent-1", title: "Add checkout" });
         expect(manifest.entries).toHaveLength(4);
     });
@@ -238,11 +237,19 @@ describe("deliverProject", () => {
 });
 
 describe("which folder a delivery is for", () => {
-    const shop: Pairing = { sandboxUrl: URL_OF, sandboxId: SANDBOX, key: attachedKey(SANDBOX, "shop"), mode: "sync", localDir: "/home/ada/shop", remoteDir: `${WORKSPACE_ROOT}/shop`, project: true, deliver: "auto" };
-    const handPicked: Pairing = { ...shop, key: attachedKey(SANDBOX, "blog"), localDir: "/home/ada/blog", remoteDir: `${WORKSPACE_ROOT}/blog`, deliver: "off" };
-    const otherSandbox: Pairing = { ...shop, sandboxUrl: "https://sandbox-0738cd6b5027.intentic.dev", sandboxId: "sandbox-0738cd6b5027-intentic-dev", key: undefined, remoteDir: `${WORKSPACE_ROOT}/site`, localDir: "/home/ada/site" };
+    // Each folder with a sandbox of its own (2026-10-21), as `sync setup --project` records it.
+    const shop: Pairing = { sandboxUrl: URL_OF, sandboxId: SANDBOX, mode: "sync", localDir: "/home/ada/shop", remoteDir: `${WORKSPACE_ROOT}/shop`, project: true, deliver: "auto" };
+    const handPicked: Pairing = {
+        ...shop,
+        sandboxUrl: "https://sandbox-9c8d7e6f5a4b.intentic.dev",
+        sandboxId: "sandbox-9c8d7e6f5a4b-intentic-dev",
+        localDir: "/home/ada/blog",
+        remoteDir: `${WORKSPACE_ROOT}/blog`,
+        deliver: "off",
+    };
+    const otherSandbox: Pairing = { ...shop, sandboxUrl: "https://sandbox-0738cd6b5027.intentic.dev", sandboxId: "sandbox-0738cd6b5027-intentic-dev", remoteDir: `${WORKSPACE_ROOT}/site`, localDir: "/home/ada/site" };
 
-    it("finds the attached folder of the sandbox on the link's other end", () => {
+    it("finds the project folder of the sandbox on the link's other end", () => {
         expect(deliveryPairingFor([otherSandbox, handPicked, shop], `${URL_OF}/`, `${WORKSPACE_ROOT}/shop`).localDir).toBe("/home/ada/shop");
     });
 
@@ -255,8 +262,8 @@ describe("which folder a delivery is for", () => {
             }
             throw new Error("not refused");
         };
-        expect(refusal(() => deliveryPairingFor([handPicked], URL_OF, `${WORKSPACE_ROOT}/blog`))).toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("did not opt into delivery") });
-        expect(refusal(() => deliveryPairingFor([{ ...handPicked, deliver: undefined }], URL_OF, `${WORKSPACE_ROOT}/blog`)).code).toBe("FORBIDDEN");
+        expect(refusal(() => deliveryPairingFor([handPicked], handPicked.sandboxUrl, `${WORKSPACE_ROOT}/blog`))).toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("did not opt into delivery") });
+        expect(refusal(() => deliveryPairingFor([{ ...handPicked, deliver: undefined }], handPicked.sandboxUrl, `${WORKSPACE_ROOT}/blog`)).code).toBe("FORBIDDEN");
         expect(refusal(() => deliveryPairingFor([otherSandbox], URL_OF, `${WORKSPACE_ROOT}/site`))).toMatchObject({ code: "NOT_FOUND" });
         expect(refusal(() => deliveryPairingFor([shop], URL_OF, `${WORKSPACE_ROOT}/nothing`))).toMatchObject({ code: "NOT_FOUND" });
     });

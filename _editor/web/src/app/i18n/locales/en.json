@@ -4922,9 +4922,9 @@
             "askAgent": "Ask an agent",
             "askAgentHint": "A conversation about this file",
             "dropFilesToAdd": "Drop files to add them to {name}",
-            "machineSandbox": "This computer's sandbox",
             "opening": "Opening {name}…",
-            "openingSlow": "Still reading the folder. A big one, or one inside WSL, takes a moment the first time."
+            "openingSlow": "Still reading the folder. A big one, or one inside WSL, takes a moment the first time.",
+            "ownSandbox": "Its own sandbox"
         },
         "folderMenu": {
             "switchFolder": "{name}: open another folder",
@@ -4981,7 +4981,7 @@
         },
         "project": {
             "dialogTitle": "Work on {name} with an agent",
-            "lede": "Its copy goes into this computer's sandbox, where agents work on it. Nothing here changes until you bring their work back.",
+            "lede": "It gets a sandbox of its own on this computer, with its copy in it, where agents work on it. Nothing here changes until you bring their work back.",
             "files": "{count} file to copy | {count} files to copy",
             "moreFiles": "More than {count} files to copy",
             "weight": "{files}, {size}",
@@ -5016,9 +5016,9 @@
             "percent": "{percent}%",
             "hide": "Hide",
             "show": "Show build",
-            "attach": "Work on this in this computer's sandbox",
-            "signInAttach": "Sign in to continue",
-            "attachFailed": "Couldn't add this folder"
+            "create": "Make its sandbox",
+            "signInCreate": "Sign in to continue",
+            "createFailed": "Couldn't make this folder's sandbox"
         },
         "journey": {
             "heading": "What happens next",
@@ -5029,15 +5029,12 @@
                 "inBrowser": "Finish in your browser"
             },
             "sandbox": {
-                "title": "Get this computer's sandbox ready",
-                "once": "Set up once, then kept for all your folders",
+                "title": "Make this folder's sandbox",
+                "once": "A sandbox of its own, on this computer",
                 "signedIn": "Getting ready…",
-                "creating": "Setting up, {percent}%",
+                "behind": "Next, after another folder's",
+                "creating": "Making it, {percent}%",
                 "interrupted": "Picking up where it left off",
-                "starting": "Starting it",
-                "asleep": "Asleep. Intentic wakes it for you",
-                "stopped": "Stopped. Intentic starts it for you",
-                "startFailed": "Couldn't start",
                 "needsDocker": {
                     "notInstalled": "Needs Docker",
                     "notRunning": "Waiting for Docker to start",
@@ -5048,94 +5045,83 @@
                     "restart": "This computer needs a restart",
                     "signOut": "Sign out of Windows and back in"
                 },
-                "failed": "Couldn't be set up",
-                "gone": "Gone from this computer"
+                "failed": "Couldn't be made"
             },
             "copy": {
                 "title": "Copy {name} in",
                 "stays": "Your folder stays where it is",
-                "adding": "Adding it",
                 "copying": "Copying. Agents can start once it's in",
                 "paused": "Paused",
-                "failed": "Couldn't be added"
+                "failed": "Isn't syncing"
             }
         },
-        "machine": {
-            "ready": "This computer's sandbox is ready",
-            "readyDetail": "Folders you work on with an agent go into it.",
-            "signedOut": "Sign in to set up this computer's sandbox",
+        "setup": {
+            "signedOut": "Sign in to make {name}'s sandbox",
             "signedOutDetail": "Intentic makes it right after you sign in, on this computer.",
             "signingIn": "Finish signing in in your browser",
             "signingInDetail": "Intentic carries on by itself once you've signed in.",
             "signedIn": "You're signed in",
-            "signedInDetail": "Getting this computer's sandbox ready…",
+            "signedInDetail": "Getting {name}'s sandbox ready…",
+            "queued": "Getting {name}'s sandbox ready",
+            "queuedDetail": "It starts in a moment.",
+            "behind": "Waiting for {behind}'s sandbox",
+            "behindDetail": "This computer makes one sandbox at a time. {name}'s is next.",
             "needsDocker": {
-                "notInstalled": "This computer's sandbox needs Docker",
-                "notRunning": "This computer's sandbox is waiting for Docker",
+                "notInstalled": "{name}'s sandbox needs Docker",
+                "notRunning": "{name}'s sandbox is waiting for Docker",
                 "notAllowed": "Docker turns this account away"
             },
             "needsDockerDetail": {
-                "notInstalled": "Install Docker Desktop, and Intentic sets the sandbox up once it runs.",
+                "notInstalled": "Install Docker Desktop, and Intentic makes the sandbox once it runs.",
                 "notRunning": "Start Docker, and Intentic carries on by itself.",
-                "notAllowed": "This computer says how to let this account use Docker."
+                "notAllowed": "Devices says how to let this account use Docker."
             },
-            "creating": "Setting up this computer's sandbox",
-            "creatingShort": "Setting up this computer's sandbox",
-            "interrupted": "Picking up this computer's sandbox",
-            "interruptedDetail": "Intentic closed while it was being set up, so it's carrying on where it left off.",
-            "waiting": "This computer's sandbox is waiting",
+            "creating": "Making {name}'s sandbox",
+            "creatingShort": "Making {name}'s sandbox",
+            "interrupted": "Picking up {name}'s sandbox",
+            "interruptedDetail": "Intentic closed while it was being made, so it's carrying on where it left off.",
+            "waiting": "{name}'s sandbox is waiting",
             "waitingDetail": {
-                "consent": "This PC needs setting up for agents first. Set it up in Devices.",
-                "restart": "This computer needs a restart before it can run a sandbox.",
-                "signOut": "This computer needs you to sign out and back in before it can run a sandbox."
+                "consent": "This PC needs setting up for agents first. Set it up in Devices, and the sandbox follows.",
+                "needs": "This computer needs this first: {needs}. Windows may ask for your permission.",
+                "restart": "Restart this computer, and Intentic carries on after.",
+                "signOut": "Sign out of Windows and back in, and Intentic carries on after."
             },
-            "failed": "This computer's sandbox wasn't set up",
-            "stopped": "This computer's sandbox is stopped",
-            "stoppedDetail": "Start it to work on your folders with an agent.",
-            "starting": "Starting this computer's sandbox",
-            "startingDetail": "It was stopped, so Intentic is starting it. This takes up to a minute.",
-            "startFailed": "This computer's sandbox didn't start",
-            "asleep": "This computer's sandbox is asleep",
-            "asleepDetail": "It went to sleep while nobody was using it, with copying {name} paused. Start it to carry on.",
-            "waking": "Waking this computer's sandbox",
-            "wakingDetail": "It went to sleep while nobody was using it. Intentic wakes it to copy {name} in.",
-            "gone": "This computer's sandbox is gone",
-            "goneDetail": "It isn't on this computer any more. Set it up again, and your folders go back into it, with its files if this computer still has them.",
-            "folder": {
-                "adding": "Adding {name} to this computer's sandbox",
-                "copying": "Copying {name} into this computer's sandbox",
-                "copyingDetail": "Agents can start once the first copy is in. Changes you make here keep going over.",
-                "paused": "Copying {name} is paused",
-                "pausedDetail": "Open the sandbox's Devices page to resume file syncing.",
-                "heldLowDisk": "The drive this folder is on is nearly full. Copying carries on by itself once there's room.",
-                "heldSwap": "This computer's sandbox is being updated. Copying carries on by itself once it's back.",
-                "heldUnreachable": "This computer's sandbox hasn't answered for an hour. Copying carries on by itself once it does.",
-                "heldAway": "This computer's sandbox isn't running on this computer right now. Copying carries on once it's back.",
-                "preparing": "Getting the sandbox ready for this folder…",
-                "failed": "{name} couldn't be added",
-                "ready": "{name} is in this computer's sandbox",
-                "readyDetail": "When you accept an agent's work, it comes back into this folder by itself. A file you changed too is left for you to look at.",
-                "readyShort": "{name} is ready"
-            },
+            "failed": "{name}'s sandbox wasn't made",
+            "noSync": "{name} isn't syncing to its sandbox",
+            "copying": "Copying {name} into its sandbox",
+            "copyingDetail": "Agents can start once the first copy is in. Changes you make here keep going over.",
+            "preparing": "Getting the sandbox ready for this folder…",
+            "paused": "Copying {name} is paused",
+            "pausedDetail": "Open the sandbox's Devices page to resume file syncing.",
+            "heldLowDisk": "The drive this folder is on is nearly full. Copying carries on by itself once there's room.",
+            "heldSwap": "Its sandbox is being updated. Copying carries on by itself once it's back.",
+            "heldUnreachable": "Its sandbox hasn't answered for an hour. Copying carries on by itself once it does.",
+            "heldAway": "Its sandbox isn't running on this computer right now. Copying carries on once it's back.",
+            "ready": "{name}'s sandbox is ready",
+            "readyDetail": "When you accept an agent's work, it comes back into this folder by itself. A file you changed too is left for you to look at.",
+            "readyShort": "{name} is ready",
             "button": {
-                "waiting": "Waiting for this computer's sandbox",
-                "waitingPercent": "Waiting for this computer's sandbox ({percent}%)",
+                "waiting": "Making this folder's sandbox…",
+                "waitingPercent": "Making this folder's sandbox ({percent}%)",
+                "behind": "Waiting for another folder's sandbox…",
                 "copying": "Copying your folder…",
                 "paused": "Copying is paused",
-                "failed": "Couldn't add this folder",
+                "failed": "Couldn't make this folder's sandbox",
                 "setUpComputer": "Set this computer up for agents",
                 "signingIn": "Waiting for you to sign in…",
-                "signedIn": "Getting ready…",
-                "starting": "Starting this computer's sandbox…"
+                "signedIn": "Getting ready…"
             },
             "action": {
                 "signIn": "Sign in",
                 "signInAgain": "Open sign-in again",
                 "startDocker": "Start Docker",
                 "retry": "Try again",
+                "consent": "Continue",
+                "restart": "Restart now",
+                "signOut": "Sign out now",
                 "log": "Show log",
-                "start": "Start",
-                "recreate": "Set it up again",
+                "dismiss": "Cancel",
                 "details": "Open Devices",
                 "open": "Open sandbox"
             }

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { homeDir, writeSecretFile } from "@intentic/local-agent";
 import type { PortSkipReason } from "@intentic/sandbox-contract/schemas/devices";
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
@@ -83,17 +84,13 @@ export const isSandboxContainerName = (name: string | undefined): name is string
 // no state backup and no git bridge (`isProjectPairing`), and the two only ever come together (`pairingProblem`).
 // `direction` is which way a project's files flow (`projectDirection`), and means nothing on any other pairing.
 // `transport` is how the sandbox's side is reached (`SyncTransport`), and `container` the sandbox container a docker
-// pairing reaches: only a project pairing's (or the projects host's), and only ever a sandbox container's name
-// (`pairingProblem`). `key` tells apart the several pairings one sandbox may hold since folders ATTACH to this machine's
-// own sandbox (`pairingKey`); `projectsHost` marks the folderless pairing that holds that sandbox's sync token and
-// mirrors its ports, and `deliver` whether landed work is written into an attached folder by itself (project-delivery.ts).
+// pairing reaches: only a project pairing's, and only ever a sandbox container's name (`pairingProblem`). `deliver` is
+// whether landed work is written into a project folder by itself (project-delivery.ts), which `setup --project` records.
 // WHETHER ITS FILE SYNC RUNS is no field of its own: it is read off the facts below (holds.ts `syncHolds`), each kept by
 // the one rule that observes it, and Mutagen is made to agree every pass.
 export interface Pairing {
     readonly sandboxUrl: string;
     readonly sandboxId: string;
-    readonly key?: string | undefined;
-    readonly projectsHost?: true | undefined;
     readonly deliver?: DeliverMode | undefined;
     readonly mode: SyncMode;
     readonly localDir?: string;
@@ -108,8 +105,8 @@ export interface Pairing {
     readonly direction?: ProjectDirection | undefined;
     readonly transport?: SyncTransport | undefined;
     readonly container?: string | undefined;
-    // (2026-10-05) What this machine knows of the sandbox's own fate, written on every pairing of one sandbox together
-    // (`updateSandboxPairings`), since it is the sandbox's and not a folder's. `goneSince` is when a positive "this sandbox
+    // (2026-10-05) What this machine knows of the sandbox's own fate, written by its id (`updateSandboxPairings`), since
+    // it is the sandbox's and not a folder's. `goneSince` is when a positive "this sandbox
     // no longer exists" was first heard (the edge's `unknown-sandbox`, or this machine's ic no longer holding it, gone.ts),
     // `goneCheckedAt` when it was last asked again, `goneBy` who said so. Past the trash window the pairing is retired
     // (retire.ts); an answer from the sandbox before then clears all three.
@@ -176,12 +173,10 @@ export type GoneWitness = "edge" | "local";
 // What became of the container a docker pairing reaches: gone from this machine's engine, or in ic's trash.
 export type ContainerAway = "missing" | "trashed";
 
-// WHICH PAIRING THIS IS, among the several one sandbox may now hold. Every pairing made before folders could attach
-// has no `key`, so its key is its sandbox id and nothing keyed by it (its Mutagen session, its restore points, its
-// listing record, its lock) moves. A folder attached to this machine's own sandbox is `<sandboxId>~<name>`, `<name>`
-// being its folder in the sandbox (`/work/<name>`). What identifies the SANDBOX (its enrollment and sync token, its ssh
-// alias and tunnel, its container, its forwards, the report's `sandboxId`) stays the sandbox id.
-export const pairingKey = (pairing: Pick<Pairing, "key" | "sandboxId">): string => pairing.key ?? pairing.sandboxId;
+// WHICH PAIRING THIS IS: one per sandbox, so its sandbox id, which keys its Mutagen session, its restore points, its
+// listing record and its lock. (2026-10-21) Folders no longer attach to one sandbox per computer, so no pairing carries
+// a key of its own (`<sandboxId>~<name>`) any more; one left from then is retired as the file is read (`LEGACY`).
+export const pairingKey = (pairing: Pick<Pairing, "sandboxId">): string => pairing.sandboxId;
 
 // The slugs this machine's ic may know a pairing's sandbox by. ic names a sandbox with a public hostname by that
 // hostname's first label (`sandbox-<id>`, or the subdomain an owner chose) and one without by the 12-hex id its
@@ -191,13 +186,6 @@ export const pairingSlugs = (sandboxUrl: string): string[] => {
     const id = sandboxIdFromUrl(sandboxUrl);
     return [...new Set([slugOfDaemonUrl(sandboxUrl), id].filter((slug): slug is string => slug !== undefined && slug !== ""))];
 };
-
-// The key an attached folder is filed under. `~` is in no project name (isProjectDirName) and in no id this agent makes.
-export const attachedKey = (sandboxId: string, name: string): string => `${sandboxId}~${name}`;
-
-// A folder attached to this machine's own sandbox (`sync attach`), one of several pairings of that sandbox. It never
-// mirrors ports (the projects host does, once per sandbox), and it is told apart by its key.
-export const isAttachedPairing = (pairing: Pick<Pairing, "key">): boolean => pairing.key !== undefined;
 
 // Whether landed work reaches the folder by itself (`deliverProject`). Read leniently, as `direction` is: only "auto"
 // delivers, and anything else, absent or a later release's word, is Bring back by hand.
@@ -231,32 +219,23 @@ export const isProjectPairing = (pairing: Pick<Pairing, "project">): boolean => 
 // through the two-way session, what lands in this device's folder, so it is held to exactly two shapes: /work, or
 // one project folder directly under it. A project pairing must be the second (its ignore list no longer shields the
 // sandbox's state dir, which only /work holds), and the second is only ever a project's. A pairing reached through
-// Docker is held to two more: it is a project's or the projects host's (a workspace pairing's git bridge and state
-// backup ride ssh), and the container it names is a sandbox container, since that container is where the folder's files
-// are written. The projects host has no folder at all, and an attached folder's key names its sandbox and its folder
-// there, so a key can never point one sandbox's restore points or session at another's.
-export const pairingProblem = (pairing: PlacementFields): string | undefined =>
-    hostProblem(pairing) ?? dockerProblem(pairing) ?? remoteDirProblem(pairing) ?? keyProblem(pairing);
+// Docker is held to two more: it is a project's (a workspace pairing's git bridge and state backup ride ssh), and the
+// container it names is a sandbox container, since that container is where the folder's files are written.
+const pairingProblem = (pairing: PlacementFields): string | undefined => dockerProblem(pairing) ?? remoteDirProblem(pairing);
 
 // What `pairingProblem` reads of a pairing: its placement, and the transport as a plain string (PlacementSchema says why).
-type PlacementFields = Pick<Pairing, "remoteDir" | "project" | "container" | "key" | "projectsHost"> & {
+type PlacementFields = Pick<Pairing, "remoteDir" | "project" | "container"> & {
     readonly sandboxId?: string | undefined;
     readonly localDir?: string | undefined;
     readonly transport?: string | undefined;
 };
 
-const hostProblem = (pairing: PlacementFields): string | undefined =>
-    pairing.projectsHost === true &&
-    (pairing.localDir !== undefined || pairing.remoteDir !== undefined || pairing.project !== undefined || pairing.key !== undefined)
-        ? `is this machine's projects host, which holds no folder of its own (no localDir, remoteDir, project or key)`
-        : undefined;
-
 const dockerProblem = (pairing: PlacementFields): string | undefined => {
     if (pairing.transport !== "docker") {
         return undefined;
     }
-    if (!isProjectPairing(pairing) && pairing.projectsHost !== true) {
-        return `reaches its sandbox through Docker, which only a project pairing or the projects host may`;
+    if (!isProjectPairing(pairing)) {
+        return `reaches its sandbox through Docker, which only a project pairing may`;
     }
     return isSandboxContainerName(pairing.container)
         ? undefined
@@ -274,25 +253,12 @@ const remoteDirProblem = (pairing: PlacementFields): string | undefined => {
     return !isProjectPairing(pairing) && inProject ? `syncs ${pairingRemoteDir(pairing)}, which only a project pairing may` : undefined;
 };
 
-const keyProblem = (pairing: PlacementFields): string | undefined => {
-    if (pairing.key === undefined) {
-        return undefined;
-    }
-    const name = pairing.remoteDir === undefined ? undefined : projectDirNameOf(pairing.remoteDir);
-    const expected = name === undefined || pairing.sandboxId === undefined ? undefined : attachedKey(pairing.sandboxId, name);
-    return isProjectPairing(pairing) && pairing.key === expected
-        ? undefined
-        : `has the key ${JSON.stringify(pairing.key)}, which only a project folder attached to its sandbox has, spelled <sandboxId>~<name> for its ${WORKSPACE_ROOT}/<name>`;
-};
-
 // The fields that decide where a pairing's files go, parsed where the file is read; the rest of a pairing is taken as
 // this agent wrote it, as it always has been. `transport` stays a plain string here so a word a later release wrote is
 // read as ssh (`pairingTransport`) rather than refusing the file; only a docker pairing's container is held to a shape.
 // `deliver` is not held here, for the same reason: a word this build does not know reads as off (`deliversByItself`).
 const PlacementSchema = z.object({
     sandboxId: z.string(),
-    key: z.string().optional(),
-    projectsHost: z.literal(true).optional(),
     localDir: z.string().optional(),
     remoteDir: z.string().optional(),
     project: z.literal(true).optional(),
@@ -343,13 +309,88 @@ export const readState = async (): Promise<SyncState> => {
     if (raw === undefined) {
         return { pairings: [] };
     }
+    const { kept } = splitPairings(raw);
+    assertPairings(kept);
+    // SAFETY: `assertPairings` held every kept pairing's placement to its schema; the rest of a pairing is taken as this
+    // agent wrote it, as it always has been.
+    return { pairings: (kept as (Pairing & Markers)[]).map(fromMarkers) };
+};
+
+/* (2026-10-21) FOLDERS NO LONGER ATTACH TO ONE SANDBOX PER COMPUTER. Each folder gets a sandbox of its own, so the two
+   kinds of pairing that design wrote are retired wherever a file still holds them: the folderless "projects host"
+   (`projectsHost: true`), which held this computer's sandbox's token and mirrored its ports, and each folder attached to
+   it (`key: "<sandboxId>~<name>"`). Every read leaves them out, so nothing syncs them, the next write drops them, and
+   the orphan sweep (mutagen.ts `retireOrphanSessions`) ends their sessions and forwards. Their files stay where they
+   are on both sides: the folder here, and its copy and its agents' history in that sandbox, which carries on as an
+   ordinary one. */
+export interface LegacyPairing {
+    readonly kind: "projects-host" | "attached";
+    readonly sandboxId: string;
+    readonly localDir?: string | undefined;
+    readonly remoteDir?: string | undefined;
+}
+
+// The two retired kinds, as they were written. Read leniently: a pairing that is neither is kept for
+// `assertPairings`, which refuses a malformed one as before.
+const LegacySchema = z.object({
+    sandboxId: z.string(),
+    projectsHost: z.literal(true).optional(),
+    key: z.string().optional(),
+    localDir: z.string().optional(),
+    remoteDir: z.string().optional(),
+});
+
+// The file's pairing list, split into the pairings this build keeps and the retired ones.
+interface SplitPairings {
+    readonly kept: readonly unknown[];
+    readonly legacy: readonly LegacyPairing[];
+}
+
+const splitPairings = (raw: string): SplitPairings => {
+    // SAFETY: only the `pairings` list is read off it, and checked to be one just below.
     const parsed = JSON.parse(raw) as Partial<SyncState> | null;
     // Another shape is as unreadable as bad bytes: "no pairings" stops sync and every writer would persist it.
     if (!Array.isArray(parsed?.pairings)) {
         throw new SyntaxError(`${configPath} has no "pairings" list`);
     }
-    assertPairings(parsed.pairings);
-    return { pairings: parsed.pairings.map(fromMarkers) };
+    const kept: unknown[] = [];
+    const legacy: LegacyPairing[] = [];
+    for (const entry of parsed.pairings) {
+        const old = LegacySchema.safeParse(entry);
+        if (old.success && old.data.projectsHost === true) {
+            legacy.push({ kind: "projects-host", sandboxId: old.data.sandboxId });
+        } else if (old.success && old.data.key !== undefined) {
+            legacy.push({ kind: "attached", sandboxId: old.data.sandboxId, localDir: old.data.localDir, remoteDir: old.data.remoteDir });
+        } else {
+            kept.push(entry);
+        }
+    }
+    return { kept, legacy };
+};
+
+// The sentence a retired pairing is said with, once.
+const legacyRetiredSentence = (legacy: LegacyPairing): string =>
+    legacy.kind === "attached"
+        ? `${legacy.localDir ?? "a folder"} stopped syncing with ${legacy.sandboxId}: folders no longer share one sandbox per computer. Its copy (${legacy.remoteDir ?? WORKSPACE_ROOT}) and its agents' history stay in that sandbox, and the folder keeps its files.`
+        : `${legacy.sandboxId} is no longer this computer's sandbox for folders: it carries on as an ordinary sandbox, with everything in it, and its ports are no longer mirrored here.`;
+
+// Takes the retired pairings out of the file and says each once. Idempotent: a file without any is left alone, and a
+// file another write already rewrote has none left to say. What ends their sessions is the orphan sweep that follows.
+export const retireLegacyPairings = async (log: (line: string) => void): Promise<readonly LegacyPairing[]> => {
+    const raw = await readFile(configPath, "utf8").catch(undefinedIfMissing);
+    if (raw === undefined) {
+        return [];
+    }
+    const retired = splitPairings(raw).legacy;
+    if (retired.length === 0) {
+        return [];
+    }
+    // A write of the state as read, which leaves them out.
+    await updateState((state) => state);
+    for (const legacy of retired) {
+        log(legacyRetiredSentence(legacy));
+    }
+    return retired;
 };
 
 // (2026-10-20) The pause markers each rule kept before file sync's holds were read off facts (holds.ts), translated on
@@ -393,20 +434,13 @@ export const updateState = async (mutate: (state: SyncState) => SyncState): Prom
     await run;
 };
 
-// Add a pairing, or replace the one already held under its key (re-running setup rotates its token). Every other
-// pairing survives untouched but for one thing: a sandbox keeps ONE sync token per machine key, so an enrollment that
-// rotated it rotates it for every pairing of that sandbox (the projects host and the folders attached to it alike).
+// Add a pairing, or replace the one already held for its sandbox (re-running setup rotates its token). Every other
+// pairing survives untouched.
 export const upsertPairing = async (pairing: Pairing): Promise<void> =>
     await updateState((state) => ({ pairings: withPairing(state.pairings, pairing) }));
 
-export const withPairing = (pairings: readonly Pairing[], pairing: Pairing): Pairing[] => [
-    ...pairings
-        .filter((held) => pairingKey(held) !== pairingKey(pairing))
-        .map((held) =>
-            pairing.syncToken !== undefined && held.sandboxId === pairing.sandboxId && held.syncToken !== pairing.syncToken
-                ? { ...held, syncToken: pairing.syncToken }
-                : held,
-        ),
+const withPairing = (pairings: readonly Pairing[], pairing: Pairing): Pairing[] => [
+    ...pairings.filter((held) => pairingKey(held) !== pairingKey(pairing)),
     pairing,
 ];
 
@@ -483,10 +517,9 @@ export const pruneBridgeHolds = async (key: string, repos: readonly string[]): P
         return next.length === 0 ? rest : { ...rest, bridgeHolds: next };
     });
 
-// Every pairing of one sandbox rewritten together: what is true of the SANDBOX (that it is gone, since when it has not
-// answered, which slug ic keeps it under) is said on each of its pairings, so a folder attached to it reads it off its
-// own record as the sandbox's own pairing does.
-export const updateSandboxPairings = async (sandboxId: string, change: (held: Pairing) => Pairing): Promise<void> =>
+// The sandbox's pairing rewritten: what is true of the SANDBOX (that it is gone, since when it has not answered, which
+// slug ic keeps it under), by its id.
+const updateSandboxPairings = async (sandboxId: string, change: (held: Pairing) => Pairing): Promise<void> =>
     await updateState((state) => ({ pairings: state.pairings.map((held) => (held.sandboxId === sandboxId ? change(held) : held)) }));
 
 // The sandbox's fate on all of its pairings at once; undefined clears it (the sandbox answered again).

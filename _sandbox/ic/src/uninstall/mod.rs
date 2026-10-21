@@ -1,8 +1,7 @@
 /* `ic uninstall`: INTENTIC OFF THIS DEVICE, in one command, from whichever door a person comes in by.
 
-The Windows uninstaller's page, the desktop app's "Uninstall Intentic…" and the `intentic.dev/uninstall` one-liner all
-end up here, so there is one list of what Intentic put on a device and one order to take it off in. Before 2026-10-18
-that knowledge was in four places that each removed their own part: `ic sandbox remove`, `ic engine remove`,
+The Windows uninstaller's page and the `intentic.dev/uninstall` one-liner both end up here, so there is one list of
+what Intentic put on a device and one order to take it off in. Before 2026-10-18 that knowledge was in four places that each removed their own part: `ic sandbox remove`, `ic engine remove`,
 `intentic-machine uninstall` and the NSIS hook. None of them removed ic itself, and between them they left Mutagen and
 its data, PATH entries, the keyring, the engine's download cache, images, logs and `~/.intentic` behind.
 
@@ -11,9 +10,10 @@ pure), asks once, then runs its steps (steps.rs) as one checklist. A step that c
 with the command that finishes it, and the run carries on. The end names everything left and why, and what stays
 because it is not Intentic's (Docker Desktop, WSL, the synced folders' files).
 
-For a reader with no screen (the desktop app's dialog, the Windows uninstaller's details list), each step is also one
-`intentic-uninstall: {json}` line (cli-output-protocol.md), and `--dry-run --json` / `--ini` answer the inventory the
-choice is shown from. */
+For the Windows uninstaller, `--dry-run --ini` answers the inventory its page shows the choice from, and the run's plain
+lines fill its details list. (2026-10-21) The desktop app's own "Uninstall Intentic…" read a `--dry-run --json`
+document and an `intentic-uninstall: {json}` line per step; it went, since the system's own uninstaller is the one way
+to remove an app, and both went with it. */
 
 mod host;
 mod inventory;
@@ -21,8 +21,6 @@ mod plan;
 mod steps;
 
 use std::path::PathBuf;
-
-use serde_json::json;
 
 use crate::ui;
 use crate::util::{Fail, Result};
@@ -35,7 +33,6 @@ pub struct Args {
     pub confirm: Option<String>,
     pub yes: bool,
     pub dry_run: bool,
-    pub json: bool,
     pub ini: Option<PathBuf>,
     pub without_app: bool,
     pub nested: bool,
@@ -44,9 +41,6 @@ pub struct Args {
 const TITLE: &str = "intentic · uninstall from this device";
 
 pub fn run(args: Args) -> Result<()> {
-    if args.json {
-        ui::send_human_to_stderr();
-    }
     let inventory = inventory::gather();
     if args.dry_run {
         return dry_run(&inventory, &args);
@@ -207,27 +201,13 @@ fn found_items(inventory: &inventory::Inventory) -> Vec<ui::Item> {
     items
 }
 
-/// `--dry-run`: what is here and what each outcome would do, changing nothing. `--json` and `--ini` are the same answer
-/// for a program: the desktop app's dialog and the Windows uninstaller's page.
+/// `--dry-run`: what is here and what each outcome would do, changing nothing. `--ini` is the same answer for the
+/// Windows uninstaller's page.
 fn dry_run(inventory: &inventory::Inventory, args: &Args) -> Result<()> {
     if let Some(path) = &args.ini {
         let text = plan::ini(&inventory.facts, &inventory.sandbox_list());
         std::fs::write(path, plan::utf16_with_bom(&text))
             .map_err(|error| Fail(format!("{} could not be written: {error}", path.display())))?;
-    }
-    if args.json {
-        let document =
-            serde_json::to_string(&inventory.document(args.without_app)).map_err(|error| {
-                Fail(format!(
-                    "the inventory could not be written as JSON: {error}"
-                ))
-            })?;
-        // Straight to stdout: under --json the println! of this crate sends human lines to stderr (main.rs), and this
-        // is the one line that is not one.
-        use std::io::Write as _;
-        // allow(terminal-output): the --json answer, one line the desktop app reads (uninstall.rs).
-        let _ = writeln!(std::io::stdout(), "{document}");
-        return Ok(());
     }
     if args.ini.is_some() {
         return Ok(());
@@ -267,62 +247,37 @@ struct Left {
     fix: String,
 }
 
-/// One `intentic-uninstall:` line, for a reader with no screen. Plain mode only: on a screen the checklist says it.
-fn marker(value: serde_json::Value) {
-    if !ui::is_rich() {
-        // allow(terminal-output): a column-0 marker the desktop app and the Windows uninstaller read (uninstall.rs).
-        println!("intentic-uninstall: {value}");
-    }
-}
-
 fn execute(inventory: &inventory::Inventory, choice: Choice, args: &Args) -> Result<()> {
     let facts = &inventory.facts;
     let planned = plan::steps(facts, choice, args.without_app);
-    marker(json!({
-        "plan": planned.iter().map(|step| json!({"step": step.step.id(), "label": step.label})).collect::<Vec<_>>(),
-        "choice": choice.id(),
-    }));
     ui::continue_with(planned.iter().map(plan_step).collect());
     let mut left: Vec<Left> = Vec::new();
     let mut failed: Vec<Step> = Vec::new();
     for step in &planned {
-        marker(json!({"step": step.step.id(), "state": "running", "label": step.label}));
         ui::step(step.step.id(), &step.label);
         let end = run_step(step.step, inventory, choice, args, &failed);
         if matches!(end, End::Left { .. }) {
             failed.push(step.step);
         }
-        let (state, tone, detail) = match end {
-            End::Done(note) => ("done", ui::Tone::Ok, note),
-            End::Skipped(why) => ("skipped", ui::Tone::Skip, Some(why)),
+        let (tone, note) = match end {
+            End::Done(note) => (ui::Tone::Ok, note),
+            End::Skipped(why) => (ui::Tone::Skip, Some(why)),
+            // Said once, at the end, numbered with its fix (stop_message).
             End::Left { problem, fix } => {
                 left.push(Left {
                     label: step.label.clone(),
-                    problem: problem.clone(),
+                    problem,
                     fix,
                 });
-                ("failed", ui::Tone::Warn, Some(problem))
+                (ui::Tone::Warn, None)
             }
         };
-        if let Some(detail) = &detail {
-            if state != "failed" {
-                ui::note(detail);
-            }
+        if let Some(note) = &note {
+            ui::note(note);
         }
         ui::settle_step(tone);
-        let mut line = json!({"step": step.step.id(), "state": state, "label": step.label});
-        if let Some(detail) = detail {
-            line["detail"] = json!(detail);
-        }
-        marker(line);
     }
     let stays = plan::stays(facts);
-    marker(json!({
-        "result": if left.is_empty() { "done" } else { "partial" },
-        "choice": choice.id(),
-        "stays": stays,
-        "failed": left.iter().map(|one| json!({"label": one.label, "problem": one.problem, "fix": one.fix})).collect::<Vec<_>>(),
-    }));
     let verdict = plan::verdict(facts, choice, left.len());
     let instruction = if stays.is_empty() {
         String::new()

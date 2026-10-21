@@ -35,28 +35,26 @@ describe("ownNames", () => {
 describe("pairingIsOurs", () => {
     const names = ownNames(URL, undefined, []);
 
-    it("is ours by its sandbox id, which every folder attached to this sandbox reports", () => {
-        expect(pairingIsOurs(pairing(), [pairing()], names)).toBe(true);
+    it("is ours by its sandbox id, which its folder's pairing reports", () => {
+        expect(pairingIsOurs(pairing(), names)).toBe(true);
     });
 
     it("is another sandbox's when its id names that one, even for a folder of the same name", () => {
         const theirs = pairing({ sandboxId: "sandbox-999999999999-intentic-dev" });
-        expect(pairingIsOurs(theirs, [theirs], names)).toBe(false);
+        expect(pairingIsOurs(theirs, names)).toBe(false);
         // Nor does a name that merely begins with ours make it ours.
         const longer = pairing({ sandboxId: `${OURS}-2` });
-        expect(pairingIsOurs(longer, [longer], names)).toBe(false);
+        expect(pairingIsOurs(longer, names)).toBe(false);
     });
 
-    it("is ours when it delivers by itself and the machine's projects host beside it is ours", () => {
-        const attached = pairing({ sandboxId: "my-app-folder" });
-        const host = pairing({ sandboxId: OURS, projectsHost: true, localDir: undefined, remoteDir: undefined, deliver: undefined });
-        expect(pairingIsOurs(attached, [host, attached], names)).toBe(true);
-        expect(pairingIsOurs({ ...attached, deliver: "off" }, [host, attached], names)).toBe(false);
+    it("is not ours by delivering by itself: a folder another sandbox's id names stays that sandbox's", () => {
+        const elsewhere = pairing({ sandboxId: "my-app-folder", deliver: "auto" });
+        expect(pairingIsOurs(elsewhere, names)).toBe(false);
     });
 
     it("takes the machine's word when this sandbox knows no name of its own", () => {
         const any = pairing({ sandboxId: "whatever" });
-        expect(pairingIsOurs(any, [any], ownNames("", undefined, []))).toBe(true);
+        expect(pairingIsOurs(any, ownNames("", undefined, []))).toBe(true);
     });
 });
 

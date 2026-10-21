@@ -1,10 +1,8 @@
 <!-- "WORK ON THIS WITH AN AGENT", ASKED IN THE WINDOW: what the first copy carries, anything to beware of, what happens
-     next, and one button, which never waits on it: the folder goes in line, and the card in the corner follows it. With
-     this computer's sandbox ready the copy is all that happens, drawn rather than explained (the folder's copy carried
-     into the agent's house). With anything before it (a sign-in, the sandbox's setup or its start) the steps are listed
-     instead, the button named for the first: the house and its moving folder over a press that only opened the browser
-     to sign in read as files being uploaded (2026-10-18). It replaced the system's own message box, which said all of
-     it in two paragraphs. -->
+     next, and one button, which never waits on it: the folder's own sandbox is made, and the card in the corner follows
+     it. The steps are listed (a sign-in where nobody is signed in, the sandbox, the copy), the button named for the
+     first: the house and its moving folder over a press that only opened the browser to sign in read as files being
+     uploaded (2026-10-18). It replaced the system's own message box, which said all of it in two paragraphs. -->
 <script setup lang="ts">
 import { Button, Icon, InfoHint, Modal, Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -21,13 +19,13 @@ import { useLocalProject } from "./useLocalProject";
 const t = useT();
 // Read through `computed`: the dialog outlives a folder pointed at in this window's place (folderSwitch.ts).
 const face = computed(localFace);
-const { dialogOpen, preview, attaching, failure, attach, cancel } = useLocalProject();
+const { dialogOpen, preview, creating, failure, create, cancel } = useLocalProject();
 const router = useRouter();
 
-// A folder taken in on a PC that cannot run agents yet goes on to This computer, whose card sets the PC up.
-const attachAndGo = async (): Promise<void> => {
+// A folder asked for on a PC that cannot run agents yet goes on to This computer, whose card sets the PC up.
+const createAndGo = async (): Promise<void> => {
     const details = localHost().project?.detailsPath;
-    if ((await attach()) === `pcSetup` && details !== undefined) {
+    if ((await create()) === `pcSetup` && details !== undefined) {
         await router.push(details);
     }
 };
@@ -61,24 +59,22 @@ const cautions = computed(() => {
     return fresh.value?.large === true ? [...said, t(`local.project.large`)] : said;
 });
 
-// The one press, which needs the app's answer first. Nobody signed in signs in on it: this computer's sandbox is made
-// right after, and the folder goes into it.
+// The one press, which needs the app's answer first. Nobody signed in signs in on it: the folder's sandbox is made right
+// after, and its copy goes in.
 const ready = computed(() => fresh.value !== undefined);
-const signedOut = computed(() => fresh.value?.machine.state === `signedOut`);
-const label = computed(() => (signedOut.value ? t(`local.project.signInAttach`) : t(`local.project.attach`)));
+const signedOut = computed(() => fresh.value?.signedIn === false);
+const label = computed(() => (signedOut.value ? t(`local.project.signInCreate`) : t(`local.project.create`)));
 
-// What happens before the copy, step by step, wherever anything does: a sign-in, the sandbox's setup or its start.
-// Nothing, with the sandbox ready: the copy starts on the press, and the picture says so.
+// What happens on the press, step by step: a sign-in where nobody is signed in, the sandbox, the copy.
 const steps = computed(() => {
     const asked = fresh.value;
-    if (asked === undefined || asked.machine.state === `ready`) {
+    if (asked === undefined) {
         return undefined;
     }
-    const machine = asked.machine;
-    return journeyOf({ machine, folder: undefined, name: asked.name, signingIn: false, withSignIn: machine.state === `signedOut` || machine.state === `signedIn` });
+    return journeyOf({ setup: undefined, signedIn: asked.signedIn, name: asked.name, signingIn: false, withSignIn: !asked.signedIn });
 });
-// The picture: the copy moving in when that is all that happens, the empty site with its sign where nothing can.
-const picture = computed(() => refused.value !== undefined || document.value || fresh.value?.machine.state === `ready`);
+// The picture: the empty site with its sign where nothing can be made; where it can, the steps say what happens.
+const picture = computed(() => refused.value !== undefined || document.value);
 
 const open = computed({
     get: () => dialogOpen.value,
@@ -97,18 +93,13 @@ const open = computed({
         size="md"
         :header="header"
         :description="refused ?? (document ? t(`local.project.document`) : t(`local.project.lede`))"
-        :dismissable="!attaching"
+        :dismissable="!creating"
     >
         <div class="flex flex-col gap-4">
             <!-- The picture says what the button does: this folder stays where it is, and its copy goes into a house of its
                  own, built beside it. A folder that cannot have one gets the empty site with the sign on it. Drawn
                  straight on the dialog: a frame round it would be a card on a card. -->
-            <AgentHouse
-                v-if="picture"
-                :stage="refused !== undefined || document ? `plan` : `moving`"
-                :failed="refused !== undefined || document"
-                class="mx-auto h-auto max-h-36 w-full"
-            />
+            <AgentHouse v-if="picture" stage="plan" failed class="mx-auto h-auto max-h-36 w-full" />
 
             <template v-if="refused === undefined && !document">
                 <!-- The folder, by its full path, its own name the brightest part of it; then what its first copy carries, with
@@ -140,7 +131,7 @@ const open = computed({
             </template>
 
             <Notice v-if="failure !== undefined" tone="danger" class="text-2xs">
-                <span class="block font-medium">{{ t(`local.project.attachFailed`) }}</span>
+                <span class="block font-medium">{{ t(`local.project.createFailed`) }}</span>
                 <span class="block break-words">{{ failure }}</span>
             </Notice>
         </div>
@@ -150,8 +141,8 @@ const open = computed({
                 <Button :label="t(`ui.action.close`)" tier="quiet" @click="cancel" />
             </template>
             <template v-else>
-                <Button tier="quiet" :label="t(`ui.action.cancel`)" :disabled="attaching" @click="cancel" />
-                <Button :label="label" :loading="attaching" :disabled="!ready" @click="attachAndGo" />
+                <Button tier="quiet" :label="t(`ui.action.cancel`)" :disabled="creating" @click="cancel" />
+                <Button :label="label" :loading="creating" :disabled="!ready" @click="createAndGo" />
             </template>
         </template>
     </Modal>

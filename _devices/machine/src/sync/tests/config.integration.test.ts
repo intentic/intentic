@@ -12,6 +12,7 @@ const {
     pairingTransport,
     readState,
     removePairing,
+    retireLegacyPairings,
     setMirrorOff,
     setPortIgnored,
     setSandboxGone,
@@ -276,7 +277,7 @@ describe("a pairing reached through Docker", () => {
         [
             "a workspace pairing",
             { ...local, transport: "docker", container: "intentic-sandbox-sandbox-0738cd6b5027" },
-            "reaches its sandbox through Docker, which only a project pairing or the projects host may",
+            "reaches its sandbox through Docker, which only a project pairing may",
         ],
         ["no container", { ...project, transport: "docker" }, "reaches its sandbox through Docker but names no sandbox container (undefined)"],
         [
@@ -305,12 +306,10 @@ describe("a pairing reached through Docker", () => {
     });
 });
 
-// (2026-10-05) What is the SANDBOX's, said on every pairing of it, and kept on disk so a restarted agent still knows.
-describe("a sandbox's fate on its pairings", () => {
-    const host = { ...local, projectsHost: true as const, localDir: undefined };
+// (2026-10-05) What is the SANDBOX's, said on its pairing, and kept on disk so a restarted agent still knows.
+describe("a sandbox's fate on its pairing", () => {
     const folder = {
         ...local,
-        key: `${local.sandboxId}~blog`,
         localDir: "/home/dev/code/blog",
         remoteDir: `${WORKSPACE_ROOT}/blog`,
         project: true as const,
@@ -318,15 +317,12 @@ describe("a sandbox's fate on its pairings", () => {
         container: "intentic-sandbox-sandbox-0738cd6b5027",
     };
 
-    it("marks and clears a sandbox gone on every one of its pairings, and on no other sandbox's", async () => {
-        const { localDir: _none, ...hostOnly } = host;
-        await upsertPairing(hostOnly);
+    it("marks and clears a sandbox gone on its pairing, and on no other sandbox's", async () => {
         await upsertPairing(folder);
         await upsertPairing(web);
 
         await setSandboxGone(local.sandboxId, { since: 10, checkedAt: 20, by: "edge" });
         expect((await readState()).pairings.map((held) => [held.sandboxId, held.goneSince, held.goneBy])).toEqual([
-            [local.sandboxId, 10, "edge"],
             [local.sandboxId, 10, "edge"],
             [web.sandboxId, undefined, undefined],
         ]);
@@ -344,13 +340,57 @@ describe("a sandbox's fate on its pairings", () => {
         expect((await readState()).pairings[0]?.unreachableSince).toBeUndefined();
     });
 
-    it("moves every docker pairing of a sandbox onto ssh, which the file still accepts", async () => {
+    it("moves a sandbox's docker pairing onto ssh, which the file still accepts", async () => {
         await upsertPairing(folder);
         await moveSandboxToSsh(local.sandboxId);
         const moved = (await readState()).pairings[0];
         expect(moved?.transport).toBeUndefined();
         expect(moved?.container).toBeUndefined();
         expect(moved === undefined ? undefined : pairingTransport(moved)).toBe("ssh");
+    });
+});
+
+// (2026-10-21) FOLDERS NO LONGER ATTACH TO ONE SANDBOX PER COMPUTER. A file an older agent wrote still holds that
+// sandbox's folderless pairing and the folders attached to it: none of them is read, the first retirement takes them out
+// of the file and says each once, and every other pairing carries on untouched.
+describe("the pairings of one sandbox per computer", () => {
+    const host = { sandboxUrl: "https://sandbox-7953ae151fa4.intentic.dev", sandboxId: "sandbox-7953ae151fa4-intentic-dev", mode: "sync", projectsHost: true, syncToken: "ist_host" };
+    const attached = {
+        ...host,
+        projectsHost: undefined,
+        key: `${host.sandboxId}~shop`,
+        localDir: "/home/dev/code/shop",
+        remoteDir: `${WORKSPACE_ROOT}/shop`,
+        project: true,
+        deliver: "auto",
+        transport: "docker",
+        container: "intentic-sandbox-sandbox-7953ae151fa4",
+    };
+
+    it("are never read, so nothing syncs them, and the rest are", async () => {
+        await writeFile(syncStatePath, JSON.stringify({ pairings: [host, attached, web] }));
+        expect((await readState()).pairings).toEqual([web]);
+    });
+
+    it("are taken out of the file once, each said in a line, and leave nothing to say a second time", async () => {
+        await writeFile(syncStatePath, JSON.stringify({ pairings: [host, attached, web] }));
+        const said: string[] = [];
+        const retired = await retireLegacyPairings((line) => said.push(line));
+        expect(retired.map((legacy) => legacy.kind)).toEqual(["projects-host", "attached"]);
+        expect(said).toHaveLength(2);
+        expect(said[1]).toContain("/home/dev/code/shop stopped syncing");
+        expect(said[1]).toContain(`${WORKSPACE_ROOT}/shop`);
+        expect(JSON.parse(await readFile(syncStatePath, "utf8"))).toEqual({ pairings: [web] });
+        expect(await retireLegacyPairings((line) => said.push(line))).toEqual([]);
+        expect(said).toHaveLength(2);
+    });
+
+    it("leave a file without them, or no file at all, as it is", async () => {
+        expect(await retireLegacyPairings(() => undefined)).toEqual([]);
+        await upsertPairing(web);
+        const before = await readFile(syncStatePath, "utf8");
+        expect(await retireLegacyPairings(() => undefined)).toEqual([]);
+        expect(await readFile(syncStatePath, "utf8")).toBe(before);
     });
 });
 

@@ -69,16 +69,14 @@ const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing, now
     // Which sandbox folder the local one holds, stated only where it is not /work itself, so every older reader's
     // picture of every other pairing holds.
     const remote = pairing.remoteDir === undefined ? {} : { remoteDir: pairing.remoteDir };
-    // The machine's own sandbox, which folders attach to and which has no folder of its own, and whether an attached
-    // folder takes landed work by itself; each stated only where it is so, as the remote dir is.
+    // Whether a project folder takes landed work by itself, stated only where it is said, as the remote dir is.
     const kind = {
         ...slugOf(pairing),
-        ...(pairing.projectsHost === true ? { projectsHost: true } : {}),
         ...(pairing.deliver === undefined ? {} : { deliver: deliversByItself(pairing) ? ("auto" as const) : ("off" as const) }),
     };
     // A mirror-only enrollment has no file sync to ask about; the absent status is a fact about the mode, not a
-    // failed read. Nor has the projects host, whose folders are pairings of their own.
-    if (pairing.mode !== "sync" || sessions === undefined || pairing.projectsHost === true) {
+    // failed read.
+    if (pairing.mode !== "sync" || sessions === undefined) {
         return withHolds({ sandboxId: pairing.sandboxId, mode: pairing.mode, localDir: pairing.localDir, ...remote, ...kind, mirroring }, pairing, now);
     }
     // A sync pairing with no session is carried as the absence of a status, not a word for it, so every reader
@@ -163,9 +161,8 @@ export const deviceReport = async (mutagen: string | undefined): Promise<DeviceR
     return buildReport(state, sessions, agent, Date.now(), wsl, machineId());
 };
 
-// One sandbox's slice for posting to it: only its own pairings and ports cross the network. That is every pairing of
-// it, the projects host and each folder attached to it alike, since the daemon keeps one report per machine and a slice
-// of one pairing would lose it the rest. A `mirror` enrollment's folder drops too, since it never had a localDir.
+// One sandbox's slice for posting to it: only its own pairings and ports cross the network. A `mirror` enrollment's
+// folder drops too, since it never had a localDir.
 export const scopedReport = (report: DeviceReport, sandboxId: string): DeviceReport => ({
     ...report,
     pairings: report.pairings.filter((pairing) => pairing.sandboxId === sandboxId),

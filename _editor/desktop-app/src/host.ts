@@ -1,6 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { type LocalFace, localFace } from "@intentic/web/local";
-import type { LocalHost, LocalMachineAction, LocalProjectHost, LocalView } from "@intentic/web/local-host";
+import type { LocalHost, LocalProjectHost, LocalSetupAction, LocalView } from "@intentic/web/local-host";
 import { computed } from "vue";
 import { track } from "./analytics";
 import { readAccount, signOutAccount, updateAccount } from "./account";
@@ -16,16 +16,17 @@ import {
     localPoint,
     localRecents,
     localRoster,
-    projectAttach,
+    projectCreate,
     projectPreview,
     signIn,
     workspaceOpen,
 } from "./desktop";
 import { deviceBadge } from "./device/badge";
 import { startDockerAndSay } from "./device/docker";
-import { machineFolderOf, machineSandbox, machineVerbs, startMachineSandbox } from "./device/machineSandbox";
+import { folderSetupOf, folderSetupRunning, folderSetups, folderSetupVerbs, startFolderSetups } from "./device/folderSetups";
 import { followOnScreen } from "./onScreen";
-import { folderOf, machineOf, machineStateOf, projectPathOf } from "./device/projectBuild";
+import { followRoster } from "./device/roster";
+import { folderSetupFor, projectPathOf } from "./device/projectBuild";
 import { useDevice } from "./device/useDevice";
 import { followPasswords, passwordsBadge, passwordsInRail } from "./passwords/passwordsState";
 
@@ -50,7 +51,7 @@ const badge = computed(() => {
         startingDocker: device.dockerStarting.value,
         // A deb or rpm upgrade installed under the running app is one restart away too.
         updateReady: device.update.value.kind === `ready` || device.update.value.kind === `installed`,
-        machine: machineSandbox.value?.state,
+        folderSetup: folderSetupRunning.value,
         // Only Windows has this PC's own setup: elsewhere its check speaks of Docker, which the tile already does.
         pc: device.info.value?.os === `windows` ? pcStanding.value : undefined,
     });
@@ -84,9 +85,9 @@ const PASSWORDS_VIEW: LocalView = {
     inRail: passwordsInRail,
 };
 
-/* A FOLDER'S WAY TO AN AGENT: this computer's own sandbox, which the app makes after sign-in and keeps (the app's
-   machine_sandbox.rs, device/machineSandbox.ts), and the window's folder on its way into it (project.rs
-   `project_attach`). Nothing here runs anything: the app does, whichever window is open, and every window hears it. */
+/* A FOLDER'S WAY TO AN AGENT: a sandbox of the window's folder's own, which the app makes on the press (the app's
+   folder_setup.rs, device/folderSetups.ts; project.rs `project_create`). Nothing here runs anything: the app does,
+   whichever window is open, and every window hears it. */
 
 // The folder this window shows, by the path the app told it: how its own entry in the record is found. Read through the
 // editor's own reader, so the card's computed below follows a folder pointed at in this window's place.
@@ -95,44 +96,44 @@ const folderPath = (): string | undefined => {
     return face === undefined || face.file !== undefined ? undefined : face.path;
 };
 
+// This window's folder's own record, read through the editor's own reader of the window's face.
+const ownSetup = () => folderSetupOf(folderSetups.value, folderPath());
+
 // Each rejects with the sentence the card says under its press (localHost.ts `LocalHost`): the app's refusal, or how a
 // start of the engine ended.
-const MACHINE_ACTIONS: Readonly<Record<LocalMachineAction, () => Promise<void>>> = {
+const SETUP_ACTIONS = {
     signIn: () => signIn(),
     // This window's own start of the engine, the one Devices' card draws; the app looks again once it answers.
     startDocker: () => startDockerAndSay(),
-    retry: () => machineVerbs.retry(),
-    start: () => machineVerbs.start(),
-    recreate: () => machineVerbs.recreate(),
-    log: () => machineVerbs.log(),
-};
+    retry: () => folderSetupVerbs.retry(),
+    consent: () => folderSetupVerbs.retry(true),
+    restart: () => folderSetupVerbs.endSession(`restart`),
+    signOut: () => folderSetupVerbs.endSession(`signout`),
+    log: () => folderSetupVerbs.log(ownSetup()),
+    dismiss: () => folderSetupVerbs.dismiss(),
+} satisfies Readonly<Record<LocalSetupAction, () => Promise<void>>>;
 
 const PROJECT: LocalProjectHost = {
-    preview: async () => {
-        const preview = await projectPreview();
-        return preview.kind === `new` ? { ...preview, machine: machineStateOf(preview.machine) } : preview;
-    },
-    attach: async (names) => {
+    preview: () => projectPreview(),
+    create: async (project) => {
         try {
-            const attached = await projectAttach(names);
-            const outcome = attached.kind === `queued` ? `queued` : `opened`;
-            track(`project_attach`, { outcome });
+            const created = await projectCreate({ project });
+            const outcome = created.kind === `started` ? `started` : `opened`;
+            track(`project_create`, { outcome });
             return outcome;
         } catch (error) {
-            track(`project_attach`, { outcome: `failed` });
+            track(`project_create`, { outcome: `failed` });
             throw error;
         }
     },
-    machine: computed(() => machineOf(machineSandbox.value)),
-    folder: computed(() => folderOf(machineSandbox.value, folderPath())),
-    // The folder's sandbox, opened on the folder: this computer's, under the folder's name in it.
+    setup: computed(() => folderSetupFor(ownSetup())),
+    // The folder's sandbox, opened on the folder, once its first copy is in (the app opens one it had already itself).
     open: async () => {
-        const record = machineSandbox.value;
-        const folder = machineFolderOf(record, folderPath());
-        await workspaceOpen(projectPathOf({ sandboxId: record?.sandboxId, project: folder?.name }));
+        const record = ownSetup();
+        await workspaceOpen(projectPathOf({ sandboxId: record?.sandboxId, project: record?.name }));
     },
-    act: (action) => MACHINE_ACTIONS[action](),
-    // Devices, where this computer's sandbox, its every step and anything it asks of the reader are drawn.
+    act: (action) => SETUP_ACTIONS[action](),
+    // Devices, where Docker and this PC's own setup are drawn.
     detailsPath: `/${DEVICE_VIEW.path}`,
 };
 
@@ -176,8 +177,10 @@ export const installHost = (face: LocalFace): void => {
     // Whether the window is on screen, heard from before the app first says it (onScreen.ts).
     followOnScreen();
     void startReading(face.home === true);
-    // Every window follows this computer's own sandbox: its card is in each of them while it is not ready.
-    void startMachineSandbox();
+    // Every window follows the folders' own sandboxes being made: its own folder's card, and the rail's tile.
+    void startFolderSetups();
+    // And who is signed in, which This computer's card for this PC asks the sign-in by.
+    void followRoster();
     // And what Passwords' tile says: requests waiting, passwords just saved.
     followPasswords();
 };

@@ -181,7 +181,7 @@ export const docsBook: Book = {
                             meta: {
                                 title: "Uninstall Intentic · intentic docs",
                                 description:
-                                    "Remove Intentic from a Windows, Linux or macOS device: from Settings, from the desktop app, or with one command. What each choice removes, what always stays, and the flags for unattended runs.",
+                                    "Remove Intentic from a Windows, Linux or macOS device: from Windows Settings, with your Linux package manager, or with one command. What each choice removes, what always stays, and the flags for unattended runs.",
                                 datePublished: "2026-10-18",
                             },
                         },

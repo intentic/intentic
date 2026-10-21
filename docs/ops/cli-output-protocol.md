@@ -152,7 +152,7 @@ The headline says what did not happen. `problem:` says why, in terms of the read
 | update, roll back, rebuild | recreate, swap | move a sandbox to another image |
 | stop, start, restart | power off, wake | a sandbox's containers |
 
-`uninstall` names one thing only: taking Intentic itself off a device (`ic uninstall`, the `uninstall` one-liner, the Windows uninstaller, the app's **Uninstall Intentic…**). Taking a sandbox off a device stays `remove`.
+`uninstall` names one thing only: taking Intentic itself off a device (`ic uninstall`, the `uninstall` one-liner, the Windows uninstaller). Taking a sandbox off a device stays `remove`.
 
 Command names keep their spelling (`ic machine enroll`, `ic sandbox purge`) because scripts and the desktop app call them. Only the prose follows this table.
 
@@ -221,7 +221,7 @@ Line by line, for a reader with no screen:
 - `intentic-requirement: {json}` and `intentic-requirement-state: {json}` come from `ic`'s Windows setup. The different prefix keeps a requirement from reading as a phase. Two rows can be `running` at once: the Docker Desktop download moves its own row while WSL2 is being turned on.
 - `intentic-prefetch: {"state","done","total"}` comes from `ic image prefetch`, about every two seconds: `state` is `fetching`, `ready`, `elsewhere` (another prefetch holds the cache), `skipped` (Docker Desktop is installed and nothing was half-fetched, so Docker pulls it) or `failed`; `done` and `total` are bytes.
 - `intentic-move:`, `intentic-fix:` and `intentic-prepare-summary:` carry one JSON object each, for the desktop app and the machine agent.
-- `intentic-uninstall: {json}` comes from `ic uninstall`, for the Windows uninstaller's page and the desktop app. The first line is the plan (`{"plan":[{"step","label"}],"choice"}`, `choice` being `everything` or `keep-sandboxes`). Each step then reports `{"step","state","label"}` with `state` `running`, and settles as `done`, `failed` or `skipped` with a `detail` sentence. The last line is the result: `{"result":"done"|"partial","stays":[…],"failed":[{"label","problem","fix"}]}`. Step ids are `stop`, `distros`, `sandboxes`, `agent`, `sync`, `engine`, `files`, `app` and `ic`. A reader ignores a field or a step it does not know. `ic uninstall --dry-run --json` prints the inventory as one document instead.
+- `ic uninstall` prints no markers: the Windows uninstaller reads its inventory from `--dry-run --ini <path>` and shows the run's human lines as they come. (2026-10-21: the `intentic-uninstall: {json}` lines and `--dry-run --json` went with the desktop app's own Uninstall dialog.)
 - Docker's pull and build lines pass through verbatim; the desktop app reads layer states from them.
 - Warnings go to stderr with the `intentic: ` prefix. A stopped run ends with `error: <message>` on stderr; the desktop app shows the text after `error: ` to the person.
 

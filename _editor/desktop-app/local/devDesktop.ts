@@ -7,20 +7,18 @@ import type {
     AccountAnswer,
     AccountAsk,
     DesktopInfo,
+    FolderSetup,
+    FolderStanding,
     HomeFacts,
-    LeftoverSandbox,
     LocalRecent,
     LocalRoster,
     LocalSandbox,
     MachineEnvironment,
-    MachineFolder,
-    MachineSandbox,
-    MachineStanding,
     OnboardingPrefetch,
     OnboardingSetup,
     OnboardingSnapshot,
     ProjectAsk,
-    ProjectAttached,
+    ProjectCreated,
     ProjectPreview,
     SandboxStatus,
     SetupArgs,
@@ -39,18 +37,19 @@ import { CHECK_CANT_RUN, CHECK_NEEDS_SETUP, CHECK_READY, CHECK_UNKNOWN } from ".
 // - `host`: signed in, two sandboxes here (one running, with a folder synced) of the account's three, the machine agent up.
 // - `setup`: signed in, a setup handed over from the workspace, running its steps.
 //
-// This computer's own sandbox (src-tauri/src/machine_sandbox.rs) is as `?sandbox=` says, kept with the machine: on a
-// signed-in machine `creating` (the default) runs its setup through to ready in about half a minute, and `ready`,
-// `docker`, `waiting`, `failed`, `stopped`, `asleep` and `gone` hold it there; a first launch's is signed out.
+// A folder's own sandbox (src-tauri/src/folder_setup.rs), made on the press of "Work on this with an agent", goes as
+// `?sandbox=` says, kept with the machine: `creating` (the default) runs its setup and first copy through to the folder
+// in, in about half a minute; `docker` stops on Docker not running, `waiting` on a yes to what this PC needs, `failed`
+// on a refused setup code, and `behind` waits behind another folder's setup first. Nobody signed in signs in first.
 //
 // "Work on this with an agent" answers as `?project=` says, kept with the machine: `new` (the default) a folder that can
 // have one, `cautions` one that a sync service already holds and that is large, `refused` one inside a folder that has
-// one, `fail` one whose attach this computer's agent turns down.
+// one, `fail` one whose folder never starts syncing.
 //
 // This PC's own setup (src-tauri/src/onboarding.rs, the card on This computer) is as `?pc=` says, kept with the machine:
 // `ready` (the default), `checking`, `unknown`, `needsSetup`, `metered`, `prefetchFailed`, `settingUp`, `needsYou`,
 // `quiet`, `restart`, `restartScheduled`, `admin`, `signOut`, `failed`, `cantRun`, or `taskFailed` (a ready PC whose
-// first task did not start). Until it is ready, a signed-in machine's own sandbox waits for it, as the app's does.
+// first task did not start). Until it is ready, a folder's sandbox waits for it, as the app's does.
 
 type Machine = `fresh` | `host` | `setup`;
 const MACHINES: readonly Machine[] = [`fresh`, `host`, `setup`];
@@ -70,13 +69,18 @@ const machineOf = (): Machine => {
     return MACHINES.find((machine) => machine === sessionStorage.getItem(MACHINE_KEY)) ?? `fresh`;
 };
 
+// A case kept for the tab's reloads under `key`: one picked on the address, or one a press moved the stand-in on to.
+const keepCase = (key: string, kind: string): void => {
+    sessionStorage.setItem(key, kind);
+};
+
 // A case picked by `?<param>=` on the dev address and kept for the tab's reloads under `key`; else the one kept; else
 // `fallback`. Read at install, while the address still carries it.
 const picked = <Case extends string>(param: string, key: string, cases: readonly Case[], fallback: Case): Case => {
     const asked = new URL(window.location.href).searchParams.get(param);
     const known = cases.find((kind) => kind === asked);
     if (known !== undefined) {
-        sessionStorage.setItem(key, known);
+        keepCase(key, known);
         return known;
     }
     return cases.find((kind) => kind === sessionStorage.getItem(key)) ?? fallback;
@@ -222,24 +226,13 @@ const runSetup = async (): Promise<void> => {
     await new Promise(() => undefined);
 };
 
-/* THIS COMPUTER'S OWN SANDBOX (src-tauri/src/machine_sandbox.rs), and a folder going into it (project.rs). */
+/* A FOLDER'S OWN SANDBOX (src-tauri/src/folder_setup.rs), made on its press (project.rs). */
 
-type SandboxCase = `creating` | `ready` | `docker` | `waiting` | `failed` | `stopped` | `asleep` | `gone`;
-const SANDBOX_CASES: readonly SandboxCase[] = [`creating`, `ready`, `docker`, `waiting`, `failed`, `stopped`, `asleep`, `gone`];
+type SandboxCase = `creating` | `docker` | `waiting` | `failed` | `behind`;
+const SANDBOX_CASES: readonly SandboxCase[] = [`creating`, `docker`, `waiting`, `failed`, `behind`];
 const SANDBOX_KEY = `intentic.local.devSandbox`;
 
 const sandboxCaseOf = (): SandboxCase => picked(`sandbox`, SANDBOX_KEY, SANDBOX_CASES, `creating`);
-
-const STANDING_OF: Readonly<Record<SandboxCase, MachineStanding>> = {
-    creating: { state: `creating`, percent: 0 },
-    ready: { state: `ready` },
-    docker: { state: `needsDocker`, reason: `notRunning` },
-    waiting: { state: `waiting`, for: `consent` },
-    failed: { state: `failed`, reason: `the platform refused the setup code (it was already used).` },
-    stopped: { state: `stopped` },
-    asleep: { state: `asleep` },
-    gone: { state: `gone` },
-};
 
 const REQUIREMENT = {
     id: `wsl-features`,
@@ -249,141 +242,99 @@ const REQUIREMENT = {
     action: `fixElevated`,
 };
 
-let record: MachineSandbox = {
-    state: `signedOut`,
-    made: false,
-    attempt: 0,
-    updatedAt: NOW_S,
-    consented: false,
-    resumeOnLaunch: false,
-    requirements: [],
-    folders: [],
-};
+// allow(module-state): the stand-in's records, as the app keeps them in folder-setups.json
+let records: FolderSetup[] = [];
 
 const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 // The fields a standing carries: the old one's go with it, or a reason or a phase would read as the new one's.
-const STANDING_KEYS: ReadonlySet<string> = new Set([`state`, `phase`, `step`, `percent`, `reason`, `for`]);
+const STANDING_KEYS: ReadonlySet<string> = new Set([`state`, `phase`, `step`, `percent`, `reason`, `for`, `behind`]);
 
-// Every change, written and sent to every window as the app sends it.
-const change = async (next: Partial<MachineSandbox> & MachineStanding): Promise<void> => {
-    const kept = Object.fromEntries(Object.entries(record).filter(([key]) => !STANDING_KEYS.has(key)));
-    // SAFETY: everything but the standing kept, and `next` carries a whole standing of its own.
-    record = { ...kept, ...next, updatedAt: Math.max(record.updatedAt + 1, Math.floor(Date.now() / 1000)) } as MachineSandbox;
-    await emit(`desktop://machine-sandbox`, record);
+// Every change to one folder's record, written and sent to every window as the app sends it.
+const change = async (path: string, next: Partial<FolderSetup> & FolderStanding): Promise<void> => {
+    records = records.map((record) => {
+        if (record.path !== path) {
+            return record;
+        }
+        const kept = Object.fromEntries(Object.entries(record).filter(([key]) => !STANDING_KEYS.has(key)));
+        // SAFETY: everything but the standing kept, and `next` carries a whole standing of its own.
+        return { ...kept, ...next, updatedAt: Math.max(record.updatedAt + 1, Date.now()) } as FolderSetup;
+    });
+    await emit(`desktop://folder-setups`, records);
 };
 
-const changeFolders = async (folders: MachineFolder[]): Promise<void> => {
-    record = { ...record, folders, updatedAt: record.updatedAt + 1 };
-    await emit(`desktop://machine-sandbox`, record);
-};
+const recordOf = (path: string): FolderSetup | undefined => records.find((record) => record.path === path);
 
-const sameStanding = (): MachineStanding => record;
-
-// The setup's phases as the scripts print them, with a sandbox-image download in the middle.
-const MACHINE_STEPS: readonly (readonly [string, string, number, number])[] = [
-    [`checking-docker`, `checking this PC for Docker...`, 1500, 2],
-    [`fetching-ic`, `fetching the installer.`, 1500, 6],
-    [`preflight`, `preflight - checking this machine.`, 1500, 9],
-    [`claiming-code`, `redeeming the setup code.`, 1200, 12],
-    [`pulling-image`, `downloading ghcr.io/intentic/sandbox:stable.`, 6000, 40],
-    [`starting-sandbox`, `starting sandbox.`, 3000, 52],
-    [`waiting-health`, `waiting for the sandbox daemon to come up.`, 4000, 65],
-    [`verifying`, `verifying the sandbox is reachable end to end.`, 3000, 74],
-    [`desktop-sync`, `enrolling this computer as the sandbox's sync holder.`, 3000, 84],
-    [`connecting-machine`, `connecting this device so you can manage its sandboxes from your browser.`, 3000, 95],
+// The setup's phases as the scripts print them (the shared setup-progress record's order), with a cached image.
+const FOLDER_STEPS: readonly (readonly [string, string, number, number])[] = [
+    [`checking-docker`, `this PC was found ready moments ago, so it is not checked again.`, 600, 3],
+    [`fetching-ic`, `ic 1.345.0 is installed, so nothing is downloaded.`, 400, 6],
+    [`preflight`, `preflight - checking this machine.`, 600, 9],
+    [`claiming-code`, `redeeming the setup code.`, 1200, 13],
+    [`pulling-image`, `using the sandbox image already on this machine.`, 800, 16],
+    [`starting-sandbox`, `starting sandbox.`, 3000, 35],
+    [`waiting-health`, `waiting for the sandbox daemon to come up.`, 3000, 55],
+    [`desktop-sync`, `linking the folder to your sandbox.`, 3000, 80],
+    [`verifying`, `verifying the sandbox is reachable end to end.`, 2000, 88],
+    [`connecting-machine`, `connecting this device so you can manage its sandboxes from your browser.`, 2000, 95],
 ];
 
-const runMachineSetup = async (): Promise<void> => {
-    await change({ state: `creating`, percent: 0, attempt: record.attempt + 1, sandboxId: `cm5machine`, name: `ada-laptop sandbox`, slug: `sandbox-5a1e` });
-    for (const [phase, step, ms, percent] of MACHINE_STEPS) {
-        await change({ state: `creating`, phase, step, percent });
+// The folder's setup, run through as the app runs it: stopped where `?sandbox=` says, else made and its copy followed in.
+const runFolderSetup = async (path: string, consent = false): Promise<void> => {
+    const kind = sandboxCaseOf();
+    if (kind === `docker`) {
+        await change(path, { state: `needsDocker`, reason: `notRunning` });
+        return;
+    }
+    if (kind === `waiting` && !consent) {
+        await change(path, { state: `waiting`, for: `consent`, requirements: [REQUIREMENT] });
+        return;
+    }
+    const held = recordOf(path);
+    await change(path, { state: `creating`, percent: 0, attempt: (held?.attempt ?? 0) + 1, sandboxId: `cm5${held?.name ?? `shop`}`, slug: `sandbox-5a1e` });
+    for (const [phase, step, ms, percent] of FOLDER_STEPS) {
+        await change(path, { state: `creating`, phase, step, percent });
         await pause(ms);
-    }
-    await change({ state: `ready`, made: true, hostname: `sandbox-5a1e.sbx.intentic.dev` });
-    await attachWaiting();
-};
-
-// Every folder waiting, attached and copied in, as the agent would.
-const attachWaiting = async (): Promise<void> => {
-    const waiting = record.folders.filter((folder) => folder.state === `queued`);
-    for (const folder of waiting) {
-        const set = (next: Partial<MachineFolder>): Promise<void> =>
-            changeFolders(record.folders.map((held) => (held.path === folder.path ? { ...held, ...next } : held)));
-        await set({ state: `attaching` });
-        await pause(800);
-        if (projectCaseOf() === `fail`) {
-            await set({ state: `failed`, reason: `That folder is already being synced with another sandbox.` });
-            continue;
+        if (kind === `failed` && phase === `claiming-code`) {
+            await change(path, {
+                state: `failed`,
+                reason: `the platform refused the setup code (it was already used).`,
+                logPath: `${HOME}\\.intentic\\logs\\desktop-folder-setup.log`,
+            });
+            return;
         }
-        await set({ state: `copying`, status: `scanning` });
-        await pause(2500);
-        await set({ status: `staging-beta` });
-        await pause(4000);
-        await set({ state: `ready`, status: `watching` });
     }
+    await change(path, { state: `copying`, made: true, hostname: `sandbox-5a1e.sbx.intentic.dev` });
+    if (projectCaseOf() === `fail`) {
+        await pause(3000);
+        await change(path, { state: `failed`, reason: `shop's sandbox is set up, but this folder isn't syncing to it.` });
+        return;
+    }
+    await change(path, { state: `copying`, status: `scanning` });
+    await pause(2000);
+    await change(path, { state: `copying`, status: `staging-beta` });
+    await pause(3000);
+    await change(path, { state: `ready`, status: `watching` });
 };
 
-// Its stopped container started, as the app's supervisor starts it for a folder waiting or the reader's Start
-// (machine_sandbox.rs `start_container`): said as starting, then up, and the folders waiting taken in.
-const startStopped = async (): Promise<void> => {
-    await change({ state: `starting` });
-    await pause(2500);
-    await change({ state: `ready` });
-    await attachWaiting();
-};
-
-// A sign-in that came back from the browser (auth.rs `complete`): signed in at once, then, once the workspace has said
-// who, the sandbox `?sandbox=` asked for: found stopped and started for the folder waiting, or set up.
+// A sign-in that came back from the browser (auth.rs `complete`): every folder waiting on it signed in at once, then,
+// once the workspace has said who, made.
 const signInFromBrowser = async (): Promise<void> => {
-    if (record.state !== `signedOut`) {
+    const waiting = records.filter((record) => record.state === `signedOut`);
+    if (waiting.length === 0) {
         return;
     }
     await pause(3000);
-    await change({ state: `signedIn` });
+    for (const record of waiting) {
+        await change(record.path, { state: `signedIn` });
+    }
     await pause(2000);
-    if (sandboxCaseOf() === `stopped`) {
-        // SAFETY: the stopped standing has no fields of its own.
-        record = { ...record, sandboxId: `cm5machine`, name: `ada-laptop sandbox`, slug: `sandbox-5a1e`, hostname: `sandbox-5a1e.sbx.intentic.dev`, made: true };
-        await change({ state: `stopped` });
-        if (record.folders.some((folder) => folder.state === `queued`)) {
-            await startStopped();
-        }
-        return;
+    for (const record of waiting) {
+        void runFolderSetup(record.path);
     }
-    await runMachineSetup();
 };
 
-/** The machine's sandbox at the start: signed out on a first launch, else the case `?sandbox=` asked for. */
-const startMachineSandbox = (machine: Machine): void => {
-    if (!signedIn(machine)) {
-        return;
-    }
-    // This PC not ready yet: the app holds this computer's sandbox for its setup, asking nothing of its own
-    // (machine_sandbox.rs `Waiting` for consent, with no requirements).
-    if (!pcReady()) {
-        record = { ...record, state: `waiting`, for: `consent`, requirements: [] };
-        return;
-    }
-    const kind = sandboxCaseOf();
-    if (kind === `creating`) {
-        // A moment after the page is up, as the app's supervisor would start it after sign-in.
-        setTimeout(() => void runMachineSetup(), 1500);
-        return;
-    }
-    // SAFETY: a whole standing from STANDING_OF over the signed-out one the record starts as, which has no fields of its own.
-    record = {
-        ...record,
-        ...STANDING_OF[kind],
-        sandboxId: `cm5machine`,
-        name: `ada-laptop sandbox`,
-        made: kind !== `waiting` && kind !== `failed`,
-        requirements: kind === `waiting` ? [REQUIREMENT] : [],
-        ...(kind === `failed` ? { logPath: `${HOME}\\.intentic\\logs\\desktop-machine-setup.log` } : {}),
-    } as MachineSandbox;
-};
-
-/* A FOLDER'S WAY INTO IT (src-tauri/src/project.rs): the dialog's answer, and the folder put in line. */
+/* A FOLDER'S WAY TO ITS SANDBOX (src-tauri/src/project.rs): the dialog's answer, and the folder's setup begun. */
 
 type ProjectCase = `new` | `cautions` | `refused` | `fail`;
 const PROJECT_CASES: readonly ProjectCase[] = [`new`, `cautions`, `refused`, `fail`];
@@ -391,7 +342,7 @@ const PROJECT_KEY = `intentic.local.devProject`;
 
 const projectCaseOf = (): ProjectCase => picked(`project`, PROJECT_KEY, PROJECT_CASES, `new`);
 
-const projectPreview = (): ProjectPreview => {
+const projectPreview = (machine: Machine): ProjectPreview => {
     const face = window.__INTENTIC_LOCAL__;
     const name = face?.name ?? `shop`;
     const path = face?.path ?? `${HOME}\\code\\${name}`;
@@ -408,43 +359,58 @@ const projectPreview = (): ProjectPreview => {
         more: kind === `cautions`,
         large: kind === `cautions`,
         cautions: kind === `cautions` ? [{ kind: `synced`, service: `OneDrive` }] : [],
-        machine: sameStanding(),
+        signedIn: signedIn(machine),
     };
 };
 
-const projectAttach = async (ask: ProjectAsk): Promise<ProjectAttached> => {
+const projectCreate = async (machine: Machine, ask: ProjectAsk): Promise<ProjectCreated> => {
     const face = window.__INTENTIC_LOCAL__;
     const path = face?.path ?? `${HOME}\\code\\${ask.project}`;
-    const taken = record.folders.filter((folder) => folder.path !== path).map((folder) => folder.name);
-    const name = taken.includes(ask.project) ? `${ask.project}-2` : ask.project;
-    await changeFolders([...record.folders.filter((folder) => folder.path !== path), { path, name, state: `queued` }]);
-    if (record.state === `ready`) {
-        void attachWaiting();
-    } else if (record.state === `stopped` || record.state === `asleep`) {
-        void startStopped();
+    const fresh: FolderSetup = { path, name: ask.project, state: `queued`, made: false, attempt: 0, askedAt: Date.now(), updatedAt: Date.now() };
+    records = [...records.filter((record) => record.path !== path), fresh];
+    await emit(`desktop://folder-setups`, records);
+    if (!signedIn(machine)) {
+        await change(path, { state: `signedOut` });
+    } else if (!pcReady()) {
+        // This PC not ready yet: the folder's setup waits for its own (folder_setup.rs `Waiting` for consent, no needs).
+        await change(path, { state: `waiting`, for: `consent` });
+    } else if (sandboxCaseOf() === `behind`) {
+        void (async () => {
+            await change(path, { state: `queued`, behind: `notes` });
+            await pause(5000);
+            await runFolderSetup(path);
+        })();
+    } else {
+        void runFolderSetup(path);
     }
-    return { kind: `queued`, name };
+    return { kind: `started`, name: ask.project };
 };
 
-// The card's and This device's presses, played out as the app would.
-const machineVerb = (command: string, args: InvokeArgs | undefined): Promise<void> | undefined => {
+// The card's presses, played out as the app would, on the calling window's own folder.
+const folderVerb = (command: string, args: InvokeArgs | undefined): Promise<void> | undefined => {
+    const path = window.__INTENTIC_LOCAL__?.path ?? ``;
     switch (command) {
-        case `machine_sandbox_retry`: {
-            // SAFETY: the page's own desktop.ts sends it, as `machineSandboxRetry` types it.
+        case `folder_setup_retry`: {
+            // SAFETY: the page's own desktop.ts sends it, as `folderSetupRetry` types it.
             const consent = args !== undefined && `consent` in args && args[`consent`] === true;
-            return consent || record.state === `failed` ? runMachineSetup() : Promise.resolve();
+            void runFolderSetup(path, consent);
+            return Promise.resolve();
         }
-        case `machine_sandbox_recreate`:
-            return runMachineSetup();
-        case `machine_sandbox_start`:
-            // Answered at once, as the app's is: the record says it is starting.
-            void startStopped();
+        case `folder_setup_check`:
+            if (recordOf(path)?.state === `needsDocker`) {
+                // SAFETY: Docker started from this window: the folder's setup carries on, as the app's next round would.
+                keepCase(SANDBOX_KEY, `creating`);
+                void runFolderSetup(path);
+            }
+            return Promise.resolve();
+        case `folder_setup_dismiss`:
+            records = records.filter((record) => record.path !== path);
+            return emit(`desktop://folder-setups`, records);
+        case `folder_setup_end_session`:
             return Promise.resolve();
         case `sign_in`:
             void signInFromBrowser();
             return Promise.resolve();
-        case `machine_sandbox_check`:
-            return record.state === `needsDocker` ? runMachineSetup() : Promise.resolve();
         default:
             return undefined;
     }
@@ -464,10 +430,9 @@ type Answer =
     | SetupArgs
     | OnboardingSnapshot
     | ProjectPreview
-    | MachineSandbox
-    | readonly LeftoverSandbox[]
+    | readonly FolderSetup[]
     | number
-    | Promise<ProjectAttached>
+    | Promise<ProjectCreated>
     | string
     | boolean
     | null
@@ -604,8 +569,11 @@ const runPcSetup = async (machine: Machine): Promise<void> => {
         await pause(2000);
     }
     await changeOnboarding({ check: CHECK_READY, setup: { state: `ready` } });
-    if (signedIn(machine) && record.state === `waiting`) {
-        await runMachineSetup();
+    // The folders whose setups waited for this PC's own carry on, as the app's next round would take them.
+    if (signedIn(machine)) {
+        for (const record of records.filter((held) => held.state === `waiting` && held.for === `consent`)) {
+            void runFolderSetup(record.path);
+        }
     }
 };
 
@@ -687,13 +655,6 @@ const accountAnswer = (machine: Machine, ask: AccountAsk): AccountAnswer => {
     }
 };
 
-// The rows this computer left behind before it kept one sandbox (machine_sandbox.rs `leftovers`).
-// allow(module-state): the stand-in's one account, as the remove press leaves it
-let leftovers: readonly LeftoverSandbox[] = [
-    { id: `cm-old-1`, name: `ADA-LAPTOP sandbox` },
-    { id: `cm-old-2`, name: `ADA-LAPTOP sandbox 2` },
-];
-
 // Every command the page reads back, answered for the machine chosen. A dialog answers yes, and picks nothing.
 const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`desktop_info`, () => DESKTOP_INFO],
@@ -721,18 +682,7 @@ const ANSWERS = new Map<string, (machine: Machine) => Answer>([
     [`take_pending_fix`, () => null],
     [`resumable_setup`, () => null],
     [`project_preview`, projectPreview],
-    [`machine_sandbox_status`, () => record],
-    // What a computer that made a row per recreate left on the account, on a machine set up long ago: removed for good
-    // here once the reader says so, as the platform would (its trash is not played).
-    [`machine_sandbox_leftovers`, (machine) => (signedIn(machine) && machine === `host` ? leftovers : [])],
-    [
-        `machine_sandbox_remove_leftovers`,
-        () => {
-            const removed = leftovers.length;
-            leftovers = [];
-            return removed;
-        },
-    ],
+    [`folder_setups`, () => records],
     [`sandbox_logs`, () => `intentic: sandbox up\nlistening on :7777\n`],
     [`machine_restart`, () => `restarted`],
     [`plugin:dialog|confirm`, () => true],
@@ -753,9 +703,9 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
         // SAFETY: the page's own src/account.ts and local/platform.ts send it, as `accountRelay` types it.
         return accountAnswer(machine, args[`ask`] as AccountAsk);
     }
-    if (command === `project_attach` && args !== undefined && `ask` in args) {
-        // SAFETY: the page's own host.ts sends it, as `projectAttach` types it.
-        return projectAttach(args[`ask`] as ProjectAsk);
+    if (command === `project_create` && args !== undefined && `ask` in args) {
+        // SAFETY: the page's own host.ts sends it, as `projectCreate` types it.
+        return projectCreate(machine, args[`ask`] as ProjectAsk);
     }
     if (command === `first_task_queue` && args !== undefined && `folder` in args && `text` in args) {
         devFirstTask = {
@@ -769,7 +719,7 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
     if (command === `first_task_pick_folder`) {
         return `${HOME}\\code\\my-app`;
     }
-    const verb = keyringVerb(command, args) ?? machineVerb(command, args) ?? onboardingVerb(machine, command, args);
+    const verb = keyringVerb(command, args) ?? folderVerb(command, args) ?? onboardingVerb(machine, command, args);
     if (verb !== undefined) {
         return verb;
     }
@@ -783,7 +733,7 @@ const answer = (machine: Machine, command: string, args: InvokeArgs | undefined)
     return null;
 };
 
-export const installDevDesktop = (more?: (command: string, args: InvokeArgs | undefined) => Promise<object> | object | null | undefined): void => {
+export const installDevDesktop = (): void => {
     const machine = machineOf();
     // Read now, while the address still carries it: the page rewrites its address before anything asks (local/main.ts).
     projectCaseOf();
@@ -799,8 +749,7 @@ export const installDevDesktop = (more?: (command: string, args: InvokeArgs | un
             reason: `That folder is already being synced with another sandbox.`,
         };
     }
-    startMachineSandbox(machine);
-    mockIPC((command, args) => more?.(command, args) ?? answer(machine, command, args), { shouldMockEvents: true });
+    mockIPC((command, args) => answer(machine, command, args), { shouldMockEvents: true });
     // The window this page is, as the app labels it (windows.rs `HOME`, local.rs `files-<n>`): the main window's setup
     // titles its own window (src/device/title.ts), which asks which window it is.
     mockWindows(window.__INTENTIC_LOCAL__?.home === true ? `home` : `files-1`);

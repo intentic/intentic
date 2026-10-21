@@ -19,24 +19,12 @@ offers EVERYTHING first, because that is what someone uninstalling a product ask
 stands between Enter and a deletion — so the protocol's "the safe answer is the default" still holds: nothing is
 deleted by a default. */
 
-use serde::Serialize;
-
 use crate::util::plural;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Choice {
     Everything,
     KeepSandboxes,
-}
-
-impl Choice {
-    pub fn id(self) -> &'static str {
-        match self {
-            Choice::Everything => "everything",
-            Choice::KeepSandboxes => "keep-sandboxes",
-        }
-    }
 }
 
 /// What the device holds, as the plan and the questions need it. Filled by inventory.rs; built by hand in tests.

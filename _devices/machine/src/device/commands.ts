@@ -10,7 +10,7 @@ import { postWhileWarming } from "../daemon-base.js";
 import { wslEnvironment } from "../environments/wsl.js";
 import { completeSetup, prepareSetup } from "../install.js";
 import { machineId } from "../machine-id.js";
-import { ensureResident } from "../resident/resident.js";
+import { ensureResident, readResidentPid } from "../resident/resident.js";
 import { auditPath, configPath, type HostLink, readLinks, readLinkStates, removeLinks, unreachableIn, upsertLink } from "./config.js";
 
 // device: setup (redeem a pairing and stay connected) and uninstall (disconnect, keep the audit log); no OAuth, only the pairing token.
@@ -108,9 +108,10 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     const links = await upsertLink(link);
     ui.step("device-starting", "starting the agent on this device…");
     // The running agent dials the new link on its next pass; one that is not running is started.
+    const before = await readResidentPid();
     await ensureResident(out);
     await completeSetup(out);
-    const opened = await linkOpens(flags.url);
+    const opened = await linkOpens(flags.url, linkWait(links.length - 1, before, await readResidentPid()));
     // Naming the count shows an already-connected device that it's still connected.
     const others = links.length - 1;
     ui.finished(
@@ -129,12 +130,21 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
 // Long enough for the running agent's next pass and a first dial through a tunnel that is warming up.
 const LINK_OPEN_TIMEOUT_MS = 20_000;
 const LINK_OPEN_POLL_MS = 500;
+// (2026-10-21) What an agent already running here, already connected to other sandboxes, is given: it dials the new link
+// by itself, as it dials every other, and the setup it closes (`ic`'s last step for every new sandbox, which each folder
+// now gets) need not sit out its dial. Long enough for a link that opens at once to be said as connected.
+const LINK_OPEN_GLANCE_MS = 2_000;
+
+// How long setup waits to see the new link open: a moment where the agent that was already running, and holds other
+// links, goes on running; the whole wait where this setup started it, or it is this device's first link. Pure.
+export const linkWait = (others: number, residentBefore: number | undefined, residentAfter: number | undefined): number =>
+    others > 0 && residentBefore !== undefined && residentBefore === residentAfter ? LINK_OPEN_GLANCE_MS : LINK_OPEN_TIMEOUT_MS;
 
 // Setup says "connected" only once the agent's own stamp shows this link's socket open.
-const linkOpens = async (url: string): Promise<boolean> =>
+const linkOpens = async (url: string, timeoutMs: number): Promise<boolean> =>
     await pollUntil(async () => (await readLinkStates())?.[url]?.state === "open", {
         intervalMs: LINK_OPEN_POLL_MS,
-        timeoutMs: LINK_OPEN_TIMEOUT_MS,
+        timeoutMs,
     });
 
 interface UninstallFlags {

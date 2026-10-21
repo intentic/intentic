@@ -44,16 +44,16 @@ it(`rejects with how the start ended when the engine did not come up, and keeps 
         () => `went through`,
         (error: unknown) => (error instanceof Error ? error.message : `not an Error`),
     );
-    expect([said, docker.dockerReport.value, calls.includes(`machine_sandbox_check`)]).toEqual([
+    expect([said, docker.dockerReport.value, calls.includes(`folder_setup_check`)]).toEqual([
         `desktop.docker.dockerWouldntStart. desktop.docker.tryOpeningItYourself`,
         answer,
         false,
     ]);
 });
 
-it(`resolves once the engine is up, and has this computer's sandbox look again`, async () => {
+it(`resolves once the engine is up, and has the folders' setups look again`, async () => {
     const docker = await load();
     answer = { outcome: `ready`, detail: `` };
     await docker.startDockerAndSay();
-    expect([docker.dockerReport.value?.outcome, calls.includes(`machine_sandbox_check`)]).toEqual([`ready`, true]);
+    expect([docker.dockerReport.value?.outcome, calls.includes(`folder_setup_check`)]).toEqual([`ready`, true]);
 });

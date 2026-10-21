@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { track } from "../analytics";
-import { dockerListening, dockerOpen, dockerStart, hostsSandboxes, machineSandboxCheck, takePendingDocker, workspaceOpen, type DockerStart } from "../desktop";
+import { dockerListening, dockerOpen, dockerStart, folderSetupCheck, hostsSandboxes, takePendingDocker, workspaceOpen, type DockerStart } from "../desktop";
 import { dockerEndingLine } from "../components/dockerWords";
 import { dockerReasonOf } from "./dockerReason";
 import { onOurEngine } from "./engine";
@@ -60,8 +60,8 @@ export const startDocker = async (trigger: DockerTrigger = `card`): Promise<void
     if (dockerReport.value?.outcome !== `ready`) {
         return;
     }
-    // This computer's own sandbox may be waiting on exactly this engine: the app looks again now rather than at its next round.
-    machineSandboxCheck().catch((error: unknown) => console.error(`[device] this computer's sandbox was not told Docker is up:`, error));
+    // A folder's own sandbox may be waiting on exactly this engine: the app looks again now rather than at its next round.
+    folderSetupCheck().catch((error: unknown) => console.error(`[device] the folders' setups were not told Docker is up:`, error));
     await refresh();
     // The launch that showed this window for the engine hands over to the workspace it was going to open, once, and
     // only that launch (desktop.ts `takePendingDocker`).

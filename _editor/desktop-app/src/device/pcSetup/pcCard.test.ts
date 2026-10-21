@@ -1,8 +1,8 @@
 import type { LocalCheckRow, LocalFirstTask, LocalPcCheck } from "@intentic/web/local-host";
 import { checksPassed, minutesLeft, movesSandboxes, offersWork, pcCardPhase, type PcCardInput, pcSteps, taskStart, unmetRows } from "./pcCard";
 
-// What This computer's card for this PC says, from what the app last said about the PC, its setup, this computer's own
-// sandbox and the first task.
+// What This computer's card for this PC says, from what the app last said about the PC, its setup, who is signed in,
+// whether a sandbox runs here already, and the first task.
 
 const row = (id: string, state: LocalCheckRow[`state`]): LocalCheckRow => ({ id, state, label: id, detail: undefined, admin: false });
 
@@ -20,7 +20,7 @@ const check = (state: LocalPcCheck[`state`], rows: readonly LocalCheckRow[] = []
 const task = (state: LocalFirstTask[`state`]): LocalFirstTask => ({ folder: `C:\\code\\shop`, text: `Fix the tests`, queuedAt: 1, state, reason: undefined });
 
 // A first launch on Windows: the check says this PC needs its setup, nobody is signed in, nothing has been pressed.
-const FIRST_LAUNCH: PcCardInput = { os: `windows`, check: check(`needsSetup`), setup: { state: `idle` }, machine: `signedOut`, firstTask: undefined };
+const FIRST_LAUNCH: PcCardInput = { os: `windows`, check: check(`needsSetup`), setup: { state: `idle` }, signedIn: false, hostsSandboxes: false, firstTask: undefined };
 
 describe(`the card for this PC's own setup`, () => {
     it(`says nothing off Windows, whatever the app says of the PC`, () => {
@@ -31,7 +31,7 @@ describe(`the card for this PC's own setup`, () => {
 
     it(`offers the setup the check says this PC needs`, () => {
         expect(pcCardPhase(FIRST_LAUNCH)).toBe(`needsSetup`);
-        expect(pcCardPhase({ ...FIRST_LAUNCH, machine: `waiting` })).toBe(`needsSetup`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, signedIn: true })).toBe(`needsSetup`);
     });
 
     it(`says the setup's own state ahead of whatever the check made before it still says`, () => {
@@ -44,35 +44,33 @@ describe(`the card for this PC's own setup`, () => {
         expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`unknown`), setup: { state: `failed`, reason: `boom` } })).toBe(`setupFailed`);
     });
 
-    it(`waits for the check, unless this computer's sandbox shows the PC was ready for it`, () => {
+    it(`waits for the check, unless a sandbox running here shows the PC was ready for one`, () => {
         expect(pcCardPhase({ ...FIRST_LAUNCH, check: undefined })).toBe(`checking`);
-        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`checking`), machine: undefined })).toBe(`checking`);
-        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`checking`), machine: `waiting` })).toBe(`checking`);
-        for (const machine of [`ready`, `creating`, `interrupted`, `stopped`] as const) {
-            expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`checking`), machine })).toBe(`hidden`);
-        }
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`checking`), signedIn: undefined })).toBe(`checking`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`checking`), signedIn: true })).toBe(`checking`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`checking`), hostsSandboxes: true })).toBe(`hidden`);
     });
 
     it(`says when the check could not read this PC, and when this PC cannot run agents`, () => {
         expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`unknown`) })).toBe(`checkUnknown`);
-        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`cantRun`), machine: `ready` })).toBe(`cantRun`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`cantRun`), hostsSandboxes: true })).toBe(`cantRun`);
     });
 
     it(`stays for the sign-in on a ready PC, and goes once someone is signed in`, () => {
         expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`) })).toBe(`signIn`);
-        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), machine: `creating` })).toBe(`hidden`);
-        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), machine: `ready`, firstTask: task(`queued`) })).toBe(`hidden`);
-        // Nothing heard of this computer's sandbox yet is not "signed out".
-        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), machine: undefined })).toBe(`hidden`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), signedIn: true })).toBe(`hidden`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), signedIn: true, firstTask: task(`queued`) })).toBe(`hidden`);
+        // Nothing heard of who is signed in yet is not "signed out".
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), signedIn: undefined })).toBe(`hidden`);
     });
 
     it(`takes a finished setup for a ready PC, whatever the check made before it said`, () => {
         expect(pcCardPhase({ ...FIRST_LAUNCH, setup: { state: `ready` } })).toBe(`signIn`);
-        expect(pcCardPhase({ ...FIRST_LAUNCH, setup: { state: `ready` }, machine: `creating` })).toBe(`hidden`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, setup: { state: `ready` }, signedIn: true })).toBe(`hidden`);
     });
 
     it(`comes back for a first task that failed to start once it could`, () => {
-        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), machine: `ready`, firstTask: task(`failed`) })).toBe(`firstTaskFailed`);
+        expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), signedIn: true, firstTask: task(`failed`) })).toBe(`firstTaskFailed`);
         // Signed out, the sign-in is what the card is for; the box under it shows the failure too.
         expect(pcCardPhase({ ...FIRST_LAUNCH, check: check(`ready`), firstTask: task(`failed`) })).toBe(`signIn`);
     });

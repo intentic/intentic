@@ -1722,7 +1722,7 @@ describe("agents registry", () => {
         expect(store.saved().find((entry) => entry.id === "c1")?.landing.failure).toBeUndefined();
     });
 
-    // A land into a folder attached to this computer's sandbox is delivered to the folder on the computer too
+    // A land into a project sandbox's folder is delivered to the folder on the computer too
     // (land/project-delivery.ts); what became of that speaks for one land, so the next land that moves the tips clears it.
     it("a land's delivery rides the card until the next land moves the tips", async () => {
         const store = memoryStore();

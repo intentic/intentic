@@ -26,7 +26,7 @@ import { openDocument } from "../../store/open-document.js";
 import { worktreeOf } from "../registry/agents-store.js";
 import { watchArrivals } from "../delivery-arrivals.js";
 
-// LANDED WORK DELIVERED TO THE OWNER'S FOLDER. A folder on the owner's computer attached to that computer's own sandbox
+// LANDED WORK DELIVERED TO THE OWNER'S FOLDER. A project sandbox's folder on the owner's computer (system/project-dir.ts)
 // is copied one way into `/work/<name>`. When a conversation's work lands there, the same change goes to the machine
 // agent holding the folder (`deliverProject`, schemas/project-delivery.ts), which takes a restore point, writes each file
 // whose copy the owner left alone, merges the ones they edited too where git can, and leaves the rest untouched and
@@ -123,8 +123,8 @@ const hostOf = (url: string): string | undefined => {
 };
 
 // What this sandbox goes by on a machine that pairs with it. A machine names a pairing by the sanitized host of the URL
-// it was set up with (`sanitizeId` in the machine's sync/ssh.ts), and every folder attached to that sandbox reports the
-// same id; the platform's short id and the pairings a volunteered report carries name it too.
+// it was set up with (`sanitizeId` in the machine's sync/ssh.ts); the platform's short id and the pairings a volunteered
+// report carries name it too.
 export const ownNames = (publicUrl: string, platformId: string | undefined, volunteered: readonly string[]): readonly string[] => {
     const host = hostOf(publicUrl);
     const names = [host === undefined ? undefined : sanitized(host), sandboxIdFromUrl(publicUrl), platformId, ...volunteered];
@@ -132,16 +132,12 @@ export const ownNames = (publicUrl: string, platformId: string | undefined, volu
 };
 
 // Whether a pairing a machine reports is one of this sandbox's. A machine's report names every sandbox it pairs, so a
-// folder attached to another sandbox of the same name is not ours. A folder set to deliver by itself is attached to the
-// machine's own sandbox, whose folderless `projectsHost` pairing names it: when that one is ours, so is the folder. A
-// sandbox that knows no name of its own (no public address yet) takes the machine's word, which checks the folder
-// against the link the call arrives on anyway.
-export const pairingIsOurs = (pairing: DevicePairing, siblings: readonly DevicePairing[], names: readonly string[]): boolean => {
-    if (names.length === 0 || names.includes(pairing.sandboxId)) {
-        return true;
-    }
-    return pairing.deliver === "auto" && siblings.some((sibling) => sibling.projectsHost === true && names.includes(sibling.sandboxId));
-};
+// folder synced into another sandbox's `/work/<name>` of the same name is not ours. A sandbox that knows no name of its
+// own (no public address yet) takes the machine's word, which checks the folder against the link the call arrives on
+// anyway. (2026-10-21) A folder attached to the desktop app's one sandbox per computer was also ours through that
+// sandbox's folderless `projectsHost` pairing beside it; that sandbox went, and a project sandbox's folder carries the
+// sandbox's own id.
+export const pairingIsOurs = (pairing: DevicePairing, names: readonly string[]): boolean => names.length === 0 || names.includes(pairing.sandboxId);
 
 const deliversHere = (pairing: DevicePairing, remoteDir: string): boolean => pairing.remoteDir === remoteDir && pairing.deliver === "auto";
 
@@ -449,7 +445,7 @@ const holdersOf = async (deps: ProjectDeliveryDeps, project: string): Promise<Ho
         if (deps.hostHub.online(host)) {
             read.add(host);
         }
-        const held = pairings.find((pairing) => deliversHere(pairing, remoteDir) && pairingIsOurs(pairing, pairings, names));
+        const held = pairings.find((pairing) => deliversHere(pairing, remoteDir) && pairingIsOurs(pairing, names));
         if (held !== undefined) {
             holders.set(host, held.localDir);
         }

@@ -1,5 +1,4 @@
 import type { LocalCheckRow, LocalFirstTask, LocalPcCheck, LocalPcSetup } from "@intentic/web/local-host";
-import type { MachineStanding } from "../../desktop";
 
 // THIS PC'S OWN SETUP, ON THIS COMPUTER (2026-10-12): one card on This computer (PcSetupCard.vue) for what a new Windows
 // PC needs before agents run on it (onboarding.rs: the check made at launch, "Set up this PC", the restart it asks for),
@@ -34,14 +33,12 @@ export interface PcCardInput {
     /** The check of this PC (onboarding/pc.ts); undefined before it has answered once. */
     readonly check: LocalPcCheck | undefined;
     readonly setup: LocalPcSetup;
-    /** Where this computer's own sandbox stands (machineSandbox.ts): `signedOut` is how the card knows nobody is signed in. */
-    readonly machine: MachineStanding[`state`] | undefined;
+    /** Someone is signed in, as the workspace last told the app (roster.ts); undefined before it has said. */
+    readonly signedIn: boolean | undefined;
+    /** This computer runs a sandbox already (the app's `hosts_sandboxes`): it was ready for one. */
+    readonly hostsSandboxes: boolean;
     readonly firstTask: LocalFirstTask | undefined;
 }
-
-// This computer's sandbox made or being made: this PC was ready for it, so the check that runs at every launch has
-// nothing new to say until it answers, and "Checking this PC…" over a working sandbox would be noise on every launch.
-const MACHINE_MADE: ReadonlySet<MachineStanding[`state`]> = new Set([`ready`, `creating`, `interrupted`, `stopped`, `starting`]);
 
 /**
  * The card's phase. The setup's own state first: it is newer than the check made before it ran, so a running, waiting or
@@ -70,7 +67,9 @@ export const pcCardPhase = (input: PcCardInput): PcCardPhase => {
         switch (check) {
             case undefined:
             case `checking`:
-                return input.machine !== undefined && MACHINE_MADE.has(input.machine) ? `hidden` : `checking`;
+                // A sandbox runs here: this PC was ready for it, so the check that runs at every launch has nothing new to
+                // say until it answers, and "Checking this PC…" over a working sandbox would be noise on every launch.
+                return input.hostsSandboxes ? `hidden` : `checking`;
             case `unknown`:
                 return `checkUnknown`;
             case `cantRun`:
@@ -79,7 +78,7 @@ export const pcCardPhase = (input: PcCardInput): PcCardPhase => {
                 return `needsSetup`;
         }
     }
-    if (input.machine === `signedOut`) {
+    if (input.signedIn === false) {
         return `signIn`;
     }
     return input.firstTask?.state === `failed` ? `firstTaskFailed` : `hidden`;

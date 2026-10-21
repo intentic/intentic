@@ -55,7 +55,7 @@ export const firstTaskParts = (): FirstTaskParts => {
             return picked ?? undefined;
         },
         queueFirstTask: async (task) => {
-            // What the folder may be called in this computer's sandbox: its own name, else its parent's in front of it.
+            // What the folder may be called in its sandbox: its own name first (the app takes the first that is a project name).
             await firstTaskQueue(task.folder, task.text, projectDirCandidates(task.folder));
             await refresh();
         },

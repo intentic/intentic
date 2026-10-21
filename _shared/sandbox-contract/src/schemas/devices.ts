@@ -331,10 +331,10 @@ export const DevicePairingSchema = z.object({
     // Which sandbox folder `localDir` holds when it is not /work itself: a project pairing's `/work/<name>`, the
     // owner's own folder, which carries no state backup and no git bridge. Absent means /work.
     remoteDir: z.string().optional(),
-    // The folderless pairing holding the sync token of this machine's own sandbox, which folders attach to (`sync attach`).
-    projectsHost: z.boolean().optional(),
-    // Whether landed work in this project folder is delivered to `localDir` by itself (`deliverProject`). Only a
-    // folder attached to the machine's own sandbox says "auto"; absent means Bring back by hand, as before.
+    // Whether landed work in this project folder is delivered to `localDir` by itself (`deliverProject`). A project
+    // sandbox's folder says "auto"; absent means Bring back by hand, as before. (2026-10-21) The folderless
+    // `projectsHost` pairing of the desktop app's one sandbox per computer went with that sandbox; an older agent's report
+    // that still carries it parses, the key dropped.
     deliver: z.enum(["auto", "off"]).optional(),
     // (2026-10-20) The slug this machine's ic knows the sandbox by: how the desktop app starts or forgets a folder's sandbox.
     slug: z.string().optional(),

@@ -13,8 +13,8 @@
 //! to take this account's access off every sandbox's daemon first, and a local window knows only its own folder, so
 //! the page sends that one to the workspace. The cookie never reaches the page.
 //!
-//! The app makes calls of its own with the same session ([`platform_post`]): this computer's own sandbox
-//! (machine_sandbox.rs), its row and its setup code, each a fixed path written there, never one a page names.
+//! The app makes calls of its own with the same session ([`platform_post`]): a folder's own sandbox (folder_setup.rs),
+//! its row and its setup code, each a fixed path written there, never one a page names.
 
 use std::time::Duration;
 
@@ -316,7 +316,7 @@ async fn signed_off(app: &AppHandle, window: &Webview, held: Vec<Cookie<'static>
     apply(window, leftovers).await;
     app.state::<AppState>()
         .remember_roster(crate::setup_link::Roster::default());
-    crate::machine_sandbox::account_changed();
+    crate::folder_setup::account_changed();
     if let Some(workspace) = crate::frame::face(app, crate::windows::WORKSPACE) {
         if let Err(error) = workspace.eval("location.reload()") {
             eprintln!("intentic: the workspace could not be told of the sign-out: {error}");
@@ -401,7 +401,7 @@ fn answered(status: u16, text: &str) -> Answered {
     }
 }
 
-/// A call the app makes for itself (machine_sandbox.rs), with the session the workspace signed in with: `path` is the app's own,
+/// A call the app makes for itself (folder_setup.rs), with the session the workspace signed in with: `path` is the app's own,
 /// written where it is called, never one a page names, so it is not held to [`ROUTES`].
 pub async fn platform_post(
     app: &AppHandle,

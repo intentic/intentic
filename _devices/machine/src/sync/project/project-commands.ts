@@ -34,7 +34,7 @@ import { mutagenSshPath } from "../ssh.js";
 
 // The project pairing whose folder `dir` is: the same folder once links are resolved, and case folded where the platform
 // folds it. A folder that is a workspace's, or one inside a project's, is named for what it is.
-export const projectPairingFor = async (pairings: readonly Pairing[], dir: string, platform: NodeJS.Platform = process.platform): Promise<ProjectPairing> => {
+const projectPairingFor = async (pairings: readonly Pairing[], dir: string, platform: NodeJS.Platform = process.platform): Promise<ProjectPairing> => {
     const wanted = await canonicalFolder(dir);
     const held = await Promise.all(
         pairings.flatMap((pairing) => (pairing.localDir === undefined ? [] : [{ ...pairing, localDir: pairing.localDir }])).map(async (pairing) => ({ pairing, folder: await canonicalFolder(pairing.localDir) })),
@@ -89,8 +89,7 @@ const asStop = (failed: string, message: string): string => {
     return explain(failed, `${acronym ? text.charAt(0) : text.charAt(0).toLowerCase()}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}`);
 };
 
-// What every one of these commands prints, and the one exit code a failure has; `sync attach` and `sync detach` answer
-// the same way (attach-commands.ts). Under --json stdout is the one object, every human line goes to stderr, and a
+// What every one of these commands prints, and the one exit code a failure has. Under --json stdout is the one object, every human line goes to stderr, and a
 // failure is `{ ok: false, error }`; otherwise the result is drawn and a failure is the run's stop (cli-ui.ts).
 export const answer = async <R extends { readonly ok: true }>(
     cli: CommandContext,

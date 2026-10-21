@@ -520,10 +520,10 @@ export const AgentSummarySchema = z.object({
         .describe(
             "The last attempt to bring its work into the workspace failed, and why. Cleared by the next land that goes through. Absent when nothing failed, and from a sandbox older than it.",
         ),
-    // The land's own last word on the owner's folder, for a project attached to this computer's sandbox: written there,
+    // The land's own last word on the owner's folder, for a sandbox made for one folder: written there,
     // partly kept out, waiting for the computer, or refused (schemas/project-delivery.ts).
     delivery: LandingDeliverySchema.optional().describe(
-        "What became of its last land in the folder on the owner's computer, for a project folder attached to this computer's sandbox. Absent for any other land, and from a sandbox older than it.",
+        "What became of its last land in the folder on the owner's computer, for a sandbox made for one folder. Absent for any other land, and from a sandbox older than it.",
     ),
     // Only the causes that still hold, re-read live (conversations/land/standing.ts), never the stored report's own list: a
     // blocker the user has since cleared is not something to offer them an action about.

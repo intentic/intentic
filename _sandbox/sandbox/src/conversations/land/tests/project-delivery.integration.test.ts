@@ -19,7 +19,7 @@ import {
     type ProjectDeliveryDeps,
 } from "../project-delivery.js";
 
-// A land into a folder attached to this computer's sandbox reaches the folder on the computer through its machine agent:
+// A land into a project sandbox's folder reaches the folder on the computer through its machine agent:
 // what the land changed is read off git whole (binary-safe, links held back), the machine's merges come back into the
 // sandbox's copy, and a computer that is away gets the land when it connects. The repository and the queue file are
 // real; the machine is a stand-in answering `deliverProject` as it is told to.

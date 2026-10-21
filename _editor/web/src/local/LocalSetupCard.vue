@@ -1,11 +1,11 @@
-<!-- THIS COMPUTER'S SANDBOX, AND THIS WINDOW'S FOLDER GOING INTO IT, in the window's corner while the reader keeps
-     working: the agent's house going up as the sandbox's setup really goes (AgentHouse.vue), then the folder's copy
-     moving in; what it is doing in its own words, how far, and the one thing to do next whenever there is one. A folder
-     on its way in has its steps ticked off under the title (JourneySteps.vue): sign in, the sandbox, the copy, each said
-     for what it is. No house while the reader is still to sign in: nothing of it is under way, and a house going up
-     beside a press that only signs in read as files being uploaded (2026-10-18). Every local window carries it while the
-     sandbox is not ready (machineCard.ts says what each state is). Folds to a line, and the fold is remembered for what
-     it showed; the folder's own button unfolds it again. -->
+<!-- THIS WINDOW'S FOLDER ON ITS WAY TO A SANDBOX OF ITS OWN, in the window's corner while the reader keeps working: the
+     agent's house going up as the sandbox's setup really goes (AgentHouse.vue), then the folder's copy moving in; what
+     it is doing in its own words, how far, and the one thing to do next whenever there is one. Its steps are ticked off
+     under the title (JourneySteps.vue): sign in, the sandbox, the copy, each said for what it is. No house while the
+     reader is still to sign in: nothing of it is under way, and a house going up beside a press that only signs in read
+     as files being uploaded (2026-10-18). Carried while the folder is on its way, and a moment once it is in
+     (setupCard.ts says what each state is). Folds to a line, and the fold is remembered for what it showed; the folder's
+     own button unfolds it again. -->
 <script setup lang="ts">
 import { Button, Icon, ProgressRing, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -14,9 +14,9 @@ import { useRouter } from "vue-router";
 import { localHost } from "../app/environments/localHost";
 import AgentHouse from "./house/AgentHouse.vue";
 import JourneySteps from "./journey/JourneySteps.vue";
-import MachineProgress from "./journey/MachineProgress.vue";
-import { runMachineAction } from "./machineAction";
-import type { MachineCardAction } from "./machineCard";
+import SetupProgress from "./journey/SetupProgress.vue";
+import { runSetupAction } from "./setupAction";
+import type { SetupCardAction } from "./setupCard";
 import { useLocalProject } from "./useLocalProject";
 
 const t = useT();
@@ -31,11 +31,11 @@ const detail = computed(() => actionFailure.value ?? card.value?.detail);
 const onDetails = computed(() => project !== undefined && router.currentRoute.value.path === project.detailsPath);
 const actions = computed(() => (card.value?.actions ?? []).filter((action) => action !== `details` || !onDetails.value));
 
-// What each press is called: the folder's "Try again" is the sandbox's word for it.
-const label = (action: MachineCardAction): string => t(`local.machine.action.${action === `retryFolder` ? `retry` : action}`);
+// What each press is called.
+const label = (action: SetupCardAction): string => t(`local.setup.action.${action}`);
 
-// What each press does: the same verbs the folder's own button offers (machineAction.ts).
-const run = (action: MachineCardAction): Promise<void> | undefined => runMachineAction(action, (path) => void router.push(path));
+// What each press does: the same verbs the folder's own button offers (setupAction.ts).
+const run = (action: SetupCardAction): Promise<void> | undefined => runSetupAction(action, (path) => void router.push(path));
 </script>
 
 <template>
@@ -93,12 +93,11 @@ const run = (action: MachineCardAction): Promise<void> | undefined => runMachine
                 </p>
 
                 <!-- The folder's steps, its setup's progress under the sandbox's own. -->
-                <JourneySteps v-if="card.steps !== undefined" :steps="card.steps" dense class="mt-2.5">
+                <JourneySteps :steps="card.steps" dense class="mt-2.5">
                     <template #step="{ step }">
-                        <MachineProgress v-if="step.key === `sandbox` && percent !== undefined" :percent="percent" :step="card.step" :label="card.title" class="mb-0.5 mt-1" />
+                        <SetupProgress v-if="step.key === `sandbox` && percent !== undefined" :percent="percent" :step="card.step" :label="card.title" class="mb-0.5 mt-1" />
                     </template>
                 </JourneySteps>
-                <MachineProgress v-else-if="percent !== undefined" :percent="percent" :step="card.step" :label="card.title" class="mt-2.5" />
 
                 <!-- The one thing to do next, as the primary press; anything beside it is a secondary one away. -->
                 <div v-if="actions.length > 0" class="mt-3 flex items-center justify-end gap-1">

@@ -108,9 +108,12 @@ flowchart LR
   sandbox's, in this environment or another of this PC's (see [What folder sync owns](#what-folder-sync-owns)), and a
   set-up-again that would change where a paired sandbox's folder syncs. It is **copy-first** unless
   its owner opted into two-way: see [Copy-first projects](#copy-first-projects).
-  Attaching the same folder again keeps its session and every fact that holds its sync (see
-  [File sync runs or holds still by one rule](#file-sync-runs-or-holds-still-by-one-rule)). The host's enrollment and
-  transport settings are refreshed.
+  Setting the same folder up again keeps its session and every fact that holds its sync (see
+  [File sync runs or holds still by one rule](#file-sync-runs-or-holds-still-by-one-rule)). A project folder also takes
+  its agents' landed work by itself (`deliver: "auto"`, see [Delivering landed work](#delivering-landed-work)), and is
+  refused where it is a whole disk, a home folder or one holding it, or the system's own (`folderRefusal` in
+  [`sync/folders.ts`](src/sync/folders.ts), as the desktop app refuses them). `setup` wakes the resident watcher
+  (`sync/wake.ts`) once it has recorded the pairing, so the session is made at once rather than at the next poll.
 - **Through Docker** ([`sync/endpoint.ts`](src/sync/endpoint.ts)): with `setup --transport auto`, the default, a
   project's sandbox is reached through this machine's own Docker engine when the container `ic` named after the
   pairing URL's slug is running there with that URL as its `SANDBOX_PUBLIC_URL`. Anything else stays on ssh: a hosted
@@ -142,10 +145,11 @@ flowchart LR
   (`settlesFirst` in [`sync/mutagen.ts`](src/sync/mutagen.ts) says why for each). Every session and forward is created
   with three Mutagen labels, `intentic-owner=<machineId>-<environment>`, `intentic-sandbox=<sanitized id>` and
   `intentic-kind=sync|state|forward`; see [What folder sync owns](#what-folder-sync-owns).
-- **This computer's own sandbox takes folders** (see [Folders attached to this computer's sandbox](#folders-attached-to-this-computers-sandbox)):
-  `sync setup --projects-host` enrolls it with no folder of its own, and each folder the owner opens attaches to it as
-  `/work/<name>` (`sync attach`), copy-first, with the land of a conversation written back into it by itself
-  (`deliverProject`).
+- **Each folder has a sandbox of its own** (`sync setup --project`, see [Copy-first projects](#copy-first-projects)):
+  copied one way into its `/work/<name>`, with the land of a conversation written back into it by itself
+  (`deliverProject`, see [Delivering landed work](#delivering-landed-work)). _(2026-10-21) Folders used to attach to one
+  sandbox per computer (`sync setup --projects-host`, `sync attach`); that went, see
+  [One sandbox per computer, retired](#one-sandbox-per-computer-retired)._
 - **What file sync costs this device is cycles, and the sandbox's side decides how many.** Mutagen's agent in the
   sandbox has no recursive watcher, and both sessions force it to poll (`--watch-mode-<side> force-poll`): every 2 s
   for the workspace, which is how late an agent's edit reaches the folder, and every 60 s for the state backup, which
@@ -178,8 +182,8 @@ flowchart LR
   this agent's and stops its Mutagen daemon, which serves this agent alone (below), starting it first if it was down so
   every session is really ended; the synced folders keep their files. It runs the agent's own Mutagen in `bin/` and
   downloads none: without that copy the session steps are skipped (2026-10-18). `sync uninstall --folders` (what the desktop app's
-  uninstaller runs) unpairs only the pairings that sync a folder here: mirror-only pairings and the projects host keep
-  their ports and their enrollments.
+  uninstaller runs) unpairs only the pairings that sync a folder here: mirror-only pairings keep their ports and their
+  enrollments.
 - Symbolic links travel only where the device can create them ([`sync/symlinks.ts`](src/sync/symlinks.ts)). A
   Windows PC without Developer Mode refuses every link, and Mutagen would try again on every cycle, so its sessions
   use `--symlink-mode ignore`. Turning Developer Mode on brings them back at the agent's next start.
@@ -368,100 +372,28 @@ folded where the platform folds it). With `--json` each prints exactly one JSON 
   `restore/<pairing key>/.paused`, and the next command about that folder resumes the session; the watcher lets go of
   its hold by itself once the folder's lock names no live process.
 
-### Folders attached to this computer's sandbox
+### One sandbox per computer, retired
 
-Each computer has one always-available local sandbox, and any number of folders attach to it, each as `/work/<name>`.
-A folder used to get a project sandbox of its own (`sync setup --project`, above), which still works.
+(2026-10-21) Each computer used to have one always-available sandbox that every folder attached to as `/work/<name>`:
+`sync setup --projects-host` enrolled it with no folder of its own, and `sync attach` / `sync detach` filed each
+folder under a key of its own (`<sandboxId>~<name>`), polled and reported once per sandbox and announced to the daemon
+before its first copy. The owner retired it: a central sandbox for everything was the wrong shape, and each folder now
+gets a sandbox of its own, made for it (`sync setup --project`, [Copy-first projects](#copy-first-projects)), which
+takes landed work by itself. So there is one pairing per sandbox again, filed under its sandbox id, and `sync.json` is
+refused whole for two pairings of one sandbox, as before.
 
-**The projects host.** `intentic-machine sync setup --url <sandboxUrl> --pair <token> --projects-host` (with
-`--transport` and `--sandbox-id` as for any setup) enrolls the machine sandbox exactly as a setup does, and records a
-folderless pairing: `{ sandboxUrl, sandboxId, mode: "sync", syncToken, projectsHost: true, transport?, container? }`.
-It has no Mutagen session, no git bridge and no state backup. It holds the sandbox's sync token, and it is the one
-pairing that mirrors the sandbox's ports to localhost. It reaches the sandbox through Docker when the sandbox's
-container runs on this machine's engine, so its forwards ride `docker://` too. Refused:
+A `sync.json` an older agent wrote is never refused for what that design left in it. Reading leaves out its folderless
+pairing (`projectsHost: true`) and every attached folder (`key`), so nothing syncs them; the watcher's start writes
+the file without them and says each in one line (`retireLegacyPairings` in [`sync/config.ts`](src/sync/config.ts)),
+and the orphan sweep ends their Mutagen sessions and forwards. Nothing is deleted on either side: each folder keeps its
+files, and that sandbox keeps its copies and its agents' history, carrying on as an ordinary sandbox. The sync scripts
+refuse `SYNC_PROJECTS_HOST` from a desktop app older than this, rather than reading it as a folder for that
+sandbox's whole `/work`.
 
-- `--projects-host` with `--dir`, `--remote-dir` or `--project`.
-- Turning a sandbox that syncs a folder into the projects host, and the other way round. Unpair first.
-- An enrollment that comes back ports-only.
+### Delivering landed work
 
-Enrolling again rotates the sandbox's one token per machine key, so the new token is written into every pairing of that
-sandbox (`withPairing` in [`sync/config.ts`](src/sync/config.ts)).
-
-**Attaching and detaching.** Both are local: no enrollment, no network. With `--json` each prints exactly one JSON
-object, `{ "ok": false, "error": "<sentence>" }` and exit code 1 on failure, as the copy-first commands do.
-
-| Command | Success output |
-|---|---|
-| `sync attach --sandbox-url <url> --dir <folder> --name <name>` | `{ "ok": true, "pairing": "<sandboxId>~<name>", "remoteDir": "/work/<name>", "folder": "<folder as given, absolute>" }` |
-| `sync detach --dir <folder>` | `{ "ok": true, "pairing": "<key>", "folder": "<folder>" }` |
-
-- `attach` finds the projects host whose URL has the same host as `--sandbox-url`. Without one it answers "this
-  computer's sandbox is not set up for folders yet".
-- It refuses:
-  - a name `isProjectDirName` refuses (the sandbox's reserved names included);
-  - a folder that is not there;
-  - a whole disk, the home folder or one holding it, `/var/home` or a whole home in it, and the system's folders (on
-    Windows, on whichever drive), as the desktop app does ([`folderRefusal`](src/sync/folders.ts)). (2026-10-06) A WSL
-    distro's folder named from Windows (`\\wsl.localhost\<distro>\…`, `\\wsl$\…`) is held to the distro's rules: its
-    `/home`, a whole home in it, `/root`, a mounted disk (`/mnt/c`) and its system's folders;
-  - a folder that is, holds or sits inside any other pairing's, this environment's or (2026-10-05) another environment
-    of this PC's ([`sync/siblings.ts`](src/sync/siblings.ts), as `setup` does);
-  - a name already attached for another folder.
-- It records `{ key: "<sandboxId>~<name>", sandboxId, sandboxUrl, syncToken (the host's), mode: "sync", localDir,
-  remoteDir: "/work/<name>", project: true, direction: "to-sandbox", deliver: "auto", transport?, container? }`.
-  Docker is preferred, as for the host. Attaching the same folder under the same name again keeps the direction its
-  owner chose. `localDir` is the folder as given, made absolute, as `setup` records one; links are resolved only to
-  compare folders (2026-10-05: the desktop app finds its folder in `status --json` by the path it passed, and on Fedora
-  Atomic `/home` is itself a link to `/var/home`, so a link-resolved path would never be found).
-- It returns once the pairing is recorded and the resident agent is running. The agent creates the session on its next
-  pass, and `status --json` lists the folder with its `localDir`, `remoteDir`, `slug`, `deliver`, `mutagenStatus` and
-  `heldBy`, what holds it still, empty while nothing does. (2026-10-21: left out while nothing held it, it read as an
-  agent older than holds, and a session Mutagen had not resumed yet as the owner's pause.) _(2026-10-20)_ That pairing
-  is the desktop app's only record of which folder
-  is in which sandbox: it reads it back here, and starts or forgets the sandbox by `slug` (the one this machine's ic
-  listed it under, else the first label of its address).
-  `mutagenStatus` is absent until the session exists, then Mutagen's own words: `connecting-beta`, `scanning`,
-  `reconciling`, `staging-beta`, `transitioning`, `saving` while the first copy runs, and `watching` once a whole cycle
-  has finished. Read the first `watching` as "first copy done": later edits pass through the same words again.
-- `detach` removes the pairing first, so the agent recreates nothing, then ends its session and drops its listing record.
-  Its restore points stay. A folder with a sandbox of its own is refused, with the `sync uninstall` that unpairs it.
-- `changes`, `bring-back`, `restore-points`, `restore` and `direction` work on an attached folder as on any project, by
-  `--dir`.
-
-**A pairing key.** Every pairing is filed under `pairingKey` = `key ?? sandboxId`. Every pairing made before folders could
-attach has no `key`, so its key is its sandbox id and nothing of it moves: its session names, its restore points, its
-listing record, its lock. The key names what is a folder's own: the `upsertPairing`/`removePairing`/`set*` writes, the
-Mutagen session (`sessionName`), `restore/<key>/` with its lock and pause marker, and `hashes/<key>.json`. The sandbox
-id still names what is the sandbox's: the enrollment and its token, the ssh alias and tunnel (one block per sandbox),
-the container, the forwards, the swap pause, the report's `sandboxId`. `sync.json` is refused whole for:
-
-- two pairings under one key;
-- an attached key that is not `<sandboxId>~<name>` for its `/work/<name>`;
-- a projects host with a folder, remote dir, project flag or key.
-
-`--sandbox` (pause, resume, mirror, autoheal, uninstall) selects every pairing of the sandbox it names.
-
-**One poll, one mirror, one report per sandbox** ([`sync/mirror.ts`](src/sync/mirror.ts)):
-
-- The sandbox's own pairing polls its ports; with no host, the first folder attached to it does. The poll is also how the
-  sandbox's liveness and a revoked enrollment are noticed. Every other folder follows that answer
-  (`followSandbox`): it shares the sandbox's `unreachableSince`, so it holds still after an hour of no answer and carries
-  on with the first. A folder never mirrors a port, whatever
-  `mirrorOff` says. It carries the sandbox's switch only so the report says the same of it.
-- A revoked enrollment drops every pairing of the sandbox, since they share its token.
-- The report goes to each sandbox once (`reportCarriers`), and `scopedReport` carries all of its pairings, host and
-  folders, each with `remoteDir`, `projectsHost` and `deliver`: the daemon keeps one report per machine.
-- **A folder's first copy waits for its report** (`readyToPrepare`). The daemon makes `/work/<name>` a repository of its
-  own once a report names it. So a folder whose session does not exist yet gets one only after a report naming it was
-  taken, tried again each pass otherwise. A daemon with no report route (404) is not waited for.
-
-(2026-10-05) An attached folder's session is `intentic-<sandbox>--<name>-<8 hex of sha256(name)>`. A sanitized id never
-holds `--`, so the name can be no sandbox's session nor its `-state` backup (a folder called `state` included). The hash
-keeps `my.app` and `my_app` apart, which sanitize alike. Letting every folder poll was rejected: ten folders would cost
-the daemon eleven polls every five seconds, and three rejected polls counted per sandbox would revoke after one tick.
-
-**Delivering landed work** ([`sync/project/project-delivery.ts`](src/sync/project/project-delivery.ts)). When a conversation's work
-lands in `/work/<name>`, the daemon calls `deliverProject` on the device link (`ProjectDeliverySchema` in the contract),
+([`sync/project/project-delivery.ts`](src/sync/project/project-delivery.ts)) When a conversation's work lands in a
+project sandbox's `/work/<name>`, the daemon calls `deliverProject` on the device link (`ProjectDeliverySchema` in the contract),
 and this agent writes the change into the folder. It is a procedure of the link, not an MCP tool, so no agent can call
 it, and it sits behind no switch of the grant: the folder's own `deliver: "auto"` is the permission. It is logged and
 appended to the audit file like every call.
@@ -625,7 +557,7 @@ whose it is.
 - **Tunnel ports per environment.** Under WSL's mirrored networking a distro's loopback is the Windows side's, so both
   sides pairing one sandbox derived one port twice. A distro now derives its ports in 20000-23999 from its name and the
   sandbox id; every native environment keeps 24000-27999 exactly as before, so nothing outside WSL moves.
-- **One folder, one sync, across the PC.** `setup` and `attach` read the other environments' `sync.json` (from the
+- **One folder, one sync, across the PC.** `setup` reads the other environments' `sync.json` (from the
   Windows side each supervised distro's through `wsl.exe -d <distro> cat`; from a distro the Windows side's beside its
   agent) and compare after one spelling: `C:\code\app` and `/mnt/c/code/app` are `drive:c/code/app`, and
   `\\wsl.localhost\Ubuntu\home\ada\app` and Ubuntu's `/home/ada/app` are `wsl:ubuntu/home/ada/app`. An overlap is refused
@@ -1037,8 +969,7 @@ person who runs it alone, and either way it never downloads anything.
 - [src/device/mcp.ts](src/device/mcp.ts) — every tool a sandbox can call on this device.
 - [src/device/policy.ts](src/device/policy.ts) — scope checks and the file-root boundary.
 - [src/sync/endpoint.ts](src/sync/endpoint.ts) — how a pairing reaches its sandbox: the tunnelled sshd (`tunnel.ts`), or Docker for a project on this machine.
-- [src/sync/attach-commands.ts](src/sync/attach-commands.ts) — `sync attach` and `sync detach`, folders on this computer's own sandbox.
-- [src/sync/project/project-delivery.ts](src/sync/project/project-delivery.ts) — landed work written into an attached folder (`deliverProject`).
+- [src/sync/project/project-delivery.ts](src/sync/project/project-delivery.ts) — landed work written into a project folder (`deliverProject`).
 - [src/sync/gone.ts](src/sync/gone.ts) — when a paired sandbox counts as gone; `gone-watch.ts` acts on it, `retire.ts` retires its pairings, `forget-command.ts` is `sync forget`.
 - [src/environments/machine.ts](src/environments/machine.ts) — the Windows root and its WSL children.
 - [src/upkeep/manifest.ts](src/upkeep/manifest.ts) — what the device upkeep finds and puts right; `reconcile.ts` runs it.
