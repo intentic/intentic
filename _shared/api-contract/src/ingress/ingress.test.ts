@@ -157,7 +157,7 @@ describe("callers in other languages spell the contract's values", () => {
     it("`ic` calls the contract's paths", () => {
         const platform = source("_sandbox/ic/src/platform.rs");
         expect(platform).toContain(`{platform_url}${PLATFORM_INGRESS.setupClaim.path}"`);
-        expect(platform).toContain(`{}${PLATFORM_INGRESS.setupReport.path}"`);
+        expect(platform).toContain(`{platform_url}${PLATFORM_INGRESS.setupReport.path}"`);
         expect(platform).toContain(`{from_host}${PLATFORM_INGRESS.farewell.path}"`);
         const report = source("_sandbox/ic/src/sandbox/fix/report.rs");
         expect(report).toContain(`{platform_url}${PLATFORM_INGRESS.hostReportClaim.path}"`);

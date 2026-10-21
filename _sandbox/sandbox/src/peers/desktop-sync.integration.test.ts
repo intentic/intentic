@@ -2,7 +2,6 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WORKSPACE_ROOT } from "@intentic/constants";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { pairings } from "./enrollment.js";
 import {

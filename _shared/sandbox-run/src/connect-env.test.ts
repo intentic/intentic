@@ -54,8 +54,12 @@ describe("ic sandbox connect env", () => {
     // A project sandbox's folder is what the sandbox is: dropped by a recreate, the daemon would seed a starter beside it.
     // The retired projects host's flag (2026-10-21) is passed no more.
     it("passes a project sandbox's folder, broken over lines as rustfmt leaves it, and no projects host's flag", () => {
-        const placement = new Set(["SANDBOX_PROJECT_DIR", "SANDBOX_PROJECTS_HOST", "AGENT_AUTH_DIR"]);
-        expect([...keys].filter((key) => placement.has(key)).toSorted()).toEqual(["AGENT_AUTH_DIR", "SANDBOX_PROJECT_DIR"]);
+        const placement = ["AGENT_AUTH_DIR", "SANDBOX_PROJECT_DIR", "SANDBOX_PROJECTS_HOST"];
+        expect(placement.map((key) => [key, keys.has(key)])).toEqual([
+            ["AGENT_AUTH_DIR", true],
+            ["SANDBOX_PROJECT_DIR", true],
+            ["SANDBOX_PROJECTS_HOST", false],
+        ]);
     });
 
     it("passes only keys the run contract replays, so a recreate keeps them", () => {
