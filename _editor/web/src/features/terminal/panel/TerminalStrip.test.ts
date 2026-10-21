@@ -181,7 +181,7 @@ describe(`the context menus`, () => {
         await press(pill(host, `b`), `click`, { shiftKey: true });
         await press(pill(host, `d`), `contextmenu`);
         expect(menuRows().slice(0, 3)).toEqual([`Split terminal`, `—`, `Rename`]);
-        const marked = [...host.querySelectorAll<HTMLElement>(`[data-term-tab]`)].map((tab) => tab.className.includes(`bg-primary-500/14`));
+        const marked = [...host.querySelectorAll<HTMLElement>(`[data-term-tab]`)].map((tab) => tab.className.includes(`ui-row-select-on`));
         expect(marked).toEqual([false, false, true]);
     });
 

@@ -708,7 +708,8 @@ const runnerServices = (
         publicUrl?: string;
         platformUrl?: string;
         online?: boolean;
-        approved?: string;
+        // The owner-approved custom section of the environment, the one input of the overlay given here.
+        custom?: string;
         settings?: Record<string, unknown>;
         features?: string[];
     } = {},
@@ -720,12 +721,32 @@ const runnerServices = (
     const services = {
         config: {
             historyRoot: NO_HISTORY,
-            sandbox: { publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev" },
+            sandbox: {
+                publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev",
+                vm: false,
+                baseImage: "",
+                image: "ghcr.io/intentic/sandbox:stable",
+                baseDigest: "",
+                environmentHash: "",
+            },
             platform: { url: overrides.platformUrl ?? "https://host.docker.internal:6480" },
         },
         // Backs runner-up's best-effort reads; empty here so nothing extra appears in the assertions below.
         workspace: { root: "/nowhere" },
-        files: { read: async () => overrides.approved },
+        files: {
+            read: async (path: string) => (path.endsWith("environment.custom.Dockerfile") ? overrides.custom : undefined),
+            write: async () => undefined,
+            remove: async () => undefined,
+        },
+        // The overlay's other inputs, none contributing a fragment: what runner-up ships is the custom section's.
+        capabilities: { list: async () => [] },
+        environmentSources: {
+            capabilityFragments: async () => [],
+            workspaceExtensionFragments: async () => [],
+            providerPackFragments: async () => [],
+        },
+        privacyShield: { policy: async () => ({ mode: "off" }) },
+        runtimeInstalls: { recordComposition: async () => undefined },
         sandboxSettings: { get: async () => ({ ...overrides.settings }) },
         runners: {
             mintPairing: (id: string) => {
@@ -844,15 +865,25 @@ test("no other op grows a pairing", async () => {
     expect(minted).toEqual([]);
 });
 
-// The approved overlay ships byte-exact with its sha256 (checked again on the machine); non-default settings ship as a
-// definition seed.
+// The approved overlay, composed now from its inputs, ships byte-exact with its sha256 (checked again on the machine);
+// non-default settings ship as a definition seed.
 test("starting a runner ships the approved overlay with its pinning hash and the settings as a seed", async () => {
-    const approved = "FROM ghcr.io/intentic/sandbox:stable\nRUN true\n";
-    const { services, sent } = runnerServices({ approved, settings: { hashlineEdits: true } });
+    const { services, sent } = runnerServices({ custom: "RUN true", settings: { hashlineEdits: true } });
     await drain(manageDeviceSandbox(services, "rog", { op: "runner-up", slug: "rig" }));
     const flow = sent[0] as DeviceSandboxFlow;
-    expect(flow.overlay).toBe(approved);
-    expect(flow.overlayHash).toBe(sha256Hex(approved));
+    const composed = [
+        "# Composed by the intentic sandbox daemon: do not edit by hand.",
+        "# Capability fragments are daemon-owned; the custom section mirrors .intentic/config/environment.custom.Dockerfile.",
+        "",
+        "FROM ghcr.io/intentic/sandbox:stable",
+        "",
+        "# ---- custom (owner-approved) ----",
+        "",
+        "RUN true",
+        "",
+    ].join("\n");
+    expect(flow.overlay).toBe(composed);
+    expect(flow.overlayHash).toBe(sha256Hex(composed));
     expect(flow.definition).toContain("hashlineEdits = true");
     expect(flow.definition).not.toContain("[[capabilities]]");
     expect(flow.definition).not.toContain("secrets");

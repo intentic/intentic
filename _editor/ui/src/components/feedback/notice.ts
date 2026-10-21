@@ -32,7 +32,7 @@ export type NoticeSize = "xs" | "sm" | "md" | "lg";
 // The box and its glyph as one recipe. The tone's colours are the kit's (tone.ts), at the strong weight every notice
 // speaks at, with the tone's own ink; the size is the box's. `strip` is the same notice laid along a pane's top edge
 // (a file that changed on disk, a truncated diff): full width, no radius, a rule only underneath.
-const notice = tv({
+const noticeRecipe = tv({
     slots: { box: `flex border text-left`, icon: `shrink-0` },
     variants: {
         tone: {
@@ -62,7 +62,7 @@ export const noticeLook = (
     actions: boolean,
     strip = false,
 ): { readonly box: (own?: string) => string; readonly icon: string } => {
-    const look = notice({ tone, size, actions, strip });
+    const look = noticeRecipe({ tone, size, actions, strip });
     return { box: (own) => look.box({ class: own }), icon: look.icon() };
 };
 

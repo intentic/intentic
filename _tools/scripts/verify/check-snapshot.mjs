@@ -128,7 +128,7 @@ export const sweepSnapshots = (root, now = Date.now(), maxAgeMs = STALE_AFTER_MS
             age = Infinity;
         }
         if (age > maxAgeMs) {
-            git(root, "worktree", "remove", "--force", path);
+            git(root, "worktree", "remove", "--force", "--force", path);
             rmSync(parent, { recursive: true, force: true });
             removed += 1;
         }
@@ -179,7 +179,9 @@ export const withSnapshot = (root, rev, use) => {
         for (const link of borrowed.links) {
             rmSync(link, { force: true }); // unlinks the link itself: node's rm reads it with lstat and never walks through one
         }
-        git(root, "worktree", "remove", "--force", snapshot);
+        // Forced twice: a `worktree add` killed between its checkout and its last step leaves the worktree locked
+        // ("initializing"), which one --force refuses to remove and `worktree prune` never takes back.
+        git(root, "worktree", "remove", "--force", "--force", snapshot);
         rmSync(parent, { recursive: true, force: true });
     };
     held.add(release);

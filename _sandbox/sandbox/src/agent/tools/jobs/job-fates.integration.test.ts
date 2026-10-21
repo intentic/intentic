@@ -234,8 +234,16 @@ describe("stopping a job", () => {
         // The runner's own publish, standing in for one that outlives the SIGTERM a moment (the runner here may publish
         // its own 143 first).
         const publish = setTimeout(() => {
-            writeFileSync(`${jobStatusPath(job)}.part`, "7\n");
-            renameSync(`${jobStatusPath(job)}.part`, jobStatusPath(job));
+            try {
+                writeFileSync(`${jobStatusPath(job)}.part`, "7\n");
+                renameSync(`${jobStatusPath(job)}.part`, jobStatusPath(job));
+            } catch (error) {
+                // The runner's own 143 landed first and the job's directory went with its end: nothing is left to stand
+                // in for, and the stop is judged on that one (CI, 2026-10-20).
+                if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+                    throw error;
+                }
+            }
         }, 300);
         const started = Date.now();
         expect(await stopBackgroundJob(actors, job, "agent")).toBe(true);

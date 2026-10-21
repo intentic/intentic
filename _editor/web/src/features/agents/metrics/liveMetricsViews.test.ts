@@ -213,10 +213,10 @@ describe("the sandbox panel", () => {
             `Counts the daemon, file cache and kernel memory. Inactive file cache is excluded; swap counts only when nearly full.`,
         );
         expect(wordsOf(el.querySelector(`[data-section="roles"] h4`)!)).toBe(`Process memory by kind`);
-        expect(el.querySelector<HTMLElement>(`[data-section="roles"] h4`)!.dataset[`tip`]).toBe(
+        expect(el.querySelector(`[data-section="roles"] h4`)!.closest<HTMLElement>(`[data-tip]`)!.dataset[`tip`]).toBe(
             `Process memory by kind · RSS only; daemon shown separately. Shared pages count in each process; unmapped cache, kernel memory and swap are excluded. These rows do not add up to sandbox memory.`,
         );
-        expect(el.querySelector<HTMLElement>(`[data-section="sessions"] h4`)!.dataset[`tip`]).toContain(
+        expect(el.querySelector(`[data-section="sessions"] h4`)!.closest<HTMLElement>(`[data-tip]`)!.dataset[`tip`]).toContain(
             `Another grouping of the same processes, not additional memory. CPU: 100% = 1 core.`,
         );
     });

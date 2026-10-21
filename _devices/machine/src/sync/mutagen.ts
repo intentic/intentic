@@ -1060,7 +1060,6 @@ const convergeSession = async (
     if (plan === "relabel" && !relabels.take()) {
         return false;
     }
-    const live = sessions.length === 1 ? sessions[0] : undefined;
     if (sessions.length > 1) {
         log(`${spec.name}: ${sessions.length} sync sessions share this name, which conflict with each other; replacing them with one.`);
     }

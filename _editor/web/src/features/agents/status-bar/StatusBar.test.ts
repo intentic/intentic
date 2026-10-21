@@ -9,6 +9,11 @@ jest.mock("@intentic/ui", async () => {
     return {
         ResizeSeam: vue.defineComponent({ setup: () => () => vue.h(`div`, { role: `separator` }) }),
         Meter: vue.defineComponent({ setup: () => () => vue.h(`div`, { "data-meter": `` }) }),
+        // The panel's title and the metrics' own sub-headers: the label as the heading it is asked to be.
+        SectionHeader: vue.defineComponent({
+            props: { label: String, heading: Number },
+            setup: (props) => () => vue.h(`div`, [vue.h(props.heading === undefined ? `span` : `h${props.heading}`, props.label)]),
+        }),
         // The real recipes: they are plain class builders, and a stand-in drifts every time the kit grows a variant.
         ui: (await import("@intentic/ui/recipes")).ui,
     };
