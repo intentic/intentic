@@ -54,6 +54,7 @@ jest.mock(`@intentic/ui`, () => ({
                 ]),
     }),
     CopyButton: defineComponent({ render: () => h(`button`) }),
+    SectionHeader: defineComponent({ props: { label: String }, setup: (props) => () => h(`span`, props.label) }),
 }));
 jest.mock(`../../../parts/providers/ProviderLogo.vue`, () => ({ default: defineComponent({ render: () => h(`svg`) }) }));
 
@@ -391,6 +392,7 @@ describe(`what the provider's own pages will show`, () => {
     it(`names Devin's pasted value a token, as its page does, everywhere the panel asks for it`, async () => {
         const host = await mount({ provider: `devin`, url: `https://app.devin.ai/auth/cli/continue?state=s1`, code: ``, handshake: `hd` });
         expect(host.textContent).toContain(`Windsurf`);
+        expect(host.textContent).toContain(`the company behind Devin`);
         expect(host.textContent).toContain(`an authentication token for Devin CLI`);
         expect(host.textContent).toContain(`come back here with the token`);
         expect(host.textContent, `offered a way out of a sign-in nothing warns about`).not.toContain(`Use another provider`);

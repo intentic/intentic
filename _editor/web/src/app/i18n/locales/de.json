@@ -2818,9 +2818,12 @@
             "comeBackWithToken": "Melde dich an und komm dann mit dem Token zurück, das die letzte Seite zeigt.",
             "whatYoullSee": "Was du sehen wirst",
             "useAnotherProvider": "Stattdessen einen anderen Anbieter nutzen",
-            "tripGoogle": "Googles Seite nennt die App „Google Antigravity“: Das ist Googles Programmierwerkzeug, und über dessen Anmeldung wird hier dein Google-Konto verbunden. Google warnt eventuell auch, dich nur anzumelden, wenn du die App aus Google Play hast. Wenn du lieber nicht fortfahren möchtest, funktioniert ein anderer Anbieter genauso gut.",
-            "tripDevin": "Die Anmeldung bei Devin läuft über Windsurf, das Unternehmen hinter Devin, deshalb nennen die Seiten (und Google, wenn du dich damit anmeldest) Windsurf.",
-            "tripDevinToken": "Die Anmeldung bei Devin läuft über Windsurf, das Unternehmen hinter Devin, deshalb nennen die Seiten (und Google, wenn du dich damit anmeldest) Windsurf. Die letzte Seite zeigt „ein Authentifizierungstoken für Devin CLI“. Intentic führt Devin CLI für dich aus, also ist dieses Token das, was du hier einfügst."
+            "tripGoogleAppMeans": "Googles eigenes Programmierwerkzeug",
+            "tripGooglePlay": "Eine Warnung zu Google Play",
+            "tripGooglePlayMeans": "erwartet, du kannst fortfahren",
+            "tripWindsurfMeans": "das Unternehmen hinter Devin",
+            "tripDevinToken": "ein Authentifizierungstoken für Devin CLI",
+            "tripDevinTokenMeans": "das hier einfügen"
         },
         "connectionNotice": {
             "cantStartedRightNow": "„{name}“ lässt sich gerade nicht starten",
