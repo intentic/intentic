@@ -6,7 +6,11 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   the setup code to itself (`local`), a browser starts a machine of ours (`hosted`), and the picker (`choose`) survives
   only where the surface's own answer is unavailable or was asked for. An account that removed a sandbox it can still
   restore (the platform's trash, or a trash that could not be read) starts nothing by itself: the picker waits for a
-  click, since the app once installed a new sandbox seconds after its reader removed the last one.
+  click, since the app once installed a new sandbox seconds after its reader removed the last one. Nor does an account
+  signed in after another one in the app (`client/auth/appAccounts.ts` keeps a fingerprint of each account the app has
+  been signed in as, which a sign-out leaves): switching accounts is not having just installed the app, and on
+  2026-10-21 a sign-in as a second email with no sandbox set one up on the reader's PC unasked. Only the app's first
+  account gets this computer by itself.
   `flow/useSetupArrival.ts` takes the answer; the other flows are the lanes it takes it on.
 - **A project.** The desktop app makes a folder's sandbox itself, from the folder's own window, and this page sees it
   only when nobody is signed in: the app parks the folder and opens `/setup?project=<folder name>&machine=mine`, and

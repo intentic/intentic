@@ -29,6 +29,8 @@ interface World {
     readonly trash?: { readonly sandboxes: TrashedSandbox[] } | Error;
     // The sandbox this browser has selected, if any.
     readonly active?: string;
+    // Another account was signed in in this app before this one.
+    readonly otherAccount?: boolean;
 }
 
 const scopes: EffectScope[] = [];
@@ -111,6 +113,7 @@ const stage = (world: World = {}) => {
             ladder,
             warmCredential,
             runHere,
+            otherAccountHere: async () => world.otherAccount ?? false,
         });
         return { row, hosted, command, arrival };
     })!;
@@ -239,6 +242,13 @@ describe(`the app's arrival`, () => {
             made: 1,
             handedOff: 0,
         });
+    });
+
+    it(`waits on the picker for an account signed in after another, handing nothing to the app`, async () => {
+        const { runHere, arrival } = stage({ inApp: true, otherAccount: true });
+        await arrival.readArrival();
+        await advanceTimersByTimeAsync(500);
+        expect({ arrival: arrival.arrival.value, handedOff: runHere.mock.calls.length }).toEqual({ arrival: `choose`, handedOff: 0 });
     });
 
     it(`waits on the picker too when the trash could not be read`, async () => {

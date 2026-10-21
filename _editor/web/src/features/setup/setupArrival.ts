@@ -47,6 +47,10 @@ export interface ArrivalInput {
     // empty account is then the aftermath of the reader's own removal, not a first run, and nothing is started for
     // it: the app once installed a new sandbox by itself seconds after its reader removed the last one.
     readonly removedRecently: boolean;
+    // Another account has been signed in in this app before this one (client/auth/appAccounts.ts). Then this sign-in is
+    // a switch of accounts, not the gesture of having just installed the app, and nothing is installed by itself: on
+    // 2026-10-21 a reader signed out, signed in as another email with no sandbox, and the app set one up on their PC.
+    readonly otherAccountHere: boolean;
     // Row has history (redeemed, reported, checked in); an unfinished errand this page must not act on.
     readonly touched: boolean;
     // Row carries a machine of ours that nothing has ever run on: a browser's errand to resume, and in the app a
@@ -107,9 +111,9 @@ const projectArrival = (input: ArrivalInput): Arrival => {
 // since being in the app is the gesture of running it on this computer.
 const settled = (input: ArrivalInput): boolean => input.touched || input.elsewhere || (input.hostedIdle && !input.inApp);
 
-// The app answering with this computer: only for an account with nowhere else to put a sandbox, and only where a
-// setup code can be minted for the install to redeem.
-const installsHere = (input: ArrivalInput): boolean => input.commandOffered && input.onlySandbox;
+// The app answering with this computer: only for the app's first account, with nowhere else to put a sandbox, and only
+// where a setup code can be minted for the install to redeem.
+const installsHere = (input: ArrivalInput): boolean => input.commandOffered && input.onlySandbox && !input.otherAccountHere;
 
 export const arrivalFor = (input: ArrivalInput): Arrival => {
     if (settled(input)) {
@@ -130,8 +134,9 @@ export const arrivalFor = (input: ArrivalInput): Arrival => {
     if (input.removedRecently) {
         return `choose`;
     }
-    // In the app, the first machine is this window's own; gated on minting addresses, since it redeems a setup code.
-    // Every later one asks, because by then this computer is one of the places it could go rather than the only one.
+    // In the app, the first machine of the app's first account is this window's own; gated on minting addresses, since it
+    // redeems a setup code. Every later one asks, because by then this computer is one of the places it could go rather
+    // than the only one, and so does every account signed in after another: switching accounts asked for no sandbox.
     if (input.inApp) {
         return installsHere(input) ? `local` : `choose`;
     }

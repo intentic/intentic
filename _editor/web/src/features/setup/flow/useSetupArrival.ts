@@ -52,6 +52,8 @@ export interface SetupArrivalHost {
     readonly warmCredential: () => Promise<void>;
     // Hands the setup to the desktop app.
     readonly runHere: () => void;
+    // Whether another account was signed in in this app before this one (`ArrivalInput.otherAccountHere`).
+    readonly otherAccountHere: () => Promise<boolean>;
 }
 
 export const useSetupArrival = ({
@@ -66,6 +68,7 @@ export const useSetupArrival = ({
     ladder,
     warmCredential,
     runHere,
+    otherAccountHere,
 }: SetupArrivalHost) => {
     // `choose` until the offers and the row land, so nothing folds on an unanswered read.
     const arrival = ref<Arrival>(`choose`);
@@ -73,11 +76,9 @@ export const useSetupArrival = ({
     const elsewhere = ref(route.query[`elsewhere`] === `1`);
     // Whether the arrival read has answered; without it the first frame reads as a failed create.
     const loaded = ref(false);
-    // The app handoff fires once: a re-mint (a lane switch, a retry) is ordinary, and must not reopen the app's
-    // installer window each time.
+    // The app handoff fires once: a re-mint (a lane switch, a retry) must not reopen the app's installer window.
     const handedOff = ref(false);
-    // The sandbox this account already works in, while the page offers it instead of making another; undefined once the
-    // reader asked for another, or when there was none to offer.
+    // The account's working sandbox, offered instead of making another; undefined once another was asked for, or with none.
     const held = ref<SandboxSummary | undefined>(undefined);
     // The reader's answer to `held`: from here on this visit makes a sandbox, as every visit did before the question.
     let anotherAsked = false;
@@ -89,8 +90,7 @@ export const useSetupArrival = ({
     // A lane to take, worth drawing the ladder for; otherwise a card just explains itself.
     const laneTakeable = computed(() => lanes.value.kind === `takeable`);
 
-    // Settles the row this visit works on, creating a fresh draft when there is none to resume; whether that row carries
-    // a machine nothing has ever run on.
+    // Settles the row this visit works on (a fresh draft when none resumes); true when it carries a never-run machine.
     const openRow = async (rows: readonly SandboxSummary[]): Promise<boolean> => {
         const named = route.query[`sandbox`];
         const found = rowToOpen(rows, typeof named === `string` ? named : undefined);
@@ -144,11 +144,12 @@ export const useSetupArrival = ({
 
     const arrive = async (): Promise<void> => {
         // The offers land with the row list, so the ladder and the address line are right on the first frame.
-        const [rows, hostedRead, addressRead, trashRead] = await Promise.all([
+        const [rows, hostedRead, addressRead, trashRead, switched] = await Promise.all([
             sandbox.list(),
             readOffer(() => platform.hostedOffer(), { enabled: false, remaining: 0 }),
             readOffer(() => platform.addressOffer(), { enabled: false }),
             readOffer(async () => (await platform.trash()).sandboxes.length > 0, false),
+            otherAccountHere(),
         ]);
         hosted.recordOffer(hostedRead);
         command.recordOffer(addressRead);
@@ -178,6 +179,7 @@ export const useSetupArrival = ({
             onlySandbox: rows.every((entry) => entry.id === row.created.value?.id),
             // An unread trash counts as a removal: one click on the picker is cheaper than an install nobody asked for.
             removedRecently: trashRead.kind === `unreachable` || trashRead.value,
+            otherAccountHere: switched,
             touched: row.resuming.value,
             hostedIdle: idleMachine,
             // Only `autoCreate` sets it, so it means exactly that this visit minted the row.

@@ -19,6 +19,7 @@ const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
     inApp: false,
     onlySandbox: true,
     removedRecently: false,
+    otherAccountHere: false,
     touched: false,
     hostedIdle: false,
     fresh: true,
@@ -61,6 +62,19 @@ describe(`a second sandbox asked for in the app`, () => {
     // The Billing page's own door: a subscriber's slot is a machine on the platform, never one more on this guest.
     it(`still starts the machine a link asked for by name`, () => {
         expect(arrivalFor(arrival({ inApp: true, onlySandbox: false, requestedMachine: `hosted` }))).toBe(`hosted`);
+    });
+});
+
+// Another account was signed in in this app before this one (2026-10-21): a reader signed out, signed in as another email
+// with no sandbox, and the app set one up on their PC unasked. Switching accounts is not having just installed the app.
+describe(`an account signed in after another in the app`, () => {
+    it(`asks instead of installing on this computer`, () => {
+        expect(arrivalFor(arrival({ inApp: true, otherAccountHere: true }))).toBe(`choose`);
+    });
+
+    it(`still takes a folder the app picked, and a browser's own answer is unchanged`, () => {
+        expect(arrivalFor(arrival({ inApp: true, otherAccountHere: true, project: true }))).toBe(`local`);
+        expect(arrivalFor(arrival({ otherAccountHere: true }))).toBe(`hosted`);
     });
 });
 

@@ -138,6 +138,9 @@ export const rememberedAccount = (email?: string): RememberedAccount | undefined
     return key === undefined ? undefined : current.accounts[key];
 };
 
+// Every account this device remembers, by its normalized address (client/auth/appAccounts.ts).
+export const rememberedEmails = (): readonly string[] => Object.keys(directory.value.accounts);
+
 // The sandboxes an account remembers that its list lacks, owned and shared alike; the recovery screen sorts them.
 export const missingSandboxes = (email: string): readonly RememberedSandbox[] =>
     rememberedAccount(email)?.sandboxes.filter((entry) => entry.missingSince !== undefined) ?? [];

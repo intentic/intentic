@@ -27,6 +27,7 @@ import { openOnProject } from "../../app/projectScope";
 import { apiClient } from "../../lib/useApi";
 import { revealConversation } from "../../models/fleet/agentActions";
 import { useAuth } from "../../client/auth/useAuth";
+import { otherAccountInApp } from "../../client/auth/appAccounts";
 import { useGoogleIdentity } from "../../client/auth/useGoogleIdentity";
 import CloudflareTokenField from "../capabilities/connect/CloudflareTokenField.vue";
 import { composingConversation } from "../../models/conversations/panel/useChat-reveal";
@@ -107,8 +108,7 @@ const desktop = computed(() => desktopVersion() !== undefined);
 // The folder the desktop app is setting this sandbox up for (`?project=`), read once for the visit: the row's name, the
 // ladder, the run step and the arrival all depend on it, and the arrival is handed the other three.
 const project = setupProjectOf(route.query[`project`]);
-// The installer replaces the raw pipe where a build ships for this machine; undefined leaves the pipe. A project's page
-// was opened by the app, so there is nothing to install.
+// The installer replaces the raw pipe where a build ships for this machine. In the app, or a project it opened, none.
 const installer = computed(() => (desktop.value || mobile.value || project !== undefined ? undefined : desktopInstaller()));
 const reader = { mobile, inApp: desktop, installer };
 
@@ -280,8 +280,7 @@ const ladderOptions = computed(() =>
     }),
 );
 
-// The hosted lane's one silent attempt at the browser's sandbox credential while the reader watches the machine boot;
-// a full sign-in gate here would ask for a second sign-in before anything even runs.
+// The hosted lane's one silent try at the sandbox credential while the machine boots: a sign-in gate here would ask twice.
 const warmSandboxCredential = async (): Promise<void> => {
     await warmIdToken();
     if ((await getIdToken({ interactive: false })) === undefined) {
@@ -311,6 +310,7 @@ const {
     ladder: ladderOptions,
     warmCredential: warmSandboxCredential,
     runHere,
+    otherAccountHere: () => otherAccountInApp(user.value?.email),
 });
 
 // The sandbox the account already works in, opened the way a finished setup opens its own: on a phone, straight into a

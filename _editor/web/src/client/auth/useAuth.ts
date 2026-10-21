@@ -18,6 +18,7 @@ import { accountWaysIn } from "./signInMethods";
 import { invalidatePlatformAuth, onPlatformAuthInvalidated } from "../../lib/authLifecycle";
 import { apiClient } from "../../lib/useApi";
 import { forgetAccount } from "../directory/deviceDirectory";
+import { noteAppAccount } from "./appAccounts";
 import { directMode } from "../directory/directState";
 import { markBoot } from "../../app/perf/boot";
 
@@ -55,6 +56,9 @@ const signInMethodsOf = async (id: string): Promise<readonly SignInMethod[] | un
 // The account as every reader holds it, with its ways in written beside it for the session module (signInMethods.ts).
 const holdAccount = (account: User | null): void => {
     user.value = account;
+    if (account !== null) {
+        void noteAppAccount(account.email);
+    }
     accountWaysIn.value = account === null ? undefined : { email: account.email, methods: account.signInMethods };
 };
 
