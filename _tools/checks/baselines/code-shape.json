@@ -937,7 +937,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/onlyoffice/src/server/local-office.ts#createLocalOffice#lines": {
-        "count": 174,
+        "count": 167,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_extensions/onlyoffice/src/server/server.ts#activateServer#lines": {
