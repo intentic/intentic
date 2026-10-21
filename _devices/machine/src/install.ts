@@ -49,6 +49,16 @@ export const CURRENT_FOR_MS = 10 * 60_000;
 export const recentlyCurrent = (check: CurrentCheck | undefined, installed: string, now: number): boolean =>
     check !== undefined && check.version === installed && now - check.at >= 0 && now - check.at < CURRENT_FOR_MS;
 
+// An update that throws is one that failed: setup is what pairs the folder, and the agent already installed can do
+// that. (2026-10-21) A rename Windows refused escaped from here and ended a folder's setup before it paired.
+const upgradeOrFailed = async (io: SelfUpdateIo): Promise<UpgradeOutcome> => {
+    try {
+        return await io.upgrade();
+    } catch (error) {
+        return { kind: "failed", reason: errorMessage(error) };
+    }
+};
+
 // Setup runs on the machine's newest agent: this environment first, the rest of the PC right after (completeSetup).
 // A failed update is a note, never a refusal: the pairing token expires in minutes.
 export const selfUpdateBeforeSetup = async (
@@ -64,7 +74,7 @@ export const selfUpdateBeforeSetup = async (
     if (recentlyCurrent(await io.checkedCurrent?.(), io.installed, now)) {
         return;
     }
-    const outcome = await io.upgrade();
+    const outcome = await upgradeOrFailed(io);
     if (outcome.kind === "current") {
         await io.rememberCurrent?.({ version: io.installed, at: now });
     }

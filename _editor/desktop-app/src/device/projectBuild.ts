@@ -39,6 +39,8 @@ export const folderSetupFor = (record: FolderSetup | undefined): LocalFolderSetu
               made: record.made,
               hasLog: record.logPath !== undefined,
               startedAt: record.startedAt,
+              madeAt: record.madeAt,
+              copy: record.copy,
           };
 
 /** The workspace's address for a folder's sandbox, opened on the folder (the app's project.rs `project_path`). */

@@ -1,14 +1,14 @@
 import { hostname, platform } from "node:os";
 import { readTextIfExists } from "@intentic/base/fs";
 import { livePidRecord } from "@intentic/local-agent";
-import type { DeviceAgent, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
+import type { DeviceAgent, DeviceCopy, DevicePairing, DevicePort, DeviceReport } from "@intentic/sandbox-contract/schemas/devices";
 import { runPidPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { machineId } from "../machine-id.js";
 import { wslEnvironment } from "../environments/wsl.js";
 import { deliversByItself, isProjectPairing, mirrorHeartbeatPath, type Pairing, pairingKey, pairingSlugs, readState, type SyncState } from "./config.js";
 import { syncHolds } from "./holds.js";
-import { backupSessionName, type LiveSession, readAllSessions, sessionName, sessionsByName, sessionStateOf } from "./mutagen.js";
+import { backupSessionName, type LiveEndpoint, type LiveSession, readAllSessions, sessionName, sessionsByName, sessionStateOf } from "./mutagen.js";
 import { ensureMutagen } from "./binary/mutagen-binary.js";
 
 // Everything this agent knows about the device, in one shape fed to `status`, `status --json`, the mirror
@@ -62,6 +62,52 @@ const slugOf = (pairing: Pairing): { readonly slug?: string } => {
     return slug === undefined ? {} : { slug };
 };
 
+// HOW FAR A SESSION'S COPY IS, in Mutagen's own counts (the contract's DeviceCopySchema), so a folder's page can measure
+// its first copy without anything walking the folder a second time (2026-10-21: the page drew a bar that only swept,
+// and a reader could not tell a copy under way from one that would never come).
+
+// What one end is receiving while it stages a pass (Mutagen's `ReceiverState`): files of this pass in, and bytes in.
+interface LiveStaging {
+    readonly receivedFiles?: number;
+    readonly expectedFiles?: number;
+    readonly totalReceivedSize?: number;
+}
+
+// A connected end, as `sync list --template {{json .}}` prints it beside its address: what its last scan held (ignored
+// paths left out, a zero left out too) and, while it receives, how far that is.
+type CountedEndpoint = LiveEndpoint & {
+    readonly scanned?: boolean;
+    readonly files?: number;
+    readonly totalFileSize?: number;
+    readonly stagingProgress?: LiveStaging;
+};
+
+type CountedSession = Pick<LiveSession, "status"> & { readonly alpha: CountedEndpoint; readonly beta: CountedEndpoint };
+
+/**
+ * The sending end's last scan and what the receiving end has of the pass it stages. Whichever end Mutagen says is
+ * staging receives; otherwise this device sends, as alpha, which it is in every session a pairing makes. Undefined
+ * while neither end has said anything.
+ */
+export const copyOf = (session: CountedSession | undefined): DeviceCopy | undefined => {
+    if (session === undefined) {
+        return undefined;
+    }
+    const [from, to] = session.status === `staging-alpha` ? [session.beta, session.alpha] : [session.alpha, session.beta];
+    const scanned = from.scanned === true;
+    const staging = to.stagingProgress;
+    if (!scanned && staging === undefined) {
+        return undefined;
+    }
+    return {
+        files: scanned ? (from.files ?? 0) : undefined,
+        bytes: scanned ? (from.totalFileSize ?? 0) : undefined,
+        stagedFiles: staging === undefined ? undefined : (staging.receivedFiles ?? 0),
+        stagingFiles: staging?.expectedFiles,
+        stagedBytes: staging === undefined ? undefined : (staging.totalReceivedSize ?? 0),
+    };
+};
+
 const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing, now: number): DevicePairing => {
     // Stated on every pairing rather than inferred from an empty port list: "nothing is listening" and "this device
     // was told not to" look identical otherwise, and only one has anything for a reader to do.
@@ -81,7 +127,8 @@ const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing, now
     }
     // A sync pairing with no session is carried as the absence of a status, not a word for it, so every reader
     // renders it the same way instead of inventing a default. sessionStateOf resolves Mutagen's omitted zero.
-    const session = sessionStateOf(sessions.get(sessionName(pairingKey(pairing))));
+    const live = sessions.get(sessionName(pairingKey(pairing)));
+    const session = sessionStateOf(live);
     // The state backup reads the same way: no status means no session, so the sandbox is the only copy of its state. A
     // project pairing has none by design, which the remote dir beside it says; its absence here is not a failure.
     const backup = isProjectPairing(pairing) ? undefined : sessionStateOf(sessions.get(backupSessionName(pairingKey(pairing))));
@@ -94,6 +141,7 @@ const pairingReport = (sessions: LiveSessions | undefined, pairing: Pairing, now
             ...kind,
             mirroring,
             mutagenStatus: session.status,
+            copy: copyOf(live),
             conflicts: session.conflicts,
             // The stuck paths, not just a count: a number names nothing to look at.
             conflictedPaths: session.conflictedPaths,

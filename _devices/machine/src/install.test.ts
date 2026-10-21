@@ -81,6 +81,22 @@ describe("selfUpdateBeforeSetup", () => {
         expect(joined).toContain(reason);
     });
 
+    // (2026-10-21) An EPERM thrown out of the agent's swap ended a folder's setup before it paired, though the agent
+    // already installed could pair it. A thrown update reads as a failed one.
+    it("notes an update that throws and continues with the installed agent", async () => {
+        const lines: string[] = [];
+        const t = io({
+            installed: "1.346.0",
+            upgrade: async () =>
+                await Promise.reject(new Error("EPERM: operation not permitted, rename 'intentic-launch.exe' -> 'intentic-launch.exe.previous'")),
+        });
+        await expect(selfUpdateBeforeSetup(t.io, {}, ["sync", "setup"], (line) => lines.push(line))).resolves.toBeUndefined();
+        expect(t.reexeced()).toBeUndefined();
+        expect(lines).toEqual([
+            "Couldn't update the agent first (EPERM: operation not permitted, rename 'intentic-launch.exe' -> 'intentic-launch.exe.previous'); continuing with 1.346.0.",
+        ]);
+    });
+
     // (2026-10-21) `ic` runs sync setup and device setup back to back for every new sandbox: the second asks nothing when
     // the first found this same release the newest moments ago, and an older finding, or another release's, is asked again.
     it("asks the release channel once for two setups minutes apart, and keeps what it found", async () => {

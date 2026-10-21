@@ -1,5 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import type { LocalFolderSetup } from "../../app/environments/localHost";
+import { copyMeasureOf } from "../setup/copyMeasure";
 
 // A FOLDER'S WAY TO AN AGENT, AS STEPS: sign in, make the folder's own sandbox, copy the folder in. The folder's page
 // for it (setup/LocalSandboxSetup.vue) lists them before the press and ticks them off as the app goes, so each step is
@@ -80,7 +81,7 @@ const copyStep = (setup: LocalFolderSetup | undefined, name: string): JourneySte
         case `copying`:
             return setup.status === `paused`
                 ? step(`copy`, title, `attention`, t(`local.journey.copy.paused`))
-                : step(`copy`, title, `running`, t(`local.journey.copy.copying`));
+                : step(`copy`, title, `running`, copyMeasureOf(setup).step);
         case `ready`:
             return step(`copy`, title, `done`);
         case `failed`:

@@ -20,6 +20,11 @@ pub enum WaitingFor {
     SignOut,
 }
 
+/// What ic's connect says on stderr when the folder's sync did not finish after the sandbox was made (its connect.rs
+/// `sync_unfinished`). The setup still exits 0, so this line is the only word that no pairing is coming (2026-10-21: a
+/// folder whose agent update failed mid-setup sat on "copying" for three minutes before the card said anything).
+pub const SYNC_UNFINISHED: &str = "sync didn't finish.";
+
 /// `intentic: [<phase>] <sentence>`, as desktop.ts `parseStep` reads it.
 pub fn parse_step(line: &str) -> Option<(String, String)> {
     let rest = line.strip_prefix("intentic: [")?;
@@ -105,6 +110,9 @@ pub struct Progress {
     pub requirements: Vec<serde_json::Value>,
     command_failure: Option<String>,
     last_error: Option<String>,
+    /// The run said its folder's sync did not finish (ic's connect.rs `sync_unfinished`): the sandbox is made, and no
+    /// pairing for the folder is coming.
+    pub sync_unfinished: bool,
 }
 
 impl Progress {
@@ -119,6 +127,7 @@ impl Progress {
             requirements: Vec::new(),
             command_failure: None,
             last_error: None,
+            sync_unfinished: false,
         }
     }
 
@@ -157,6 +166,10 @@ impl Progress {
         }
         if stream == Stream::Stderr {
             let said = line.trim();
+            if said.contains(SYNC_UNFINISHED) {
+                self.sync_unfinished = true;
+                return false;
+            }
             if let Some(failure) = said.strip_prefix("Command failed,") {
                 self.command_failure = Some(failure.trim().to_string());
             } else if !said.is_empty() {
@@ -455,6 +468,21 @@ mod tests {
         assert_eq!(waiting_for(Some(4), &[]), Some(WaitingFor::Restart));
         assert_eq!(waiting_for(Some(1), &sign_out), None);
         assert_eq!(waiting_for(None, &sign_out), None);
+    }
+
+    #[test]
+    fn a_folder_sync_that_did_not_finish_is_heard_and_is_not_the_runs_failure() {
+        let mut progress = Progress::new(true, true);
+        progress.hear(
+            Stream::Stderr,
+            "intentic: folder sync didn't finish. Your sandbox is fine; set it up again from the desktop app to sync your folder.",
+        );
+        assert!(progress.sync_unfinished);
+        assert_eq!(progress.reason(), None);
+        // The sentence is ic's own: held to its source, so a reworded warning cannot go unheard.
+        let connect = include_str!("../../../../_sandbox/ic/src/sandbox/connect.rs");
+        assert!(connect.contains(&format!("folder {SYNC_UNFINISHED}")));
+        assert!(!Progress::new(true, true).sync_unfinished);
     }
 
     /* THE DECISION. */

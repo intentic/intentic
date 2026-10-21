@@ -20,8 +20,7 @@ export const refusalSentence = (refusal: LocalProjectRefusal, path: string): str
 };
 
 /** What to beware of before the folder gets its sandbox. */
-export const cautionSentence = (caution: LocalProjectCaution): string =>
-    caution.kind === `synced` ? t(`local.project.caution.synced`, { service: caution.service }) : t(`local.project.caution.away`);
+export const cautionSentence = (caution: LocalProjectCaution): string => t(`local.project.caution.synced`, { service: caution.service });
 
 /** What the first copy carries: its files, and their size where it says anything. */
 export const copyWeight = (copy: { readonly files: number; readonly bytes: number; readonly more: boolean }): string => {

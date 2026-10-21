@@ -12529,12 +12529,12 @@
         },
         "project": {
             "dialogTitle": "Popracuj nad {name} z agentem",
-            "lede": "Dostaje własną piaskownicę na tym komputerze, z kopią w środku, nad którą pracują agenci. Nic tutaj się nie zmieni, dopóki nie przyniesiesz ich pracy z powrotem.",
-            "files": "{count} plik do skopiowania | {count} pliki do skopiowania | {count} plików do skopiowania",
-            "moreFiles": "Plików do skopiowania: ponad {count}",
-            "weight": "{files}, {size}",
+            "lede": "Agenci pracują na kopii w piaskownicy na tym komputerze. Twój folder zmienia się dopiero, gdy przyjmiesz ich pracę.",
+            "files": "{count} plik | {count} pliki | {count} plików",
+            "moreFiles": "Ponad {count} plików",
+            "weight": "{files} · {size}",
             "staysHere": "Bez kopiowania: .git, node_modules, wyniki budowania i pliki .env. Zostają na tym komputerze.",
-            "large": "To dużo do skopiowania, więc pierwsza kopia trochę potrwa.",
+            "large": "Duży folder, więc pierwsza kopia trochę potrwa.",
             "refusedTitle": "Ten folder nie może mieć sandboxa",
             "documentTitle": "Najpierw otwórz folder",
             "document": "Sandbox działa na całym folderze. Otwórz folder, w którym jest ten dokument, i poproś stamtąd jeszcze raz.",
@@ -12549,8 +12549,7 @@
                 "around": "Ten folder zawiera {other}, który ma już własny sandbox."
             },
             "caution": {
-                "synced": "{service} już synchronizuje ten folder. Dwie synchronizacje jednego folderu mogą cofać sobie nawzajem zmiany.",
-                "away": "Ten folder jest na dysku sieciowym lub wymiennym, więc kopiowanie jest wolniejsze i wstrzymuje się, gdy dysku nie ma."
+                "synced": "{service} już synchronizuje ten folder. Dwie synchronizacje jednego folderu mogą cofać sobie nawzajem zmiany."
             },
             "stage": {
                 "plan": "Rysujemy plany",
@@ -12573,11 +12572,11 @@
                 "inBrowser": "Dokończ w przeglądarce"
             },
             "sandbox": {
-                "title": "Utwórz piaskownicę tego folderu",
-                "once": "Własna piaskownica, na tym komputerze",
+                "title": "Utwórz jego piaskownicę",
+                "once": "Na tym komputerze",
                 "signedIn": "Przygotowuję…",
                 "behind": "Następna, po innym folderze",
-                "creating": "Tworzę, {percent}%",
+                "creating": "{percent}%",
                 "interrupted": "Wznawiam od miejsca przerwania",
                 "needsDocker": {
                     "notInstalled": "Potrzebuje Dockera",
@@ -12594,16 +12593,15 @@
             "copy": {
                 "title": "Skopiuj {name} do środka",
                 "stays": "Twój folder zostaje na miejscu",
-                "copying": "Kopiowanie. Agenci mogą zacząć, gdy tylko będzie w środku",
                 "paused": "Wstrzymane",
                 "failed": "Nie synchronizuje się"
             }
         },
         "setup": {
             "signingIn": "Dokończ logowanie w przeglądarce",
-            "signingInDetail": "Po zalogowaniu Intentic sam przejdzie dalej.",
+            "signingInDetail": "Ta strona przejdzie dalej, gdy się zalogujesz.",
             "signInFirst": "Zaloguj się, aby kontynuować",
-            "signInFirstDetail": "Intentic utworzy piaskownicę dla {name} zaraz po zalogowaniu. Logowanie otwiera przeglądarkę.",
+            "signInFirstDetail": "Logowanie otwiera przeglądarkę. Piaskownica dla {name} powstanie zaraz potem.",
             "signedIn": "Jesteś zalogowany",
             "signedInDetail": "Przygotowuję piaskownicę dla {name}…",
             "queued": "Przygotowuję piaskownicę dla {name}",
@@ -12622,7 +12620,7 @@
             },
             "creating": "Tworzę piaskownicę dla {name}",
             "interrupted": "Wznawiam piaskownicę dla {name}",
-            "interruptedDetail": "Intentic zamknął się w trakcie jej tworzenia, więc kontynuuje od miejsca, w którym przerwał.",
+            "interruptedDetail": "Intentic zamknął się w trakcie tworzenia, więc kontynuuje od miejsca, w którym przerwał.",
             "waiting": "Piaskownica dla {name} czeka",
             "waitingDetail": {
                 "consent": "Ten komputer trzeba najpierw przygotować dla agentów. Zrób to w Urządzeniach, a piaskownica powstanie zaraz potem.",
@@ -12633,8 +12631,16 @@
             "failed": "Nie udało się utworzyć piaskownicy dla {name}",
             "noSync": "{name} nie synchronizuje się ze swoją piaskownicą",
             "copying": "Kopiuję {name} do jej piaskownicy",
-            "copyingDetail": "Agenci mogą zacząć, gdy pierwsza kopia będzie gotowa. Zmiany wprowadzone tutaj są przenoszone na bieżąco.",
-            "preparing": "Przygotowuję piaskownicę na ten folder…",
+            "copyingDetail": "Agenci mogą zacząć, gdy tylko kopia będzie w środku.",
+            "copy": {
+                "connecting": "Łączę z piaskownicą",
+                "counting": "Liczę pliki",
+                "comparing": "Porównuję pliki",
+                "files": "{done} z {total} pliku | {done} z {total} plików | {done} z {total} plików",
+                "copying": "Kopiuję pliki",
+                "placing": "Układam pliki na miejscu",
+                "bytes": "{done} z {total}"
+            },
             "paused": "Kopiowanie {name} jest wstrzymane",
             "pausedDetail": "Otwórz stronę Urządzenia w piaskownicy, aby wznowić synchronizację plików.",
             "heldLowDisk": "Dysk z tym folderem jest prawie pełny. Kopiowanie wznowi się samo, gdy zrobi się miejsce.",
@@ -12642,7 +12648,7 @@
             "heldUnreachable": "Jej piaskownica nie odpowiada od godziny. Kopiowanie wznowi się samo, gdy odpowie.",
             "heldAway": "Jej piaskownica nie działa teraz na tym komputerze. Kopiowanie wznowi się, gdy wróci.",
             "ready": "Piaskownica dla {name} jest gotowa",
-            "readyDetail": "Gdy zaakceptujesz pracę agenta, wróci ona do tego folderu sama. Plik, który też zmieniłeś, zostanie do przejrzenia.",
+            "readyDetail": "Przyjęta praca wraca do tego folderu sama.",
             "button": {
                 "waiting": "Tworzę piaskownicę tego folderu…",
                 "waitingPercent": "Tworzę piaskownicę tego folderu ({percent}%)",
@@ -12678,7 +12684,6 @@
         },
         "sandboxSetup": {
             "tile": "Piaskownica dla {name}",
-            "eyebrow": "Nowa piaskownica · {name}",
             "looking": "Sprawdzam {name}…",
             "notNow": "Nie teraz",
             "stepsHeading": "Kroki",
@@ -12692,7 +12697,7 @@
             "account": "Konto",
             "signedIn": "Zalogowano",
             "notSignedIn": "Jeszcze nie zalogowano",
-            "carriesOn": "To trwa dalej, gdy pracujesz. Wróć do plików, kiedy chcesz: kafelek piaskownicy po lewej pokazuje postęp.",
+            "carriesOn": "To trwa w tle. Kafelek po lewej pokazuje postęp.",
             "backToFiles": "Wróć do plików",
             "left": "zostało około {left}",
             "almostDone": "prawie gotowe"

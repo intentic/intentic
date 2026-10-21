@@ -4,7 +4,7 @@ import { folderButtonOf, setupBadgeOf, setupViewOf } from "./setupView";
 // What a folder's window says about its own sandbox, state by state: its page before the press and at every step after
 // it, the rail tile's mark for a reader who left the page, and the folder's own button in Files.
 
-const setupAt = (state: LocalSetupState, more: Partial<Pick<LocalFolderSetup, `name` | `status` | `heldBy` | `made` | `hasLog`>> = {}): LocalFolderSetup => ({
+const setupAt = (state: LocalSetupState, more: Partial<Pick<LocalFolderSetup, `name` | `status` | `heldBy` | `made` | `hasLog` | `madeAt` | `copy`>> = {}): LocalFolderSetup => ({
     ...state,
     name: `shop`,
     status: undefined,
@@ -116,12 +116,16 @@ describe(`the page after the press`, () => {
     });
 
     it(`follows the copy, and says why a paused one waits`, () => {
-        expect(viewOf(setupAt({ state: `copying` }, { made: true }))).toMatchObject({
+        // Before the sync's first word: a connection on its way, measured from nothing, what it carries said from the ask.
+        expect(viewOf(setupAt({ state: `copying` }, { made: true, madeAt: 7 }), { preview: NEW })).toMatchObject({
             tone: `working`,
             hero: { kind: `house`, stage: `moving` },
-            detail: `Getting the sandbox ready for this folder…`,
+            detail: `Agents can start as soon as it's in.`,
+            percent: 0,
+            step: `Connecting to the sandbox`,
+            measure: `3 files · 355 B`,
+            since: 7,
         });
-        expect(viewOf(setupAt({ state: `copying` }, { made: true, status: `staging-beta` }))?.detail).toContain(`Agents can start once the first copy is in`);
         const paused = viewOf(setupAt({ state: `copying` }, { made: true, status: `paused`, heldBy: [`low-disk`] }));
         expect(paused).toMatchObject({ tone: `waiting`, actions: [`open`] });
         expect(paused?.detail).toContain(`nearly full`);
@@ -147,7 +151,9 @@ describe(`the rail tile's mark`, () => {
 
     it(`spins while the work goes on by itself, with how far where it is measured`, () => {
         expect(badgeAt(setupAt({ state: `creating`, phase: undefined, step: undefined, percent: 42, left: undefined }))).toEqual({ running: `42%` });
-        expect(badgeAt(setupAt({ state: `copying` }, { made: true, status: `scanning` }))).toEqual({ running: `Copying. Agents can start once it's in` });
+        expect(badgeAt(setupAt({ state: `copying` }, { made: true, status: `scanning` }))).toEqual({ running: `1%` });
+        // Files crossing with nothing counting them (an agent older than the counts): what it does, not a figure.
+        expect(badgeAt(setupAt({ state: `copying` }, { made: true, status: `staging-beta` }))).toEqual({ running: `Copying files` });
     });
 
     it(`asks for attention when the reader is needed, says a failure, and ticks a folder that is in`, () => {

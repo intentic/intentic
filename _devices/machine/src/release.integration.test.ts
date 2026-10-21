@@ -1,7 +1,7 @@
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { agentAssetUrl, archToken, exe, isLeftover, launcherAssetUrl, osToken, versionOf } from "./release.js";
+import { basename, dirname, join } from "node:path";
+import { agentAssetUrl, archToken, asideOf, exe, isLeftover, launcherAssetUrl, osToken, vacate, versionOf } from "./release.js";
 
 describe("release asset URLs", () => {
     // Two environments of one PC downloading "latest" a minute apart can land on two releases; a tag cannot.
@@ -21,6 +21,21 @@ describe("isLeftover", () => {
         for (const name of ["intentic-machine.exe.old", "intentic-machine.old", "intentic-launch.exe.old", "intentic-launch.exe.tmp", "mutagen.exe.old", "mutagen.tar.gz"]) {
             expect(isLeftover(name), name).toBe(true);
         }
+    });
+
+    // A binary moved aside while still running is no one's way back any more: swept once it is free.
+    it("names the binaries an upgrade or a rollback moved aside, whatever their stamp", () => {
+        for (const name of [
+            basename(asideOf("intentic-launch.exe.previous", 1_729_500_000_000)),
+            basename(asideOf("intentic-machine.exe.previous", 1)),
+            basename(asideOf("intentic-machine.previous", 1_729_500_000_000)),
+            basename(asideOf("intentic-machine.exe", 1_729_500_000_000)),
+            basename(asideOf("intentic-launch.exe", 1)),
+        ]) {
+            expect(isLeftover(name), name).toBe(true);
+        }
+        expect(isLeftover(basename(asideOf("intentic-keyring.exe.previous", 1)))).toBe(false);
+        expect(isLeftover("intentic-launch.exe.previous.old-")).toBe(false);
     });
 
     // A versioned part file is an interrupted download the next attempt resumes; Mutagen needs its agents bundle; and
@@ -79,5 +94,40 @@ describe.skipIf(process.platform === "win32")("versionOf", () => {
         expect(versionOf(path)).toBeUndefined();
         expect(versionOf(script(`echo 1.305.0; exit 1`))).toBeUndefined();
         expect(versionOf(script(`echo hello`))).toBeUndefined();
+    });
+});
+
+// Windows neither deletes nor replaces a file a process still runs from, but renames it: the delete's refusal is played
+// here by `remove`, since nothing on this side of a test holds a file that way.
+describe("vacate", () => {
+    const held = (code: string) => async (): Promise<void> => await Promise.reject(Object.assign(new Error(`${code}: unlink`), { code }));
+    const keptCopy = (): string => {
+        const path = join(mkdtempSync(join(tmpdir(), "vacate-")), "intentic-launch.exe.previous");
+        writeFileSync(path, "the launcher the keyring runs from");
+        return path;
+    };
+
+    it("deletes a file nothing holds", async () => {
+        const path = keptCopy();
+        await vacate(path);
+        expect(readdirSync(dirname(path))).toEqual([]);
+    });
+
+    it("moves a file a running process holds aside, under a name bin/'s sweep removes later", async () => {
+        for (const code of ["EPERM", "EBUSY", "EACCES"]) {
+            const path = keptCopy();
+            await vacate(path, held(code));
+            expect(existsSync(path), code).toBe(false);
+            const [aside, ...rest] = readdirSync(dirname(path));
+            expect(rest, code).toEqual([]);
+            expect(isLeftover(aside ?? ""), aside).toBe(true);
+            expect(readFileSync(join(dirname(path), aside ?? ""), "utf8")).toBe("the launcher the keyring runs from");
+        }
+    });
+
+    it("throws any other refusal, leaving the file where it was", async () => {
+        const path = keptCopy();
+        await expect(vacate(path, held("EIO"))).rejects.toThrow("EIO");
+        expect(existsSync(path)).toBe(true);
     });
 });

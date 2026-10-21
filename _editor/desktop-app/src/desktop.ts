@@ -3,7 +3,7 @@ import type { ResourcesForm } from "@intentic/ui";
 import type { DeviceReport, DeviceSandbox } from "@intentic/sandbox-contract/schemas/devices";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { LocalFirstTask, LocalFound } from "@intentic/web/local-host";
+import type { LocalFirstTask, LocalFolderCopy, LocalFound } from "@intentic/web/local-host";
 import type { FixEnd } from "./fixReport";
 
 // Typed surface over the Rust commands in src-tauri/src/commands.rs. The native side just runs the shipped scripts
@@ -464,7 +464,7 @@ export type ProjectRefusal =
     | { readonly kind: `inside` | `around`; readonly other: string };
 
 /** What to beware of before a folder becomes a project (project.rs `Caution`). */
-export type ProjectCaution = { readonly kind: `synced`; readonly service: string } | { readonly kind: `away` };
+export type ProjectCaution = { readonly kind: `synced`; readonly service: string };
 
 /** What the folder's dialog draws (project.rs `Preview`). */
 export type ProjectPreview =
@@ -495,14 +495,12 @@ export interface ProjectAsk {
 export type ProjectCreated = { readonly kind: `started`; readonly name: string } | { readonly kind: `opened` };
 
 export const projectPreview = (): Promise<ProjectPreview> => invoke(`project_preview`);
-// Answers at once, whatever is under way: the folder's own setup waits for a sign-in, Docker or another folder's setup by
-// itself. Rejects with a sentence for the reader only for a folder that cannot have one (a refusal, a name the sandbox
-// would not take).
+// Answers at once, whatever is under way: the folder's setup waits for a sign-in, Docker or another folder's by itself.
+// Rejects with a sentence for the reader only for a folder that cannot have one (a refusal, a name the sandbox refuses).
 export const projectCreate = (ask: ProjectAsk): Promise<ProjectCreated> => invoke(`project_create`, { ask });
 
-/* A FOLDER'S OWN SANDBOX (src-tauri/src/folder_setup.rs, 2026-10-21): made on the folder's press by the app rather than
-   any window, one setup at a time on this computer, its first copy followed until the folder is in. Every window reads
-   every folder's record on opening and hears every change, and draws its own folder's. */
+/* A FOLDER'S OWN SANDBOX (src-tauri/src/folder_setup.rs, 2026-10-21): made on the folder's press by the app, one setup
+   at a time on this computer, its first copy followed until it is in. Every window hears every record, draws its own. */
 
 /** Why Docker is in the way of it. */
 export type DockerReason = `notInstalled` | `notRunning` | `notAllowed`;
@@ -544,6 +542,9 @@ export type FolderSetup = FolderStanding & {
     readonly status?: string;
     /** While it is paused, why the machine agent holds its sync still (its `heldBy`), the reader's own pause first. */
     readonly heldBy?: readonly string[];
+    // When its first copy began (Unix ms), and how far it is in the machine agent's counts; absent from an older agent.
+    readonly madeAt?: number;
+    readonly copy?: LocalFolderCopy;
 };
 
 export const folderSetups = (): Promise<readonly FolderSetup[]> => invoke(`folder_setups`);

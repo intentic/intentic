@@ -3,10 +3,13 @@
      as the sandbox's setup really goes (AgentHouse.vue), with the setup's own measure, how long it has run and roughly
      how long is left (SetupMeter.vue). The folder's steps sit beside what is known about it (JourneySteps.vue,
      SetupFacts.vue), and the one thing to do next is the primary press whenever there is one. A sign-in, where nobody is
-     signed in, is the way's first step here too: once the browser hands back, the page carries on by itself. Nothing on
-     it holds the reader: they can go back to Files, and the rail's tile for it says how far it is (LocalShell.vue).
+     signed in, is the way's first step here too: once the browser hands back, the page carries on by itself (the app
+     brings the reader back here, windows.rs). Nothing on it holds the reader: they can go back to Files, and the rail's
+     tile for it says how far it is (LocalShell.vue). The folder's first copy is measured as the sync counts it
+     (copyMeasure.ts), never by a bar that only sweeps.
      (2026-10-21: it replaced a dialog that went away on the press and a card in the window's corner that could not be
-     put away and said almost nothing, setupView.ts.) -->
+     put away and said almost nothing, setupView.ts. Later that day: the "New sandbox · name" line over the title went,
+     the words got shorter, and the network-drive caution went, since every WSL folder drew it.) -->
 <script setup lang="ts">
 import { Button, Icon, Notice, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -60,14 +63,12 @@ const plate = computed(() => toneWash(TONE_WASH[tone.value]));
 
 const started = computed(() => setup.value !== undefined);
 const detail = computed(() => actionFailure.value ?? view.value?.detail);
-// What to beware of before the press, beside it: the app's cautions, and a first copy that will take its time.
+// What to beware of before the press, beside it: another sync on the folder, and a first copy that will take its time.
 const cautions = computed(() => {
     const asked = setup.value === undefined && preview.value?.kind === `new` ? preview.value : undefined;
     const said = (asked?.cautions ?? []).map(cautionSentence);
     return asked?.large === true ? [...said, t(`local.project.large`)] : said;
 });
-// A copy under way has no measure of its own: a bar that only moves says it is going.
-const copying = computed(() => setup.value?.state === `copying` && setup.value.status !== `paused`);
 
 const actions = computed<readonly SetupPress[]>(() => view.value?.actions ?? []);
 const label = (press: SetupPress): string => t(`local.setup.action.${press}`);
@@ -103,7 +104,6 @@ const signedIn = computed(() => (setup.value === undefined ? preview.value?.kind
 
             <div class="flex flex-col gap-4 p-5 md:p-6">
                 <div class="flex flex-col gap-1">
-                    <p class="text-xs font-medium text-subtle">{{ t(`local.sandboxSetup.eyebrow`, { name: folderName }) }}</p>
                     <h1 class="text-lg font-semibold text-content" aria-live="polite">
                         {{ view?.title ?? t(`local.sandboxSetup.looking`, { name: folderName }) }}
                     </h1>
@@ -114,13 +114,16 @@ const signedIn = computed(() => (setup.value === undefined ? preview.value?.kind
                     v-if="view?.percent !== undefined"
                     :percent="view.percent"
                     :step="view.step"
-                    :started-at="setup?.startedAt"
+                    :started-at="view.since"
                     :left="view.left"
+                    :measure="view.measure"
                     :label="view.title"
                 />
-                <div v-else-if="copying" class="h-2 overflow-hidden rounded-full bg-primary-600/15" role="progressbar" :aria-label="view?.title">
-                    <div class="setup-sweep h-full w-1/3 rounded-full bg-primary-600"></div>
-                </div>
+                <!-- Under way with nothing counting it (an agent older than the copy's counts): what it does, not a figure. -->
+                <p v-else-if="tone === `working` && view?.step" class="flex items-center gap-2 text-xs text-muted">
+                    <Icon name="spinner" spin class="text-sm" aria-hidden="true" />
+                    {{ view.step }}
+                </p>
                 <Icon v-else-if="view === undefined && failure === undefined" name="spinner" spin class="text-sm text-muted" :aria-label="t(`workspace.words.working`)" />
 
                 <div v-if="cautions.length > 0" class="flex flex-col gap-2">
@@ -175,23 +178,3 @@ const signedIn = computed(() => (setup.value === undefined ? preview.value?.kind
         </div>
     </div>
 </template>
-
-<style scoped>
-/* A copy with no measure of its own: a third of a bar sweeping the track, still for a reader who asks for no motion. */
-.setup-sweep {
-    animation: setup-sweep 1.6s ease-in-out infinite;
-}
-@keyframes setup-sweep {
-    from {
-        transform: translateX(-100%);
-    }
-    to {
-        transform: translateX(300%);
-    }
-}
-:root[data-motion="reduced"] .setup-sweep {
-    animation: none;
-    width: 100%;
-    opacity: 0.5;
-}
-</style>

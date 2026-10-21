@@ -331,17 +331,19 @@ fn nested(path: &Path, taken: &[PathBuf]) -> Option<Refusal> {
 
 /// What to say before a folder becomes a project. None of these refuse; each is a way the sync can disappoint, drawn by
 /// the folder's dialog by `kind` (the web's local/projectWords.ts).
+///
+/// (2026-10-21) A second kind, a folder "on a network or removable drive", was said for any path starting `\\`,
+/// `/mnt/` or `/media/`. Every WSL folder opened from Windows (`\\wsl.localhost\…`) is such a path, so the warning met
+/// the very readers it was least true for, and read as a reason not to go on. It is no longer said at all: a slow drive
+/// shows itself in the copy's own measure.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Caution {
     /// Another service already syncs the folder: two syncs on one folder can undo each other's changes.
     Synced { service: String },
-    /// A network or removable drive: the sync is slower there and pauses while it is away.
-    Away,
 }
 
-/// What to say before `path` becomes a project: a folder another service already syncs, one on a network or a
-/// removable drive.
+/// What to say before `path` becomes a project: a folder another service already syncs.
 pub fn cautions(path: &Path) -> Vec<Caution> {
     let text = path.display().to_string();
     let mut said = Vec::new();
@@ -358,13 +360,6 @@ pub fn cautions(path: &Path) -> Vec<Caution> {
             });
             break;
         }
-    }
-    if text.starts_with(r"\\")
-        || text.starts_with("/mnt/")
-        || text.starts_with("/media/")
-        || text.starts_with("/run/media/")
-    {
-        said.push(Caution::Away);
     }
     said
 }
@@ -2380,18 +2375,19 @@ mod tests {
     }
 
     #[test]
-    fn another_sync_service_or_a_network_drive_is_said_before_anything_is_made() {
+    fn another_sync_service_is_said_first_and_a_wsl_folder_is_nothing_to_beware_of() {
         assert_eq!(
             cautions(Path::new("/home/me/Dropbox/app")),
             vec![Caution::Synced {
                 service: "Dropbox".into()
             }]
         );
-        assert_eq!(cautions(Path::new("/mnt/nas/app")), vec![Caution::Away]);
         assert!(cautions(Path::new("/home/me/code/app")).is_empty());
+        assert!(cautions(Path::new(r"\\wsl.localhost\archlinux\home\me\code\app")).is_empty());
+        assert!(cautions(Path::new("/mnt/nas/app")).is_empty());
         assert_eq!(
             serde_json::to_value(cautions(Path::new("/mnt/OneDrive/app"))).unwrap(),
-            serde_json::json!([{ "kind": "synced", "service": "OneDrive" }, { "kind": "away" }])
+            serde_json::json!([{ "kind": "synced", "service": "OneDrive" }])
         );
     }
 

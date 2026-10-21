@@ -5,6 +5,7 @@ import type { LocalFolderSetup, LocalProjectPreview } from "../../app/environmen
 import { type HouseStage, houseStageOf } from "../house/agentHouse";
 import { activeStep, type JourneyStep, journeyOf } from "../journey/journey";
 import { refusalSentence, stageHeadline } from "../projectWords";
+import { copyMeasureOf } from "./copyMeasure";
 
 // A FOLDER'S WAY TO AN AGENT, AS A PAGE OF ITS OWN (LocalSandboxSetup.vue): what the page says before the press (what
 // the folder's sandbox involves), and at every step after it (the sign-in, the sandbox being made, the folder's copy,
@@ -49,12 +50,16 @@ export interface SetupView {
     readonly hero: SetupHero;
     readonly title: string;
     readonly detail: string | undefined;
-    /** How far the sandbox's setup is, where it is measured. */
+    /** How far the sandbox's setup, or the folder's first copy, is, where it is measured. */
     readonly percent: number | undefined;
-    /** The setup's running step, in its own words. */
+    /** The running step, in its own words. */
     readonly step: string | undefined;
-    /** Roughly how many seconds are left, by the setup's plan. */
+    /** Roughly how many seconds are left, by the setup's plan; undefined where the page reckons it from the pace. */
     readonly left: number | undefined;
+    /** What is measured, beside the time: the copy's bytes in of bytes to copy, or what it carries. */
+    readonly measure: string | undefined;
+    /** When what is measured began, Unix milliseconds: the setup's start, or the first copy's. */
+    readonly since: number | undefined;
     /** The folder's way to an agent, step by step (journey.ts): the sign-in, the sandbox, the copy. */
     readonly steps: readonly JourneyStep[];
     /** The first is the primary press. */
@@ -76,7 +81,10 @@ export interface SetupFacts {
     readonly withSignIn?: boolean;
 }
 
-type Draft = Pick<SetupView, `tone` | `hero` | `title` | `detail` | `actions`> & Partial<Pick<SetupView, `percent` | `step` | `left`>>;
+type Draft = Pick<SetupView, `tone` | `hero` | `title` | `detail` | `actions`> & Partial<Pick<SetupView, `percent` | `step` | `left` | `measure` | `since`>>;
+
+// What a view holds for what it does not measure.
+const UNMEASURED = { percent: undefined, step: undefined, left: undefined, measure: undefined, since: undefined } as const;
 
 const house = (stage: HouseStage): SetupHero => ({ kind: `house`, stage });
 const SIGN_IN: SetupHero = { kind: `mark`, icon: `sign-in` };
@@ -129,19 +137,28 @@ const waitingDraft = (setup: LocalFolderSetup & { readonly state: `waiting` }): 
     }
 };
 
-// The copy under way, or held still.
-const copyingDraft = (setup: LocalFolderSetup): Draft => {
+// The copy under way, measured as the sync counts it (copyMeasure.ts), or held still.
+const copyingDraft = (setup: LocalFolderSetup, preview: LocalProjectPreview | undefined): Draft => {
     const name = setup.name;
     if (setup.status === `paused`) {
         return { tone: `waiting`, hero: house(`lit`), title: t(`local.setup.paused`, { name }), detail: heldDetail(setup.heldBy), actions: [`open`] };
     }
-    // No word from the copy yet: the sandbox has not taken the folder's first report.
-    const detail = setup.status === undefined ? t(`local.setup.preparing`) : t(`local.setup.copyingDetail`);
-    return { tone: `working`, hero: house(`moving`), title: t(`local.setup.copying`, { name }), detail, actions: [] };
+    const copy = copyMeasureOf(setup, preview);
+    return {
+        tone: `working`,
+        hero: house(`moving`),
+        title: t(`local.setup.copying`, { name }),
+        detail: t(`local.setup.copyingDetail`),
+        percent: copy.percent,
+        step: copy.step,
+        measure: copy.detail,
+        since: setup.madeAt,
+        actions: [],
+    };
 };
 
 // The page's own words for each state of the folder's setup.
-const draftOf = (setup: LocalFolderSetup, signingIn: boolean): Draft => {
+const draftOf = (setup: LocalFolderSetup, signingIn: boolean, preview: LocalProjectPreview | undefined): Draft => {
     const name = setup.name;
     switch (setup.state) {
         case `signedOut`:
@@ -178,13 +195,14 @@ const draftOf = (setup: LocalFolderSetup, signingIn: boolean): Draft => {
                 percent: setup.percent,
                 step: setup.step,
                 left: setup.left,
+                since: setup.startedAt,
                 actions: [],
             };
         }
         case `interrupted`:
             return { tone: `working`, hero: house(`plan`), title: t(`local.setup.interrupted`, { name }), detail: t(`local.setup.interruptedDetail`), actions: [] };
         case `copying`:
-            return copyingDraft(setup);
+            return copyingDraft(setup, preview);
         case `failed`:
             // Made, and the folder never started syncing: the sandbox is there to open and look at.
             return setup.made
@@ -237,12 +255,12 @@ export const setupViewOf = (facts: SetupFacts): SetupView | undefined => {
     if (setup === undefined) {
         const asked = preview === undefined ? undefined : askDraft(preview, facts);
         if (asked === undefined || preview?.kind !== `new`) {
-            return asked === undefined ? undefined : { percent: undefined, step: undefined, left: undefined, ...asked, steps: [], carriesOn: false };
+            return asked === undefined ? undefined : { ...UNMEASURED, ...asked, steps: [], carriesOn: false };
         }
         const steps = journeyOf({ setup: undefined, signedIn: preview.signedIn, name: preview.name, signingIn: false, withSignIn: !preview.signedIn });
-        return { percent: undefined, step: undefined, left: undefined, ...asked, steps, carriesOn: false };
+        return { ...UNMEASURED, ...asked, steps, carriesOn: false };
     }
-    const draft = draftOf(setup, signingIn);
+    const draft = draftOf(setup, signingIn, preview);
     const steps = journeyOf({
         setup,
         signedIn: setup.state !== `signedOut`,
@@ -250,7 +268,7 @@ export const setupViewOf = (facts: SetupFacts): SetupView | undefined => {
         signingIn,
         withSignIn: facts.withSignIn === true || setup.state === `signedOut` || setup.state === `signedIn`,
     });
-    return { percent: undefined, step: undefined, left: undefined, ...draft, steps, carriesOn: draft.tone === `working` };
+    return { ...UNMEASURED, ...draft, steps, carriesOn: draft.tone === `working` };
 };
 
 /**

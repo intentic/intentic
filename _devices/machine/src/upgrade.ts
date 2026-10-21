@@ -13,6 +13,7 @@ import {
     launcherAssetUrl,
     launcherPath,
     renameIfPresent,
+    vacate,
     versionOf,
 } from "./release.js";
 import { type ReleaseFile, verifyReleaseFiles } from "./release/release-verify.js";
@@ -40,6 +41,9 @@ export interface UpgradeExec {
     // The release the binary reports itself as; undefined where it does not run as an agent.
     readonly probe: (binary: string) => string | undefined;
     readonly swap: (from: string, to: string) => Promise<void>;
+    // Clears a path for a swap to land on: deleted, or where a running process still holds it, moved aside under a name
+    // bin/'s sweep removes later (release.ts vacate).
+    readonly vacate: (path: string) => Promise<void>;
     // The build the agent holding the pidfile runs now; undefined when none runs, which an upgrade leaves that way.
     readonly runningBuild: () => Promise<string | undefined>;
     // Restarts the agent through its supervisor and answers the build that came up; undefined when none did. May throw
@@ -126,21 +130,60 @@ const fetchAll = async (exec: UpgradeExec, pieces: readonly Piece[]): Promise<st
     }
 };
 
-const swapIn = async (exec: UpgradeExec, pieces: readonly Piece[]): Promise<void> => {
-    for (const piece of pieces) {
-        // renames in order, each undone in reverse by swapOut
-        await exec.swap(piece.target, piece.previous);
-        // ditto
-        await exec.swap(piece.staged, piece.target);
+// A rename made, as [from, to]: undone by renaming `to` back to `from`.
+type Moved = readonly [from: string, to: string];
+
+// Renames undone newest first. Every one is tried even after one is refused, since each that does go back is one file
+// fewer out of place. Answers the first refusal, or undefined when everything went back.
+const undo = async (exec: UpgradeExec, moved: readonly Moved[]): Promise<string | undefined> => {
+    let refused: string | undefined;
+    for (const [from, to] of moved.toReversed()) {
+        try {
+            // in reverse, each undoing the rename made after the one before it
+            await exec.swap(to, from);
+        } catch (error) {
+            refused ??= errorMessage(error);
+        }
+    }
+    return refused;
+};
+
+// Each piece's `.previous` is cleared before the current file moves onto it. What sits there is the rollback copy of an
+// earlier update whose trial is over, and on Windows a process may still run from it: the launcher is shared with the
+// keyring's session, which outlives agent upgrades, and Windows renames a running executable but refuses to replace
+// one. (2026-10-21) A launcher `.previous` the keyring still ran from refused to be replaced, and the EPERM escaped
+// setup before it paired a folder. A swap refused part way puts back what it had moved, so it lands whole or not at
+// all; answers why it was refused, or undefined when it landed.
+const swapIn = async (exec: UpgradeExec, pieces: readonly Piece[]): Promise<string | undefined> => {
+    const moved: Moved[] = [];
+    try {
+        for (const piece of pieces) {
+            // in order, the launcher before the agent; each rename is undone in reverse by undo or swapOut
+            await exec.vacate(piece.previous);
+            // ditto
+            await exec.swap(piece.target, piece.previous);
+            moved.push([piece.target, piece.previous]);
+            // ditto
+            await exec.swap(piece.staged, piece.target);
+            moved.push([piece.staged, piece.target]);
+        }
+        return undefined;
+    } catch (error) {
+        const refused = errorMessage(error);
+        const stuck = await undo(exec, moved);
+        return stuck === undefined
+            ? `the new files could not be put in place (${refused}), so the ones already moved were put back and nothing was changed.`
+            : `the new files could not be put in place (${refused}), and putting back the ones already moved failed too (${stuck}).`;
     }
 };
 
-const swapOut = async (exec: UpgradeExec, pieces: readonly Piece[]): Promise<void> => {
-    for (const piece of pieces.toReversed()) {
-        // the rollback undoes swapIn in reverse
-        await exec.swap(piece.previous, piece.target);
-    }
-};
+// The rollback: each piece's previous build back over the new one, the agent first. Answers why one would not go back
+// (a process still running from the new file), after every piece has been tried, rather than throwing past the restart.
+const swapOut = async (exec: UpgradeExec, pieces: readonly Piece[]): Promise<string | undefined> =>
+    await undo(
+        exec,
+        pieces.map((piece): Moved => [piece.target, piece.previous]),
+    );
 
 const discardAll = async (exec: UpgradeExec, paths: readonly string[]): Promise<void> => {
     await Promise.all(paths.map(async (path) => await exec.discard(path)));
@@ -159,8 +202,14 @@ const restartOnto = async (exec: UpgradeExec, pieces: readonly Piece[], target: 
         return { kind: "agent-behind", installed: target, running: came };
     }
     log(`The new agent didn't stay running: putting the previous one back.`);
-    await swapOut(exec, pieces);
+    const stuck = await swapOut(exec, pieces);
+    // Restarted either way: whatever is in place now is better running than nothing, and a new agent left there that
+    // keeps stopping is put back by its own trial (agent-trial.ts), which the kept copy is for.
     const back = await restartAgent(exec, log);
+    if (stuck !== undefined) {
+        const reason = `the new agent (${target}) wouldn't start, and putting ${installed} back was refused (${stuck}). The copy of ${installed} is kept, and goes back by itself if the new one keeps stopping.`;
+        return back === undefined ? { kind: "failed", reason, fix: "intentic-machine run" } : { kind: "failed", reason };
+    }
     return back === undefined
         ? {
               kind: "failed",
@@ -210,7 +259,10 @@ export const runUpgrade = async (exec: UpgradeExec, target: string, installed: s
         return { kind: "failed", reason: refused };
     }
     const wasRunning = (await exec.runningBuild()) !== undefined;
-    await swapIn(exec, pieces);
+    const unswapped = await swapIn(exec, pieces);
+    if (unswapped !== undefined) {
+        return { kind: "failed", reason: unswapped };
+    }
     // Nothing was running to restart: the new agent's trial begins at its first start, whenever that is.
     if (!wasRunning) {
         return { kind: "upgraded", from: installed, to: target };
@@ -270,6 +322,7 @@ export const realUpgradeExec = (
     },
     probe: versionOf,
     swap: renameIfPresent,
+    vacate,
     runningBuild,
     restart,
     discard: async (path) => await rm(path, { force: true }).catch(() => undefined),

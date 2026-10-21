@@ -682,6 +682,8 @@ pub fn show_device(app: &AppHandle) {
 pub const DEVICE_ROUTE: &str = "/device";
 /// The route of the folder itself.
 pub const FILES_ROUTE: &str = "/workspace";
+/// The route of a folder's way to its own sandbox (the web's local/setup/setupPath.ts `SANDBOX_SETUP_PATH`).
+pub const SANDBOX_SETUP_ROUTE: &str = "/sandbox-setup";
 
 /// The main window in front, at a route of its own shell (`/repair?from=tray`): the way a link, the tray or a
 /// notification opens one of the local shell's views.
@@ -710,13 +712,17 @@ fn show_home_at(app: &AppHandle, route: Option<&str>, keyboard: Keyboard) {
 /// own raised, with the main window's face back where the workspace stood. A window gone since, or none named, is the
 /// main window's folder, which is where this way back always went (2026-10-17: a folder window that asked was left
 /// behind the workspace, and the main window came forward on a different folder).
+///
+/// The main window comes back on its folder's way to a sandbox ([`return_route`]), where the sign-in was asked and
+/// where the sandbox's making now shows: it used to come back on the folder's files, so a reader who had just signed in
+/// had to find their way back to see anything happen (2026-10-21).
 fn show_folder_that_asked(app: &AppHandle, asked_in: Option<&str>) {
     app.state::<AppState>().remember_last_face(Face::Home);
     let asked = asked_in
         .filter(|label| is_folder_window(label))
         .and_then(|label| app.get_webview_window(label));
     let Some(asked) = asked else {
-        show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
+        show_home_at(app, Some(return_route(asked_in)), Keyboard::Take);
         return;
     };
     match crate::frame::face(app, HOME) {
@@ -727,6 +733,17 @@ fn show_folder_that_asked(app: &AppHandle, asked_in: Option<&str>) {
     let _ = asked.unminimize();
     let _ = asked.show();
     let _ = asked.set_focus();
+}
+
+/// Where the main window comes back after a sign-in begun on a folder: the folder's way to its sandbox when the main
+/// window itself asked (the page the reader pressed on), its files when the window that asked is gone or none was
+/// named, since nothing then says that folder is the main window's. Pure.
+pub(crate) fn return_route(asked_in: Option<&str>) -> &'static str {
+    if asked_in == Some(HOME) {
+        SANDBOX_SETUP_ROUTE
+    } else {
+        FILES_ROUTE
+    }
 }
 
 /// The face this app was last used through, as a bare launch and the tray's "Open Intentic" open it.
@@ -2481,6 +2498,14 @@ fn confirm_setup(app: &AppHandle, args: SetupArgs) {
 #[cfg(test)]
 mod loopback_tests {
     use super::*;
+
+    /// A sign-in pressed on the main window's way to a sandbox comes back to that page, not to the folder's files.
+    #[test]
+    fn a_sign_in_asked_from_the_main_window_comes_back_to_its_folders_way_to_a_sandbox() {
+        assert_eq!(return_route(Some(HOME)), SANDBOX_SETUP_ROUTE);
+        assert_eq!(return_route(None), FILES_ROUTE);
+        assert_eq!(return_route(Some("files-gone")), FILES_ROUTE);
+    }
 
     #[test]
     fn every_page_gets_the_process_launch_id() {

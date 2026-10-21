@@ -304,7 +304,7 @@ export type LocalProjectRefusal =
     | { readonly kind: `inside` | `around`; readonly other: string };
 
 /** What to beware of before a folder gets its sandbox. */
-export type LocalProjectCaution = { readonly kind: `synced`; readonly service: string } | { readonly kind: `away` };
+export type LocalProjectCaution = { readonly kind: `synced`; readonly service: string };
 
 /** Why Docker is in the way of a folder's sandbox. */
 export type LocalDockerReason = `notInstalled` | `notRunning` | `notAllowed`;
@@ -345,7 +345,21 @@ export type LocalFolderSetup = LocalSetupState & {
     readonly hasLog: boolean;
     /** When its last setup started, Unix milliseconds; undefined before one has. */
     readonly startedAt: number | undefined;
+    /** When the sandbox was made and its first copy began, Unix milliseconds; undefined before. */
+    readonly madeAt?: number | undefined;
+    /** How far the first copy is, in the sync's own counts; undefined until it has said, and from an older agent. */
+    readonly copy?: LocalFolderCopy | undefined;
 };
+
+/** How far a folder's first copy is: the folder's files and bytes, and of the pass its sandbox stages, how many files
+ * are in and how many bytes have crossed. Each undefined until the sync has said it. */
+export interface LocalFolderCopy {
+    readonly files?: number | undefined;
+    readonly bytes?: number | undefined;
+    readonly stagedFiles?: number | undefined;
+    readonly stagingFiles?: number | undefined;
+    readonly stagedBytes?: number | undefined;
+}
 
 /** What the folder's page says before the press. */
 export type LocalProjectPreview =

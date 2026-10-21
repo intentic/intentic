@@ -5,6 +5,7 @@ import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
+import { errnoCode } from "@intentic/base/errors";
 import { livePidRecord, WINDOWS_LAUNCH_STUB } from "@intentic/local-agent";
 import { binDir, upgradeLockPath } from "./config.js";
 
@@ -188,13 +189,39 @@ export const renameIfPresent = async (from: string, to: string): Promise<void> =
     });
 };
 
+// Where a binary still running is moved out of a name that is needed: by `vacate`, and by a rollback setting the
+// current binary aside (agent-trial.ts). The stamp keeps two such files apart: the one set aside last time may still
+// be running too.
+export const asideOf = (path: string, now: number): string => `${path}.old-${now}`;
+
+// What deleting a file a running process was started from answers on Windows (access denied, sharing violation).
+const HELD = new Set(["EPERM", "EBUSY", "EACCES"]);
+
+const removeFile = async (path: string): Promise<void> => await rm(path, { force: true });
+
+// `path` cleared for a rename to land on. Windows neither deletes nor replaces a file a process still runs from, but it
+// does rename one, so such a file is moved aside (asideOf) and bin/'s sweep removes it once nothing runs from it.
+// Anything else that keeps it from going is thrown. `remove` is the delete, replaceable only for a test.
+export const vacate = async (path: string, remove: (path: string) => Promise<void> = removeFile): Promise<void> => {
+    try {
+        await remove(path);
+    } catch (error) {
+        if (!HELD.has(errnoCode(error) ?? "")) {
+            throw error;
+        }
+        await rename(path, asideOf(path, Date.now()));
+    }
+};
+
 // What a finished swap or an extracted tarball leaves in bin/. Versioned part files stay: the next attempt resumes them.
 // So does `.previous`: it is what undoes an update whose agent keeps crashing, and only that agent's trial drops it
-// (agent-trial.ts), once it has run for ten minutes. Each pattern names its program, so the keyring's files
+// (agent-trial.ts), once it has run for ten minutes. A binary moved aside while still running (asideOf), a `.previous`
+// among them, is no longer anything's way back, so it goes. Each pattern names its program, so the keyring's files
 // (`intentic-keyring*`, `intentic-askpass*`, its own `.previous` among them) never match: they are `keyring upgrade`'s.
 const LEFTOVER = [
     /^intentic-machine(?:\.exe)?\.old$/,
     /^intentic-launch\.exe\.(?:old|tmp(?:\.gz)?)$/,
+    /^intentic-(?:machine(?:\.exe)?|launch\.exe)(?:\.previous)?\.old-\d+$/,
     /^mutagen(?:\.exe)?\.old$/,
     /^mutagen\.tar\.gz$/,
 ];

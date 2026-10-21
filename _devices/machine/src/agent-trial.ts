@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { rename, rm } from "node:fs/promises";
+import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { readJsonIfExists, writeFileAtomic } from "@intentic/base/fs";
@@ -9,7 +9,7 @@ import { z } from "zod";
 import { baseDir } from "./config.js";
 import { readMachineConfig, updateMachineConfig } from "./environments/machine.js";
 import { installedBuild, runningAsInstalledAgent } from "./installed.js";
-import { agentPath, launcherPath, renameIfPresent } from "./release.js";
+import { agentPath, asideOf, launcherPath, vacate } from "./release.js";
 import { MACHINE_VERSION } from "./version.js";
 
 // A NEW AGENT IS ON TRIAL UNTIL IT HAS RUN FOR TEN MINUTES. An upgrade keeps the binary it replaced as `<bin>.previous`
@@ -50,7 +50,8 @@ export const withCleanExit = (ledger: StartLedger, pid: number): StartLedger => 
 // Whether the ledger's release is crash-looping: not the release that proved itself, and started CRASH_LOOP_STARTS
 // times inside the window without one of them having ended cleanly (the start asking counts, since it has not).
 export const crashLooping = (ledger: StartLedger, healthy: string | undefined, now: number): boolean =>
-    ledger.version !== healthy && ledger.starts.filter((start) => start.clean !== true && now - start.at < HEALTHY_AFTER_MS).length >= CRASH_LOOP_STARTS;
+    ledger.version !== healthy &&
+    ledger.starts.filter((start) => start.clean !== true && now - start.at < HEALTHY_AFTER_MS).length >= CRASH_LOOP_STARTS;
 
 // No file is no history, and a torn one is treated the same: it starts the count over.
 const readLedger = async (): Promise<StartLedger | undefined> => await readJsonIfExists(startsPath, StartLedgerSchema);
@@ -69,20 +70,46 @@ export const recordStopped = async (pid: number): Promise<void> => {
 
 const previousOf = (target: string): string => `${target}.previous`;
 
-// One piece back: the current one set aside as `.old` (swept at the next start, release.ts), the kept one in its place.
-// A failure puts the current one back, so the path is never left empty for a supervisor to start nothing from.
-const putBack = async (target: string): Promise<void> => {
-    if (!existsSync(previousOf(target))) {
+// The file effects of putting a kept copy back and of dropping it, behind one seam so their order is asserted without a
+// disk, a file a running process holds included. `rename` throws for a source that is not there.
+export interface KeptCopyIo {
+    readonly exists: (path: string) => boolean;
+    readonly rename: (from: string, to: string) => Promise<void>;
+    readonly vacate: (path: string) => Promise<void>;
+    readonly now: () => number;
+}
+
+const REAL_KEPT_COPY_IO: KeptCopyIo = { exists: existsSync, rename, vacate, now: Date.now };
+
+// One piece back: the current one set aside (swept at the next start, release.ts), the kept one in its place. A
+// failure puts the current one back, so the path is never left empty for a supervisor to start nothing from. The aside
+// name is a new one each time: the binary set aside by an earlier rollback may still be running (the launcher is
+// shared with the keyring's session), and Windows refuses to replace a running executable's file.
+export const putBack = async (target: string, io: KeptCopyIo = REAL_KEPT_COPY_IO): Promise<void> => {
+    if (!io.exists(previousOf(target))) {
         return;
     }
-    const aside = `${target}.old`;
-    await renameIfPresent(target, aside);
+    const aside = io.exists(target) ? asideOf(target, io.now()) : undefined;
+    if (aside !== undefined) {
+        await io.rename(target, aside);
+    }
     try {
-        await rename(previousOf(target), target);
+        await io.rename(previousOf(target), target);
     } catch (error) {
-        await renameIfPresent(aside, target);
+        if (aside !== undefined) {
+            await io.rename(aside, target);
+        }
         throw error;
     }
+};
+
+// The copies kept to undo an update, dropped once the new agent has proved itself; answers how many there were. A copy
+// a running process still holds (the launcher is shared with the keyring's session) is moved aside for bin/'s sweep
+// rather than failing the drop. Never the keyring's own `.previous`, which is `keyring upgrade`'s.
+export const dropKeptCopies = async (io: KeptCopyIo = REAL_KEPT_COPY_IO): Promise<number> => {
+    const kept = [previousOf(agentPath), previousOf(launcherPath)].filter((path) => io.exists(path));
+    await Promise.all(kept.map(async (path) => await io.vacate(path)));
+    return kept.length;
 };
 
 // The kept binaries back in place, the launcher before the agent as the upgrade itself orders them, and the release
@@ -118,10 +145,10 @@ const markHealthy = async (version: string, since: number, log: Log): Promise<vo
 
 const proven = async (version: string, since: number, log: Log): Promise<void> => {
     await writeFileAtomic(healthyPath, JSON.stringify({ version, since }));
-    const kept = [previousOf(agentPath), previousOf(launcherPath)].filter((path) => existsSync(path));
-    await Promise.all(kept.map(async (path) => await rm(path, { force: true })));
-    if (kept.length > 0) {
-        log(`the agent ${version} has run for ${HEALTHY_AFTER_MS / 60_000} minutes, so the copy of the one before it, kept to undo this update, is dropped.`);
+    if ((await dropKeptCopies()) > 0) {
+        log(
+            `the agent ${version} has run for ${HEALTHY_AFTER_MS / 60_000} minutes, so the copy of the one before it, kept to undo this update, is dropped.`,
+        );
     }
     // allow(silent-catch): a config that does not read holds no skip this could lift
     if ((await readMachineConfig().catch(() => undefined))?.skippedAgent?.version === version) {

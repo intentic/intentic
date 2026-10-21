@@ -31,6 +31,7 @@ const scripted = (overrides: Partial<UpgradeExec> & Scripted = {}) => {
             return downloaded;
         },
         swap: async (from, to) => void steps.push(`swap ${from} → ${to}`),
+        vacate: async (path) => void steps.push(`vacate ${path}`),
         runningBuild: async () => await Promise.resolve(running),
         restart: async () => {
             steps.push(`restart`);
@@ -89,10 +90,50 @@ describe("runUpgrade", () => {
         const { steps, exec } = scripted();
         await upgrade(exec, "1.0.0");
         expect(steps.filter((step) => !step.startsWith("fetch") && !step.startsWith("verify") && !step.startsWith("probe"))).toEqual([
+            `vacate ${previous}`,
             `swap ${agentPath} → ${previous}`,
             `swap ${staged} → ${agentPath}`,
             `restart`,
         ]);
+    });
+
+    // A rename refused part way used to throw out of the upgrade, and out of setup's self-update with it; one refused
+    // after the agent had moved to `.previous` left nothing in its place. Every rename made is put back, newest first.
+    it("puts back what it had moved when a rename is refused part way, and says so instead of throwing", async () => {
+        const refused = new Error(`EPERM: operation not permitted, rename '${staged}' -> '${agentPath}'`);
+        const { steps, exec } = scripted({
+            swap: async (from, to) => {
+                steps.push(`swap ${from} → ${to}`);
+                return from === staged ? await Promise.reject(refused) : undefined;
+            },
+        });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome).toEqual({
+            kind: "failed",
+            reason: `the new files could not be put in place (${refused.message}), so the ones already moved were put back and nothing was changed.`,
+        });
+        expect(steps.slice(steps.indexOf(`vacate ${previous}`))).toEqual([
+            `vacate ${previous}`,
+            `swap ${agentPath} → ${previous}`,
+            `swap ${staged} → ${agentPath}`,
+            `swap ${previous} → ${agentPath}`,
+        ]);
+        expect(steps).not.toContain("restart");
+    });
+
+    it("says so when putting back what had moved is refused too", async () => {
+        const { steps, exec } = scripted({
+            swap: async (from, to) => {
+                steps.push(`swap ${from} → ${to}`);
+                return from === staged || from === previous ? await Promise.reject(new Error(`EPERM: ${from}`)) : undefined;
+            },
+        });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome).toEqual({
+            kind: "failed",
+            reason: `the new files could not be put in place (EPERM: ${staged}), and putting back the ones already moved failed too (EPERM: ${previous}).`,
+        });
+        expect(steps).not.toContain("restart");
     });
 
     // A captive-portal page, a truncated body, or the wrong architecture all download fine and aren't an agent.
@@ -155,6 +196,26 @@ describe("runUpgrade", () => {
         expect(steps.slice(-3)).toEqual(["restart", `swap ${previous} → ${agentPath}`, "restart"]);
     });
 
+    // A put-back Windows refuses (a process still running from the new file) is said, not thrown: the restart after it
+    // still runs, and the kept copy stays for the new agent's own trial to put back.
+    it("still restarts, and says the previous agent could not go back, when putting it back is refused", async () => {
+        const { steps, exec } = scripted({
+            came: undefined,
+            swap: async (from, to) => {
+                steps.push(`swap ${from} → ${to}`);
+                return from === previous ? await Promise.reject(new Error("EPERM: operation not permitted")) : undefined;
+            },
+        });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome).toEqual({
+            kind: "failed",
+            reason: `the new agent (${TARGET}) wouldn't start, and putting 1.0.0 back was refused (EPERM: operation not permitted). The copy of 1.0.0 is kept, and goes back by itself if the new one keeps stopping.`,
+            fix: "intentic-machine run",
+        });
+        expect(steps.slice(-2)).toEqual([`swap ${previous} → ${agentPath}`, "restart"]);
+        expect(steps).not.toContain(`discard ${previous}`);
+    });
+
     // The swap landed but something else is serving; not a rollback, since the bytes are in place.
     it("names the build still serving when the agent that came up isn't the one installed", async () => {
         const { steps, exec } = scripted({ came: "1.0.0" });
@@ -185,6 +246,44 @@ describe("runUpgrade with the Windows launcher", () => {
         const { steps, exec } = scripted({ withLauncher: true, came: undefined });
         await upgrade(exec, "1.0.0");
         expect(steps.slice(-3)).toEqual([`swap ${previous} → ${agentPath}`, `swap ${launcherPrevious} → ${launcherPath}`, `restart`]);
+    });
+
+    // (2026-10-21) The launcher is shared with the keyring's session, which can outlive an agent upgrade and go on running
+    // from the `.previous` that upgrade left. Windows refuses to replace that file but lets it be renamed, so it is
+    // cleared out of the way before the current launcher moves onto it.
+    it("clears a `.previous` a running process still holds before moving the launcher onto it, and the swap goes on", async () => {
+        const held = new Set([launcherPrevious]);
+        const { steps, exec } = scripted({
+            withLauncher: true,
+            vacate: async (path) => void steps.push(held.delete(path) ? `set aside ${path}` : `vacate ${path}`),
+            swap: async (from, to) => {
+                steps.push(`swap ${from} → ${to}`);
+                return held.has(to) ? await Promise.reject(new Error(`EPERM: operation not permitted, rename '${from}' -> '${to}'`)) : undefined;
+            },
+        });
+        expect(await upgrade(exec, "1.0.0")).toEqual({ kind: "upgraded", from: "1.0.0", to: TARGET });
+        expect(steps.filter((step) => step.startsWith("set aside") || step.startsWith("vacate") || step.startsWith("swap"))).toEqual([
+            `set aside ${launcherPrevious}`,
+            `swap ${launcherPath} → ${launcherPrevious}`,
+            `swap ${launcherStaged} → ${launcherPath}`,
+            `vacate ${previous}`,
+            `swap ${agentPath} → ${previous}`,
+            `swap ${staged} → ${agentPath}`,
+        ]);
+    });
+
+    it("puts the launcher back when the agent's own piece is refused after it, and restarts nothing", async () => {
+        const { steps, exec } = scripted({
+            withLauncher: true,
+            vacate: async (path) =>
+                path === previous
+                    ? await Promise.reject(new Error(`EPERM: operation not permitted, rename '${previous}'`))
+                    : void steps.push(`vacate ${path}`),
+        });
+        const outcome = await upgrade(exec, "1.0.0");
+        expect(outcome.kind === "failed" && outcome.reason).toContain("nothing was changed");
+        expect(steps.slice(-2)).toEqual([`swap ${launcherPath} → ${launcherStaged}`, `swap ${launcherPrevious} → ${launcherPath}`]);
+        expect(steps).not.toContain(`swap ${agentPath} → ${previous}`);
     });
 
     it("touches neither when either download fails", async () => {

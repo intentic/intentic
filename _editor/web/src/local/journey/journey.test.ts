@@ -31,7 +31,7 @@ describe(`a folder's way to an agent`, () => {
         const before = journeyOf(facts(undefined, { signedIn: false, withSignIn: true }));
         expect(before.map((each) => [each.title, each.state, each.note])).toEqual([
             [`Sign in`, `current`, `Opens your browser`],
-            [`Make this folder's sandbox`, `todo`, `A sandbox of its own, on this computer`],
+            [`Create its sandbox`, `todo`, `On this computer`],
             [`Copy shop in`, `todo`, `Your folder stays where it is`],
         ]);
         // In the browser: the sign-in is under way, finished there.
@@ -48,7 +48,7 @@ describe(`a folder's way to an agent`, () => {
     it(`leaves the sign-in out for a reader who was signed in already`, () => {
         const creating = setupAt({ state: `creating`, phase: undefined, step: undefined, percent: 30, left: undefined });
         expect(standings(facts(creating))).toEqual([`sandbox:running`, `copy:todo`]);
-        expect(journeyOf(facts(creating))[0]?.note).toBe(`Making it, 30%`);
+        expect(journeyOf(facts(creating))[0]?.note).toBe(`30%`);
     });
 
     it(`says a folder waiting behind another folder's setup is next`, () => {

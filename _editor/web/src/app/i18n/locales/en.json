@@ -4984,12 +4984,12 @@
         },
         "project": {
             "dialogTitle": "Work on {name} with an agent",
-            "lede": "It gets a sandbox of its own on this computer, with its copy in it, where agents work on it. Nothing here changes until you bring their work back.",
-            "files": "{count} file to copy | {count} files to copy",
-            "moreFiles": "More than {count} files to copy",
-            "weight": "{files}, {size}",
+            "lede": "Agents work on a copy in a sandbox on this computer. Your folder changes only when you accept their work.",
+            "files": "{count} file | {count} files",
+            "moreFiles": "More than {count} files",
+            "weight": "{files} · {size}",
             "staysHere": "Not copied: .git, node_modules, build output and .env files. They stay on this computer.",
-            "large": "That's a lot to copy, so the first copy takes a while.",
+            "large": "A big folder, so the first copy takes a while.",
             "refusedTitle": "This folder can't have a sandbox",
             "documentTitle": "Open the folder first",
             "document": "A sandbox works on a whole folder. Open the folder this document is in, then ask again from there.",
@@ -5004,8 +5004,7 @@
                 "around": "This folder holds {other}, which already has a sandbox of its own."
             },
             "caution": {
-                "synced": "{service} already syncs this folder. Two syncs on one folder can undo each other's changes.",
-                "away": "This folder is on a network or removable drive, so copying it is slower and pauses while the drive is away."
+                "synced": "{service} already syncs this folder. Two syncs on one folder can undo each other's changes."
             },
             "stage": {
                 "plan": "Drawing up the plans",
@@ -5028,11 +5027,11 @@
                 "inBrowser": "Finish in your browser"
             },
             "sandbox": {
-                "title": "Make this folder's sandbox",
-                "once": "A sandbox of its own, on this computer",
+                "title": "Create its sandbox",
+                "once": "On this computer",
                 "signedIn": "Getting ready…",
                 "behind": "Next, after another folder's",
-                "creating": "Making it, {percent}%",
+                "creating": "{percent}%",
                 "interrupted": "Picking up where it left off",
                 "needsDocker": {
                     "notInstalled": "Needs Docker",
@@ -5049,16 +5048,15 @@
             "copy": {
                 "title": "Copy {name} in",
                 "stays": "Your folder stays where it is",
-                "copying": "Copying. Agents can start once it's in",
                 "paused": "Paused",
                 "failed": "Isn't syncing"
             }
         },
         "setup": {
             "signingIn": "Finish signing in in your browser",
-            "signingInDetail": "Intentic carries on by itself once you've signed in.",
+            "signingInDetail": "This page carries on once you're signed in.",
             "signInFirst": "Sign in to continue",
-            "signInFirstDetail": "Intentic makes {name}'s sandbox right after you sign in. Signing in opens your browser.",
+            "signInFirstDetail": "Signing in opens your browser. {name}'s sandbox is made right after.",
             "signedIn": "You're signed in",
             "signedInDetail": "Getting {name}'s sandbox ready…",
             "queued": "Getting {name}'s sandbox ready",
@@ -5077,7 +5075,7 @@
             },
             "creating": "Making {name}'s sandbox",
             "interrupted": "Picking up {name}'s sandbox",
-            "interruptedDetail": "Intentic closed while it was being made, so it's carrying on where it left off.",
+            "interruptedDetail": "Intentic closed while making it, so it's picking up where it left off.",
             "waiting": "{name}'s sandbox is waiting",
             "waitingDetail": {
                 "consent": "This PC needs setting up for agents first. Set it up in Devices, and the sandbox follows.",
@@ -5088,8 +5086,16 @@
             "failed": "{name}'s sandbox wasn't made",
             "noSync": "{name} isn't syncing to its sandbox",
             "copying": "Copying {name} into its sandbox",
-            "copyingDetail": "Agents can start once the first copy is in. Changes you make here keep going over.",
-            "preparing": "Getting the sandbox ready for this folder…",
+            "copyingDetail": "Agents can start as soon as it's in.",
+            "copy": {
+                "connecting": "Connecting to the sandbox",
+                "counting": "Counting files",
+                "comparing": "Comparing files",
+                "files": "{done} of {total} file | {done} of {total} files",
+                "copying": "Copying files",
+                "placing": "Putting files in place",
+                "bytes": "{done} of {total}"
+            },
             "paused": "Copying {name} is paused",
             "pausedDetail": "Open the sandbox's Devices page to resume file syncing.",
             "heldLowDisk": "The drive this folder is on is nearly full. Copying carries on by itself once there's room.",
@@ -5097,7 +5103,7 @@
             "heldUnreachable": "Its sandbox hasn't answered for an hour. Copying carries on by itself once it does.",
             "heldAway": "Its sandbox isn't running on this computer right now. Copying carries on once it's back.",
             "ready": "{name}'s sandbox is ready",
-            "readyDetail": "When you accept an agent's work, it comes back into this folder by itself. A file you changed too is left for you to look at.",
+            "readyDetail": "Work you accept comes back into this folder by itself.",
             "button": {
                 "waiting": "Making this folder's sandbox…",
                 "waitingPercent": "Making this folder's sandbox ({percent}%)",
@@ -5133,7 +5139,6 @@
         },
         "sandboxSetup": {
             "tile": "{name}'s sandbox",
-            "eyebrow": "New sandbox · {name}",
             "looking": "Looking at {name}…",
             "notNow": "Not now",
             "stepsHeading": "Steps",
@@ -5147,7 +5152,7 @@
             "account": "Account",
             "signedIn": "Signed in",
             "notSignedIn": "Not signed in yet",
-            "carriesOn": "This keeps going while you work. Go back to your files whenever you like: the sandbox's tile on the left shows how far it is.",
+            "carriesOn": "This keeps going in the background. The tile on the left shows how far it is.",
             "backToFiles": "Back to files",
             "left": "about {left} left",
             "almostDone": "almost done"

@@ -199,6 +199,9 @@ pub struct Record {
     /// While it is paused, why the agent holds its file sync still (`heldBy`, the agent's holds.ts), owner's first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub held_by: Vec<String>,
+    /// How far the first copy is, as the agent counts it off Mutagen (its pairing's `copy`); none from an older agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy: Option<CopyMeasure>,
     /// Its first copy's session has been seen running ([`copy_seen`]).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub ran: bool,
@@ -209,6 +212,23 @@ pub struct Record {
     /// a failure never takes it off the account.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub announced: bool,
+}
+
+/// How far a first copy is, in Mutagen's counts as the machine agent reports them (the contract's `DeviceCopySchema`):
+/// the folder's files and bytes, and of the pass the sandbox stages, how many files it has and how many bytes crossed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopyMeasure {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staged_files: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staging_files: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staged_bytes: Option<u64>,
 }
 
 /* WHAT TO DO NEXT — the supervisor's decision for one folder, a plain function of its record and what was found. */
@@ -507,6 +527,7 @@ pub fn copy_seen(record: &Record, pairing: &serde_json::Value) -> Option<Record>
             },
             status: Some(said.to_string()),
             held_by: Vec::new(),
+            copy: serde_json::from_value(pairing["copy"].clone()).ok(),
             ran: true,
             ..record.clone()
         });
@@ -530,7 +551,7 @@ pub fn copy_seen(record: &Record, pairing: &serde_json::Value) -> Option<Record>
 /// What the card says when a setup finished and the folder's sync never started.
 pub fn no_sync(name: &str) -> String {
     format!(
-        "{name}'s sandbox is set up, but this folder isn't syncing to it. Open the sandbox: its Devices page says why."
+        "{name}'s sandbox works, but this folder isn't syncing to it. Its Devices page says why."
     )
 }
 
@@ -1281,16 +1302,25 @@ fn create(app: &AppHandle, path: &str, consent: bool) {
         Ok(ended) => {
             let standing = outcome(ended.success, ended.code, &progress);
             clock_out(app, &clock, step_outcome(&standing, ended.code));
-            if standing == Standing::Copying {
+            let made = standing == Standing::Copying;
+            if made {
                 finished(app, &sandbox_id, slug.as_deref(), &name);
-            }
-            if matches!(standing, Standing::Failed { .. }) {
+            } else if matches!(standing, Standing::Failed { .. }) {
                 discard_unannounced(app, &window, path);
             }
+            // Made, and the run said the folder's sync did not finish: no pairing is coming, so the card says so now
+            // rather than after [`COPY_SILENCE`] of a copy that never started.
+            let standing = if made && progress.sync_unfinished {
+                Standing::Failed {
+                    reason: no_sync(&record.name),
+                }
+            } else {
+                standing
+            };
             update(app, path, |record| {
                 record.log_path = ended.log.clone();
                 record.requirements.clone_from(&progress.requirements);
-                if standing == Standing::Copying {
+                if made {
                     record.made = true;
                     record.made_at = Some(now_ms());
                     record.consented = false;
@@ -1699,6 +1729,7 @@ fn follow_copies(app: &AppHandle, report: Option<&serde_json::Value>) {
                 held.standing = seen.standing.clone();
                 held.status = seen.status.clone();
                 held.held_by = seen.held_by.clone();
+                held.copy = seen.copy.clone();
                 held.ran = seen.ran;
             }
         });
@@ -2151,6 +2182,27 @@ mod tests {
         );
         // Nothing said yet: nothing to change.
         assert_eq!(copy_seen(&copying, &serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn a_first_copy_carries_the_agents_count_of_it_and_none_from_an_older_agent() {
+        let copying = made(Standing::Copying);
+        let counted = serde_json::json!({
+            "mutagenStatus": "staging-beta",
+            "copy": { "files": 328, "bytes": 3145728, "stagedFiles": 142, "stagingFiles": 328, "stagedBytes": 1200000 }
+        });
+        assert_eq!(
+            copy_seen(&copying, &counted).unwrap().copy,
+            Some(CopyMeasure {
+                files: Some(328),
+                bytes: Some(3_145_728),
+                staged_files: Some(142),
+                staging_files: Some(328),
+                staged_bytes: Some(1_200_000),
+            })
+        );
+        let older = serde_json::json!({ "mutagenStatus": "scanning" });
+        assert_eq!(copy_seen(&copying, &older).unwrap().copy, None);
     }
 
     #[test]

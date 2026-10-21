@@ -42,6 +42,20 @@ export const clearableOnDevice = (conflict: DeviceConflict): boolean =>
 export const DeviceSyncHoldSchema = z.enum(["owner", "gone", "container-missing", "container-trashed", "swap", "unreachable", "low-disk", "transfer"]);
 export type DeviceSyncHold = z.infer<typeof DeviceSyncHoldSchema>;
 
+// HOW FAR A FOLDER'S COPY IS (2026-10-21), in Mutagen's own counts, so nothing walks the folder a second time to say
+// it: what the sending side's last scan holds (`files`, `bytes`, ignored paths left out as the sync leaves them), and
+// while the receiving side stages a pass, how many of that pass's files it has (`stagedFiles` of `stagingFiles`) and
+// how many bytes have crossed (`stagedBytes`). A folder's first copy is one such pass over everything. Each is absent
+// until Mutagen has said it; the whole is absent from an agent older than it, and from a pairing with no session.
+export const DeviceCopySchema = z.object({
+    files: z.number().int().nonnegative().optional(),
+    bytes: z.number().nonnegative().optional(),
+    stagedFiles: z.number().int().nonnegative().optional(),
+    stagingFiles: z.number().int().nonnegative().optional(),
+    stagedBytes: z.number().nonnegative().optional(),
+});
+export type DeviceCopy = z.infer<typeof DeviceCopySchema>;
+
 // The drive reading that paused a pairing for want of room: when (epoch ms), and how much was free of how much.
 export const DeviceLowDiskSchema = z.object({
     since: z.number(),

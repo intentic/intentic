@@ -24,6 +24,7 @@ import type {
     SetupArgs,
     UpdateStage,
 } from "../src/desktop";
+import { followCopy } from "./devCopy";
 import { keyringVerb } from "./devKeyring";
 import { CHECK_CANT_RUN, CHECK_NEEDS_SETUP, CHECK_READY, CHECK_UNKNOWN } from "./devOnboarding";
 
@@ -304,17 +305,13 @@ const runFolderSetup = async (path: string, consent = false): Promise<void> => {
             return;
         }
     }
-    await change(path, { state: `copying`, made: true, hostname: `sandbox-5a1e.sbx.intentic.dev` });
+    await change(path, { state: `copying`, made: true, madeAt: Date.now(), hostname: `sandbox-5a1e.sbx.intentic.dev` });
     if (projectCaseOf() === `fail`) {
         await pause(3000);
-        await change(path, { state: `failed`, reason: `shop's sandbox is set up, but this folder isn't syncing to it.` });
+        await change(path, { state: `failed`, reason: `shop's sandbox works, but this folder isn't syncing to it. Its Devices page says why.` });
         return;
     }
-    await change(path, { state: `copying`, status: `scanning` });
-    await pause(2000);
-    await change(path, { state: `copying`, status: `staging-beta` });
-    await pause(3000);
-    await change(path, { state: `ready`, status: `watching` });
+    await followCopy(path, change);
 };
 
 // A sign-in back from the browser (auth.rs `complete`): every folder waiting on it signed in, then, once the session is read, made.

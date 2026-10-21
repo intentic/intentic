@@ -1,7 +1,7 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
 import { PortNumberSchema } from "./device-commands.js";
-import { DeviceBridgeHoldSchema, DeviceConflictSchema, DeviceLowDiskSchema } from "./device-folder.js";
+import { DeviceBridgeHoldSchema, DeviceConflictSchema, DeviceCopySchema, DeviceLowDiskSchema } from "./device-folder.js";
 import { parseHostConnection, type DeviceFacts, DeviceFactsSchema, MachineIdentitySchema, MachineIdSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
 import { RollbackTargetSchema, UpdateOutcomeSchema } from "./updates.js";
 import { DEV_VERSION } from "../state/versions.js";
@@ -249,15 +249,15 @@ export const DevicePairingSchema = z.object({
     remoteDir: z.string().optional(),
     // Whether landed work in this project folder is delivered to `localDir` by itself (`deliverProject`). A project
     // sandbox's folder says "auto"; absent means Bring back by hand, as before. (2026-10-21) The folderless
-    // `projectsHost` pairing of the desktop app's one sandbox per computer went with that sandbox; an older agent's report
-    // that still carries it parses, the key dropped.
+    // `projectsHost` pairing of the one sandbox per computer went with it; an older report carrying it parses, key dropped.
     deliver: z.enum(["auto", "off"]).optional(),
     // (2026-10-20) The slug this machine's ic knows the sandbox by: how the desktop app starts or forgets a folder's sandbox.
     slug: z.string().optional(),
     // Machine-owned switch (agent's own `sync mirror off`); absent reads as "on", not merely unknown.
     mirroring: z.enum(["on", "off"]).optional(),
-    // Mutagen's own status word, kept verbatim rather than reduced to a traffic light.
+    // Mutagen's own status word, kept verbatim rather than reduced to a traffic light, and how far its copy is.
     mutagenStatus: z.string().optional(),
+    copy: DeviceCopySchema.optional(),
     // Whole conflict count, including any Mutagen's own state truncates (`excludedConflicts`).
     conflicts: z.number().int().nonnegative().optional(),
     // Conflicted paths, capped at `CONFLICT_PATHS_MAX`; `conflicts` above is the true, uncapped count.
