@@ -38,6 +38,10 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   beside its button, sent to the app as `intentic://setup-stop` (the app stops the run, or gives up a setup still
   waiting on the PC); a press on a machine has no stop, since the machine's flow takes none, which is why choosing it
   is a separate step from starting it.
+- **What a press on a machine shows.** The machine runs `ic sandbox connect` and streams its output back. The page
+  reads those lines with the engine the desktop app reads its own install with (sandbox-run's `setup-progress`), in
+  `progress/`, and draws the run with `<StagedProgress>`, the card every long run on a machine uses: the steps, a bar
+  sized by them, the time left, and the raw output behind "Show log", which opens by itself when the run fails.
 
 ## Key files
 
@@ -46,6 +50,7 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
 - [flow/useSetupArrival.ts](flow/useSetupArrival.ts) — reads the offers and the row, decides the arrival and takes it.
 - [flow/machineLadder.ts](flow/machineLadder.ts) — the picker's rungs, and which of them a project may have.
 - [flow/useSetupOnMachine.ts](flow/useSetupOnMachine.ts) — the "Runs on" pick and the press on a connected machine.
+- [progress/setupRunProgress.ts](progress/setupRunProgress.ts) — that press's output read as steps, in this page's words.
 - [flow/useHostedLane.ts](flow/useHostedLane.ts) — the machine of ours on the row: provision, wait, restart, hand back.
 - [hostedProject.ts](hostedProject.ts) — the hand-over of a hosted project's folder to the desktop app.
 - [desktopRun.ts](desktopRun.ts) — the desktop app's install as its reports tell it: how long each kind of app may go

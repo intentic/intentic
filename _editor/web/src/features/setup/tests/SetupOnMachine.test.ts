@@ -54,8 +54,29 @@ it(`stands down while something else is on its way to a machine for this row`, a
     expect(el.querySelector(`button`)?.hasAttribute(`disabled`)).toBe(true);
 });
 
-it(`shows what the machine prints while it runs`, async () => {
-    const { el } = await mount({ busy: true, lines: [`pulling the sandbox image`] });
-    expect(el.textContent).toContain(`pulling the sandbox image`);
+// What a Windows PC on the Intentic engine printed (2026-10-21), which the page used to show line for line.
+const RUN = [
+    `intentic: [claiming-code] redeeming the setup code…`,
+    `intentic: [pulling-image] pulling sandbox image ghcr.io/intentic/sandbox:stable (first run can take a minute)…`,
+    `error getting credentials - err: exec: "docker-credential-desktop.exe": executable file not found in $PATH, out: \`\``,
+    `intentic: [starting-sandbox] starting sandbox…`,
+    `intentic: [waiting-health] waiting for the sandbox daemon to come up…`,
+];
+
+it(`draws what the machine is doing as the setup's steps, with its output one press away`, async () => {
+    const { el } = await mount({ busy: true, lines: RUN });
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Setting it up on omen`);
+    expect(text).toContain(`Download the sandbox image`);
+    expect(text).toContain(`Wait for it to come up`);
+    // The running step says what ic says it is doing; the rest of the output stays behind "Show log".
+    expect(text).toContain(`waiting for the sandbox daemon to come up…`);
+    expect(text).not.toContain(`docker-credential-desktop`);
+    expect(text).toContain(`Show log`);
     expect(el.querySelector(`button`)?.hasAttribute(`disabled`)).toBe(true);
+});
+
+it(`draws nothing under the button before a press`, async () => {
+    const { el } = await mount();
+    expect(el.textContent).not.toContain(`Show log`);
 });

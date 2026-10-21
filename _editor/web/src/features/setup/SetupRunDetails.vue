@@ -25,27 +25,15 @@ const { cleanup, downloads = true } = defineProps<{ cleanup: string; downloads?:
         <p class="text-sm font-medium text-content">{{ t(`setup.setupRunDetails.whatDoes`) }}</p>
         <!-- ONE CLAUSE A LINE. -->
         <ul class="flex flex-col gap-2 text-xs leading-relaxed text-muted">
+            <!-- No engine named and no "install it yourself" link: the command installs Docker, or on Windows Intentic's own
+                 engine, by itself after asking, so the reader's question is whether it changes their system, not which runtime. -->
             <li class="flex items-start gap-2">
                 <Icon name="box" class="shrink-0 text-link" />
-                <span class="min-w-0 flex flex-col gap-1">
-                    <span>{{ t(`setup.setupRunDetails.startsSandboxIn`) }} <span class="text-content">Docker</span></span>
-                    <a
-                        href="https://docs.docker.com/get-docker/"
-                        target="_blank"
-                        rel="noreferrer"
-                        class="inline-flex items-center gap-1 text-link hover:underline"
-                    >
-                        {{ t(`setup.setupRunDetails.installDockerYourself`) }} <Icon name="external-link" />
-                    </a>
-                </span>
+                <span class="min-w-0">{{ t(`setup.setupRunDetails.installsMissing`) }}</span>
             </li>
             <li class="flex items-start gap-2">
                 <Icon name="cloud" class="shrink-0 text-link" />
-                <!-- The fabric changed under this line and the line did not: it named Cloudflare long after the box stopped dialling one. -->
-                <span class="min-w-0"
-                    >{{ t(`setup.setupRunDetails.dials`) }} <span class="text-content">{{ t(`setup.setupRunDetails.out`) }}</span>
-                    {{ t(`setup.setupRunDetails.toReachBrowserNo`) }}</span
-                >
+                <span class="min-w-0">{{ t(`setup.setupRunDetails.connectsOut`) }}</span>
             </li>
         </ul>
 

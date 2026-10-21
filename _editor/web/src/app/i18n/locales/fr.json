@@ -5535,14 +5535,34 @@
             "waitingOnInstaller": "En attente de l'installateur."
         },
         "setupRunDetails": {
-            "dials": "Réglages",
-            "installDockerYourself": "Installer Docker moi-même",
-            "out": "sortant",
+            "connectsOut": "Se connecte vers l'extérieur pour joindre votre navigateur, sans ouvrir de port entrant",
+            "installsMissing": "Installe ce dont votre sandbox a besoin et qui manque sur cet ordinateur, en demandant d'abord",
             "removesAll": "Le retire à nouveau. Il demande quelle sandbox, et la garde récupérable pendant 7 jours.",
-            "startsSandboxIn": "Démarre votre sandbox dans",
-            "toReachBrowserNo": "pour joindre votre navigateur, sans port entrant",
             "useDesktopApp": "Ou utilisez l'application de bureau",
             "whatDoes": "Ce que cela fait"
+        },
+        "setupRunProgress": {
+            "aboutMinutes": "environ {count} minute restante | environ {count} minutes restantes",
+            "doneOn": "Votre sandbox tourne sur {machine}",
+            "downloadedOf": "{done} sur {total} téléchargés",
+            "hideLog": "Masquer le journal",
+            "lessThanMinute": "moins d'une minute restante",
+            "loadingImage": "Chargement de l'image…",
+            "outputOn": "S'exécute sur {machine} : cela continue même si vous quittez cette page.",
+            "showLog": "Afficher le journal",
+            "step": {
+                "checkingDocker": "Vérifier qu'il peut faire tourner des sandboxes",
+                "claimingCode": "Utiliser le code de configuration",
+                "connectingMachine": "Connecter l'ordinateur",
+                "desktopSync": "Configurer la synchronisation du dossier",
+                "fetchingIc": "Récupérer l'installateur",
+                "installingDocker": "Installer ce dont les sandboxes ont besoin",
+                "preflight": "Vérifier l'ordinateur",
+                "pullingImage": "Télécharger l'image de la sandbox",
+                "startingSandbox": "Démarrer la sandbox",
+                "verifying": "Vérifier qu'elle répond",
+                "waitingHealth": "Attendre qu'elle soit prête"
+            }
         },
         "setupSyncOption": {
             "alsoSyncLocalFolder": "Synchroniser aussi un dossier local",

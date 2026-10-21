@@ -44,6 +44,12 @@ flowchart LR
   name that is not a sandbox's), off a daemon's address (`slugOfDaemonUrl`, guarded and lowercased, undefined rather
   than a throw), and the 12-hex id off a connect token through Web Crypto (`sandboxIdOfToken`, the browser's twin of
   the contract's `sandboxIdFromToken`). It imports nothing, so the editor takes it without the run emitter.
+- `./setup-progress` reads a sandbox's setup off what `ic sandbox connect` prints: the plan of phases weighed in
+  seconds (`setupSteps`), the `intentic: [<phase>]` markers that move a cursor down it, ic's byte readings and docker's
+  layer lines for the pull, and the bar and the time left they make (`advance`, `tick`, `remainingMsOf`). It holds no
+  words, so the desktop app's install screen (its `setupPlan.ts`) and the web's "Set it up on <machine>" press
+  (`features/setup/progress/`) each name the steps in their own catalog and draw the same run the same way. Its tables
+  are held to `setup-progress.fixture.json`, with ic's `ui.rs` and the desktop app's `setup_progress.rs`.
 - `flyMachineConfig` declares no Fly service or check: a hosted machine is reached only down the tunnel its daemon
   dials to the edge, like every other sandbox, so nothing on Fly routes to it.
 
@@ -53,6 +59,7 @@ flowchart LR
 - [src/fly.ts](src/fly.ts) — the hosted flavour: `flyMachineConfig` and the single-volume layout.
 - [src/quote.ts](src/quote.ts) — quoters to compose outward, one per parser a value crosses.
 - [src/slug.ts](src/slug.ts) — a sandbox's slug and id read back off a container name, an address or a token.
+- [src/setup-progress.ts](src/setup-progress.ts) — a setup's progress read off its output, and the record it is held to.
 - [src/index.test.ts](src/index.test.ts) — the emitted argv and directive handling, by example.
 
 GPU preflight uses `gpuProbeArgv` to exercise an actual Docker `--gpus=all` device request with an image already on the host. `gpuProbePassed` requires a physical GPU listing; a registered NVIDIA runtime or CDI setting alone is insufficient. Fly machines stamp GPU access as unsupported.

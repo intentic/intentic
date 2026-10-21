@@ -50,6 +50,17 @@
                 "default": "./dist/quote.js"
             }
         },
+        "./setup-progress": {
+            "types": "./dist/setup-progress.d.ts",
+            "import": {
+                "@intentic/src": "./src/setup-progress.ts",
+                "default": "./dist/setup-progress.js"
+            },
+            "require": {
+                "@intentic/src": "./src/setup-progress.ts",
+                "default": "./dist/setup-progress.js"
+            }
+        },
         "./slug": {
             "types": "./dist/slug.d.ts",
             "import": {

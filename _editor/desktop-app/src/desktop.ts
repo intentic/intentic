@@ -596,20 +596,9 @@ export const onUpdate = (handler: (stage: UpdateStage) => void): Promise<Unliste
 // a failed install comes back as a message for the screen, and a failed one also turns the stage `manual`.
 export const updateInstall = (): Promise<void> => invoke(`update_install`);
 
-// Format: `intentic: [<phase>] <sentence>`; unphased output is detail under the running step, not a step itself.
-const STEP = /^intentic: \[([a-z-]+)\] (.*)$/;
-
-export interface Step {
-    /** The phase id, the same vocabulary the platform's setup report uses. */
-    readonly phase: string;
-    /** What the script said it was doing, for the reader watching one step. */
-    readonly message: string;
-}
-
-export const parseStep = (line: string): Step | undefined => {
-    const found = STEP.exec(line);
-    return found === null ? undefined : { phase: found[1] ?? ``, message: (found[2] ?? ``).trim() };
-};
+// Format: `intentic: [<phase>] <sentence>`; unphased output is detail under the running step, not a step itself. The
+// reader is sandbox-run's setup-progress.ts, which the web's press on a connected machine reads the same lines with.
+export { parseStep, type StepLine as Step } from "@intentic/sandbox-run/setup-progress";
 
 // One line per unmet requirement, emitted only when piped; `action` drives the UI, separate from phase lines.
 const REQUIREMENT = /^intentic-requirement: (\{.*\})$/;

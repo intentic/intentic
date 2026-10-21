@@ -1318,6 +1318,9 @@ importers:
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract
+      '@intentic/sandbox-run':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-run
       '@intentic/ui':
         specifier: workspace:*
         version: link:../ui

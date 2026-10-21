@@ -10737,14 +10737,34 @@
             "startingOn": "Starting on {machine}…"
         },
         "setupRunDetails": {
-            "dials": "Dials",
-            "installDockerYourself": "Install Docker yourself",
-            "out": "out",
+            "connectsOut": "Connects outward to reach your browser, so it opens no inbound ports",
+            "installsMissing": "Installs what this computer is missing to run your sandbox, and asks first",
             "removesAll": "Removes it again. It asks which sandbox, and keeps it recoverable for 7 days.",
-            "startsSandboxIn": "Starts your sandbox in",
-            "toReachBrowserNo": "to reach your browser, no inbound ports",
             "useDesktopApp": "Or use the desktop app",
             "whatDoes": "What this does"
+        },
+        "setupRunProgress": {
+            "aboutMinutes": "about {count} minute left | about {count} minutes left",
+            "doneOn": "Your sandbox is up on {machine}",
+            "downloadedOf": "{done} of {total} downloaded",
+            "hideLog": "Hide log",
+            "lessThanMinute": "less than a minute left",
+            "loadingImage": "Loading the image…",
+            "outputOn": "Running on {machine}: it keeps going even if you leave this page.",
+            "showLog": "Show log",
+            "step": {
+                "checkingDocker": "Check it can run sandboxes",
+                "claimingCode": "Redeem the setup code",
+                "connectingMachine": "Connect the computer",
+                "desktopSync": "Set up folder sync",
+                "fetchingIc": "Fetch the installer",
+                "installingDocker": "Set up what sandboxes need",
+                "preflight": "Check the computer",
+                "pullingImage": "Download the sandbox image",
+                "startingSandbox": "Start the sandbox",
+                "verifying": "Check it answers",
+                "waitingHealth": "Wait for it to come up"
+            }
         },
         "setupSyncOption": {
             "alsoSyncLocalFolder": "Also sync a local folder",

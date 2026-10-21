@@ -5577,14 +5577,34 @@
             "waitingOnInstaller": "Esperando al instalador."
         },
         "setupRunDetails": {
-            "dials": "Mandos",
-            "installDockerYourself": "Instalar Docker yo mismo",
-            "out": "fuera",
+            "connectsOut": "Se conecta hacia fuera para llegar a tu navegador, sin abrir puertos de entrada",
+            "installsMissing": "Instala lo que tu sandbox necesite y falte en este ordenador, y pregunta antes",
             "removesAll": "Lo vuelve a quitar. Pregunta qué sandbox y la deja recuperable durante 7 días.",
-            "startsSandboxIn": "Inicia tu sandbox en",
-            "toReachBrowserNo": "para llegar a tu navegador, sin puertos de entrada",
             "useDesktopApp": "O usa la aplicación de escritorio",
             "whatDoes": "Qué hace esto"
+        },
+        "setupRunProgress": {
+            "aboutMinutes": "falta alrededor de {count} minuto | faltan alrededor de {count} minutos",
+            "doneOn": "Tu sandbox está en marcha en {machine}",
+            "downloadedOf": "{done} de {total} descargados",
+            "hideLog": "Ocultar registro",
+            "lessThanMinute": "falta menos de un minuto",
+            "loadingImage": "Cargando la imagen…",
+            "outputOn": "Se ejecuta en {machine}: sigue aunque salgas de esta página.",
+            "showLog": "Ver registro",
+            "step": {
+                "checkingDocker": "Comprobar que puede ejecutar sandboxes",
+                "claimingCode": "Canjear el código de configuración",
+                "connectingMachine": "Conectar el ordenador",
+                "desktopSync": "Configurar la sincronización de carpetas",
+                "fetchingIc": "Descargar el instalador",
+                "installingDocker": "Preparar lo que necesitan las sandboxes",
+                "preflight": "Comprobar el ordenador",
+                "pullingImage": "Descargar la imagen de la sandbox",
+                "startingSandbox": "Iniciar la sandbox",
+                "verifying": "Comprobar que responde",
+                "waitingHealth": "Esperar a que arranque"
+            }
         },
         "setupSyncOption": {
             "alsoSyncLocalFolder": "Sincronizar también una carpeta local",

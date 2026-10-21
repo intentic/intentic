@@ -43,6 +43,13 @@ it(`offers no installers inside the desktop app, and explains the same command`,
     const text = render();
     expect(text).not.toContain(`Or use the desktop app`);
     expect(text).not.toContain(`Windows`);
-    expect(text).toContain(`Starts your sandbox in`);
+    expect(text).toContain(`Installs what this computer is missing`);
     expect(text).toContain(`Removes it again`);
+});
+
+it(`leaves installing Docker to the command rather than sending the reader off to do it`, () => {
+    version.value = undefined;
+    const text = render();
+    expect(text).not.toContain(`Install Docker yourself`);
+    expect(text).toContain(`asks first`);
 });
