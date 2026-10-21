@@ -2368,6 +2368,8 @@ pub fn handle_link(app: &AppHandle, link: &str, source: Source) {
         }) => {
             let asked_in = crate::auth::take_asked_in();
             show_folder_that_asked(app, asked_in.as_deref());
+            // The page redeemed the session just before saying so: a folder waiting on the sign-in finds it now.
+            crate::folder_setup::kick();
         }
         // The setup page took this sandbox to a machine of ours, or its reader called the install off there: the main
         // window stops the install it runs for it as the card's own Stop does, or gives up the setup waiting on this PC

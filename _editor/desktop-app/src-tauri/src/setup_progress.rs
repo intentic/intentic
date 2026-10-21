@@ -185,6 +185,23 @@ impl Progress {
         ((share * 100.0) as u8).min(99)
     }
 
+    /// Roughly how many seconds the run has left, by the plan's weights: everything not behind it yet, the phase under
+    /// way counted by its pull's layers where it has them. The whole plan before the run has said where it is.
+    pub fn seconds_left(&self) -> Option<u32> {
+        let total: u32 = self.plan.iter().map(|(_, weight)| weight).sum();
+        let Some(index) = self.index else {
+            return Some(total);
+        };
+        let behind: u32 = self.plan[..index].iter().map(|(_, weight)| weight).sum();
+        let inside = if self.layers.is_empty() {
+            0.0
+        } else {
+            self.layers.values().sum::<f32>() / self.layers.len() as f32
+        };
+        let done = behind as f32 + self.plan[index].1 as f32 * inside;
+        Some((total as f32 - done).max(0.0).round() as u32)
+    }
+
     /// Why the run stopped, in its own words: a command that said it failed, else the last thing it said on stderr.
     pub fn reason(&self) -> Option<String> {
         self.command_failure
@@ -328,6 +345,26 @@ mod tests {
         );
         assert_eq!(parse_layer("stable: Pulling from intentic/sandbox"), None);
         assert_eq!(parse_layer("a1b2: Pull complete"), None);
+    }
+
+    #[test]
+    fn the_time_left_is_what_the_plan_has_not_run_yet() {
+        // Linux, the image already here: 5 + 15 + 10 + 5 + 2 + 25 + 40 + 46 + 8 + 13 seconds.
+        let mut progress = Progress::new(false, true);
+        assert_eq!(progress.seconds_left(), Some(169));
+        progress.hear(
+            Stream::Stdout,
+            "intentic: [checking-docker] Docker is running",
+        );
+        assert_eq!(progress.seconds_left(), Some(169));
+        progress.hear(Stream::Stdout, "intentic: [starting-sandbox] starting");
+        assert_eq!(progress.seconds_left(), Some(25 + 40 + 46 + 8 + 13));
+        // A pull's layers count inside its own step.
+        let mut pulling = Progress::new(false, false);
+        pulling.hear(Stream::Stdout, "intentic: [pulling-image] downloading");
+        let before = pulling.seconds_left().expect("left");
+        pulling.hear(Stream::Stdout, "a1b2c3d4e5f6: Pull complete");
+        assert_eq!(pulling.seconds_left(), Some(before - 240));
     }
 
     #[test]

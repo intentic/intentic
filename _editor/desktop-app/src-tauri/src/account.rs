@@ -369,9 +369,18 @@ pub async fn account_relay(
     ask: RelayAsk,
 ) -> Result<RelayAnswer, String> {
     let (method, path) = checked(&ask)?;
+    // A local window asking who is signed in is the app finding out too, so the folder's dialog and its setup never
+    // say otherwise than the account at the window's foot.
+    let asks_session = path == GET_SESSION;
     let Some((answer, held)) = with_session(&app, &window, method, &path, ask.body).await? else {
+        if asks_session {
+            take_session(&app, &Session::Nobody);
+        }
         return Ok(signed_out(&path));
     };
+    if asks_session {
+        take_session(&app, &session_of(answer.status, &answer.body));
+    }
     if path == SIGN_OUT && (200..300).contains(&answer.status) {
         signed_off(&app, &window, held).await;
     }
@@ -427,6 +436,117 @@ pub async fn platform_get(
         None => Answered::SignedOut,
         Some((answer, _)) => answered(answer.status, &answer.body),
     })
+}
+
+/* WHO IS SIGNED IN, AS THE PLATFORM SAYS IT (2026-10-21): the one answer every part of the app goes by. The roster's
+account (state.rs) used to be only what the workspace's sandbox switcher last announced, and that switcher is drawn
+only once the account has a sandbox. So a reader who had just signed in, with no sandbox yet, was signed in to the
+local window's own account check and signed out to the folder's dialog, the folder's setup and This computer's card.
+The setup asked them to sign in again after every sign-in. Now every session answer the app sees (a local window's
+account check, the folder's dialog, a setup waiting on a sign-in) is taken as the account, so all of them agree. */
+
+/// What a session answer says about who is signed in: someone, nobody, or nothing to go by (the platform out of reach,
+/// a refusal other than 401, an answer that is not a session).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Session {
+    Someone(crate::setup_link::RosterAccount),
+    Nobody,
+    Unknown,
+}
+
+/// Better Auth's answer to `get-session` read as a [`Session`]: `null` or a 401 is nobody, a user with an email is
+/// them. A name is kept trimmed and only when there is one; a picture only over https, as the workspace sends it
+/// (desktop.ts `rosterAccount`). Pure.
+pub fn session_of(status: u16, body: &str) -> Session {
+    if status == 401 {
+        return Session::Nobody;
+    }
+    if !(200..300).contains(&status) {
+        return Session::Unknown;
+    }
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(body) else {
+        return Session::Unknown;
+    };
+    if value.is_null() || (value["user"].is_null() && value["session"].is_null()) {
+        return Session::Nobody;
+    }
+    let user = &value["user"];
+    let Some(email) = user["email"]
+        .as_str()
+        .map(str::trim)
+        .filter(|email| !email.is_empty())
+    else {
+        return Session::Unknown;
+    };
+    let name = user["name"]
+        .as_str()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string);
+    let image = user["image"]
+        .as_str()
+        .filter(|image| image.starts_with("https://"))
+        .map(str::to_string);
+    Session::Someone(crate::setup_link::RosterAccount {
+        email: email.to_string(),
+        name,
+        image,
+    })
+}
+
+/// The roster once `session` is taken as who is signed in. Someone keeps the sandboxes listed when they are the person
+/// the roster already named, or when it named nobody (a folder's own sandbox listed the moment it was made, before the
+/// workspace said who); a different person starts with none of the last one's. Nobody is an empty roster, as a
+/// sign-out leaves it. Unknown changes nothing. Pure.
+pub fn roster_with(
+    roster: crate::setup_link::Roster,
+    session: &Session,
+) -> crate::setup_link::Roster {
+    match session {
+        Session::Unknown => roster,
+        Session::Nobody => crate::setup_link::Roster::default(),
+        Session::Someone(account) => {
+            let same = roster
+                .account
+                .as_ref()
+                .is_none_or(|held| held.email.eq_ignore_ascii_case(&account.email));
+            crate::setup_link::Roster {
+                account: Some(account.clone()),
+                sandboxes: if same { roster.sandboxes } else { Vec::new() },
+            }
+        }
+    }
+}
+
+/// `session` taken as the app's answer to who is signed in: the roster written, and on a change every window told
+/// (`desktop://roster`, as the workspace's own roster is told) and every folder waiting on a sign-in looked at again.
+pub fn take_session(app: &AppHandle, session: &Session) {
+    let state = app.state::<AppState>();
+    let before = state.roster();
+    let after = roster_with(before.clone(), session);
+    if after == before {
+        return;
+    }
+    state.remember_roster(after.clone());
+    let _ = tauri::Emitter::emit(app, "desktop://roster", &after);
+    crate::shell::roster_changed(app);
+    crate::folder_setup::account_changed();
+}
+
+/// Who is signed in, asked of the platform now with the session the store holds, and taken as the app's answer. No
+/// session in the store is nobody, as the platform would say it; the platform out of reach is unknown and changes
+/// nothing.
+pub async fn learn_account(app: &AppHandle, window: &Webview) -> Session {
+    let session = match with_session(app, window, Method::Get, GET_SESSION, None).await {
+        Ok(None) => Session::Nobody,
+        Ok(Some((answer, _))) => session_of(answer.status, &answer.body),
+        Err(error) => {
+            eprintln!("intentic: who is signed in could not be asked: {error}");
+            Session::Unknown
+        }
+    };
+    take_session(app, &session);
+    session
 }
 
 #[cfg(test)]
@@ -628,5 +748,100 @@ mod tests {
             origin_of("http://localhost:5173/x"),
             "http://localhost:5173"
         );
+    }
+
+    /* WHO IS SIGNED IN, AS THE PLATFORM SAYS IT. */
+
+    fn ada() -> crate::setup_link::RosterAccount {
+        crate::setup_link::RosterAccount {
+            email: "ada@example.com".into(),
+            name: Some("Ada".into()),
+            image: None,
+        }
+    }
+
+    fn listed(id: &str) -> crate::setup_link::RosterEntry {
+        crate::setup_link::RosterEntry {
+            id: id.into(),
+            name: id.into(),
+            place: "own".into(),
+            shared: false,
+        }
+    }
+
+    #[test]
+    fn a_session_answer_is_someone_nobody_or_nothing_to_go_by() {
+        let body = r#"{"session":{"id":"s"},"user":{"id":"u","email":" ada@example.com ","name":"  Ada ","image":"http://x/a.png"}}"#;
+        assert_eq!(session_of(200, body), Session::Someone(ada()));
+        let pictured = r#"{"session":{},"user":{"email":"ada@example.com","name":"","image":"https://x/a.png"}}"#;
+        assert_eq!(
+            session_of(200, pictured),
+            Session::Someone(crate::setup_link::RosterAccount {
+                email: "ada@example.com".into(),
+                name: None,
+                image: Some("https://x/a.png".into()),
+            })
+        );
+        assert_eq!(session_of(200, "null"), Session::Nobody);
+        assert_eq!(session_of(200, "{}"), Session::Nobody);
+        assert_eq!(session_of(401, r#"{"message":"no"}"#), Session::Nobody);
+        // The platform in trouble, or an answer that is not a session, says nothing about who is signed in.
+        assert_eq!(session_of(500, "null"), Session::Unknown);
+        assert_eq!(session_of(200, "<html>"), Session::Unknown);
+        assert_eq!(
+            session_of(200, r#"{"session":{},"user":{}}"#),
+            Session::Unknown
+        );
+    }
+
+    #[test]
+    fn the_roster_follows_the_session_and_keeps_only_its_own_sandboxes() {
+        use crate::setup_link::Roster;
+        let announced = Roster {
+            account: Some(ada()),
+            sandboxes: vec![listed("shop")],
+        };
+        // The same person: their sandboxes stay, their name as the platform says it now.
+        let renamed = crate::setup_link::RosterAccount {
+            name: Some("Ada L.".into()),
+            ..ada()
+        };
+        assert_eq!(
+            roster_with(announced.clone(), &Session::Someone(renamed.clone())),
+            Roster {
+                account: Some(renamed),
+                sandboxes: vec![listed("shop")],
+            }
+        );
+        // Nobody named yet, and a folder's own sandbox listed the moment it was made: kept.
+        let unnamed = Roster {
+            account: None,
+            sandboxes: vec![listed("mine")],
+        };
+        assert_eq!(
+            roster_with(unnamed, &Session::Someone(ada())),
+            Roster {
+                account: Some(ada()),
+                sandboxes: vec![listed("mine")],
+            }
+        );
+        // Someone else: none of the last person's sandboxes.
+        let bo = crate::setup_link::RosterAccount {
+            email: "bo@example.com".into(),
+            name: None,
+            image: None,
+        };
+        assert_eq!(
+            roster_with(announced.clone(), &Session::Someone(bo.clone())),
+            Roster {
+                account: Some(bo),
+                sandboxes: Vec::new(),
+            }
+        );
+        assert_eq!(
+            roster_with(announced.clone(), &Session::Nobody),
+            Roster::default()
+        );
+        assert_eq!(roster_with(announced.clone(), &Session::Unknown), announced);
     }
 }

@@ -17,7 +17,6 @@ const Nothing = defineComponent({ render: () => null });
 jest.mock(`../shell/AccountPanel.vue`, () => ({ default: Nothing }));
 jest.mock(`./LocalAccountTile.vue`, () => ({ default: Nothing }));
 jest.mock(`./LocalPlaceSwitcher.vue`, () => ({ default: Nothing }));
-jest.mock(`./LocalProject.vue`, () => ({ default: Nothing }));
 jest.mock(`../shell/rail/RailTile.vue`, () => ({ default: Nothing }));
 jest.mock(`./folderSwitch`, () => ({ takeFolderSwitches: () => () => undefined }));
 jest.mock(`../client/auth/useAccount`, () => ({ useAccount: () => ({ user: ref(null) }) }));

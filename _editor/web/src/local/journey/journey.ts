@@ -1,12 +1,12 @@
 import { t } from "@intentic/ui/i18n";
 import type { LocalFolderSetup } from "../../app/environments/localHost";
 
-// A FOLDER'S WAY TO AN AGENT, AS STEPS: sign in, make the folder's own sandbox, copy the folder in. The dialog that asks
-// (LocalProjectDialog.vue) lists them before the press, and the card in the window's corner (LocalSetupCard.vue) ticks
-// them off as the app goes, so each step is said for what it is and only while it is the one under way. They used to
-// run together: the dialog drew the folder being carried into the house over a button that only signed the reader in,
-// and the card went from "finish signing in" to a copy to "stopped" with nothing saying which step was which
-// (2026-10-18). Pure, so every state's steps are tested by value (journey.test.ts).
+// A FOLDER'S WAY TO AN AGENT, AS STEPS: sign in, make the folder's own sandbox, copy the folder in. The folder's page
+// for it (setup/LocalSandboxSetup.vue) lists them before the press and ticks them off as the app goes, so each step is
+// said for what it is and only while it is the one under way. They used to run together: the ask drew the folder being
+// carried into the house over a button that only signed the reader in, and the progress went from "finish signing in"
+// to a copy to "stopped" with nothing saying which step was which (2026-10-18). Pure, so every state's steps are tested
+// by value (journey.test.ts).
 
 /** How a step stands: done, the reader's next press, under way by itself, waiting on the reader, failed, or not yet. */
 export type JourneyStepState = `done` | `current` | `running` | `attention` | `failed` | `todo`;

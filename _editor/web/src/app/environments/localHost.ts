@@ -291,12 +291,12 @@ export interface LocalRepairHost {
     reset(): Promise<void>;
 }
 
-/* A FOLDER'S WAY TO AN AGENT: "Work on this with an agent" asks the app in the window's own dialog (local/LocalProject.vue),
-   and the folder gets a sandbox of its own, which the app makes on the press (its folder_setup.rs), one setup at a time
-   on this computer, and follows until the folder's first copy is in. Nothing waits on it: a card in the window's corner
-   and the folder's own button say how far it is. A folder that already has a sandbox keeps opening that one. The folder
-   is never named here: the app always means the window's own (its project.rs). (2026-10-21: every folder used to go into
-   one sandbox the app kept for the whole computer.) */
+/* A FOLDER'S WAY TO AN AGENT: "Work on this with an agent" asks the app on the folder's own page for it
+   (local/setup/LocalSandboxSetup.vue), and the folder gets a sandbox of its own, which the app makes on the press (its
+   folder_setup.rs), one setup at a time on this computer, and follows until the folder's first copy is in. Nothing waits
+   on it: the page, its tile on the rail and the folder's own button say how far it is. A folder that already has a
+   sandbox keeps opening that one. The folder is never named here: the app always means the window's own (its
+   project.rs). (2026-10-21: every folder used to go into one sandbox the app kept for the whole computer.) */
 
 /** Why a folder cannot have a sandbox, by kind, drawn in the reader's words (local/projectWords.ts). */
 export type LocalProjectRefusal =
@@ -320,11 +320,18 @@ export type LocalSetupState =
     | { readonly state: `signedOut` | `signedIn` | `copying` | `ready` | `interrupted` }
     | { readonly state: `queued`; readonly behind: string | undefined }
     | { readonly state: `needsDocker`; readonly reason: LocalDockerReason }
-    | { readonly state: `creating`; readonly phase: string | undefined; readonly step: string | undefined; readonly percent: number }
+    | {
+          readonly state: `creating`;
+          readonly phase: string | undefined;
+          readonly step: string | undefined;
+          readonly percent: number;
+          // Roughly how many seconds are left, by the setup's plan; undefined while it is not known.
+          readonly left: number | undefined;
+      }
     | { readonly state: `waiting`; readonly for: `consent` | `restart` | `signOut`; readonly needs: readonly string[] }
     | { readonly state: `failed`; readonly reason: string };
 
-/** This window's folder on its way to its own sandbox, as its card and button draw it. */
+/** This window's folder on its way to its own sandbox, as its page and button draw it. */
 export type LocalFolderSetup = LocalSetupState & {
     /** The folder's name inside its sandbox's /work. */
     readonly name: string;
@@ -336,9 +343,11 @@ export type LocalFolderSetup = LocalSetupState & {
     readonly made: boolean;
     /** Its last setup's transcript can be shown. */
     readonly hasLog: boolean;
+    /** When its last setup started, Unix milliseconds; undefined before one has. */
+    readonly startedAt: number | undefined;
 };
 
-/** What the folder's dialog draws. */
+/** What the folder's page says before the press. */
 export type LocalProjectPreview =
     // The folder has its sandbox already: the press opens it.
     | { readonly kind: `existing` }
@@ -357,14 +366,16 @@ export type LocalProjectPreview =
           // Enough that the first copy is a long upload.
           readonly large: boolean;
           readonly cautions: readonly LocalProjectCaution[];
-          // Someone is signed in: the press makes the sandbox at once, else signs in first.
+          // Someone is signed in, as the platform says now: the press makes the sandbox at once, else signs in first.
           readonly signedIn: boolean;
+          // Roughly how many seconds making the sandbox takes, by the setup's plan (the app's setup_progress.rs).
+          readonly seconds: number;
       };
 
-/** What a press of the dialog's button came to: the folder's own sandbox on its way, or the one it has opened. */
+/** What a press of the page's button came to: the folder's own sandbox on its way, or the one it has opened. */
 export type LocalProjectStart = `started` | `opened`;
 
-/** What the card's buttons ask of the app: sign in, start Docker (on the reader's press, never by itself), try the setup
+/** What the page's buttons ask of the app: sign in, start Docker (on the reader's press, never by itself), try the setup
  * again, go ahead with what this computer needs first, restart or sign out of Windows for it, show the last setup's
  * transcript, put a setup that stopped away. */
 export type LocalSetupAction = `signIn` | `startDocker` | `retry` | `consent` | `restart` | `signOut` | `log` | `dismiss`;

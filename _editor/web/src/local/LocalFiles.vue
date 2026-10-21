@@ -29,8 +29,7 @@ import { useQuietChecks } from "./bring-back/useBringBack";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import LocalFolderMenu from "./LocalFolderMenu.vue";
 import { type LocalChord, localChord } from "./localKeys";
-import { runSetupAction } from "./setupAction";
-import { folderButtonOf } from "./setupCard";
+import { folderButtonOf } from "./setup/setupView";
 import { nameOf } from "./places";
 import { useLocalProject } from "./useLocalProject";
 
@@ -121,11 +120,11 @@ const { rootDragging, onRootDragEnter, onRootDragOver, onRootDragLeave, onRootDr
     accepts: () => face !== undefined && face.file === undefined && supportsRoute(`POST /workspace/upload`),
 });
 
-// THE WAY FROM THIS FOLDER TO AN AGENT: its sandbox, opened once it has one; otherwise asked for in this window's own
-// dialog and made for it while the reader keeps working (LocalProject.vue), the button saying how far it is
-// (setupCard.ts `folderButtonOf`).
+// THE WAY FROM THIS FOLDER TO AN AGENT: its sandbox, opened once it has one; otherwise asked for on the folder's own
+// page for it (setup/LocalSandboxSetup.vue) and made for it while the reader keeps working, the button saying how far it
+// is (setupView.ts `folderButtonOf`).
 const hasSandbox = useFolderSandbox();
-const { setup, signingIn, ask: askForSandbox, fold } = useLocalProject();
+const { setup, signingIn, ask: askForSandbox } = useLocalProject();
 const sandboxButton = computed(() => folderButtonOf({ hasSandbox: hasSandbox.value, setup: setup.value, signingIn: signingIn.value }));
 // What agents changed there, looked for once the folder is in its sandbox (its first copy done), so Bring back appears
 // when there is something to bring back.
@@ -169,17 +168,10 @@ const toSandbox = (): void => {
                 askLocalApp(`sandbox`);
             }
             return;
-        // Under way, with nothing to ask of anyone: its card says how far. Already open, the card flashes rather than
-        // the press going nowhere.
-        case `card`:
-            fold(false);
-            return;
+        // Asked for, or on its way: the folder's page for it, which says how far it is and holds whatever there is to do.
         case `ask`:
-            void askForSandbox();
-            return;
-        // The setup is stopped on the reader: the button carries the card's own next step (setupAction.ts).
-        default:
-            void runSetupAction(press, (path) => void router.push(path));
+        case `view`:
+            askForSandbox((path) => void router.push(path));
     }
 };
 

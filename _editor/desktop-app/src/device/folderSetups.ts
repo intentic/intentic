@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import {
     type FolderSetup,
     folderSetupCheck,
@@ -53,8 +53,13 @@ export const startFolderSetups = (): Promise<void> =>
 export const folderSetupOf = (records: readonly FolderSetup[] | undefined, path: string | undefined): FolderSetup | undefined =>
     path === undefined ? undefined : records?.find((record) => record.path === path);
 
-/** Any folder's sandbox being made right now: the rail's tile spins for it. */
-export const folderSetupRunning = computed(() => (folderSetups.value ?? []).some((record) => record.state === `creating` || record.state === `interrupted`));
+/**
+ * Any folder's sandbox being made right now but the one at `path`: Devices' tile spins for it. The window on that folder
+ * has a tile of its own for it beside Files (the web's local/LocalShell.vue), and two spinning for one setup said nothing
+ * more than one. Pure.
+ */
+export const folderSetupRunningBesides = (records: readonly FolderSetup[] | undefined, path: string | undefined): boolean =>
+    (records ?? []).some((record) => record.path !== path && (record.state === `creating` || record.state === `interrupted`));
 
 // One press, rejecting with the app's sentence, which the card says under it (the shell's contract for every verb).
 const attempt = async (action: () => Promise<void>): Promise<void> => {

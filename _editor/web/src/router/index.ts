@@ -35,6 +35,7 @@ import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../workbench/views/vocabulary";
 import { localFace, sandboxFace } from "../app/environments/local";
 import { localHost } from "../app/environments/localHost";
+import { SANDBOX_SETUP_PATH } from "../local/setup/setupPath";
 import { receiveHandoff } from "../features/chat/drafts/localHandoff";
 import { receiveTaskHandoff } from "../features/chat/drafts/localTaskHandoff";
 import { noteFound } from "../lib/foundOnComputer";
@@ -441,6 +442,18 @@ const localRoutes = (): RouteRecordRaw[] => [
                 meta: { title: () => localFace()?.name ?? t(`shared.files`) },
                 component: asyncView(() => import(`../local/LocalFiles.vue`)),
             },
+            // The folder's way to a sandbox of its own (local/setup/LocalSandboxSetup.vue): its tile is on the rail while the
+            // folder is on its way (LocalShell.vue), and "Work on this with an agent" in Files opens it.
+            ...(localHost().project === undefined
+                ? []
+                : [
+                      {
+                          path: SANDBOX_SETUP_PATH.slice(1),
+                          name: `local-sandbox-setup`,
+                          meta: { title: () => t(`local.sandboxSetup.tile`, { name: localFace()?.name ?? `` }) },
+                          component: asyncView(() => import(`../local/setup/LocalSandboxSetup.vue`)),
+                      } satisfies RouteRecordRaw,
+                  ]),
             // Repair, the agent that runs on this computer outside every sandbox, routed with no tile of its own. (This PC's
             // own first-run setup is the app's This computer view since 2026-10-12, not a route of the shell's.)
             ...(localHost().repair === undefined

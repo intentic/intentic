@@ -214,8 +214,7 @@ const SETUP_STEPS = [
     [`pulling-image`, `Downloading ghcr.io/intentic/sandbox:stable`],
 ] as const;
 
-// A setup's run as the app streams it (scripts.rs `desktop://run`): a step every few seconds, which is what the page's
-// plan moves on.
+// A setup's run as the app streams it (scripts.rs `desktop://run`): a step every few seconds, for the page's plan.
 const runSetup = async (): Promise<void> => {
     await emit(`desktop://run`, { kind: `started`, run: `setup`, log: `${HOME}\\AppData\\Local\\intentic\\setup.log` });
     for (const [phase, said] of SETUP_STEPS) {
@@ -248,7 +247,7 @@ let records: FolderSetup[] = [];
 const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 // The fields a standing carries: the old one's go with it, or a reason or a phase would read as the new one's.
-const STANDING_KEYS: ReadonlySet<string> = new Set([`state`, `phase`, `step`, `percent`, `reason`, `for`, `behind`]);
+const STANDING_KEYS: ReadonlySet<string> = new Set([`state`, `phase`, `step`, `percent`, `left`, `reason`, `for`, `behind`]);
 
 // Every change to one folder's record, written and sent to every window as the app sends it.
 const change = async (path: string, next: Partial<FolderSetup> & FolderStanding): Promise<void> => {
@@ -265,7 +264,7 @@ const change = async (path: string, next: Partial<FolderSetup> & FolderStanding)
 
 const recordOf = (path: string): FolderSetup | undefined => records.find((record) => record.path === path);
 
-// The setup's phases as the scripts print them (the shared setup-progress record's order), with a cached image.
+// The setup's phases as the scripts print them (the shared setup-progress record's order), with a cached image: 169 s.
 const FOLDER_STEPS: readonly (readonly [string, string, number, number])[] = [
     [`checking-docker`, `this PC was found ready moments ago, so it is not checked again.`, 600, 3],
     [`fetching-ic`, `ic 1.345.0 is installed, so nothing is downloaded.`, 400, 6],
@@ -291,9 +290,10 @@ const runFolderSetup = async (path: string, consent = false): Promise<void> => {
         return;
     }
     const held = recordOf(path);
-    await change(path, { state: `creating`, percent: 0, attempt: (held?.attempt ?? 0) + 1, sandboxId: `cm5${held?.name ?? `shop`}`, slug: `sandbox-5a1e` });
+    const begun = { attempt: (held?.attempt ?? 0) + 1, startedAt: Date.now(), sandboxId: `cm5${held?.name ?? `shop`}`, slug: `sandbox-5a1e` };
+    await change(path, { state: `creating`, percent: 0, left: 169, ...begun });
     for (const [phase, step, ms, percent] of FOLDER_STEPS) {
-        await change(path, { state: `creating`, phase, step, percent });
+        await change(path, { state: `creating`, phase, step, percent, left: Math.round(1.69 * (100 - percent)) });
         await pause(ms);
         if (kind === `failed` && phase === `claiming-code`) {
             await change(path, {
@@ -317,8 +317,7 @@ const runFolderSetup = async (path: string, consent = false): Promise<void> => {
     await change(path, { state: `ready`, status: `watching` });
 };
 
-// A sign-in that came back from the browser (auth.rs `complete`): every folder waiting on it signed in at once, then,
-// once the workspace has said who, made.
+// A sign-in back from the browser (auth.rs `complete`): every folder waiting on it signed in, then, once the session is read, made.
 const signInFromBrowser = async (): Promise<void> => {
     const waiting = records.filter((record) => record.state === `signedOut`);
     if (waiting.length === 0) {
@@ -360,6 +359,7 @@ const projectPreview = (machine: Machine): ProjectPreview => {
         large: kind === `cautions`,
         cautions: kind === `cautions` ? [{ kind: `synced`, service: `OneDrive` }] : [],
         signedIn: signedIn(machine),
+        seconds: 169,
     };
 };
 

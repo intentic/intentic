@@ -81,13 +81,16 @@ pub enum Standing {
     SignedIn,
     /// Docker is not there or not answering; never installed or started from here.
     NeedsDocker { reason: DockerReason },
-    /// Being made: the running phase (setupPlan.ts ids), its sentence, and how far.
+    /// Being made: the running phase (setupPlan.ts ids), its sentence, how far, and roughly how many seconds are left
+    /// by the plan's weights (setup_progress.rs `seconds_left`), none until the run has said where it is.
     Creating {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         phase: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         step: Option<String>,
         percent: u8,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        left: Option<u32>,
     },
     /// Stopped on a designed question (exit 3 or 4), or on this PC's own setup: answered on the folder's card.
     Waiting {
@@ -297,6 +300,7 @@ fn pc_setting_up() -> Standing {
         phase: None,
         step: Some(PC_SETTING_UP.to_string()),
         percent: 0,
+        left: None,
     }
 }
 
@@ -444,7 +448,9 @@ pub fn pause_for(records: &[Record]) -> Duration {
     } else if any("queued") || any("interrupted") {
         Duration::from_secs(5)
     } else if any("signedIn") {
-        Duration::from_secs(10)
+        // Back from the browser: the platform is asked each round until the session is there, so the folder moves on
+        // within moments of the sign-in rather than at the next slow round.
+        Duration::from_secs(2)
     } else if any("needsDocker") || any("creating") {
         Duration::from_secs(15)
     } else {
@@ -955,12 +961,7 @@ fn supervise(app: &AppHandle) {
 
 /// One round: each folder decided in the order it was asked, one setup made per round, then the first copies.
 fn round(app: &AppHandle, launch: bool, asked: &[(String, Ask)]) {
-    let account = app
-        .state::<AppState>()
-        .roster()
-        .account
-        .map(|account| account.email)
-        .filter(|_| !REFUSED.load(Ordering::SeqCst));
+    let account = account_for_round(app, &all(app));
     let pc = Pc::now();
     let just_signed_in = SIGNED_IN_AT
         .lock()
@@ -1071,6 +1072,38 @@ fn container_of(app: &AppHandle, slug: &str) -> Container {
     }
 }
 
+/// Who is signed in for this round: the app's roster, and, where it names nobody while a folder waits on a sign-in, the
+/// platform asked now (account.rs `learn_account`). A sign-in the workspace has not announced is still a sign-in: the
+/// workspace announces the account only once it has a sandbox to list, so a reader signing in for their first one was
+/// read as signed out, and asked to sign in again once the grace below ran out (2026-10-21). Not asked after the
+/// platform turned the session away: nothing changes that until someone signs in again ([`account_changed`]).
+fn account_for_round(app: &AppHandle, records: &[Record]) -> Option<String> {
+    if REFUSED.load(Ordering::SeqCst) {
+        return None;
+    }
+    let held = app
+        .state::<AppState>()
+        .roster()
+        .account
+        .map(|account| account.email);
+    if held.is_some() || !records.iter().any(waits_on_account) {
+        return held;
+    }
+    let window = any_window(app)?;
+    match tauri::async_runtime::block_on(crate::account::learn_account(app, &window)) {
+        crate::account::Session::Someone(account) => Some(account.email),
+        crate::account::Session::Nobody | crate::account::Session::Unknown => None,
+    }
+}
+
+/// A folder whose next step needs someone signed in: one waiting on the sign-in, or in line to be made. Pure.
+pub fn waits_on_account(record: &Record) -> bool {
+    matches!(
+        record.standing,
+        Standing::SignedOut | Standing::SignedIn | Standing::Queued { .. } | Standing::Interrupted
+    )
+}
+
 /// A window whose webview holds the workspace's session (every window shares one browser profile, account.rs).
 fn any_window(app: &AppHandle) -> Option<Webview> {
     app.get_webview(crate::windows::WORKSPACE)
@@ -1100,6 +1133,7 @@ fn create(app: &AppHandle, path: &str, consent: bool) {
                     phase: None,
                     step: Some(WAITING_FOR_SETUP.to_string()),
                     percent: 0,
+                    left: None,
                 };
             });
             said = true;
@@ -1125,6 +1159,7 @@ fn create(app: &AppHandle, path: &str, consent: bool) {
             phase: None,
             step: None,
             percent: 0,
+            left: None,
         };
         record.requirements.clear();
         record.consented = consent;
@@ -1443,6 +1478,7 @@ fn hearing(
                     phase: shown.phase.clone(),
                     step: shown.step.clone(),
                     percent: shown.percent,
+                    left: shown.seconds_left(),
                 };
             }
             if may_have_announced(shown.phase.as_deref()) {
@@ -1568,6 +1604,7 @@ fn follow_live_run(app: &AppHandle, path: &str) -> bool {
             phase: None,
             step: Some(FOLLOWING_RUN.to_string()),
             percent: 0,
+            left: None,
         };
     });
     let progress = Arc::new(Mutex::new(Progress::new(cfg!(windows), false)));
@@ -1816,6 +1853,7 @@ mod tests {
                 phase: Some("pulling-image".into()),
                 step: Some("using the image already here".into()),
                 percent: 12,
+                left: None,
             },
             ..record(Standing::default())
         };
@@ -2021,6 +2059,7 @@ mod tests {
                 phase: Some("pulling-image".into()),
                 step: None,
                 percent: 30,
+                left: None,
             })
         };
         let cut = Record { made: false, ..cut };
@@ -2159,7 +2198,8 @@ mod tests {
                 &Standing::Creating {
                     phase: None,
                     step: None,
-                    percent: 1
+                    percent: 1,
+                    left: None
                 },
                 &failed,
                 None
@@ -2172,7 +2212,8 @@ mod tests {
                 &Standing::Creating {
                     phase: None,
                     step: None,
-                    percent: 1
+                    percent: 1,
+                    left: None
                 },
                 &failed,
                 Some("failed")
@@ -2188,7 +2229,8 @@ mod tests {
             &Standing::Creating {
                 phase: None,
                 step: None,
-                percent: 0
+                percent: 0,
+                left: None
             }
         ));
     }
@@ -2202,6 +2244,7 @@ mod tests {
                 phase: None,
                 step: None,
                 percent: 3,
+                left: None,
             }),
         ];
         settle_on_launch(&mut records);
@@ -2235,6 +2278,33 @@ mod tests {
             pause_for(&[record(Standing::Failed { reason: "x".into() })]),
             Duration::from_secs(120)
         );
+        // Back from the browser: looked at again within moments.
+        assert_eq!(
+            pause_for(&[record(Standing::SignedIn)]),
+            Duration::from_secs(2)
+        );
+    }
+
+    #[test]
+    fn only_a_folder_on_its_way_to_being_made_waits_on_the_account() {
+        for standing in [
+            Standing::SignedOut,
+            Standing::SignedIn,
+            Standing::default(),
+            Standing::Interrupted,
+        ] {
+            assert!(waits_on_account(&record(standing.clone())), "{standing:?}");
+        }
+        for standing in [
+            Standing::Copying,
+            Standing::Ready,
+            Standing::Failed { reason: "x".into() },
+            Standing::NeedsDocker {
+                reason: DockerReason::NotRunning,
+            },
+        ] {
+            assert!(!waits_on_account(&record(standing.clone())), "{standing:?}");
+        }
     }
 
     #[test]

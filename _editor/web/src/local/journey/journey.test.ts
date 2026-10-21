@@ -2,7 +2,7 @@ import type { LocalFolderSetup, LocalSetupState } from "../../app/environments/l
 import { activeStep, type JourneyFacts, journeyOf } from "./journey";
 
 // A folder's way to an agent, step by step: what each state of the folder's own sandbox and of its copy says about the
-// sign-in, the sandbox and the copy, before the press (the dialog) and while it goes (the card).
+// sign-in, the sandbox and the copy, before the press and while it goes (the folder's page for it).
 
 const setupAt = (state: LocalSetupState, more: Partial<Pick<LocalFolderSetup, `name` | `status` | `heldBy` | `made` | `hasLog`>> = {}): LocalFolderSetup => ({
     ...state,
@@ -11,6 +11,7 @@ const setupAt = (state: LocalSetupState, more: Partial<Pick<LocalFolderSetup, `n
     heldBy: [],
     made: false,
     hasLog: false,
+    startedAt: undefined,
     ...more,
 });
 
@@ -45,7 +46,7 @@ describe(`a folder's way to an agent`, () => {
     });
 
     it(`leaves the sign-in out for a reader who was signed in already`, () => {
-        const creating = setupAt({ state: `creating`, phase: undefined, step: undefined, percent: 30 });
+        const creating = setupAt({ state: `creating`, phase: undefined, step: undefined, percent: 30, left: undefined });
         expect(standings(facts(creating))).toEqual([`sandbox:running`, `copy:todo`]);
         expect(journeyOf(facts(creating))[0]?.note).toBe(`Making it, 30%`);
     });

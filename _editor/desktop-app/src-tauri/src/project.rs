@@ -652,7 +652,8 @@ pub fn remember(app: &AppHandle, args: &SetupArgs) {
     }
 }
 
-/* THE FOLDER'S OWN DIALOG — what it draws, and the sandbox it makes (the web's local/LocalProjectDialog.vue). */
+/* THE FOLDER'S OWN ASK — what its page draws before the press, and the sandbox it makes (the web's
+local/setup/LocalSandboxSetup.vue). */
 
 /// What the folder's dialog draws when "Work on this with an agent" is pressed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -679,8 +680,10 @@ pub enum Preview {
         /// Enough that the first copy is a long upload.
         large: bool,
         cautions: Vec<Caution>,
-        /// Someone is signed in, as the workspace last said: the press makes the sandbox at once, else signs in first.
+        /// Someone is signed in, as the platform says now: the press makes the sandbox at once, else signs in first.
         signed_in: bool,
+        /// Roughly how many seconds making the sandbox takes, by the setup's plan (setup_progress.rs `plan`).
+        seconds: u32,
     },
 }
 
@@ -726,11 +729,26 @@ pub async fn project_preview(app: AppHandle, window: Webview) -> Result<Preview,
     if let Some(refusal) = refusal_here(&app, &root) {
         return Ok(Preview::Refused { refusal });
     }
-    // Off the calling thread: a large folder's count takes its time.
+    // Off the calling thread: a large folder's count takes its time. Who is signed in is asked of the platform meanwhile,
+    // never taken from what the workspace last said, which says nobody until the account has a sandbox (account.rs).
+    // How long making it takes is the setup's own plan, which turns on whether the sandbox image is here already.
     let counted = root.clone();
-    let (files, bytes) = tauri::async_runtime::spawn_blocking(move || weigh(&counted))
-        .await
-        .map_err(|error| error.to_string())?;
+    let weighing = tauri::async_runtime::spawn_blocking(move || {
+        let image_ready = crate::commands::sandbox_image_ready();
+        (weigh(&counted), image_ready)
+    });
+    let session = crate::account::learn_account(&app, &window).await;
+    let ((files, bytes), image_ready) = weighing.await.map_err(|error| error.to_string())?;
+    let seconds = crate::setup_progress::plan(cfg!(windows), image_ready)
+        .iter()
+        .map(|(_, weight)| weight)
+        .sum();
+    let signed_in = match session {
+        crate::account::Session::Someone(_) => true,
+        crate::account::Session::Nobody => false,
+        // The platform out of reach: what the app last knew.
+        crate::account::Session::Unknown => app.state::<AppState>().roster().account.is_some(),
+    };
     Ok(Preview::New {
         name: folder_name(&root),
         path: root.display().to_string(),
@@ -739,7 +757,8 @@ pub async fn project_preview(app: AppHandle, window: Webview) -> Result<Preview,
         more: files >= COUNT_LIMIT,
         large: files >= MANY_FILES || bytes >= MANY_BYTES,
         cautions: cautions(&root),
-        signed_in: app.state::<AppState>().roster().account.is_some(),
+        signed_in,
+        seconds,
     })
 }
 
@@ -1863,6 +1882,7 @@ mod tests {
                 service: "OneDrive".into(),
             }],
             signed_in: true,
+            seconds: 169,
         };
         assert_eq!(
             serde_json::to_value(preview).unwrap(),
@@ -1876,6 +1896,7 @@ mod tests {
                 "large": false,
                 "cautions": [{ "kind": "synced", "service": "OneDrive" }],
                 "signedIn": true,
+                "seconds": 169,
             })
         );
         assert_eq!(

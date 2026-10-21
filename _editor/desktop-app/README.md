@@ -76,12 +76,12 @@ flowchart LR
   on `intentic://first-task?do=sent|failed&id=…`. "Ask about this" while no sandbox can answer leaves a draft of one
   (`first_task.rs` `prefill_from_ask`: announced on `desktop://first-task-draft`, and kept in memory for a main window
   still being built, which takes it with `first_task_take_draft`) and opens Devices on it. Settings open in the window itself (`#/settings`), and
-  signing out leaves it on its folder. The sandboxes and the account are what the workspace last told the app: its
-  switcher hands them over on `intentic://roster` whenever either changes, a sign-out empties them, and the app keeps
-  them in `roster.json` (`local_roster`), with no address, token or logo, so a row carries a name, where it runs and
+  signing out leaves it on its folder. The sandboxes are what the workspace last told the app, and the account what the
+  platform last answered (below): the workspace's switcher hands both over on `intentic://roster` whenever either
+  changes, a sign-out empties them, and the app keeps them in `roster.json` (`local_roster`), with no address, token or logo, so a row carries a name, where it runs and
   whether it is shared, and no count or state, and the account an address, a name and an `https` avatar. Before the
-  workspace has said, the row is the workspace itself; the account menu shows the named account at once and then
-  what the platform answers (below). It opens on the folder it was last
+  workspace has listed any, Add sandbox is the place chip's one row; the account menu shows the named account at once
+  and then what the platform answers (below). It opens on the folder it was last
   pointed at (`home-folder.json`), or on `~/intentic/local`, which a first launch creates: nothing is asked before the
   first screen. A folder picked in the system's dialog from an empty folder's page, or one of the folders that page
   offers (below), takes the window's place
@@ -446,18 +446,28 @@ flowchart LR
   rest of its words went), "Cancel" stays. A folder's own sandbox's setup is not asked about: a quit stops it and the
   next launch runs it again. _(2026-10-05) Quit used to ask about unsaved windows alone, and abandoned every run under
   way with a dead pipe (`windows.rs` `hold_quit`)._
-- **A folder becomes its own sandbox, copy-first** (2026-10-21). "Work on this with an agent" in a folder's window asks
-  in the window's own dialog (the web's `local/LocalProject.vue`), drawn from `project_preview`
+- **A folder becomes its own sandbox, copy-first** (2026-10-21). "Work on this with an agent" in a folder's window opens
+  the folder's own page for it (the web's `local/setup/LocalSandboxSetup.vue`), drawn from `project_preview`
   (`src-tauri/src/project.rs`): the folder's name and path, what its first copy carries, anything to beware of (another
-  sync service, a network drive, a large first copy), whether a sign-in comes first, or why it cannot have one (a disk,
-  a home folder, a system folder, one inside or around a folder that already has a sandbox, or one on its way to one),
-  each by kind for the page to word. Its steps are listed (sign in where nobody is, make the sandbox, copy the folder
-  in). "Make its sandbox" is `project_create`: the folder's name in `/work` is its own (sandbox-contract's
+  sync service, a network drive, a large first copy), whether a sign-in comes first, roughly how long making the sandbox
+  takes (`seconds`, the setup's own plan, which turns on whether the sandbox image is here already), or why it cannot
+  have one (a disk, a home folder, a system folder, one inside or around a folder that already has a sandbox, or one on
+  its way to one), each by kind for the page to word. Its steps are listed (sign in where nobody is, make the sandbox,
+  copy the folder in). "Create sandbox" is `project_create`: the folder's name in `/work` is its own (sandbox-contract's
   `projectDirNameFor`; the sandbox is the folder's alone, so it never steps aside for another's), and the press is
-  answered at once, whatever is under way; nobody signed in is sent to sign in by the same press, and the window's card
-  says to finish in the browser until the app hears who signed in. Once the folder is in, the window that asked opens its
-  sandbox on the folder by itself when the reader is looking at it, and otherwise keeps the "ready" card up with its
-  Open. A folder that already has a sandbox opens that one (after `ic sandbox list`, starting it if stopped).
+  answered at once, whatever is under way; nobody signed in is sent to sign in by the same press, and the page says to
+  finish in the browser until the app hears who signed in, then follows the setup on its own. Once the folder is in,
+  the window that asked opens its sandbox on the folder by itself when the reader is looking at it, and otherwise keeps
+  the page's Open sandbox, its rail tile ticked. A folder that already has a sandbox opens that one (after
+  `ic sandbox list`, starting it if stopped).
+
+  **Who is signed in is the platform's answer** (`account.rs` `learn_account`, `take_session`). Every `get-session`
+  answer the app carries for a local window, `project_preview`, and every setup round while a folder waits on a sign-in
+  with no account named, are taken as the account in `roster.json` and told to every window (`desktop://roster`).
+  _(2026-10-21) The account used to be only what the workspace's sandbox switcher announced, which is drawn only once
+  the account has a sandbox: a reader signing in for their first one was signed in at the rail's foot and signed out to
+  the folder's dialog, its setup and This computer's card, and the setup asked them to sign in again once its 90-second
+  grace ran out._
 
   The app makes the folder's sandbox, not the window (`src-tauri/src/folder_setup.rs`). A thread started at launch runs
   every folder's setup, one at a time on this docker (a folder in line says whose goes first), and a handed-over setup
@@ -466,7 +476,8 @@ flowchart LR
   script as the run `folder-setup:<key>` with the folder as its project (`SYNC_DIR`, `SYNC_REMOTE_DIR=/work/<name>`,
   `SYNC_PROJECT=1`, `commands.rs` `setup_script`, which also passes `INTENTIC_PC_READY=1` on a Windows PC its check
   found ready moments ago, so connect.ps1 does not examine it again). Its `intentic: [phase]` lines are read in Rust
-  into a step and a percent (`setup_progress.rs`, held to sandbox-run's setup-progress.fixture.json): the folder's
+  into a step, a percent and roughly how many seconds are left by the plan's weights (`setup_progress.rs`, held to
+  sandbox-run's setup-progress.fixture.json): the folder's
   link comes right after the daemon answers, ahead of the public address's checks, so its first copy runs while they
   wait on the edge. Each folder's record is a line of `folder-setups.json`, written on every change and sent whole to
   every window (`desktop://folder-setups`, and `folder_setups` for a window that opens later), which draws its own
@@ -479,7 +490,7 @@ flowchart LR
   minted afresh. A run holds a lock in the app's data folder (`folder-setup-<key>.pid.json`), so a launch after a hard
   crash follows that run from its files rather than starting a second. A setup that fails before it started its
   container takes its row off the account (`/rpc/sandbox/delete`), so a Try again makes a fresh one. Docker is never
-  installed or started unasked: the folder's card offers Start Docker, and the next round notices. The records of
+  installed or started unasked: the folder's page offers Start Docker, and the next round notices. The records of
   folders that went in are forgotten at the next launch: which folder is in which sandbox is the agent's pairing. The
   system's notification says once that a folder is in and once each time it newly needs the reader, and nothing while a
   window of this computer has the focus; a press on one about the folder opens its window (`notice.rs` `FOLDER`).

@@ -10,10 +10,10 @@ import {
     type LocalSetupState,
 } from "../app/environments/localHost";
 
-// "Work on this with an agent" in a folder's window: its own dialog, a sandbox of the folder's own under a name derived
-// from the folder's, a press that never waits on it, and a card that comes back rather than a second question while
-// the folder is on its way. The app is a fake host; the links a page without one sends are caught where they leave
-// (desktop.ts sends them a beat apart, so the clock is walked).
+// "Work on this with an agent" in a folder's window: its own page, a sandbox of the folder's own under a name derived
+// from the folder's, a press that never waits on it, the sign-in a step of the same way, and a tile on the rail for as
+// long as the folder is on its way. The app is a fake host; the links a page without one sends are caught where they
+// leave (desktop.ts sends them a beat apart, so the clock is walked).
 
 const load = () => freshImport<typeof import("./useLocalProject")>("./useLocalProject", import.meta.url);
 
@@ -24,10 +24,11 @@ const setupOf = (state: LocalSetupState, more: Partial<Pick<LocalFolderSetup, `n
     heldBy: [],
     made: false,
     hasLog: false,
+    startedAt: undefined,
     ...more,
 });
 
-const CREATING = setupOf({ state: `creating`, phase: `pulling-image`, step: `Download`, percent: 30 });
+const CREATING = setupOf({ state: `creating`, phase: `pulling-image`, step: `Download`, percent: 30, left: 120 });
 
 const NEW: LocalProjectPreview = {
     kind: `new`,
@@ -39,6 +40,7 @@ const NEW: LocalProjectPreview = {
     large: false,
     cautions: [],
     signedIn: true,
+    seconds: 169,
 };
 
 const setup = ref<LocalFolderSetup | undefined>(undefined);
@@ -61,6 +63,7 @@ beforeEach(() => {
     setup.value = undefined;
     localStorage.clear();
     Object.defineProperty(document, `readyState`, { configurable: true, get: () => `complete` });
+    window.__INTENTIC_LOCAL__ = { daemonUrl: `http://127.0.0.1:1`, token: `t`, id: `local-folder`, name: `My App`, path: `C:\\Users\\me\\Documents\\My App` };
     stubGlobal(`location`, {
         get href(): string {
             return heard.at(-1) ?? ``;
@@ -75,6 +78,7 @@ afterEach(() => {
     jest.useRealTimers();
     unstubAllGlobals();
     delete window.__INTENTIC_LOCAL_HOST__;
+    delete window.__INTENTIC_LOCAL__;
 });
 
 const links = (): string[] => {
@@ -82,132 +86,115 @@ const links = (): string[] => {
     return [...heard];
 };
 
-it(`asks in the window, with what the app found out about the folder`, async () => {
+// Where the page sends the reader, as the router would be asked.
+let went: string[] = [];
+const go = (path: string): void => {
+    went.push(path);
+};
+beforeEach(() => {
+    went = [];
+});
+
+it(`takes the reader to the folder's own page, where the app says what it found out about the folder`, async () => {
     fakeProject(NEW);
-    const { useLocalProject } = await load();
-    const flow = useLocalProject();
-    await flow.ask();
-    expect({ open: flow.dialogOpen.value, preview: flow.preview.value, links: links() }).toEqual({ open: true, preview: NEW, links: [] });
+    const flow = (await load()).useLocalProject();
+    flow.ask(go);
+    expect(await flow.weigh()).toBeUndefined();
+    expect({ went, preview: flow.preview.value, links: links(), title: flow.view.value?.title, actions: flow.view.value?.actions }).toEqual({
+        went: [`/sandbox-setup`],
+        preview: NEW,
+        links: [],
+        title: `Work on My App with an agent`,
+        actions: [`create`],
+    });
 });
 
 it(`opens the sandbox a folder already has, asking nothing`, async () => {
     fakeProject({ kind: `existing` });
-    const { useLocalProject } = await load();
-    const flow = useLocalProject();
-    await flow.ask();
-    expect({ open: flow.dialogOpen.value, links: links() }).toEqual({ open: false, links: [`intentic://local?do=sandbox`] });
+    const flow = (await load()).useLocalProject();
+    expect({ weighed: await flow.weigh(), links: links() }).toEqual({ weighed: `opened`, links: [`intentic://local?do=sandbox`] });
+});
+
+it(`asks the app by link where there is no app behind the page to answer`, async () => {
+    const flow = (await load()).useLocalProject();
+    flow.ask(go);
+    expect({ went, links: links() }).toEqual({ went: [], links: [`intentic://local?do=sandbox`] });
 });
 
 // The folder's name in /work is the folder's own, made safe (`projectDirNameFor`): the sandbox is the folder's alone.
-it(`asks for a sandbox of the folder's own under the name derived from its own, and the dialog goes at once`, async () => {
+it(`asks for a sandbox of the folder's own under the name derived from its own`, async () => {
     const { create, act } = fakeProject(NEW);
-    const { useLocalProject } = await load();
-    const flow = useLocalProject();
-    await flow.ask();
+    const flow = (await load()).useLocalProject();
+    await flow.weigh();
     await flow.create();
     expect(create).toHaveBeenCalledWith(`My-App`);
     expect(act).not.toHaveBeenCalled();
-    expect({ open: flow.dialogOpen.value, folded: flow.minimized.value }).toEqual({ open: false, folded: false });
 });
 
 it(`asks for the sign-in at the same press when nobody is signed in, the folder already asked for`, async () => {
     const { create, act } = fakeProject({ ...NEW, signedIn: false });
-    const { useLocalProject } = await load();
-    const flow = useLocalProject();
-    await flow.ask();
+    const flow = (await load()).useLocalProject();
+    await flow.weigh();
+    expect(flow.view.value?.actions).toEqual([`signInCreate`]);
     await flow.create();
     expect(create).toHaveBeenCalledTimes(1);
     expect(act).toHaveBeenCalledWith(`signIn`);
-    expect(flow.dialogOpen.value).toBe(false);
 });
 
-it(`keeps the dialog up with the app's own reason when the folder could not be asked for`, async () => {
+it(`keeps the app's own reason on the page when the folder could not be asked for`, async () => {
     fakeProject(NEW, Promise.reject(new Error(`This folder can't be used to name a folder in a sandbox.`)));
-    const { useLocalProject } = await load();
-    const flow = useLocalProject();
-    await flow.ask();
+    const flow = (await load()).useLocalProject();
+    await flow.weigh();
     await flow.create();
-    expect({ open: flow.dialogOpen.value, failure: flow.failure.value, creating: flow.creating.value }).toEqual({
-        open: true,
+    expect({ failure: flow.failure.value, creating: flow.creating.value }).toEqual({
         failure: `This folder can't be used to name a folder in a sandbox.`,
         creating: false,
     });
 });
 
-it(`asks for nothing for a folder that cannot have a sandbox`, async () => {
+it(`asks for nothing for a folder that cannot have a sandbox, and says why`, async () => {
     const { create } = fakeProject({ kind: `refused`, refusal: { kind: `disk` } });
     const flow = (await load()).useLocalProject();
-    await flow.ask();
+    await flow.weigh();
     await flow.create();
     expect(create).not.toHaveBeenCalled();
+    expect({ tone: flow.view.value?.tone, actions: flow.view.value?.actions }).toEqual({ tone: `failed`, actions: [] });
 });
 
-it(`brings back the card of a folder on its way rather than asking a second time`, async () => {
+it(`weighs nothing again for a folder on its way: its record says how far it is`, async () => {
     const { asked } = fakeProject(NEW);
     setup.value = CREATING;
-    const { useLocalProject } = await load();
-    const flow = useLocalProject();
-    flow.fold(true);
-    await flow.ask();
-    expect({ open: flow.dialogOpen.value, folded: flow.minimized.value, previewed: asked.mock.calls.length }).toEqual({ open: false, folded: false, previewed: 0 });
+    const flow = (await load()).useLocalProject();
+    await flow.weigh();
+    expect({ previewed: asked.mock.calls.length, tone: flow.view.value?.tone, percent: flow.view.value?.percent, left: flow.view.value?.left }).toEqual({
+        previewed: 0,
+        tone: `working`,
+        percent: 30,
+        left: 120,
+    });
 });
 
-// A press that asks for the card it is already looking at used to set `minimized` from false to false, and nothing on
-// screen moved: the folder's button in a window whose card was open did nothing whatsoever.
-it(`flashes a card asked for while it is already open, and simply unfolds a folded one`, async () => {
+it(`keeps a tile on the rail while the folder is on its way, marked by how it is going, and once it is in until it is seen`, async () => {
     fakeProject(NEW);
-    setup.value = CREATING;
-    const { useLocalProject } = await load();
-    const flow = useLocalProject();
-    await nextTick();
-    expect(flow.attention.value).toBe(false);
-    flow.fold(false);
-    expect({ folded: flow.minimized.value, flashed: flow.attention.value }).toEqual({ folded: false, flashed: true });
-    // Folded, the unfolding is answer enough.
-    flow.fold(true);
-    flow.fold(false);
-    expect(flow.minimized.value).toBe(false);
-});
-
-it(`asks the app by link where there is no app behind the page to answer`, async () => {
-    const { useLocalProject } = await load();
-    await useLocalProject().ask();
-    expect(links()).toEqual([`intentic://local?do=sandbox`]);
-});
-
-it(`carries the card while the folder is on its way, and says for a moment when it is in`, async () => {
-    fakeProject(NEW);
-    const { useLocalProject } = await load();
-    const flow = useLocalProject();
-    expect(flow.card.value).toBeUndefined();
+    const flow = (await load()).useLocalProject();
+    expect({ inRail: flow.inRail.value, badge: flow.badge.value }).toEqual({ inRail: false, badge: undefined });
     setup.value = CREATING;
     await nextTick();
-    expect(flow.card.value?.tone).toBe(`working`);
+    expect({ inRail: flow.inRail.value, badge: flow.badge.value }).toEqual({ inRail: true, badge: { running: `30%` } });
+    setup.value = setupOf({ state: `needsDocker`, reason: `notRunning` });
+    await nextTick();
+    expect(flow.badge.value).toMatchObject({ mark: `exclamation-circle`, tone: `warning` });
     setup.value = setupOf({ state: `copying` }, { status: `staging`, made: true });
     await nextTick();
+    lookingHere(false);
     setup.value = setupOf({ state: `ready` }, { made: true });
     await nextTick();
-    expect(flow.card.value?.tone).toBe(`ready`);
-    jest.advanceTimersByTime(15_000);
-    expect(flow.card.value).toBeUndefined();
+    expect({ inRail: flow.inRail.value, badge: flow.badge.value?.mark }).toEqual({ inRail: true, badge: `check` });
+    flow.seen();
+    expect(flow.inRail.value).toBe(false);
 });
 
-// A fold is remembered for what the card showed, in every window: the same news stays folded, new news unfolds.
-it(`remembers a fold for what it showed, and unfolds for something new`, async () => {
-    fakeProject(NEW);
-    setup.value = setupOf({ state: `needsDocker`, reason: `notRunning` });
-    const first = (await load()).useLocalProject();
-    await nextTick();
-    first.fold(true);
-    const second = (await load()).useLocalProject();
-    await nextTick();
-    expect(second.minimized.value).toBe(true);
-    setup.value = CREATING;
-    await nextTick();
-    expect(second.minimized.value).toBe(false);
-});
-
-it(`says on the card why a press did nothing`, async () => {
+it(`says on the page why a press did nothing`, async () => {
     const { act } = fakeProject(NEW);
     setup.value = setupOf({ state: `failed`, reason: `The platform couldn't make the sandbox.` });
     const flow = (await load()).useLocalProject();
@@ -217,32 +204,35 @@ it(`says on the card why a press did nothing`, async () => {
 });
 
 /* THE WAY THROUGH A SIGN-IN, AND INTO THE SANDBOX (2026-10-17): a reader who pressed "Sign in and work on this" was told
-   to sign in again by the card all through the browser's sign-in, and was never taken to the folder's sandbox once it
-   was in. */
+   to sign in again all through the browser's sign-in, and was never taken to the folder's sandbox once it was in. */
 
 const SIGNED_OUT = setupOf({ state: `signedOut` });
 
 // Whether the reader is looking at this window, as the page reads it.
-const lookingHere = (here: boolean): void => {
+function lookingHere(here: boolean): void {
     Object.defineProperty(document, `visibilityState`, { configurable: true, get: () => (here ? `visible` : `hidden`) });
     Object.defineProperty(document, `hasFocus`, { configurable: true, value: () => here });
-};
+}
 
 it(`says to finish signing in while the browser has it, and moves on when the app hears who signed in`, async () => {
     fakeProject({ ...NEW, signedIn: false });
     const flow = (await load()).useLocalProject();
-    await flow.ask();
+    await flow.weigh();
     await flow.create();
     // The app's record of the folder, made by the press: waiting on the sign-in.
     setup.value = SIGNED_OUT;
-    expect({ key: flow.card.value?.key, actions: flow.card.value?.actions, signingIn: flow.signingIn.value }).toEqual({
-        key: `signingIn`,
-        actions: [`signInAgain`],
+    expect({ title: flow.view.value?.title, actions: flow.view.value?.actions, signingIn: flow.signingIn.value }).toEqual({
+        title: `Finish signing in in your browser`,
+        actions: [`signInAgain`, `dismiss`],
         signingIn: true,
     });
     setup.value = CREATING;
     await nextTick();
-    expect({ key: flow.card.value?.key, signingIn: flow.signingIn.value }).toEqual({ key: `creating`, signingIn: false });
+    expect({ title: flow.view.value?.title, signingIn: flow.signingIn.value, steps: flow.view.value?.steps.map((each) => each.state) }).toEqual({
+        title: `Making My-App's sandbox`,
+        signingIn: false,
+        steps: [`done`, `running`, `todo`],
+    });
 });
 
 it(`asks to sign in again once the sign-in has run out`, async () => {
@@ -250,15 +240,15 @@ it(`asks to sign in again once the sign-in has run out`, async () => {
     setup.value = SIGNED_OUT;
     const flow = (await load()).useLocalProject();
     await flow.signIn();
-    expect(flow.card.value?.key).toBe(`signingIn`);
+    expect(flow.view.value?.actions).toEqual([`signInAgain`, `dismiss`]);
     jest.advanceTimersByTime(3 * 60_000);
-    expect(flow.card.value?.key).toBe(`signedOut`);
+    expect(flow.view.value?.actions).toEqual([`signIn`, `dismiss`]);
 });
 
 it(`takes the reader into the folder's sandbox once the folder this window asked for is in`, async () => {
     const { open } = fakeProject(NEW);
     const flow = (await load()).useLocalProject();
-    await flow.ask();
+    await flow.weigh();
     await flow.create();
     setup.value = setupOf({ state: `copying` }, { status: `staging`, made: true });
     await nextTick();
@@ -268,10 +258,10 @@ it(`takes the reader into the folder's sandbox once the folder this window asked
     expect(open).toHaveBeenCalledTimes(1);
 });
 
-it(`leaves the ready card up, rather than moving a reader who is elsewhere`, async () => {
+it(`leaves the ready page up, rather than moving a reader who is elsewhere`, async () => {
     const { open } = fakeProject(NEW);
     const flow = (await load()).useLocalProject();
-    await flow.ask();
+    await flow.weigh();
     await flow.create();
     setup.value = setupOf({ state: `copying` }, { status: `staging`, made: true });
     await nextTick();
@@ -280,7 +270,7 @@ it(`leaves the ready card up, rather than moving a reader who is elsewhere`, asy
     await nextTick();
     expect(open).not.toHaveBeenCalled();
     jest.advanceTimersByTime(60_000);
-    expect(flow.card.value?.actions).toEqual([`open`]);
+    expect(flow.view.value?.actions).toEqual([`open`]);
 });
 
 it(`moves nobody into a sandbox for a folder another window asked for`, async () => {
@@ -292,7 +282,7 @@ it(`moves nobody into a sandbox for a folder another window asked for`, async ()
     setup.value = setupOf({ state: `ready` }, { made: true });
     await nextTick();
     expect(open).not.toHaveBeenCalled();
-    expect(flow.card.value?.tone).toBe(`ready`);
+    expect(flow.view.value?.tone).toBe(`ready`);
 });
 
 /* THE FOLDER'S SANDBOX ON ITS WAY TO THE SCREEN (folderSandbox.ts `useSandboxOpening`): "Open this folder's sandbox" is

@@ -3,7 +3,7 @@ import type { ViewBadge } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, unref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
-import { LOCAL_NAVIGATE_EVENT } from "../app/environments/local";
+import { LOCAL_NAVIGATE_EVENT, LOCAL_PROJECT_ASK_EVENT, localFace } from "../app/environments/local";
 import { type LocalView, localHost } from "../app/environments/localHost";
 import { useAccount } from "../client/auth/useAccount";
 import { useSandbox } from "../client/sandbox/useSandbox";
@@ -18,8 +18,9 @@ import { navigatedPath } from "./appEvents";
 import { takeFolderSwitches } from "./folderSwitch";
 import LocalAccountTile from "./LocalAccountTile.vue";
 import LocalPlaceSwitcher from "./LocalPlaceSwitcher.vue";
-import LocalProject from "./LocalProject.vue";
+import { SANDBOX_SETUP_PATH } from "./setup/setupPath";
 import { useUnsavedGuard } from "./unsaved/useUnsavedGuard";
+import { useLocalProject } from "./useLocalProject";
 
 // THE SHELL OF A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER: the sandbox shell's rail and page, holding what needs no
 // sandbox and no account. At the top, the place this window shows and every other one, the account's sandboxes
@@ -63,8 +64,20 @@ const isActive = (to: string): boolean => route.path === to || route.path.starts
 // routes without a tile (Repair, opened from where it is needed) is left off the rail, and one whose tile comes and goes
 // (Passwords) keeps it while the reader is on it, so the rail never loses the place they stand. This PC's own setup is
 // Devices' (the app's view), not a tile of its own: the Agents tile that held it until 2026-10-12 had nothing else.
+// The folder's way to a sandbox of its own has a tile of its own beside Files while the folder is on its way, and while
+// the reader is on its page: the reader can go back to their files, and its mark says how far it is (setupView.ts).
+const project = useLocalProject();
+const setupTile = computed<Tile | undefined>(() => {
+    if (host.project === undefined || (!project.inRail.value && !isActive(SANDBOX_SETUP_PATH))) {
+        return undefined;
+    }
+    const tile: Tile = { section: `sandbox-setup`, to: SANDBOX_SETUP_PATH, label: t(`local.sandboxSetup.tile`, { name: localFace()?.name ?? `` }) };
+    const badge = project.badge.value;
+    return badge === undefined ? tile : { ...tile, badge };
+});
 const tiles = computed<readonly Tile[]>(() => [
     { section: `workspace`, to: `/workspace`, label: t(`shared.files`) },
+    ...(setupTile.value === undefined ? [] : [setupTile.value]),
     ...host.views.filter((view) => unref(view.inRail) !== false || isActive(`/${view.path}`)).map(viewTile),
 ]);
 const tileLabel = (tile: Tile): string => [tile.label, tile.badge?.tooltip, tile.badge?.running].filter((part) => part !== undefined && part !== ``).join(` · `);
@@ -77,8 +90,17 @@ const onNavigate = (event: Event): void => {
         void router.push(path);
     }
 };
-onMounted(() => window.addEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
-onUnmounted(() => window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate));
+// The app asking this window for its folder's sandbox (its project.rs `start`, for "Work on this with an agent" asked by
+// link): the folder's page for it, from whichever screen the reader is on.
+const onAskProject = (): void => project.ask((path) => void router.push(path));
+onMounted(() => {
+    window.addEventListener(LOCAL_NAVIGATE_EVENT, onNavigate);
+    window.addEventListener(LOCAL_PROJECT_ASK_EVENT, onAskProject);
+});
+onUnmounted(() => {
+    window.removeEventListener(LOCAL_NAVIGATE_EVENT, onNavigate);
+    window.removeEventListener(LOCAL_PROJECT_ASK_EVENT, onAskProject);
+});
 
 // THE WINDOW'S CLOSE, asked about from whichever screen it is on: unsaved edits outlive Files (the buffers are the
 // folder's, not the page's), so a close the app holds back for them is answered here, where the shell stands for the
@@ -131,8 +153,6 @@ onUnmounted(() => stopTaking?.());
                 </RouterView>
             </div>
         </main>
-        <!-- The folder's own sandbox: its dialog, and its build's card, in sight from every screen of this window. -->
-        <LocalProject v-if="host.project !== undefined" />
         <!-- The window's close, held back for unsaved edits: asked over any screen, Files or not. -->
         <CloseGuardDialog :open="closeAsked" :question="closeQuestion" @cancel="keepWindow" @confirm="closeWindow" />
     </div>

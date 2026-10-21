@@ -1,6 +1,6 @@
-// THE AGENT'S HOUSE, built as the sandbox is: the picture on the card of a folder's own sandbox (AgentHouse.vue,
-// LocalSetupCard.vue) is drawn by its setup's real phases, never by a clock of its own. Each stage is something the
-// setup has actually reached, so a card that shows a roof is a sandbox whose daemon is coming up, and one with the
+// THE AGENT'S HOUSE, built as the sandbox is: the picture on the page of a folder's own sandbox (AgentHouse.vue,
+// setup/LocalSandboxSetup.vue) is drawn by its setup's real phases, never by a clock of its own. Each stage is something
+// the setup has actually reached, so a page that shows a roof is a sandbox whose daemon is coming up, and one with the
 // lights on is a sandbox that answers with the folder's link made; the folder's copy moving in is its own first copy.
 
 export const HOUSE_STAGES = [

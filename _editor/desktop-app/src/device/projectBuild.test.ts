@@ -1,8 +1,8 @@
 import type { FolderSetup } from "../desktop";
-import { folderSetupOf } from "./folderSetups";
+import { folderSetupOf, folderSetupRunningBesides } from "./folderSetups";
 import { folderSetupFor, needsOf, projectPathOf, setupStateOf } from "./projectBuild";
 
-// A folder on its way to its own sandbox, read off the app's records into what its window's card and button draw: every
+// A folder on its way to its own sandbox, read off the app's records into what its window's page and button draw: every
 // state a record can be in, the folder found by the path its window is told, and where "Open sandbox" goes.
 
 const RECORD: FolderSetup = {
@@ -12,6 +12,7 @@ const RECORD: FolderSetup = {
     phase: `pulling-image`,
     step: `using the sandbox image already here`,
     percent: 42,
+    left: 120,
     sandboxId: `cmshop0001`,
     slug: `sandbox-2c8eb2c5b3a5`,
     hostname: `sandbox-2c8eb2c5b3a5.sbx.intentic.dev`,
@@ -19,6 +20,7 @@ const RECORD: FolderSetup = {
     made: false,
     attempt: 1,
     askedAt: 1_790_000_000_000,
+    startedAt: 1_790_000_000_000,
     updatedAt: 1_790_000_000_500,
 };
 
@@ -32,18 +34,20 @@ it(`says how far it is being made, and whether it has a log`, () => {
         phase: `pulling-image`,
         step: `using the sandbox image already here`,
         percent: 42,
+        left: 120,
         name: `shop`,
         status: undefined,
         heldBy: [],
         made: false,
         hasLog: false,
+        startedAt: 1_790_000_000_000,
     });
     expect(folderSetupFor({ ...RECORD, logPath: `/home/ada/.intentic/logs/desktop-folder-setup.log` })?.hasLog).toBe(true);
 });
 
 // Fields a state does not have are said as undefined, never carried over from the record.
 it(`reads every state the app can be in`, () => {
-    expect(setupStateOf({ state: `creating`, percent: 0 })).toEqual({ state: `creating`, phase: undefined, step: undefined, percent: 0 });
+    expect(setupStateOf({ state: `creating`, percent: 0 })).toEqual({ state: `creating`, phase: undefined, step: undefined, percent: 0, left: undefined });
     expect(setupStateOf({ state: `queued` })).toEqual({ state: `queued`, behind: undefined });
     expect(setupStateOf({ state: `queued`, behind: `notes` })).toEqual({ state: `queued`, behind: `notes` });
     expect(setupStateOf({ state: `needsDocker`, reason: `notRunning` })).toEqual({ state: `needsDocker`, reason: `notRunning` });
@@ -69,6 +73,15 @@ it(`finds the window's own folder by the path it is told, and no other`, () => {
     expect(folderSetupOf(records, `C:\\Users\\ada\\code`)).toBeUndefined();
     expect(folderSetupOf(records, undefined)).toBeUndefined();
     expect(folderSetupOf(undefined, `C:\\Users\\ada\\code\\shop`)).toBeUndefined();
+});
+
+// The window on a folder being made has that setup's own tile: Devices spins only for another folder's.
+it(`spins Devices for a sandbox being made for any folder but the window's own`, () => {
+    const notes = { ...RECORD, path: `C:\\Users\\ada\\notes`, name: `notes`, state: `failed` as const, reason: `no` };
+    expect(folderSetupRunningBesides([RECORD, notes], RECORD.path)).toBe(false);
+    expect(folderSetupRunningBesides([RECORD, notes], notes.path)).toBe(true);
+    expect(folderSetupRunningBesides([RECORD], undefined)).toBe(true);
+    expect(folderSetupRunningBesides(undefined, undefined)).toBe(false);
 });
 
 it(`opens a folder's sandbox on the folder, and nowhere without a sandbox to name`, () => {

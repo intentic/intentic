@@ -267,31 +267,37 @@ flowchart LR
   for) and Alt+1–9 (`localKeys.ts`), the close guard for unsaved edits, held by the shell so a close is asked about
   from any screen of the window (`unsaved/useUnsavedGuard.ts`), a project folder's Bring back section (`bring-back/LocalBringBack.vue`, drawn only when a check the window runs on its own,
   on arrival and on focus, finds changes to bring back), and the way to a folder's own
-  sandbox (`LocalProject.vue`): the window's dialog for "Work on this with an agent" (`LocalProjectDialog.vue`), and the
-  card the folder's own sandbox's setup stands on in the notification lane while the reader keeps working
-  (`LocalSetupCard.vue`, worded by `setupCard.ts`), drawn as the agent's house going up with the setup's real phases
-  (`AgentHouse.vue`, `agentHouse.ts`), its steps (sign in, the sandbox, the copy) ticked off as they go (`journey/`).
-  _(2026-10-21) Every folder now becomes a sandbox of its own, made by the app on the press (its folder_setup.rs); before,
-  every folder went into the one sandbox the app kept for the whole computer, and every window carried a card about it._ A new Windows
-  PC's own first-run setup (the PC check, the setup, the sign-in, the download, the first task) is the desktop app's,
-  drawn on its Devices view from `LocalOnboardingHost` (`localHost.ts`); the shell's own Agents view that held it
-  was removed on 2026-10-12, and a folder taken in on a PC not ready yet goes to `project.detailsPath`. The folder's own
-  button at the foot of the window says what the sandbox is doing while it is doing it, and IS the next step wherever it
-  is stopped on the reader instead — "Set this computer up for agents", "Start Docker", "Sign in" — running the card's
-  own verb (`setupCard.ts` `folderButtonOf`, `setupAction.ts`, shared with `LocalSetupCard.vue`); before this it read
-  "Waiting" in those states and its press unfolded a card already on screen, so the one button in the window did nothing
-  at all. A press that asks for a card that is open flashes it (`attention`). The place chip names the
+  sandbox: one page, `setup/LocalSandboxSetup.vue` at `/sandbox-setup`, worded by `setup/setupView.ts` and driven by
+  `useLocalProject.ts`. Before the press it says what the sandbox involves (the folder, what its first copy carries,
+  where it runs, how long making it takes by the setup's own plan, who it is for, what to beware of) and asks once;
+  after it, the same page follows every step to the open sandbox: the sign-in where nobody is signed in, which carries
+  on by itself once the browser hands back; the agent's house going up with the setup's real phases (`AgentHouse.vue`,
+  `agentHouse.ts`) over the setup's own measure, how long it has run and roughly how long is left
+  (`setup/SetupMeter.vue`); the copy; and Open sandbox. Its steps are ticked off as they go (`journey/`). The page
+  holds nothing back: Files is a press away, and while the folder is on its way the page has a tile of its own on the
+  rail beside Files (`LocalShell.vue`), spinning while the work goes on, marked for attention when the reader is needed
+  and ticked once the folder is in. _(2026-10-21) It replaced a dialog that went away on the press and a card in the
+  notification lane that could not be put away and showed no measure of progress; and every folder now becomes a
+  sandbox of its own, made by the app on the press (its folder_setup.rs), where every folder went into the one sandbox
+  the app kept for the whole computer._ A new Windows PC's own first-run setup (the PC check, the setup, the sign-in,
+  the download, the first task) is the desktop app's, drawn on its Devices view from `LocalOnboardingHost`
+  (`localHost.ts`); the shell's own Agents view that held it was removed on 2026-10-12. The folder's own button at the
+  foot of the window says what the sandbox is doing while it is doing it, or what it waits for ("Waiting for Docker",
+  "Sign in to continue"), and its press shows the page, where that is done (`setup/setupView.ts` `folderButtonOf`,
+  `setupAction.ts`). The place chip names the
   window's folder and lists the account's sandboxes, the only other places the window goes, as the sandbox switcher
   lists "This computer" first in the app's workspace window, with the same digits for the same places in both: Alt+0
-  this computer, Alt+1–9 the sandboxes. What only the desktop app can answer (the recent places, whether there is an
+  this computer, Alt+1–9 the sandboxes. With none listed, Add sandbox is its one row. What only the desktop app can answer (the recent places, whether there is an
   account, who is signed in and the sandboxes as the workspace last told it, its Devices view, and the account itself)
   comes from the host it installs before the editor runs (`app/environments/localHost.ts`); a page without one gets
   the link-only host. The account is `client/auth/useAccount.ts`: in the workspace the editor's own session, in a local
   window the one the workspace signed in with, which the app asks the platform about for the window. A local window's
   editor runs as a placeholder for its folder, so the account is kept apart from it: the account menu, Settings and
   the plan read `useAccount`, and a sign-out or a refused call ends the account and never the folder's session
-  (`useAuth.ts` skips its teardown there). The workspace's switcher is what tells the app the account and those sandboxes
-  (`announceDesktopRoster` in `app/environments/desktop.ts`), and a sign-out tells it there are none. A sandbox picked
+  (`useAuth.ts` skips its teardown there). The workspace's switcher is what tells the app those sandboxes
+  (`announceDesktopRoster` in `app/environments/desktop.ts`), and a sign-out tells it there are none. Who is signed in
+  the app also learns from every session answer it carries (the desktop app's account.rs), so a local window's account
+  check, the folder's page and the folder's setup all go by the platform's own answer. A sandbox picked
   there reaches a workspace page already loaded without a reload: the app calls the opener the page registered
   (`installDesktopOpener`), and `openInPage` (`router/index.ts`) selects the sandbox the path names and routes there.
   The general Workspace button asks for `/` explicitly, so returning from This computer cannot just reveal an old

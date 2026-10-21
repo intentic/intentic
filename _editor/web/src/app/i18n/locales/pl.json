@@ -12506,8 +12506,6 @@
         },
         "placeSwitcher": {
             "switchPlace": "{name}: przejdź do sandboxa",
-            "workspace": "Twoja przestrzeń robocza",
-            "workspaceLead": "Agenci i sandboxy",
             "putAgentsToWork": "Zaprzęgnij agentów do pracy",
             "signInLead": "Zaloguj się, żeby utworzyć sandbox"
         },
@@ -12571,10 +12569,6 @@
                 "home": "Wprowadzone"
             },
             "percent": "{percent}%",
-            "hide": "Ukryj",
-            "show": "Pokaż budowę",
-            "create": "Utwórz jej piaskownicę",
-            "signInCreate": "Zaloguj się, aby kontynuować",
             "createFailed": "Nie udało się utworzyć piaskownicy tego folderu"
         },
         "journey": {
@@ -12613,10 +12607,10 @@
             }
         },
         "setup": {
-            "signedOut": "Zaloguj się, aby utworzyć piaskownicę dla {name}",
-            "signedOutDetail": "Intentic utworzy ją zaraz po zalogowaniu, na tym komputerze.",
             "signingIn": "Dokończ logowanie w przeglądarce",
             "signingInDetail": "Po zalogowaniu Intentic sam przejdzie dalej.",
+            "signInFirst": "Zaloguj się, aby kontynuować",
+            "signInFirstDetail": "Intentic utworzy piaskownicę dla {name} zaraz po zalogowaniu. Logowanie otwiera przeglądarkę.",
             "signedIn": "Jesteś zalogowany",
             "signedInDetail": "Przygotowuję piaskownicę dla {name}…",
             "queued": "Przygotowuję piaskownicę dla {name}",
@@ -12634,7 +12628,6 @@
                 "notAllowed": "W Urządzeniach jest opisane, jak pozwolić temu kontu używać Dockera."
             },
             "creating": "Tworzę piaskownicę dla {name}",
-            "creatingShort": "Tworzę piaskownicę dla {name}",
             "interrupted": "Wznawiam piaskownicę dla {name}",
             "interruptedDetail": "Intentic zamknął się w trakcie jej tworzenia, więc kontynuuje od miejsca, w którym przerwał.",
             "waiting": "Piaskownica dla {name} czeka",
@@ -12657,7 +12650,6 @@
             "heldAway": "Jej piaskownica nie działa teraz na tym komputerze. Kopiowanie wznowi się, gdy wróci.",
             "ready": "Piaskownica dla {name} jest gotowa",
             "readyDetail": "Gdy zaakceptujesz pracę agenta, wróci ona do tego folderu sama. Plik, który też zmieniłeś, zostanie do przejrzenia.",
-            "readyShort": "{name} jest gotowa",
             "button": {
                 "waiting": "Tworzę piaskownicę tego folderu…",
                 "waitingPercent": "Tworzę piaskownicę tego folderu ({percent}%)",
@@ -12665,11 +12657,15 @@
                 "copying": "Kopiuję folder…",
                 "paused": "Kopiowanie wstrzymane",
                 "failed": "Nie udało się utworzyć piaskownicy tego folderu",
-                "setUpComputer": "Przygotuj ten komputer dla agentów",
                 "signingIn": "Czekam na zalogowanie…",
-                "signedIn": "Przygotowuję…"
+                "signedIn": "Przygotowuję…",
+                "signIn": "Zaloguj się, aby kontynuować",
+                "needsDocker": "Czeka na Dockera",
+                "needsYou": "Ten komputer czeka na Ciebie"
             },
             "action": {
+                "create": "Utwórz piaskownicę",
+                "signInCreate": "Zaloguj się i utwórz piaskownicę",
                 "signIn": "Zaloguj się",
                 "signInAgain": "Otwórz logowanie ponownie",
                 "startDocker": "Uruchom Dockera",
@@ -12681,7 +12677,32 @@
                 "dismiss": "Anuluj",
                 "details": "Otwórz Urządzenia",
                 "open": "Otwórz piaskownicę"
+            },
+            "badge": {
+                "percent": "{percent}%",
+                "ready": "gotowa do otwarcia"
             }
+        },
+        "sandboxSetup": {
+            "tile": "Piaskownica dla {name}",
+            "eyebrow": "Nowa piaskownica · {name}",
+            "looking": "Sprawdzam {name}…",
+            "notNow": "Nie teraz",
+            "stepsHeading": "Kroki",
+            "factsHeading": "O tej piaskownicy",
+            "folder": "Folder",
+            "copy": "Pierwsza kopia",
+            "where": "Działa",
+            "thisComputer": "Na tym komputerze, w Dockerze",
+            "time": "Tworzenie potrwa",
+            "takes": "Około {span}",
+            "account": "Konto",
+            "signedIn": "Zalogowano",
+            "notSignedIn": "Jeszcze nie zalogowano",
+            "carriesOn": "To trwa dalej, gdy pracujesz. Wróć do plików, kiedy chcesz: kafelek piaskownicy po lewej pokazuje postęp.",
+            "backToFiles": "Wróć do plików",
+            "left": "zostało około {left}",
+            "almostDone": "prawie gotowe"
         },
         "repair": {
             "title": "Naprawa",

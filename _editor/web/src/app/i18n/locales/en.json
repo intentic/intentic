@@ -4953,8 +4953,6 @@
         },
         "placeSwitcher": {
             "switchPlace": "{name}: switch to a sandbox",
-            "workspace": "Your workspace",
-            "workspaceLead": "Agents and sandboxes",
             "putAgentsToWork": "Put agents to work",
             "signInLead": "Sign in to set up a sandbox"
         },
@@ -5018,10 +5016,6 @@
                 "home": "Moved in"
             },
             "percent": "{percent}%",
-            "hide": "Hide",
-            "show": "Show build",
-            "create": "Make its sandbox",
-            "signInCreate": "Sign in to continue",
             "createFailed": "Couldn't make this folder's sandbox"
         },
         "journey": {
@@ -5060,10 +5054,10 @@
             }
         },
         "setup": {
-            "signedOut": "Sign in to make {name}'s sandbox",
-            "signedOutDetail": "Intentic makes it right after you sign in, on this computer.",
             "signingIn": "Finish signing in in your browser",
             "signingInDetail": "Intentic carries on by itself once you've signed in.",
+            "signInFirst": "Sign in to continue",
+            "signInFirstDetail": "Intentic makes {name}'s sandbox right after you sign in. Signing in opens your browser.",
             "signedIn": "You're signed in",
             "signedInDetail": "Getting {name}'s sandbox ready…",
             "queued": "Getting {name}'s sandbox ready",
@@ -5081,7 +5075,6 @@
                 "notAllowed": "Devices says how to let this account use Docker."
             },
             "creating": "Making {name}'s sandbox",
-            "creatingShort": "Making {name}'s sandbox",
             "interrupted": "Picking up {name}'s sandbox",
             "interruptedDetail": "Intentic closed while it was being made, so it's carrying on where it left off.",
             "waiting": "{name}'s sandbox is waiting",
@@ -5104,7 +5097,6 @@
             "heldAway": "Its sandbox isn't running on this computer right now. Copying carries on once it's back.",
             "ready": "{name}'s sandbox is ready",
             "readyDetail": "When you accept an agent's work, it comes back into this folder by itself. A file you changed too is left for you to look at.",
-            "readyShort": "{name} is ready",
             "button": {
                 "waiting": "Making this folder's sandbox…",
                 "waitingPercent": "Making this folder's sandbox ({percent}%)",
@@ -5112,11 +5104,15 @@
                 "copying": "Copying your folder…",
                 "paused": "Copying is paused",
                 "failed": "Couldn't make this folder's sandbox",
-                "setUpComputer": "Set this computer up for agents",
                 "signingIn": "Waiting for you to sign in…",
-                "signedIn": "Getting ready…"
+                "signedIn": "Getting ready…",
+                "signIn": "Sign in to continue",
+                "needsDocker": "Waiting for Docker",
+                "needsYou": "This computer needs you"
             },
             "action": {
+                "create": "Create sandbox",
+                "signInCreate": "Sign in and create sandbox",
                 "signIn": "Sign in",
                 "signInAgain": "Open sign-in again",
                 "startDocker": "Start Docker",
@@ -5128,7 +5124,32 @@
                 "dismiss": "Cancel",
                 "details": "Open Devices",
                 "open": "Open sandbox"
+            },
+            "badge": {
+                "percent": "{percent}%",
+                "ready": "ready to open"
             }
+        },
+        "sandboxSetup": {
+            "tile": "{name}'s sandbox",
+            "eyebrow": "New sandbox · {name}",
+            "looking": "Looking at {name}…",
+            "notNow": "Not now",
+            "stepsHeading": "Steps",
+            "factsHeading": "About this sandbox",
+            "folder": "Folder",
+            "copy": "First copy",
+            "where": "Runs",
+            "thisComputer": "On this computer, in Docker",
+            "time": "Setup takes",
+            "takes": "About {span}",
+            "account": "Account",
+            "signedIn": "Signed in",
+            "notSignedIn": "Not signed in yet",
+            "carriesOn": "This keeps going while you work. Go back to your files whenever you like: the sandbox's tile on the left shows how far it is.",
+            "backToFiles": "Back to files",
+            "left": "about {left} left",
+            "almostDone": "almost done"
         },
         "repair": {
             "title": "Repair",

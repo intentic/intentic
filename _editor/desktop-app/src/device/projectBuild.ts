@@ -1,9 +1,9 @@
 import type { LocalFolderSetup, LocalSetupState } from "@intentic/web/local-host";
 import { type FolderSetup, type FolderStanding, requirementOf } from "../desktop";
 
-// A FOLDER ON ITS WAY TO ITS OWN SANDBOX, AS THE WINDOW'S CARD AND BUTTON DRAW IT (the web's local/LocalSetupCard.vue,
-// local/LocalFiles.vue): the app's record (folder_setup.rs, device/folderSetups.ts), read into the few facts the shell
-// takes. Pure, so what each state comes to is tested by value.
+// A FOLDER ON ITS WAY TO ITS OWN SANDBOX, AS THE WINDOW'S PAGE AND BUTTON DRAW IT (the web's
+// local/setup/LocalSandboxSetup.vue, local/LocalFiles.vue): the app's record (folder_setup.rs, device/folderSetups.ts),
+// read into the few facts the shell takes. Pure, so what each state comes to is tested by value.
 
 /** What a setup stopped on a question said this computer needs, in its own words (each requirement's title). */
 export const needsOf = (requirements: readonly unknown[] | undefined): readonly string[] =>
@@ -15,7 +15,7 @@ export const setupStateOf = (standing: FolderStanding & { readonly requirements?
         case `queued`:
             return { state: `queued`, behind: standing.behind };
         case `creating`:
-            return { state: `creating`, phase: standing.phase, step: standing.step, percent: standing.percent };
+            return { state: `creating`, phase: standing.phase, step: standing.step, percent: standing.percent, left: standing.left };
         case `needsDocker`:
             return { state: `needsDocker`, reason: standing.reason };
         case `waiting`:
@@ -38,6 +38,7 @@ export const folderSetupFor = (record: FolderSetup | undefined): LocalFolderSetu
               heldBy: record.heldBy ?? [],
               made: record.made,
               hasLog: record.logPath !== undefined,
+              startedAt: record.startedAt,
           };
 
 /** The workspace's address for a folder's sandbox, opened on the folder (the app's project.rs `project_path`). */

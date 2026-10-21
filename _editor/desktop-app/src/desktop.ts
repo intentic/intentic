@@ -480,8 +480,10 @@ export type ProjectPreview =
           readonly more: boolean;
           readonly large: boolean;
           readonly cautions: readonly ProjectCaution[];
-          /** Someone is signed in, as the workspace last said: the press makes the sandbox at once, else signs in first. */
+          /** Someone is signed in, as the platform says now: the press makes the sandbox at once, else signs in first. */
           readonly signedIn: boolean;
+          /** Roughly how many seconds making the sandbox takes, by the setup's plan. */
+          readonly seconds: number;
       };
 
 /** The folder's name inside its sandbox's /work, derived by the page from the folder's (project.rs `CreateAsk`). */
@@ -512,7 +514,7 @@ export type FolderStanding =
     | { readonly state: `signedOut` | `signedIn` | `copying` | `ready` | `interrupted` }
     | { readonly state: `queued`; readonly behind?: string }
     | { readonly state: `needsDocker`; readonly reason: DockerReason }
-    | { readonly state: `creating`; readonly phase?: string; readonly step?: string; readonly percent: number }
+    | { readonly state: `creating`; readonly phase?: string; readonly step?: string; readonly percent: number; readonly left?: number }
     | { readonly state: `waiting`; readonly for: SetupWaitingFor }
     | { readonly state: `failed`; readonly reason: string };
 
@@ -532,6 +534,8 @@ export type FolderSetup = FolderStanding & {
     readonly attempt: number;
     /** Unix milliseconds of the press. */
     readonly askedAt: number;
+    /** Unix milliseconds the last setup started. */
+    readonly startedAt?: number;
     /** Unix milliseconds of the last change: an older answer never replaces a newer one. */
     readonly updatedAt: number;
     /** What a setup stopped on a question said this computer needs, as `intentic-requirement:` objects. */

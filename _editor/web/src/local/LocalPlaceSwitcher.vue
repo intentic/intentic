@@ -16,7 +16,8 @@ import { sandboxSlot, sandboxSlotChord } from "./localKeys";
 //
 // The sandboxes are the ones the workspace last told the app about (localHost.ts `roster`): this page cannot ask
 // the platform. So a row carries what came with it (a name, where it runs, whether it is shared) and no count or state,
-// which would be as old as the workspace's last look. Until the workspace has said, the row is the workspace itself.
+// which would be as old as the workspace's last look. With none listed, Add sandbox is the one row: a "Your workspace"
+// row beside it opened the same page for an account with no sandbox, so the menu offered one place twice (2026-10-21).
 //
 // It opens as the workspace's switcher does (SandboxSwitcher.vue): resting on the chip raises it, a press pins it. The
 // folder the chip names heads the panel, where its hover card used to say it.
@@ -82,8 +83,8 @@ const attempt = async (key: string, act: () => Promise<void>): Promise<void> => 
     }
 };
 
-// A destination is required: bringing the workspace window forward alone can restore an old /setup page.
-const toAgents = (): void => void attempt(`:agents`, () => (facts.value?.accountSeen === true ? host.openWorkspace(`/`) : host.signIn()));
+// No account on this install yet: the sign-in, which comes back as the workspace.
+const toAgents = (): void => void attempt(`:agents`, () => host.signIn());
 
 // A sandbox is the workspace opened on it (router/sandboxArrival.ts), which says so when the account no longer lists it.
 const sandboxKey = (box: LocalSandbox): string => `sandbox:${box.id}`;
@@ -193,17 +194,6 @@ const agentsFailure = computed(() => failedAt(`:agents`, `:add`));
                         <Notice tone="danger" class="text-2xs">{{ failedAt(sandboxKey(box)) }}</Notice>
                     </div>
                 </template>
-                <!-- The workspace has not told the app its sandboxes yet (an install updated since it was last open): the workspace itself, which knows them. -->
-                <button v-if="sandboxes.length === 0" type="button" data-menu-row :class="rowClass" @click="toAgents">
-                    <span class="flex h-7 w-7 shrink-0 items-center justify-center text-muted">
-                        <Icon :name="working === `:agents` ? `spinner` : `robot`" :spin="working === `:agents`" class="text-sm" />
-                    </span>
-                    <span class="flex min-w-0 flex-1 flex-col">
-                        <span class="truncate text-content">{{ t(`local.placeSwitcher.workspace`) }}</span>
-                        <span class="truncate text-2xs text-subtle">{{ t(`local.placeSwitcher.workspaceLead`) }}</span>
-                    </span>
-                    <Icon name="arrow-up-right" class="shrink-0 text-2xs text-subtle" />
-                </button>
                 <button type="button" data-menu-row :class="rowClass" @click="addSandbox">
                     <span class="flex h-7 w-7 shrink-0 items-center justify-center text-muted">
                         <Icon :name="working === `:add` ? `spinner` : `plus`" :spin="working === `:add`" class="text-sm" />

@@ -23,7 +23,7 @@ import {
 } from "./desktop";
 import { deviceBadge } from "./device/badge";
 import { startDockerAndSay } from "./device/docker";
-import { folderSetupOf, folderSetupRunning, folderSetups, folderSetupVerbs, startFolderSetups } from "./device/folderSetups";
+import { folderSetupOf, folderSetupRunningBesides, folderSetups, folderSetupVerbs, startFolderSetups } from "./device/folderSetups";
 import { followOnScreen } from "./onScreen";
 import { followRoster } from "./device/roster";
 import { folderSetupFor, projectPathOf } from "./device/projectBuild";
@@ -51,7 +51,7 @@ const badge = computed(() => {
         startingDocker: device.dockerStarting.value,
         // A deb or rpm upgrade installed under the running app is one restart away too.
         updateReady: device.update.value.kind === `ready` || device.update.value.kind === `installed`,
-        folderSetup: folderSetupRunning.value,
+        folderSetup: folderSetupRunningBesides(folderSetups.value, folderPath()),
         // Only Windows has this PC's own setup: elsewhere its check speaks of Docker, which the tile already does.
         pc: device.info.value?.os === `windows` ? pcStanding.value : undefined,
     });
