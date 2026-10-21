@@ -139,12 +139,12 @@ onMounted(reveal);
 watch(tabStop, reveal, { flush: `post` });
 
 // THE GLIDING RULE: one bar under the strip that slides from the tab being left to the one chosen, rather than one
-// rule going out as another comes in, so the eye is carried to where the selection went. Drawn as a 1px-wide bar that
-// is translated and scaled to the open tab, never given a left or a width: both are compositor-only, so the slide
-// costs no layout and no paint per frame, however busy the page under it. Measured from the tab's offset in the strip,
-// which scrolls with it. The first placement takes no time (nothing slid there); after that it moves on the house
-// curve at `--motion-base`, which reads 0ms under the reduced-motion switch, so a still interface gets a cut. Until it
-// is measured (and with no layout at all, as in a test) the open tab draws its own rule, so nothing is ever unmarked.
+// rule going out as another comes in, so the eye is carried to where the selection went. The bar takes the tab's
+// measured width: scaling a 1px-wide layer magnifies its raster rounding at fractional zoom or display scales, so
+// the painted rule can spill into the next tab even when its layout bounds are right. Translated from the tab's
+// offset in the strip, which scrolls with it. The first placement takes no time (nothing slid there); after that it
+// moves on the house curve at `--motion-base`, which reads 0ms under the reduced-motion switch. Until it is measured
+// (and with no layout at all, as in a test) the open tab draws its own rule, so nothing is ever unmarked.
 const rule = ref<{ x: number; width: number }>();
 const gliding = ref(false);
 const place = (): void => {
@@ -188,7 +188,7 @@ watch(
     { flush: `post` },
 );
 const ruleStyle = computed(() =>
-    rule.value === undefined ? undefined : { translate: `${rule.value.x}px 0`, scale: `${rule.value.width} 1` },
+    rule.value === undefined ? undefined : { translate: `${rule.value.x}px 0`, width: `${rule.value.width}px` },
 );
 const optionClass = (active: boolean): string => (variant === `underline` ? underlineTab(active) : look.value.option({ active }));
 </script>
@@ -228,8 +228,8 @@ const optionClass = (active: boolean): string => (variant === `underline` ? unde
         <span
             v-if="ruleStyle !== undefined"
             aria-hidden="true"
-            class="pointer-events-none absolute bottom-0 left-0 h-0.5 w-px origin-left bg-primary-500 will-change-[translate,scale]"
-            :class="gliding && `transition-[translate,scale] duration-(--motion-base) ease-smooth`"
+            class="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-primary-500 will-change-[translate]"
+            :class="gliding && `transition-[translate,width] duration-(--motion-base) ease-smooth`"
             :style="ruleStyle"
         />
     </div>
