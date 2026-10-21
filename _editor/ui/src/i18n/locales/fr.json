@@ -269,5 +269,11 @@
     "await": {
         "couldntLoad": "Impossible de charger ceci",
         "stillWaiting": "Toujours en chargement · {elapsed}"
+    },
+    "freshness": {
+        "checking": "Recherche de données plus récentes",
+        "failed": "Impossible de vérifier s'il y a plus récent : {error}",
+        "offline": "La sandbox ne répond pas : voici ce qu'elle a affiché en dernier",
+        "updated": "Mis à jour {ago}"
     }
 }

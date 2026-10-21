@@ -441,5 +441,11 @@
     "await": {
         "couldntLoad": "Couldn't load this",
         "stillWaiting": "Still loading · {elapsed}"
+    },
+    "freshness": {
+        "checking": "Checking for anything newer",
+        "failed": "Couldn't check for anything newer: {error}",
+        "offline": "The sandbox isn't answering, so this is what it showed last",
+        "updated": "Updated {ago}"
     }
 }

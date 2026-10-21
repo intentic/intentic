@@ -573,6 +573,28 @@
     --tw-ring-color: color-mix(in oklab, var(--color-primary-500) 40%, transparent);
 }
 
+/* THE FRESHNESS LINE (FreshnessFrame.vue): a short bar crossing the pane's top edge while a newer answer is on its way.
+   With motion reduced it stands still across the whole edge, so "checking" is still seen. */
+@keyframes ui-freshness-sweep {
+    from {
+        left: -33%;
+    }
+    to {
+        left: 100%;
+    }
+}
+
+.ui-freshness-sweep {
+    animation: ui-freshness-sweep 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+:root[data-motion="reduced"] .ui-freshness-sweep {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.5;
+}
+
 /* Kept for the tiny tooltip and anchored-overlay reveal. */
 @keyframes ui-fade-in {
     from {

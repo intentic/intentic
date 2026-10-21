@@ -314,6 +314,10 @@ export {
     type SkeletonSnapshotOptions,
 } from "./lib/skeleton/skeletonStore.js";
 export { IMPRINT_VERSION, type SkeletonImprint } from "./lib/skeleton/skeletonImprint.js";
+// The other half of a wait: an answer already on screen while a newer one is asked for. Every read with one reports
+// its age (`reportFreshness`), and the <FreshnessFrame> around a pane says when what it shows may be out of date.
+export { default as FreshnessFrame } from "./components/feedback/FreshnessFrame.vue";
+export { FRESHNESS_SCOPE, type ReadFreshness, reportFreshness } from "./components/feedback/freshness.js";
 // Index-and-body screen layout.
 export { default as SplitView } from "./components/layout/SplitView.vue";
 // Whether the screen has folded its index above its body; lets a rail match the shell's compact-width breakpoint.

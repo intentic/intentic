@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { Disposable } from "@intentic/extension-api";
-import { ContextMenu, ResizeSeam, ui } from "@intentic/ui";
+import { ContextMenu, FreshnessFrame, ResizeSeam, ui } from "@intentic/ui";
 import { loadChunk } from "@intentic/ui/chunk";
 import { useT } from "@intentic/ui/i18n";
 import type { MenuItem } from "primevue/menuitem";
 import { type Component, computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, useId } from "vue";
+import { useSandboxLiveness } from "../../client/sandbox/freshness/queryFreshness";
 import { chatInSidePanel } from "../../models/conversations/panel/chatPanelLayout";
 import { SIDE_PANEL } from "../../workbench/commands/categories";
 import { type CommandRegistration, registerCommand } from "../../workbench/commands/useCommands";
@@ -39,6 +40,8 @@ const { floating = false } = defineProps<{ floating?: boolean }>();
 const t = useT();
 const layout = useLayout();
 const panel = useSidePanel();
+// The side panel's views draw cached answers too; each tab's frame says when they may be out of date.
+const { offline, lostAt } = useSandboxLiveness();
 const uid = useId();
 
 const tabsOnScreen = computed(() => shownSideTabs.value.length > 0);
@@ -332,7 +335,10 @@ onBeforeUnmount(() => {
                     :class="tab.id === shownSideActive ? `` : `invisible`"
                     :inert="tab.id === shownSideActive ? undefined : true"
                 >
-                    <component :is="bodyOf(tab)" :input="tab.input" :jump="panel.jumps.value[tab.id]" />
+                    <!-- Per tab, so a slow read in a hidden tab never speaks for the one shown. -->
+                    <FreshnessFrame :offline="offline" :lost-at="lostAt">
+                        <component :is="bodyOf(tab)" :input="tab.input" :jump="panel.jumps.value[tab.id]" />
+                    </FreshnessFrame>
                 </div>
             </div>
         </section>

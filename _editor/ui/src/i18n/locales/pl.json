@@ -441,5 +441,11 @@
     "await": {
         "couldntLoad": "Nie udało się tego wczytać",
         "stillWaiting": "Wciąż wczytuję · {elapsed}"
+    },
+    "freshness": {
+        "checking": "Sprawdzam, czy jest coś nowszego",
+        "failed": "Nie udało się sprawdzić, czy jest coś nowszego: {error}",
+        "offline": "Sandbox nie odpowiada, więc widzisz to, co pokazał ostatnio",
+        "updated": "Zaktualizowano {ago}"
     }
 }

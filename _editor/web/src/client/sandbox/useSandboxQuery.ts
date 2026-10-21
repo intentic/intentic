@@ -2,6 +2,7 @@ import { useQuery, type QueryFunction, type UseQueryOptions } from "@tanstack/vu
 import { useLoaded } from "@intentic/extension-api";
 import { computed, type MaybeRefOrGetter, shallowRef, toValue, watch } from "vue";
 import { queryClient } from "../../lib/queryPersistence";
+import { reportQueryFreshness } from "./freshness/queryFreshness";
 import { readFailure } from "./useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../../app/perf/perf";
@@ -73,6 +74,8 @@ export function useSandboxQuery<T, Selected = T>(options: UseQueryOptions<T, Err
         wanted: resolved.enabled === undefined || toValue(resolved.enabled) !== false,
         retry: () => void query.refetch(),
     }));
+    // The pane it is read in says when the answer drawn may be out of date (a slow refresh, one that failed).
+    reportQueryFreshness(query, () => standingFailure.value);
     // `error` is the standing failure too, so a view that says the failure from it agrees with `loaded` and does not go
     // blank for a retry the read makes by itself.
     return { query, error: standingFailure, loaded };

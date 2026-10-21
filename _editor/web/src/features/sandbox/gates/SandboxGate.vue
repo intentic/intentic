@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { FreshnessFrame } from "@intentic/ui";
 import { computed } from "vue";
 import { sandboxRequiresGate } from "../overview/availability";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxEstablished } from "./established";
 import { daemonTooOld } from "../../../client/sandbox/daemon/useDaemonVersion";
+import { useSandboxLiveness } from "../../../client/sandbox/freshness/queryFreshness";
 import SandboxConnecting from "./SandboxConnecting.vue";
 import SandboxTooOld from "./SandboxTooOld.vue";
 import SandboxUnauthorized from "./SandboxUnauthorized.vue";
@@ -23,6 +25,8 @@ const denied = computed(() => connection.value.failure?.kind === `forbidden`);
 const established = useSandboxEstablished();
 const availability = useSandboxAvailability(established);
 const gated = computed(() => sandboxRequiresGate(reachable.value, established.value, availability.value));
+// What stays mounted through a stall is the last answers it had: the frame says when they may be out of date.
+const { offline, lostAt } = useSandboxLiveness();
 </script>
 
 <template>
@@ -34,5 +38,5 @@ const gated = computed(() => sandboxRequiresGate(reachable.value, established.va
     <SandboxWarming v-else-if="gated && availability === `warming`" />
     <!-- A gate is for a workspace that never painted, or a cause waiting can't repair. -->
     <SandboxConnecting v-else-if="gated" />
-    <slot v-else />
+    <FreshnessFrame v-else :offline="offline" :lost-at="lostAt"><slot /></FreshnessFrame>
 </template>

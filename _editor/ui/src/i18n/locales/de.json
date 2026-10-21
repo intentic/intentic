@@ -279,5 +279,11 @@
     "await": {
         "couldntLoad": "Konnte nicht geladen werden",
         "stillWaiting": "Wird noch geladen · {elapsed}"
+    },
+    "freshness": {
+        "checking": "Suche nach Neuerem",
+        "failed": "Konnte nicht nach Neuerem suchen: {error}",
+        "offline": "Die Sandbox antwortet nicht, daher siehst du ihren letzten Stand",
+        "updated": "Aktualisiert {ago}"
     }
 }
