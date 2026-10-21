@@ -1380,10 +1380,6 @@
         "count": 417,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/agent/routes/agent.routes.ts#createAgentRoutes.<anonymous>#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/agent/routes/agent.routes.ts#createAgentRoutes#lines": {
         "count": 291,
         "why": "standing when the check arrived (2026-10-16)"
@@ -1454,11 +1450,11 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts": {
-        "count": 1048,
+        "count": 1000,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-resume.ts#rehydrateParkedTurn#lines": {
-        "count": 185,
+        "count": 165,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/agent/run/turn/turn-runs.ts#startTurnRun.<anonymous>#cognitive": {
@@ -1761,7 +1757,7 @@
         "count": 115,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/composition.ts": 911,
+    "_sandbox/sandbox/src/composition.ts": 912,
     "_sandbox/sandbox/src/composition.ts#createServices#lines": {
         "count": 273,
         "why": "standing when the check arrived (2026-10-16); came in with main's own changes"
@@ -2291,7 +2287,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/privacy/masker.ts#createMasker#lines": {
-        "count": 141,
+        "count": 123,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/privacy/ner.ts#loadRecognizer#lines": {
@@ -2307,7 +2303,7 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/privacy/privacy-vault.ts#createPrivacyVault#lines": {
-        "count": 220,
+        "count": 199,
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_sandbox/sandbox/src/processes/managed-processes.ts#createManagedProcesses#lines": {
@@ -3165,10 +3161,6 @@
         "why": "standing when the check arrived (2026-10-16)"
     },
     "_shared/sandbox-contract/src/chores/verdict.ts#assessChore#cyclomatic": {
-        "count": 21,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_shared/sandbox-contract/src/models/plan-pools.ts#serviceState#cyclomatic": {
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
