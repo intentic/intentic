@@ -12,6 +12,9 @@ describe(`plainToolWords`, () => {
         expect(plainToolWords({ name: `Bash`, target: `cd /work && pnpm test src` })).toBe(`Running checks`);
         expect(plainToolWords({ name: `Bash`, target: `bunx vitest run foo` })).toBe(`Running checks`);
         expect(plainToolWords({ name: `Bash`, target: `pnpm add left-pad` })).toBe(`Installing something`);
+        // Past an `export` that only sets the PATH, and into a subshell.
+        const target = `cd /work/intentic && export PATH=/opt/sandbox/heavy-shims:$PATH; (pnpm --filter @intentic/sandbox test registry 2>&1 | tail -5)`;
+        expect(plainToolWords({ name: `Bash`, target })).toBe(`Running checks`);
     });
 
     it(`does not guess at a line it cannot place, and never prints it`, () => {

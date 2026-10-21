@@ -63,13 +63,16 @@ const LOOKING = new Set([
 ]);
 // Programs that run a project's own checks.
 const CHECKING = new Set([`vitest`, `jest`, `pytest`, `tsc`, `eslint`, `oxlint`, `biome`, `prettier`, `cargo`, `go`, `mocha`, `playwright`, `lsp`]);
+// Statements that only prepare the line for the ones after them.
+const SETUP = new Set([`cd`, `export`]);
 const RUNNERS = new Set([`bunx`, `npx`, `pnpx`]);
 const PACKAGE_MANAGERS = new Set([`npm`, `pnpm`, `yarn`, `bun`, `pip`, `pip3`, `uv`, `cargo`, `apt`, `apt-get`, `brew`]);
 
 const statementsOf = (command: string): string[] =>
     command
         .split(/&&|\|\||;|\n/)
-        .map((statement) => statement.trim())
+        // A subshell's or a group's brackets are punctuation round the statement, not part of the program it starts.
+        .map((statement) => statement.trim().replace(/^[({]+\s*/, ``).replace(/\s*[)}]+$/, ``))
         .filter((statement) => statement !== ``);
 
 // The program a statement starts: past an env prefix, and without the path it was called by.
@@ -86,8 +89,8 @@ const commandKind = (command: string | undefined): CommandKind => {
     if (command === undefined) {
         return `command`;
     }
-    // `cd` only moves; it says nothing about what the line did there.
-    const statements = statementsOf(command).filter((statement) => headOf(statement) !== `cd`);
+    // `cd` only moves and `export` only sets the stage; neither says what the line did there.
+    const statements = statementsOf(command).filter((statement) => !SETUP.has(headOf(statement)));
     if (statements.length === 0) {
         return `command`;
     }

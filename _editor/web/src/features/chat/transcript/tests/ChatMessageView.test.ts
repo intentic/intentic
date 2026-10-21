@@ -21,6 +21,7 @@ import { agentStatusMeta, CLOCK_FROM_MS } from "../../../../models/agent-status/
 import type { EndingByHand } from "../../../../models/agent-status/agentStatus-standing";
 import { setLocale } from "@intentic/ui/i18n";
 import { useAudience } from "../../../../app/useAudience";
+import { useToolCalls } from "../../../../models/conversations/tools/useToolCalls";
 
 // `onSandbox`: the running turn's start was stamped on the sandbox's clock rather than this browser's.
 const clock = { turnStartedAt: undefined as number | undefined, onSandbox: false };
@@ -1380,6 +1381,19 @@ describe(`background jobs`, () => {
 
     const icons = (element: HTMLElement): (string | null)[] => [...element.querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`));
 
+    // An ended job stands folded on the spine while tool calls are hidden; a press opens it back into its row.
+    const band = (element: HTMLElement): HTMLButtonElement | null => element.querySelector<HTMLButtonElement>(`button.chat-spine-wash`);
+    const opened = async (element: HTMLElement): Promise<HTMLElement> => {
+        band(element)!.click();
+        await nextTick();
+        return element;
+    };
+
+    afterEach(() => {
+        useToolCalls().showToolCalls.value = false;
+        useAudience().setAudience(`developer`);
+    });
+
     it(`names the job by the agent's words, not its command, and says it is running and for how long`, () => {
         roster.jobs = [live()];
         const element = mount(jobRow());
@@ -1398,23 +1412,23 @@ describe(`background jobs`, () => {
         expect(element.textContent).toContain(`2m 5s`);
     });
 
-    it(`says how a job ended once the card reports it, weighting a failure`, () => {
+    it(`says how a job ended once the card reports it, weighting a failure`, async () => {
         roster.jobs = [live({ endedAt: Date.now() - 13_000, exitCode: 0 })];
-        const finished = mount(jobRow());
+        const finished = await opened(mount(jobRow()));
         expect(finished.textContent).toContain(`Finished in 52s`);
         expect(icons(finished)).toContain(`check`);
 
         app?.unmount();
         app = undefined;
         roster.jobs = [live({ endedAt: Date.now() - 24_000, exitCode: 2 })];
-        const failed = mount(jobRow());
+        const failed = await opened(mount(jobRow()));
         expect(failed.textContent).toContain(`Failed (exit 2) after 41s`);
         expect(failed.querySelector(`.text-danger`)).not.toBeNull();
     });
 
     // A daemon restart forgets a job's live state; the row then claims nothing about how it went.
-    it(`claims no outcome for a job the card no longer knows`, () => {
-        const element = mount(jobRow());
+    it(`claims no outcome for a job the card no longer knows`, async () => {
+        const element = await opened(mount(jobRow()));
         expect(element.textContent).toContain(`Background job · started`);
         expect(element.textContent).not.toContain(`Running`);
         expect(icons(element)).not.toContain(`spinner`);
@@ -1426,6 +1440,59 @@ describe(`background jobs`, () => {
         element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!.click();
         await nextTick();
         expect(element.textContent).toContain(`pnpm -C web e2e --project=chromium`);
+    });
+
+    // Over, a job is a step the agent took, folded as the call that started it is; only its drawing changes.
+    it(`folds an ended job onto the spine while tool calls are hidden, and opens it back on a press`, async () => {
+        roster.jobs = [live({ endedAt: Date.now() - 13_000, exitCode: 0 })];
+        const row = jobRow();
+        const element = mount(row);
+        expect(band(element)).not.toBeNull();
+        expect(element.textContent).not.toContain(`Finished`);
+        expect(element.querySelector(`.chat-spine-shut`)).not.toBeNull();
+
+        await opened(element);
+        expect(band(element)).toBeNull();
+        expect(element.textContent).toContain(`Finished in 52s`);
+        element.querySelector<HTMLButtonElement>(`button[aria-label="Fold the background job"]`)!.click();
+        await nextTick();
+        expect(band(element)).not.toBeNull();
+        expect(row.backgroundJob?.label).toBe(`Run the web e2e suite`);
+    });
+
+    it(`tints the band of a job that failed`, () => {
+        roster.jobs = [live({ endedAt: Date.now() - 24_000, exitCode: 2 })];
+        expect(band(mount(jobRow()))?.classList.contains(`chat-spine-wash-failed`)).toBe(true);
+    });
+
+    it(`keeps a running job a row, and every job a row once tool calls are shown`, () => {
+        roster.jobs = [live()];
+        expect(band(mount(jobRow()))).toBeNull();
+
+        app?.unmount();
+        app = undefined;
+        useToolCalls().showToolCalls.value = true;
+        roster.jobs = [live({ endedAt: Date.now() - 13_000, exitCode: 0 })];
+        const element = mount(jobRow());
+        expect(band(element)).toBeNull();
+        expect(element.textContent).toContain(`Finished in 52s`);
+    });
+
+    // A maker is told what the job does, never the shell line, when the agent gave no words of its own.
+    it(`says a bare command as the act it is to a maker, and a failure without its exit code`, () => {
+        useAudience().setAudience(`maker`);
+        useToolCalls().showToolCalls.value = true;
+        roster.jobs = [live({ endedAt: Date.now() - 24_000, exitCode: 143 })];
+        const command = `cd /work && pnpm --filter web test`;
+        const element = mount({ ...jobRow(), backgroundJob: { id: `job-1`, label: command, command, startedAt: Date.now() - 65_000 } });
+        expect(element.textContent).toContain(`Running checks`);
+        expect(element.textContent).not.toContain(`pnpm`);
+        expect(element.textContent).toContain(`Ran into a problem after 41s`);
+        expect(element.textContent).not.toContain(`143`);
+
+        app?.unmount();
+        app = undefined;
+        expect(mount(jobRow()).textContent).toContain(`Run the web e2e suite`);
     });
 });
 
