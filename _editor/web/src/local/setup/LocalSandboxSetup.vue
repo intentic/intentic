@@ -11,7 +11,7 @@
 import { Button, Icon, Notice, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, watch } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import { localFace } from "../../app/environments/local";
 import { useAccount } from "../../client/auth/useAccount";
 import AgentHouse from "../house/AgentHouse.vue";
@@ -31,13 +31,14 @@ const { view, setup, preview, creating, failure, actionFailure, weigh, seen } = 
 
 const folderName = computed(() => face.value?.name ?? setup.value?.name ?? ``);
 
-const toFiles = (): void => void router.push(`/workspace`);
+// Back to the folder's files: a link wherever the reader presses for it.
+const FILES = `/workspace`;
 
 // The first look, when nothing has been asked yet: a folder that has its sandbox already is opened, and the page goes.
 // Looked at again when a setup is put away, since who is signed in may have changed meanwhile.
 const look = async (): Promise<void> => {
     if ((await weigh()) === `opened`) {
-        toFiles();
+        void router.push(FILES);
     }
 };
 onMounted(look);
@@ -102,7 +103,7 @@ const signedIn = computed(() => (setup.value === undefined ? preview.value?.kind
 
             <div class="flex flex-col gap-4 p-5 md:p-6">
                 <div class="flex flex-col gap-1">
-                    <p class="text-2xs font-medium uppercase tracking-wide text-subtle">{{ t(`local.sandboxSetup.eyebrow`, { name: folderName }) }}</p>
+                    <p class="text-xs font-medium text-subtle">{{ t(`local.sandboxSetup.eyebrow`, { name: folderName }) }}</p>
                     <h1 class="text-lg font-semibold text-content" aria-live="polite">
                         {{ view?.title ?? t(`local.sandboxSetup.looking`, { name: folderName }) }}
                     </h1>
@@ -141,7 +142,7 @@ const signedIn = computed(() => (setup.value === undefined ? preview.value?.kind
                         :loading="at === 0 && creating"
                         @click="run(press)"
                     />
-                    <Button v-if="secondaryLabel" tier="quiet" :label="secondaryLabel" @click="toFiles" />
+                    <Button v-if="secondaryLabel" :as="RouterLink" :to="FILES" tier="quiet" :label="secondaryLabel" />
                 </div>
             </div>
         </section>
@@ -167,10 +168,10 @@ const signedIn = computed(() => (setup.value === undefined ? preview.value?.kind
         <div v-if="view?.carriesOn" class="flex flex-wrap items-center gap-3 rounded-lg border border-line-subtle px-4 py-3 text-xs text-muted">
             <Icon name="info-circle" class="shrink-0 text-sm" aria-hidden="true" />
             <span class="min-w-0 flex-1">{{ t(`local.sandboxSetup.carriesOn`) }}</span>
-            <Button tier="boring" size="small" :label="t(`local.sandboxSetup.backToFiles`)" @click="toFiles" />
+            <Button :as="RouterLink" :to="FILES" tier="boring" size="small" :label="t(`local.sandboxSetup.backToFiles`)" />
         </div>
         <div v-else-if="view !== undefined && view.steps.length === 0" class="flex">
-            <Button tier="boring" :label="t(`local.sandboxSetup.backToFiles`)" @click="toFiles" />
+            <Button :as="RouterLink" :to="FILES" tier="boring" :label="t(`local.sandboxSetup.backToFiles`)" />
         </div>
     </div>
 </template>
@@ -188,11 +189,9 @@ const signedIn = computed(() => (setup.value === undefined ? preview.value?.kind
         transform: translateX(300%);
     }
 }
-@media (prefers-reduced-motion: reduce) {
-    .setup-sweep {
-        animation: none;
-        width: 100%;
-        opacity: 0.5;
-    }
+:root[data-motion="reduced"] .setup-sweep {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
 }
 </style>

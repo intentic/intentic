@@ -1,5 +1,6 @@
 import { t } from "@intentic/ui/i18n";
 import { analyticsAvailable } from "../../app/analyticsConsent";
+import { localFace } from "../../app/environments/local";
 import type { HubPage, SettingEntry } from "../../workbench/hub/hubSearch";
 import type { SettingsSection } from "./settingsNav";
 
@@ -155,6 +156,15 @@ export const SETTINGS_CARDS: readonly SettingEntry[] = [
         title: () => t(`settings.settingsVoice.micGroup`),
         terms: () => [t(`settings.search.wakeWord`)],
         shown: (reader) => !reader.phone,
+    },
+
+    // Organisations: a local window has no account session of its own, so its page only hands the reader to the workspace.
+    {
+        id: `organisation-workspace`,
+        slug: `organisation`,
+        title: () => t(`organisations.console.yours`),
+        terms: () => [t(`organisations.console.openInWorkspace`)],
+        shown: () => localFace() !== undefined,
     },
 
     // Data & privacy.

@@ -1,3 +1,4 @@
+import { sandboxRef } from "@intentic/extension-api";
 import { reportFreshness } from "@intentic/ui";
 import { computed, readonly, type Ref, ref, watch } from "vue";
 import { useSandbox } from "../useSandbox";
@@ -38,9 +39,10 @@ export const reportQueryFreshness = (query: QueryFacts, refreshError: () => stri
 
 // What a pane's frame needs of the sandbox itself: whether it is answering at all, and when it last stopped. Until that
 // moment the live stream kept every cached answer true, so an answer fetched an hour before a drop is as of the drop.
-// One record for every pane, kept for the session: watched here rather than in a pane, whose unmount would stop it.
+// One record for every pane, kept per sandbox: watched here rather than in a pane, whose unmount would stop it, and
+// scoped to the sandbox so the next one picked does not inherit this one's drop.
 const { reachable } = useSandbox();
-const lostAt = ref<number | undefined>(undefined);
+const lostAt = sandboxRef<number | undefined>(() => undefined);
 watch(reachable, (answering, was) => {
     if (!answering && was) {
         lostAt.value = Date.now();

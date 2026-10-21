@@ -21,13 +21,9 @@ import type { RunEvent } from "./desktop";
 
 export {
     approach,
-    type Download,
-    downloadRate,
-    LAYER_DONE,
     type PlanInput,
     parseDownload,
     parseLayer,
-    type Sample,
     startProgress,
     tick,
 } from "@intentic/sandbox-run/setup-progress";

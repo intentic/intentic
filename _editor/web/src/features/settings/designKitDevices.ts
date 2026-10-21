@@ -60,7 +60,7 @@ export const KIT_PORTS: readonly DevicePortRow[] = [
     { port: 5173, sandboxId: `lab-intentic-dev`, state: `held-by-sandbox`, heldBy: `work-intentic-dev`, command: `node vite` },
 ];
 // A healthy loop with both verbs offered: the standing case, where the quiet note is what makes the buttons legible.
-export const KIT_AGENT: AgentPanel = {
+const KIT_AGENT: AgentPanel = {
     version: `1.275.0`,
     state: { word: `running`, variant: `success` },
     facts: [`pid 12716`],

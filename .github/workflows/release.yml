@@ -478,6 +478,10 @@ jobs:
     # Was 120 when this job built installers and images itself; now it stages, uploads and stitches. The
     # uploads are the slow part and they have never neared 60; the other 30 are the edge-door gate's longest wait.
     timeout-minutes: 90
+    outputs:
+      # Whether semantic-release actually cut this version: a publish that found main moved on succeeds having
+      # tagged nothing, and a job that checks the tag out must not run after one (see the Release step).
+      released: ${{ steps.release.outputs.released }}
     permissions:
       contents: write
       packages: write
@@ -677,7 +681,7 @@ jobs:
   # back the sandbox, and the APK only ever names a Release that exists.
   device-android:
     needs: [plan, publish]
-    if: ${{ needs.publish.result == 'success' && needs.plan.outputs.version != '' }}
+    if: ${{ needs.publish.result == 'success' && needs.publish.outputs.released == 'true' && needs.plan.outputs.version != '' }}
     permissions:
       contents: write
     uses: ./.github/workflows/device-android.yml

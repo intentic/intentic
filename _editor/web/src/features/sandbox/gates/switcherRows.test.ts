@@ -4,7 +4,11 @@ import { answerNote, removalTakes } from "./switcherRows";
 
 describe(`removalTakes`, () => {
     it(`lists what an owner's removal takes along`, () => {
-        expect(removalTakes(`owner`).map((take) => take.label)).toEqual([`Connected accounts`, `Settings`, `Chats and files`]);
+        expect(removalTakes(`owner`)).toEqual([
+            { icon: `key`, label: `Connected accounts`, note: `ChatGPT, Claude, GitHub` },
+            { icon: `cog`, label: `Settings`, note: `Instructions, capabilities` },
+            { icon: `comments`, label: `Chats and files`, note: `The whole workspace` },
+        ]);
     });
 
     it(`lists nothing for a member leaving, who takes nothing with them`, () => {

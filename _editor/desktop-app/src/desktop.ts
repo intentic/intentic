@@ -602,7 +602,7 @@ export const updateInstall = (): Promise<void> => invoke(`update_install`);
 
 // Format: `intentic: [<phase>] <sentence>`; unphased output is detail under the running step, not a step itself. The
 // reader is sandbox-run's setup-progress.ts, which the web's press on a connected machine reads the same lines with.
-export { parseStep, type StepLine as Step } from "@intentic/sandbox-run/setup-progress";
+export { parseStep } from "@intentic/sandbox-run/setup-progress";
 
 // One line per unmet requirement, emitted only when piped; `action` drives the UI, separate from phase lines.
 const REQUIREMENT = /^intentic-requirement: (\{.*\})$/;

@@ -27,21 +27,22 @@ declare global {
 // Each read also reports its answer's age to the pane it is read in (queryFreshness.ts), so the pane says when what an
 // extension shows may be out of date without the extension drawing anything for it.
 const { reachable } = useSandbox();
-const errorWords = (error: Error | null): string | undefined => (error === null ? undefined : errorMessage(error));
+// The read's error in words: vue-query types it `unknown`, since a query function may throw anything.
+const errorWords = ({ error }: { readonly error: vue.Ref<unknown> }): string | undefined => (error.value === null ? undefined : errorMessage(error.value));
 const useQuery = (...args: Parameters<typeof vueQuery.useQuery>): ReturnType<typeof vueQuery.useQuery> => {
     const query = vueQuery.useQuery(...args);
     extensionApi.useLoaded(() => ({
         data: query.data.value,
-        error: errorWords(query.error.value),
+        error: errorWords(query),
         fetching: query.isFetching.value,
         wanted: query.fetchStatus.value !== `idle` || reachable.value !== true,
     }));
-    reportQueryFreshness(query, () => errorWords(query.error.value));
+    reportQueryFreshness(query, () => errorWords(query));
     return query;
 };
 const useInfiniteQuery = (...args: Parameters<typeof vueQuery.useInfiniteQuery>): ReturnType<typeof vueQuery.useInfiniteQuery> => {
     const query = vueQuery.useInfiniteQuery(...args);
-    reportQueryFreshness(query, () => errorWords(query.error.value));
+    reportQueryFreshness(query, () => errorWords(query));
     return query;
 };
 
