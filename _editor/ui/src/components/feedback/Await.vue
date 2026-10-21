@@ -7,6 +7,7 @@ import { useLoadingReveal } from "../../composables/loadingReveal.js";
 import { useT } from "../../i18n/index.js";
 import { formatElapsed } from "../../lib/format.js";
 import { vSkeletonSource } from "../../lib/skeleton/skeletonSource.js";
+import { imprintOf } from "../../lib/skeleton/skeletonStore.js";
 import Notice from "./Notice.vue";
 import SkeletonRows from "./SkeletonRows.vue";
 import SkeletonSnapshot from "./SkeletonSnapshot.vue";
@@ -19,7 +20,9 @@ import SkeletonSnapshot from "./SkeletonSnapshot.vue";
 // - an answer that renders nothing is remembered as nothing, so a section that turned out empty is not promised again;
 // - reads made inside the region as it first draws join its wait (`joinAwait`, which every daemon read does by itself),
 //   and the region keeps its remembered look until they have answered or HOLD_BUDGET_MS has passed, instead of showing
-//   its insides half-read. A region inside another joins it too, so a page settles once, not in pieces;
+//   its insides half-read. A region inside another joins it too, so a page settles once, not in pieces. A region with
+//   no remembered look covers nothing: its insides draw at once, each with its own placeholder, and its look is taken
+//   only once they have answered;
 // - a wait that outlasts a blip says how long it has run, and offers to ask again;
 // - a read that gave up is said, with a way to try again (`#failed` for a view's own words).
 
@@ -98,23 +101,29 @@ onMounted(settle);
 onBeforeUnmount(() => clearTimeout(budget));
 
 const holding = computed(() => of.state === `ready` && !released.value);
-const waiting = computed(() => of.state === `waiting` || holding.value);
+// Held out of sight only under a look remembered for it. With none, the insides draw at once and each region inside
+// draws its own placeholder (a view's hand-drawn shape, or its own remembered look) while its reads are out: covering
+// them all with this region's fallback drew a generic page over every view whose look this sandbox had not taken yet.
+const remembered = computed(() => imprint !== undefined && imprintOf(imprint) !== undefined);
+const covering = computed(() => holding.value && remembered.value);
+const waiting = computed(() => of.state === `waiting` || covering.value);
 const subject = computed(() => imprint ?? ``);
 const revealed = useLoadingReveal(waiting, subject);
 
-// The region's own wait, joined to the region it sits in, which holds until this one has settled too.
+// The region's own wait, joined to the region it sits in, which holds until this one has settled too, covered or not.
 const since = computed(() =>
     of.state === `waiting` ? of.since : Math.min(Date.now(), ...inside.value.map((read) => (read.state === `waiting` ? read.since : Date.now()))),
 );
 const retry = computed(() => (of.state === `waiting` || of.state === `failed` ? of.retry : undefined));
-joinAwait(() => (waiting.value ? { state: `waiting`, since: since.value, retry: retry.value } : { state: `idle` }));
+joinAwait(() => (of.state === `waiting` || holding.value ? { state: `waiting`, since: since.value, retry: retry.value } : { state: `idle` }));
 provide(AWAIT_SCOPE, { join: (read) => joined.add(read), leave: (read) => joined.delete(read) });
 
-// The insides stay mounted under the placeholder, so the reads they make keep going; they are shown once nothing holds
+// The insides stay mounted under the placeholder, so the reads they make keep going; they are shown once nothing covers
 // them and the placeholder has been up long enough to register.
-const hidden = computed(() => holding.value || revealed.value);
-// Taken only from the answer on screen: a hidden region measures as nothing, and must not be remembered as nothing.
-const source = computed(() => (hidden.value ? undefined : imprint));
+const hidden = computed(() => covering.value || revealed.value);
+// Taken only from the answer on screen and only once its insides have answered: a hidden region measures as nothing,
+// and a half-read one as its insides' placeholders, and neither is what the region looks like.
+const source = computed(() => (hidden.value || holding.value ? undefined : imprint));
 
 const now = useNow(() => revealed.value && of.state === `waiting`);
 const elapsed = computed(() =>

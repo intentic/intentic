@@ -223,6 +223,7 @@ describe(`<Await>`, () => {
     });
 
     it(`stops holding past its budget, leaving a slow read to the insides that made it`, async () => {
+        rememberImprint(`default`, NAME, remembered);
         const inner = ref<Loaded<string>>(waiting());
         const Inside = Reading(inner);
         const host = mount(() => h(Await, { of: ready(`code`), imprint: NAME }, { default: () => h(Inside) }));
@@ -232,6 +233,7 @@ describe(`<Await>`, () => {
     });
 
     it(`holds the region around it while a region inside still waits, so a page settles once`, async () => {
+        rememberImprint(`default`, `outer`, remembered);
         const inner = shallowRef(waiting());
         const host = mount(() =>
             h(Await, { of: ready(`page`), imprint: `outer` }, { default: () => h(Await, { of: inner.value }, { default: answer, ...FALLBACK }) }),
@@ -244,6 +246,22 @@ describe(`<Await>`, () => {
         await advance(0);
         expect(host.querySelector(`.hidden`)).toBeNull();
         expect(host.querySelector(`[data-answer]`)?.textContent).toBe(`rows`);
+    });
+
+    // A view never seen in this sandbox: the host's fallback covering it drew a generic page over the view's own
+    // hand-drawn placeholder (Pipelines' board, under the extension host's outline) until every read inside had answered.
+    it(`covers nothing without a remembered look, so the regions inside draw their own placeholders`, async () => {
+        const inner = shallowRef(waiting());
+        const host = mount(() =>
+            h(Await, { of: ready(`page`), imprint: `outer` }, { default: () => h(Await, { of: inner.value }, { default: answer, ...FALLBACK }) }),
+        );
+        await advance(REVEAL_DELAY_MS);
+        expect(host.querySelector(`.hidden`)).toBeNull();
+        expect(host.querySelector(`[data-skeleton-snapshot]`)).toBeNull();
+        expect(host.querySelector(`[data-fallback]`)).not.toBeNull();
+        // Shown, but not what the region looks like until its insides have answered.
+        await advance(1_000);
+        expect(imprintOf(`outer`)).toBeUndefined();
     });
 
     // A hub's route view is remembered per path (asyncView.ts), so a move between its sections renames the region while
@@ -282,7 +300,8 @@ describe(`<Await>`, () => {
         await flush();
         expect(host.querySelector(`.hidden`)).toBeNull();
 
-        // Another file: about something else, so its insides' first reads hold it again.
+        // Another file: about something else, so its insides' first reads hold it again under its remembered look.
+        rememberImprint(`default`, `diff:two.ts`, remembered);
         name.value = `diff:two.ts`;
         read.value = ready(`two`);
         await flush();

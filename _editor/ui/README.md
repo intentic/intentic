@@ -145,8 +145,10 @@ flowchart LR
   (`src/components/feedback/Await.vue`) from its read's `Loaded` (`@intentic/extension-api`: waiting, ready, failed or
   idle), and by nothing else. It draws nothing for a fast answer, then the region exactly as it last looked in this
   sandbox (its `#fallback` until it has been seen once), then the answer. It takes that look only from the answer on
-  screen, and remembers an answer that shows nothing as nothing. It holds the look while reads made inside the region
-  as it first draws are still out (for 2.5 s at most), says a wait that has run past five seconds with a way to ask
+  screen once the reads inside it have answered, and remembers an answer that shows nothing as nothing. It holds the
+  look while reads made inside the region as it first draws are still out (for 2.5 s at most); a region with no look
+  remembered yet holds nothing, so the regions inside draw their own placeholders. It says a wait that has run past
+  five seconds with a way to ask
   again, and says a failure in words. A region that has drawn waits again only when it is about something else: a new
   `imprint` with a new answer. A new name alone (a hub's route view, remembered per path, moving to another section)
   only changes what its look is remembered under, so the hub's rail and title stay while the section waits in its own
