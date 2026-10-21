@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::webview::cookie::Cookie;
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, Webview};
 
 use crate::state::AppState;
 
@@ -200,10 +200,7 @@ fn now_unix() -> i64 {
 
 /// The store's cookies for the platform. Off the async runtime's threads: the webview answers on the main thread,
 /// and on Windows a cookie read from anywhere that holds that thread never returns (wry#583).
-async fn cookies_for(
-    window: &WebviewWindow,
-    url: url::Url,
-) -> Result<Vec<Cookie<'static>>, String> {
+async fn cookies_for(window: &Webview, url: url::Url) -> Result<Vec<Cookie<'static>>, String> {
     let window = window.clone();
     tauri::async_runtime::spawn_blocking(move || window.cookies_for_url(url))
         .await
@@ -213,7 +210,7 @@ async fn cookies_for(
 
 /// Writes or deletes each cookie in the store, as the webview would have on receiving the answer itself. A cookie the
 /// store refuses costs only the session's roll, which the workspace's own next call makes, so it is logged and passed.
-async fn apply(window: &WebviewWindow, changes: Vec<CookieChange>) {
+async fn apply(window: &Webview, changes: Vec<CookieChange>) {
     if changes.is_empty() {
         return;
     }
@@ -310,7 +307,7 @@ async fn send(
 /// After a sign-out the platform has agreed to: no session in the store whatever the answer's cookies said, no
 /// account or sandboxes for the local windows to list, and a workspace window that finds out now rather than at its
 /// next call.
-async fn signed_off(app: &AppHandle, window: &WebviewWindow, held: Vec<Cookie<'static>>) {
+async fn signed_off(app: &AppHandle, window: &Webview, held: Vec<Cookie<'static>>) {
     let leftovers = held
         .into_iter()
         .filter(|cookie| cookie.name().contains("better-auth"))
@@ -320,7 +317,7 @@ async fn signed_off(app: &AppHandle, window: &WebviewWindow, held: Vec<Cookie<'s
     app.state::<AppState>()
         .remember_roster(crate::setup_link::Roster::default());
     crate::machine_sandbox::account_changed();
-    if let Some(workspace) = app.get_webview_window(crate::windows::WORKSPACE) {
+    if let Some(workspace) = crate::frame::face(app, crate::windows::WORKSPACE) {
         if let Err(error) = workspace.eval("location.reload()") {
             eprintln!("intentic: the workspace could not be told of the sign-out: {error}");
         }
@@ -331,7 +328,7 @@ async fn signed_off(app: &AppHandle, window: &WebviewWindow, held: Vec<Cookie<'s
 /// when the store holds no session, since nothing this app asks answers anyone else.
 async fn with_session(
     app: &AppHandle,
-    window: &WebviewWindow,
+    window: &Webview,
     method: Method,
     path: &str,
     body: Option<String>,
@@ -368,7 +365,7 @@ async fn with_session(
 #[tauri::command]
 pub async fn account_relay(
     app: AppHandle,
-    window: WebviewWindow,
+    window: Webview,
     ask: RelayAsk,
 ) -> Result<RelayAnswer, String> {
     let (method, path) = checked(&ask)?;
@@ -408,7 +405,7 @@ fn answered(status: u16, text: &str) -> Answered {
 /// written where it is called, never one a page names, so it is not held to [`ROUTES`].
 pub async fn platform_post(
     app: &AppHandle,
-    window: &WebviewWindow,
+    window: &Webview,
     path: &str,
     body: &serde_json::Value,
 ) -> Result<Answered, String> {
@@ -422,7 +419,7 @@ pub async fn platform_post(
 /// A GET the app makes for itself, with the workspace session (Repair's turn uses POST; this checks sign-in).
 pub async fn platform_get(
     app: &AppHandle,
-    window: &WebviewWindow,
+    window: &Webview,
     path: &str,
 ) -> Result<Answered, String> {
     let sent = with_session(app, window, Method::Get, path, None).await?;

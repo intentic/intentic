@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
-use tauri::{Manager, WebviewWindow, WindowEvent};
+use tauri::{Manager, Webview, Window, WindowEvent};
 
 /* WHETHER A WINDOW OF THE PAGE IS WHERE THE READER CAN SEE IT, told to its page.
 
@@ -13,7 +13,8 @@ answer is always "visible": WebView2 hears it only from the controller's IsVisib
 push reached their phone all that time. WebKitGTK follows its window, so on Linux this says what the page already
 knew.
 
-So the app says it: a window is shown when it is visible and not minimised, and its page hears
+So the app says it: a page is shown when its window is visible and not minimised and, for one of the two faces sharing
+the app's window (frame.rs), when it is the face that window draws; its page hears
 `intentic-desktop-shown` with `{ shown }` whenever that changes, and once when its bar comes up (windows.rs
 `chrome_is_up`), which is a page that has just loaded and knows nothing. The page reads no event as shown, which is
 what every app before this one meant. */
@@ -24,10 +25,14 @@ const SHOWN_EVENT: &str = "intentic-desktop-shown";
 /// What each window's page was last told, by label, so a resize or a focus change that moves nothing says nothing.
 static TOLD: LazyLock<Mutex<HashMap<String, bool>>> = LazyLock::new(Mutex::default);
 
-/// Whether `window` is on screen. A window that cannot answer counts as shown: a page told it is unseen goes quiet
-/// towards its sandbox, and the wrong way round that loses the reader's push rather than adding one.
-fn on_screen(window: &WebviewWindow) -> bool {
-    window.is_visible().unwrap_or(true) && !window.is_minimized().unwrap_or(false)
+/// Whether `page` is on screen. A window that cannot answer counts as shown: a page told it is unseen goes quiet
+/// towards its sandbox, and the wrong way round that loses the reader's push rather than adding one. A face the frame
+/// is not drawing is out of sight, which the app knows without asking anything.
+fn on_screen(page: &Webview) -> bool {
+    let window = page.window();
+    crate::frame::drawn(page)
+        && window.is_visible().unwrap_or(true)
+        && !window.is_minimized().unwrap_or(false)
 }
 
 /// Record `shown` for `label`; whether that is a change from what was told before (a first telling is one).
@@ -38,7 +43,7 @@ fn changed(told: &Mutex<HashMap<String, bool>>, label: &str, shown: bool) -> boo
 /// Tell `window`'s page whether it is shown: when that changed, or `always` for a page that has just loaded. A window
 /// coming back on screen also gets the app's mark back on its taskbar button, which Windows drops with the button
 /// (badge.rs).
-pub fn tell(window: &WebviewWindow, always: bool) {
+pub fn tell(window: &Webview, always: bool) {
     let shown = on_screen(window);
     let moved = changed(&TOLD, window.label(), shown);
     if moved && shown {
@@ -53,20 +58,29 @@ pub fn tell(window: &WebviewWindow, always: bool) {
     ));
 }
 
-/// Keep `window`'s page told for the life of the window. A minimise or a restore arrives as a resize (tao reports the
-/// minimised one with a zero size), and a window the app hides or shows itself loses or takes the focus; the app's own
-/// `show` and `hide` say it too (windows.rs), so this is the catch for what the platform did on its own.
-pub fn watch(window: &WebviewWindow) {
+/// Keep the pages in `window` told for the life of the window: the two faces in the frame, or a window's own page. A
+/// minimise or a restore arrives as a resize (tao reports the minimised one with a zero size), and a window the app
+/// hides or shows itself loses or takes the focus; the app's own `show` and `hide` say it too (frame.rs, windows.rs), so
+/// this is the catch for what the platform did on its own.
+pub fn watch(window: &Window) {
     let app = window.app_handle().clone();
     let label = window.label().to_string();
     window.on_window_event(move |event| match event {
         WindowEvent::Resized(_) | WindowEvent::Focused(_) => {
-            if let Some(window) = app.get_webview_window(&label) {
-                tell(&window, false);
+            if let Some(window) = app.get_window(&label) {
+                for page in window.webviews() {
+                    tell(&page, false);
+                }
             }
         }
         WindowEvent::Destroyed => {
-            TOLD.lock().unwrap().remove(&label);
+            let mut told = TOLD.lock().unwrap();
+            // A window's own page shares its label; the frame's faces go with the frame.
+            told.remove(&label);
+            if label == crate::frame::FRAME {
+                told.remove(crate::windows::WORKSPACE);
+                told.remove(crate::windows::HOME);
+            }
         }
         _ => {}
     });

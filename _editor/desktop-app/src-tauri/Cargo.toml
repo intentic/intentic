@@ -22,7 +22,8 @@ tauri-build = { version = "2.7.3", features = [] }
 # HTTP client, no docker crate and no async runtime beyond Tauri's own — the crate that used to hold all of that
 # (intentic-desktop-core) is what made the first attempt unmaintainable.
 [dependencies]
-tauri = { version = "2.12.4", features = ["tray-icon", "image-png"] }
+# `unstable` is the multi-webview API: the app's two faces are two webviews in one window (src/frame.rs).
+tauri = { version = "2.12.4", features = ["tray-icon", "image-png", "unstable"] }
 tauri-plugin-dialog = "2.8.3"
 tauri-plugin-opener = "2.7.2"
 tauri-plugin-process = "2.4.0"
@@ -101,6 +102,9 @@ futures-util = "0.3.34"
 # request, on the webview Tauri hands over (`with_webview`), which is this crate's own type. Pinned to the version wry
 # pins and at the features Tauri asks for, so this names what is already compiled rather than adding a download.
 webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
+# The resize borders of the app's frameless window, on the faces' webviews (src/frame.rs), which Tauri attaches only to
+# a window's own content webview. The version webkit2gtk and tao already build against.
+gtk = "=0.18.2"
 # sway's IPC for Intentic OS's shell (src/shell/), the copy `ic`'s screen service uses too.
 intentic-sway-ipc = { path = "../../../_sandbox/ic/sway-ipc" }
 

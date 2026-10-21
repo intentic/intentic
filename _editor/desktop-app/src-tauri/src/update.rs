@@ -143,7 +143,7 @@ fn set(app: &AppHandle, next: Stage) {
 
 /* The workspace window is remote content with an empty capability list, and that does not change here. */
 fn announce_to_workspace(app: &AppHandle, stage: &Stage) {
-    let Some(window) = app.get_webview_window(crate::windows::WORKSPACE) else {
+    let Some(window) = crate::frame::face(app, crate::windows::WORKSPACE) else {
         return;
     };
     let Some(version) = stage.ready_version() else {

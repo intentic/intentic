@@ -569,7 +569,7 @@ pub(crate) fn renewed(args: &SetupArgs, minted: crate::project::Minted, now: u64
 #[tauri::command]
 pub async fn setup_fresh_code(
     app: AppHandle,
-    window: tauri::WebviewWindow,
+    window: tauri::Webview,
     args: SetupArgs,
 ) -> FreshCode {
     let Some(sandbox_id) = args
@@ -1104,7 +1104,7 @@ pub async fn sandbox_logs(slug: String, tail: u32) -> CommandResult<String> {
 /// handled (Tauri's `WebviewWindowBuilder` known issue). An async one runs off that thread, and the build is handed
 /// to the event loop like any other. The answer arrives once the workspace is up, which is what the press waits on.
 #[tauri::command]
-pub async fn workspace_open(app: AppHandle, window: tauri::WebviewWindow, path: Option<String>) {
+pub async fn workspace_open(app: AppHandle, window: tauri::Webview, path: Option<String>) {
     crate::windows::show_workspace_from(&app, path.as_deref(), &window);
 }
 

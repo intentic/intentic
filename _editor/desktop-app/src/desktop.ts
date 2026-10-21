@@ -432,6 +432,11 @@ export interface LocalRoster {
 }
 export const localRoster = (): Promise<LocalRoster> => invoke(`local_roster`);
 
+// The OS title of the window this page is drawn in, set by the app, and the title it had before (src-tauri/src/local.rs
+// `local_title`): the main window shares the app's one window with the workspace (frame.rs), so a page titling that
+// window itself would title the workspace too.
+export const localTitle = (title: string): Promise<string> => invoke(`local_title`, { title });
+
 // One platform call of a local window's account menu or Settings, sent by the app with the session the workspace signed
 // in with (src-tauri/src/account.rs), which checks it against a short list of its own. The answer is the platform's, as
 // a fetch would have had it; nobody signed in is the platform's own answer to that (`null`, or 401). Rejects with a

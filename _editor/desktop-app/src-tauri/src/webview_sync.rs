@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Manager, Webview, Window, WindowEvent};
 
 /* WEBVIEW2 TAKES ITS WINDOW'S GEOMETRY AGAIN EVERY TIME THE WINDOW COMES BACK (Windows only).
 
@@ -34,23 +34,31 @@ const SETTLE: Duration = Duration::from_millis(250);
 /// takes as no change at all.
 static MINIMISED: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(Mutex::default);
 
-/// Nudge `window`'s webview whenever its scale changes or it comes back from the taskbar. Once per window, as it is
-/// built; the listener goes with the window.
-pub fn watch(window: &WebviewWindow) {
+/// Nudge the webview `window` draws whenever its scale changes or it comes back from the taskbar: the face the frame
+/// shows (frame.rs), or a window's own page. Once per window, as it is built; the listener goes with the window.
+pub fn watch(window: &Window) {
     if !cfg!(windows) {
         return;
     }
     let app = window.app_handle().clone();
     let label = window.label().to_string();
+    let drawn = move |app: &AppHandle| {
+        app.get_window(&label)
+            .into_iter()
+            .flat_map(|window| window.webviews())
+            .filter(crate::frame::drawn)
+            .for_each(|page| nudge_later(app, page.label()));
+    };
+    let own = window.label().to_string();
     window.on_window_event(move |event| match event {
-        WindowEvent::ScaleFactorChanged { .. } => nudge_later(&app, &label),
+        WindowEvent::ScaleFactorChanged { .. } => drawn(&app),
         WindowEvent::Resized(size) => {
-            if returned(&MINIMISED, &label, size.width == 0 && size.height == 0) {
-                nudge_later(&app, &label);
+            if returned(&MINIMISED, &own, size.width == 0 && size.height == 0) {
+                drawn(&app);
             }
         }
         WindowEvent::Destroyed => {
-            MINIMISED.lock().unwrap().remove(&label);
+            MINIMISED.lock().unwrap().remove(&own);
         }
         _ => {}
     });
@@ -58,7 +66,7 @@ pub fn watch(window: &WebviewWindow) {
 
 /// `window` has just been put on screen: from the tray, from behind the other face, or for the first time after its
 /// page loaded while it was hidden.
-pub fn shown(window: &WebviewWindow) {
+pub fn shown(window: &Webview) {
     if !cfg!(windows) {
         return;
     }
@@ -81,12 +89,16 @@ fn nudge_later(app: &AppHandle, label: &str) {
     let label = label.to_string();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(SETTLE).await;
-        let Some(window) = app.get_webview_window(&label) else {
+        let Some(page) = app.get_webview(&label) else {
             return;
         };
-        // A window that went away again meanwhile is nudged when it is next shown, not while nobody can see it.
-        if matches!(window.is_visible(), Ok(true)) && matches!(window.is_minimized(), Ok(false)) {
-            nudge(&window);
+        // A page that went away again meanwhile is nudged when it is next shown, not while nobody can see it.
+        let window = page.window();
+        if crate::frame::drawn(&page)
+            && matches!(window.is_visible(), Ok(true))
+            && matches!(window.is_minimized(), Ok(false))
+        {
+            nudge(&page);
         }
     });
 }
@@ -94,7 +106,7 @@ fn nudge_later(app: &AppHandle, label: &str) {
 /// Tell the controller its parent moved, then resize it one pixel shorter and back, on the main thread
 /// (`with_webview` runs there).
 #[cfg(windows)]
-fn nudge(window: &WebviewWindow) {
+fn nudge(window: &Webview) {
     let _ = window.with_webview(|webview| {
         let controller = webview.controller();
         // SAFETY: plain COM calls on the controller this webview owns, made on the thread that created it.
@@ -116,7 +128,7 @@ fn nudge(window: &WebviewWindow) {
 }
 
 #[cfg(not(windows))]
-fn nudge(_window: &WebviewWindow) {}
+fn nudge(_window: &Webview) {}
 
 #[cfg(test)]
 mod tests {

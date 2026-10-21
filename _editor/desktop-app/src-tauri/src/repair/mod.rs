@@ -8,7 +8,7 @@ use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, Webview};
 use uuid::Uuid;
 
 use crate::account::{platform_get, platform_post, Answered};
@@ -99,9 +99,8 @@ struct PendingApproval {
 
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 
-fn home_window(app: &AppHandle) -> Result<WebviewWindow, String> {
-    app.get_webview_window(HOME)
-        .ok_or_else(|| "Repair needs the main window.".into())
+fn home_window(app: &AppHandle) -> Result<Webview, String> {
+    crate::frame::face(app, HOME).ok_or_else(|| "Repair needs the main window.".into())
 }
 
 /// The reader's home folder: USERPROFILE first, as the rest of the app and `ic` read it (`%USERPROFILE%\.intentic`),

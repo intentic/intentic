@@ -24,7 +24,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, Webview};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::account::Answered;
@@ -424,7 +424,7 @@ fn show_project(app: &AppHandle, asked_in: Option<&str>, project: &Project) {
         .as_deref()
         .map(|id| project_path(id, &project.dir));
     tell_opening(app, asked_in, "shown");
-    match asked_in.and_then(|label| app.get_webview_window(label)) {
+    match asked_in.and_then(|label| app.get_webview(label)) {
         Some(window) => crate::windows::show_workspace_from(app, path.as_deref(), &window),
         None => crate::windows::show_workspace_at(app, path.as_deref()),
     }
@@ -434,7 +434,7 @@ fn show_project(app: &AppHandle, asked_in: Option<&str>, project: &Project) {
 /// `starting` while a stopped sandbox is started first, `shown` as the workspace goes up. Its button says "Opening"
 /// from the press on and holds it until then; a window that is gone hears nothing, and needs to.
 fn tell_opening(app: &AppHandle, asked_in: Option<&str>, stage: &str) {
-    if let Some(window) = asked_in.and_then(|label| app.get_webview_window(label)) {
+    if let Some(window) = asked_in.and_then(|label| app.get_webview(label)) {
         let _ = window.eval(opening_event(stage));
     }
 }
@@ -636,7 +636,7 @@ pub fn start(app: &AppHandle, label: &str, root: PathBuf) {
         open_existing(app, Some(label), &project);
         return;
     }
-    if let Some(window) = app.get_webview_window(label) {
+    if let Some(window) = app.get_webview(label) {
         let _ = window.eval(ASK_EVENT);
     }
 }
@@ -743,7 +743,7 @@ const DOCUMENT: &str = "A sandbox works on a whole folder. Open the folder this 
 /// What the folder's dialog draws: the sandbox the folder has, why it cannot have one, or what going into this
 /// computer's sandbox involves.
 #[tauri::command]
-pub async fn project_preview(app: AppHandle, window: WebviewWindow) -> Result<Preview, String> {
+pub async fn project_preview(app: AppHandle, window: Webview) -> Result<Preview, String> {
     let Some(root) = crate::local::folder_of(&app, window.label()) else {
         return Ok(Preview::Document);
     };
@@ -776,7 +776,7 @@ pub async fn project_preview(app: AppHandle, window: WebviewWindow) -> Result<Pr
 #[tauri::command]
 pub async fn project_attach(
     app: AppHandle,
-    window: WebviewWindow,
+    window: Webview,
     ask: AttachAsk,
 ) -> Result<Attached, String> {
     let Some(root) = crate::local::folder_of(&app, window.label()) else {
@@ -1150,7 +1150,7 @@ fn is_hostname(hostname: &str) -> bool {
 /// `setup_fresh_code`). [`minted_code`] reads the answer.
 pub(crate) async fn mint_code(
     app: &AppHandle,
-    window: &WebviewWindow,
+    window: &Webview,
     sandbox_id: &str,
     profile: Option<&str>,
 ) -> Result<Answered, String> {
@@ -1511,7 +1511,7 @@ pub(crate) fn said(silence: &AgentSilence) -> String {
 
 /// `intentic:project` into the window `label`, one event carrying `detail`.
 fn tell(app: &AppHandle, label: &str, detail: &serde_json::Value) {
-    if let Some(window) = app.get_webview_window(label) {
+    if let Some(window) = app.get_webview(label) {
         let _ = window.eval(project_event(detail));
     }
 }

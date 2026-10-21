@@ -24,7 +24,7 @@ pub fn granted(audio: bool, sight: bool, page: &str, origin: &url::Origin) -> bo
 /// app, and a grant kept in it would answer a floating panel of the same origin too), and marked handled so no later
 /// handler revisits it. Everything else is left untouched, so the prompt WebView2 would have shown still shows.
 #[cfg(windows)]
-pub fn allow(window: &tauri::WebviewWindow, app_origin: &url::Url) {
+pub fn allow(window: &tauri::Webview, app_origin: &url::Url) {
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
     use webview2_com::PermissionRequestedEventHandler;
     use windows::core::Interface;
@@ -79,7 +79,7 @@ pub fn allow(window: &tauri::WebviewWindow, app_origin: &url::Url) {
 /// this change is sent after it on the same connection, and the document that reads it is made only once the network
 /// has answered that load.
 #[cfg(target_os = "linux")]
-pub fn allow(window: &tauri::WebviewWindow, app_origin: &url::Url) {
+pub fn allow(window: &tauri::Webview, app_origin: &url::Url) {
     use webkit2gtk::glib::prelude::*;
     use webkit2gtk::{
         PermissionRequestExt, SettingsExt, UserMediaPermissionRequest,
@@ -122,7 +122,7 @@ pub fn allow(window: &tauri::WebviewWindow, app_origin: &url::Url) {
 
 /// Nowhere else does this app build.
 #[cfg(not(any(windows, target_os = "linux")))]
-pub fn allow(_window: &tauri::WebviewWindow, _app_origin: &url::Url) {}
+pub fn allow(_window: &tauri::Webview, _app_origin: &url::Url) {}
 
 #[cfg(test)]
 mod tests {

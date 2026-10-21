@@ -28,7 +28,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, Webview};
 
 use crate::project::{Made, Minted};
 use crate::scripts::{AgentSilence, Heard, Stream};
@@ -1279,9 +1279,7 @@ fn news(before: &Standing, after: &Standing, noticed: Option<&str>) -> Option<St
 
 /// The reader is in a window of this computer (the main one or a folder's), where the card already says it.
 fn reader_here(app: &AppHandle) -> bool {
-    app.webview_windows()
-        .iter()
-        .any(|(label, window)| shows_the_card(label) && window.is_focused().unwrap_or(false))
+    crate::windows::focused_page(app).is_some_and(|label| shows_the_card(&label))
 }
 
 /// The one folder asked into the sandbox, when there is just one: the folder the reader is waiting on.
@@ -1518,10 +1516,10 @@ pub fn container_in(rows: &[serde_json::Value], slug: &str) -> Container {
 }
 
 /// A window whose webview holds the workspace's session (every window shares one browser profile, account.rs).
-fn any_window(app: &AppHandle) -> Option<WebviewWindow> {
-    app.get_webview_window(crate::windows::WORKSPACE)
-        .or_else(|| app.get_webview_window(crate::windows::HOME))
-        .or_else(|| app.webview_windows().into_values().next())
+fn any_window(app: &AppHandle) -> Option<Webview> {
+    app.get_webview(crate::windows::WORKSPACE)
+        .or_else(|| app.get_webview(crate::windows::HOME))
+        .or_else(|| app.webviews().into_values().next())
 }
 
 const WAITING_FOR_SETUP: &str = "Waiting for another sandbox's setup on this computer to finish.";
@@ -1751,7 +1749,7 @@ fn create(app: &AppHandle, consent: bool) {
 /// account (`/rpc/sandbox/delete`, which the platform holds in its own trash for the recovery window), the record
 /// forgets it, so the next try makes a fresh one, and the local windows stop listing it. Best effort: a row the platform
 /// would not delete stays, as before, and the next try sets it up.
-fn discard_unannounced(app: &AppHandle, window: &WebviewWindow) {
+fn discard_unannounced(app: &AppHandle, window: &Webview) {
     let record = status(app);
     let container = match &record.slug {
         Some(slug) => container_of(app, slug),
@@ -2158,7 +2156,7 @@ pub fn adopted(record: &Record, account: &str, found: &Adoptable) -> Record {
 
 /// [`adoptable`], asked of the platform and of this machine's sandboxes. Nothing found, or either one not answering, is
 /// a new row as before.
-fn find_adoptable(app: &AppHandle, window: &WebviewWindow) -> Option<Adoptable> {
+fn find_adoptable(app: &AppHandle, window: &Webview) -> Option<Adoptable> {
     let listed = match tauri::async_runtime::block_on(crate::account::platform_get(
         app,
         window,
@@ -2258,7 +2256,7 @@ pub fn leftovers(
 /// [`leftovers`], asked of the platform and of this machine. Nothing when either does not answer: an offer to remove is
 /// made only on what both said.
 #[tauri::command]
-pub async fn machine_sandbox_leftovers(app: AppHandle, window: WebviewWindow) -> Vec<Leftover> {
+pub async fn machine_sandbox_leftovers(app: AppHandle, window: Webview) -> Vec<Leftover> {
     let listed = match crate::account::platform_get(&app, &window, "/rpc/sandbox/list").await {
         Ok(crate::account::Answered::Json { status, body }) if (200..300).contains(&status) => body,
         _ => return Vec::new(),
@@ -2295,7 +2293,7 @@ pub async fn machine_sandbox_leftovers(app: AppHandle, window: WebviewWindow) ->
 #[tauri::command]
 pub async fn machine_sandbox_remove_leftovers(
     app: AppHandle,
-    window: WebviewWindow,
+    window: Webview,
     ids: Vec<String>,
 ) -> Result<usize, String> {
     let offered = machine_sandbox_leftovers(app.clone(), window.clone()).await;

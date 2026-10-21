@@ -2,7 +2,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, Window};
 
 use super::ipc;
 use crate::setup_link::{Roster, RosterEntry, ShellTarget};
@@ -87,24 +87,24 @@ fn move_face(title: &str, space: &str) -> bool {
     ipc::command(&format!("[con_id={id}] fullscreen disable; [con_id={id}] floating disable; [con_id={id}] border none; [con_id={id}] move container to workspace {}; workspace {}; [con_id={id}] focus", quote(space), quote(space))).is_ok()
 }
 
-/// Called after a face is shown; sway may learn of its surface just after Tauri returns from show().
-pub(super) fn face_shown(window: &WebviewWindow) {
-    if !matches!(
-        window.label(),
-        crate::windows::HOME | crate::windows::WORKSPACE
-    ) {
+/// Called after the frame has drawn a face; sway may learn of its surface just after Tauri returns from show().
+pub(super) fn face_shown(window: &Window) {
+    if window.label() != crate::frame::FRAME {
         return;
     }
     let Some(space) = destination().lock().unwrap().clone() else {
         return;
     };
-    let Ok(title) = window.title() else {
-        return;
-    };
+    let window = window.clone();
     std::thread::spawn(move || {
         for _ in 0..20 {
             // A later keypress wins over a delayed surface from the preceding one.
-            if destination().lock().unwrap().as_ref() != Some(&space) || move_face(&title, &space) {
+            if destination().lock().unwrap().as_ref() != Some(&space) {
+                return;
+            }
+            // Read again each time: the frame wears the title of the face it draws (frame.rs), which the swap has
+            // only just asked GTK for.
+            if window.title().is_ok_and(|title| move_face(&title, &space)) {
                 return;
             }
             std::thread::sleep(Duration::from_millis(50));
@@ -118,16 +118,13 @@ fn activate(app: &AppHandle, number: usize, agents: bool, chat: bool) {
         return;
     };
     *destination().lock().unwrap() = Some(space.clone());
-    // Move the face already on screen before asking Tauri to focus it: otherwise it could pull focus back to its
+    // Move the frame already on screen before asking Tauri to focus it: otherwise it could pull focus back to its
     // previous Space while the in-page navigation is being handed over.
-    for label in [crate::windows::HOME, crate::windows::WORKSPACE] {
-        if let Some(window) = app
-            .get_webview_window(label)
-            .filter(|w| w.is_visible().unwrap_or(false))
-        {
-            if let Ok(title) = window.title() {
-                let _ = move_face(&title, &space);
-            }
+    if let Some(window) =
+        crate::frame::frame(app).filter(|frame| frame.is_visible().unwrap_or(false))
+    {
+        if let Ok(title) = window.title() {
+            let _ = move_face(&title, &space);
         }
     }
     // Select the destination before mapping a cold face. No process is spawned for this keypress.

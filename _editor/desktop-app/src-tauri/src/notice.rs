@@ -214,7 +214,7 @@ pub fn status(app: &AppHandle, window: &str) {
     let window = window.to_string();
     later(move || {
         let standing = platform::standing(&app);
-        if let Some(window) = app.get_webview_window(&window) {
+        if let Some(window) = app.get_webview(&window) {
             let _ = window.eval(standing_script(standing));
         }
     });

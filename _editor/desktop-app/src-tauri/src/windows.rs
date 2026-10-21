@@ -3,10 +3,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
+use tauri::webview::WebviewBuilder;
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{
-    AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize, Url, WebviewUrl,
-    WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, PhysicalSize, Url, Webview,
+    WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
@@ -16,9 +17,10 @@ use crate::setup_link::{parse_link, LauncherTo, Link, NoticeVerb, SetupArgs, Sou
 use crate::state::{AppState, CloseAction, Face, Mode};
 
 /* ONE WINDOW OF THE APP ON SCREEN — these two labels are two FACES of it, not two windows: the hosted workspace, and
-the main local window (`HOME`), the editor's shell on a folder of this computer with This device beside it. They swap
-in one frame (`swap_in`). A second window is one the page asked for (a panel floated out, `FLOATING`) or one the
-reader did (a folder or a document opened on its own, local.rs `FILES`). */
+the main local window (`HOME`), the editor's shell on a folder of this computer with This device beside it. They are two
+webviews in the one window frame.rs builds, which shows one of them at a time (`swap_in`). A second window is one the
+page asked for (a panel floated out, `FLOATING`) or one the reader did (a folder or a document opened on its own,
+local.rs `FILES`). */
 pub const WORKSPACE: &str = "workspace";
 /// The main local window: where a launch without an account opens, and what the launcher's card became (2026-09-30).
 pub const HOME: &str = "home";
@@ -79,7 +81,7 @@ fn fit_to_screen(preferred: (f64, f64), available: (f64, f64)) -> (f64, f64) {
 
 /// The opening size and the minimum that goes with it — the minimum fitted to the same screen, so it can
 /// never be the thing that holds a window bigger than the display it is on.
-fn opening_bounds(available: Option<(f64, f64)>) -> ((f64, f64), (f64, f64)) {
+pub(crate) fn opening_bounds(available: Option<(f64, f64)>) -> ((f64, f64), (f64, f64)) {
     let Some(available) = available else {
         return (DEFAULT_SIZE, MIN_SIZE);
     };
@@ -91,9 +93,9 @@ fn opening_bounds(available: Option<(f64, f64)>) -> ((f64, f64), (f64, f64)) {
 /// scale that turns the answer back into pixels. The origin is carried because it is not (0, 0) on a secondary
 /// monitor, nor on a display with the taskbar docked to the left or the top.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct WorkArea {
+pub(crate) struct WorkArea {
     origin: (f64, f64),
-    size: (f64, f64),
+    pub(crate) size: (f64, f64),
     scale: f64,
 }
 
@@ -107,7 +109,7 @@ fn opening_position(work: WorkArea, inner: (f64, f64)) -> (f64, f64) {
 }
 
 /* The work area of the screen a window is about to open on — its usable rectangle rather than its full size, so a taskbar. */
-fn work_area(app: &AppHandle) -> Option<WorkArea> {
+pub(crate) fn work_area(app: &AppHandle) -> Option<WorkArea> {
     work_area_of(app.primary_monitor().ok().flatten())
 }
 
@@ -141,7 +143,7 @@ fn work_area_of(monitor: Option<Monitor>) -> Option<WorkArea> {
 /// from the monitor's own scale rather than handed to Tauri as logical units: a logical position is resolved
 /// against whatever scale the WINDOW reports, and a window the platform has just cascaded onto another display
 /// reports that display's — which is how a placement computed for one screen lands on a different one.
-fn place_in_work_area(window: &WebviewWindow, work: WorkArea, inner: (f64, f64)) {
+pub(crate) fn place_in_work_area(window: &Window, work: WorkArea, inner: (f64, f64)) {
     let at = opening_position(work, inner);
     let _ = window.set_position(PhysicalPosition::new(
         (at.0 * work.scale).round() as i32,
@@ -220,25 +222,13 @@ pub fn fit_to_content(app: &AppHandle, window: &WebviewWindow, content_height: f
     }
 }
 
-/// Bring `window` up and step `other` aside: shown first and hidden after, so nothing between the two is
-/// ever on screen. The face coming up takes the frame of the one going (`take_frame`), called before this, so the
-/// swap reads as one window changing what it shows.
-fn swap_in(window: &WebviewWindow, other: Option<WebviewWindow>, keyboard: Keyboard) {
-    let _ = window.show();
-    // Its frame was just set while it was hidden, which is the change its webview is the last to hear of.
-    crate::webview_sync::shown(window);
-    if keyboard == Keyboard::Take {
-        let _ = window.set_focus();
-    }
-    crate::shown::tell(window, false);
-    if let Some(other) = other {
-        // Hidden whatever it answers about itself: `is_visible` is a round trip to the event loop, and an
-        // answer that fails to arrive reads as "already hidden", which is both faces on screen at once.
-        // Hiding a window that is already hidden is a no-op, so nothing is spent asking.
-        let _ = other.hide();
-        crate::shown::tell(&other, false);
-    }
-    crate::shell::face_shown(window);
+/// Draw the face `label` in the frame, the other stepping aside in the same turn (frame.rs `show`), with the platform's
+/// title bar on the frame only while that face's page has none of its own ([`fit_decorations`]). The face, when there
+/// is one to draw.
+fn swap_in(app: &AppHandle, label: &'static str, keyboard: Keyboard) -> Option<Webview> {
+    let face = crate::frame::show(app, label, keyboard == Keyboard::Take)?;
+    fit_decorations(app);
+    Some(face)
 }
 
 /// Whether the keyboard comes with the face being raised: a face taking over a window somebody is reading has
@@ -249,20 +239,19 @@ enum Keyboard {
     Leave,
 }
 
-/// The face coming up takes the frame of the face going, when that one is on screen: its place, its size, and
-/// whether it is maximised. The two faces are one window to the reader, who moved and sized it once. A face with
-/// nothing on screen to take over keeps the frame it has (the platform remembers a hidden window's).
+/// The frame takes the frame of the folder or document window the workspace is opened from (`show_workspace_from`),
+/// when that one is on screen: its place, its size, and whether it is maximised. The reader sees the window they pressed
+/// in change what it shows. A window with nothing on screen to hand over leaves the frame where it is.
 ///
-/// In kiosk mode sway tiles the faces edge to edge below the system bar. Fullscreen would hide that bar.
-fn take_frame(window: &WebviewWindow, from: Option<&WebviewWindow>) {
+/// In kiosk mode sway tiles the frame edge to edge below the system bar, and nothing is taken.
+fn take_frame(window: &Window, from: Option<&Window>) {
     if crate::os::kiosk() {
-        let _ = window.set_fullscreen(false);
         return;
     }
     let Some(from) = from else {
         return;
     };
-    // "Not minimised" is what is asked, so a face that cannot answer is treated as minimised and hands over nothing.
+    // "Not minimised" is what is asked, so a window that cannot answer is treated as minimised and hands over nothing.
     let taken = frame_taken(
         from.is_visible().unwrap_or(false),
         !matches!(from.is_minimized(), Ok(false)),
@@ -271,9 +260,11 @@ fn take_frame(window: &WebviewWindow, from: Option<&WebviewWindow>) {
     match taken {
         FrameTaken::Nothing => {}
         FrameTaken::Maximized => {
+            let _ = window.unminimize();
             let _ = window.maximize();
         }
         FrameTaken::Place => {
+            let _ = window.unminimize();
             let _ = window.unmaximize();
             if let (Ok(position), Ok(size)) = (from.outer_position(), from.inner_size()) {
                 let _ = window.set_position(position);
@@ -283,21 +274,21 @@ fn take_frame(window: &WebviewWindow, from: Option<&WebviewWindow>) {
     }
 }
 
-/// What the face coming up takes from the face going ([`take_frame`]).
+/// What the frame takes from the window it replaces ([`take_frame`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FrameTaken {
-    /// The face going is not on screen: the one coming up keeps its own frame.
+    /// The window going is not on screen: the frame keeps its own place.
     Nothing,
-    /// The face going is maximised: so is the one coming up, wherever it was.
+    /// The window going is maximised: so is the frame, wherever it was.
     Maximized,
     /// Its place and its size.
     Place,
 }
 
-/// Pure, for the tests. A face minimised to the taskbar is NOT on screen, though Windows calls it visible: its frame is
-/// where Windows parks a minimised window, (-32000, -32000) at nothing by nothing, and a face that took it opened there,
-/// off every screen, frameless and out of reach until Quit (2026-10-12). And a minimised window is never maximised as
-/// far as tao says, so it handed over neither its place nor its maximised state.
+/// Pure, for the tests. A window minimised to the taskbar is NOT on screen, though Windows calls it visible: its frame
+/// is where Windows parks a minimised window, (-32000, -32000) at nothing by nothing, and a face that took it opened
+/// there, off every screen, frameless and out of reach until Quit (2026-10-12). And a minimised window is never
+/// maximised as far as tao says, so it hands over neither its place nor its maximised state.
 fn frame_taken(visible: bool, minimized: bool, maximized: bool) -> FrameTaken {
     if !visible || minimized {
         return FrameTaken::Nothing;
@@ -309,18 +300,27 @@ fn frame_taken(visible: bool, minimized: bool, maximized: bool) -> FrameTaken {
     }
 }
 
-/// Whether a face is where the reader can see it: shown, and not minimised to the taskbar. A face that cannot answer
+/// Whether a window is where the reader can see it: shown, and not minimised to the taskbar. A window that cannot answer
 /// counts as not on screen, so nothing is placed against a frame that was never read.
-fn on_screen(window: &WebviewWindow) -> bool {
+pub(crate) fn window_on_screen(window: &Window) -> bool {
     window.is_visible().unwrap_or(false) && matches!(window.is_minimized(), Ok(false))
 }
 
-/// The face on screen, the one a dialog about closing stands over: the workspace or the main local window.
-fn shown_face(app: &AppHandle) -> Option<WebviewWindow> {
-    [WORKSPACE, HOME]
+/// The page the reader is typing into, by label: the face the frame draws while the frame has the focus, or the page of
+/// the window of its own that has it.
+pub(crate) fn focused_page(app: &AppHandle) -> Option<String> {
+    if crate::frame::frame(app).is_some_and(|frame| frame.is_focused().unwrap_or(false)) {
+        return crate::frame::shown().map(str::to_string);
+    }
+    app.webview_windows()
         .into_iter()
-        .filter_map(|label| app.get_webview_window(label))
-        .find(|window| window.is_visible().unwrap_or(false))
+        .find(|(_, window)| window.is_focused().unwrap_or(false))
+        .map(|(label, _)| label)
+}
+
+/// The frame while it is shown, the window a dialog about closing stands over, whichever face it draws.
+fn shown_face(app: &AppHandle) -> Option<Window> {
+    crate::frame::frame(app).filter(|frame| frame.is_visible().unwrap_or(false))
 }
 
 /// Marks the page as running inside the desktop app. DETECTION ONLY — the handoff is the `intentic://`
@@ -413,7 +413,7 @@ fn face_init_script(mode: Option<Mode>) -> String {
 /// Mirrors `--color-canvas` (@intentic/ui semantic-colors.css) in each scheme. Nothing announced means light,
 /// the same answer the pages themselves reach when the OS will not say — and [`settle_background`] corrects it
 /// to the OS's own before the window is ever shown.
-fn face_background(mode: Option<Mode>) -> tauri::window::Color {
+pub(crate) fn face_background(mode: Option<Mode>) -> tauri::window::Color {
     match mode {
         Some(Mode::Dark) => tauri::window::Color(15, 13, 10, 255),
         _ => tauri::window::Color(244, 241, 236, 255),
@@ -421,15 +421,25 @@ fn face_background(mode: Option<Mode>) -> tauri::window::Color {
 }
 
 /// The OS's light, which Tauri answers only per WINDOW — there is no system-wide getter, so the true answer
-/// does not exist until a window has been built. Both local faces are built hidden and placed before they are
-/// shown, so re-pointing the pre-paint frame here still lands before anything is on screen. Only consulted
+/// does not exist until a window has been built. The frame and every local window are built hidden and placed before
+/// they are shown, so re-pointing the pre-paint frame here still lands before anything is on screen. Only consulted
 /// when the workspace has announced no scheme of its own: what it announced outranks the OS, since the card
 /// stands in the middle of that workspace.
-fn settle_background(window: &WebviewWindow, mode: Option<Mode>) {
-    if mode.is_some() || !matches!(window.theme(), Ok(tauri::Theme::Dark)) {
-        return;
+pub(crate) fn settle_background(window: &Window, mode: Option<Mode>) {
+    if os_says_dark(window, mode) {
+        let _ = window.set_background_color(Some(face_background(Some(Mode::Dark))));
     }
-    let _ = window.set_background_color(Some(face_background(Some(Mode::Dark))));
+}
+
+/// [`settle_background`] for a face, whose webview paints its own background over the frame's until its page has.
+fn settle_face_background(face: &Webview, mode: Option<Mode>) {
+    if os_says_dark(&face.window(), mode) {
+        let _ = face.set_background_color(Some(face_background(Some(Mode::Dark))));
+    }
+}
+
+fn os_says_dark(window: &Window, mode: Option<Mode>) -> bool {
+    mode.is_none() && matches!(window.theme(), Ok(tauri::Theme::Dark))
 }
 
 /// The page announced its scheme, or the sign-in handoff implied one: remember it, and repaint the close question if
@@ -502,8 +512,8 @@ pub fn show_workspace_at(app: &AppHandle, path: Option<&str>) {
 /// pressed in change what it shows. _(2026-10-16) The workspace only ever took the main window's frame: a sandbox picked
 /// in a window `intentic .` opened came up as a second window beside it, and the × of that one, answered "Quit", took
 /// both down._
-pub fn show_workspace_from(app: &AppHandle, path: Option<&str>, asked_in: &WebviewWindow) {
-    let replaced = is_folder_window(asked_in.label()).then(|| asked_in.clone());
+pub fn show_workspace_from(app: &AppHandle, path: Option<&str>, asked_in: &Webview) {
+    let replaced = is_folder_window(asked_in.label()).then(|| asked_in.window());
     show_workspace_over(app, path, replaced);
 }
 
@@ -518,14 +528,16 @@ fn is_folder_window(label: &str) -> bool {
 /// Whether a folder or document window other than `except` is where the reader can see it. A spare is never on screen.
 fn folder_window_on_screen(app: &AppHandle, except: Option<&str>) -> bool {
     app.webview_windows().into_iter().any(|(label, window)| {
-        is_folder_window(&label) && Some(label.as_str()) != except && on_screen(&window)
+        is_folder_window(&label)
+            && Some(label.as_str()) != except
+            && window_on_screen(&window.as_ref().window())
     })
 }
 
 /// The folder window the workspace has just taken the place of goes as its own × would close it: hidden first, so the
 /// two are never on screen together, then closed, which revokes its folder (local.rs `window_closed`). Unsaved edits
 /// hold the close as they hold any other (`close_turn`): the window comes back in front with its page's question.
-fn close_replaced(window: Option<WebviewWindow>) {
+fn close_replaced(window: Option<Window>) {
     let Some(window) = window else {
         return;
     };
@@ -533,8 +545,8 @@ fn close_replaced(window: Option<WebviewWindow>) {
     let _ = window.close();
 }
 
-/// [`show_workspace_at`], in the frame of `replaced` when it is given (`show_workspace_from`), else the main window's.
-fn show_workspace_over(app: &AppHandle, path: Option<&str>, replaced: Option<WebviewWindow>) {
+/// [`show_workspace_at`], in the place of `replaced` when it is given (`show_workspace_from`), else where the frame is.
+fn show_workspace_over(app: &AppHandle, path: Option<&str>, replaced: Option<Window>) {
     let state = app.state::<AppState>();
     state.remember_workspace_seen();
     // Whatever brought it up, the workspace is now the face this app is being used through: the next launch and
@@ -552,49 +564,46 @@ fn show_workspace_over(app: &AppHandle, path: Option<&str>, replaced: Option<Web
         Some(path) => format!("{}{path}", base.trim_end_matches('/')),
         None => base,
     };
-    if let Some(window) = app.get_webview_window(WORKSPACE) {
-        // Out of the taskbar first, as the main window comes back (`show_home_at`): `show` does nothing to a window
-        // Windows already counts as visible, and `set_focus` nothing to a minimised one, so a minimised workspace stayed
-        // minimised through the tray's "Open Intentic", a second launch and a notification's press (2026-10-12).
-        // Before its frame is set, which a minimised window would only keep for when it is restored.
-        let _ = window.unminimize();
-        let home = app.get_webview_window(HOME);
-        take_frame(&window, replaced.as_ref().or(home.as_ref()));
-        swap_in(&window, home, Keyboard::Take);
-        close_replaced(replaced);
-        // The workspace coming back is the cheapest evidence this machine is awake and being used, which the
-        // six-hourly timer cannot see through a night of sleep (update.rs).
-        crate::update::nudge(app);
-        if let Some(path) = path {
-            // Told to the page already loaded, which routes there itself: a sandbox picked in a local window's
-            // switcher is a switch, not a reload of the whole workspace (`open_in_place`).
-            if let Err(error) = window.eval(open_in_place(&origin, path, &target)) {
-                eprintln!(
-                    "the workspace could not be told where to go ({error}); loading {target}"
-                );
-                match target.parse() {
-                    Ok(url) => {
-                        let _ = window.navigate(url);
-                    }
-                    Err(error) => eprintln!("workspace path is not a url: {target} ({error})"),
-                }
-            }
+    // A face already in the frame is told where to go; one added now loads there.
+    let loaded = crate::frame::face(app, WORKSPACE);
+    let face = match &loaded {
+        Some(face) => face.clone(),
+        None => {
+            let url: tauri::Url = target.parse().unwrap_or_else(|_| {
+                crate::state::APP_URL
+                    .parse()
+                    .expect("static app url parses")
+            });
+            let Some(face) = build_workspace(app, url) else {
+                return;
+            };
+            face
         }
+    };
+    if let Some(frame) = crate::frame::frame(app) {
+        take_frame(&frame, replaced.as_ref());
+    }
+    swap_in(app, WORKSPACE, Keyboard::Take);
+    close_replaced(replaced);
+    if loaded.is_none() {
         return;
     }
-    let url: tauri::Url = match target.parse() {
-        Ok(url) => url,
-        Err(_) => crate::state::APP_URL
-            .parse()
-            .expect("static app url parses"),
-    };
-    let Some(window) = build_workspace(app, url) else {
-        return;
-    };
-    let home = app.get_webview_window(HOME);
-    take_frame(&window, replaced.as_ref().or(home.as_ref()));
-    swap_in(&window, home, Keyboard::Take);
-    close_replaced(replaced);
+    // The workspace coming back is the cheapest evidence this machine is awake and being used, which the six-hourly
+    // timer cannot see through a night of sleep (update.rs).
+    crate::update::nudge(app);
+    if let Some(path) = path {
+        // Told to the page already loaded, which routes there itself: a sandbox picked in a local window's switcher is
+        // a switch, not a reload of the whole workspace (`open_in_place`).
+        if let Err(error) = face.eval(open_in_place(&origin, path, &target)) {
+            eprintln!("the workspace could not be told where to go ({error}); loading {target}");
+            match target.parse() {
+                Ok(url) => {
+                    let _ = face.navigate(url);
+                }
+                Err(error) => eprintln!("workspace path is not a url: {target} ({error})"),
+            }
+        }
+    }
 }
 
 pub fn show_workspace(app: &AppHandle) {
@@ -603,75 +612,37 @@ pub fn show_workspace(app: &AppHandle) {
 
 /* THE WORKSPACE'S PAGE, LOADED WHERE NOBODY SEES IT (2026-10-13) — for the wake word, which it listens for (wake.rs). */
 
-/// Build the workspace at the app's address, hidden and left hidden, when there is none: a launch whose page was
+/// Add the workspace to the frame at the app's address, out of sight, when there is none: a launch whose page was
 /// listening when the app last ran (wake.rs `resume_on_launch`), and the tray's "Listen for …" with no page to tell. It
-/// is the face the reader would get from the tray, built and placed as always, with nothing put on screen, nothing
-/// focused and nothing remembered: the face this app was last used through (`last-face.json`) and whether the
-/// workspace was ever shown are about what somebody looked at, and nobody looked at this. Showing it later is the swap
-/// every other road takes (`show_workspace_at`), onto a page that is already there.
+/// is the face the reader would get from the tray, with nothing put on screen, nothing focused and nothing remembered:
+/// the face this app was last used through (`last-face.json`) and whether the workspace was ever shown are about what
+/// somebody looked at, and nobody looked at this. Showing it later is the swap every other road takes
+/// (`show_workspace_at`), onto a page that is already there.
 pub fn load_workspace_hidden(app: &AppHandle) {
-    if app.get_webview_window(WORKSPACE).is_some() {
+    if crate::frame::face(app, WORKSPACE).is_some() {
         return;
     }
     let url = app_origin(&app.state::<AppState>());
     let _ = build_workspace(app, url);
 }
 
-/// The workspace window at `url`, hidden: its frame, its handlers and its page, placed for a cold start. Its caller
-/// puts it on screen (`show_workspace_at`) or leaves it in the tray (`load_workspace_hidden`).
-fn build_workspace(app: &AppHandle, url: Url) -> Option<WebviewWindow> {
-    let screen = work_area(app);
-    let (size, min) = opening_bounds(screen.map(|screen| screen.size));
-    let builder = page_window(app, WORKSPACE, url)
-        .inner_size(size.0, size.1)
-        .min_inner_size(min.0, min.1)
-        // Built hidden so `swap_in` can place it on the frame it is taking over before it is ever on screen —
-        // a finished setup hands the window back, and the workspace must appear where the setup was standing.
-        .visible(false);
-    let window = match builder.build() {
-        Ok(window) => window,
-        Err(error) => {
-            eprintln!("workspace window failed to open: {error}");
-            return None;
-        }
-    };
-    crate::webview_sync::watch(&window);
-    crate::shown::watch(&window);
+/// The workspace face at `url`, added to the frame out of sight: its page and its handlers. Its caller draws it
+/// (`show_workspace_over`) or leaves it there (`load_workspace_hidden`).
+fn build_workspace(app: &AppHandle, url: Url) -> Option<Webview> {
+    let builder = page_webview(app, WORKSPACE, url);
+    let face = crate::frame::add_face(app, WORKSPACE, builder)?;
+    crate::frame::set_title(app, WORKSPACE, "Intentic");
+    let origin = app_origin(&app.state::<AppState>());
     // A page that cannot be reached gets the app's own screen, not the browser's (offline.rs).
-    crate::offline::watch(&window, &app_origin(&app.state::<AppState>()));
+    crate::offline::watch(&face, &origin);
     // A big drop on the explorer, copied into a sandbox on this computer by the app (drop_copy.rs).
-    crate::drop_copy::watch(&window, &app_origin(&app.state::<AppState>()));
+    crate::drop_copy::watch(&face, &origin);
     // The microphone for the wake word, granted to the workspace's own page and to nothing else (microphone.rs).
-    crate::microphone::allow(&window, &app_origin(&app.state::<AppState>()));
-    // Hidden until `swap_in`, so the OS's own light still lands before this window is on screen.
-    settle_background(&window, app.state::<AppState>().ui_mode());
-    let handle = app.clone();
-    window.on_window_event(move |event| match event {
-        // The × is a question, not an exit — see `request_close`. Whichever way it is answered, the
-        // window is HIDDEN rather than destroyed, so reopening from the tray is instant and this
-        // webview keeps the session it signed in with instead of reloading the SPA. The page's own ×
-        // arrives here too: it asks the window to close rather than deciding anything itself. It is also
-        // what keeps the wake word listening with the window out of sight (wake.rs).
-        WindowEvent::CloseRequested { api, .. } => {
-            api.prevent_close();
-            request_close(&handle);
-        }
-        /* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. */
-        WindowEvent::Resized(_) => {
-            if let Some(window) = handle.get_webview_window(WORKSPACE) {
-                announce_frame(&window, false);
-            }
-        }
-        _ => {}
-    });
+    crate::microphone::allow(&face, &origin);
+    // Out of sight until `swap_in`, so the OS's own light still lands before this face is on screen.
+    settle_face_background(&face, app.state::<AppState>().ui_mode());
     arm_frame_fallback(app, WORKSPACE);
-    // While the window is still hidden. This is the placement for a COLD start — a swap that has a frame to
-    // inherit overwrites it a line later, which is the right precedence: the window the user is already looking
-    // at beats the middle of the screen.
-    if let Some(screen) = screen {
-        place_in_work_area(&window, screen, size);
-    }
-    Some(window)
+    Some(face)
 }
 
 /// What the workspace page registers to be told a path without a reload (the web's desktop.ts
@@ -719,20 +690,18 @@ pub(crate) fn show_home_route(app: &AppHandle, route: &str) {
     show_home_at(app, Some(route), Keyboard::Take);
 }
 
-/// The main window in the workspace's place, at `route` when given: built on its folder the first time (local.rs
-/// `open_home`, which swaps it in once it is up), raised and taken there every time after.
+/// The main window in the workspace's place, at `route` when given: added to the frame on its folder the first time
+/// (local.rs `open_home`, which draws it once it is up), drawn and taken there every time after.
 fn show_home_at(app: &AppHandle, route: Option<&str>, keyboard: Keyboard) {
-    let Some(window) = app.get_webview_window(HOME) else {
+    if crate::frame::face(app, HOME).is_none() {
         crate::local::open_home_later(app, route.map(str::to_string));
         return;
+    }
+    let Some(face) = swap_in(app, HOME, keyboard) else {
+        return;
     };
-    // Out of the taskbar before its frame is set, which a minimised window would only keep for when it is restored.
-    let _ = window.unminimize();
-    let workspace = app.get_webview_window(WORKSPACE);
-    take_frame(&window, workspace.as_ref());
-    swap_in(&window, workspace, keyboard);
     if let Some(route) = route {
-        crate::local::navigate(&window, route);
+        crate::local::navigate(&face, route);
     }
 }
 
@@ -750,14 +719,10 @@ fn show_folder_that_asked(app: &AppHandle, asked_in: Option<&str>) {
         show_home_at(app, Some(FILES_ROUTE), Keyboard::Take);
         return;
     };
-    match app.get_webview_window(HOME) {
+    match crate::frame::face(app, HOME) {
         Some(_) => show_home_at(app, None, Keyboard::Leave),
-        None => {
-            if let Some(workspace) = app.get_webview_window(WORKSPACE) {
-                let _ = workspace.hide();
-                crate::shown::tell(&workspace, false);
-            }
-        }
+        // No main window to draw in the workspace's place: the frame steps aside.
+        None => crate::frame::hide(app),
     }
     let _ = asked.unminimize();
     let _ = asked.show();
@@ -781,94 +746,117 @@ fn app_origin(state: &AppState) -> Url {
     })
 }
 
-/* EVERY WINDOW SHOWING THE PAGE IS BUILT HERE — the workspace, and each panel of it floating on its own. */
+/* EVERY PAGE OF THE HOSTED EDITOR IS BUILT HERE — the workspace face, and each panel of it floating on its own. */
 
-/// What the workspace and a floating panel have in common, which is everything but their size and when they
-/// appear: no platform frame (the page draws the bar, see [`WindowVerb`]), the page's own dark under it, the
-/// browser arguments, the page told what window it is in, and the same answer for every link out of it.
+/// What the workspace and a floating panel have in common, which is everything but their window: the page's own dark
+/// under it, the browser arguments, the page told what window it is in, and the same answer for every link out of it.
+/// One chain for two builders, since the workspace is a webview in the frame ([`page_webview`]) and a floating panel a
+/// window of its own ([`page_window`]), and Tauri's two builders share their methods but no trait.
+macro_rules! hosted_page {
+    ($builder:expr, $app:expr, $label:expr) => {{
+        let app: &AppHandle = $app;
+        let label: &str = $label;
+        let state = app.state::<AppState>();
+        let origin = app_origin(&state);
+        let install_id = state.install_id();
+        $builder
+            // The frame between "window mapped" and the REMOTE page's first paint, which is white by default and is
+            // longest on the launch that has no HTTP cache to open from. The two local faces have always had this;
+            // the windows that wait on a network were the ones without it. In the scheme the page was last seen in,
+            // never a fixed one: this window used to open on near-black under a reader who had chosen daylight.
+            .background_color(face_background(state.ui_mode()))
+            // Windows uses either Tauri drag-drop or HTML5 drag-drop, never both.
+            .disable_drag_drop_handler()
+            // The windows this is actually for — see BROWSER_ARGS, and `loopbackUngated` in the init script, which
+            // tells the page it was done.
+            .additional_browser_args(BROWSER_ARGS)
+            .initialization_script(workspace_init_script(
+                &install_id,
+                update_told(&crate::update::stage(app), false),
+                label == WORKSPACE,
+            ))
+            .on_navigation({
+                let app = app.clone();
+                let label = label.to_string();
+                let origin = origin.clone();
+                move |url| {
+                    if url.scheme() == "intentic" {
+                        // Handle off the navigation callback — creating a window inside the webview's navigation
+                        // event would re-enter the webview (WebView2 COM re-entrancy).
+                        let app = app.clone();
+                        let label = label.clone();
+                        let link = url.to_string();
+                        tauri::async_runtime::spawn(async move {
+                            // The one direction that is this app's own window navigating — the SPA's button.
+                            crate::handle_intentic_link(&app, &link, Source::App { window: &label });
+                        });
+                        return false;
+                    }
+                    // The app's own page for a workspace that cannot be reached (offline.rs), which sends the window here,
+                    // and its own copy of the editor on this computer's sandboxes (machine_face.rs), which it offers.
+                    if stays_in_webview(url, &origin)
+                        || crate::offline::is_offline_page(url)
+                        || crate::machine_face::is_face_page(url)
+                    {
+                        return true;
+                    }
+                    open_in_browser(&app, url.as_str());
+                    false
+                }
+            })
+            // Something on screen: this launch has reached the reader, even if what it shows is an error.
+            .on_page_load(|_, payload| {
+                if matches!(payload.event(), PageLoadEvent::Finished) {
+                    crate::launch::reached(crate::launch::Stage::Shown);
+                }
+            })
+            // A `window.open`: the page floating one of its own panels gets a window of this app's (its browser
+            // popup, done natively); anything else opened this way leaves for the browser. Denied either way — the
+            // window the page gets is built by this app, off the callback, for the same re-entrancy reason as above.
+            .on_new_window({
+                let app = app.clone();
+                move |url, features| {
+                    match floating_panel(&url, &origin) {
+                        Some(panel) => {
+                            let app = app.clone();
+                            let size = features.size();
+                            let position = features.position();
+                            tauri::async_runtime::spawn(async move {
+                                show_floating(&app, &panel, url, size, position);
+                            });
+                        }
+                        None => open_in_browser(&app, url.as_str()),
+                    }
+                    NewWindowResponse::Deny
+                }
+            })
+    }};
+}
+
+/// The workspace face's webview, added to the frame (frame.rs `add_face`), whose window draws no platform title bar.
+fn page_webview(app: &AppHandle, label: &str, url: Url) -> WebviewBuilder<tauri::Wry> {
+    hosted_page!(
+        WebviewBuilder::new(label, WebviewUrl::External(url)),
+        app,
+        label
+    )
+}
+
+/// A floating panel's window.
 fn page_window<'a>(
     app: &'a AppHandle,
     label: &str,
     url: Url,
 ) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
-    let state = app.state::<AppState>();
-    let origin = app_origin(&state);
-    let install_id = state.install_id();
-    WebviewWindowBuilder::new(app, label, WebviewUrl::External(url))
-        .title("Intentic")
-/* NO PLATFORM TITLE BAR ON ANY WINDOW OF THE PAGE — see [`WindowVerb`] for the bar the page draws in its place. */
-        .decorations(false)
-        .shadow(true)
-        // The frame between "window mapped" and the REMOTE page's first paint, which is white by default and is
-        // longest on the launch that has no HTTP cache to open from. The two local faces have always had this;
-        // the windows that wait on a network were the ones without it. In the scheme the page was last seen in,
-        // never a fixed one: this window used to open on near-black under a reader who had chosen daylight.
-        .background_color(face_background(state.ui_mode()))
-/* Windows uses either Tauri drag-drop or HTML5 drag-drop, never both. */
-        .disable_drag_drop_handler()
-        // The windows this is actually for — see BROWSER_ARGS, and `loopbackUngated` in the init script, which
-        // tells the page it was done.
-        .additional_browser_args(BROWSER_ARGS)
-        .initialization_script(workspace_init_script(
-            &install_id,
-            update_told(&crate::update::stage(app), false),
-            label == WORKSPACE,
-        ))
-        .on_navigation({
-            let app = app.clone();
-            let label = label.to_string();
-            let origin = origin.clone();
-            move |url| {
-                if url.scheme() == "intentic" {
-                    // Handle off the navigation callback — creating a window inside the webview's navigation
-                    // event would re-enter the webview (WebView2 COM re-entrancy).
-                    let app = app.clone();
-                    let label = label.clone();
-                    let link = url.to_string();
-                    tauri::async_runtime::spawn(async move {
-                        // The one direction that is this app's own window navigating — the SPA's button.
-                        crate::handle_intentic_link(&app, &link, Source::App { window: &label });
-                    });
-                    return false;
-                }
-                // The app's own page for a workspace that cannot be reached (offline.rs), which sends the window here,
-                // and its own copy of the editor on this computer's sandboxes (machine_face.rs), which it offers.
-                if stays_in_webview(url, &origin)
-                    || crate::offline::is_offline_page(url)
-                    || crate::machine_face::is_face_page(url)
-                {
-                    return true;
-                }
-                open_in_browser(&app, url.as_str());
-                false
-            }
-        })
-        // Something on screen: this launch has reached the reader, even if what it shows is an error.
-        .on_page_load(|_, payload| {
-            if matches!(payload.event(), PageLoadEvent::Finished) {
-                crate::launch::reached(crate::launch::Stage::Shown);
-            }
-        })
-        // A `window.open`: the page floating one of its own panels gets a window of this app's (its browser
-        // popup, done natively); anything else opened this way leaves for the browser. Denied either way — the
-        // window the page gets is built by this app, off the callback, for the same re-entrancy reason as above.
-        .on_new_window({
-            let app = app.clone();
-            move |url, features| {
-                match floating_panel(&url, &origin) {
-                    Some(panel) => {
-                        let app = app.clone();
-                        let size = features.size();
-                        let position = features.position();
-                        tauri::async_runtime::spawn(async move {
-                            show_floating(&app, &panel, url, size, position);
-                        });
-                    }
-                    None => open_in_browser(&app, url.as_str()),
-                }
-                NewWindowResponse::Deny
-            }
-        })
+    hosted_page!(
+        WebviewWindowBuilder::new(app, label, WebviewUrl::External(url)),
+        app,
+        label
+    )
+    .title("Intentic")
+    /* NO PLATFORM TITLE BAR ON ANY WINDOW OF THE PAGE — see [`WindowVerb`] for the bar the page draws in its place. */
+    .decorations(false)
+    .shadow(true)
 }
 
 /* A PANEL IN A WINDOW OF ITS OWN. */
@@ -919,7 +907,7 @@ fn show_floating(
 ) {
     let label = floating_label(panel);
     if let Some(window) = app.get_webview_window(&label) {
-        raise(&window);
+        raise(window.as_ref());
         return;
     }
     let size = size.unwrap_or_else(|| LogicalSize::new(FLOATING_SIZE.0, FLOATING_SIZE.1));
@@ -933,19 +921,19 @@ fn show_floating(
     };
     match builder.build() {
         Ok(window) => {
-            crate::webview_sync::watch(&window);
-            crate::shown::watch(&window);
+            crate::webview_sync::watch(&window.as_ref().window());
+            crate::shown::watch(&window.as_ref().window());
             // A page that cannot be reached gets the app's own screen, not the browser's (offline.rs).
-            crate::offline::watch(&window, &app_origin(&app.state::<AppState>()));
+            crate::offline::watch(window.as_ref(), &app_origin(&app.state::<AppState>()));
             // A big drop on the explorer, copied into a sandbox on this computer by the app (drop_copy.rs).
-            crate::drop_copy::watch(&window, &app_origin(&app.state::<AppState>()));
+            crate::drop_copy::watch(window.as_ref(), &app_origin(&app.state::<AppState>()));
             let handle = app.clone();
             let own = label.clone();
             window.on_window_event(move |event| match event {
                 /* WHAT THE PAGE'S MAXIMISE BUTTON DRAWS FOLLOWS THE WINDOW, NOT THE PRESS. */
                 WindowEvent::Resized(_) => {
-                    if let Some(window) = handle.get_webview_window(&own) {
-                        announce_frame(&window, false);
+                    if let Some(page) = handle.get_webview(&own) {
+                        announce_frame(&page, false);
                     }
                 }
                 // Closing IS docking: the page in it stops announcing its claim and the workspace draws the
@@ -976,24 +964,90 @@ fn stays_in_files_window(url: &Url) -> bool {
     }
 }
 
-/// How a local window comes up: on screen for the grant it was built for, hidden as the spare the next open wears
-/// (local.rs, the warm window: a page that has already loaded the editor and waits for its face), or as the main
-/// window (`HOME`), which takes the workspace's frame and place and, like the workspace, is hidden by its × rather
-/// than closed.
+/// How a folder's or a document's window comes up: on screen for the grant it was built for, or hidden as the spare the
+/// next open wears (local.rs, the warm window: a page that has already loaded the editor and waits for its face). The
+/// main window is not one of these: it is a face of the frame ([`show_home_face`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FilesWindow {
     Shown,
     Spare,
-    Home,
 }
 
-/// Build the window that shows one grant of the sidecar: the local face of the app's own bundle
-/// (`files/local`), told who it is by `init` (`__INTENTIC_LOCAL__`, local.rs) before any of its script runs, or,
-/// for a [`FilesWindow::Spare`], by [`wear_face`] later. Frameless like every page window, drawn by the same page
-/// bar. Unlike the workspace it holds a capability (capabilities/local.json): the commands its shell and This device
-/// call. Its links are still only `window` and `local` (setup_link.rs), and its files come from the sidecar's port.
+/// What every page of the app's own bundle on a folder has in common, the main window's and each folder's or
+/// document's window: the local face of `files/local`, told who it is by `init` (`__INTENTIC_LOCAL__`, local.rs) before
+/// any of its script runs, its own dark under it, and its links kept to the bundle. One chain for two builders, as
+/// [`hosted_page`] is.
+macro_rules! local_page {
+    ($builder:expr, $app:expr, $label:expr, $init:expr) => {{
+        let app: &AppHandle = $app;
+        let label: &str = $label;
+        let state = app.state::<AppState>();
+        $builder
+            .background_color(face_background(state.ui_mode()))
+            // Drops land in the page: the explorer copies a dragged file into the folder, as the workspace does.
+            .disable_drag_drop_handler()
+            .additional_browser_args(BROWSER_ARGS)
+            // No update: a local window draws no update banner (`update_told`).
+            .initialization_script(workspace_init_script(
+                &state.install_id(),
+                update_told(&crate::update::stage(app), true),
+                false,
+            ))
+            .initialization_script($init)
+            // A page starting over has no unsaved changes yet: it says again what it holds once it mounts, and until
+            // then nothing of the page before it may hold a close. And whether a spare's page has loaded, so only one
+            // that has is worn: a face evaluated into a page still navigating lands in the document it is leaving
+            // (local.rs `take_spare`).
+            .on_page_load({
+                let app = app.clone();
+                move |page, payload| match payload.event() {
+                    PageLoadEvent::Started => page_started(page.label()),
+                    PageLoadEvent::Finished => {
+                        crate::launch::reached(crate::launch::Stage::Shown);
+                        crate::local::page_loaded(&app, page.label())
+                    }
+                }
+            })
+            .on_navigation({
+                let app = app.clone();
+                let label = label.to_string();
+                move |url| {
+                    if url.scheme() == "intentic" {
+                        let app = app.clone();
+                        let label = label.clone();
+                        let link = url.to_string();
+                        tauri::async_runtime::spawn(async move {
+                            crate::handle_intentic_link(
+                                &app,
+                                &link,
+                                Source::Files { window: &label },
+                            );
+                        });
+                        return false;
+                    }
+                    if stays_in_files_window(url) {
+                        return true;
+                    }
+                    open_in_browser(&app, url.as_str());
+                    false
+                }
+            })
+            .on_new_window({
+                let app = app.clone();
+                move |url, _features| {
+                    open_in_browser(&app, url.as_str());
+                    NewWindowResponse::Deny
+                }
+            })
+    }};
+}
+
+/// Build the window that shows one grant of the sidecar ([`local_page`]), or, for a [`FilesWindow::Spare`], one told
+/// who it is later by [`wear_face`]. Frameless like every page window, drawn by the same page bar. Unlike the
+/// workspace it holds a capability (capabilities/local.json): the commands its shell and This device call. Its links
+/// are still only `window` and `local` (setup_link.rs), and its files come from the sidecar's port.
 ///
-/// Built hidden and placed before it is shown, as the workspace is, so it never appears for a frame wherever the
+/// Built hidden and placed before it is shown, as the frame is, so it never appears for a frame wherever the
 /// platform's cascade put it.
 pub fn show_files_window(
     app: &AppHandle,
@@ -1002,93 +1056,35 @@ pub fn show_files_window(
     init: &str,
     how: FilesWindow,
 ) -> Result<WebviewWindow, String> {
-    let state = app.state::<AppState>();
     let screen = work_area(app);
     let (size, min) = opening_bounds(screen.map(|screen| screen.size));
-    let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("files/local".into()))
-        .title(title)
-        .decorations(false)
-        .shadow(true)
-        .background_color(face_background(state.ui_mode()))
-        // Drops land in the page: the explorer copies a dragged file into the folder, as the workspace does.
-        .disable_drag_drop_handler()
-        .additional_browser_args(BROWSER_ARGS)
-        // No update: a local window draws no update banner (`update_told`).
-        .initialization_script(workspace_init_script(
-            &state.install_id(),
-            update_told(&crate::update::stage(app), true),
-            false,
-        ))
-        .initialization_script(init)
-        .inner_size(size.0, size.1)
-        .min_inner_size(min.0, min.1)
-        .visible(false)
-        // A page starting over has no unsaved changes yet: it says again what it holds once it mounts, and until then
-        // nothing of the page before it may hold a close. And whether a spare's page has loaded, so only one that
-        // has is worn: a face evaluated into a page still navigating lands in the document it is leaving (local.rs
-        // `take_spare`).
-        .on_page_load({
-            let app = app.clone();
-            move |window, payload| match payload.event() {
-                PageLoadEvent::Started => page_started(window.label()),
-                PageLoadEvent::Finished => {
-                    crate::launch::reached(crate::launch::Stage::Shown);
-                    crate::local::page_loaded(&app, window.label())
-                }
-            }
-        })
-        .on_navigation({
-            let app = app.clone();
-            let label = label.to_string();
-            move |url| {
-                if url.scheme() == "intentic" {
-                    let app = app.clone();
-                    let label = label.clone();
-                    let link = url.to_string();
-                    tauri::async_runtime::spawn(async move {
-                        crate::handle_intentic_link(&app, &link, Source::Files { window: &label });
-                    });
-                    return false;
-                }
-                if stays_in_files_window(url) {
-                    return true;
-                }
-                open_in_browser(&app, url.as_str());
-                false
-            }
-        })
-        .on_new_window({
-            let app = app.clone();
-            move |url, _features| {
-                open_in_browser(&app, url.as_str());
-                NewWindowResponse::Deny
-            }
-        });
+    let builder = local_page!(
+        WebviewWindowBuilder::new(app, label, WebviewUrl::App("files/local".into())),
+        app,
+        label,
+        init
+    )
+    .title(title)
+    .decorations(false)
+    .shadow(true)
+    .inner_size(size.0, size.1)
+    .min_inner_size(min.0, min.1)
+    .visible(false);
     let window = builder
         .build()
         .map_err(|error| format!("the window for {title} did not open: {error}"))?;
-    crate::webview_sync::watch(&window);
-    // The main window carries the app's mark on its taskbar button, which comes back with each showing (badge.rs).
-    if how == FilesWindow::Home {
-        crate::shown::watch(&window);
-    }
+    crate::webview_sync::watch(&window.as_ref().window());
     let handle = app.clone();
     let own = label.to_string();
     window.on_window_event(move |event| match event {
         WindowEvent::Resized(_) => {
-            if let Some(window) = handle.get_webview_window(&own) {
-                announce_frame(&window, false);
+            if let Some(page) = handle.get_webview(&own) {
+                announce_frame(&page, false);
             }
         }
         // The reader back on this computer's window: its card is read again from what the sandbox is now, rather than
         // what it was minutes ago (machine_sandbox.rs `reader_returned`).
         WindowEvent::Focused(true) => crate::machine_sandbox::reader_returned(&own),
-        // The main window's × is the workspace's: a question, and a hide rather than a close (`request_close`), so
-        // nothing it holds unsaved is lost, and the tray brings it back as it was.
-        WindowEvent::CloseRequested { api, .. } if own == HOME => {
-            api.prevent_close();
-            request_close(&handle);
-        }
         // Unsaved changes hold the close, whoever asked for it (the platform's ×, the page's own, Alt+F4): the
         // window comes to the front and its page asks what to do with them, answering with a confirmed close — or,
         // for a page that never takes the question, the app asks in its place (`close_turn`).
@@ -1098,11 +1094,11 @@ pub fn show_files_window(
                 quit_with_last_window(&handle, &own);
             } else {
                 api.prevent_close();
-                if let Some(window) = handle.get_webview_window(&own) {
+                if let Some(page) = handle.get_webview(&own) {
                     match turn {
-                        CloseTurn::AskPage(id) => ask_page(&handle, &window, id),
-                        CloseTurn::AskHere => ask_here(&handle, &window),
-                        CloseTurn::Wait | CloseTurn::Close => raise(&window),
+                        CloseTurn::AskPage(id) => ask_page(&handle, &page, id),
+                        CloseTurn::AskHere => ask_here(&handle, &page),
+                        CloseTurn::Wait | CloseTurn::Close => raise(&page),
                     }
                 }
             }
@@ -1116,27 +1112,36 @@ pub fn show_files_window(
         _ => {}
     });
     if let Some(screen) = screen {
-        place_in_work_area(&window, screen, size);
+        place_in_work_area(&window.as_ref().window(), screen, size);
     }
     // A spare's bar is judged from when it is worn, not from when it was built: its page draws nothing until it
     // has a face, and a fallback fired meanwhile would hand it the platform's frame for no reason.
-    match how {
-        FilesWindow::Shown => {
-            arm_frame_fallback(app, label);
-            let _ = window.show();
-            let _ = window.set_focus();
-            crate::webview_sync::shown(&window);
-        }
-        // In the workspace's frame and place, as the other face of the one window.
-        FilesWindow::Home => {
-            arm_frame_fallback(app, label);
-            let workspace = app.get_webview_window(WORKSPACE);
-            take_frame(&window, workspace.as_ref());
-            swap_in(&window, workspace, Keyboard::Take);
-        }
-        FilesWindow::Spare => {}
+    if how == FilesWindow::Shown {
+        arm_frame_fallback(app, label);
+        let _ = window.show();
+        let _ = window.set_focus();
+        crate::webview_sync::shown(window.as_ref());
     }
     Ok(window)
+}
+
+/// The main window: the local face of the frame on `init`'s folder ([`local_page`]), added out of sight and drawn in
+/// the workspace's place. Like the workspace, its × hides the frame rather than closing anything (`request_close`), so
+/// nothing it holds unsaved is lost and the tray brings it back as it was.
+pub fn show_home_face(app: &AppHandle, title: &str, init: &str) -> Result<Webview, String> {
+    let builder = local_page!(
+        WebviewBuilder::new(HOME, WebviewUrl::App("files/local".into())),
+        app,
+        HOME,
+        init
+    );
+    let face = crate::frame::add_face(app, HOME, builder)
+        .ok_or_else(|| format!("the window for {title} did not open"))?;
+    crate::frame::set_title(app, HOME, title);
+    settle_face_background(&face, app.state::<AppState>().ui_mode());
+    arm_frame_fallback(app, HOME);
+    swap_in(app, HOME, Keyboard::Take);
+    Ok(face)
 }
 
 /// The spare becoming a window of its own (local.rs): `script` hands its page the face, and the window takes the
@@ -1149,12 +1154,12 @@ pub fn wear_face(app: &AppHandle, window: &WebviewWindow, title: &str, script: &
     let _ = window.set_min_size(Some(LogicalSize::new(min.0, min.1)));
     let _ = window.set_size(LogicalSize::new(size.0, size.1));
     if let Some(screen) = screen {
-        place_in_work_area(window, screen, size);
+        place_in_work_area(&window.as_ref().window(), screen, size);
     }
     arm_frame_fallback(app, window.label());
     let _ = window.show();
     let _ = window.set_focus();
-    crate::webview_sync::shown(window);
+    crate::webview_sync::shown(window.as_ref());
 }
 
 /* A LOCAL WINDOW'S UNSAVED CHANGES — what its close and the app's Quit ask about first. */
@@ -1375,7 +1380,7 @@ fn forget_unsaved(label: &str) {
 /// Hand the page the question, and give it [`PAGE_SILENCE`] to take it. The eval's own completion is the receipt:
 /// it runs only if the page's script does, so a page that has died or hung never sends one, and the app asks in its
 /// place ([`ask_here`]).
-fn ask_page(app: &AppHandle, window: &WebviewWindow, id: u64) {
+fn ask_page(app: &AppHandle, window: &Webview, id: u64) {
     raise(window);
     let label = window.label().to_string();
     let receipt = label.clone();
@@ -1391,7 +1396,7 @@ fn ask_page(app: &AppHandle, window: &WebviewWindow, id: u64) {
         if !unanswered {
             return;
         }
-        match app.get_webview_window(&label) {
+        match app.get_webview(&label) {
             Some(window) => ask_here(&app, &window),
             None => forget_unsaved(&label),
         }
@@ -1400,7 +1405,7 @@ fn ask_page(app: &AppHandle, window: &WebviewWindow, id: u64) {
 
 /// The page's question, asked by the app, over the window, for a page that never took it: "Close anyway" closes
 /// the window with its edits, "Cancel" keeps it, and the next close hands the question to the page again.
-fn ask_here(app: &AppHandle, window: &WebviewWindow) {
+fn ask_here(app: &AppHandle, window: &Webview) {
     raise(window);
     let label = window.label().to_string();
     let handle = app.clone();
@@ -1412,7 +1417,7 @@ fn ask_here(app: &AppHandle, window: &WebviewWindow) {
             "Close anyway".into(),
             "Cancel".into(),
         ))
-        .parent(window)
+        .parent(&window.window())
         .show(move |close| {
             {
                 let mut unsaved = UNSAVED.lock().unwrap();
@@ -1688,10 +1693,10 @@ fn quit_question(count: usize) -> String {
 }
 
 /// Bring a local window back in front of the reader, as the tray or a second double-click on the same file asks. The
-/// main window is a face, so it comes up in the workspace's place, as the tray's "This computer" brings it: raised on
-/// its own, a double-click on a file in its folder or `intentic .` there stood it beside the workspace, two faces of
-/// the one window on screen at once (2026-10-12). Shown by the reader's own doing, so it is the face in use from then.
-pub fn raise_window(app: &AppHandle, window: &WebviewWindow) {
+/// main window is a face, so it comes up in the workspace's place, as the tray's "This computer" brings it (2026-10-12:
+/// raised on its own, it stood beside the workspace). Shown by the reader's own doing, so it is the face in use from
+/// then.
+pub fn raise_window(app: &AppHandle, window: &Webview) {
     if window.label() == HOME {
         show_home(app);
         return;
@@ -1699,13 +1704,19 @@ pub fn raise_window(app: &AppHandle, window: &WebviewWindow) {
     raise(window);
 }
 
-/// In front of the reader, whatever it was doing: hidden, minimised, or under the window that asked.
-fn raise(window: &WebviewWindow) {
+/// In front of the reader, whatever it was doing: hidden, minimised, or under the window that asked. A face is drawn
+/// in the frame as well, since a frame raised over the other face would show the reader the wrong one.
+fn raise(page: &Webview) {
+    if let Some(face) = crate::frame::face_label(page.label()) {
+        swap_in(page.app_handle(), face, Keyboard::Take);
+        return;
+    }
+    let window = page.window();
     let _ = window.show();
     let _ = window.unminimize();
     let _ = window.set_focus();
-    crate::webview_sync::shown(window);
-    crate::shown::tell(window, false);
+    crate::webview_sync::shown(page);
+    crate::shown::tell(page, false);
 }
 
 /* THE TITLE BAR THE PAGE DRAWS, AND THE FRAME THAT COMES BACK IF IT DOES NOT. */
@@ -1717,6 +1728,9 @@ fn raise(window: &WebviewWindow) {
 struct Chrome {
     ready: AtomicBool,
     maximized: AtomicBool,
+    /// The page has no bar of its own to be moved and closed by (none drawn in time, or the app's offline page), so the
+    /// window it is drawn in wears the platform's: a window of its own at once, the frame while it draws this face.
+    bare: AtomicBool,
 }
 
 static CHROMES: LazyLock<Mutex<HashMap<String, Arc<Chrome>>>> = LazyLock::new(Mutex::default);
@@ -1769,23 +1783,22 @@ fn arm_frame_fallback(app: &AppHandle, label: &str) {
         if chrome.ready.load(Ordering::Relaxed) || !Arc::ptr_eq(&chrome, &chrome_of(&label)) {
             return;
         }
-        let Some(window) = app.get_webview_window(&label) else {
+        let Some(page) = app.get_webview(&label) else {
             return;
         };
-        if bar_drawn(&window).await {
-            chrome_is_up(&window);
+        if bar_drawn(&page).await {
+            chrome_is_up(&page);
             return;
         }
         eprintln!("no title bar from the page in {label}: handing back the platform's frame");
-        let _ = window.set_decorations(true);
+        wear_platform_bar(&page, true);
     });
 }
 
-/// Whether the page in `window` has drawn its bar ([`BAR_DRAWN`]), within [`BAR_ANSWER`]; a page that does not
-/// answer has not.
-async fn bar_drawn(window: &WebviewWindow) -> bool {
+/// Whether `page` has drawn its bar ([`BAR_DRAWN`]), within [`BAR_ANSWER`]; a page that does not answer has not.
+async fn bar_drawn(page: &Webview) -> bool {
     let (tell, heard) = std::sync::mpsc::channel::<String>();
-    let asked = window.eval_with_callback(BAR_DRAWN, move |answer| {
+    let asked = page.eval_with_callback(BAR_DRAWN, move |answer| {
         let _ = tell.send(answer);
     });
     if asked.is_err() {
@@ -1808,46 +1821,78 @@ fn says_yes(answer: &str) -> bool {
     answer.trim() == "true"
 }
 
-/// The page saying its bar is up. `set_decorations(false)` is a no-op in the ordinary case and the whole point
-/// in the slow one: a page that arrives after the fallback fired takes the frame off again, so the window ends
-/// in the state the page can actually drive either way round.
-fn chrome_is_up(window: &WebviewWindow) {
-    chrome_of(window.label())
-        .ready
-        .store(true, Ordering::Relaxed);
-    let _ = window.set_decorations(false);
+/// The page saying its bar is up. Taking the platform's frame off is a no-op in the ordinary case and the whole point
+/// in the slow one: a page that arrives after the fallback fired takes the frame off again, so the window ends in the
+/// state the page can actually drive either way round.
+fn chrome_is_up(page: &Webview) {
+    chrome_of(page.label()).ready.store(true, Ordering::Relaxed);
+    wear_platform_bar(page, false);
     // Unconditionally, because this is a page that has just loaded: it knows nothing yet about a window that
     // may have been maximised before it got here, or hidden.
-    announce_frame(window, true);
-    crate::shown::tell(window, true);
+    announce_frame(page, true);
+    crate::shown::tell(page, true);
 }
 
-/// Tell the page whether the window is maximised. `always` is for a page that has just announced itself and
-/// has no state at all; every other caller is an event, and sends only what CHANGED.
-fn announce_frame(window: &WebviewWindow, always: bool) {
-    let maximized = window.is_maximized().unwrap_or(false);
-    let changed = chrome_of(window.label())
+/// Whether the window `page` is drawn in wears the platform's title bar, because the page has none (`bare`) or not.
+/// A window of its own takes it at once; the frame takes what the face it draws needs ([`fit_decorations`]), so a
+/// face out of sight never puts a bar over the one on screen.
+fn wear_platform_bar(page: &Webview, bare: bool) {
+    chrome_of(page.label()).bare.store(bare, Ordering::Relaxed);
+    if crate::frame::is_face(page.label()) {
+        fit_decorations(page.app_handle());
+    } else {
+        let _ = page.window().set_decorations(bare);
+    }
+}
+
+/// The workspace face is on a page of the app's own that draws no bar (offline.rs): the frame wears the platform's
+/// while it shows it, until a page that draws one says so (`chrome_is_up`).
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn page_has_no_bar(page: &Webview) {
+    wear_platform_bar(page, true);
+}
+
+/// The frame wears the platform's title bar while the face it draws has no bar of its own, and only then. Asked only
+/// when it would change: taking a frame off that is already off still makes Windows recompute the window's frame.
+fn fit_decorations(app: &AppHandle) {
+    let (Some(frame), Some(shown)) = (crate::frame::frame(app), crate::frame::shown()) else {
+        return;
+    };
+    let bare = chrome_of(shown).bare.load(Ordering::Relaxed);
+    if frame.is_decorated().unwrap_or(!bare) != bare {
+        let _ = frame.set_decorations(bare);
+    }
+}
+
+/// Tell the page whether the window it is drawn in is maximised. `always` is for a page that has just announced itself
+/// and has no state at all; every other caller is an event, and sends only what CHANGED.
+pub(crate) fn announce_frame(page: &Webview, always: bool) {
+    let maximized = page.window().is_maximized().unwrap_or(false);
+    let changed = chrome_of(page.label())
         .maximized
         .swap(maximized, Ordering::Relaxed)
         != maximized;
     if !always && !changed {
         return;
     }
-    let _ = window.eval(format!(
+    let _ = page.eval(format!(
         "window.dispatchEvent(new CustomEvent('{FRAME_EVENT}', {{ detail: {{ maximized: {maximized} }} }}));"
     ));
 }
 
 /* A PRESS ON THE PAGE'S OWN TITLE BAR — answered on the window it was pressed in. */
+///
+/// A face's page works the frame it is drawn in.
 fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
-    let Some(window) = app.get_webview_window(label) else {
+    let Some(page) = app.get_webview(label) else {
         return;
     };
+    let window = page.window();
+    let face = crate::frame::is_face(label);
     match verb {
-        WindowVerb::Ready => chrome_is_up(&window),
+        WindowVerb::Ready => chrome_is_up(&page),
         // Sway owns kiosk sizing: these buttons must not hide the face or cover the system bar.
-        WindowVerb::Minimize | WindowVerb::Maximize
-            if crate::os::kiosk() && (label == WORKSPACE || label == HOME) => {}
+        WindowVerb::Minimize | WindowVerb::Maximize if crate::os::kiosk() && face => {}
         WindowVerb::Minimize => {
             let _ = window.minimize();
         }
@@ -1859,13 +1904,13 @@ fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
             };
             // The resize event says the same thing a moment later and is deduplicated against this; sending it
             // here is what makes the glyph flip on the press rather than on the platform's next frame.
-            announce_frame(&window, false);
+            announce_frame(&page, false);
         }
         // A face's × is a question and hides (`request_close`), the workspace's and the main window's alike; a
         // floating panel's × is its dock, and the window simply goes. Any other local window's goes through its
         // CloseRequested, where unsaved changes hold it until its page has asked (`close_turn`), which `confirmed`
         // says it has.
-        WindowVerb::Close { .. } if label == WORKSPACE || label == HOME => request_close(app),
+        WindowVerb::Close { .. } if face => request_close(app),
         WindowVerb::Close { confirmed } => {
             if confirmed && is_local_window(label) {
                 UNSAVED.lock().unwrap().confirmed.insert(label.to_string());
@@ -1885,7 +1930,7 @@ fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
         // A face comes back the way the tray brings it back, in the other face's place.
         WindowVerb::Raise if label == WORKSPACE => show_workspace(app),
         WindowVerb::Raise if label == HOME => show_home_at(app, None, Keyboard::Take),
-        WindowVerb::Raise => raise(&window),
+        WindowVerb::Raise => raise(&page),
         WindowVerb::Fit(width) => fit_width(&window, f64::from(width)),
         // Answered before this is reached (`handle_link`); it is about the app's faces, not this window.
         WindowVerb::Mode(mode) => apply_mode(app, mode),
@@ -1894,7 +1939,7 @@ fn work_the_window(app: &AppHandle, label: &str, verb: WindowVerb) {
 
 /// Widen to `width` CSS pixels (logical, which is what the page measures in), keeping the height; never
 /// narrows, so a window the reader already made wider is left as they made it.
-fn fit_width(window: &WebviewWindow, width: f64) {
+fn fit_width(window: &Window, width: f64) {
     let scale = window.scale_factor().unwrap_or(1.0);
     let Ok(size) = window.inner_size() else {
         return;
@@ -1907,7 +1952,7 @@ fn fit_width(window: &WebviewWindow, width: f64) {
 }
 
 /* THE × IS A QUESTION, ASKED BEFORE ANYTHING HAPPENS — and asked in this app's own voice. */
-fn request_close(app: &AppHandle) {
+pub(crate) fn request_close(app: &AppHandle) {
     // In kiosk mode this app is the screen (os.rs `kiosk`): hiding a face to a tray leaves it empty, and a Quit only has
     // the session start the app again. The × is refused, and the face stays where it is (2026-10-13).
     if crate::os::kiosk() {
@@ -1939,11 +1984,7 @@ fn quit_with_last_window(app: &AppHandle, own: &str) {
     if crate::os::kiosk() {
         return;
     }
-    let face_on_screen = [WORKSPACE, HOME]
-        .into_iter()
-        .filter_map(|label| app.get_webview_window(label))
-        .any(|window| on_screen(&window));
-    let another_on_screen = face_on_screen || folder_window_on_screen(app, Some(own));
+    let another_on_screen = crate::frame::on_screen(app) || folder_window_on_screen(app, Some(own));
     let chosen = app.state::<crate::state::AppState>().close_action();
     if quits_with_last_window(another_on_screen, chosen) {
         // Its close goes ahead (nothing unsaved, or the reader let it go), so the Quit does not ask about it again.
@@ -1959,7 +2000,7 @@ fn quits_with_last_window(another_on_screen: bool, chosen: Option<CloseAction>) 
 
 /// Both answers, once one has been given. Hiding rather than destroying is what makes the tray instant, and
 /// `exit` is the tray menu's own Quit reached from the × instead — same exit, so a downloaded update installs
-/// on the way out exactly as it would there. Both faces step aside: only one is ever on screen, and the × was its.
+/// on the way out exactly as it would there. The frame steps aside with both faces in it, and the × was its.
 fn apply_close(app: &AppHandle, action: CloseAction) {
     match action {
         CloseAction::Tray => hide_faces(app),
@@ -1967,18 +2008,13 @@ fn apply_close(app: &AppHandle, action: CloseAction) {
     }
 }
 
-/// Both faces to the tray, from where "Open Intentic" brings back the one last in use.
+/// The frame to the tray, from where "Open Intentic" brings back the face last in use.
 fn hide_faces(app: &AppHandle) {
-    for label in [WORKSPACE, HOME] {
-        if let Some(window) = app.get_webview_window(label) {
-            let _ = window.hide();
-            crate::shown::tell(&window, false);
-        }
-    }
+    crate::frame::hide(app);
 }
 
 /// Raise the dialog over the window it is about. Built hidden and placed before it is ever shown, the same as
-/// `swap_in`, so nothing appears in the wrong spot for a frame.
+/// the frame, so nothing appears in the wrong spot for a frame.
 ///
 /// Every failure here falls through to the tray rather than leaving the × doing nothing: a close that seems to
 /// be ignored is the worst outcome available, and the app staying up is the recoverable one.
@@ -1998,8 +2034,8 @@ fn ask_before_closing(app: &AppHandle) {
         let _ = window.set_focus();
         return;
     }
-    // Owned by the face only while that face is on screen: a dialog owned by a minimised window is hidden with it.
-    let parent = face.filter(on_screen);
+    // Owned by the frame only while it is on screen: a dialog owned by a minimised window is hidden with it.
+    let parent = face.filter(window_on_screen);
     let mode = app.state::<crate::state::AppState>().ui_mode();
     let mut builder =
         WebviewWindowBuilder::new(app, CONFIRM_CLOSE, WebviewUrl::App("index.html".into()))
@@ -2026,17 +2062,17 @@ fn ask_before_closing(app: &AppHandle) {
             .additional_browser_args(BROWSER_ARGS)
             .visible(false);
     if let Some(parent) = &parent {
-        builder = match builder.parent(parent) {
+        builder = match owned_by(builder, parent) {
             Ok(owned) => owned,
             Err(error) => {
-                eprintln!("close confirmation could not be owned by the workspace: {error}");
+                eprintln!("close confirmation could not be owned by the app's window: {error}");
                 return apply_close(app, CloseAction::Tray);
             }
         };
     }
     match builder.build() {
         Ok(window) => {
-            settle_background(&window, mode);
+            settle_background(&window.as_ref().window(), mode);
             center_over(
                 &window,
                 parent.as_ref(),
@@ -2056,12 +2092,31 @@ fn ask_before_closing(app: &AppHandle) {
 /// taskbar button ("Close window"), and the question used to be centred on where Windows parks a minimised window,
 /// (-32000, -32000): off every screen, and every × after it only focused that question again, so the × did nothing for
 /// the rest of the run (2026-10-12). The reader asked about this window, so it comes back to be asked about.
-fn face_to_ask_over(app: &AppHandle) -> Option<WebviewWindow> {
+fn face_to_ask_over(app: &AppHandle) -> Option<Window> {
     let face = shown_face(app)?;
     if !matches!(face.is_minimized(), Ok(false)) {
         let _ = face.unminimize();
     }
     Some(face)
+}
+
+/// The dialog `builder` makes, owned by `parent` as Tauri's own `parent` would own it by a window of a page: on
+/// Windows always above it and minimised with it, on Linux transient for it. The frame is a window with no page of
+/// its own, which that `parent` cannot take.
+fn owned_by<'a>(
+    builder: WebviewWindowBuilder<'a, tauri::Wry, AppHandle>,
+    parent: &Window,
+) -> tauri::Result<WebviewWindowBuilder<'a, tauri::Wry, AppHandle>> {
+    #[cfg(windows)]
+    let owned = builder.owner_raw(parent.hwnd()?);
+    #[cfg(target_os = "linux")]
+    let owned = builder.transient_for_raw(&parent.gtk_window()?);
+    #[cfg(not(any(windows, target_os = "linux")))]
+    let owned = {
+        let _ = parent;
+        builder
+    };
+    Ok(owned)
 }
 
 /// The middle of the window being asked about, not the middle of the screen — a window that opens away from
@@ -2073,9 +2128,9 @@ fn face_to_ask_over(app: &AppHandle) -> Option<WebviewWindow> {
 /// `size` is what the window will be WEARING when it is shown, passed in rather than read back off it. A
 /// window that has just been asked to resize does not answer with its new size on every platform — GTK
 /// resizes on its own clock — and a setup placed against the size it is leaving lands half a window off.
-fn center_over(window: &WebviewWindow, over: Option<&WebviewWindow>, size: LogicalSize<f64>) {
+fn center_over(window: &WebviewWindow, over: Option<&Window>, size: LogicalSize<f64>) {
     let own: PhysicalSize<u32> = size.to_physical(window.scale_factor().unwrap_or(1.0));
-    let placed = over.filter(|over| on_screen(over)).and_then(|over| {
+    let placed = over.filter(|over| window_on_screen(over)).and_then(|over| {
         Some(centered(
             over.outer_position().ok()?,
             over.outer_size().ok()?,
@@ -2124,9 +2179,8 @@ pub fn resolve_close(app: &AppHandle, action: CloseAction, remember: bool) {
 pub fn alert_setup(app: &AppHandle) {
     // The keyboard only when the workspace is the window being read; a run that takes minutes must not pull the user
     // out of whatever they moved on to. Wrong here costs a focus, never a second window.
-    let reading_workspace = app
-        .get_webview_window(WORKSPACE)
-        .is_some_and(|workspace| workspace.is_visible().unwrap_or(false));
+    let reading_workspace = crate::frame::shown() == Some(WORKSPACE)
+        && crate::frame::frame(app).is_some_and(|frame| frame.is_visible().unwrap_or(false));
     let keyboard = if reading_workspace {
         Keyboard::Take
     } else {
@@ -2135,8 +2189,8 @@ pub fn alert_setup(app: &AppHandle) {
     // The swap the setup arrived through, run again rather than a bare `show`: a run settling while the workspace
     // holds the frame has to end with one face up, and only the swap takes the other off screen.
     show_home_at(app, Some(DEVICE_ROUTE), keyboard);
-    if let Some(window) = app.get_webview_window(HOME) {
-        let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
+    if let Some(frame) = crate::frame::frame(app) {
+        let _ = frame.request_user_attention(Some(tauri::UserAttentionType::Critical));
     }
 }
 
@@ -2150,7 +2204,7 @@ pub fn announce_setup(app: &AppHandle, report: &SetupReport) {
 }
 
 fn tell_workspace(app: &AppHandle, report: &SetupReport) {
-    let Some(window) = app.get_webview_window(WORKSPACE) else {
+    let Some(window) = crate::frame::face(app, WORKSPACE) else {
         return;
     };
     let _ = window.eval(setup_announcement(report));

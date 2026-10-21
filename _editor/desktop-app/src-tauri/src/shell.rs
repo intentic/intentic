@@ -24,7 +24,8 @@ pub fn roster_changed(app: &tauri::AppHandle) {
     let _ = app;
 }
 
-pub fn face_shown(window: &tauri::WebviewWindow) {
+/// The frame has just drawn a face (frame.rs `show`).
+pub fn face_shown(window: &tauri::Window) {
     #[cfg(target_os = "linux")]
     if crate::os::kiosk() {
         spaces::face_shown(window);

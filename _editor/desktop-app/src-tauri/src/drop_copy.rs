@@ -2294,7 +2294,7 @@ fn event_script(detail: &Value) -> String {
 /* WHERE THE PAGE'S MESSAGE ARRIVES: WebView2's own event on a page window. */
 
 #[cfg(windows)]
-pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
+pub fn watch(window: &tauri::Webview, app_origin: &url::Url) {
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
     use webview2_com::WebMessageReceivedEventHandler;
 
@@ -2393,7 +2393,7 @@ pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
 
 /// Elsewhere the page is never told this app takes a drop (`nativeCopy` in the init script), so never asks.
 #[cfg(not(windows))]
-pub fn watch(_window: &tauri::WebviewWindow, _app_origin: &url::Url) {}
+pub fn watch(_window: &tauri::Webview, _app_origin: &url::Url) {}
 
 #[cfg(test)]
 mod tests {

@@ -67,7 +67,7 @@ pub fn unreachable(status: &str) -> bool {
 }
 
 #[cfg(windows)]
-pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
+pub fn watch(window: &tauri::Webview, app_origin: &url::Url) {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
@@ -118,7 +118,8 @@ pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
             // Off the event: navigating from inside WebView2's own callback re-enters it (the same rule as the
             // window handlers in windows.rs).
             tauri::async_runtime::spawn(async move {
-                let _ = window.set_decorations(true);
+                // The offline page draws no bar: the window it is shown in wears the platform's (windows.rs).
+                crate::windows::page_has_no_bar(&window);
                 if let Ok(page) = page.parse() {
                     let _ = window.navigate(page);
                 }
@@ -166,7 +167,7 @@ fn unreachable_on_webkit(error: &webkit2gtk::glib::Error) -> bool {
 /// so a name that takes WebKit half a minute to give up on is not half a minute of a blank screen. The probe never moves
 /// a page that has started showing: only a load that has not committed by the time it answers is replaced.
 #[cfg(target_os = "linux")]
-pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
+pub fn watch(window: &tauri::Webview, app_origin: &url::Url) {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use webkit2gtk::{LoadEvent, WebViewExt};
@@ -215,7 +216,7 @@ pub fn watch(window: &tauri::WebviewWindow, app_origin: &url::Url) {
 /// Where a workspace window that could not reach its page goes, off the event that said so: navigating from inside
 /// WebKitGTK's own signal re-enters it (the same rule as WebView2's callback above).
 #[cfg(target_os = "linux")]
-fn leave_for_fallback(window: &tauri::WebviewWindow, target: &str, status: &str) {
+fn leave_for_fallback(window: &tauri::Webview, target: &str, status: &str) {
     let app = tauri::Manager::app_handle(window).clone();
     let hosts = tauri::Manager::state::<crate::state::AppState>(&app).hosts_sandboxes();
     let page = crate::machine_face::fallback_for(hosts, target, status);
@@ -229,7 +230,7 @@ fn leave_for_fallback(window: &tauri::WebviewWindow, target: &str, status: &str)
 
 /// Elsewhere the platform's error page stays: the webview there does not say a navigation failed.
 #[cfg(not(any(windows, target_os = "linux")))]
-pub fn watch(_window: &tauri::WebviewWindow, _app_origin: &url::Url) {}
+pub fn watch(_window: &tauri::Webview, _app_origin: &url::Url) {}
 
 #[cfg(test)]
 mod tests {

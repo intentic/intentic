@@ -668,10 +668,7 @@ pub fn onboarding_sign_out() -> Result<(), String> {
 
 /// A machine we host instead, for a PC that cannot run a sandbox.
 #[tauri::command]
-pub async fn onboarding_use_cloud(
-    app: AppHandle,
-    window: tauri::WebviewWindow,
-) -> Result<(), String> {
+pub async fn onboarding_use_cloud(app: AppHandle, window: tauri::Webview) -> Result<(), String> {
     crate::commands::workspace_open(
         app,
         window,

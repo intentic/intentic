@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 use base64::Engine;
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, Webview, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 
@@ -440,7 +440,7 @@ fn navigate_to(route: &str) -> String {
 }
 
 /// Take a shown window's shell to `route`.
-pub fn navigate(window: &WebviewWindow, route: &str) {
+pub fn navigate(window: &Webview, route: &str) {
     let _ = window.eval(navigate_to(route));
 }
 
@@ -456,7 +456,7 @@ fn open_in_window(path: &str) -> String {
 /// still have saved, its server having gone. Closing them instead would lose the same and the windows too.
 pub fn moved(app: &AppHandle) {
     for (label, face) in app.state::<LocalFiles>().faces() {
-        if let Some(window) = app.get_webview_window(&label) {
+        if let Some(window) = app.get_webview(&label) {
             eprintln!("intentic-files moved to another port: reloading {label} onto it");
             let _ = window.eval(face_moved(&face));
         }
@@ -576,13 +576,13 @@ fn open_path(app: &AppHandle, path: &Path) -> Result<(), Trouble> {
     drop(opening);
     match destination {
         Destination::Shown(label) => {
-            if let Some(window) = app.get_webview_window(&label) {
+            if let Some(window) = app.get_webview(&label) {
                 crate::windows::raise_window(app, &window);
             }
             Ok(())
         }
         Destination::Inside { label, path } => {
-            if let Some(window) = app.get_webview_window(&label) {
+            if let Some(window) = app.get_webview(&label) {
                 crate::windows::raise_window(app, &window);
                 let _ = window.eval(open_in_window(&path));
                 app.state::<AppState>().remember_recent(&asked, false);
@@ -731,7 +731,7 @@ fn open_home(app: &AppHandle, route: Option<&str>) -> Result<(), Trouble> {
 }
 
 fn build_home(app: &AppHandle, route: Option<&str>) -> Result<(), Trouble> {
-    if app.get_webview_window(crate::windows::HOME).is_some() {
+    if crate::frame::face(app, crate::windows::HOME).is_some() {
         return Ok(());
     }
     let state = app.state::<AppState>();
@@ -750,13 +750,7 @@ fn build_home(app: &AppHandle, route: Option<&str>) -> Result<(), Trouble> {
         face_init(Some(&grant.face)),
         route.map(route_init).unwrap_or_default()
     );
-    if let Err(error) = crate::windows::show_files_window(
-        app,
-        crate::windows::HOME,
-        &format!("{name} · Intentic"),
-        &init,
-        FilesWindow::Home,
-    ) {
+    if let Err(error) = crate::windows::show_home_face(app, &format!("{name} · Intentic"), &init) {
         files.windows.lock().unwrap().remove(crate::windows::HOME);
         let _ = crate::sidecar::send(app, &revoke_line(&grant.token));
         return Err(Trouble::Failed(error));
@@ -822,14 +816,14 @@ pub fn point(app: &AppHandle, label: &str, path: &Path) -> Result<(), Trouble> {
         .map(|(shows, _)| shows.clone());
     if let Some(shows) = shown {
         if shows != label {
-            if let Some(window) = app.get_webview_window(&shows) {
+            if let Some(window) = app.get_webview(&shows) {
                 crate::windows::raise_window(app, &window);
             }
         }
         return Ok(());
     }
     let window = app
-        .get_webview_window(label)
+        .get_webview(label)
         .ok_or_else(|| Trouble::Failed(format!("{label} is not open")))?;
     let port = crate::sidecar::ensure(app)?;
     let home = label == crate::windows::HOME;
@@ -842,7 +836,16 @@ pub fn point(app: &AppHandle, label: &str, path: &Path) -> Result<(), Trouble> {
     if let Some(old) = replaced {
         revoke_later(app, old.token);
     }
-    let _ = window.set_title(&format!("{name} · Intentic"));
+    let title = format!("{name} · Intentic");
+    match crate::frame::face_label(label) {
+        // The main window is a face of the app's one window, which wears the title of the face it draws.
+        Some(face) => {
+            crate::frame::set_title(app, face, &title);
+        }
+        None => {
+            let _ = window.window().set_title(&title);
+        }
+    }
     let _ = window.eval(face_pointed(&grant.face));
     let state = app.state::<AppState>();
     state.remember_recent(&asked, true);
@@ -1080,7 +1083,7 @@ pub fn folder_of(app: &AppHandle, label: &str) -> Option<PathBuf> {
 /// that sandbox, and its bring-back appears, without a reload (the web's local/folderSandbox.ts).
 pub fn mark_sandbox(app: &AppHandle, folder: &Path) {
     for (label, face) in app.state::<LocalFiles>().mark_sandbox(folder) {
-        if let Some(window) = app.get_webview_window(&label) {
+        if let Some(window) = app.get_webview(&label) {
             let _ = window.eval(face_sandboxed(&face));
         }
     }
@@ -1297,7 +1300,7 @@ fn handoff_path(port: u16, token: &str, granted: &Granted) -> String {
 /// document opened where [`open`] puts it. Nothing chosen changes nothing; what fails is said in a dialog, since the
 /// answer comes long after the press.
 #[tauri::command]
-pub fn local_pick(app: AppHandle, window: WebviewWindow, folder: bool) {
+pub fn local_pick(app: AppHandle, window: Webview, folder: bool) {
     let label = window.label().to_string();
     let handle = app.clone();
     let chosen = move |path: Option<tauri_plugin_dialog::FilePath>| {
@@ -1320,7 +1323,7 @@ pub fn local_pick(app: AppHandle, window: WebviewWindow, folder: bool) {
             }
         });
     };
-    let dialog = app.dialog().file().set_parent(&window);
+    let dialog = app.dialog().file().set_parent(&window.window());
     if folder {
         dialog.pick_folder(chosen);
     } else {
@@ -1331,11 +1334,7 @@ pub fn local_pick(app: AppHandle, window: WebviewWindow, folder: bool) {
 /// The folder menu's folder: shown in the window that asked, in place of its own. What fails comes back as the
 /// sentence the menu shows under the row, so no dialog is raised.
 #[tauri::command]
-pub async fn local_point(
-    app: AppHandle,
-    window: WebviewWindow,
-    path: String,
-) -> Result<(), String> {
+pub async fn local_point(app: AppHandle, window: Webview, path: String) -> Result<(), String> {
     let label = window.label().to_string();
     tauri::async_runtime::spawn_blocking(move || {
         let path = PathBuf::from(&path);
@@ -1376,6 +1375,23 @@ pub async fn local_recents(app: AppHandle) -> Result<Vec<RecentView>, String> {
 #[tauri::command]
 pub fn local_forget_recent(app: AppHandle, path: String) {
     app.state::<AppState>().forget_recent(&path);
+}
+
+/// What the window this page is drawn in is called, while its page says so (src/device/title.ts: a setup running in
+/// the main window), and what it was called before, which the page hands back once the setup lets go of it. The main
+/// window is a face of the app's one window, which wears its face's title only while it draws it (frame.rs), so the
+/// page asks here rather than titling that window itself, which would title the workspace too.
+#[tauri::command]
+pub fn local_title(app: AppHandle, window: Webview, title: String) -> String {
+    match crate::frame::face_label(window.label()) {
+        Some(face) => crate::frame::set_title(&app, face, &title).unwrap_or_default(),
+        None => {
+            let own = window.window();
+            let before = own.title().unwrap_or_default();
+            let _ = own.set_title(&title);
+            before
+        }
+    }
 }
 
 /// Who is signed in to the workspace and the sandboxes it last listed, for the place chip's Sandboxes and the rail's

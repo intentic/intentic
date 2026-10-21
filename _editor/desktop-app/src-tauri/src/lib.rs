@@ -13,6 +13,7 @@ mod engine_keeper;
 mod first_task;
 mod fix;
 mod found;
+mod frame;
 mod keyring;
 mod launch;
 mod local;
@@ -66,7 +67,7 @@ pub(crate) fn handle_intentic_link(app: &AppHandle, link: &str, source: setup_li
 /// a folder's — and a sign-in asked for there is a sign-in about that folder, so it hands them back to this
 /// computer's face rather than to the account's sandbox list (auth.rs `complete_path`).
 #[tauri::command]
-fn sign_in(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+fn sign_in(app: AppHandle, window: tauri::Webview) -> Result<(), String> {
     let asked_in = (window.label() != windows::WORKSPACE).then(|| window.label().to_string());
     auth::start(&app, false, asked_in)
 }
@@ -252,6 +253,7 @@ pub fn run() {
             local::local_recents,
             local::local_forget_recent,
             local::local_roster,
+            local::local_title,
             account::account_relay,
             project::project_preview,
             project::project_attach,
@@ -397,7 +399,7 @@ pub fn run() {
             let background = std::env::args().any(|arg| arg == autostart::ARG);
 
             /* BEFORE the link, nothing opens. */
-            if app.webview_windows().is_empty() && !opened_local {
+            if app.webviews().is_empty() && !opened_local {
                 let state = app.state::<state::AppState>();
                 // The engine is asked for by its socket, never by `docker info`, which would hold the first
                 // window of the launch for tens of seconds on exactly the machines this is about (scripts.rs).
@@ -429,7 +431,7 @@ pub fn run() {
                     None => {}
                 }
             }
-            let windowed = !app.webview_windows().is_empty();
+            let windowed = !app.webviews().is_empty();
             if windowed {
                 launch::reached(launch::Stage::Window);
             } else if background {
@@ -443,9 +445,9 @@ pub fn run() {
                 app.handle(),
                 std::time::Duration::from_secs(if windowed { 3 } else { 0 }),
             );
-            launch::opened(if app.get_webview_window(windows::WORKSPACE).is_some() {
+            launch::opened(if frame::face(app.handle(), windows::WORKSPACE).is_some() {
                 "workspace"
-            } else if app.get_webview_window(windows::HOME).is_some() {
+            } else if frame::face(app.handle(), windows::HOME).is_some() {
                 "home"
             } else if opened_local {
                 "local"

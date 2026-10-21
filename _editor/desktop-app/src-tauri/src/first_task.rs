@@ -272,7 +272,8 @@ pub fn first_task_clear(app: AppHandle) -> Result<(), String> {
 /// The system's folder dialog for the task's folder: none when nothing was chosen.
 #[tauri::command]
 pub async fn first_task_pick_folder(app: AppHandle) -> Option<String> {
-    let parent = app.get_webview_window(HOME);
+    // Over the app's one window, where the main window is drawn (frame.rs).
+    let parent = crate::frame::face(&app, HOME).map(|face| face.window());
     let (tx, rx) = std::sync::mpsc::channel();
     let mut dialog = app.dialog().file();
     if let Some(window) = parent.as_ref() {
@@ -424,9 +425,8 @@ fn urlencode(value: &str) -> String {
 }
 
 fn reader_here(app: &AppHandle) -> bool {
-    app.webview_windows().iter().any(|(label, window)| {
-        (label == windows::HOME || label.starts_with(FILES)) && window.is_focused().unwrap_or(false)
-    })
+    windows::focused_page(app)
+        .is_some_and(|label| label == windows::HOME || label.starts_with(FILES))
 }
 
 /// The workspace saying what became of the task it was handed (`intentic://first-task`).

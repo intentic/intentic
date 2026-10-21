@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::image::Image;
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, Webview, Window};
 
 use crate::setup_link::BadgeArgs;
 
@@ -81,49 +81,42 @@ pub fn show(app: &AppHandle, args: BadgeArgs) {
         standing.overlay = overlay;
         standing.count.replace(count) != Some(count)
     };
-    for face in faces(app) {
-        overlay_now(app, &face);
+    if let Some(frame) = crate::frame::frame(app) {
+        overlay_now(app, &frame);
     }
     if tell_dock {
         dock(app, count);
     }
 }
 
-/// The two faces, whose taskbar button is the app's: the workspace and the main window. A floating panel or a
-/// document's window keeps a button of its own, unmarked, as a second window of an app does.
-fn faces(app: &AppHandle) -> impl Iterator<Item = WebviewWindow> + '_ {
-    [crate::windows::WORKSPACE, crate::windows::HOME]
-        .into_iter()
-        .filter_map(|label| app.get_webview_window(label))
-}
-
-/// A window has just come on screen (shown.rs). Windows makes its taskbar button anew each time, with no overlay, and
-/// only once the shell has got round to it, so the mark is put back a moment later and once more after that rather
-/// than straight away, when there is no button yet to put it on.
-pub fn window_shown(window: &WebviewWindow) {
+/// A face has just come on screen (shown.rs): the frame both faces are drawn in carries the app's taskbar button, and a
+/// floating panel or a document's window keeps a button of its own, unmarked, as a second window of an app does. Windows
+/// makes that button anew each time the frame comes back from the tray, with no overlay, and only once the shell has got
+/// round to it, so the mark is put back a moment later and once more after that rather than straight away, when there
+/// is no button yet to put it on.
+pub fn window_shown(window: &Webview) {
     if !cfg!(windows) || !is_face(window.label()) {
         return;
     }
     let app = window.app_handle().clone();
-    let label = window.label().to_string();
     tauri::async_runtime::spawn(async move {
         for wait in [Duration::from_millis(300), Duration::from_millis(1500)] {
             tokio::time::sleep(wait).await;
-            if let Some(window) = app.get_webview_window(&label) {
-                overlay_now(&app, &window);
+            if let Some(frame) = crate::frame::frame(&app) {
+                overlay_now(&app, &frame);
             }
         }
     });
 }
 
 fn is_face(label: &str) -> bool {
-    label == crate::windows::WORKSPACE || label == crate::windows::HOME
+    crate::frame::is_face(label)
 }
 
-/// The overlay on `window`'s taskbar button, as the badge stands. A hidden window has no button to mark, and gets its
+/// The overlay on the frame's taskbar button, as the badge stands. A hidden frame has no button to mark, and gets its
 /// mark when it is shown again ([`window_shown`]).
 #[cfg(windows)]
-fn overlay_now(app: &AppHandle, window: &WebviewWindow) {
+fn overlay_now(app: &AppHandle, window: &Window) {
     if !matches!(window.is_visible(), Ok(true)) {
         return;
     }
@@ -132,7 +125,7 @@ fn overlay_now(app: &AppHandle, window: &WebviewWindow) {
 }
 
 #[cfg(not(windows))]
-fn overlay_now(_app: &AppHandle, _window: &WebviewWindow) {}
+fn overlay_now(_app: &AppHandle, _window: &Window) {}
 
 /// The count on a Linux dock's icon for the app, through the signal Unity defined and every dock that draws a count
 /// listens for. tao's own `set_badge_count` speaks it only while Unity itself is running, which no desktop since 2017

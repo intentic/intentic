@@ -312,7 +312,7 @@ pub fn reported(app: &AppHandle, args: WakeArgs) {
 /// gone (`SAY_AGAIN_EVERY`). With no workspace there is no page to tell: `on` loads it hidden first, `off` is written
 /// down for the next launch, and a pause or a resume has nothing to act on.
 pub fn send(app: &AppHandle, command: Command) {
-    if app.get_webview_window(WORKSPACE).is_none() {
+    if crate::frame::face(app, WORKSPACE).is_none() {
         match command {
             Command::On => crate::windows::load_workspace_hidden(app),
             Command::Off => return off_unheard(app),
@@ -331,7 +331,7 @@ pub fn send(app: &AppHandle, command: Command) {
         standing.pending = Some((command, standing.said));
         standing.said
     };
-    if let Some(window) = app.get_webview_window(WORKSPACE) {
+    if let Some(window) = crate::frame::face(app, WORKSPACE) {
         let _ = window.eval(&script);
     }
     let app = app.clone();
@@ -345,7 +345,7 @@ pub fn send(app: &AppHandle, command: Command) {
             if !unanswered {
                 return;
             }
-            if let Some(window) = app.get_webview_window(WORKSPACE) {
+            if let Some(window) = crate::frame::face(&app, WORKSPACE) {
                 let _ = window.eval(&script);
             }
         }

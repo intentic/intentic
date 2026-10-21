@@ -20,13 +20,26 @@ flowchart LR
     app -->|"updater"| release["GitHub release<br/>latest.json"]
 ```
 
-- **One window, two faces.** The main local window (label `home`) and the workspace face swap in one frame
-  (`swap_in`, `take_frame`): the one coming up takes the place, size and maximised state of the one going, so the
-  reader sees one window changing what it shows. The workspace face loads the hosted [web](../web) editor from
-  `https://app.intentic.dev` (or the `appUrl` setting, or `INTENTIC_APP_URL`) as remote content with no IPC. The main
-  window is the local face: the same editor built into this package's bundle (`dist/files/`, `local/main.ts`), on a
-  folder of this computer. A panel the editor floats out gets a frameless window of its own. This package's own `src/`
-  bundle (`index.html`) now draws one thing, the close question (`CloseConfirm.vue`).
+- **One window, two faces** (2026-10-21, `src-tauri/src/frame.rs`). The main local window (webview `home`) and the
+  workspace face (webview `workspace`) are two webviews in ONE native window, the frame (label `frame`, built with
+  Tauri's multi-webview API, its `unstable` feature). A switch shows one face and hides the other inside the frame in
+  one turn of the main thread (`frame::show`, `windows.rs` `swap_in`), so there is one taskbar button, one place, size
+  and maximised state, and nothing for a face to hand over. A face is added to the frame, out of sight, the first time
+  it is wanted. On Windows a face steps aside by hiding its webview's own child window, never through WebView2's
+  `IsVisible`, which reports a viewport of about 70×39 to a hidden page (`webview_sync.rs`); on Linux by hiding its GTK
+  widget, kept out of the `show_all` tao answers every `show` with. Tauri attaches a frameless window's resize borders
+  only to a window's own content webview, so the frame attaches them for its faces. The frame wears the title of the
+  face it shows ("<folder> · Intentic", a setup's, or "Intentic"), and the platform's title bar only while that face's
+  page has none (`fit_decorations`). Capabilities name webviews, not windows: a capability naming the frame would
+  grant the main window's commands to the workspace's remote page too. The workspace face loads the hosted
+  [web](../web) editor from `https://app.intentic.dev` (or the `appUrl` setting, or `INTENTIC_APP_URL`) as remote
+  content with no IPC. The main window is the local face: the same editor built into this package's bundle
+  (`dist/files/`, `local/main.ts`), on a folder of this computer. A panel the editor floats out gets a frameless window
+  of its own, and so does a folder or document opened on its own. This package's own `src/` bundle (`index.html`) now
+  draws one thing, the close question (`CloseConfirm.vue`). _(2026-10-21) Each face was a window of its own, and a
+  switch swapped the two in one place. The first switch after a launch built the second window on the spot and showed
+  it before its page had drawn, so the reader saw their window close and an empty one open where it had been; every
+  later switch still made and dropped a taskbar button and played Windows' open and close animations._
 - **No internet: this computer's own sandboxes** (2026-10-16, `src-tauri/src/machine_face.rs`, `local/sandbox.ts`).
   When the workspace's address does not answer, the workspace window shows the sandbox face instead of WebKitGTK's
   error page: the same editor built into this bundle (`files/sandbox`, `dist/files/sandbox.html`), whole (every route
@@ -162,14 +175,14 @@ flowchart LR
   signed in for the page's own session check stays the folder's placeholder, so a platform out of reach never holds
   the first paint.
 - **The workspace, opened somewhere.** A press that opens the workspace at a path (a sandbox on the place chip,
-  deleting the account from a local window's Settings) swaps the workspace into the main window's frame and, when its page is already loaded, tells
+  deleting the account from a local window's Settings) draws the workspace face in the frame and, when its page is already loaded, tells
   that page the path instead of loading it again (`open_in_place` in `windows.rs`): a script the app runs in the page
   calls the opener the page registered (`__INTENTIC_OPEN__`, the web's `installDesktopOpener`), which selects the
   sandbox the path names and routes there in place. A page that registered none, from another origin or still
   loading, is loaded at the address, as before the opener existed. The press comes from a window, and the workspace
-  comes up in that window's place (`workspace_open`, `show_workspace_from`): in the main window it is the usual swap
-  of the two faces; in a folder or document window (`files-<n>`, the window `intentic .` opens) it takes that window's
-  frame, and the folder window is hidden and closed. Unsaved edits hold that close as they hold any other, so the
+  comes up in that window's place (`workspace_open`, `show_workspace_from`): in the main window it is the usual switch
+  of the two faces; in a folder or document window (`files-<n>`, the window `intentic .` opens) the frame takes that
+  window's place, size and maximised state, and the folder window is hidden and closed. Unsaved edits hold that close as they hold any other, so the
   window comes back in front with its page's question. _(2026-10-16) The workspace always took the main window's frame,
   so a sandbox picked in a window `intentic .` had opened came up as a second window beside it, and the workspace's ×,
   answered "Quit", closed both._
