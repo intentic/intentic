@@ -2,7 +2,7 @@
 import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS, type SandboxSummary } from "@intentic/api-contract";
 import { sandboxSubdomain } from "@intentic/sandbox-contract/ids/hostnames";
 import { oneLinerFits } from "@intentic/constants";
-import { Button, type CommandOs, Meter, Modal, Notice, toneWash } from "@intentic/ui";
+import { Button, type CommandOs, Meter, Modal, Notice, toneInk } from "@intentic/ui";
 import { type NoticeModel, noticeFrom, useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { computed, nextTick, onUnmounted, ref, watch } from "vue";
@@ -36,9 +36,7 @@ import {
     stepsLeft,
     stepWeight,
 } from "./removalPlan";
-import RemovalMap from "./RemovalMap.vue";
 import RemovalTakes from "./RemovalTakes.vue";
-import { removalMap } from "./removalMap";
 import { useRemovalDoor } from "./useRemovalDoor";
 
 // REMOVING OR LEAVING A SANDBOX, from the question to the end of the work. One dialog through four moments, because a
@@ -395,10 +393,30 @@ const header = computed(() => {
     return owner.value ? t(`sandbox.removeSandbox.removing`, { name }) : t(`sandbox.removeSandbox.leaving`, { name });
 });
 
-// The question as a picture (removalMap.ts); ticking "also delete it there" cuts its second link live.
-const picture = computed(() =>
-    shown.value === undefined ? undefined : removalMap(shown.value, { deletes: deletesThere.value, label: cleanupDoor.value?.machineLabel }),
-);
+// What the press itself does, in one line. The machine out there is NOT in it: on a box of the reader's own that is the
+// tick box's business alone, and a line up here naming the machine read as if the press deleted it there.
+const lead = computed(() => {
+    if (!owner.value) {
+        return t(`sandbox.removeAsk.leadLeave`);
+    }
+    return shown.value?.hosted === null ? t(`sandbox.removeAsk.leadOwn`) : t(`sandbox.removeAsk.leadHosted`);
+});
+
+// THE CONFIRM'S WIDTH, held from the press on. Its words change every second of the grace and again as the work
+// starts; measured once the countdown is drawn, the button keeps that width to the end instead of twitching with them.
+const confirmButton = ref<{ $el?: Element } | null>(null);
+const confirmMinWidth = ref<number | undefined>(undefined);
+watch(phase, async (next, previous) => {
+    if (next === `ask`) {
+        confirmMinWidth.value = undefined;
+        return;
+    }
+    if (next === `grace` && previous === `ask`) {
+        await nextTick();
+        const element = confirmButton.value?.$el;
+        confirmMinWidth.value = element instanceof HTMLElement ? element.getBoundingClientRect().width : undefined;
+    }
+});
 
 // The one sentence beside the clock: what can still be done about it.
 const heading = computed(() => {
@@ -434,32 +452,36 @@ const confirmLabel = computed(() => {
 <template>
     <Modal :open="target !== undefined" size="md" class="ui-dialog-confirm" :header="header" @update:open="onOpen">
         <template v-if="shown !== undefined">
-            <!-- THE QUESTION, read top to bottom in one pass: a picture of what the press cuts, what goes with it, what can
-                 come back, and the one choice. Words are labels under marks, never paragraphs: the reader skims this
-                 dialog on the way to its button, and a sentence they skip is a fact they do not have. -->
+            <!-- THE QUESTION, read top to bottom in one pass: what the press does, what goes with it, what can come back,
+                 and the one choice. Short labels, never paragraphs: the reader skims this dialog on the way to its
+                 button. Marks are kept for the one promise (restorable); the rest is words, so nothing competes. -->
             <div v-if="phase === 'ask'" class="flex flex-col gap-5">
-                <RemovalMap v-if="picture !== undefined" :picture="picture" />
+                <p class="text-content">{{ lead }}</p>
 
-                <!-- Only the owner's removal takes anything or promises anything back; a member leaving has the picture. -->
+                <!-- Only the owner's removal takes anything or promises anything back; a member leaving has the one line. -->
                 <template v-if="shown.role === 'owner'">
                     <RemovalTakes :hosted="shown.hosted !== null" />
 
                     <!-- The hosted lane's machine goes with it anyway, so the choice below is only for a box of the reader's own. -->
                     <div v-if="shown.hosted === null && cleanupCommand !== undefined" class="border-t border-line pt-4">
                         <!-- One of the owner's sandboxes reaches the machine holding it, so this is a tick box rather than a
-                             command: the same removal the Devices tab's own button runs. Ticking it turns the picture's
-                             machine red, so the consequence is seen where it lands. -->
+                             command: the same removal the Devices tab's own button runs. It is the only place the machine
+                             is named, and its note says what each state of the box means there, so the consequence is
+                             read beside the choice that makes it. -->
                         <label v-if="cleanupDoor !== undefined" class="flex cursor-pointer items-start gap-2.5">
                             <!-- Same plain box the extension cards use; the kit has no checkbox component, on purpose. -->
-                            <input v-model="alsoDeleteThere" type="checkbox" class="mt-2 shrink-0" />
-                            <span :class="toneWash(alsoDeleteThere ? `danger` : `neutral`, `grid size-8 shrink-0 place-items-center rounded-lg transition-colors`)">
-                                <Icon name="server" />
-                            </span>
+                            <input v-model="alsoDeleteThere" type="checkbox" class="mt-1 shrink-0" />
                             <span class="flex min-w-0 flex-col">
                                 <span class="text-content">
                                     {{ t(`sandbox.removeAsk.alsoDelete`) }} <span class="font-medium">{{ cleanupDoor.machineLabel }}</span>
                                 </span>
-                                <span class="text-xs text-subtle">{{ t(`sandbox.removeAsk.alsoDeleteNote`) }}</span>
+                                <span :class="alsoDeleteThere ? toneInk(`danger`, `text-xs`) : `text-xs text-subtle`">
+                                    {{
+                                        alsoDeleteThere
+                                            ? t(`sandbox.removeAsk.alsoDeleteNote`)
+                                            : t(`sandbox.removeAsk.alsoDeleteOff`, { machine: cleanupDoor.machineLabel })
+                                    }}
+                                </span>
                             </span>
                         </label>
                         <!-- Not found YET: the fresh reads are out, and a command drawn now was most often replaced by the tick
@@ -492,7 +514,7 @@ const confirmLabel = computed(() => {
 
             <!-- THE GRACE: what is about to happen, a bar running down to it, and nothing touched yet. -->
             <div v-else-if="phase === 'grace'" class="flex flex-col gap-3" role="status" aria-live="polite">
-                <p class="text-content">{{ t(`sandbox.removeSandbox.startsIn`, { seconds: graceSeconds }) }}</p>
+                <p class="text-content tabular-nums">{{ t(`sandbox.removeSandbox.startsIn`, { seconds: graceSeconds }) }}</p>
                 <Meter :value="graceShare" tone="muted" :label="t(`sandbox.removeSandbox.countdown`)" :valuetext="t(`sandbox.removeSandbox.secondsLeft`, { seconds: graceSeconds })" />
                 <ol class="flex flex-col gap-1.5">
                     <li v-for="step in shownSteps" :key="step.key" class="flex items-center gap-2 text-muted">
@@ -556,8 +578,11 @@ const confirmLabel = computed(() => {
             </Button>
             <Button
                 v-else
+                ref="confirmButton"
                 :label="confirmLabel"
                 tone="danger"
+                class="tabular-nums"
+                :style="confirmMinWidth === undefined ? undefined : { minWidth: `${confirmMinWidth}px` }"
                 :autofocus="phase === 'ask'"
                 :disabled="phase !== 'ask'"
                 :loading="phase === 'working'"
