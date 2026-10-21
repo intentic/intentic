@@ -716,6 +716,8 @@
         "noAgent": "Na tym komputerze nie ma agenta Intentic. Zainstaluj go, a Hasła będą przechowywać tu Twoje hasła.",
         "notRunning": "Hasła są zainstalowane na tym komputerze, ale nie działają. Ponowne uruchomienie komputera włączy je z powrotem.",
         "oldAgent": "Agent Intentic na tym komputerze jest za stary dla Haseł. Zaktualizuj go, a potem otwórz Hasła ponownie.",
+        "needsUpdate": "Hasła na tym komputerze mają wersję {version} i wymagają aktualizacji, aby działać z tą aplikacją. Aktualizują się niezależnie od Intentic, po Twoim potwierdzeniu na tym komputerze.",
+        "update": "Zaktualizuj Hasła",
         "offerLead": "Trzymaj hasła na tym komputerze, zapisywane w trakcie wpisywania, aby agenci mogli z nich korzystać, nigdy ich nie widząc.",
         "offerOpen": "Skonfiguruj Hasła"
     },

@@ -183,6 +183,10 @@ export const keyringUnlock = async (minutes?: number): Promise<void> => {
 export const keyringLock = async (): Promise<void> => {
     keyringAnswer<KeyringLine>(await invoke<string>(`keyring_lock`));
 };
+/** Update at the running keyring's consent, through the machine agent's verified download and service installer. */
+export const keyringUpgrade = async (): Promise<void> => {
+    keyringAnswer<KeyringLine>(await invoke<string>(`keyring_upgrade`));
+};
 /** One of the Passwords app's verbs, its input on the agent's stdin (keyring.rs `keyring_app`). */
 export const keyringApp = async <Op extends KeyringAppOp>(op: Op, input: KeyringAppOps[Op][`in`]): Promise<KeyringAppOps[Op][`out`]> =>
     keyringAnswer<KeyringAppOps[Op][`out`]>(await invoke<string>(`keyring_app`, { op, input }));

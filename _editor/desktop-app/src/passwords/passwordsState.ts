@@ -13,7 +13,7 @@ type ViewBadge = NonNullable<LocalView[`badge`]>[`value`];
 const fresh = ref(0);
 const requests = ref(0);
 // This computer's vault as last read: unknown until the first read answers.
-const vault = ref<`unknown` | `not-set-up` | `ready` | `unavailable`>(`unknown`);
+const vault = ref<`unknown` | `not-set-up` | `ready` | `unavailable` | `needs-update`>(`unknown`);
 let port: PasswordsPort | undefined;
 
 /** The port the page mounts the app with: this computer's, its list and requests counted as they are read. */
@@ -24,7 +24,8 @@ export const passwordsPort = (): PasswordsPort => {
             ...inner,
             status: async () => {
                 const status = await inner.status();
-                vault.value = status.kind;
+                // An existing vault awaiting its separate update keeps its way in on the rail.
+                vault.value = status.kind === `unavailable` && status.fix !== undefined ? `needs-update` : status.kind;
                 return status;
             },
             list: async () => {
@@ -46,7 +47,7 @@ export const passwordsPort = (): PasswordsPort => {
  * Whether Passwords has a tile on the rail (2026-10-19): only once this computer has a vault, or an agent's request waits
  * on one. A new owner meets an agent workspace, not a password manager; until then This device offers the setup.
  */
-export const passwordsInRail = computed(() => vault.value === `ready` || requests.value > 0);
+export const passwordsInRail = computed(() => vault.value === `ready` || vault.value === `needs-update` || requests.value > 0);
 
 /** This device's one-line way in: shown while this computer can have Passwords and has not set it up. */
 export const passwordsOffered = computed(() => vault.value === `not-set-up`);

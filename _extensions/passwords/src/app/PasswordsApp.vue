@@ -1,6 +1,6 @@
 <!-- THE PASSWORDS APP, as any host mounts it with a PasswordsPort: the first run, then an index, a list and a password, with Requests and Settings in the same frame. -->
 <script setup lang="ts">
-import { Button, Icon, Modal, Notice, SearchBar, SegmentedControl, SplitView, ui, useNarrow, useNow } from "@intentic/extension-ui";
+import { Button, Icon, messageOr, Modal, Notice, SearchBar, SegmentedControl, SplitView, ui, useNarrow, useNow } from "@intentic/extension-ui";
 import { formatClock } from "@intentic/extension-ui/format";
 import { computed, nextTick, ref, watch } from "vue";
 import { t } from "../i18n.js";
@@ -146,13 +146,23 @@ const toggleLock = async (): Promise<void> => {
 };
 
 // The unavailable state's own way out, when the port offers one: the fix, then a fresh read either way.
+const fixing = ref(false);
+const fixError = ref<string | undefined>(undefined);
 const runFix = async (): Promise<void> => {
+    if (fixing.value) {
+        return;
+    }
+    fixing.value = true;
+    fixError.value = undefined;
     try {
         if (status.value?.kind === `unavailable`) {
             await status.value.fix?.run();
         }
+    } catch (failure) {
+        fixError.value = messageOr(failure, t(`app.error.act`));
     } finally {
         await state.load();
+        fixing.value = false;
     }
 };
 
@@ -222,9 +232,11 @@ watch(item, async (found) => {
             <Icon name="key" class="text-4xl text-subtle" />
             <p class="text-base font-semibold text-content">{{ t(`app.unavailable.title`) }}</p>
             <p class="text-sm text-muted">{{ status?.kind === `unavailable` ? status.reason : state.readError.value }}</p>
+            <p v-if="fixError" class="text-sm text-danger" role="alert">{{ fixError }}</p>
             <Button
                 v-if="status?.kind === `unavailable` && status.fix"
                 :label="status.fix.label"
+                :disabled="fixing"
                 @click="runFix()"
             />
             <Button v-else tier="boring" :label="t(`app.retry`)" @click="state.load()" />

@@ -148,6 +148,42 @@ const button = (el: HTMLElement, text: string): HTMLButtonElement => {
 };
 
 describe(`PasswordsApp`, () => {
+    it(`waits for an update, then loads the passwords once it succeeds`, async () => {
+        const { port } = fakePort({ status: READY });
+        let updated = false;
+        let finish: (() => void) | undefined;
+        const status: PasswordsPort[`status`] = async () => updated ? READY : {
+            kind: `unavailable`,
+            reason: `Passwords needs an update on this computer.`,
+            fix: {
+                label: `Update Passwords`,
+                run: async () => {
+                    await new Promise<void>((resolve) => { finish = resolve; });
+                    updated = true;
+                },
+            },
+        };
+        const el = mount({ ...port, status });
+        await waitFor(() => expect(el.textContent).toContain(`Passwords needs an update on this computer.`));
+        button(el, `Update Passwords`).click();
+        await waitFor(() => expect(button(el, `Update Passwords`).disabled).toBe(true));
+        finish?.();
+        await waitFor(() => expect(el.textContent).toContain(`No passwords yet.`));
+    });
+
+    it(`shows an update's refusal and lets the person retry`, async () => {
+        const { port } = fakePort({ status: {
+            kind: `unavailable`,
+            reason: `Passwords needs an update on this computer.`,
+            fix: { label: `Update Passwords`, run: async () => { throw new Error(`You declined the keyring update.`); } },
+        } });
+        const el = mount(port);
+        await waitFor(() => expect(el.textContent).toContain(`Passwords needs an update on this computer.`));
+        button(el, `Update Passwords`).click();
+        await waitFor(() => expect(el.querySelector(`[role="alert"]`)?.textContent).toBe(`You declined the keyring update.`));
+        expect(button(el, `Update Passwords`).disabled).toBe(false);
+    });
+
     it(`turns Passwords on, shows the recovery key once, and asks once to remember`, async () => {
         const { port, calls } = fakePort({ status: { kind: `not-set-up`, canSetUp: true, hello: true, computer: `rog` } });
         const el = mount(port);

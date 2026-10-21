@@ -27,6 +27,7 @@ import {
     keyringStatus,
     keyringUnlock,
     keyringUnshare,
+    keyringUpgrade,
 } from "./keyringCommands";
 
 // THE PASSWORDS APP'S PORT ON THIS COMPUTER: the app (@intentic/ext-passwords/app) over `intentic-machine keyring`,
@@ -167,10 +168,23 @@ const readStatus = async (readHere: () => Promise<Here>): Promise<VaultStatus> =
         }
         throw failure;
     }
-    // Whether the one-time question was answered is the vault's own setting; a keyring too old to say has none to ask,
-    // so it is not asked.
-    // allow(silent-catch): a keyring that cannot read its settings is treated as one that already asked
-    const asked = read?.state === undefined ? true : await keyringApp(`settings`, {}).then((answer) => answer.settings.rememberAskedAt !== undefined, () => true);
+    // The keyring updates only at its person's word, separately from the app and machine agent. Probe the app's
+    // protocol before declaring it ready: a pre-Passwords keyring knows `state` and `list`, but rejects `needs`.
+    let asked = true;
+    if (read?.setUp && read.state !== undefined) {
+        try {
+            asked = (await keyringApp(`settings`, {})).settings.rememberAskedAt !== undefined;
+        } catch (failure) {
+            if (failure instanceof KeyringRefusal && failure.code === `bad-grant`) {
+                return {
+                    kind: `unavailable`,
+                    reason: t(`desktop.passwords.needsUpdate`, { version: read.state.version }),
+                    fix: { label: t(`desktop.passwords.update`), run: keyringUpgrade },
+                };
+            }
+            throw failure;
+        }
+    }
     return vaultOf(read, (await where).computer, asked);
 };
 

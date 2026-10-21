@@ -52,7 +52,10 @@ flowchart LR
   the sign-in before an account), then Files (the folder's tree and documents, `/workspace`), then Devices
   (`/device`), then Passwords (`/passwords`) once this computer has it set up or an agent's request waits on it. Until
   then Passwords has no tile, so a new owner doesn't meet a password manager, and a quiet "Set up Passwords" card at
-  the foot of Devices (`src/passwords/PasswordsOffer.vue`) is the way in. At the foot of the rail is the sandbox
+  the foot of Devices (`src/passwords/PasswordsOffer.vue`) is the way in. Passwords checks that the running keyring
+  understands its app requests before loading. A keyring left on an older release offers **Update Passwords**, through
+  `intentic-machine keyring upgrade`: a verified download, the person's consent, and the protected service installer.
+  This update is separate from the desktop app's and the machine agent's updates. At the foot of the rail is the sandbox
   shell's own account control (who is signed in, Settings, Sign out), or the sign-in in the default browser until
   there is an account. The **first task** the reader writes on Devices' card
   for this PC (below) is kept in `first-task.json` under the app config dir, announced on `desktop://first-task`,

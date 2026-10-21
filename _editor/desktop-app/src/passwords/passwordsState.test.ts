@@ -58,4 +58,13 @@ describe(`the Passwords tile`, () => {
         expect(passwordsInRail.value).toBe(true);
         expect(passwordsOffered.value).toBe(false);
     });
+
+    it(`keeps the vault's tile while its keyring needs a separate update`, async () => {
+        mockIPC((command) => JSON.stringify(command === `keyring_status`
+            ? { ok: true, ...READY }
+            : { ok: false, code: `bad-grant`, refusal: `Unknown request.` }));
+        expect((await passwordsPort().status()).kind).toBe(`unavailable`);
+        expect(passwordsInRail.value).toBe(true);
+        expect(passwordsOffered.value).toBe(false);
+    });
 });

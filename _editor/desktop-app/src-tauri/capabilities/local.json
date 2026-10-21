@@ -49,6 +49,7 @@
         "allow-keyring-unshare",
         "allow-keyring-unlock",
         "allow-keyring-lock",
+        "allow-keyring-upgrade",
         "allow-keyring-app",
         "allow-workspace-open",
         "allow-home-facts",

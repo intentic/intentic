@@ -234,6 +234,7 @@ pub fn run() {
             keyring::keyring_unshare,
             keyring::keyring_unlock,
             keyring::keyring_lock,
+            keyring::keyring_upgrade,
             keyring::keyring_app,
             commands::workspace_open,
             commands::home_facts,

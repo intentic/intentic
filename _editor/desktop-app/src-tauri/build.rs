@@ -65,6 +65,7 @@ const COMMANDS: &[&str] = &[
     "keyring_unshare",
     "keyring_unlock",
     "keyring_lock",
+    "keyring_upgrade",
     "keyring_app",
     "workspace_open",
     "home_facts",

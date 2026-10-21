@@ -716,6 +716,8 @@
         "noAgent": "There is no Intentic agent on this computer. Install it, and Passwords keeps your passwords here.",
         "notRunning": "Passwords is installed on this computer but is not running. Restarting the computer starts it again.",
         "oldAgent": "This computer's Intentic agent is too old for Passwords. Update it, then open Passwords again.",
+        "needsUpdate": "Passwords on this computer is version {version} and needs an update to work with this app. It updates separately from Intentic, after you confirm on this computer.",
+        "update": "Update Passwords",
         "offerLead": "Keep your passwords on this computer, saved as you type them, so agents can use them without ever seeing them.",
         "offerOpen": "Set up Passwords"
     },

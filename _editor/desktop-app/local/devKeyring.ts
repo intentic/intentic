@@ -12,7 +12,8 @@ import type { KeyringActivityLine, KeyringAppOp, KeyringAppOps, KeyringEntry, Ke
    "Confirm on this computer" can be seen. Nothing here is anybody's password.
 
    `?passwords=not-set-up` opens on the first run, `?passwords=locked` on a locked vault, `?passwords=old` on an agent
-   too old to have Passwords: the dev page's own query, read once. */
+   too old to have Passwords, `?passwords=old-keyring` on a vault awaiting its separate update: the dev page's own query,
+   read once. */
 const SHOP_URL = `https://shop-574ea8038415.intentic.app`;
 const DEV_URL = `https://intentic-dev-2c8eb2c5b3a5.intentic.app`;
 const MIN = 60_000;
@@ -21,6 +22,7 @@ const NOW = Date.now();
 const devMode = new URLSearchParams(globalThis.location?.search ?? ``).get(`passwords`);
 let setUp = devMode !== `not-set-up`;
 let locked = devMode === `locked`;
+let outdated = devMode === `old-keyring`;
 let remember: KeyringRemember = { browser: true, terminal: true, apps: false, phone: false, sandbox: false };
 let settings: KeyringSettings = { remember, rememberAskedAt: NOW - 86_400_000, neverSave: [{ kind: `site`, host: `bank.example.com` }], autoLockMinutes: 15, lockOnSleep: true };
 
@@ -131,7 +133,7 @@ const statusLine = (): string => {
         return refuse(`agent-too-old`, `This computer's Intentic agent has no keyring yet. Update the agent, then try again.`);
     }
     const state: KeyringState = {
-        version: `1.320.0`,
+        version: outdated ? `1.344.0` : `1.345.0`,
         locked,
         unlock: [`hello`, `passphrase`],
         keys: { seal: `A`.repeat(43), inbox: `B`.repeat(43) },
@@ -257,6 +259,11 @@ export const keyringVerb = (command: string, args: InvokeArgs | undefined): stri
         case `keyring_lock`:
             locked = true;
             return ok();
+        case `keyring_upgrade`:
+            return prompted(() => {
+                outdated = false;
+                return undefined;
+            });
         case `keyring_remove`:
             return prompted(() => {
                 entries = entries.filter((entry) => entry.name !== argsOf(args).name);
@@ -266,6 +273,9 @@ export const keyringVerb = (command: string, args: InvokeArgs | undefined): stri
         case `keyring_unshare`:
             return shareVerb(command, argsOf(args));
         case `keyring_app`: {
+            if (outdated) {
+                return refuse(`bad-grant`, `That is not a request this keyring reads: is the caller a different version?`);
+            }
             const { op, input } = argsOf(args);
             return op === undefined || input === undefined ? refuse(`unknown`, `Passwords asked nothing.`) : appVerb(op, input);
         }

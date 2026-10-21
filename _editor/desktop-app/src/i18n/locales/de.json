@@ -715,6 +715,8 @@
         "noAgent": "Auf diesem Computer ist kein Intentic-Agent installiert. Installiere ihn, dann bewahrt Passwörter deine Passwörter hier auf.",
         "notRunning": "Passwörter ist auf diesem Computer installiert, läuft aber nicht. Ein Neustart des Computers startet es wieder.",
         "oldAgent": "Der Intentic-Agent auf diesem Computer ist zu alt für Passwörter. Aktualisiere ihn und öffne Passwörter dann erneut.",
+        "needsUpdate": "Passwörter auf diesem Computer hat Version {version} und braucht ein Update, um mit dieser App zu funktionieren. Es wird getrennt von Intentic aktualisiert, nachdem du auf diesem Computer zugestimmt hast.",
+        "update": "Passwörter aktualisieren",
         "offerLead": "Bewahre deine Passwörter auf diesem Computer auf, gespeichert, während du sie eingibst, damit Agenten sie nutzen können, ohne sie je zu sehen.",
         "offerOpen": "Passwörter einrichten"
     }

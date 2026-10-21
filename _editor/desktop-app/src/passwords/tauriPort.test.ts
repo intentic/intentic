@@ -12,6 +12,14 @@ const { itemOf, sandboxLabel, tauriPasswordsPort, vaultOf } = await import("./ta
 
 const KEYS = { seal: `A`.repeat(43), inbox: `B`.repeat(43) };
 const SHOP = `https://shop-574ea8038415.intentic.app`;
+const READY: KeyringStatus = {
+    installed: true,
+    running: true,
+    setUp: true,
+    askpass: { installed: false },
+    state: { version: `1.344.0`, locked: true, unlock: [`passphrase`], keys: KEYS, pendingInbox: 2 },
+};
+const SETTINGS = { remember: { browser: false, terminal: false, apps: false, phone: false, sandbox: false }, neverSave: [], autoLockMinutes: 15, lockOnSleep: true, rememberAskedAt: 1 };
 
 describe(`vaultOf`, () => {
     it(`reads no agent, an agent too old, a computer not set up and a ready vault`, () => {
@@ -77,6 +85,80 @@ describe(`tauriPasswordsPort`, () => {
         });
     });
     afterEach(() => clearMocks());
+
+    it(`detects the separately outdated keyring before loading, and updates only at the person's word`, async () => {
+        let outdated = true;
+        mockIPC((command, args) => {
+            // SAFETY: these commands send a plain argument object, or no arguments, through Tauri IPC.
+            calls.push({ command, args: (args ?? {}) as Record<string, unknown> });
+            if (command === `keyring_status`) {
+                return JSON.stringify({ ok: true, ...READY });
+            }
+            if (command === `keyring_upgrade`) {
+                outdated = false;
+                return JSON.stringify({ ok: true, upgraded: true, from: `1.344.0`, to: `1.345.0` });
+            }
+            if (command === `keyring_app`) {
+                return JSON.stringify(outdated
+                    ? { ok: false, code: `bad-grant`, refusal: `That is not a request this keyring reads: is the caller a different version?` }
+                    : { ok: true, settings: SETTINGS });
+            }
+            return JSON.stringify({ device: { links: [] }, sync: { hostname: `rog` } });
+        });
+        const port = tauriPasswordsPort();
+        const status = await port.status();
+        expect(status.kind).toBe(`unavailable`);
+        if (status.kind !== `unavailable`) {
+            throw new Error(`An old keyring must offer its update before loading the app.`);
+        }
+        expect(status.reason).toContain(`version 1.344.0`);
+        expect(status.fix?.label).toBe(`Update Passwords`);
+        expect(calls.map((call) => call.command)).toEqual([`machine_report`, `keyring_status`, `keyring_app`]);
+        expect(calls[2]?.args).toEqual({ op: `settings`, input: {} });
+        await status.fix?.run();
+        expect(calls[3]?.command).toBe(`keyring_upgrade`);
+        expect(await port.status()).toMatchObject({ kind: `ready`, locked: true, rememberAsked: true });
+    });
+
+    it(`uses the protocol probe, so a compatible keyring can be a different release`, async () => {
+        mockIPC((command) => {
+            if (command === `keyring_status`) {
+                return JSON.stringify({ ok: true, ...READY });
+            }
+            if (command === `keyring_app`) {
+                return JSON.stringify({ ok: true, settings: SETTINGS });
+            }
+            return JSON.stringify({ device: { links: [] }, sync: { hostname: `rog` } });
+        });
+        expect(await tauriPasswordsPort().status()).toMatchObject({ kind: `ready`, locked: true, rememberAsked: true });
+    });
+
+    it(`keeps an ordinary refusal and an update refusal in the keyring's own words`, async () => {
+        mockIPC((command) => {
+            if (command === `keyring_status`) {
+                return JSON.stringify({ ok: true, ...READY });
+            }
+            if (command === `machine_report`) {
+                return JSON.stringify({ device: { links: [] }, sync: { hostname: `rog` } });
+            }
+            return JSON.stringify({ ok: false, code: `busy`, refusal: `Another prompt is open on this computer.` });
+        });
+        const port = tauriPasswordsPort();
+        await expect(port.status()).rejects.toMatchObject({ code: `busy`, message: `Another prompt is open on this computer.` });
+        mockIPC((command) => {
+            if (command === `keyring_status`) {
+                return JSON.stringify({ ok: true, ...READY });
+            }
+            return JSON.stringify(command === `keyring_upgrade`
+                ? { ok: false, code: `declined`, refusal: `You declined the keyring update.` }
+                : { ok: false, code: `bad-grant`, refusal: `Unknown request.` });
+        });
+        const status = await port.status();
+        if (status.kind !== `unavailable` || status.fix === undefined) {
+            throw new Error(`The old keyring must offer an update.`);
+        }
+        await expect(status.fix.run()).rejects.toMatchObject({ code: `declined`, message: `You declined the keyring update.` });
+    });
 
     it(`sends a manual add, an answer and an import as the input of one command`, async () => {
         const port = tauriPasswordsPort();

@@ -31,6 +31,9 @@ const READ_LIMIT: Duration = Duration::from_secs(30);
 /// start and relay around that.
 const CONSENT_LIMIT: Duration = Duration::from_secs(150);
 
+/// An update downloads and verifies a release, asks the running keyring, then may wait ten minutes for UAC/pkexec.
+const UPGRADE_LIMIT: Duration = Duration::from_secs(15 * 60);
+
 /// How long a finished child's pipes are waited on, the bounded crate's grace: a helper it left behind can hold them.
 const DRAIN_GRACE: Duration = intentic_bounded::DRAIN_GRACE;
 
@@ -454,6 +457,12 @@ pub async fn keyring_lock() -> CommandResult<String> {
     blocking(|| run_present(plain_args("lock"), None, READ_LIMIT)).await
 }
 
+/// The keyring's own update: verified download, the person's consent, then the protected service installer.
+#[tauri::command]
+pub async fn keyring_upgrade() -> CommandResult<String> {
+    blocking(|| run_present(plain_args("upgrade"), None, UPGRADE_LIMIT)).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,6 +477,7 @@ mod tests {
         assert!(args.iter().all(|arg| !arg.contains(VALUE)));
         // A setup is fed nothing: the recovery key is made by the keyring and comes back in its answer.
         assert_eq!(setup_args(true), ["keyring", "setup", "--json"]);
+        assert_eq!(plain_args("upgrade"), ["keyring", "upgrade", "--json"]);
         assert_eq!(
             setup_args(false),
             ["keyring", "setup", "--no-hello", "--json"]
