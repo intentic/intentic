@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { agentLines, DeviceAgentNotes, DeviceEnvironmentRow } from "@intentic/ui";
-import { computed } from "vue";
+import { agentLines, Button, DeviceAgentNotes, DeviceEnvironmentRow, DeviceRunLog, Icon } from "@intentic/ui";
+import { useT } from "@intentic/ui/i18n";
+import { computed, ref, watch } from "vue";
 import AgentRunStrip from "./health/AgentRunStrip.vue";
+import { useLineWithElapsed } from "../../../components/progress/useProgress";
+import { agentRunLive, agentRunWorking } from "./runners/agentRun";
 import DeviceConcern from "./health/DeviceConcern.vue";
 import { cardRoute } from "../../../models/sandbox/devices/deviceLinks";
 import type { DeviceAgentPanel } from "./deviceAgent";
@@ -36,6 +39,8 @@ const { environment, panel, concerns, readAt, ops, masthead, hardware } = define
 
 const emit = defineEmits<{ connect: [] }>();
 
+const t = useT();
+
 const device = computed(() => environment.device);
 // The OS this environment runs, as its own mark: a Windows side and an Arch side of one PC used to share a monitor.
 const os = computed(() => osMark(device.value));
@@ -55,16 +60,40 @@ const stoppedSync = computed(() => (syncStopped(device.value, readAt) ? syncNote
 
 const notes = computed(() => (panel === undefined ? [] : agentLines(panel)));
 
-// The last press on this environment's agent, as one strip with a state (agentRun.ts). Drawn IN PLACE of the concern
-// that offered it when there is one, since that concern is now a question already answered: its count is the reading
-// from before the press, and leaving its button live beside the run is what made a finished drop look unfinished.
+// The last press on this environment's agent (agentRun.ts). WHILE IT RUNS it is said once, on the row itself: one
+// spinner and how long it has gone ("Updating… · 12s"), in place of the state badge and the verbs. Everything else this
+// environment would say in that time is the run's own side effect (an updating agent drops its socket, so the row
+// would read "reconnecting", "last seen now", and raise the concerns a silent machine raises), so it all stands down
+// until the run ends or outlives its deadline. Once it has ended, the strip below says how it went.
 const run = computed(() => ops.agentRun(environment));
-const answers = (concern: Concern): boolean => run.value !== undefined && concern.fix?.kind === `agent` && concern.fix.op === run.value.op;
+const live = computed(() => agentRunLive(run.value));
+const working = useLineWithElapsed(
+    () => (live.value && run.value !== undefined ? agentRunWorking(run.value.op) : undefined),
+    () => (live.value ? run.value?.startedAt : undefined),
+);
+// The machine's own output, behind one quiet toggle at the row's end while it works.
+const showing = ref(false);
+watch(live, (now) => {
+    if (!now) {
+        showing.value = false;
+    }
+});
+
+const shownConcerns = computed(() => (live.value ? [] : concerns));
+const shownNotes = computed(() => (live.value ? [] : notes.value));
+const shownSync = computed(() => (live.value ? undefined : stoppedSync.value));
+// Drawn IN PLACE of the concern that offered it when there is one, since that concern is now a question already
+// answered: its count is the reading from before the press, and leaving its button live beside the run is what made a
+// finished drop look unfinished.
+const ended = computed(() => (live.value ? undefined : run.value));
+const answers = (concern: Concern): boolean => ended.value !== undefined && concern.fix?.kind === `agent` && concern.fix.op === ended.value.op;
 // A run whose concern is gone (the fresh reading no longer raises it) or that no concern offered (a standing button)
 // still has to be drawn somewhere: after the concerns, on the same spine.
-const standalone = computed(() => run.value !== undefined && !concerns.some(answers));
+const standalone = computed(() => ended.value !== undefined && !shownConcerns.value.some(answers));
 
-const below = computed(() => stoppedSync.value !== undefined || concerns.length > 0 || notes.value.length > 0 || run.value !== undefined);
+const below = computed(
+    () => shownSync.value !== undefined || shownConcerns.value.length > 0 || shownNotes.value.length > 0 || ended.value !== undefined || showing.value,
+);
 </script>
 
 <template>
@@ -86,14 +115,33 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
         :actions="panel?.actions"
         :running="ops.agentOp(environment)"
         :busy="ops.working.value"
+        :working="working"
         @run="(op) => void ops.runAgent(environment, op)"
     >
+        <template v-if="live && run && run.lines.length > 0" #aside>
+            <Button
+                size="small"
+                tier="quiet"
+                :label="t(`sandbox.agentRun.output`)"
+                :aria-expanded="showing"
+                @click="showing = !showing"
+            >
+                <template #icon><Icon name="terminal" /></template>
+            </Button>
+        </template>
         <!-- Everything this environment WANTS, on a spine under its own mark so it reads as this row's, not the
              machine's. Absent entirely on a healthy one, which is nearly all of them. -->
         <template v-if="below" #below>
-            <p v-if="stoppedSync" class="min-w-0 text-xs text-warning">{{ stoppedSync }}</p>
-            <template v-for="concern in concerns" :key="concern.key">
-                <AgentRunStrip v-if="run && answers(concern)" :run="run" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
+            <DeviceRunLog
+                v-if="showing && run"
+                :lines="run.lines"
+                :running="live"
+                :empty="t(`sandbox.devicePage.startingOnDevice`)"
+                :note="t(`sandbox.devicePage.runsOnDeviceKeeps`)"
+            />
+            <p v-if="shownSync" class="min-w-0 text-xs text-warning">{{ shownSync }}</p>
+            <template v-for="concern in shownConcerns" :key="concern.key">
+                <AgentRunStrip v-if="ended && answers(concern)" :run="ended" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
                 <DeviceConcern
                     v-else
                     :concern="concern"
@@ -104,8 +152,8 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
                     @agent="(op) => void ops.runAgent(environment, op)"
                 />
             </template>
-            <DeviceAgentNotes :notes="notes" />
-            <AgentRunStrip v-if="run && standalone" :run="run" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
+            <DeviceAgentNotes :notes="shownNotes" />
+            <AgentRunStrip v-if="ended && standalone" :run="ended" :machine="device.label" @dismiss="ops.dismissAgent(environment)" />
         </template>
     </DeviceEnvironmentRow>
 </template>

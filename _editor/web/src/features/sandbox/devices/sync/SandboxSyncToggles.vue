@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { syncFolder } from "@intentic/sandbox-contract/ids/hostnames";
 import { Button, type DeviceSandboxGroup, ui } from "@intentic/ui";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
 import { type DeviceRow, managerOf, type MachineRow } from "../../../../models/sandbox/devices/deviceRows";
 import { environmentTitle } from "../machineEnvironments";
@@ -80,6 +80,10 @@ const fieldFloor = (environment: DeviceRow): string =>
 
 const key = computed(() => ops.rowKey(group));
 
+// The fields wait behind one press: a card that is read far more often than it is set up used to carry a text field and
+// two buttons per environment on every visit. A folder already typed opens them by itself, so a draft is never hidden.
+const asked = ref(choices.value.some((environment) => draftFolder(machine.key, group.sandboxId, environment.device.key) !== undefined));
+
 const enable = async (environment: DeviceRow, mode: "sync" | "mirror"): Promise<void> => {
     const target = door.value;
     if (target === undefined || ops.working.value) {
@@ -115,47 +119,61 @@ const enable = async (environment: DeviceRow, mode: "sync" | "mirror"): Promise<
     <div v-else-if="door" class="flex flex-col gap-2">
         <!-- One button tall, so the sentence sits on the line of the name beside it. The field labels below say which
              side each folder syncs through, so the sentence no longer has to explain the rule. -->
-        <p class="flex min-h-6.5 items-center text-xs text-muted">{{ t(`sandbox.sandboxSyncToggles.notSyncedHere`) }}</p>
-        <!-- The field's floor is what makes the BUTTON wrap on a narrow card rather than the input shrink: a path you
-             cannot read while typing it is the one thing this field must never be. -->
-        <div v-for="environment in choices" :key="`sync:${environment.device.key}`" class="flex flex-col gap-1">
-            <!-- Named only where there is a choice of side: on a machine of one environment it would name the page. -->
-            <label v-if="choices.length > 1" class="text-2xs text-subtle" :for="`sync-folder-${environment.device.key}`">
-                {{ environmentLabel(environment) }}
-            </label>
-            <div class="flex flex-wrap items-center gap-2">
-                <input
-                    :id="`sync-folder-${environment.device.key}`"
-                    :value="folderFor(environment)"
-                    spellcheck="false"
-                    :aria-label="choices.length > 1 ? undefined : t(`sandbox.sandboxSyncToggles.folderOnComputer`)"
-                    :class="ui.input({ size: `sm` }, `flex-1 font-mono`)"
-                    :style="{ minWidth: fieldFloor(environment) }"
-                    @input="setFolder(environment, ($event.target as HTMLInputElement).value)"
-                />
+        <p class="flex min-h-6.5 flex-wrap items-center gap-x-2 text-xs text-muted">
+            {{ t(`sandbox.sandboxSyncToggles.notSyncedHere`) }}
+            <Button
+                v-if="!asked"
+                size="small"
+                tier="quiet"
+                :label="t(`sandbox.sandboxSyncToggles.setUp`)"
+                :disabled="ops.working.value"
+                @click="asked = true"
+            >
+                <template #icon><Icon name="folder" /></template>
+            </Button>
+        </p>
+        <template v-if="asked">
+            <!-- The field's floor is what makes the BUTTON wrap on a narrow card rather than the input shrink: a path you
+                 cannot read while typing it is the one thing this field must never be. -->
+            <div v-for="environment in choices" :key="`sync:${environment.device.key}`" class="flex flex-col gap-1">
+                <!-- Named only where there is a choice of side: on a machine of one environment it would name the page. -->
+                <label v-if="choices.length > 1" class="text-2xs text-subtle" :for="`sync-folder-${environment.device.key}`">
+                    {{ environmentLabel(environment) }}
+                </label>
+                <div class="flex flex-wrap items-center gap-2">
+                    <input
+                        :id="`sync-folder-${environment.device.key}`"
+                        :value="folderFor(environment)"
+                        spellcheck="false"
+                        :aria-label="choices.length > 1 ? undefined : t(`sandbox.sandboxSyncToggles.folderOnComputer`)"
+                        :class="ui.input({ size: `sm` }, `flex-1 font-mono`)"
+                        :style="{ minWidth: fieldFloor(environment) }"
+                        @input="setFolder(environment, ($event.target as HTMLInputElement).value)"
+                    />
+                    <Button
+                        size="small"
+                        :label="t(`sandbox.sandboxSyncToggles.syncFilesHere`)"
+                        :disabled="ops.working.value || folderFor(environment).trim() === ``"
+                        v-tooltip.top="{ title: t(`sandbox.sandboxSyncToggles.filesAndPorts`), note: t(`sandbox.sandboxSyncToggles.portsOntoLocalhost`) }"
+                        @click="void enable(environment, `sync`)"
+                    >
+                        <template #icon><Icon name="folder" /></template>
+                    </Button>
+                </div>
+            </div>
+            <!-- Ports without files: one machine may mirror while another holds the file sync, so this is its own act. -->
+            <div class="flex flex-wrap items-center">
                 <Button
                     size="small"
-                    :label="t(`sandbox.sandboxSyncToggles.syncFilesHere`)"
-                    :disabled="ops.working.value || folderFor(environment).trim() === ``"
-                    v-tooltip.top="{ title: t(`sandbox.sandboxSyncToggles.filesAndPorts`), note: t(`sandbox.sandboxSyncToggles.portsOntoLocalhost`) }"
-                    @click="void enable(environment, `sync`)"
+                    tier="boring"
+                    :label="t(`sandbox.sandboxSyncToggles.mirrorPortsOnly`)"
+                    :disabled="ops.working.value"
+                    v-tooltip.top="{ title: t(`sandbox.words.ontoLocalhost`), note: t(`sandbox.sandboxSyncToggles.noFilesTouched`) }"
+                    @click="void enable(choices[0] ?? machine.environments[0]!, `mirror`)"
                 >
-                    <template #icon><Icon name="folder" /></template>
+                    <template #icon><Icon name="ports" /></template>
                 </Button>
             </div>
-        </div>
-        <!-- Ports without files: one machine may mirror while another holds the file sync, so this is its own act. -->
-        <div class="flex flex-wrap items-center">
-            <Button
-                size="small"
-                tier="boring"
-                :label="t(`sandbox.sandboxSyncToggles.mirrorPortsOnly`)"
-                :disabled="ops.working.value"
-                v-tooltip.top="{ title: t(`sandbox.words.ontoLocalhost`), note: t(`sandbox.sandboxSyncToggles.noFilesTouched`) }"
-                @click="void enable(choices[0] ?? machine.environments[0]!, `mirror`)"
-            >
-                <template #icon><Icon name="ports" /></template>
-            </Button>
-        </div>
+        </template>
     </div>
 </template>

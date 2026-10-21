@@ -30,7 +30,13 @@ export interface AgentRun {
     readonly failure?: { readonly notice: NoticeModel; readonly command?: string | undefined } | undefined;
     /** When it was pressed: what the strip's "so far" counts from, and what its deadline is measured against. */
     readonly startedAt?: number | undefined;
+    /** Still waiting, past the deadline (deviceWork.ts): no longer work in flight, and worth a word of its own. */
+    readonly expired?: boolean | undefined;
 }
+
+/** Work still in flight: said on the environment's own row as one spinner, rather than as a strip under it. */
+export const agentRunLive = (run: AgentRun | undefined): boolean =>
+    run !== undefined && (run.state === `running` || (run.state === `waiting` && run.expired !== true));
 
 // Counted so the headline can say how much was done, never only that something was.
 const count = (links: LinksAsked | undefined): number | undefined => (links === undefined || links.unreachable === 0 ? undefined : links.unreachable);
@@ -91,3 +97,7 @@ export const agentRefusal = (op: DeviceAgentOp): string =>
         : op === `restart`
           ? t(`sandbox.agentRun.restartRefused`)
           : t(`sandbox.useDevices.agentUpdateRefused`);
+
+/** What the environment's row says beside its spinner while the run is live: the verb, short enough for the row's meta. */
+export const agentRunWorking = (op: DeviceAgentOp): string =>
+    op === `upgrade` ? t(`sandbox.agentRun.working`) : op === `restart` ? t(`sandbox.agentRun.workingRestart`) : t(`sandbox.agentRun.workingForget`);

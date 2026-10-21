@@ -18,6 +18,7 @@ import {
     RowNote,
     Section,
     SandboxLogo,
+    type SandboxMenuVerb,
     SandboxResourcesDialog,
     SandboxVerbs,
     StatusBadge,
@@ -58,11 +59,12 @@ import {
     notOnAccount,
     pausable,
     removableHere,
+    rowRemoval,
     selfGroup,
     slugOfDaemonUrl,
     switchMenus,
 } from "../../../models/sandbox/devices/deviceRows";
-import { useDeviceOps } from "./runners/deviceOps";
+import { type SyncCommand, useDeviceOps } from "./runners/deviceOps";
 import { verbStartedAt } from "./runners/deviceOpKeys";
 import { useSandboxSelection } from "./batch/sandboxSelection";
 import { environmentTitle, wslDistroRows } from "./machineEnvironments";
@@ -142,6 +144,12 @@ const agentOf = (row: DeviceRow) => deviceAgentPanel(row, latest, readAt, { upda
 // The machine's one Update, and what only the whole machine can say: its sides disagreeing, or a newer release.
 const shared = computed(() => machineAgent(machine, latest));
 
+// An update in flight on any side answers the machine's own errands (its sides disagreeing, a newer release) and holds
+// its one Update down: the rows say how it is going, so the banner and a spinning header button would be its third and
+// fourth telling.
+const updating = computed(() => environments.value.some((environment) => ops.agentOp(environment) === `upgrade`));
+const machineNotes = computed(() => (updating.value ? [] : shared.value.notes));
+
 const updateMachine = (): void => {
     const door = shared.value.door;
     if (door !== undefined) {
@@ -199,12 +207,47 @@ const ownerOf = (group: DeviceSandboxGroup): DeviceRow | undefined => folderOwne
 // adds the owner's own on top (deviceHolds.ts `folderHold`).
 const resumes = (group: DeviceSandboxGroup): boolean => folderHold(group.folder)?.resumable === true;
 
-// The one sandbox this page should arrive with unfolded; <DeviceDetail> unfolds anything needing attention
-// on its own.
-const openIds = computed(() => {
+// The sandbox serving this page, drawn first.
+const leadingIds = computed(() => {
     const mine = selfGroup(machine, ownSlug);
     return mine === undefined ? [] : [mine.sandboxId];
 });
+
+// What this machine does FOR a sandbox (syncing its files, mirroring its ports, the pairing that holds both), as a
+// group of the card's one ⋯ rather than buttons along its lines: Pause, a red Unpair and Stop mirroring used to sit at
+// the ends of the Files and Ports lines, beside the container's own menu.
+const fileVerbs = (group: DeviceSandboxGroup): SandboxMenuVerb[] => {
+    const owner = ownerOf(group);
+    if (owner === undefined || !commandable(owner.device, group)) {
+        return [];
+    }
+    const sync = (command: SyncCommand): void => void ops.runSync(owner, ops.rowKey(group), group.sandboxId, command);
+    const off = mirroringOff(group.folder);
+    return [
+        ...(pausable(owner.device, group)
+            ? [
+                  resumes(group)
+                      ? { label: t(`sandbox.devicePage.resumeSyncing`), icon: `play` as const, run: () => sync(`sync-resume`) }
+                      : { label: t(`sandbox.devicePage.pauseSyncing`), icon: `pause` as const, hint: t(`sandbox.words.portsStayMirrored`), run: () => sync(`sync-pause`) },
+              ]
+            : []),
+        off
+            ? { label: t(`sandbox.devicePage.startMirroring`), icon: `eye` as const, hint: t(`sandbox.words.ontoLocalhost`), run: () => sync(`mirror-on`) }
+            : { label: t(`sandbox.devicePage.stopMirroring`), icon: `eye-slash` as const, hint: t(`sandbox.words.filesKeepSyncing`), run: () => sync(`mirror-off`) },
+        // Not where the menu's Remove already is the unpairing: a row with no container here has nothing else to remove.
+        ...(rowRemoval(machine, group).container || !removableHere(machine, group)
+            ? [
+                  {
+                      label: t(`sandbox.words.unpair`),
+                      icon: `link-broken` as const,
+                      danger: true,
+                      hint: t(`sandbox.devicePage.localFolderKept`),
+                      run: () => (ops.confirmingUnpair.value = { environment: owner, group }),
+                  },
+              ]
+            : []),
+    ];
+};
 
 const applyReshape = (shape: ResourcesForm): void => ops.applyReshape(shape);
 const saveReshape = (shape: ResourcesForm | undefined): void => ops.saveReshape(shape);
@@ -268,20 +311,19 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
         -->
         <RowGroup v-if="many" :label="t(`sandbox.devicePage.environments`)">
             <!-- One press for the computer, which brings every side to one version itself; its log lands under the door's row. -->
-            <template v-if="shared.door && shared.updateNeeded" #actions>
+            <template v-if="shared.door && shared.updateNeeded && !updating" #actions>
                 <Button
                     size="small"
                     tier="boring"
                     :label="shared.action.label"
-                    :loading="ops.agentOp(shared.door) === `upgrade`"
                     :disabled="ops.working.value || ops.agentOp(shared.door) !== undefined"
                     v-tooltip.top="shared.action.hint"
                     @click="updateMachine"
                 />
             </template>
 
-            <RowNote v-if="shared.notes.length > 0" variant="block">
-                <DeviceAgentNotes :notes="shared.notes" />
+            <RowNote v-if="machineNotes.length > 0" variant="block">
+                <DeviceAgentNotes :notes="machineNotes" />
             </RowNote>
 
             <DeviceEnvironment
@@ -374,8 +416,7 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                     :pairings="lists.pairings"
                     :ports="lists.ports"
                     :sandboxes="lists.sandboxes"
-                    :open="openIds"
-                    :leading="openIds"
+                    :leading="leadingIds"
                     :busy="ops.workingIds.value"
                     :selected="selection.chosenIds.value"
                 >
@@ -398,23 +439,16 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                     </template>
                     <!-- The one row on this page that can close the page, said beside the name rather than only in the confirmation. -->
                     <template #badges="{ group }">
-                        <StatusBadge
-                            v-if="ops.selfGroup(group)"
-                            variant="info"
-                            size="xs"
-                            :label="t(`sandbox.devicePage.thisSandbox`)"
-                            v-tooltip.top="t(`sandbox.words.youreHere`)"
-                            class="-my-0.5 shrink-0"
-                        />
+                        <span v-if="ops.selfGroup(group)" class="shrink-0 text-2xs text-info" v-tooltip.top="t(`sandbox.words.youreHere`)">{{
+                            t(`sandbox.devicePage.thisSandbox`)
+                        }}</span>
                         <!-- Why a row is titled by a folder rather than a name: its sandbox is gone, or another account's. -->
-                        <StatusBadge
+                        <span
                             v-else-if="notOnAccount(group, account)"
-                            variant="neutral"
-                            size="xs"
-                            :label="t(`sandbox.devicePage.notOnAccount`)"
+                            class="shrink-0 text-2xs text-subtle"
                             v-tooltip.top="{ title: t(`sandbox.devicePage.notOnAccountTitle`), note: t(`sandbox.devicePage.notOnAccountTip`) }"
-                            class="-my-0.5 shrink-0"
-                        />
+                            >{{ t(`sandbox.devicePage.notOnAccount`) }}</span
+                        >
                     </template>
                     <!-- One quiet ⋯ per row, the kit's own menu, so this page and the desktop app's manager window offer the
                          same verbs. A row whose container is elsewhere gets the same ⋯ holding the one act that applies. -->
@@ -429,15 +463,18 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                             :logs-open="ops.logShown(group)"
                             :rollback-choices="rollbackChoices(manager.device.facts, group.sandbox)"
                             :sleeps="deviceSupports(manager.device.facts, DEVICE_FEATURE_SLEEP) && !ops.selfGroup(group)"
+                            :extra="fileVerbs(group)"
                             @act="(verb) => ops.act(group, verb)"
                             @rollback-to="(choice) => ops.act(group, `rollback`, choice)"
                         />
                         <SandboxVerbs
-                            v-else-if="removableHere(machine, group)"
+                            v-else-if="removableHere(machine, group) || fileVerbs(group).length > 0"
                             :compact="true"
                             :container="false"
                             :running="false"
                             :disabled="ops.working.value"
+                            :extra="fileVerbs(group)"
+                            :removable="removableHere(machine, group)"
                             @act="(verb) => ops.act(group, verb)"
                         />
                     </template>
@@ -445,14 +482,14 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                     <!-- Which side of a many-sided machine holds the folder, among its facts rather than as a lead-in to
                          its buttons: the path alone says it, but not in words. -->
                     <template #where="{ group }">
-                        <span v-if="many && ownerOf(group)" class="inline-flex min-w-0 items-center gap-1 text-2xs text-subtle">
+                        <span v-if="many && ownerOf(group)" class="inline-flex shrink-0 items-center" v-tooltip.top="environmentTitle(ownerOf(group)!)">
                             <BrandMark
                                 :size="12"
                                 :name="environmentTitle(ownerOf(group)!)"
                                 :icon="osMark(ownerOf(group)!.device).icon"
                                 :tint="osMark(ownerOf(group)!.device).tint"
                                 :plain="true"
-                            />{{ environmentTitle(ownerOf(group)!) }}
+                            />
                         </span>
                     </template>
                     <!-- What settles a conflict, at the foot of the block that explains it. -->
@@ -483,34 +520,6 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                             @click="startAgent(conflictTurn(ownerOf(group)!, group).prompt)"
                         >
                             <template #icon><Icon name="sparkles" /></template>
-                        </Button>
-                    </template>
-                    <!-- The folder's own switches, at the end of its line: Pause stops no container, only the file movement. -->
-                    <template #folder="{ group }">
-                        <Button
-                            v-if="ownerOf(group) && pausable(ownerOf(group)!.device, group)"
-                            size="small"
-                            tier="quiet"
-                            :label="resumes(group) ? t(`sandbox.devicePage.resumeSyncing`) : t(`sandbox.devicePage.pauseSyncing`)"
-                            :loading="ops.syncRunning(ops.rowKey(group), `sync-pause`)"
-                            :disabled="ops.working.value"
-                            v-tooltip.top="resumes(group) ? undefined : { title: t(`sandbox.words.filesOnly`), note: t(`sandbox.words.portsStayMirrored`) }"
-                            @click="void ops.runSync(ownerOf(group)!, ops.rowKey(group), group.sandboxId, resumes(group) ? `sync-resume` : `sync-pause`)"
-                        >
-                            <template #icon><Icon :name="resumes(group) ? `play` : `pause`" /></template>
-                        </Button>
-                        <!-- The one control here nothing undoes in a click. -->
-                        <Button
-                            v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
-                            size="small"
-                            tier="quiet" tone="danger"
-                            :label="t(`sandbox.words.unpair`)"
-                            :loading="ops.syncRunning(ops.rowKey(group), `sync-unpair`)"
-                            :disabled="ops.working.value"
-                            v-tooltip.top="{ title: t(`sandbox.devicePage.stopSync`), note: t(`sandbox.devicePage.localFolderKept`) }"
-                            @click="ops.confirmingUnpair.value = { environment: ownerOf(group)!, group }"
-                        >
-                            <template #icon><Icon name="link-broken" /></template>
                         </Button>
                     </template>
                     <!-- Nothing synced here yet: the folder field and the two ways to start, for this sandbox alone —
@@ -544,32 +553,6 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                                 )
                             "
                         />
-                    </template>
-                    <!-- The switch that clears the user's own localhost, under the ports it's about rather than with the container verbs. -->
-                    <template #ports="{ group }">
-                        <Button
-                            v-if="ownerOf(group) && commandable(ownerOf(group)!.device, group)"
-                            size="small"
-                            tier="quiet"
-                            :label="mirroringOff(group.folder) ? t(`sandbox.devicePage.startMirroring`) : t(`sandbox.devicePage.stopMirroring`)"
-                            :loading="ops.syncRunning(ops.rowKey(group), `mirror-off`)"
-                            :disabled="ops.working.value"
-                            v-tooltip.top="
-                                mirroringOff(group.folder)
-                                    ? t(`sandbox.words.ontoLocalhost`)
-                                    : { title: t(`sandbox.words.offLocalhost`), note: t(`sandbox.words.filesKeepSyncing`) }
-                            "
-                            @click="
-                                void ops.runSync(
-                                    ownerOf(group)!,
-                                    ops.rowKey(group),
-                                    group.sandboxId,
-                                    mirroringOff(group.folder) ? `mirror-on` : `mirror-off`,
-                                )
-                            "
-                        >
-                            <template #icon><Icon :name="mirroringOff(group.folder) ? `eye` : `eye-slash`" /></template>
-                        </Button>
                     </template>
                     <!-- The machine's own output, visible while a row works and afterward for as long as its log is being read. -->
                     <template #footer="{ group }">
@@ -615,8 +598,6 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
         <RowGroup v-if="revocable.length > 0" :label="t(`ui.devicePage.dangerZone`)">
             <template v-for="environment in revocable" :key="`revoke:${environment.device.key}`">
                 <Row
-                    icon="times"
-                    tone="danger"
                     :title="
                         many
                             ? t(`sandbox.devicePage.revokeSAccess`, { environment: environmentTitle(environment) })
@@ -630,12 +611,11 @@ const logoOf = (group: DeviceSandboxGroup): string | null | undefined =>
                         <Button
                             size="small"
                             tone="danger"
+                            tier="quiet"
                             :label="t(`sandbox.words.revokeAccess`)"
                             :disabled="ops.working.value"
                             @click="ops.confirmingRevoke.value = environment"
-                        >
-                            <template #icon><Icon name="times" /></template>
-                        </Button>
+                        />
                     </template>
                 </Row>
                 <RowNote v-if="ops.failure.value?.key === ops.accessKey(environment)" variant="block">

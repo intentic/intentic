@@ -43,5 +43,7 @@ it(`names the side of this computer that keeps a sandbox, and an adoption`, () =
     expect(keeperLine({ ...box, keptElsewhere: `windows` })).toBe(`kept by windows on this computer`);
     expect(keeperLine({ ...box, adoptedFrom: `WSL (archlinux)` })).toBe(`looked after from here: WSL (archlinux) went quiet`);
     const group: DeviceSandboxGroup = { sandboxId: `work`, title: `work`, sandbox: { ...box, keptElsewhereName: `Windows`, keptElsewhere: `windows` }, ports: [] };
-    expect(cardSubline(group, NOW)).toEqual([`kept by Windows on this computer`]);
+    // Which side keeps it is the id's hover; only an adoption is news enough for the line under the name.
+    expect(cardSubline(group, NOW)).toEqual([]);
+    expect(cardSubline({ ...group, sandbox: { ...box, adoptedFrom: `WSL (archlinux)` } }, NOW)).toEqual([`looked after from here: WSL (archlinux) went quiet`]);
 });

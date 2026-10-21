@@ -1,4 +1,14 @@
-import { type AgentPanel, type DeviceFolderRow, type DevicePortRow, type DeviceSandboxRow, osMarkOf, restartAgent } from "@intentic/ui";
+import {
+    type AgentPanel,
+    type DeviceFolderRow,
+    type DevicePortRow,
+    type DeviceSandboxGroup,
+    type DeviceSandboxRow,
+    mirroringOff,
+    osMarkOf,
+    restartAgent,
+    type SandboxMenuVerb,
+} from "@intentic/ui";
 
 // The design kit's device samples (DesignKit.vue's device panel section): sandboxes, folder pairings, ports and an agent
 // loop shaped so every row state the panel draws is on screen at once.
@@ -83,3 +93,13 @@ export const KIT_MASTHEAD = {
     state: KIT_AGENT.state,
     actions: KIT_AGENT.actions,
 };
+
+// What the machine does FOR a sample sandbox, as the device page puts it in the card's one ⋯: inert here.
+export const kitFileVerbs = (group: DeviceSandboxGroup): SandboxMenuVerb[] =>
+    group.folder === undefined
+        ? []
+        : [
+              { label: `Pause syncing`, icon: `pause`, run: () => undefined },
+              { label: mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`, icon: `eye-slash`, run: () => undefined },
+              { label: `Unpair`, icon: `link-broken`, danger: true, run: () => undefined },
+          ];

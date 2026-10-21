@@ -3080,7 +3080,6 @@
             "startingOnDevice": "Démarrage sur cet appareil…",
             "stopMirroring": "Cesser de refléter",
             "stopsSyncingSandboxsFiles": "cesse de synchroniser les fichiers de ce sandbox et de refléter ses ports. Tout ce qui est déjà dans son dossier local reste exactement tel quel.",
-            "stopSync": "Arrêter la synchro",
             "syncedFilesUntouched": "Fichiers synchronisés intacts",
             "thisSandbox": "ce sandbox",
             "unblockDeletions": "Débloquer les suppressions",

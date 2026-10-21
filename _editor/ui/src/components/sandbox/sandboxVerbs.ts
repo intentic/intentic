@@ -1,3 +1,4 @@
+import type { IconName } from "../../icons/iconSets.js";
 import { t } from "../../i18n/index.js";
 
 // What can be done to one sandbox on one device, the vocabulary behind SandboxVerbs.vue. Structural
@@ -22,6 +23,16 @@ export const menuVerbs = (running: boolean, sleeps = false): readonly SandboxVer
     `update`,
     `rollback`,
 ];
+
+/** A caller's own menu row beside the container verbs (pausing a sync, unpairing): a label, a glyph and what it runs. */
+export interface SandboxMenuVerb {
+    readonly label: string;
+    readonly icon: IconName;
+    readonly run: () => void;
+    readonly danger?: boolean | undefined;
+    /** One quiet line under the label: what sets it apart, or what it leaves alone. */
+    readonly hint?: string | undefined;
+}
 
 // The one verb that stands apart, named here so a reader of either app can see why it's placed last.
 export const DESTRUCTIVE_VERB = `remove` satisfies SandboxVerb;

@@ -5588,6 +5588,11 @@
             "writeAssistantsSystemPrompt": "Write the assistant's system prompt, or start from one of the built-in prompts below."
         },
         "agentRun": {
+            "working": "Updating…",
+            "workingRestart": "Restarting…",
+            "workingForget": "Forgetting links…",
+            "notBack": "Its agent hasn't come back after {limit}.",
+            "output": "Output",
             "comingBack": "Waiting for its agent to come back…",
             "forgetFailed": "Couldn't forget the unreachable links",
             "forgetRefused": "That device didn't drop its unreachable links.",
@@ -5601,12 +5606,10 @@
             "restartRefused": "That device wouldn't restart its agent.",
             "restarted": "Agent restarted",
             "restarting": "Restarting its agent…",
-            "showOutput": "Show output",
             "stillConnected": "Still connected to {count} sandbox. | Still connected to {count} sandboxes.",
             "updateFailed": "Couldn't update its agent",
             "updated": "Update finished",
-            "updating": "Updating its agent…",
-            "deadline": "If its agent isn't back within {limit}, the machine's status here will say what's wrong."
+            "updating": "Updating its agent…"
         },
         "agentMemory": {
             "addToMemory": "Add to memory",
@@ -6665,7 +6668,6 @@
             "startMirroring": "Start mirroring",
             "stopMirroring": "Stop mirroring",
             "stopsSyncingSandboxsFiles": "stops syncing this sandbox's files and mirroring its ports. Everything already in its local folder stays exactly as it is.",
-            "stopSync": "Stop sync",
             "syncedFilesUntouched": "Synced files untouched",
             "thisSandbox": "this sandbox",
             "unblockDeletions": "Unblock deletions",
@@ -7956,6 +7958,7 @@
             "rowRemoving": "removing…"
         },
         "sandboxSyncToggles": {
+            "setUp": "Set up…",
             "filesAndPorts": "Files and ports",
             "folderOnComputer": "Folder on this computer",
             "mirrorPortsOnly": "Mirror ports only",

@@ -197,6 +197,7 @@ export {
     // One version a machine kept, as Roll back's own list offers it, and the question before going back to it.
     type RollbackChoice,
     rollbackToPrompt,
+    type SandboxMenuVerb,
     type SandboxVerb,
     sandboxVerbPrompt,
     type SandboxVerbPrompt,

@@ -78,8 +78,27 @@ const fields = (el: HTMLElement): HTMLInputElement[] => [...el.querySelectorAll(
 const buttonSaying = (words: string): HTMLButtonElement | undefined =>
     [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(words));
 
-it(`offers a folder per environment, each in that environment's own filesystem`, () => {
+// The fields wait behind "Set up…": mounted, then asked for, as a reader would.
+const mountOpen = async (machine: MachineRow): Promise<HTMLElement> => {
+    const el = mount(machine);
+    buttonSaying(`Set up`)?.click();
+    await nextTick();
+    return el;
+};
+
+// A card is read far more often than it is set up: no field and no second button until somebody asks.
+it(`offers one press to set up, and no fields until it is pressed`, async () => {
     const el = mount(pc());
+    expect(fields(el)).toHaveLength(0);
+    expect(buttonSaying(`Mirror ports only`)).toBeUndefined();
+    buttonSaying(`Set up`)?.click();
+    await nextTick();
+    expect(fields(el)).toHaveLength(2);
+    expect(buttonSaying(`Set up`)).toBeUndefined();
+});
+
+it(`offers a folder per environment, each in that environment's own filesystem`, async () => {
+    const el = await mountOpen(pc());
     const paths = fields(el).map((field) => field.value);
     expect(paths).toHaveLength(2);
     // A drive path for the Windows side, a unix path for the distro — the reader picks a side by picking a path.
@@ -88,8 +107,8 @@ it(`offers a folder per environment, each in that environment's own filesystem`,
 });
 
 // Two distros of one PC can run the same OS, and "Arch Linux" twice is two labels nobody can choose between.
-it(`names an environment by its distro as well as its OS`, () => {
-    const el = mount(pc());
+it(`names an environment by its distro as well as its OS`, async () => {
+    const el = await mountOpen(pc());
     const labels = [...el.querySelectorAll(`label`)].map((label) => label.textContent?.trim());
     expect(labels[0]).toBe(`Microsoft Windows 11 Home`);
     expect(labels[1]).toContain(`archlinux`);
@@ -101,7 +120,7 @@ const syncButtons = (): HTMLButtonElement[] =>
 // THE CASE THIS EXISTS FOR: the folder is in the distro, the only card is the Windows side. Nothing here picks a
 // side — the line goes through the door that is open and the daemon crosses by the folder's own dialect.
 it(`sends the distro's folder through the Windows door, which is the only one open`, async () => {
-    mount(pc());
+    await mountOpen(pc());
     syncButtons()[1]?.click();
     await nextTick();
 
@@ -110,7 +129,7 @@ it(`sends the distro's folder through the Windows door, which is the only one op
 
 // The suggestion is a suggestion: what the reader types is what syncs, which is the whole of "I decide the path".
 it(`sends the path as edited rather than the one it suggested`, async () => {
-    const el = mount(pc());
+    const el = await mountOpen(pc());
     const field = fields(el)[1]!;
     field.value = `/srv/code/work`;
     field.dispatchEvent(new Event(`input`));
@@ -122,7 +141,7 @@ it(`sends the path as edited rather than the one it suggested`, async () => {
 });
 
 it(`asks for ports without files as its own act, carrying no folder`, async () => {
-    mount(pc());
+    await mountOpen(pc());
     buttonSaying(`Mirror ports only`)?.click();
     await nextTick();
     expect(sent).toEqual([{ command: `sync-install`, folder: { mode: `mirror` }, door: `rog` }]);
@@ -138,19 +157,20 @@ it(`says nothing when the machine has no open door`, () => {
 // out. Kept in the component, the typed folder fell back to the suggestion halfway through and the pressed state went
 // with it, so a setup that was working read as one that had done nothing (2026-10-08).
 it(`keeps the folder as typed across a remount`, async () => {
-    const field = fields(mount(pc()))[1]!;
+    const field = fields(await mountOpen(pc()))[1]!;
     field.value = `/home/radarsu/intentic/workspace-82789f4106b4`;
     field.dispatchEvent(new Event(`input`));
     await nextTick();
     app?.unmount();
     document.body.innerHTML = ``;
 
+    // A folder already typed opens the fields by itself, so a draft is never hidden behind "Set up…".
     expect(fields(mount(pc()))[1]?.value).toBe(`/home/radarsu/intentic/workspace-82789f4106b4`);
 });
 
 it(`says the folder back while it sets up, across a remount, and offers the fields again once it is done`, async () => {
     holdAnswers = true;
-    const field = fields(mount(pc()))[1]!;
+    const field = fields(await mountOpen(pc()))[1]!;
     field.value = `/home/radarsu/intentic/workspace-82789f4106b4`;
     field.dispatchEvent(new Event(`input`));
     await nextTick();

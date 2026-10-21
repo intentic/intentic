@@ -3079,7 +3079,6 @@
             "startingOnDevice": "Wird auf diesem Gerät gestartet…",
             "stopMirroring": "Spiegelung stoppen",
             "stopsSyncingSandboxsFiles": "hört auf, die Dateien dieser Sandbox zu synchronisieren und ihre Ports zu spiegeln. Alles, was schon in seinem lokalen Ordner liegt, bleibt genau so, wie es ist.",
-            "stopSync": "Sync beenden",
             "syncedFilesUntouched": "Synchronisierte Dateien bleiben",
             "thisSandbox": "diese Sandbox",
             "unblockDeletions": "Löschungen freigeben",

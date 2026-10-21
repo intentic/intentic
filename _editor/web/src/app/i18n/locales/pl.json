@@ -5101,6 +5101,11 @@
             "writeAssistantsSystemPrompt": "Napisz prompt systemowy asystenta albo wyjdź od jednego z wbudowanych promptów poniżej."
         },
         "agentRun": {
+            "working": "Aktualizuję…",
+            "workingRestart": "Restartuję…",
+            "workingForget": "Usuwam linki…",
+            "notBack": "Jego agent nie wrócił po {limit}.",
+            "output": "Wynik",
             "comingBack": "Czekam, aż jego agent wróci…",
             "forgetFailed": "Nie udało się zapomnieć niedostępnych powiązań",
             "forgetRefused": "Tamto urządzenie nie usunęło swoich niedostępnych powiązań.",
@@ -5114,12 +5119,10 @@
             "restartRefused": "Tamto urządzenie nie chciało zrestartować swojego agenta.",
             "restarted": "Agent zrestartowany",
             "restarting": "Restartowanie jego agenta…",
-            "showOutput": "Pokaż wyjście",
             "stillConnected": "Wciąż połączone z {count} sandboxem. | Wciąż połączone z {count} sandboxami. | Wciąż połączone z {count} sandboxami.",
             "updateFailed": "Nie udało się zaktualizować jego agenta",
             "updated": "Aktualizacja zakończona",
-            "updating": "Aktualizowanie jego agenta…",
-            "deadline": "Jeśli agent nie wróci w ciągu {limit}, status maszyny pokaże tutaj, co jest nie tak."
+            "updating": "Aktualizowanie jego agenta…"
         },
         "agentMemory": {
             "addToMemory": "Dodaj do pamięci",
@@ -6200,7 +6203,6 @@
             "startingOnDevice": "Uruchamianie na tamtym urządzeniu…",
             "stopMirroring": "Przestań odbijać",
             "stopsSyncingSandboxsFiles": "przestaje synchronizować pliki tego sandboxa i odbijać jego porty. Wszystko, co już jest w jego lokalnym folderze, zostaje dokładnie tak, jak jest.",
-            "stopSync": "Zatrzymaj synchronizację",
             "syncedFilesUntouched": "Zsynchronizowane pliki nietknięte",
             "thisSandbox": "ten sandbox",
             "unblockDeletions": "Odblokuj usunięcia",
@@ -7552,6 +7554,7 @@
             "rowRemoving": "usuwanie…"
         },
         "sandboxSyncToggles": {
+            "setUp": "Skonfiguruj…",
             "filesAndPorts": "Pliki i porty",
             "folderOnComputer": "Folder na tym komputerze",
             "mirrorPortsOnly": "Odbijaj tylko porty",

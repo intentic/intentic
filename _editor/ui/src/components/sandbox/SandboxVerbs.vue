@@ -8,7 +8,7 @@ import { computed, ref } from "vue";
 import type { IconName } from "../../icons/iconSets.js";
 import ContextMenu from "../overlays/ContextMenu.vue";
 import Icon from "../primitives/Icon.vue";
-import { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type RollbackChoice, type SandboxVerb, VERB_LABEL } from "./sandboxVerbs.js";
+import { DESTRUCTIVE_VERB, menuVerbs, primaryVerb, type RollbackChoice, type SandboxMenuVerb, type SandboxVerb, VERB_LABEL } from "./sandboxVerbs.js";
 import { useT } from "../../i18n/index.js";
 
 const t = useT();
@@ -22,6 +22,8 @@ const {
     container = true,
     rollbackChoices = [],
     sleeps = false,
+    extra = [],
+    removable = true,
 } = defineProps<{
     /** The container's own state: it decides whether the row's button says Start or Stop. */
     running: boolean;
@@ -42,6 +44,11 @@ const {
     // Whether the machine can put this sandbox to sleep (stopped, and started again when somebody opens it): a running
     // row then offers Sleep beside Stop.
     sleeps?: boolean | undefined;
+    // The caller's own verbs for what this machine does FOR the sandbox (its file sync, its port mirroring), as a group
+    // of their own between the container's verbs and removal: one ⋯ per card, rather than buttons strewn along its lines.
+    extra?: readonly SandboxMenuVerb[] | undefined;
+    /** False where nothing on this row can be removed from here: the menu is then only `extra`. */
+    removable?: boolean | undefined;
 }>();
 
 const emit = defineEmits<{ act: [verb: SandboxVerb]; rollbackTo: [choice: RollbackChoice] }>();
@@ -95,18 +102,26 @@ const rollbackRows = (): MenuItem[] =>
           });
 
 const menu = ref<{ show: (event: Event) => void } | undefined>();
-const items = computed<MenuItem[]>(() => [
-    ...(container
-        ? [
-              ...(compact ? [item(power.value)] : []),
-              ...menuVerbs(running, sleeps).flatMap((verb) => (verb === `rollback` ? rollbackRows() : [item(verb)])),
-              { separator: true },
-          ]
-        : []),
-    // The caller still asks its own confirmation; this only stops the row presenting removal as the seventh
-    // item beside harmless ones.
-    { label: VERB_LABEL[DESTRUCTIVE_VERB], icon: VERB_ICON[DESTRUCTIVE_VERB], danger: true, command: () => emit(`act`, DESTRUCTIVE_VERB) },
-]);
+const extraRow = (verb: SandboxMenuVerb): MenuItem => {
+    const row: MenuItem = { label: verb.label, icon: verb.icon, command: verb.run };
+    if (verb.danger === true) {
+        row[`danger`] = true;
+    }
+    if (verb.hint !== undefined) {
+        row[`hint`] = verb.hint;
+    }
+    return row;
+};
+const items = computed<MenuItem[]>(() => {
+    const groups: MenuItem[][] = [
+        container ? [...(compact ? [item(power.value)] : []), ...menuVerbs(running, sleeps).flatMap((verb) => (verb === `rollback` ? rollbackRows() : [item(verb)]))] : [],
+        extra.map(extraRow),
+        // The caller still asks its own confirmation; this only stops the row presenting removal as the seventh
+        // item beside harmless ones.
+        removable ? [{ label: VERB_LABEL[DESTRUCTIVE_VERB], icon: VERB_ICON[DESTRUCTIVE_VERB], danger: true, command: () => emit(`act`, DESTRUCTIVE_VERB) }] : [],
+    ];
+    return groups.filter((group) => group.length > 0).flatMap((group, at) => (at === 0 ? group : [{ separator: true }, ...group]));
+});
 </script>
 
 <template>

@@ -605,8 +605,8 @@ export const portsLine = (group: DeviceSandboxGroup): CardPart[] | undefined => 
     return parts.length > 0 ? parts : [{ key: `none`, text: t(`ui.deviceDetail.noPorts`), tone: `subtle` }];
 };
 
-// The line under a card's name: the exact id somebody types into a terminal (only where the name is not it already),
-// what version runs, and the container's share of the machine.
+// The line under a card's name: what version runs, the container's share of the machine, and an adoption (which side
+// keeps it is otherwise the id's hover: true of most sandboxes on a PC, it was the card's longest, least-read line).
 // Which side of this computer looks after the sandbox, when it is not the one this card was read from: a Windows PC
 // lists its WSL distros' sandboxes too, and a reader who wonders why one never updates here is reading the answer.
 export const keeperLine = (sandbox: DeviceSandboxRow): string | undefined => {
@@ -621,7 +621,7 @@ export const cardSubline = (group: DeviceSandboxGroup, now: number): string[] =>
     [
         group.sandbox === undefined ? undefined : versionLine(group.sandbox, now),
         group.sandbox === undefined ? undefined : resourcesSummary(group.sandbox),
-        group.sandbox === undefined ? undefined : keeperLine(group.sandbox),
+        group.sandbox?.adoptedFrom === undefined ? undefined : keeperLine(group.sandbox),
     ].filter((part): part is string => part !== undefined && part !== ``);
 
 // Whether a sandbox this computer does not run still does anything here: a folder whose sync session is up, or a port

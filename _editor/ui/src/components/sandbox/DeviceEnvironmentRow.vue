@@ -6,6 +6,7 @@ import BrandMark from "../brand/BrandMark.vue";
 import StatusBadge from "../feedback/StatusBadge.vue";
 import type { StatusVariant } from "../feedback/statusBadge.js";
 import Button from "../primitives/Button.vue";
+import Icon from "../primitives/Icon.vue";
 import Row from "../rows/Row.vue";
 import type { TooltipValue } from "../../lib/tooltip.js";
 import type { AgentAction } from "./deviceAgent.js";
@@ -38,6 +39,7 @@ const {
     actions = [],
     running,
     busy = false,
+    working,
 } = defineProps<{
     /** The machine's name: the masthead's title. */
     name: string;
@@ -69,11 +71,17 @@ const {
     running?: Op | undefined;
     /** True while any op on the page holds its one-at-a-time lock, whichever control started it. */
     busy?: boolean | undefined;
+    // Work in flight on this environment's agent ("Updating… · 12s"), said ONCE, here, with the row's only spinner. It
+    // stands in for the state badge, the last-seen and the verbs: a machine mid-update drops its socket by design, so
+    // "reconnecting", "last seen now" and a dead Restart button beside a spinner were three tellings of one wait.
+    working?: string | undefined;
 }>();
 
 const slots = defineSlots<{
     /** What this environment wants, and the answer to the last press on its agent. Absent on a healthy one. */
     below?: () => VNode[];
+    /** A control after the verbs (the run's Output toggle), drawn while they are not. */
+    aside?: () => VNode[];
 }>();
 
 const emit = defineEmits<{ run: [op: Op] }>();
@@ -111,25 +119,31 @@ const emit = defineEmits<{ run: [op: Op] }>();
         </template>
 
         <template #meta>
-            <span v-if="seen" class="shrink-0">{{ seen }}</span>
+            <span v-if="seen && !working" class="shrink-0">{{ seen }}</span>
             <span v-if="version" class="shrink-0 font-mono">{{ version }}</span>
-            <StatusBadge v-if="state" :variant="state.variant" size="xs" :dot="true" :label="state.word" class="shrink-0" />
+            <span v-if="working" class="inline-flex shrink-0 items-center gap-1.5 text-content tabular-nums" role="status">
+                <Icon name="spinner" spin class="text-2xs text-info" aria-hidden="true" />{{ working }}
+            </span>
+            <StatusBadge v-else-if="state" :variant="state.variant" size="xs" :dot="true" :label="state.word" class="shrink-0" />
         </template>
 
         <!-- The agent's verbs through this environment's door. Each runs on that machine, so each spins the whole
              page's lock rather than its own. -->
-        <template v-if="actions.length > 0" #control>
-            <Button
-                v-for="action in actions"
-                :key="action.op"
-                size="small"
-                tier="boring"
-                :label="action.label"
-                :loading="running === action.op"
-                :disabled="busy || running !== undefined"
-                v-tooltip.top="action.hint"
-                @click="emit(`run`, action.op)"
-            />
+        <template v-if="(actions.length > 0 && !working) || slots.aside" #control>
+            <slot name="aside" />
+            <template v-if="!working">
+                <Button
+                    v-for="action in actions"
+                    :key="action.op"
+                    size="small"
+                    tier="quiet"
+                    :label="action.label"
+                    :loading="running === action.op"
+                    :disabled="busy || running !== undefined"
+                    v-tooltip.top="action.hint"
+                    @click="emit(`run`, action.op)"
+                />
+            </template>
         </template>
 
         <template v-if="slots.below" #below>

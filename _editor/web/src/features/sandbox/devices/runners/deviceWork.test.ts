@@ -104,6 +104,7 @@ it(`keeps an agent update in flight past its call, until a reading shows a new p
         links: undefined,
         failure: undefined,
         startedAt: expect.any(Number),
+        expired: false,
     });
 
     // The same processes answering: nothing has been replaced yet.

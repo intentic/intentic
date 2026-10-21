@@ -29,7 +29,6 @@ import {
     InfoTable,
     InlineRename,
     MarkdownDocument,
-    mirroringOff,
     Modal,
     Notice,
     Page,
@@ -71,7 +70,7 @@ import Checkbox from "primevue/checkbox";
 import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import DesignKitAssistants from "./DesignKitAssistants.vue";
-import { KIT_MASTHEAD, KIT_PAIRINGS, KIT_PORTS, KIT_SANDBOXES } from "./designKitDevices";
+import { KIT_MASTHEAD, KIT_PAIRINGS, KIT_PORTS, KIT_SANDBOXES, kitFileVerbs } from "./designKitDevices";
 
 const { scheme, set: setScheme } = useTheme();
 const t = useT();
@@ -566,11 +565,16 @@ const pickedTier = ref(`collaborator`);
                 <Section :label="t(`ui.devicePage.sandboxes`)">
                     <div class="flex flex-col">
                         <DeviceDetail :pairings="KIT_PAIRINGS" :ports="KIT_PORTS" :sandboxes="KIT_SANDBOXES">
+                            <!-- One ⋯ per card: the container's verbs, then what this machine does for the sandbox. -->
                             <template #actions="{ group }">
-                                <SandboxVerbs v-if="group.sandbox" :running="group.sandbox.running" />
+                                <SandboxVerbs
+                                    :compact="true"
+                                    :container="group.sandbox !== undefined"
+                                    :running="group.sandbox?.running === true"
+                                    :extra="kitFileVerbs(group)"
+                                />
                             </template>
-                            <!-- The same switch for ONE number, on the ports that never reached localhost: the layout
-                                 worth checking is a button landing at the end of a note that already wraps. -->
+                            <!-- The one switch left on a line, at the end of a port's note: the layout to check when it wraps. -->
                             <template #port="{ port }">
                                 <Button
                                     v-if="port.state !== `mirrored`"
@@ -578,14 +582,6 @@ const pickedTier = ref(`collaborator`);
                                     tier="quiet"
                                     class="-my-1"
                                     :label="port.state === `ignored` ? `Mirror it` : `Don't mirror it`"
-                                />
-                            </template>
-                            <!-- Clears this device's localhost only, stops nothing in the sandbox; row three shows mirroring off. -->
-                            <template #ports="{ group }">
-                                <Button
-                                    size="small"
-                                    tier="quiet"
-                                    :label="mirroringOff(group.folder) ? `Start mirroring` : `Stop mirroring`"
                                 />
                             </template>
                         </DeviceDetail>

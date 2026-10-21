@@ -863,7 +863,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         }
     };
 
-    // The row a run is on right now: a container verb's own row, a batch's or a removal's by the row it reached. With
+    // The row a run is on right now: a container verb's or a sync switch's own row, a batch's or a removal's by the row it reached. With
     // nothing running here, the device-work ledger's rows: an agent press or a setup still out on the machine.
     const workingIds = computed<readonly string[]>(() => {
         const now = running.value;
@@ -873,7 +873,7 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         if (subOf(now) === LIST) {
             return now.progress?.row === undefined ? [] : [now.progress.row];
         }
-        const group = machine().groups.find((candidate) => subOf(now) === ROW(candidate));
+        const group = machine().groups.find((candidate) => subOf(now) === ROW(candidate) || subOf(now) === SYNC(rowKey(candidate)));
         return group === undefined || now.tag === `logs` ? [] : [group.sandboxId];
     });
 

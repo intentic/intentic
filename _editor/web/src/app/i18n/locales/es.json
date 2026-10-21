@@ -3090,7 +3090,6 @@
             "startingOnDevice": "Iniciando en ese dispositivo…",
             "stopMirroring": "Dejar de replicar",
             "stopsSyncingSandboxsFiles": "deja de sincronizar los archivos de este sandbox y de replicar sus puertos. Todo lo que ya está en su carpeta local se queda exactamente como está.",
-            "stopSync": "Detener sincronización",
             "syncedFilesUntouched": "Archivos sincronizados intactos",
             "thisSandbox": "este sandbox",
             "unblockDeletions": "Desbloquear borrados",
