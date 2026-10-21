@@ -60,7 +60,7 @@ class IntenticAutofillService : AutofillService() {
         callback.onSuccess(responseBuilder.build())
     }
 
-    override fun onSaveRequest(request: SaveRequest, cancellationSignal: android.os.CancellationSignal, callback: SaveCallback) {
+    override fun onSaveRequest(request: SaveRequest, callback: SaveCallback) {
         val pairing = Graph.pairings.get()
         if (pairing == null) {
             callback.onFailure("Pair this phone first.")
@@ -116,8 +116,8 @@ class IntenticAutofillService : AutofillService() {
 
     private fun parseStructure(structure: AssistStructure): StructureParsed {
         val fields = mutableListOf<Pair<String, AutofillFields.Hint>>()
-        for (index in 0 until structure.childCount) {
-            collect(structure.getChildAt(index), fields, structure.activityComponent.packageName)
+        for (root in roots(structure)) {
+            collect(root, fields, structure.activityComponent.packageName)
         }
         val parsed = AutofillFields.parse(fields)
         val ids = mutableMapOf<String, AutofillId>()
@@ -132,6 +132,10 @@ class IntenticAutofillService : AutofillService() {
         )
     }
 
+    /** The root view of every window in the structure. */
+    private fun roots(structure: AssistStructure): List<AssistStructure.ViewNode> =
+        (0 until structure.windowNodeCount).map { structure.getWindowNodeAt(it).rootViewNode }
+
     private fun walkIds(structure: AssistStructure, visit: (AutofillId, String) -> Unit) {
         fun walk(node: AssistStructure.ViewNode) {
             val autofillId = node.autofillId
@@ -143,8 +147,8 @@ class IntenticAutofillService : AutofillService() {
                 walk(node.getChildAt(index))
             }
         }
-        for (index in 0 until structure.childCount) {
-            walk(structure.getChildAt(index))
+        for (root in roots(structure)) {
+            walk(root)
         }
     }
 
@@ -165,8 +169,8 @@ class IntenticAutofillService : AutofillService() {
                 walk(node.getChildAt(index))
             }
         }
-        for (index in 0 until structure.childCount) {
-            walk(structure.getChildAt(index))
+        for (root in roots(structure)) {
+            walk(root)
         }
         return found
     }

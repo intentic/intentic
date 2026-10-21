@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.service.autofill.Dataset
 import android.view.autofill.AutofillId
 import android.view.autofill.AutofillManager
 import android.view.autofill.AutofillValue
@@ -150,6 +151,3 @@ class PasswordsAuthActivity : AppCompatActivity() {
                 .apply { usernameId?.let { putExtra(EXTRA_USERNAME_ID, it) } }
     }
 }
-
-// Dataset lives in autofill package; import alias for builder in this file.
-private typealias Dataset = android.service.autofill.Dataset
