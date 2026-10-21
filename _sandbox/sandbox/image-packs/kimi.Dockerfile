@@ -7,6 +7,6 @@
 # pin below is the version that runs.
 # ponytail: engines.json blesses this pin; bump-engines.mjs moves both.
 RUN --mount=type=cache,target=/root/.npm \
-    npm install --prefix /opt/kimi --no-save --no-package-lock --no-audit --no-fund @moonshot-ai/kimi-code@2.1.1 \
+    npm install --prefix /opt/kimi --no-save --no-package-lock --no-audit --no-fund @moonshot-ai/kimi-code@2.2.0 \
     && ln -sf /opt/kimi/node_modules/.bin/kimi /usr/local/bin/kimi \
     && kimi --version
