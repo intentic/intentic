@@ -470,7 +470,7 @@
         },
         "liveMetrics": {
             "sessionsLabel": "Prozessspeicher nach Session",
-            "sessionsNote": "Eine andere Gruppierung derselben Prozesse, kein zusätzlicher Speicher. CPU: 100 % = 1 Kern.",
+            "sessionsNote": "Untergeordnete Sitzungen und die Schritte eines Laufs zählen zu der Karte, unter der sie gruppiert sind. Eine andere Gruppierung derselben Prozesse, kein zusätzlicher Speicher. CPU: 100 % = 1 Kern.",
             "accountingLabel": "Speicheraufteilung",
             "accountingNote": "Separat gemessen; Summe kann abweichen.",
             "anonymousLabel": "Anonymer Speicher",
@@ -528,7 +528,9 @@
             "swapFullNote": "Fast voll: zählt als belegt",
             "swapNote": "Wächst: Speicher knapp",
             "tintAt": "≥ {percent} Speicher",
-            "tinted": "Markiert"
+            "tinted": "Markiert",
+            "groupedLabel": "Gruppierte Sitzungen",
+            "groupedValue": "{count} · {size}"
         },
         "ownerMark": {
             "controlToken": "Steuertoken",

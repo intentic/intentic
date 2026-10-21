@@ -3,19 +3,19 @@ import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics"
 import { Meter, SectionHeader, type Tip, ui } from "@intentic/ui";
 import { formatBinaryBytes, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 import { agentDisplayTitle } from "../../../models/agent-status/agentStatus-meta";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { openById } from "../../../models/fleet/useAgents-actions";
-import { HEAVY_SESSION_SHARE } from "../../../models/sandbox/liveMetrics";
+import { CARD_METRICS_KEY, HEAVY_SESSION_SHARE } from "../../../models/sandbox/liveMetrics";
 import { useSandboxReadout } from "./sandboxFigures";
 
 // The panel the status bar's metrics segment opens above it: every figure the bar leaves out, grouped by
 // what it answers. The gauges again with their capacity, then the machine's other readings, then which kinds of process
 // hold the memory, one kind a row with the small ones folded (sandboxFigures.ts decides which), since a row of
-// side-by-side kinds reads as a puzzle rather than a list. Last, which conversations hold it, heaviest first: where the
-// memory went, in one look rather than a scan across every card, and each row opens its conversation, so the one eating
-// the box is a press from being stopped. Every figure explains itself on hover, since "load" or "pressure" is a number
+// side-by-side kinds reads as a puzzle rather than a list. Last, which cards hold it, heaviest first, each counting the
+// sessions grouped under it as the card itself does (CARD_METRICS_KEY): where the memory went, in one look rather than a
+// scan across every card, and each row opens its conversation, so the one eating the box is a press from being stopped. Every figure explains itself on hover, since "load" or "pressure" is a number
 // only a reader who already knows it can read bare; a figure past its limit wears the warning dot there too. Its heading
 // is the status bar panel's header (StatusBar.vue).
 
@@ -25,37 +25,43 @@ const props = defineProps<{
     metrics: SandboxMetrics;
 }>();
 
-const readout = useSandboxReadout(() => props.metrics);
+const cards = inject(CARD_METRICS_KEY, undefined);
+const readout = useSandboxReadout(
+    () => props.metrics,
+    () => cards?.value,
+);
 const warned = (hint: Tip, warn: boolean): Tip => (warn ? { ...hint, tone: `warning` } : hint);
 
 // The two lists' headings, each read on hover as what its bars measure.
 const rolesTip = computed((): Tip => ({ title: t(`agents.liveMetrics.rolesLabel`), note: t(`agents.liveMetrics.rolesNote`) }));
-const sessionsTip = computed(
-    (): Tip => ({
-        title: t(`agents.liveMetrics.sessionsLabel`),
-        rows: [
-            { label: t(`agents.liveMetrics.cpuLabel`), value: t(`agents.liveMetrics.cpuPerCore`) },
-            { label: t(`agents.liveMetrics.tinted`), value: t(`agents.liveMetrics.tintAt`, { percent: formatPercent(HEAVY_SESSION_SHARE * 100) }) },
-        ],
-        note: `${t(`agents.liveMetrics.sessionsNote`)} ${t(`agents.liveMetrics.pressToOpen`)}`,
-    }),
-);
+const sessionsTip = computed((): Tip => ({
+    title: t(`agents.liveMetrics.sessionsLabel`),
+    rows: [
+        { label: t(`agents.liveMetrics.cpuLabel`), value: t(`agents.liveMetrics.cpuPerCore`) },
+        { label: t(`agents.liveMetrics.tinted`), value: t(`agents.liveMetrics.tintAt`, { percent: formatPercent(HEAVY_SESSION_SHARE * 100) }) },
+    ],
+    note: `${t(`agents.liveMetrics.sessionsNote`)} ${t(`agents.liveMetrics.pressToOpen`)}`,
+}));
 
 // Folded until asked for, and for as long as the panel stays open.
 const smallOpen = ref(false);
 const shownRoles = computed(() => (smallOpen.value ? [...readout.value.roles, ...readout.value.smallRoles] : readout.value.roles));
 const moreSessionsOpen = ref(false);
-const shownSessions = computed(() =>
-    moreSessionsOpen.value ? [...readout.value.sessions, ...readout.value.smallSessions] : readout.value.sessions,
-);
+const shownSessions = computed(() => (moreSessionsOpen.value ? [...readout.value.sessions, ...readout.value.smallSessions] : readout.value.sessions));
 
-// A conversation as its card names it; one the board carries no card for (archived, another reader's) by its id.
+// A row as its card names it: a run by its name, a conversation by its title, and one the board carries no card for
+// (archived, another reader's) by its id. A run's row opens one of its steps' chats, a run having none of its own.
 const { agentById } = useAgents();
-const titleOf = (id: string): string => {
-    const agent = agentById(id);
-    return agent === undefined ? id : agentDisplayTitle(agent);
+const titleOf = (key: string): string => {
+    const run = cards?.value?.runs.get(key);
+    if (run !== undefined) {
+        return run.title;
+    }
+    const agent = agentById(key);
+    return agent === undefined ? key : agentDisplayTitle(agent);
 };
-const open = (id: string): void => {
+const open = (key: string): void => {
+    const id = cards?.value?.runs.get(key)?.opens ?? key;
     const agent = agentById(id);
     openById(id, agent === undefined ? undefined : agentDisplayTitle(agent));
 };
@@ -83,18 +89,16 @@ const open = (id: string): void => {
                     >
                         <template v-for="row in readout.memoryRows" :key="row.key">
                             <dt class="text-muted">{{ row.label }}</dt>
-                            <dd class="text-right whitespace-nowrap tabular-nums" :class="row.excluded ? `text-muted` : `text-content`">{{ row.value }}</dd>
+                            <dd class="text-right whitespace-nowrap tabular-nums" :class="row.excluded ? `text-muted` : `text-content`">
+                                {{ row.value }}
+                            </dd>
                         </template>
                     </dl>
                 </template>
             </div>
         </div>
 
-        <dl
-            role="group"
-            data-section="figures"
-            class="grid w-72 max-w-full shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs"
-        >
+        <dl role="group" data-section="figures" class="grid w-72 max-w-full shrink-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-2xs">
             <template v-for="figure in readout.figures" :key="figure.key">
                 <dt v-tooltip.left="warned(figure.hint, figure.warn)" class="cursor-help text-muted">{{ figure.label }}</dt>
                 <dd
@@ -109,7 +113,13 @@ const open = (id: string): void => {
 
         <!-- One kind a row, so the eye runs down names and sizes alike; the small kinds fold behind a line that sums them. -->
         <div v-if="readout.roles.length > 0" role="group" data-section="roles" class="flex w-72 max-w-full shrink-0 flex-col gap-1.5">
-            <SectionHeader :label="t(`agents.liveMetrics.rolesLabel`)" density="dense" :heading="4" class="cursor-help self-start" v-tooltip.left="rolesTip" />
+            <SectionHeader
+                :label="t(`agents.liveMetrics.rolesLabel`)"
+                density="dense"
+                :heading="4"
+                class="cursor-help self-start"
+                v-tooltip.left="rolesTip"
+            />
             <div
                 v-for="role in shownRoles"
                 :key="role.key"
@@ -144,7 +154,13 @@ const open = (id: string): void => {
         <!-- One conversation a row, its memory against the heaviest's and its CPU beside it; tinted when it holds a
              quarter of the box. Its title opens it; its whole reading is on hover. -->
         <div v-if="readout.sessions.length > 0" role="group" data-section="sessions" class="flex w-80 max-w-full shrink-0 flex-col gap-1.5">
-            <SectionHeader :label="t(`agents.liveMetrics.sessionsLabel`)" density="dense" :heading="4" class="cursor-help self-start" v-tooltip.left="sessionsTip" />
+            <SectionHeader
+                :label="t(`agents.liveMetrics.sessionsLabel`)"
+                density="dense"
+                :heading="4"
+                class="cursor-help self-start"
+                v-tooltip.left="sessionsTip"
+            />
             <div
                 v-for="session in shownSessions"
                 :key="session.key"

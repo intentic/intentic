@@ -11,7 +11,11 @@ const opened = jest.fn((_conversationId: string, _title?: string) => undefined);
 jest.mock("../../../models/fleet/useAgents", () => ({
     useAgents: () => ({
         agentById: (id: string) =>
-            id === `a1` ? { title: `Wire the checkout`, status: `running` } : id === `b2` ? { title: `Translate the notes`, status: `running` } : undefined,
+            id === `a1`
+                ? { title: `Wire the checkout`, status: `running` }
+                : id === `b2`
+                  ? { title: `Translate the notes`, status: `running` }
+                  : undefined,
     }),
 }));
 jest.mock("../../../models/fleet/useAgents-actions", () => ({ openById: opened }));
@@ -19,7 +23,7 @@ jest.mock("../../../models/fleet/useAgents-actions", () => ({ openById: opened }
 const { default: SessionMetrics } = await import("./SessionMetrics.vue");
 const { default: SandboxMetricsSummary } = await import("./SandboxMetricsSummary.vue");
 const { default: SandboxMetricsDetails } = await import("./SandboxMetricsDetails.vue");
-const { LIVE_METRICS_KEY } = await import("../../../models/sandbox/liveMetrics");
+const { CARD_METRICS_KEY, cardUsages, LIVE_METRICS_KEY, runCardKey } = await import("../../../models/sandbox/liveMetrics");
 
 const GIB = 2 ** 30;
 const MIB = 2 ** 20;
@@ -62,7 +66,18 @@ const reading = (patch: { sandbox?: Partial<SandboxMetrics[`sandbox`]>; daemon?:
 
 let app: App | undefined;
 // Icon and v-tooltip are registered app-wide by installUi; stand-ins keep the whole UI plugin out.
-const mount = (component: Component, props: Record<string, unknown>, provided?: SandboxMetrics): HTMLElement => {
+// `grouped` folds a reading's conversations into the cards the board draws them under (`cardOf`, by conversation), as
+// the desktop shell's CARD_METRICS_KEY does.
+const mount = (
+    component: Component,
+    props: Record<string, unknown>,
+    provided?: SandboxMetrics,
+    grouped?: {
+        readonly from: SandboxMetrics;
+        readonly cardOf: Record<string, string>;
+        readonly runs?: Record<string, { title: string; opens: string | undefined }>;
+    },
+): HTMLElement => {
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(component, props) });
@@ -77,6 +92,15 @@ const mount = (component: Component, props: Record<string, unknown>, provided?: 
         app.provide(
             LIVE_METRICS_KEY,
             computed(() => provided),
+        );
+    }
+    if (grouped !== undefined) {
+        app.provide(
+            CARD_METRICS_KEY,
+            computed(() => ({
+                usage: cardUsages(grouped.from.sessions, (id) => grouped.cardOf[id] ?? id),
+                runs: new Map(Object.entries(grouped.runs ?? {})),
+            })),
         );
     }
     app.mount(el);
@@ -118,14 +142,14 @@ const termsOf = (el: HTMLElement, section = `figures`): string[] =>
 describe("a card's figure", () => {
     // One figure in the card's stats row, memory first since memory is what runs out; the whole reading is its hover.
     it("says what the conversation's processes hold and use, with the whole reading on hover", () => {
-        const figure = mount(SessionMetrics, { conversationId: `a1` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
+        const figure = mount(SessionMetrics, { card: `a1` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
         expect(figure.textContent?.trim()).toBe(`412 MiB · 37%`);
         expect(figure.dataset[`tip`]).toBe(`Session usage · CPU 37% · Process memory (RSS) 412 MiB · Processes 12 · 100% = 1 core`);
         expect(figure.classList.contains(`text-warning`)).toBe(false);
     });
 
     it("leaves CPU out of a first reading rather than guessing it", () => {
-        const figure = mount(SessionMetrics, { conversationId: `fresh` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
+        const figure = mount(SessionMetrics, { card: `fresh` }, reading()).querySelector<HTMLElement>(`[data-session-metrics]`)!;
         expect(figure.textContent?.trim()).toBe(`40 MiB`);
         expect(figure.dataset[`tip`]?.startsWith(`Session usage · Process memory (RSS) 40 MiB · Processes 1 · `)).toBe(true);
     });
@@ -134,7 +158,7 @@ describe("a card's figure", () => {
     it("tints a conversation holding a quarter of the sandbox's memory, and none holding less", () => {
         const holding = (rssBytes: number): boolean => {
             const metrics = { ...reading(), sessions: { a1: { processes: 3, rssBytes, cpuPercent: 80 } } };
-            const tinted = mount(SessionMetrics, { conversationId: `a1` }, metrics).querySelector(`[data-session-metrics]`)!.classList.contains(`text-warning`);
+            const tinted = mount(SessionMetrics, { card: `a1` }, metrics).querySelector(`[data-session-metrics]`)!.classList.contains(`text-warning`);
             app?.unmount();
             app = undefined;
             document.body.innerHTML = ``;
@@ -143,10 +167,33 @@ describe("a card's figure", () => {
         expect([holding(4 * GIB), holding(4 * GIB - 1)]).toEqual([true, false]);
     });
 
-    it("draws nothing for a conversation with nothing running, or on a card the board did not provide a reading to", () => {
-        expect(mount(SessionMetrics, { conversationId: `idle` }, reading()).textContent).toBe(``);
+    // The board draws a family as one card, so the card says what the family holds: its children's processes too.
+    it("counts the sessions grouped under the card, and says how much of it they hold", () => {
+        const metrics = {
+            ...reading(),
+            sessions: { a1: { processes: 2, rssBytes: 300 * MIB, cpuPercent: 1.2 }, c1: { processes: 5, rssBytes: 900 * MIB, cpuPercent: 80 } },
+        };
+        const figure = mount(SessionMetrics, { card: `a1` }, metrics, { from: metrics, cardOf: { c1: `a1` } }).querySelector<HTMLElement>(
+            `[data-session-metrics]`,
+        )!;
+        expect(figure.textContent?.trim()).toBe(`1.2 GiB · 81%`);
+        expect(figure.dataset[`tip`]).toBe(
+            `Session usage · CPU 81% · Process memory (RSS) 1.2 GiB · Processes 7 · Grouped sessions 1 · 900 MiB · 100% = 1 core`,
+        );
         app?.unmount();
-        expect(mount(SessionMetrics, { conversationId: `a1` }).textContent).toBe(``);
+        // A card whose own conversation holds nothing still says what its working children hold.
+        const idle = { ...reading(), sessions: { c1: { processes: 5, rssBytes: 900 * MIB, cpuPercent: 80 } } };
+        expect(mount(SessionMetrics, { card: `a1` }, idle, { from: idle, cardOf: { c1: `a1` } }).textContent?.trim()).toBe(`900 MiB · 80%`);
+        app?.unmount();
+        expect(mount(SessionMetrics, { card: runCardKey(`r1`) }, idle, { from: idle, cardOf: { c1: runCardKey(`r1`) } }).textContent?.trim()).toBe(
+            `900 MiB · 80%`,
+        );
+    });
+
+    it("draws nothing for a conversation with nothing running, or on a card the board did not provide a reading to", () => {
+        expect(mount(SessionMetrics, { card: `idle` }, reading()).textContent).toBe(``);
+        app?.unmount();
+        expect(mount(SessionMetrics, { card: `a1` }).textContent).toBe(``);
     });
 });
 
@@ -333,7 +380,9 @@ describe("the sandbox panel", () => {
         expect(wordsOf(el.querySelector(`[data-section="sessions"] h4`)!)).toBe(`Process memory by session`);
         expect(figuresOf(el, `sessions`)).toEqual([`Translate the notes 1.3 GiB 179%`, `Wire the checkout 412 MiB 37%`, `fresh 40 MiB –`]);
         const rows = [...el.querySelectorAll<HTMLElement>(`[data-section="sessions"] [data-figure]`)];
-        expect(rows[0]!.querySelector<HTMLElement>(`button`)!.dataset[`tip`]).toBe(`Session usage · CPU 179% · Process memory (RSS) 1.3 GiB · Processes 27 · 100% = 1 core`);
+        expect(rows[0]!.querySelector<HTMLElement>(`button`)!.dataset[`tip`]).toBe(
+            `Session usage · CPU 179% · Process memory (RSS) 1.3 GiB · Processes 27 · 100% = 1 core`,
+        );
 
         rows[1]!.querySelector<HTMLButtonElement>(`button`)!.click();
         await nextTick();
@@ -343,11 +392,36 @@ describe("the sandbox panel", () => {
         expect(opened).toHaveBeenLastCalledWith(`fresh`, undefined);
     });
 
+    it("lists a family once, under its card, and a run under its name, opening one of its steps", async () => {
+        const metrics = {
+            ...reading(),
+            sessions: {
+                a1: { processes: 2, rssBytes: 300 * MIB, cpuPercent: 1 },
+                c1: { processes: 5, rssBytes: 900 * MIB, cpuPercent: 80 },
+                s1: { processes: 3, rssBytes: 200 * MIB, cpuPercent: 10 },
+            },
+        };
+        const el = mount(SandboxMetricsDetails, { metrics }, undefined, {
+            from: metrics,
+            cardOf: { c1: `a1`, s1: runCardKey(`r1`) },
+            runs: { [runCardKey(`r1`)]: { title: `Nightly review`, opens: `s1` } },
+        });
+        expect(figuresOf(el, `sessions`)).toEqual([`Wire the checkout 1.2 GiB 81%`, `Nightly review 200 MiB 10%`]);
+        [...el.querySelectorAll<HTMLElement>(`[data-section="sessions"] [data-figure] button`)][1]!.click();
+        await nextTick();
+        expect(opened).toHaveBeenCalledWith(`s1`, undefined);
+    });
+
     it("tints a session holding a quarter of the sandbox's memory in the list too", () => {
         const el = mount(SandboxMetricsDetails, {
-            metrics: { ...reading(), sessions: { b2: { processes: 30, rssBytes: 5 * GIB, cpuPercent: 250 }, a1: { processes: 12, rssBytes: 412 * MIB } } },
+            metrics: {
+                ...reading(),
+                sessions: { b2: { processes: 30, rssBytes: 5 * GIB, cpuPercent: 250 }, a1: { processes: 12, rssBytes: 412 * MIB } },
+            },
         });
-        const values = [...el.querySelectorAll(`[data-section="sessions"] [data-figure]`)].map((row) => row.querySelector(`.text-warning`)?.textContent?.trim());
+        const values = [...el.querySelectorAll(`[data-section="sessions"] [data-figure]`)].map((row) =>
+            row.querySelector(`.text-warning`)?.textContent?.trim(),
+        );
         expect(values).toEqual([`5.0 GiB`, undefined]);
     });
 

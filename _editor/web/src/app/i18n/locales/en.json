@@ -513,7 +513,7 @@
             "kernelLabel": "Kernel memory",
             "inactiveCacheLabel": "Inactive cache (excluded)",
             "rssLabel": "Process memory (RSS)",
-            "sessionsNote": "Another grouping of the same processes, not additional memory. CPU: 100% = 1 core.",
+            "sessionsNote": "Child sessions and a run's steps count with the card they are grouped under. Another grouping of the same processes, not additional memory. CPU: 100% = 1 core.",
             "minutes": "{count} min",
             "pressToOpen": "Press to open",
             "pressureNote": "Above zero: queuing",
@@ -564,7 +564,9 @@
             "swapFullNote": "Nearly full: counts as used",
             "swapNote": "Growing means low memory",
             "tintAt": "≥ {percent} memory",
-            "tinted": "Tinted"
+            "tinted": "Tinted",
+            "groupedLabel": "Grouped sessions",
+            "groupedValue": "{count} · {size}"
         },
         "buildIdeas": {
             "pageMyBusiness": "A page for my business",

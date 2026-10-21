@@ -2,28 +2,31 @@
 import { formatBinaryBytes, formatPercent } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, inject } from "vue";
-import { LIVE_METRICS_KEY, sessionHeavy } from "../../../models/sandbox/liveMetrics";
+import { CARD_METRICS_KEY, cardMetricsOf, LIVE_METRICS_KEY, sessionHeavy } from "../../../models/sandbox/liveMetrics";
 import type { Tip } from "@intentic/ui";
 import { sessionTip } from "./sandboxFigures";
 
-// One conversation's share of the board's geek metrics, as one figure in its card's stats row beside its diff and cost:
-// its memory and its CPU, the whole reading (processes too) on hover, tinted when it holds a quarter of the sandbox. A
-// row of its own on every working card was the loudest line on the board; where the memory went across all of them is
-// the metrics panel's list (SandboxMetricsDetails.vue). Draws nothing unless the board provides a reading that names
-// this conversation, which is also why a card never starts a read of its own.
+// One card's share of the board's geek metrics, as one figure in its stats row beside its diff and cost: the memory and
+// CPU of its conversation and of everything grouped under it (child sessions, a run's steps: liveMetrics.cardUsages),
+// the whole reading (processes too) on hover, tinted when it holds a quarter of the sandbox. A row of its own on every
+// working card was the loudest line on the board; where the memory went across all of them is the metrics panel's list
+// (SandboxMetricsDetails.vue). Draws nothing unless the board provides a reading that names this card, which is also
+// why a card never starts a read of its own.
 
 const t = useT();
 
 const props = defineProps<{
-    conversationId: string;
+    // The card's key: its conversation's id, or a run's runCardKey.
+    card: string;
 }>();
 
 const metrics = inject(LIVE_METRICS_KEY, undefined);
+const cards = inject(CARD_METRICS_KEY, undefined);
 
 // Strings and a flag, so this leaf redraws only when what it says changes rather than on every reading the board takes.
 const figure = computed<{ readonly short: string; readonly hint: Tip; readonly heavy: boolean } | undefined>(() => {
     const reading = metrics?.value;
-    const session = reading?.sessions[props.conversationId];
+    const session = reading === undefined ? undefined : cardMetricsOf(reading, cards?.value).usage.get(props.card);
     if (reading === undefined || session === undefined) {
         return undefined;
     }

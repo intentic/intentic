@@ -609,7 +609,7 @@
             "kernelLabel": "Pamięć jądra",
             "inactiveCacheLabel": "Nieaktywny cache (wyłączony)",
             "rssLabel": "Pamięć procesów (RSS)",
-            "sessionsNote": "Inne grupowanie tych samych procesów, nie dodatkowa pamięć. CPU: 100% = 1 rdzeń.",
+            "sessionsNote": "Sesje podrzędne i kroki przebiegu liczą się do karty, pod którą są zgrupowane. Inne grupowanie tych samych procesów, nie dodatkowa pamięć. CPU: 100% = 1 rdzeń.",
             "minutes": "{count} min",
             "pressToOpen": "Naciśnij, by otworzyć",
             "pressureLabel": "Presja",
@@ -646,7 +646,9 @@
             "swapFullNote": "Niemal pełny: liczy się jako zajęta",
             "swapNote": "Rośnie: brakuje pamięci",
             "tintAt": "≥ {percent} pamięci",
-            "tinted": "Wyróżnione"
+            "tinted": "Wyróżnione",
+            "groupedLabel": "Sesje zgrupowane",
+            "groupedValue": "{count} · {size}"
         },
         "ownerMark": {
             "controlToken": "Token sterujący",

@@ -6,6 +6,8 @@ import { laneOfRun, runningTitles, spentOn } from "../../../../models/fleet/useW
 import { liveSessions } from "../../../../models/conversations/run/chatRun";
 import { useT } from "@intentic/ui/i18n";
 import { useSelectionBlade } from "../../../../models/fleet/board/selectionBlade";
+import { runCardKey } from "../../../../models/sandbox/liveMetrics";
+import SessionMetrics from "../../metrics/SessionMetrics.vue";
 
 // A workflow run's row on the board, an agent card's sibling, not one: same shell (radius, border, lane bar, hover)
 // since it shares the column, but no provider/branch/worktree/transcript, so Land/Archive/diff don't apply.
@@ -91,8 +93,9 @@ const TONE: Record<WorkflowRun["state"], string> = {
                 class="min-w-0 flex-1 rounded-sm text-left font-semibold text-content"
                 :class="bigLane ? 'line-clamp-2 break-words text-sm leading-snug' : 'truncate text-xs'"
                 @click.stop="emit(`open`)"
-                >{{ run.workflow.name }}</button
             >
+                {{ run.workflow.name }}
+            </button>
             <!-- Waiting runs use the agent card's attention chip. -->
             <span
                 v-if="needsYou"
@@ -163,6 +166,8 @@ const TONE: Record<WorkflowRun["state"], string> = {
             <span :class="TONE[run.state]">{{ run.state === `running` ? t(`agents.workflowRunCard.live`, { count: live.length }) : run.state }}</span>
             <span>{{ t(`agents.workflowRunCard.steps`, { done, count: run.steps.length }) }}</span>
             <span v-if="spent > 0">{{ formatMoney(spent) }}</span>
+            <!-- Opt-in geek metrics, as an agent card draws them: what every step's processes hold now, together. -->
+            <SessionMetrics :card="runCardKey(run.runId)" />
             <!-- Archived rows date by filing, not start, like the agent card: "when" means "when I put it away". -->
             <span v-if="run.archivedAt !== undefined">{{ t(`agents.workflowRunCard.archived`, { archivedAt: timeAgo(run.archivedAt) }) }}</span>
             <span v-else>{{ timeAgo(run.startedAt) }}</span>

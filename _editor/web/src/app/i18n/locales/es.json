@@ -473,7 +473,7 @@
         },
         "liveMetrics": {
             "sessionsLabel": "Memoria de procesos por sesión",
-            "sessionsNote": "Otra agrupación de los mismos procesos, no memoria adicional. CPU: 100 % = 1 núcleo.",
+            "sessionsNote": "Las sesiones hijas y los pasos de una ejecución cuentan con la tarjeta bajo la que se agrupan. Otra agrupación de los mismos procesos, no memoria adicional. CPU: 100 % = 1 núcleo.",
             "accountingLabel": "Desglose de memoria",
             "accountingNote": "Medidos aparte; la suma puede variar.",
             "anonymousLabel": "Memoria anónima",
@@ -531,7 +531,9 @@
             "swapFullNote": "Casi lleno: cuenta como usado",
             "swapNote": "Si crece, falta memoria",
             "tintAt": "≥ {percent} de memoria",
-            "tinted": "Resaltado"
+            "tinted": "Resaltado",
+            "groupedLabel": "Sesiones agrupadas",
+            "groupedValue": "{count} · {size}"
         },
         "ownerMark": {
             "controlToken": "Token de control",

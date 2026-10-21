@@ -13,7 +13,8 @@ import { askForAttention } from "../models/fleet/board/attentionOutside";
 import { useRole } from "../client/sandbox/useRole";
 import { useTerminalPanel } from "../models/terminal/useTerminalPanel";
 import { useTerminalFloating } from "../features/terminal/terminalFloating";
-import { LIVE_METRICS_KEY, showLiveMetrics, useLiveMetrics } from "../models/sandbox/liveMetrics";
+import { CARD_METRICS_KEY, LIVE_METRICS_KEY, showLiveMetrics, useLiveMetrics } from "../models/sandbox/liveMetrics";
+import { useCardMetrics } from "../models/fleet/board/metricsCards";
 import StatusBar from "../features/agents/status-bar/StatusBar.vue";
 import { openPanel } from "../features/agents/status-bar/statusBarState";
 import RuntimeChips from "./status-bar/RuntimeChips.vue";
@@ -300,12 +301,10 @@ const moreLabel = computed(() =>
         ? t(`shell.shellDesktop.moreSections`)
         : t(`shell.shellDesktop.moreSectionsOffRail`, { count: moreTiles.value.length }, moreTiles.value.length),
 );
-const moreTip = computed(
-    (): Tip => ({
-        title: t(`shell.shellDesktop.moreSections`),
-        rows: moreTiles.value.length === 0 ? [] : [{ label: t(`shell.shellDesktop.offRail`), value: moreTiles.value.length }],
-    }),
-);
+const moreTip = computed((): Tip => ({
+    title: t(`shell.shellDesktop.moreSections`),
+    rows: moreTiles.value.length === 0 ? [] : [{ label: t(`shell.shellDesktop.offRail`), value: moreTiles.value.length }],
+}));
 const dismissMore = (event: MouseEvent): void => {
     if (!browserOwnsClick(event)) {
         moreOpen.value = false;
@@ -353,6 +352,8 @@ watch(
 // reading serves both. Off, nothing is measured at all (liveMetrics.ts).
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
+// The same reading folded into the board's cards, so a card and the panel's list say what a whole family holds.
+provide(CARD_METRICS_KEY, useCardMetrics(liveMetrics));
 // The runtime chips, read here so the bar knows whether it has anything to say: a developer's terminal chip keeps it
 // drawn for good, but a maker's chips all come and go, and with no chip and no metrics the bar would be an empty strip.
 const runtimeChips = useRuntimeChips();
@@ -433,7 +434,8 @@ useGettingStarted();
                             class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg text-muted hover:text-content"
                             :class="{
                                 'ui-row-select-on text-link': isNavActive(tile.to),
-                                'opacity-40 outline-1 -outline-offset-1 outline-dashed outline-primary-500': tile.id === `chat` && chatDrag.dragging.value,
+                                'opacity-40 outline-1 -outline-offset-1 outline-dashed outline-primary-500':
+                                    tile.id === `chat` && chatDrag.dragging.value,
                             }"
                             :draggable="chatCarriable(tile) ? `false` : undefined"
                             :aria-label="railTileLabel(tile)"
@@ -579,10 +581,7 @@ useGettingStarted();
             <RouterLink
                 v-else-if="!isGuest"
                 to="/capabilities"
-                :class="[
-                    ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`),
-                    { 'ui-row-select-on text-link': isNavActive('/capabilities') },
-                ]"
+                :class="[ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`), { 'ui-row-select-on text-link': isNavActive('/capabilities') }]"
                 :aria-label="t(`shell.words.addCapability`)"
                 v-tooltip.right="t(`shell.words.addCapability`)"
             >

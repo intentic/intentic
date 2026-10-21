@@ -3,7 +3,17 @@ import type { Tip } from "@intentic/ui";
 import { formatBinaryBytes, formatFixed, formatPercent } from "@intentic/ui/format";
 import { type TypedT, useT } from "@intentic/ui/i18n";
 import { computed, type ComputedRef } from "vue";
-import { heaviestRoles, heaviestSessions, NEAR_LIMIT, PRESSURE_STALLING, PRESSURE_WORTH_SHOWING, sessionHeavy } from "../../../models/sandbox/liveMetrics";
+import {
+    type CardMetrics,
+    type CardUsage,
+    cardMetricsOf,
+    heaviestRoles,
+    heaviestSessions,
+    NEAR_LIMIT,
+    PRESSURE_STALLING,
+    PRESSURE_WORTH_SHOWING,
+    sessionHeavy,
+} from "../../../models/sandbox/liveMetrics";
 
 // The board's geek metrics as the places that draw them read them: three gauges (CPU, memory, disk: the figures that run
 // out) for the quiet bar at the foot of the board, every other figure for the panel it opens, and one conversation's
@@ -42,7 +52,7 @@ export interface RoleRow {
 }
 
 export interface SessionRow {
-    // The conversation's id, which its title is looked up by where the row is drawn.
+    // The card's key (a conversation's id, or a run's runCardKey), which its title is looked up by where the row is drawn.
     readonly key: string;
     // Its memory, "1.3 GiB", and its CPU, "179%", undefined on a first reading.
     readonly value: string;
@@ -117,18 +127,24 @@ const SESSIONS_SHOWN = 5;
 export const splitSessions = <Row>(rows: readonly Row[]): [Row[], Row[]] =>
     rows.length - SESSIONS_SHOWN < 2 ? [[...rows], []] : [rows.slice(0, SESSIONS_SHOWN), rows.slice(SESSIONS_SHOWN)];
 
-// One conversation's reading as a card, as its card's hover and the panel's row show it: CPU where there is a reading of
-// it (a first reading has none, and its row is dropped), then memory, then how many processes. In the words of the
-// caller's own `t`.
-export const sessionTip = (
-    t: TypedT,
-    session: { readonly cpuPercent?: number | undefined; readonly rssBytes: number; readonly processes: number },
-): Tip => ({
+// One card's reading as a tip, as its card's hover and the panel's row show it: CPU where there is a reading of it (a
+// first reading has none, and its row is dropped), then memory, then how many processes, and, for a card with sessions
+// grouped under it, how much of that they hold, since the figure is the whole family's. In the words of the caller's own
+// `t`.
+export const sessionTip = (t: TypedT, card: CardUsage): Tip => ({
     title: t(`agents.liveMetrics.sessionUsage`),
     rows: [
-        { label: t(`agents.liveMetrics.cpuLabel`), value: session.cpuPercent === undefined ? `` : formatPercent(session.cpuPercent) },
-        { label: t(`agents.liveMetrics.rssLabel`), value: formatBinaryBytes(session.rssBytes) },
-        { label: t(`agents.liveMetrics.processesLabel`), value: session.processes },
+        { label: t(`agents.liveMetrics.cpuLabel`), value: card.cpuPercent === undefined ? `` : formatPercent(card.cpuPercent) },
+        { label: t(`agents.liveMetrics.rssLabel`), value: formatBinaryBytes(card.rssBytes) },
+        { label: t(`agents.liveMetrics.processesLabel`), value: card.processes },
+        ...(card.grouped === 0
+            ? []
+            : [
+                  {
+                      label: t(`agents.liveMetrics.groupedLabel`),
+                      value: t(`agents.liveMetrics.groupedValue`, { count: card.grouped, size: formatBinaryBytes(card.groupedRssBytes) }),
+                  },
+              ]),
     ],
     note: t(`agents.liveMetrics.cpuPerCore`),
 });
@@ -162,7 +178,8 @@ export const memoryRowsOf = (t: TypedT, sandbox: SandboxMetrics[`sandbox`]): Mem
     });
 };
 
-export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<SandboxReadout> {
+// `cards` is the reading folded into the board's cards (CARD_METRICS_KEY); without it every conversation is its own row.
+export function useSandboxReadout(metrics: () => SandboxMetrics, cards?: () => CardMetrics | undefined): ComputedRef<SandboxReadout> {
     const t = useT();
 
     const gaugesOf = ({ sandbox }: SandboxMetrics): Gauge[] => {
@@ -315,8 +332,8 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
         }));
     };
 
-    const sessionsOf = ({ sessions, sandbox }: SandboxMetrics): SessionRow[] => {
-        const held = heaviestSessions(sessions);
+    const sessionsOf = (reading: SandboxMetrics): SessionRow[] => {
+        const held = heaviestSessions(cardMetricsOf(reading, cards?.()).usage);
         const heaviest = held[0]?.rssBytes ?? 0;
         return held.map((session) => ({
             key: session.id,
@@ -324,7 +341,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics): ComputedRef<Sa
             cpu: session.cpuPercent === undefined ? undefined : formatPercent(session.cpuPercent),
             bytes: session.rssBytes,
             share: heaviest === 0 ? 0 : session.rssBytes / heaviest,
-            heavy: sessionHeavy(session.rssBytes, sandbox),
+            heavy: sessionHeavy(session.rssBytes, reading.sandbox),
             tip: sessionTip(t, session),
         }));
     };
