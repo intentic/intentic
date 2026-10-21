@@ -259,12 +259,14 @@ flowchart LR
   button opens in its own window, keeping this one's unsaved edits. A document's own window takes no drop. A refused call says the feature is not there for a folder rather than
   asking for an update, and a recording plays from its bytes over `/workspace/raw` where no media ticket is minted.
   `local/` holds the window's own parts: its shell (`LocalShell.vue`, the sandbox shell's rail from
-  `shell/rail/iconRail.css`, holding the place chip `LocalPlaceSwitcher.vue`, Files with the folder menu on the folder's
+  `shell/rail/iconRail.css`, holding the workspace's own sandbox switcher standing on the folder (`features/sandbox/gates/SandboxSwitcher.vue`
+  with `switcherPlace.ts`: the account's sandboxes come through the app, so a row is opened, removed or left as in the
+  workspace, and the remove dialog's door is this computer through the app), Files with the folder menu on the folder's
   name (`LocalFolderMenu.vue`: open a folder, and the folders opened lately; one opened in the window's place is moved
   to in place by `folderSwitch.ts`, as the editor's own sandbox switch to `local-<id>`, crossfaded with no reload), the views the app adds, and at
   the foot the sandbox shell's own account control `shell/AccountPanel.vue`, or the sign-in `LocalAccountTile.vue`
-  before there is an account), Ctrl+P, Ctrl+Shift+F, Ctrl+W (by default: they follow the keymap's overrides for the workspace commands they stand
-  for) and Alt+1–9 (`localKeys.ts`), the close guard for unsaved edits, held by the shell so a close is asked about
+  before there is an account), the workspace's own keyboard dispatcher over the one command registry (`useKeybindings`:
+  Ctrl+P, Ctrl+Shift+F and Ctrl+W bound by Files, Alt+1–9 by the switcher, Alt+↑/↓ over the rail, every one in the keymap), the close guard for unsaved edits, held by the shell so a close is asked about
   from any screen of the window (`unsaved/useUnsavedGuard.ts`), a project folder's Bring back section (`bring-back/LocalBringBack.vue`, drawn only when a check the window runs on its own,
   on arrival and on focus, finds changes to bring back), and the way to a folder's own
   sandbox: one page, `setup/LocalSandboxSetup.vue` at `/sandbox-setup`, worded by `setup/setupView.ts` and driven by

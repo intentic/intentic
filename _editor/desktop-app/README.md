@@ -166,8 +166,19 @@ flowchart LR
   (`src-tauri/src/account.rs`) reads it there, sends the call with the workspace's origin (Better Auth's check on an
   auth call that changes something), and writes back whatever cookie the answer sets, so the session rolls forward.
   Only a short list may be asked, checked in Rust: `get-session`, `update-user`, `sign-out`, the hosted plan and
-  its checkout and portal, the tokens, and `me/export`. Deleting the account is not on it, since it must first take
-  the account's access off every sandbox's daemon, and a local window knows only its own folder. A sign-out also
+  its checkout and portal, the tokens, `me/export`, and the account's sandboxes as the switcher reads and tidies them
+  (`sandbox/list`, `delete`, `leave`, `trash`, `restore`, `hosted-rollback`). Deleting the account is not on it, since
+  it must first take the account's access off every sandbox's daemon, and a local window reaches no daemon but its
+  folder's.
+
+  _(2026-10-21) The sandbox calls joined the list so a local window draws the workspace's own switcher
+  (`SandboxSwitcher.vue`) instead of a place chip of its own that could only list what `roster.json` held: a sandbox
+  can be removed, left or rolled back from This computer as from the workspace, through the same dialog. In the page
+  (`local/platform.ts`), the sandbox list is the folder's own row at once on a window's first ask, the boot guard's, so
+  no first paint waits on the network, and the folder's row followed by the account's on every later ask. The remove
+  dialog's door onto this computer is the app's own `ic` (`machine` in `src/host.ts`), since every sandbox's daemon
+  refuses this page's origin off the loopback port. As before, only the app's bundle can call the relay: the
+  documents a local window draws run no script there._ A sign-out also
   deletes the session from the store, empties `roster.json` and reloads the workspace window, so both faces are signed
   out together. In the page, `src/account.ts` asks for the account (the host's `account`, `updateAccount`,
   `signOut`) and `local/platform.ts` routes the plan, token and export calls of the editor's API client; who is
@@ -679,7 +690,7 @@ every link and drops what an outside sender may not ask for. The editor builds t
 | `notice?do=show&key=…&kind=asks\|finished&title=…[&body=…][&path=…][&silent=1]` | app windows | Puts up one of the system's notifications, replacing the one under the same `key`. `path` is a workspace route (`/?sandbox=<id>&conversation=<id>`) a press opens, `silent` asks for no sound. `do=withdraw&key=…` takes one down, `do=clear` all of them, and `do=status` asks whether the system shows them at all (answered as `intentic-desktop-notices`). A line that is empty, too long or holds a control character, or a path that is not rooted or starts `//`, drops the link. |
 | `wake?state=off\|listening\|paused\|blocked\|error&word=…[&until=…]` | the workspace window | What the workspace page's wake-word listening is doing, whenever that changes: kept for the tray's rows, and whether it is wanted (any state but `off`) and the word written to `wake.json` for the next launch. `word` is one line of 1 to 40 characters; `until` (epoch milliseconds, a positive whole number) rides only with `paused`. A value out of shape drops the link. |
 | `notice?do=open&token=…` | anywhere | A press on one of the app's notifications, as Windows delivers it through the OS: the workspace at that notification's route. A token this run did not issue, letters and digits only, opens the workspace as it is. |
-| `roster?list=<JSON>[&account=<JSON>]` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`) and who is signed in (`email`, `name`, `image`), kept in `roster.json` for the place chip and the rail's foot; `[]` and no account after a sign-out. One value out of shape drops the link: an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word, an account without an address, an avatar that is not an `https` address. |
+| `roster?list=<JSON>[&account=<JSON>]` | app windows | The account's sandboxes as the workspace's switcher lists them (`id`, `name`, `place`, `shared`) and who is signed in (`email`, `name`, `image`), kept in `roster.json` for the rail's foot and the app's own reads (a local window's switcher asks the platform itself, through `account_relay`); `[]` and no account after a sign-out. One value out of shape drops the link: an id that is not a plain token, a name empty, over 200 characters or holding a control character, a place that is not a lowercase word, an account without an address, an avatar that is not an `https` address. |
 | `window?do=…` | app and local windows | The editor's own title bar: `ready`, `minimize`, `maximize`, `close[&confirmed=1]`, `dirty&value=0\|1`, `drag`, `raise`, `fit`, `mode`. |
 | `local?do=…` | local windows only | `open-folder` and `open-file` in the system dialog, `reveal[&path=…]` an entry of the window's own folder, `sandbox` (the folder's sandbox opened, or the window asked to put up its dialog), `ask&path=…`, and the project's `changes`, `bring-back[&paths=<JSON array>]`, `restore&point=…`, `direction&value=to-sandbox\|both`. |
 

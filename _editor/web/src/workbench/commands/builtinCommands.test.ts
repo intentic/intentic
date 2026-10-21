@@ -36,7 +36,7 @@ describe(`the keymap's commands`, () => {
 
     it(`lists a mounted command once, under the live title its surface gives it, and runs that surface's handler`, async () => {
         const ran: string[] = [];
-        registerBuiltin(`chat.toggleFloating`, () => ran.push(`toggled`), () => `Dock back`);
+        registerBuiltin(`chat.toggleFloating`, () => ran.push(`toggled`), { title: () => `Dock back` });
         await executeCommand(`chat.toggleFloating`);
         const rows = keymapCommands.value.filter((entry) => entry.command === `chat.toggleFloating`);
         expect({ rows: rows.map((entry) => [entry.title, entry.keybinding, entry.when]), ran }).toEqual({

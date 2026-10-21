@@ -41,12 +41,12 @@ export function useShellCommands(): void {
             // Both terminal commands no-op below maintainer, where the daemon refuses the socket.
             registerBuiltin(`terminal.toggle`, () => (canShip.value ? terminal.toggle() : undefined)),
             registerBuiltin(`terminal.new`, () => (canShip.value ? terminal.spawnShell() : undefined)),
-            registerBuiltin(`chat.toggleFloating`, () => toggleChatFloating(), () => dockWord(chat.floats.value)),
+            registerBuiltin(`chat.toggleFloating`, () => toggleChatFloating(), { title: () => dockWord(chat.floats.value) }),
             // In-app counterpart to the pop-out: rail vs. side column.
             registerBuiltin(
                 `chat.toggleHome`,
                 () => toggleChatHome(router),
-                () => (chatOnRail.value ? t(`shell.useShellCommands.dockBackToSide`) : t(`shell.useShellCommands.dockToRail`)),
+                { title: () => (chatOnRail.value ? t(`shell.useShellCommands.dockBackToSide`) : t(`shell.useShellCommands.dockToRail`)) },
             ),
             registerBuiltin(
                 `terminal.toggleFloating`,
@@ -55,10 +55,10 @@ export function useShellCommands(): void {
                     terminal.setOpen(true);
                     terminalFloat.toggle();
                 },
-                () => dockWord(terminalFloat.floats.value),
+                { title: () => dockWord(terminalFloat.floats.value) },
             ),
             // The jump to its area is a destination (useNavigationCommands), like every other area's.
-            registerBuiltin(`browsers.toggleFloating`, () => toggleBrowsersFloating(), () => dockWord(browsersFloat.floats.value)),
+            registerBuiltin(`browsers.toggleFloating`, () => toggleBrowsersFloating(), { title: () => dockWord(browsersFloat.floats.value) }),
         ];
     });
 

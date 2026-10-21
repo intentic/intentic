@@ -1,4 +1,5 @@
-import type { apiContract, SandboxSummary, User } from "@intentic/api-contract";
+import { parseJsonWith } from "@intentic/base/json";
+import { apiContract, type SandboxSummary, type User } from "@intentic/api-contract";
 import { type LocalFace, localFace, localSandboxId } from "@intentic/web/local";
 import type { AccountAnswer, AccountAsk } from "../src/desktop";
 import { LOCAL_PLATFORM_ORIGIN } from "./origin";
@@ -83,10 +84,11 @@ export const platformAnswer = (face: LocalFace, url: URL): Response => {
     }
 };
 
-// THE ACCOUNT'S CALLS that Settings and the account menu make through the editor's API client: the plan and its
-// checkout (useHostedPlan, Billing), API tokens, the data export. They are not the folder's to answer, so the app sends
-// them on with the session the workspace signed in with (src-tauri/src/account.rs, whose list decides; this one only
-// routes). Who is signed in is not among them: this page's own session check stays the folder's placeholder above, and
+// THE ACCOUNT'S CALLS that Settings, the account menu and the sandbox switcher make through the editor's API client:
+// the plan and its checkout (useHostedPlan, Billing), API tokens, the data export, and the account's sandboxes as the
+// switcher removes, leaves, restores and rolls them back (SandboxSwitcher.vue, the same one the workspace draws). They
+// are not the folder's to answer, so the app sends them on with the session the workspace signed in with
+// (src-tauri/src/account.rs, whose list decides; this one only routes). The list itself is `accountList` below. Who is signed in is not among them: this page's own session check stays the folder's placeholder above, and
 // the shell asks for the account through its host (src/host.ts), so a platform that cannot be reached never holds the
 // window's first paint.
 const RELAYED: ReadonlySet<string> = new Set([
@@ -99,7 +101,37 @@ const RELAYED: ReadonlySet<string> = new Set([
     `/rpc/tokens/create`,
     `/rpc/tokens/revoke`,
     `/rpc/me/export`,
+    `/rpc/sandbox/delete`,
+    `/rpc/sandbox/leave`,
+    `/rpc/sandbox/trash`,
+    `/rpc/sandbox/restore`,
+    `/rpc/sandbox/hosted-rollback`,
 ]);
+
+const SANDBOX_LIST = `/rpc/sandbox/list`;
+type SandboxList = OutputOf<typeof apiContract.sandbox.list>;
+// The contract's own reader of the list, so a row the page takes in is a row the editor would have taken from the platform.
+const SANDBOX_LIST_SCHEMA = apiContract.sandbox.list[`~orpc`].outputSchema;
+
+// THE SANDBOX LIST: the folder's own row, which is the sandbox this window shows, and the account's sandboxes after it,
+// which its switcher lists, removes and opens the workspace on. The account's half is the platform's, through the app,
+// but never on a window's first ask: that one is the boot guard's (router/index.ts `requireSetup`), and a platform that
+// is slow or out of reach must not hold the first paint, so it is the folder alone, at once. Every later ask (the
+// switcher opening, a removal settling) goes to the platform, and anything short of its list (nobody signed in, no
+// network, an answer out of shape) is the folder alone again, as it was before the account was there to ask.
+const accountList = async (face: LocalFace, relay: PlatformRelay): Promise<Response> => {
+    const own = rowOf(face);
+    try {
+        const answer = await relay({ method: `GET`, path: SANDBOX_LIST });
+        const body = answer.status === 200 && SANDBOX_LIST_SCHEMA !== undefined ? parseJsonWith(answer.body, SANDBOX_LIST_SCHEMA) : undefined;
+        if (body !== undefined) {
+            return json<SandboxList>({ sandboxes: [own, ...body.sandboxes.filter((row) => row.id !== own.id)] });
+        }
+    } catch (error) {
+        console.warn(`[local] the account's sandboxes could not be listed:`, error);
+    }
+    return json<SandboxList>({ sandboxes: [own] });
+};
 
 export type PlatformRelay = (ask: AccountAsk) => Promise<AccountAnswer>;
 
@@ -123,6 +155,8 @@ const isRelayed = (url: URL, method: string): boolean => RELAYED.has(url.pathnam
 // carry them; every other request goes where it was going.
 export const installPlatform = (face: LocalFace, relay?: PlatformRelay): void => {
     const original = globalThis.fetch;
+    // The boot guard's ask comes first and is answered in the page (`accountList`).
+    let listedOnce = false;
     const passThrough = original.bind(globalThis);
     const routed = (...[input, init]: Parameters<typeof fetch>): Promise<Response> => {
         const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
@@ -131,6 +165,13 @@ export const installPlatform = (face: LocalFace, relay?: PlatformRelay): void =>
         }
         // The editor's API client asks with a Request and options beside it (`credentials`), which a new Request merges.
         const method = (init?.method ?? (input instanceof Request ? input.method : `GET`)).toUpperCase();
+        if (url.pathname === SANDBOX_LIST && relay !== undefined && method === `GET`) {
+            const first = !listedOnce;
+            listedOnce = true;
+            if (!first) {
+                return accountList(localFace() ?? face, relay);
+            }
+        }
         if (relay === undefined || !isRelayed(url, method)) {
             // The face the window wears now: another folder pointed at in its place is answered as the one sandbox.
             return Promise.resolve(platformAnswer(localFace() ?? face, url));

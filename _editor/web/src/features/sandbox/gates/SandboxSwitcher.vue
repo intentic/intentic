@@ -6,6 +6,7 @@ import {
     browserOwnsClick,
     Button,
     Modal,
+    Notice,
     SandboxLogo,
     SectionHeader,
     StatusBadge,
@@ -31,7 +32,9 @@ import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTre
 import { operationRunning } from "../../../workbench/operations/operations";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
+import { isLocalFolderRow } from "../../../app/environments/local";
 import { useAuth } from "../../../client/auth/useAuth";
+import { useFolderPlace } from "./switcherPlace";
 import { answerNote } from "./switcherRows";
 import { removalKey } from "./removal/removalPlan";
 import RemoveSandboxDialog from "./removal/RemoveSandboxDialog.vue";
@@ -46,6 +49,13 @@ import { useT } from "@intentic/ui/i18n";
 // not cost a press first. A pointer passing over raises nothing (the hover clock's dwell), the way across the rail
 // to a lower row keeps it up (useHoverMenu's corridor), and a press pins it. The sandboxes come first and always stand
 // in the same place, so the Nth one is the same reach every time.
+//
+// ONE SWITCHER FOR BOTH WINDOWS. The desktop app's window on a folder of this computer draws this same control at the
+// top of its rail (local/LocalShell.vue), standing on that folder rather than on a sandbox (switcherPlace.ts): the
+// account's sandboxes reach it through the app (its local/platform.ts), so picking, removing, leaving and rolling one
+// back are the same rows, chords and dialogs as here. What it leaves out is what a folder's window cannot read: other
+// sandboxes' daemons refuse its page (attention counts, "not answering"), and the sandbox hub is the workspace's.
+// Until 2026-10-21 it had a switcher of its own (LocalPlaceSwitcher.vue) that could list sandboxes and nothing else.
 //
 // PLACES ONLY. What the sandbox in use needs, what is worth knowing and setups never finished used to hang under the
 // list as three headed sections, with the badge for them on the logo; they turned a menu for picking a place into a
@@ -79,7 +89,9 @@ const placement = useSandboxPlacement();
 const switcherLabel = computed(() => {
     const name = sandbox.active.value?.name ?? t(`sandbox.sandboxSwitcher.sandboxes`);
     const status =
-        availability.value === `live` || availability.value === `stale` ? undefined : t(`sandbox.sandboxSwitcher.sandboxState`, { state: availabilityVisual.value.label.toLowerCase() });
+        availability.value === `live` || availability.value === `stale`
+            ? undefined
+            : t(`sandbox.sandboxSwitcher.sandboxState`, { state: availabilityVisual.value.label.toLowerCase() });
     return [name, placement.value?.detail, status, restarting.value].filter((part) => part !== undefined).join(` · `);
 });
 
@@ -90,7 +102,8 @@ const quiet = computed(() => availability.value === `live` || availability.value
 const connectionInkClass = computed(() => availabilityVisual.value.inkClass);
 const connectionLabel = computed(() => availabilityVisual.value.label.toLowerCase());
 
-const isActive = (option: SandboxSummary): boolean => option.id === sandbox.activeSandboxId.value;
+// A local window stands on its folder, so none of the account's sandboxes is the one on screen there.
+const isActive = (option: SandboxSummary): boolean => !local && option.id === sandbox.activeSandboxId.value;
 
 // Anchored rather than PrimeVue's Popover, so one overlay alone decides where a panel goes.
 const trigger = ref<HTMLButtonElement | null>(null);
@@ -98,13 +111,16 @@ const panel = ref<HTMLElement | null>(null);
 const menu = useHoverMenu(panel);
 const open = menu.open;
 const pressed = menu.pressed;
+// The local window's own half (switcherPlace.ts): opening a sandbox through the app, the sign-in, a failure by its row.
+const { folder, local, failure, openFromFolder, signedOut, signingIn, signIn, addSandbox: addFromFolder } = useFolderPlace(open);
 
 // Reads these counts only while the popover is open, since the control is mounted for the whole session; a second
 // open within the freshness window paints instantly from the store's last read. A pointer resting on the logo starts
 // the read before the dwell is out, so the counts are usually there by the time the panel is.
 let releaseBoxes: (() => void) | undefined;
+// Never from a local window, whose page those daemons refuse: every row would read as not answering.
 watch(
-    () => open.value || menu.hovering.value,
+    () => !local && (open.value || menu.hovering.value),
     (wanted) => {
         if (wanted) {
             releaseBoxes ??= watchOtherBoxes();
@@ -121,7 +137,8 @@ onUnmounted(() => {
 
 // A sandbox that never reported in has no daemon, so switching to it can only paint a connecting gate that never
 // resolves; those rows are unfinished errands on the getting-started ring, not places to switch to.
-const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
+// A local window's own folder is in the list too (it is the "sandbox" that window shows) and is not a place to switch to.
+const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value).filter((option) => !isLocalFolderRow(option.id)));
 
 // How much is waiting in every other sandbox; absent for the active row since its badge is already on the rail.
 // An unanswered box gets undefined, which draws nothing rather than a zero.
@@ -175,6 +192,10 @@ const placementTip = (option: SandboxSummary): Tip => {
 };
 
 const pick = (option: SandboxSummary): void => {
+    if (local) {
+        void openFromFolder(option.id);
+        return;
+    }
     open.value = false;
     sandbox.select(option.id);
 };
@@ -191,7 +212,7 @@ const dismiss = (event: MouseEvent): void => {
 // (the app's local shell). Offered only inside the app, whose workspace window this page then is; the app swaps the
 // two in one frame, so this list names every place the window can show. An app older than the local shell opens its
 // own card for the same link, which is this computer too.
-const inDesktopApp = desktopApp() !== undefined;
+const inDesktopApp = desktopApp() !== undefined && !local;
 const toThisComputer = (): void => {
     open.value = false;
     openThisComputer();
@@ -205,7 +226,12 @@ if (inDesktopApp) {
     watch(
         () =>
             [
-                switchable.value.map((option) => ({ id: option.id, name: option.name, place: placementFor(option).kind, shared: option.role !== `owner` })),
+                switchable.value.map((option) => ({
+                    id: option.id,
+                    name: option.name,
+                    place: placementFor(option).kind,
+                    shared: option.role !== `owner`,
+                })),
                 user.value === null ? undefined : { email: user.value.email, name: user.value.name, image: user.value.image },
             ] as const,
         ([rows, account]) => announceDesktopRoster(rows, account),
@@ -213,11 +239,13 @@ if (inDesktopApp) {
     );
 }
 
+// A local window asks for its list itself (switcherPlace.ts).
 onMounted(() => {
-    if (sandbox.sandboxes.value.length === 0) {
+    if (!local && sandbox.sandboxes.value.length === 0) {
         void sandbox.list();
     }
 });
+
 // Alt+0 for this computer inside the app, Alt+1…9 for the sandboxes under it (useSwitchCommands.ts).
 useSwitchCommands(switchable, pick, inDesktopApp ? toThisComputer : undefined);
 
@@ -248,7 +276,7 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
     const outcome = await sandbox.remove(target.id);
     // Only once the row is really gone: leaving for the setup on the optimistic drop took the reader off the shell, and
     // the dialog with it, before a refusal could bring the row back and say why.
-    if (sandbox.sandboxes.value.length === 0) {
+    if (!local && sandbox.sandboxes.value.length === 0) {
         void router.push(`/setup`);
     }
     if (outcome?.grant === `kept`) {
@@ -267,12 +295,16 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
             type="button"
             class="sandbox-switcher flex items-center justify-center overflow-hidden transition-opacity hover:opacity-80"
             :class="[route.path.startsWith('/sandbox') ? 'text-link' : 'text-muted', open && 'opacity-80']"
-            :aria-label="t(`sandbox.sandboxSwitcher.switchSandbox`, { switcherLabel })"
+            :aria-label="
+                folder ? t(`local.placeSwitcher.switchPlace`, { name: folder.name }) : t(`sandbox.sandboxSwitcher.switchSandbox`, { switcherLabel })
+            "
             aria-haspopup="dialog"
             :aria-expanded="open"
             v-on="menu.trigger"
         >
-            <SandboxLogo :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
+            <!-- A local window's chip is its folder's letter: the place it shows, as the workspace's is its sandbox's logo. -->
+            <SandboxLogo v-if="folder" :name="folder.name" />
+            <SandboxLogo v-else :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
         </button>
         <!-- WHERE IT RUNS AND WHETHER IT ANSWERS, on the bottom-left corner: bottom-right is where every icon on the
              rail shows its running mark, so that corner belongs to the spinner below. The glyph
@@ -282,8 +314,16 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
              is unreadable. The plate is the tile's own ground, so it reads as a notch cut into the logo rather than a
              second badge. No active sandbox is no link to report, so the corner stays empty rather than guessing.
              aria-hidden: both sentences are already in the button's label above. -->
+        <!-- A folder's mark is the computer it is on, and says nothing of a connection: there is none to report. -->
         <span
-            v-if="placement"
+            v-if="folder"
+            class="sandbox-switcher-mark pointer-events-none absolute bottom-0.5 left-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none text-subtle"
+            aria-hidden="true"
+        >
+            <Icon name="desktop" class="text-[0.9em]" />
+        </span>
+        <span
+            v-else-if="placement"
             class="sandbox-switcher-mark pointer-events-none absolute bottom-0.5 left-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none"
             :class="connectionInkClass"
             aria-hidden="true"
@@ -292,7 +332,7 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
             <Icon :name="placement.icon" class="text-[0.9em]" />
         </span>
         <!-- Getting started's way to connecting a model: the sandbox's own settings start here. Its hint leads to them. -->
-        <TourMark step="models" place="rail" still side="right" class="absolute left-0.5 top-0.5" />
+        <TourMark v-if="!local" step="models" place="rail" still side="right" class="absolute left-0.5 top-0.5" />
         <!-- The rail's running mark, on the bottom-right corner as on every other rail icon: it is an errand in flight,
      where the two beside it are standing facts, and the one thing here that must never be crowded. The sentence rides the control's own label,
      since a tooltip on a mark inside a tooltipped button nests inside it. -->
@@ -334,102 +374,156 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
                 </button>
                 <div class="my-1 border-t border-line-subtle"></div>
             </template>
+            <!-- In a local window, the same place heads the panel as where this window already is: the folder it shows
+                 and its path. Not a row to pick, being the place on screen. -->
+            <template v-else-if="folder">
+                <div class="ui-row-select-on flex items-center gap-2.5 rounded-md px-2 py-1.5 text-xs" aria-current="true">
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-content/5 text-link">
+                        <Icon name="desktop" class="text-sm" />
+                    </span>
+                    <span class="flex min-w-0 flex-1 flex-col">
+                        <span class="truncate font-medium text-link">{{ folder.name }}</span>
+                        <span class="truncate font-mono text-2xs text-subtle" :title="folder.path">{{ folder.path }}</span>
+                    </span>
+                </div>
+                <div class="my-1 border-t border-line-subtle"></div>
+            </template>
 
             <SectionHeader :label="t(`shared.sandboxes`)" density="dense" class="px-2 py-1.5" />
 
-            <!-- Two lines a row: the name, and where it runs with whatever else is true of it (rowNote). The logo is the
+            <!-- A local window with nobody signed in: what agents need, and the sign-in that brings the workspace. -->
+            <template v-if="signedOut">
+                <button
+                    type="button"
+                    data-menu-row
+                    class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-content/5"
+                    @click="signIn"
+                >
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center text-muted">
+                        <Icon :name="signingIn ? `spinner` : `robot`" :spin="signingIn" class="text-sm" />
+                    </span>
+                    <span class="flex min-w-0 flex-1 flex-col">
+                        <span class="truncate text-content">{{ t(`local.placeSwitcher.putAgentsToWork`) }}</span>
+                        <span class="truncate text-2xs text-subtle">{{ t(`local.placeSwitcher.signInLead`) }}</span>
+                    </span>
+                    <Icon name="sign-in" class="shrink-0 text-2xs text-subtle" />
+                </button>
+                <div v-if="failure?.id === `:sign-in`" class="px-2 pb-1">
+                    <Notice tone="danger" class="text-2xs">{{ failure.message }}</Notice>
+                </div>
+            </template>
+            <template v-else>
+                <!-- Two lines a row: the name, and where it runs with whatever else is true of it (rowNote). The logo is the
                  row's height, so a reader finds a box by its picture before reading a word. -->
-            <button
-                v-for="(option, at) in switchable"
-                :key="option.id"
-                type="button"
-                data-menu-row
-                :data-current="isActive(option) || undefined"
-                :aria-current="isActive(option) || undefined"
-                class="ui-row-select group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs"
-                :class="{ 'ui-row-select-on': isActive(option) }"
-                @click="pick(option)"
-            >
-                <SandboxLogo :size="28" :image="option.image ?? null" :name="option.name" />
-                <span class="flex min-w-0 flex-1 flex-col">
-                    <span class="truncate font-medium" :class="isActive(option) ? 'text-link' : 'text-content'">{{ option.name }}</span>
-                    <!-- Where that one runs, the reason to switch to a box being often which machine it is on. On the
+                <template v-for="(option, at) in switchable" :key="option.id">
+                    <button
+                        type="button"
+                        data-menu-row
+                        :data-current="isActive(option) || undefined"
+                        :aria-current="isActive(option) || undefined"
+                        class="ui-row-select group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs"
+                        :class="{ 'ui-row-select-on': isActive(option) }"
+                        @click="pick(option)"
+                    >
+                        <SandboxLogo :size="28" :image="option.image ?? null" :name="option.name" />
+                        <span class="flex min-w-0 flex-1 flex-col">
+                            <span class="truncate font-medium" :class="isActive(option) ? 'text-link' : 'text-content'">{{ option.name }}</span>
+                            <!-- Where that one runs, the reason to switch to a box being often which machine it is on. On the
                          ACTIVE row the glyph is the tile's mark exactly, the same glyph inked by the connection; on every
                          other row it is the placement alone. While the work replacing it runs, its spinner stands in. -->
-                    <span class="flex min-w-0 items-center gap-1 text-2xs text-subtle">
-                        <Icon v-if="isActive(option) && restarting !== undefined" name="spinner" spin class="shrink-0" :class="RUNNING_MARK_CLASS" />
-                        <!-- The hover card is the glyph's alone: on the whole line it rose under every pointer sweeping
+                            <span class="flex min-w-0 items-center gap-1 text-2xs text-subtle">
+                                <Icon
+                                    v-if="isActive(option) && restarting !== undefined"
+                                    name="spinner"
+                                    spin
+                                    class="shrink-0"
+                                    :class="RUNNING_MARK_CLASS"
+                                />
+                                <!-- The hover card is the glyph's alone: on the whole line it rose under every pointer sweeping
                              down the list, over the row above. -->
-                        <Icon
-                            v-else
-                            :name="placementFor(option).icon"
-                            class="shrink-0"
-                            :class="isActive(option) ? connectionInkClass : undefined"
-                            v-tooltip.top="placementTip(option)"
-                            :aria-label="isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail"
-                        />
-                        <span class="truncate">
-                            <template v-for="(part, index) in rowNote(option)" :key="index">
-                                <template v-if="index > 0"> · </template><span :class="part.ink">{{ part.text }}</span>
-                            </template>
+                                <Icon
+                                    v-else
+                                    :name="placementFor(option).icon"
+                                    class="shrink-0"
+                                    :class="isActive(option) ? connectionInkClass : undefined"
+                                    v-tooltip.top="placementTip(option)"
+                                    :aria-label="
+                                        isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail
+                                    "
+                                />
+                                <span class="truncate">
+                                    <template v-for="(part, index) in rowNote(option)" :key="index">
+                                        <template v-if="index > 0"> · </template><span :class="part.ink">{{ part.text }}</span>
+                                    </template>
+                                </span>
+                            </span>
                         </span>
-                    </span>
-                </span>
-                <!-- What's waiting in that sandbox; nothing waiting, or not known yet, draws nothing. The active row is
+                        <!-- What's waiting in that sandbox; nothing waiting, or not known yet, draws nothing. The active row is
                      never either: its own badge is on the logo, so it reports no count to read. -->
-                <StatusBadge
-                    v-if="(attentionFor(option) ?? 0) > 0"
-                    variant="warning"
-                    size="xs"
-                    class="shrink-0 leading-4"
-                    v-tooltip.top="t(`sandbox.sandboxSwitcher.needsYou`)"
-                    >{{ attentionFor(option) }}</StatusBadge
-                >
-                <!-- Which digit this row is, the only place the chord can be learned, and under it the row's own actions,
+                        <StatusBadge
+                            v-if="(attentionFor(option) ?? 0) > 0"
+                            variant="warning"
+                            size="xs"
+                            class="shrink-0 leading-4"
+                            v-tooltip.top="t(`sandbox.sandboxSwitcher.needsYou`)"
+                            >{{ attentionFor(option) }}</StatusBadge
+                        >
+                        <!-- Which digit this row is, the only place the chord can be learned, and under it the row's own actions,
                      which take its place on hover. Laid over the chord rather than beside it, so the second line keeps
                      the room the actions only need while the pointer is on the row. -->
-                <span class="relative flex min-w-9 shrink-0 items-center justify-end">
-                    <kbd
-                        v-if="slotChord(at)"
-                        class="rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle transition-opacity group-hover:opacity-0"
-                        >{{ slotChord(at) }}</kbd
-                    >
-                    <span class="absolute inset-y-0 right-0 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                        <!-- The platform's way back for a hosted machine, here as well as on the update card because this
+                        <span class="relative flex min-w-9 shrink-0 items-center justify-end">
+                            <kbd
+                                v-if="slotChord(at)"
+                                class="rounded border border-line px-1 font-mono text-2xs font-normal leading-4 text-subtle transition-opacity group-hover:opacity-0"
+                                >{{ slotChord(at) }}</kbd
+                            >
+                            <span class="absolute inset-y-0 right-0 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                <!-- The platform's way back for a hosted machine, here as well as on the update card because this
                              list answers while the sandbox itself doesn't. -->
-                        <Icon
-                            v-if="option.role === 'owner' && option.hosted?.canRollBack === true"
-                            name="undo"
-                            @click.stop="askRollBack(option)"
-                            v-tooltip.top="{ title: t(`sandbox.sandboxSwitcher.rollBack`), note: t(`sandbox.sandboxSwitcher.undoLastUpdate`) }"
-                            class="text-xs text-subtle transition-colors hover:text-content"
-                        />
-                        <Icon
-                            name="trash"
-                            @click.stop="askRemove(option)"
-                            v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
-                            class="text-xs text-subtle transition-colors hover:text-danger"
-                        />
+                                <Icon
+                                    v-if="option.role === 'owner' && option.hosted?.canRollBack === true"
+                                    name="undo"
+                                    @click.stop="askRollBack(option)"
+                                    v-tooltip.top="{
+                                        title: t(`sandbox.sandboxSwitcher.rollBack`),
+                                        note: t(`sandbox.sandboxSwitcher.undoLastUpdate`),
+                                    }"
+                                    class="text-xs text-subtle transition-colors hover:text-content"
+                                />
+                                <Icon
+                                    name="trash"
+                                    @click.stop="askRemove(option)"
+                                    v-tooltip.top="option.role === 'owner' ? t(`ui.action.remove`) : t(`ui.action.leave`)"
+                                    class="text-xs text-subtle transition-colors hover:text-danger"
+                                />
+                            </span>
+                        </span>
+                    </button>
+                    <!-- A local window opens the workspace on the row, which can fail where the app says why. -->
+                    <div v-if="failure?.id === option.id" class="px-2 pb-1">
+                        <Notice tone="danger" class="text-2xs">{{ failure.message }}</Notice>
+                    </div>
+                </template>
+
+                <component
+                    :is="local ? `button` : RouterLink"
+                    v-bind="local ? { type: `button` } : { to: `/setup` }"
+                    data-menu-row
+                    class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
+                    @click="(event: MouseEvent) => (local ? addFromFolder(event) : dismiss(event))"
+                >
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-line text-muted">
+                        <Icon name="plus" class="text-sm" />
                     </span>
-                </span>
-            </button>
+                    <span class="min-w-0 flex-1">{{ t(`sandbox.words.addSandbox`) }}</span>
+                </component>
+            </template>
 
+            <!-- The sandbox management hub has no rail tile; this chip is its home. It is the workspace's, so a local
+                 window, which opens the workspace on a sandbox instead, has none. -->
+            <div v-if="!local" class="my-1 border-t border-line-subtle"></div>
             <RouterLink
-                to="/setup"
-                data-menu-row
-                class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
-                @click="dismiss"
-            >
-                <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-line text-muted">
-                    <Icon name="plus" class="text-sm" />
-                </span>
-                <span class="min-w-0 flex-1">{{ t(`sandbox.words.addSandbox`) }}</span>
-            </RouterLink>
-
-            <div class="my-1 border-t border-line-subtle"></div>
-
-            <!-- The sandbox management hub has no rail tile; this chip is its home. -->
-            <RouterLink
+                v-if="!local"
                 :to="hubPath"
                 data-menu-row
                 class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs text-content transition-colors hover:bg-content/5"

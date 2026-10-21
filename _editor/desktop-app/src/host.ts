@@ -18,6 +18,8 @@ import {
     localRoster,
     projectCreate,
     projectPreview,
+    sandboxList,
+    sandboxRemove,
     signIn,
     workspaceOpen,
 } from "./desktop";
@@ -160,6 +162,11 @@ export const nativeHost = (): LocalHost => ({
     project: PROJECT,
     onboarding: onboardingHost(),
     repair: repairHost(),
+    // The remove dialog's door onto this computer: the same `ic` calls This device's rows make (device/sandboxes.ts).
+    machine: {
+        holds: async (slug) => (await sandboxList()).some((row) => row.slug === slug),
+        remove: (slug) => sandboxRemove(slug),
+    },
 });
 
 /**

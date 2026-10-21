@@ -16,7 +16,7 @@ const CLOSE = `intentic://window?do=close&confirmed=1`;
 const Nothing = defineComponent({ render: () => null });
 jest.mock(`../shell/AccountPanel.vue`, () => ({ default: Nothing }));
 jest.mock(`./LocalAccountTile.vue`, () => ({ default: Nothing }));
-jest.mock(`./LocalPlaceSwitcher.vue`, () => ({ default: Nothing }));
+jest.mock(`../features/sandbox/gates/SandboxSwitcher.vue`, () => ({ default: Nothing }));
 jest.mock(`../shell/rail/RailTile.vue`, () => ({ default: Nothing }));
 jest.mock(`./folderSwitch`, () => ({ takeFolderSwitches: () => () => undefined }));
 jest.mock(`../client/auth/useAccount`, () => ({ useAccount: () => ({ user: ref(null) }) }));

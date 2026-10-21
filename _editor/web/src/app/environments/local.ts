@@ -69,6 +69,13 @@ export const wearFace = (face: LocalFace): void => {
 // folder, so a folder opened again finds what it left.
 export const localSandboxId = (face: Pick<LocalFace, `id`>): string => `local-${face.id}`;
 
+/** Whether a row of the sandbox list is this window's own folder rather than one of the account's sandboxes, which the
+ *  desktop app lists after it (its local/platform.ts): false in every window that is not on a folder. */
+export const isLocalFolderRow = (id: string): boolean => {
+    const face = localFace();
+    return face !== undefined && id === localSandboxId(face);
+};
+
 const isText = (value: unknown): value is string => typeof value === `string`;
 const isOptional = (value: unknown, is: (value: unknown) => boolean): boolean => value === undefined || is(value);
 

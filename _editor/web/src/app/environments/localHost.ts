@@ -407,6 +407,15 @@ export interface LocalProjectHost {
     readonly detailsPath: string;
 }
 
+/** This computer's own sandboxes, as the app runs them through `ic`: the remove dialog's door onto this machine, which no
+ *  sandbox's daemon can carry from a local window's page (they refuse its origin). Rejects with the app's sentence. */
+export interface LocalMachineHost {
+    /** Whether this computer's container engine holds the sandbox with this slug. */
+    holds(slug: string): Promise<boolean>;
+    /** Deletes it here: the container and its volumes, the files kept for the recovery window as `ic` keeps them. */
+    remove(slug: string): Promise<void>;
+}
+
 /** Every verb rejects with a sentence written for the reader, shown where the press was. */
 export interface LocalHost {
     /** Whether this host reaches the app itself; the link-only host cannot read anything the app keeps. */
@@ -455,6 +464,8 @@ export interface LocalHost {
     readonly onboarding?: LocalOnboardingHost;
     /** Repair, the agent that runs on this computer outside every sandbox; absent where no app is behind the page. */
     readonly repair?: LocalRepairHost;
+    /** This computer's own sandboxes; absent where no app is behind the page. */
+    readonly machine?: LocalMachineHost;
 }
 
 /* THE ACCOUNT'S ANSWERS, as the app hands their text over (its src/account.ts): Better Auth's, read as useAuth.ts reads

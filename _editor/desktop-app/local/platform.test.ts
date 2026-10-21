@@ -187,6 +187,45 @@ describe(`installPlatform, with the app there to carry the account's calls`, () 
         expect([empty.status, await empty.text()]).toEqual([204, ``]);
     });
 
+    // The first list is the boot guard's, which must not wait on the network; every later one is the switcher's.
+    it(`lists the folder alone at once first, then the account's sandboxes after it, through the app`, async () => {
+        const theirs: SandboxSummary = {
+            ...outputSchemaOf(apiContract.sandbox.list).parse((await answer(`/rpc/sandbox/list`)).body).sandboxes[0]!,
+            id: `sbx-work`,
+            name: `work`,
+            daemonUrl: `https://work.intentic.dev`,
+        };
+        next = { status: 200, body: JSON.stringify({ sandboxes: [theirs] }), contentType: `application/json` };
+        const ids = async (): Promise<readonly string[]> => {
+            // SAFETY: the contract's list, whose shape the suite above pins.
+            const { sandboxes } = (await (await fetch(`${LOCAL_PLATFORM_ORIGIN}/rpc/sandbox/list`)).json()) as OutputOf<typeof apiContract.sandbox.list>;
+            return sandboxes.map((row) => row.id);
+        };
+        const first = await ids();
+        const later = await ids();
+        next = { status: 401, body: `{"message":"Not signed in."}`, contentType: `application/json` };
+        const signedOut = await ids();
+        expect({ first, later, signedOut, asked }).toEqual({
+            first: [`local-f3a9c2`],
+            later: [`local-f3a9c2`, `sbx-work`],
+            signedOut: [`local-f3a9c2`],
+            asked: [
+                { method: `GET`, path: `/rpc/sandbox/list` },
+                { method: `GET`, path: `/rpc/sandbox/list` },
+            ],
+        });
+    });
+
+    it(`removes and leaves the account's sandboxes through the app`, async () => {
+        next = { status: 200, body: `{}`, contentType: `application/json` };
+        await fetch(`${LOCAL_PLATFORM_ORIGIN}/rpc/sandbox/delete`, { method: `POST`, body: `{"sandboxId":"sbx-work"}` });
+        await fetch(`${LOCAL_PLATFORM_ORIGIN}/rpc/sandbox/leave`, { method: `POST`, body: `{"sandboxId":"sbx-shared"}` });
+        expect(asked).toEqual([
+            { method: `POST`, path: `/rpc/sandbox/delete`, body: `{"sandboxId":"sbx-work"}` },
+            { method: `POST`, path: `/rpc/sandbox/leave`, body: `{"sandboxId":"sbx-shared"}` },
+        ]);
+    });
+
     it(`rejects as a fetch does when the app cannot reach the platform`, async () => {
         const unreachable: PlatformRelay = () => Promise.reject(new Error(`The platform could not be reached.`));
         installPlatform(FACE, unreachable);

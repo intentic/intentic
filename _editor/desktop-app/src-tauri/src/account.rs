@@ -9,9 +9,12 @@
 //! cookie the answer sets, so the session rolls forward and a sign-out ends it for the workspace too.
 //!
 //! What may be asked is a short list ([`ROUTES`]), checked here and not in the page: the account (who, rename, avatar,
-//! sign out), the plan and its checkout, API tokens, and the data export. Deleting the account is not on it: that has
-//! to take this account's access off every sandbox's daemon first, and a local window knows only its own folder, so
-//! the page sends that one to the workspace. The cookie never reaches the page.
+//! sign out), the plan and its checkout, API tokens, the data export, and the account's sandboxes as its switcher reads
+//! and tidies them (list, remove, leave, the recently deleted and their restore, a hosted one's rollback), so a local
+//! window's switcher is the workspace's own (SandboxSwitcher.vue) rather than a second one that can only list. Deleting
+//! the account is not on it: that has to take this account's access off every sandbox's daemon first, and a local
+//! window reaches no daemon but its own folder's, so the page sends that one to the workspace. The cookie never reaches
+//! the page.
 //!
 //! The app makes calls of its own with the same session ([`platform_post`]): a folder's own sandbox (folder_setup.rs),
 //! its row and its setup code, each a fixed path written there, never one a page names.
@@ -39,6 +42,12 @@ const ROUTES: &[(Method, &str)] = &[
     (Method::Post, "/rpc/tokens/create"),
     (Method::Post, "/rpc/tokens/revoke"),
     (Method::Get, "/rpc/me/export"),
+    (Method::Get, "/rpc/sandbox/list"),
+    (Method::Post, "/rpc/sandbox/delete"),
+    (Method::Post, "/rpc/sandbox/leave"),
+    (Method::Get, "/rpc/sandbox/trash"),
+    (Method::Post, "/rpc/sandbox/restore"),
+    (Method::Post, "/rpc/sandbox/hosted-rollback"),
 ];
 
 const GET_SESSION: &str = "/api/auth/get-session";
@@ -578,9 +587,21 @@ mod tests {
             checked(&ask("GET", "/rpc/me/export?x=1&y=a%20b", None)),
             Ok((Method::Get, "/rpc/me/export?x=1&y=a%20b".into()))
         );
+        // The switcher's own calls, so a local window lists and removes the account's sandboxes as the workspace does.
+        assert_eq!(
+            checked(&ask("GET", "/rpc/sandbox/list", None)),
+            Ok((Method::Get, "/rpc/sandbox/list".into()))
+        );
+        assert_eq!(
+            checked(&ask("POST", "/rpc/sandbox/delete", Some("{}"))),
+            Ok((Method::Post, "/rpc/sandbox/delete".into()))
+        );
         for (method, path) in [
             ("POST", "/api/auth/delete-user"),
-            ("GET", "/rpc/sandbox/list"),
+            ("POST", "/rpc/sandbox/list"),
+            ("GET", "/rpc/sandbox/delete"),
+            ("POST", "/rpc/sandbox/create"),
+            ("POST", "/rpc/sandbox/owner-ticket"),
             ("POST", "/api/auth/get-session"),
             ("GET", "/api/auth/sign-out"),
             ("DELETE", "/rpc/tokens"),
@@ -598,14 +619,10 @@ mod tests {
     }
 
     /// A sandbox a folder's window asks for is made with fixed paths the app writes, never a page's: a page still cannot
-    /// name them through the relay.
+    /// name them through the relay. Removing one is the page's (its switcher's remove, as the workspace's), so it is not here.
     #[test]
     fn the_calls_the_app_makes_for_itself_are_not_a_pages_to_ask() {
-        for path in [
-            "/rpc/sandbox/create",
-            "/rpc/sandbox/setup-code",
-            "/rpc/sandbox/delete",
-        ] {
+        for path in ["/rpc/sandbox/create", "/rpc/sandbox/setup-code"] {
             assert_eq!(checked(&ask("POST", path, Some("{}"))), Err(refused(path)));
         }
     }

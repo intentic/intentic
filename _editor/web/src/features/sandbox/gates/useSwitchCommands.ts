@@ -47,9 +47,11 @@ export const useSwitchCommands = (
                     }
                 },
                 // Live, so the row names the box this chord lands on even as the roster reorders under it.
-                (): string => {
-                    const option = switchable.value[at];
-                    return option === undefined ? t(`sandbox.sandboxSwitcher.switchToSlot`, { slot: at + 1 }) : t(`sandbox.sandboxSwitcher.switchTo`, { name: option.name });
+                {
+                    title: (): string => {
+                        const option = switchable.value[at];
+                        return option === undefined ? t(`sandbox.sandboxSwitcher.switchToSlot`, { slot: at + 1 }) : t(`sandbox.sandboxSwitcher.switchTo`, { name: option.name });
+                    },
                 },
             ),
         );
@@ -59,7 +61,7 @@ export const useSwitchCommands = (
     let stopSync: WatchStopHandle | undefined;
 
     // ALT+0 IS THIS COMPUTER, the place listed first, beside Alt+1…9 for the sandboxes under it; a local window binds the
-    // same digits to the same sandboxes (local/localKeys.ts).
+    // same digits to the same sandboxes through this same switcher (local/LocalShell.vue draws it).
     let thisComputerCommand: Disposable | undefined;
 
     onMounted(() => {

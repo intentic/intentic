@@ -18,7 +18,7 @@ import { useExplorerSearch } from "../features/workspace/search/useExplorerSearc
 import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
 import { useCloseGuard } from "../features/workspace/tabs/useCloseGuard";
 import { useWorkspaceTabs } from "../models/workspace/tabs/useWorkspaceTabs";
-import { isApplePlatform } from "../workbench/commands/keybindings";
+import type { Disposable } from "@intentic/extension-api";
 import QuickOpen from "../shell/commands/QuickOpen.vue";
 import { useQuickOpen } from "../workbench/commands/useQuickOpen";
 import { openedPath } from "./appEvents";
@@ -28,7 +28,7 @@ import LocalBringBack from "./bring-back/LocalBringBack.vue";
 import { useQuietChecks } from "./bring-back/useBringBack";
 import LocalEmptyFolder from "./LocalEmptyFolder.vue";
 import LocalFolderMenu from "./LocalFolderMenu.vue";
-import { type LocalChord, localChord } from "./localKeys";
+import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { folderButtonOf } from "./setup/setupView";
 import { nameOf } from "./places";
 import { useLocalProject } from "./useLocalProject";
@@ -227,28 +227,26 @@ const openFirstMatch = (): void => {
     }
 };
 
-// The window's own chords (localKeys.ts); every other key goes on to whatever has focus.
-const CHORD_ACTIONS = {
-    "find-file": () => {
+// The workspace's own commands for what this page does, bound through the one registry and dispatcher (LocalShell.vue
+// mounts it), so the person's keymap, Settings › Keyboard and the chords are the workspace's. Closing a tab is Mod+W
+// here, a key the desktop app's window may take and a browser tab may not, where the workspace's default is Ctrl+Shift+X.
+let commands: readonly Disposable[] = [];
+const bindCommands = (): readonly Disposable[] => [
+    registerBuiltin(`workspace.goToAnything`, () => {
         paletteOpen.value = true;
-    },
-    "search-text": () => void focusSearch(`text`),
+    }),
+    registerBuiltin(`workspace.searchContent`, () => void focusSearch(`text`)),
     // Exactly what the active tab's × does, the question about its unsaved edits included.
-    "close-tab": () => {
-        if (activeId.value !== null) {
-            closeTab(activeId.value);
-        }
-    },
-} satisfies Readonly<Record<LocalChord, () => void>>;
-const isMac = isApplePlatform();
-const onKeydown = (event: KeyboardEvent): void => {
-    const chord = localChord(event, isMac);
-    if (chord === undefined) {
-        return;
-    }
-    event.preventDefault();
-    CHORD_ACTIONS[chord]();
-};
+    registerBuiltin(
+        `workspace.closeTab`,
+        () => {
+            if (activeId.value !== null) {
+                closeTab(activeId.value);
+            }
+        },
+        { keybinding: `Mod+W` },
+    ),
+];
 
 // A file of this folder opened from outside the window (a double-click in the file manager): here, kept, and found in
 // the tree.
@@ -264,11 +262,14 @@ onMounted(() => {
     if (face?.file !== undefined) {
         openFile(face.file, `keep`);
     }
-    window.addEventListener(`keydown`, onKeydown);
+    commands = bindCommands();
     window.addEventListener(LOCAL_OPEN_EVENT, onOpened);
 });
 onUnmounted(() => {
-    window.removeEventListener(`keydown`, onKeydown);
+    for (const command of commands) {
+        command.dispose();
+    }
+    commands = [];
     window.removeEventListener(LOCAL_OPEN_EVENT, onOpened);
 });
 </script>

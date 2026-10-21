@@ -268,14 +268,17 @@ export const SANDBOX_SWITCH_COMMANDS = [
 /** One built-in command's declaration. */
 const builtinCommand = (command: BuiltinCommand): CommandDeclaration => BUILTIN_COMMANDS[command];
 
-/** A built-in command's default chord, for a window that answers it without the registry (local/localKeys.ts). */
-export const builtinChord = (command: BuiltinCommand): string | undefined => builtinCommand(command).keybinding;
+/** What a surface may say of a declared command beyond its handler: a title worded by its state (a toggle that says
+ *  which way it goes), or a default chord of the window's own (the desktop app's window takes Mod+W, a browser tab cannot). */
+export interface BuiltinBinding {
+    readonly title?: () => string;
+    readonly keybinding?: string;
+}
 
-/** The registry entry for a declared command: its declaration, the handler the mounted surface gives it, and a live
- *  title where the surface words it by state (a toggle that says which way it goes). */
-export const builtinRegistration = (command: BuiltinCommand, handler: CommandRegistration[`handler`], title?: () => string): CommandRegistration => {
+/** The registry entry for a declared command: its declaration, and the handler the mounted surface gives it. */
+export const builtinRegistration = (command: BuiltinCommand, handler: CommandRegistration[`handler`], binding: BuiltinBinding = {}): CommandRegistration => {
     const declared = builtinCommand(command);
-    const name = title ?? declared.title;
+    const name = binding.title ?? declared.title;
     return {
         owner: `builtin`,
         command,
@@ -285,15 +288,15 @@ export const builtinRegistration = (command: BuiltinCommand, handler: CommandReg
         },
         category: declared.category,
         icon: declared.icon,
-        keybinding: declared.keybinding,
+        keybinding: binding.keybinding ?? declared.keybinding,
         when: declared.when,
         handler,
     };
 };
 
 /** Binds a handler to a declared command for as long as the caller holds the disposable. */
-export const registerBuiltin = (command: BuiltinCommand, handler: CommandRegistration[`handler`], title?: () => string): Disposable =>
-    registerCommand(builtinRegistration(command, handler, title));
+export const registerBuiltin = (command: BuiltinCommand, handler: CommandRegistration[`handler`], binding?: BuiltinBinding): Disposable =>
+    registerCommand(builtinRegistration(command, handler, binding));
 
 /** One row of the keymap: a command as the Keyboard page reads it, whether or not anything here can run it right now. */
 export type KeymapCommand = Pick<CommandRegistration, `owner` | `command` | `title` | `category` | `keybinding` | `when`>;

@@ -22,6 +22,11 @@ export interface MachineDoor {
     readonly machineLabel: string;
     /** The relay is the sandbox the press acts on: its daemon dies mid-call, and that is the press landing. */
     readonly severs: boolean;
+    /**
+     * The door carries the press itself instead of a sandbox's daemon: this computer, from the desktop app's window on a
+     * folder of it, through the app's own `ic` (localHost.ts `machine`). Absent on every door a daemon relays.
+     */
+    readonly carry?: (slug: string) => Promise<void>;
 }
 
 const machineOfDoor = (devices: readonly Device[], hostId: string): Machine | undefined =>

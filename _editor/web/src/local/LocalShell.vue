@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ViewBadge } from "@intentic/extension-api";
+import type { ViewBadge,Disposable } from "@intentic/extension-api";
 import { useT } from "@intentic/ui/i18n";
 import { computed, onMounted, onUnmounted, unref } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
@@ -7,6 +7,7 @@ import { LOCAL_NAVIGATE_EVENT, LOCAL_PROJECT_ASK_EVENT, localFace } from "../app
 import { type LocalView, localHost } from "../app/environments/localHost";
 import { useAccount } from "../client/auth/useAccount";
 import { useSandbox } from "../client/sandbox/useSandbox";
+import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 import CloseGuardDialog from "../features/workspace/tabs/CloseGuardDialog.vue";
 import AccountPanel from "../shell/AccountPanel.vue";
 import SkipToContent from "../shell/SkipToContent.vue";
@@ -14,17 +15,18 @@ import { railFrame } from "../shell/rail/railFrame";
 import { useWallpaperedRoute } from "../skins/useWallpaper";
 import RailTile from "../shell/rail/RailTile.vue";
 import { useIconRailSize } from "../workbench/window/useIconRailSize";
+import { registerBuiltin } from "../workbench/commands/builtinCommands";
+import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { navigatedPath } from "./appEvents";
 import { takeFolderSwitches } from "./folderSwitch";
 import LocalAccountTile from "./LocalAccountTile.vue";
-import LocalPlaceSwitcher from "./LocalPlaceSwitcher.vue";
 import { SANDBOX_SETUP_PATH } from "./setup/setupPath";
 import { useUnsavedGuard } from "./unsaved/useUnsavedGuard";
 import { useLocalProject } from "./useLocalProject";
 
 // THE SHELL OF A DESKTOP WINDOW ON A FOLDER OF THIS COMPUTER: the sandbox shell's rail and page, holding what needs no
 // sandbox and no account. At the top, the place this window shows and every other one, the account's sandboxes
-// included (LocalPlaceSwitcher); under it Files, the folder itself, then every view the app adds (Devices, the same
+// included (the workspace's own SandboxSwitcher, standing on this folder); under it Files, the folder itself, then every view the app adds (Devices, the same
 // tile and the same page the sandbox shell has for its machines, localHost.ts); at the foot, the account, the sandbox shell's own control (AccountPanel: Settings open in
 // this window, Sign out leaves it on its folder), or the sign-in before there is one (LocalAccountTile). The tiles are
 // the sandbox shell's own (shell/rail/iconRail.css), so signing in changes what the rail holds, never what it is.
@@ -82,6 +84,30 @@ const tiles = computed<readonly Tile[]>(() => [
 ]);
 const tileLabel = (tile: Tile): string => [tile.label, tile.badge?.tooltip, tile.badge?.running].filter((part) => part !== undefined && part !== ``).join(` · `);
 
+// THE KEYBOARD, the workspace's own: one dispatcher over the one command registry (useKeybindings.ts), so every chord
+// this window answers is a command the person's keymap and Settings › Keyboard reach, as in the workspace. The commands
+// are the parts' own: the switcher's Alt+1…9 (useSwitchCommands.ts), the account menu's, Files' finding and closing,
+// and here, Alt+↑/↓ over this rail's tiles. Until 2026-10-21 a local window had a keydown listener of its own per part.
+useKeybindings();
+const cycleSection = (delta: number): void => {
+    const list = tiles.value;
+    const at = list.findIndex((tile) => isActive(tile.to));
+    const next = list[(at + delta + list.length) % list.length];
+    if (next !== undefined && !isActive(next.to)) {
+        void router.push(next.to);
+    }
+};
+let sectionCommands: readonly Disposable[] = [];
+onMounted(() => {
+    sectionCommands = [registerBuiltin(`view.previousSection`, () => cycleSection(-1)), registerBuiltin(`view.nextSection`, () => cycleSection(1))];
+});
+onUnmounted(() => {
+    for (const command of sectionCommands) {
+        command.dispose();
+    }
+    sectionCommands = [];
+});
+
 // The app showing this window for a reason of its own (a setup handed over, the tray's agent row) names the screen it
 // is for; only a route of this shell is taken, anything else leaves the reader where they are.
 const onNavigate = (event: Event): void => {
@@ -120,8 +146,8 @@ onUnmounted(() => stopTaking?.());
     <div class="local-shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
         <SkipToContent />
         <nav class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
-            <!-- Top of the rail: the place this window shows, and the account's sandboxes (other folders are Files' folder menu). -->
-            <LocalPlaceSwitcher />
+            <!-- Top of the rail: the place this window shows, and the account's sandboxes, the workspace's own switcher (other folders are Files' folder menu). -->
+            <SandboxSwitcher />
             <span class="my-1 icon-rail-divider h-px bg-line"></span>
 
             <div class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">

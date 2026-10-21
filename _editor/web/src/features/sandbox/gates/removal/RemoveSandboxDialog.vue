@@ -37,6 +37,7 @@ import {
     stepWeight,
 } from "./removalPlan";
 import RemovalTakes from "./RemovalTakes.vue";
+import { openWorkspacePath } from "../switcherPlace";
 import { useRemovalDoor } from "./useRemovalDoor";
 
 // REMOVING OR LEAVING A SANDBOX, from the question to the end of the work. One dialog through four moments, because a
@@ -119,7 +120,11 @@ const cleanupCommand = computed(() => {
 // is a checkbox here, and the cleanup command above is only for a machine nothing can reach. Looked up fresh as the
 // dialog opens (useRemovalDoor), so the command never stands in for a press that is merely not known yet, and so a
 // container an earlier attempt already put away is no longer offered.
-const { door: cleanupDoor, looked: machinesLooked, looking: lookingForMachine } = useRemovalDoor(
+const {
+    door: cleanupDoor,
+    looked: machinesLooked,
+    looking: lookingForMachine,
+} = useRemovalDoor(
     () => target,
     () => cleanupSlug.value,
 );
@@ -241,14 +246,16 @@ const deleteThere = async (row: SandboxSummary, door: MachineDoor, slug: string,
         what: t(`sandbox.deviceOps.doingOn`, { doing, machine: door.machineLabel }),
     });
     try {
-        // Carried by whichever of the owner's sandboxes reaches that machine. When that is the box being deleted, its
-        // daemon dies relaying the call, so the stream ends instead of answering; that is the removal landing, and
-        // only a refusal the device sent still counts as a failure.
-        await manageDeviceSandbox(door.hostId, slug, `remove`, {
-            severing: door.severs,
-            at: door.relay === sandbox.activeSandboxId.value ? undefined : door.relay,
-            onLine: line,
-        });
+        // Carried by the door itself where it can (this computer, through the app, from a local window), else by whichever
+        // of the owner's sandboxes reaches that machine. When that is the box being deleted, its daemon dies relaying the
+        // call, so the stream ends instead of answering; that is the removal landing, and only a refusal the device sent
+        // still counts as a failure.
+        await (door.carry?.(slug) ??
+            manageDeviceSandbox(door.hostId, slug, `remove`, {
+                severing: door.severs,
+                at: door.relay === sandbox.activeSandboxId.value ? undefined : door.relay,
+                onLine: line,
+            }));
     } finally {
         endMark();
     }
@@ -292,7 +299,9 @@ const announce = (row: SandboxSummary, outcome: { readonly state: string; readon
             tone: `done`,
             title: ownRow ? t(`sandbox.removeSandbox.removed`, { name: row.name }) : t(`sandbox.removeSandbox.left`, { name: row.name }),
             detail: ownRow ? t(`sandbox.removeSandbox.removedDetail`, { count: RECOVERY_DAYS }, RECOVERY_DAYS) : undefined,
-            actions: ownRow ? [{ label: t(`sandbox.removeSandbox.openDeleted`), run: () => void router.push(DELETED_PATH) }] : undefined,
+            actions: ownRow
+                ? [{ label: t(`sandbox.removeSandbox.openDeleted`), run: () => void openWorkspacePath(router, DELETED_PATH) }]
+                : undefined,
         });
         return;
     }
@@ -515,7 +524,12 @@ const confirmLabel = computed(() => {
             <!-- THE GRACE: what is about to happen, a bar running down to it, and nothing touched yet. -->
             <div v-else-if="phase === 'grace'" class="flex flex-col gap-3" role="status" aria-live="polite">
                 <p class="text-content tabular-nums">{{ t(`sandbox.removeSandbox.startsIn`, { seconds: graceSeconds }) }}</p>
-                <Meter :value="graceShare" tone="muted" :label="t(`sandbox.removeSandbox.countdown`)" :valuetext="t(`sandbox.removeSandbox.secondsLeft`, { seconds: graceSeconds })" />
+                <Meter
+                    :value="graceShare"
+                    tone="muted"
+                    :label="t(`sandbox.removeSandbox.countdown`)"
+                    :valuetext="t(`sandbox.removeSandbox.secondsLeft`, { seconds: graceSeconds })"
+                />
                 <ol class="flex flex-col gap-1.5">
                     <li v-for="step in shownSteps" :key="step.key" class="flex items-center gap-2 text-muted">
                         <Icon name="circle" class="shrink-0" />
@@ -554,12 +568,7 @@ const confirmLabel = computed(() => {
         <template #footer>
             <!-- Left: the way out, which means something different in each moment. -->
             <Button v-if="phase === 'grace'" :label="t(`ui.action.undo`)" tier="accent" data-removal-undo @click="undo" />
-            <Button
-                v-else
-                :label="phase === 'ask' ? t(`ui.action.cancel`) : t(`ui.action.close`)"
-                tier="quiet"
-                @click="onOpen(false)"
-            />
+            <Button v-else :label="phase === 'ask' ? t(`ui.action.cancel`) : t(`ui.action.close`)" tier="quiet" @click="onOpen(false)" />
             <Button
                 v-if="phase === 'failed' && failedOn === 'device' && owner"
                 :label="t(`sandbox.removeSandbox.accountOnly`)"
@@ -567,13 +576,7 @@ const confirmLabel = computed(() => {
                 @click="retry(true)"
             />
             <!-- Right: the confirm, held in place from the press to the end, so presses after the first fall on nothing. -->
-            <Button
-                v-if="phase === 'failed'"
-                :label="t(`ui.action.tryAgain`)"
-                tone="danger"
-                autofocus
-                @click="retry(false)"
-            >
+            <Button v-if="phase === 'failed'" :label="t(`ui.action.tryAgain`)" tone="danger" autofocus @click="retry(false)">
                 <template #icon><Icon name="refresh" /></template>
             </Button>
             <Button
