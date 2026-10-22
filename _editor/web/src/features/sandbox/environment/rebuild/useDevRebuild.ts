@@ -186,6 +186,9 @@ const idle = (): DevRebuildRun => ({
 
 const runs = new Map<string, DevRebuildRun>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
+// Which follow owns a slug's polls. `stop` can clear a pending timer but not a read already awaiting its answer; the
+// generation is how that read learns it was superseded, rather than scheduling a second chain beside the new one.
+const generations = new Map<string, number>();
 const probedAt = new Map<string, number>();
 
 // WHAT IS LEFT ON SCREEN OF A BUILD THE READER WALKED AWAY FROM, held for as long as this browser is following one.
@@ -238,6 +241,7 @@ const runFor = (slug: string): DevRebuildRun => {
 };
 
 const stop = (slug: string): void => {
+    generations.set(slug, (generations.get(slug) ?? 0) + 1);
     const timer = timers.get(slug);
     if (timer !== undefined) {
         clearTimeout(timer);
@@ -376,8 +380,13 @@ const unread = (run: DevRebuildRun, slug: string, error: unknown): void => {
 
 const poll = async (slug: string, hostId: string): Promise<void> => {
     const run = runFor(slug);
+    const generation = generations.get(slug);
+    const superseded = (): boolean => generations.get(slug) !== generation;
     try {
         const result = await runDeviceCommand(hostId, `dev-rebuild-log`);
+        if (superseded()) {
+            return;
+        }
         if (result.ok) {
             // `message`, never `output`: the latter is the raw `run_command` answer, exit line and stream fences and all.
             run.heardAt = Date.now();
@@ -393,6 +402,9 @@ const poll = async (slug: string, hostId: string): Promise<void> => {
             run.trouble = result.message;
         }
     } catch (error) {
+        if (superseded()) {
+            return;
+        }
         unread(run, slug, error);
     }
     if (!rebuildRunning(run.phase)) {
@@ -432,7 +444,8 @@ const probe = async (slug: string, hostId: string): Promise<void> => {
         // Nothing to report, and nobody asked; only the read is forgiven, not what is made of its answer.
         return;
     }
-    if (!result.ok) {
+    // A run begun while this read was out (the reader pressed rebuild) owns the card now; this answer is about before it.
+    if (!result.ok || run.phase !== `idle`) {
         return;
     }
     const log = readDevRebuildLog(result.message);

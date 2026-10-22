@@ -142,6 +142,10 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
         path: stateRelPath(".intentic/config/safety.md"),
         note: "Arrives as the file it is, and governs the target from its first turn: read what it says before cloning a workspace you did not write. The lines allowed with Always on permission cards are not in it: they are the owner's own grants, kept off the workspace, and do not travel.",
     },
+    {
+        path: stateRelPath(".intentic/config/home.md"),
+        note: "Arrives as the file it is, and governs what the target's home conversations review, merge and ask about from their first turn; read it, like the safety policy, before cloning a workspace you did not write.",
+    },
 ];
 
 // Moves every credential written into the capability manifest or extension settings since boot out to its vault. Both

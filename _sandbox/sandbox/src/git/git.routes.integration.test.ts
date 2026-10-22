@@ -507,6 +507,14 @@ test("git writes serialize per repo, so a commit cannot interleave with an agent
     };
     const order: string[] = [];
     const phase = (entry: string): string | undefined => entry.split(` `)[0];
+    // A commit holds until a second one has entered, or a deadline passes. A fixed sleep only overlapped the two repos'
+    // commits when the git work before each was quicker than the sleep, which a loaded CI runner was not; waiting on the
+    // other's entry overlaps them whenever the lock allows it, and the deadline lets a serialized pair still finish.
+    let entered = 0;
+    let bothIn: () => void = () => undefined;
+    let secondEntry = new Promise<void>((resolve) => {
+        bothIn = resolve;
+    });
     const client = clientFor(
         createApp(
             services({
@@ -516,7 +524,11 @@ test("git writes serialize per repo, so a commit cannot interleave with an agent
                     ...services().git,
                     commitIndex: async (_dir, message) => {
                         order.push(`enter ${message}`);
-                        await new Promise((resolve) => setTimeout(resolve, 10));
+                        entered += 1;
+                        if (entered === 2) {
+                            bothIn();
+                        }
+                        await Promise.race([secondEntry, new Promise((resolve) => setTimeout(resolve, 1_000))]);
                         order.push(`exit ${message}`);
                         return true;
                     },
@@ -530,6 +542,10 @@ test("git writes serialize per repo, so a commit cannot interleave with an agent
     expect(new Set(order)).toEqual(new Set([`enter a`, `exit a`, `enter b`, `exit b`]));
 
     order.length = 0;
+    entered = 0;
+    secondEntry = new Promise<void>((resolve) => {
+        bothIn = resolve;
+    });
     await Promise.all([client.git.commit({ repo: "root", message: "r" }), client.git.commit({ repo: "intent", message: "i" })]);
     // Different repos overlap freely; a workspace-wide lock would defeat the point of per-repo locking.
     expect(order.map(phase)).toEqual([`enter`, `enter`, `exit`, `exit`]);

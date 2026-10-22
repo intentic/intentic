@@ -327,6 +327,52 @@ it(`hands the same live run to a second reader of the same sandbox`, async () =>
     expect(runDeviceCommand).not.toHaveBeenCalledWith(HOST, `dev-rebuild`, expect.anything());
 });
 
+// A read still out when a new follow begins belongs to the follow it was asked for. Answered late, it must not start a
+// second chain of polls beside the new one: CI saw this as a card polling twice every four seconds.
+it(`keeps one chain of polls when a follow is replaced while its read is still out`, async () => {
+    const slug = nextSlug();
+    let answer: (value: unknown) => void = () => undefined;
+    const late = new Promise((resolve) => {
+        answer = resolve;
+    });
+    runDeviceCommand
+        .mockResolvedValueOnce(started)
+        .mockReturnValueOnce(late)
+        .mockResolvedValueOnce(started)
+        .mockResolvedValue(log(`2`, `#4 [builder 2/9]`));
+    await useDevRebuild(slug).start(HOST);
+    await useDevRebuild(slug).start(HOST);
+    answer(log(`2`, `#3 [builder 1/9]`));
+    await advanceTimersByTimeAsync(0);
+
+    const asked = runDeviceCommand.mock.calls.length;
+    await nextPoll(3);
+    expect(runDeviceCommand).toHaveBeenCalledTimes(asked + 3);
+    expect(useDevRebuild(slug).run.lines).toEqual([`#4 [builder 2/9]`]);
+});
+
+// The card probes for a terminal-run rebuild on mount; a reader who presses rebuild before that read answers owns the
+// card, and the probe's answer about the moment before must not reset the run they started.
+it(`lets a probe that answers after the reader started a rebuild leave that run alone`, async () => {
+    const slug = nextSlug();
+    let answer: (value: unknown) => void = () => undefined;
+    const late = new Promise((resolve) => {
+        answer = resolve;
+    });
+    runDeviceCommand.mockReturnValueOnce(late).mockResolvedValueOnce(started).mockResolvedValue(log(`2`, `#4 [builder 2/9]`));
+    const { run, adopt, start } = useDevRebuild(slug);
+    adopt(HOST);
+    await start(HOST);
+    const startedAt = run.startedAt;
+    answer(log(`3`, `#1 an earlier build`));
+    await advanceTimersByTimeAsync(0);
+
+    expect(run.startedAt).toBe(startedAt);
+    const asked = runDeviceCommand.mock.calls.length;
+    await nextPoll(3);
+    expect(runDeviceCommand).toHaveBeenCalledTimes(asked + 3);
+});
+
 // After the swap the page comes back on the new image with its memory wiped; the marker is what says a rebuild was
 // being waited on, and the machine's log says how it went.
 it(`resumes from the marker a reload left behind, and reports the outcome`, async () => {

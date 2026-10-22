@@ -103,7 +103,7 @@ const STATE_FILES = [
     // What every home conversation works by (conversations/home/home-policy.ts): when it reviews, tests, merges and asks a
     // person. `carry`+`versioned` like the safety policy, since it governs what an orchestrator lands unasked. Absent falls
     // back to `DEFAULT_HOME_POLICY`.
-    { path: ".intentic/config/home.md", invalidates: [], portability: "carry", versioned: true },
+    { path: ".intentic/config/home.md", invalidates: [], portability: "carry", versioned: true, why: "Read per home turn; no view shows it." },
     // Verdicts the policy above produced, newest first. `derived`/`local`: evidence about this machine, self-trimming,
     // not carried. Own query key, separate from the policy's, since a verdict must not invalidate the document someone
     // is editing.
