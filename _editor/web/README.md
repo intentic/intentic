@@ -526,6 +526,7 @@ pnpm --filter @intentic/web typecheck
 connected sandboxes with personal attention counts; on phones the list opens each sandbox’s chat at `/home/:sandbox`.
 Single clicks switch sandboxes, double clicks and Enter enter the full sandbox. `features/home/` draws the surface;
 `models/home/` holds attention polling and the pure work ledger projection.
+The desktop status bar stays hidden in the master view, including personal settings opened from it.
 
 ## Local shell: Repair
 

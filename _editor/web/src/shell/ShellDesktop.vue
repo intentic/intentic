@@ -614,7 +614,7 @@ useGettingStarted();
         <!-- The foot of the window, under the section and the side panel: what the sandbox is running, the terminal first,
              and with geek metrics on, how full it is. Outside the gate, like the chat column: a stalled sandbox still says
              what it had going, and the terminal's chip goes inert until it answers. -->
-        <StatusBar :persistent="statusBarShown" :metrics="liveMetrics" style="grid-area: status">
+        <StatusBar v-if="!masterRail" :persistent="statusBarShown" :metrics="liveMetrics" style="grid-area: status">
             <template #start><RuntimeChips :runtime="runtimeChips" /><WakeStatusChip /></template>
         </StatusBar>
 
