@@ -2,6 +2,11 @@
 
 The platform's HTTP server (`@intentic/api`): sign-in, the registry of sandboxes and their addresses, hosted Fly machines, the hosted plan and the agent wallet.
 
+Cloud entry (`/start/hosted` in the editor) is advertised by `hostedOffer.startJourney`. An optional create UUID reuses
+one owner-scoped sandbox identity across retries, including a lost response. Offer and provisioning accept a selected
+paid tier and check its own allocations, independently of the free machine. Checkout can return to this fixed cloud
+entry before the account has a working sandbox; ordinary Billing checkout retains its previous return destination.
+
 ```mermaid
 flowchart LR
     spa["web SPA"] -- "/rpc · /api/auth" --> api(["api"])

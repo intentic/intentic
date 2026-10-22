@@ -133,14 +133,18 @@ const landOnList = async (row: SandboxSummary, { added = false, current = (): bo
         return;
     }
     queryClient.setQueryData<SandboxSummary[]>(SANDBOX_LIST_KEY, (live = []) =>
-        added ? [...live, row] : live.map((sandbox) => (sandbox.id === row.id ? row : sandbox)),
+        added ? [...live.filter((entry) => entry.id !== row.id), row] : live.map((sandbox) => (sandbox.id === row.id ? row : sandbox)),
     );
 };
 
 // Mints a new sandbox; does not make it active. /setup creates the row before the reader has agreed to
 // anything, so selection moves only on announce or a successful attach.
-const create = async (name: string): Promise<SandboxSummary> => {
-    const sandbox = await apiClient.sandbox.create({ name });
+const create = async (name: string, requestId?: string): Promise<SandboxSummary> => {
+    const input: Parameters<typeof apiClient.sandbox.create>[0] = { name };
+    if (requestId !== undefined) {
+        input.requestId = requestId;
+    }
+    const sandbox = await apiClient.sandbox.create(input);
     await landOnList(sandbox, { added: true });
     return sandbox;
 };

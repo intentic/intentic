@@ -14,13 +14,13 @@ const cleanupUrl = installScriptUrl(`cleanup`);
 const rungs = [
     {
         machine: "hosted",
-        title: "Start instantly",
+        title: "Start a cloud sandbox",
         cost: `Free · ${FREE_TIER.monthlyHours} hours a month, bigger machines from $${PAID_TIERS[0]?.priceUsd}`,
         whose: "Our servers",
-        asks: "One click. No install, nothing to run, no account anywhere else.",
-        body: "We start a machine for you and hand your workspace back in seconds. It is the fastest way to see what the product is, and the only rung that asks nothing of a device you own.",
+        asks: "No install. Sign in and choose your cloud machine.",
+        body: "Your workspace runs on our servers. Review your free or paid machine, start it, and watch its progress until the workspace is ready.",
         limits: "The hours are awake hours: a workspace nobody is working in is not spending them. When you want more power or no ceiling, switch to the rung beside this one and keep the same workspace.",
-        cta: "Start instantly",
+        cta: "Start a cloud sandbox",
     },
     {
         machine: "mine",
@@ -88,7 +88,7 @@ const consequences = [
                             </div>
                             <p class="text-xs text-subtle">{rung.limits}</p>
                             {/* Setup opens on the selected machine. */}
-                            <a class="btn btn-primary btn-sm mt-auto" href={`${APP_URL}/setup?machine=${rung.machine}`}>
+                            <a class="btn btn-primary btn-sm mt-auto" href={rung.machine === "hosted" ? `${APP_URL}/start/hosted` : `${APP_URL}/setup?machine=mine`}>
                                 {rung.cta}
                             </a>
                         </div>
@@ -97,7 +97,7 @@ const consequences = [
             </div>
             <p class="mt-4 max-w-copy text-xs text-subtle">
                 Both buttons go to the same place: a sign-in, with Google or a code mailed to your address, then the setup screen opened on
-                the rung you picked. No card, either way. "Start instantly" starts your machine the moment you land, and you watch it boot.
+                the rung you picked. The free cloud machine needs no card. Review your cloud options, then start a machine and watch it boot.
                 The free machine needs a Google account linked to yours, and a paid one does not. "Set up on my computer" puts the installer
                 and the command in front of you and runs nothing until you do.
             </p>

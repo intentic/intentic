@@ -2,6 +2,14 @@
 
 The `/setup` page: it makes the sandbox row a visit sets up, decides by itself where that sandbox runs, and opens its workspace once the sandbox answers.
 
+- **Starting from cloud pricing** opens `/start/hosted` (`hosted/HostedStart.vue`), outside the workspace gate. It reads
+  the account's cloud machines and the chosen tier's offer without minting a draft. Sign-in returns here with the
+  cloud choice intact; a local sandbox never substitutes for that choice. Create commits an account-scoped UUID,
+  reused by the platform across retries, then hands the named row and tier to `/setup?machine=hosted`. Existing cloud
+  machines use that same progress and readiness flow. Google linking and checkout return to this entry, and a paid
+  machine is provisioned against the selected tier's allocation rather than the free one. Billing can complete here
+  before the account has a working workspace.
+
 - **What an arrival does by itself** is decided in one place, `arrivalFor` in `setupArrival.ts`: the desktop app hands
   the setup code to itself (`local`), a browser starts a machine of ours (`hosted`), and the picker (`choose`) survives
   only where the surface's own answer is unavailable or was asked for. An account that removed a sandbox it can still

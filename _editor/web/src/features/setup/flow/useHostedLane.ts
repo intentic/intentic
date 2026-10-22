@@ -1,4 +1,5 @@
 import { GOOGLE_REQUIRED_REASON, type HostedOffer, type HostedStatus, type SandboxSummary } from "@intentic/api-contract";
+import type { HostedTierId } from "@intentic/constants";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
@@ -51,6 +52,7 @@ const hostOf = (url: string | null | undefined): string | undefined => {
 };
 
 export interface HostedLaneHost {
+    readonly tier?: HostedTierId | undefined;
     readonly platform: Pick<Platform, `hostedOffer` | `hostedStatus` | `hostedRestart` | `wake` | `hostedProvision`>;
     readonly sandbox: Pick<SandboxStore, `hostedProvision` | `hostedRelease`>;
     readonly row: SetupRow;
@@ -69,10 +71,10 @@ const holdsProjects = (offer: Readonly<Ref<HostedOffer | null>>, appTakesProject
 
 // The store's provision names no folder, so a project's machine is asked of the platform directly, with the profile the
 // store would have sent; the store's list learns the machine at the registry watch's next read.
-const provisionFor = ({ platform, sandbox, project }: HostedLaneHost, sandboxId: string, token: string): Promise<SandboxSummary> =>
-    project === undefined
+const provisionFor = ({ platform, sandbox, project, tier }: HostedLaneHost, sandboxId: string, token: string): Promise<SandboxSummary> =>
+    project === undefined && tier === undefined
         ? sandbox.hostedProvision(sandboxId, token)
-        : platform.hostedProvision({ sandboxId, token, project, profile: arrivingProfile() });
+        : platform.hostedProvision({ sandboxId, token, project, tier, profile: arrivingProfile() });
 
 // Why a machine call failed, and whether it was for want of room, which the card answers with another rung instead, or for
 // want of a Google sign-in on the account, which it answers with the ways on from there.
@@ -110,10 +112,10 @@ export const useHostedLane = (host: HostedLaneHost) => {
     const machineCall = computed(() => work.at(`machine`));
     const releaseCall = computed(() => work.at(`release`));
     // Why the hosted lane failed, shown on the step where it was pressed; kept apart from the arrival's notice.
-    const hostedFailure = computed(() =>
-        [machineCall.value, releaseCall.value]
-            .filter((call) => call?.state === `failed`)
-            .toSorted((a, b) => (b?.order ?? 0) - (a?.order ?? 0))[0]?.failure,
+    const hostedFailure = computed(
+        () =>
+            [machineCall.value, releaseCall.value].filter((call) => call?.state === `failed`).toSorted((a, b) => (b?.order ?? 0) - (a?.order ?? 0))[0]
+                ?.failure,
     );
     // A refusal for want of Google is answered by the ways on from there (Setup.vue), not said as a failure.
     const hostedError = computed(() => (hostedFailure.value?.google === true ? undefined : hostedFailure.value?.notice));
@@ -198,7 +200,7 @@ export const useHostedLane = (host: HostedLaneHost) => {
     // Re-reads what the account has left, since releasing a machine changes it; a failed re-read keeps the last answer.
     const refreshHostedOffer = async (): Promise<void> => {
         try {
-            hostedOffer.value = await platform.hostedOffer();
+            hostedOffer.value = await platform.hostedOffer(host.tier === undefined ? undefined : { tier: host.tier });
         } catch {
             // A platform that cannot be asked keeps the answer it already gave.
         }

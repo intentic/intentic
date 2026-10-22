@@ -13,6 +13,10 @@ flowchart LR
 - Both ends are typed from the same `apiContract`: the browser's `OpenAPILink` client in `_editor/web` and the
   per-domain handlers in `_platform/api`, mounted under `API_BASE_PATH` (`/rpc`). It covers accounts, the sandbox
   registry, invites, hosted plans, push relay, wallet, admin reads and API tokens.
+- `hostedOffer.startJourney` advertises the cloud entry protocol: `sandbox.create` accepts an optional UUID
+  `requestId`, scoped to the owner for idempotency; offer and provisioning accept an optional hosted `tier`; checkout
+  accepts the fixed return destination `/start/hosted`. These are additive fields. An older platform does not advertise
+  the protocol, so a newer cloud entry explains that an update is needed rather than charging for an ignored tier.
 - `src/ingress/` is the other contract: `PLATFORM_INGRESS`, every route a machine calls outside `/rpc` (the daemon's
   announce, boot report and wallet calls, `ic`'s setup claim and host report, the edge's reachability lookup), each
   with its method, path, credential and body and answer schemas. The platform registers handlers under it and the

@@ -359,6 +359,22 @@ describe(`sandbox routes`, () => {
         expect(summary).toMatchObject({ id: `s2`, role: `owner` });
     });
 
+    it(`reuses a cloud-start request's identity and token on retry`, async () => {
+        const upsert = jest.fn().mockResolvedValue(sandboxRow);
+        const prisma = fakePrisma({ sandbox: { upsert } });
+        const requestId = `56ef8187-00b7-4235-9fa2-27db9121d9ee`;
+        const first = await call(sandboxRoutes.create, { name: `cloud`, requestId }, { context: context({ prisma }) });
+        const again = await call(sandboxRoutes.create, { name: `cloud again`, requestId }, { context: context({ prisma }) });
+        expect({ id: first.id, token: first.token }).toEqual({ id: again.id, token: again.token });
+        expect(upsert).toHaveBeenCalledTimes(2);
+        expect(upsert.mock.calls[0]?.[0]).toMatchObject({
+            where: { id: sha256Hex(JSON.stringify([user.id, requestId])) },
+            create: { ownerId: user.id, name: `cloud` },
+            update: {},
+        });
+        expect(upsert.mock.calls[1]?.[0]).toMatchObject({ where: { id: sha256Hex(JSON.stringify([user.id, requestId])) }, update: {} });
+    });
+
     // tunnelId is the key ingress registration and the DNS sweep look sandboxes up by; pinned against the shared
     // derivation, not a transcribed digest.
     it(`create stores the sandbox's derived tunnel id alongside the token's digest`, async () => {
@@ -1079,9 +1095,13 @@ describe(`hosted machine state on a sandbox summary`, () => {
 
     // Every list carried a read with Fly's own 30 s deadline, so a hung provider held the editor's sandbox list that long.
     it(`a provider that hangs costs the list a short deadline, and the state reads unknown`, async () => {
-        stubGlobal(`fetch`, (_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
-            init?.signal?.addEventListener(`abort`, () => reject(init.signal?.reason ?? new Error(`aborted`)));
-        }));
+        stubGlobal(
+            `fetch`,
+            (_url: string, init?: RequestInit) =>
+                new Promise((_resolve, reject) => {
+                    init?.signal?.addEventListener(`abort`, () => reject(init.signal?.reason ?? new Error(`aborted`)));
+                }),
+        );
         const hosted = { appName: `test-app`, machineId: `m1`, region: `iad`, warm: false };
         const prisma = fakePrisma({
             sandbox: { findMany: jest.fn().mockResolvedValue([{ ...sandboxRow, hosted }]) },

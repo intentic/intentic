@@ -161,6 +161,10 @@ export const assertHostedAllowance = async (
     await requireHostedStanding(context, userId);
     // A machine arriving on a paid slot spends nothing of the free lane, so none of its limits below apply to it.
     if (arrival.lane === `slot`) {
+        const { used, left } = await hostedSlotUse(context.prisma, context.config, userId, arrival.tier);
+        if (left <= 0) {
+            throw new ORPCError(`BAD_REQUEST`, { message: slotsMessage(used) });
+        }
         return arrival;
     }
     try {

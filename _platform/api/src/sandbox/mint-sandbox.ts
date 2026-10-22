@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@intentic/prisma";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import type { Config } from "../config.js";
-import { encryptSecret } from "../crypto.js";
+import { decryptSecret, encryptSecret } from "../crypto.js";
 
 // Mints a sandbox row for signup and the canary, deriving three columns from one connect token: the encrypted token,
 // its digest (matched to the daemon's announce), and `tunnelId` (the hostname id) — stored so callers can use them as
@@ -47,15 +47,20 @@ export const connectTokenIdentity = (token: string): { readonly tokenDigest: str
     tunnelId: sandboxIdFromToken(token) ?? ``,
 });
 
-export const mintSandbox = async (prisma: PrismaClient, config: Config, data: { readonly name: string; readonly ownerId: string }) => {
+export const mintSandbox = async (
+    prisma: PrismaClient,
+    config: Config,
+    data: { readonly name: string; readonly ownerId: string },
+    requestId?: string,
+) => {
     const token = mintConnectToken();
-    const sandbox = await prisma.sandbox.create({
-        data: {
-            ...data,
-            token: encryptSecret(config, token),
-            ...connectTokenIdentity(token),
-        },
-        include: { hosted: true },
-    });
-    return { token, sandbox };
+    const create = { ...data, token: encryptSecret(config, token), ...connectTokenIdentity(token) };
+    // A committed browser journey can retry after losing the response. Scope its stable ID to the owner, and use the
+    // database's unique key so concurrent tabs return one row without replacing its token, name, or machine.
+    const id = requestId === undefined ? undefined : sha256Hex(JSON.stringify([data.ownerId, requestId]));
+    const sandbox =
+        id === undefined
+            ? await prisma.sandbox.create({ data: create, include: { hosted: true } })
+            : await prisma.sandbox.upsert({ where: { id }, create: { ...create, id }, update: {}, include: { hosted: true } });
+    return { token: id === undefined ? token : decryptSecret(config, sandbox.token), sandbox };
 };

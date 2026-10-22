@@ -11,6 +11,7 @@ export const API_BASE_PATH = "/rpc";
 // What machines send the platform outside /rpc (the setup claim and report, announce, boot and host reports), which the
 // editor reads back off a sandbox's summary: declared with the ingress routes that carry them.
 export * from "./ingress/index.js";
+export * from "./hosted-offer.js";
 
 // ---- platform-native shapes. A daemon wire shape is imported from @intentic/sandbox-contract, never through here ----
 
@@ -235,39 +236,6 @@ export const SandboxHostedSchema = z.object({
     canRollBack: z.boolean().optional(),
 });
 export type SandboxHosted = z.infer<typeof SandboxHostedSchema>;
-
-// The hosted lane's offer, read before creation; `remaining` is this caller's own allowance left.
-// `hours` is the account's free hours, which is what a new machine spends: it arrives on the free rung, a subscriber's
-// included. Absent where nothing is counted against them (a comped account, a platform with no ceiling).
-export const HostedHoursSchema = z.object({
-    // Monthly ceiling and what's left, in whole hours; `remaining` floors, so "1 hour left" isn't a few minutes.
-    allowance: z.number().int().nonnegative(),
-    remaining: z.number().int().nonnegative(),
-    // Present while a new account's ceiling is the ramp's rather than the month's: when the full one applies (ISO).
-    rampUntil: z.iso.datetime().optional(),
-});
-export type HostedHours = z.infer<typeof HostedHoursSchema>;
-
-export const HostedOfferSchema = z.object({
-    enabled: z.boolean(),
-    remaining: z.number().int().nonnegative(),
-    // The platform's fleet is full, no machine to give anyone; unrelated to this account's own `remaining`.
-    full: z.boolean().optional(),
-    hours: HostedHoursSchema.optional(),
-    // True when the caller is on the hosted plan (or comped): their machines are never removed for going unopened.
-    plan: z.boolean().optional(),
-    // True when the hosted lane is switched off for this account (hosted-standing.ts); `remaining` is 0 with it.
-    suspended: z.boolean().optional(),
-    // True when a machine of ours can hold a project folder (`hostedProvision`'s `project`). Absent from a platform from
-    // before hosted projects, which would drop that field unread, so the editor keeps a project on the reader's own
-    // computer there.
-    projects: z.boolean().optional(),
-    // True when this account signs in only by email and holds no free paid slot: a free machine, the trial and Repair
-    // need a Google sign-in linked to the account first (api sandbox/hosted/free-lane.ts), so the editor offers linking
-    // Google, buying a machine, or running the sandbox on the reader's own computer. `remaining` is 0 with it.
-    needsGoogle: z.boolean().optional(),
-});
-export type HostedOffer = z.infer<typeof HostedOfferSchema>;
 
 // The `data.reason` a refusal carries when the free hosted lane (or the trial, or Repair) needs a Google sign-in linked to
 // an account that signs in only by email.

@@ -67,7 +67,12 @@ const DEMO_HOSTED_PLAN: HostedPlanState = {
                 // month rather than the account's free hours.
                 tier: DEMO_MACHINE_TIER.id,
                 shape: DEMO_MACHINE_TIER,
-                hours: { kind: `slot`, usedMinutes: 12_720, allowanceMinutes: DEMO_MACHINE_TIER.monthlyHours * 60, resetsAt: `2026-10-01T00:00:00.000Z` },
+                hours: {
+                    kind: `slot`,
+                    usedMinutes: 12_720,
+                    allowanceMinutes: DEMO_MACHINE_TIER.monthlyHours * 60,
+                    resetsAt: `2026-10-01T00:00:00.000Z`,
+                },
                 // A machine that has not been killed for memory; the page shows nothing at 0, which is the point.
                 oomsThisWeek: 0,
             },
@@ -131,6 +136,12 @@ const ANSWERS: PlatformAnswers = {
     org: { list: () => officeOrganisations, get: () => officeOrganisation },
     sandbox: {
         list: () => ({ sandboxes: [DEMO_SANDBOX] }),
+        hostedOffer: () => ({
+            enabled: true,
+            startJourney: true,
+            remaining: 1,
+            hours: { allowance: FREE_TIER.monthlyHours, remaining: FREE_TIER.monthlyHours },
+        }),
         trash: () => ({ sandboxes: [...DEMO_TRASH] }),
         // The recovery panel's command carries one; nothing ever claims it here.
         fixCode: () => ({ code: `DEMOFIX7K2Q`, expiresAt: new Date(Date.now() + 30 * 60_000).toISOString() }),
@@ -154,7 +165,9 @@ const ANSWERS: PlatformAnswers = {
 
 // A procedure's route path, read structurally as contract-serve reads the sandbox contract: `~orpc` is oRPC's own
 // metadata, which the contract's types do not spell.
-type RouteTables = Readonly<Record<string, Readonly<Record<string, { readonly "~orpc": { readonly route: { readonly path?: string } } } | undefined>> | undefined>>;
+type RouteTables = Readonly<
+    Record<string, Readonly<Record<string, { readonly "~orpc": { readonly route: { readonly path?: string } } } | undefined>> | undefined>
+>;
 // SAFETY: every group of apiContract is a record of oRPC procedures, each carrying its route under `~orpc`; a group or
 // name the contract lacks reads as undefined.
 const routeOf = (group: string, name: string): string | undefined => (apiContract as RouteTables)[group]?.[name]?.[`~orpc`].route.path;

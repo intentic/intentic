@@ -6,6 +6,12 @@ it(`carries the page that asked for the sign-in`, () => {
     expect(signInAt(`/sandbox/usage`)).toEqual({ path: `/login`, query: { returnTo: `/sandbox/usage` } });
 });
 
+it(`preserves hosted intent and the selected tier through sign-in`, () => {
+    const destination = `/start/hosted?tier=standard&new=1&utm_source=pricing`;
+    expect(signInAt(destination)).toEqual({ path: `/login`, query: { returnTo: destination } });
+    expect(returnPath(destination)).toBe(destination);
+});
+
 // The desktop app opens this URL in the OS browser, which may not be signed in; state and challenge tie
 // the sign-in back to the app's deep link, so they must survive returnTo untouched.
 it(`keeps a desktop hand-off's state and challenge`, () => {

@@ -17,18 +17,25 @@ import { hostedSlotUse } from "./plan/hosted-plan.js";
 // Where an account's next hosted machine arrives: on the free rung for an account with Google linked; straight onto a
 // paid rung it holds an unused slot at for one that signs in only by email (the free rung is a free lane); nowhere until
 // it links Google or buys one.
-export type HostedArrival =
-    | { readonly lane: `free` }
-    | { readonly lane: `slot`; readonly tier: HostedTierId }
-    | { readonly lane: `needs-google` };
+export type HostedArrival = { readonly lane: `free` } | { readonly lane: `slot`; readonly tier: HostedTierId } | { readonly lane: `needs-google` };
 
 export const hostedArrivalFor = async (
     prisma: Pick<PrismaClient, "account" | "hostedPlan" | "hostedMachine">,
     config: Config,
     userId: string,
+    requestedTier?: HostedTierId,
 ): Promise<HostedArrival> => {
+    // Buying an additional machine must use the paid tier the reader chose, even with Google linked and the free
+    // allocation occupied. The offer counts this tier's slots; provisioning checks them atomically before writing.
+    if (requestedTier !== undefined && requestedTier !== FREE_TIER.id) {
+        return { lane: `slot`, tier: requestedTier };
+    }
     if (await hasGoogleAccount(prisma, userId)) {
         return { lane: `free` };
+    }
+    // An explicit free choice must never consume a paid allocation instead.
+    if (requestedTier === FREE_TIER.id) {
+        return { lane: `needs-google` };
     }
     // Cheapest rung first, so a machine never lands on a bigger slot than it has to.
     const uses = await Promise.all(PAID_TIERS.map((tier) => hostedSlotUse(prisma, config, userId, tier.id)));
@@ -40,8 +47,7 @@ export const hostedArrivalFor = async (
 export type AdmittedArrival = Exclude<HostedArrival, { readonly lane: `needs-google` }>;
 
 // The rung a machine arriving this way is built at.
-export const arrivalTier = (arrival: AdmittedArrival): HostedTierId =>
-    arrival.lane === `slot` ? arrival.tier : FREE_TIER.id;
+export const arrivalTier = (arrival: AdmittedArrival): HostedTierId => (arrival.lane === `slot` ? arrival.tier : FREE_TIER.id);
 
 // How many machines the hosted card offers: none to a suspended account or one that must link Google first, the one
 // paid slot an email-only account arrives on, and otherwise what the free rung has left.
@@ -49,7 +55,7 @@ export const offeredMachines = (arrival: HostedArrival, suspended: boolean, free
     if (suspended || arrival.lane === `needs-google`) {
         return 0;
     }
-    return arrival.lane === `slot` ? 1 : Math.max(0, freeLeft);
+    return Math.max(0, freeLeft);
 };
 
 // Whether this account may spend a free lane: a Google account linked to it.

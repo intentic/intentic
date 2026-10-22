@@ -1,4 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { isHostedTierId } from "@intentic/constants";
 import { computed, ref, type Ref, watch } from "vue";
 import type { RouteLocationNormalizedLoaded } from "vue-router";
 import type { apiClient } from "../../../lib/useApi";
@@ -18,6 +19,8 @@ import type { SetupRow } from "./useSetupRow";
 
 type Platform = (typeof apiClient)[`sandbox`];
 type SandboxStore = ReturnType<typeof useSandbox>;
+const hostedOfferFor = (platform: Pick<Platform, `hostedOffer`>, tier: SetupArrivalHost[`route`][`query`][string] | undefined) =>
+    isHostedTierId(tier) ? platform.hostedOffer({ tier }) : platform.hostedOffer();
 
 export interface SetupArrivalHost {
     // `activeSandboxId` names which working sandbox to offer back when the account has several.
@@ -146,7 +149,7 @@ export const useSetupArrival = ({
         // The offers land with the row list, so the ladder and the address line are right on the first frame.
         const [rows, hostedRead, addressRead, trashRead, switched] = await Promise.all([
             sandbox.list(),
-            readOffer(() => platform.hostedOffer(), { enabled: false, remaining: 0 }),
+            readOffer(() => hostedOfferFor(platform, route.query[`tier`]), { enabled: false, remaining: 0 }),
             readOffer(() => platform.addressOffer(), { enabled: false }),
             readOffer(async () => (await platform.trash()).sandboxes.length > 0, false),
             otherAccountHere(),

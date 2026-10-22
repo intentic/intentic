@@ -1,4 +1,4 @@
-import { PROFILE_IDS } from "@intentic/constants";
+import { HOSTED_TIER_IDS, PROFILE_IDS } from "@intentic/constants";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
 import { isProjectDirName } from "@intentic/sandbox-contract/ids/project-dir";
 import { SANDBOX_ID } from "@intentic/sandbox-contract/ids/sandbox-id";
@@ -76,11 +76,12 @@ const profileInput = z.object({ profile: z.enum(PROFILE_IDS).optional() });
 // hold it to (sandbox-contract's `isProjectDirName`). Optional: any other sandbox names none, and a platform from before
 // hosted projects drops it unread, which is why the editor sends it only where `hostedOffer` answers `projects`.
 const projectInput = z.object({ project: z.string().refine(isProjectDirName, `not a project folder name`).optional() });
+const hostedTierInput = z.object({ tier: z.enum(HOSTED_TIER_IDS).optional() });
 export const sandboxRegistryContract = {
     list: oc.route({ method: "GET", path: "/sandbox/list" }).output(z.object({ sandboxes: z.array(SandboxSummarySchema) })),
     create: oc
         .route({ method: "POST", path: "/sandbox/create" })
-        .input(z.object({ name: z.string().min(1).max(60) }))
+        .input(z.object({ name: z.string().min(1).max(60), requestId: z.uuid().optional() }))
         .output(SandboxSummarySchema),
     update: oc
         .route({ method: "POST", path: "/sandbox/update" })
@@ -102,10 +103,16 @@ export const sandboxRegistryContract = {
     // Zones a pasted Cloudflare token can see, for the in-app capability; the token is used once and discarded.
     zones: oc.route({ method: "POST", path: "/sandbox/zones" }).input(CfTokenSchema).output(CfZonesSchema),
     // Provision requests are bound to the identity that release revokes.
-    hostedOffer: oc.route({ method: "GET", path: "/sandbox/hosted-offer" }).output(HostedOfferSchema),
+    hostedOffer: oc.route({ method: "GET", path: "/sandbox/hosted-offer" }).input(hostedTierInput.optional()).output(HostedOfferSchema),
     hostedProvision: oc
         .route({ method: "POST", path: "/sandbox/hosted-provision" })
-        .input(z.object({ sandboxId: z.string(), token: z.string().min(1) }).extend(profileInput.shape).extend(projectInput.shape))
+        .input(
+            z
+                .object({ sandboxId: z.string(), token: z.string().min(1) })
+                .extend(profileInput.shape)
+                .extend(projectInput.shape)
+                .extend(hostedTierInput.shape),
+        )
         .output(SandboxSummarySchema),
     hostedRelease: oc.route({ method: "POST", path: "/sandbox/hosted-release" }).input(sandboxIdInput).output(SandboxSummarySchema),
     // What the machine is doing, asked of the provider; polled only during a hosted wait, never from `list`.
@@ -134,10 +141,7 @@ export const sandboxRegistryContract = {
     ownerTicket: oc.route({ method: "POST", path: "/sandbox/owner-ticket" }).input(sandboxIdInput).output(MintedOwnerTicketSchema),
     // The platform's word that the caller controls their address, for a sandbox they own or were invited to; FORBIDDEN for
     // an address no code or Google confirmed, NOT_FOUND on a platform with no identity key or no email sign-in.
-    identityAssertion: oc
-        .route({ method: "POST", path: "/sandbox/identity-assertion" })
-        .input(sandboxIdInput)
-        .output(MintedIdentityAssertionSchema),
+    identityAssertion: oc.route({ method: "POST", path: "/sandbox/identity-assertion" }).input(sandboxIdInput).output(MintedIdentityAssertionSchema),
     // What the registry holds of sandboxes the editor remembers but the list lacks, by their 12-hex ids.
     lookup: oc
         .route({ method: "POST", path: "/sandbox/lookup" })
@@ -210,7 +214,7 @@ export const hostedPlanContract = {
     checkout: oc
         .route({ method: "POST", path: "/hosted-plan/checkout" })
         // Which rung the first slot is bought at; omitted — as a field or as the whole body — buys the cheapest on sale.
-        .input(z.object({ tier: z.string().optional() }).optional())
+        .input(z.object({ tier: z.string().optional(), returnTo: z.literal(`/start/hosted`).optional() }).optional())
         .output(z.object({ url: z.url() })),
     portal: oc.route({ method: "POST", path: "/hosted-plan/portal" }).output(z.object({ url: z.url() })),
     setSlots: oc

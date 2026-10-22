@@ -54,8 +54,8 @@ const columns: PricingColumn[] = [
     {
         eyebrow: "Our machine",
         name: "Hosted",
-        price: `Free, then $${entry.priceUsd}`,
-        priceNote: "a month per hosted sandbox via Stripe, cancel any time",
+        price: "Free to start",
+        priceNote: `Upgrade when you choose, from $${entry.priceUsd} a month per hosted sandbox`,
         includes: [
             `Free: one sandbox on ${hostedShapeLine(FREE_TIER)}, ${FREE_TIER.monthlyHours} awake hours a month (${hosted.newAccountHours} in ${rampSpan}), removed after ${idleWeeks} weeks unopened, for an account with Google linked`,
             `Paid: a bigger machine and more hours, from $${entry.priceUsd} a month, and never removed`,
@@ -63,7 +63,7 @@ const columns: PricingColumn[] = [
             `Sleeps after ${hosted.idleStopMinutes} minutes away; a sleeping machine spends no hours`,
             "Change size whenever you like: the workspace, the address and the disk stay as they are",
         ],
-        cta: { label: "Start instantly", href: APP_URL },
+        cta: { label: "Start a cloud sandbox", href: `${APP_URL}/start/hosted` },
         note: "Our machine, your AI accounts. Move the workspace to your own whenever you like; the plan is the only thing you cancel.",
     },
 ];

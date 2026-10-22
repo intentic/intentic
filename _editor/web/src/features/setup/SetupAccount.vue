@@ -11,6 +11,9 @@ import { useAuth } from "../../client/auth/useAuth";
 const props = defineProps<{
     // Runs while the session still stands: what the page does on leaving (deleting its draft row) needs the account.
     beforeSignOut: () => Promise<void>;
+    // A purpose-specific entry can keep its destination while the reader changes accounts.
+    afterSignOut?: () => void;
+    showEmailOnMobile?: boolean;
 }>();
 
 const t = useT();
@@ -27,7 +30,7 @@ const leave = async (): Promise<void> => {
         failed.value = true;
         return;
     }
-    leaveAfterSignOut();
+    (props.afterSignOut ?? leaveAfterSignOut)();
 };
 </script>
 
@@ -36,7 +39,7 @@ const leave = async (): Promise<void> => {
         <!-- The masthead's quiet tier, at the size of "Back to workspace" beside it: an exit, not a step of the setup. -->
         <div class="flex min-w-0 items-center gap-1">
             <!-- The address answers "which account is this?", the usual reason to sign out here; a phone keeps only the action. -->
-            <span v-if="user" class="hidden min-w-0 max-w-72 truncate text-[0.8125rem] text-muted sm:inline" :title="user.email">
+            <span v-if="user" :class="showEmailOnMobile ? `inline` : `hidden sm:inline`" class="min-w-0 max-w-72 truncate text-[0.8125rem] text-muted" :title="user.email">
                 <span class="sr-only">{{ t(`setup.setupAccount.signedInAs`) }}</span>
                 {{ user.email }}
             </span>

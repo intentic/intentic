@@ -25,6 +25,7 @@ const route = useRoute();
 
 // Where the guard sent this visitor; sanitized as both a router push and an OAuth callback (lib/routes/signIn.ts).
 const destination = computed(() => returnPath(route.query[`returnTo`]));
+const hosted = computed(() => destination.value.split(`?`)[0] === `/start/hosted`);
 
 // True in the desktop webview, where Google can't run; sign-in there hands off to the real browser instead.
 const desktop = computed(() => desktopVersion() !== undefined);
@@ -46,6 +47,9 @@ onMounted(async () => {
 const install = desktopInstaller();
 const steps = computed<readonly string[]>(() => {
     const signIn = options.value.email ? t(`auth.login.stepSignInAnyWay`) : t(`auth.login.stepSignIn`);
+    if (hosted.value) {
+        return [signIn, t(`hostedStart.title`), t(`hostedStart.firstTask`)];
+    }
     return desktop.value
         ? [signIn, t(`auth.login.stepSandboxWaiting`)]
         : [signIn, t(`auth.login.stepSandboxWaiting`), install === undefined ? t(`auth.login.stepPasteCommand`) : t(`auth.login.stepInstallApp`)];
@@ -170,12 +174,12 @@ watch(
                     ><span class="entry-stop">.</span></span
                 >
                 <span class="beat"
-                    ><span class="entry-display">{{ t(`auth.login.buildAgents`) }}</span
+                    ><span class="entry-display">{{ hosted ? t(`hostedStart.loginTitle`) : t(`auth.login.buildAgents`) }}</span
                     ><span class="entry-stop">.</span></span
                 >
             </h1>
 
-            <p class="hero-sub">{{ t(`auth.login.workspaceCodingAgents`) }}</p>
+            <p class="hero-sub">{{ hosted ? t(`hostedStart.loginDetail`) : t(`auth.login.workspaceCodingAgents`) }}</p>
 
             <!-- The one framed object here; the turned corner and lotus finial only appear on a panel big enough to carry them. -->
             <section class="entry-frame gate">

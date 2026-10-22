@@ -24,6 +24,14 @@ const os = implement(apiContract).$context<OrpcContext>();
 // Where Stripe sends the browser back: the Billing page, which owns the post-checkout wait and every state's words.
 const billingUrl = (context: OrpcContext, query = ``): string => `${context.config.webOrigin}/settings/billing${query}`;
 
+const checkoutUrls = (context: OrpcContext, tier: string, returnTo: `/start/hosted` | undefined): { successUrl: string; cancelUrl: string } =>
+    returnTo === undefined
+        ? { successUrl: billingUrl(context, `?plan=welcome`), cancelUrl: billingUrl(context) }
+        : {
+              successUrl: `${context.config.webOrigin}${returnTo}?tier=${tier}&plan=welcome`,
+              cancelUrl: `${context.config.webOrigin}${returnTo}?tier=${tier}&plan=cancelled`,
+          };
+
 // The wire form of one kind of hours: what was spent, the ceiling or null where nothing is counted, and when it resets.
 const meterOf = (budget: HostedBudget, now: Date): HostedHoursMeter => ({
     kind: budget.kind,
@@ -211,8 +219,7 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
                     customerEmail: user.email,
                     // A resubscriber is the same Stripe customer they were: one invoice history, one portal.
                     ...(plan === null ? {} : { customer: plan.stripeCustomerId }),
-                    successUrl: billingUrl(context, `?plan=welcome`),
-                    cancelUrl: billingUrl(context),
+                    ...checkoutUrls(context, entry.tier.id, input?.returnTo),
                 }),
             );
         }),

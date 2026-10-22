@@ -1,5 +1,6 @@
 import "@intentic/testing/dom";
 import type { HostedOffer, HostedStatus, SandboxSummary } from "@intentic/api-contract";
+import type { HostedTierId } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import { type EffectScope, effectScope, ref } from "vue";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
@@ -20,15 +21,16 @@ const hostedRow = (over: Partial<SandboxSummary> = {}): SandboxSummary =>
 // Every lane a case stands up is stopped after it, so none of them keeps the shared wall clock armed for the next.
 const scopes: EffectScope[] = [];
 
-const stage = (offer: HostedOffer = { enabled: true, remaining: 1 }, project?: string, appTakesProjects = true) => {
+const stage = (offer: HostedOffer = { enabled: true, remaining: 1 }, project?: string, appTakesProjects = true, tier?: HostedTierId) => {
     const rows: SetupRowHost[`sandbox`] = unstubbed(`sandbox`, { sandboxes: ref([]), select: jest.fn(), remove: jest.fn(async () => undefined) });
     const platform = {
-        hostedOffer: jest.fn(async () => offer),
+        hostedOffer: jest.fn<HostedLaneHost[`platform`][`hostedOffer`]>(async () => offer),
         hostedStatus: jest.fn(async (_input: { sandboxId: string }): Promise<HostedStatus> => ({ machine: `unknown` })),
         hostedRestart: jest.fn(async (_input: { sandboxId: string }) => ({ ok: true as const })),
         wake: jest.fn(async (_input: { sandboxId: string }) => ({ ok: true as const })),
-        hostedProvision: jest.fn(async ({ sandboxId }: { sandboxId: string; token: string; project?: string; profile?: string }) =>
-            hostedRow({ id: sandboxId, hosted: { region: `iad`, warm: false } }),
+        hostedProvision: jest.fn(
+            async ({ sandboxId }: { sandboxId: string; token: string; project?: string; profile?: string; tier?: HostedTierId }) =>
+                hostedRow({ id: sandboxId, hosted: { region: `iad`, warm: false } }),
         ),
     };
     const sandbox = {
@@ -46,6 +48,7 @@ const stage = (offer: HostedOffer = { enabled: true, remaining: 1 }, project?: s
                 sandbox: unstubbed<HostedLaneHost[`sandbox`]>(`sandbox`, sandbox),
                 row: setupRow,
                 project,
+                tier,
                 appTakesProjects: () => appTakesProjects,
             }),
         };
@@ -85,6 +88,16 @@ describe(`the hosted offer`, () => {
 });
 
 describe(`starting a machine`, () => {
+    it(`retains the selected paid tier when handing creation to the platform`, async () => {
+        const { platform, sandbox, row, hosted } = stage({ enabled: true, remaining: 1 }, undefined, true, `standard`);
+        row.created.value = draft;
+        hosted.machine.value = `hosted`;
+        expect(await hosted.provisionHosted()).toBe(true);
+        expect(platform.hostedProvision.mock.calls).toEqual([[{ sandboxId: `new`, token: `tok`, tier: `standard` }]]);
+        expect(platform.hostedOffer.mock.calls).toEqual([[{ tier: `standard` }]]);
+        expect(sandbox.hostedProvision).not.toHaveBeenCalled();
+    });
+
     it(`puts one on the row and starts the wait's clock`, async () => {
         const { platform, sandbox, row, hosted } = stage();
         row.created.value = draft;
@@ -157,7 +170,9 @@ describe(`starting a machine`, () => {
         const { sandbox, row, hosted } = stage();
         row.created.value = draft;
         hosted.machine.value = `hosted`;
-        sandbox.hostedProvision.mockRejectedValueOnce(Object.assign(new Error(`link Google first`), { code: `FORBIDDEN`, data: { reason: `google-required` } }));
+        sandbox.hostedProvision.mockRejectedValueOnce(
+            Object.assign(new Error(`link Google first`), { code: `FORBIDDEN`, data: { reason: `google-required` } }),
+        );
         expect(await hosted.provisionHosted()).toBe(false);
         expect({ google: hosted.refusedForGoogle.value, error: hosted.hostedError.value }).toEqual({ google: true, error: undefined });
     });
@@ -364,6 +379,10 @@ describe(`coming back to the row`, () => {
         restarting.reject(new Error(`machine gone`));
         await asked;
         expect(again.hosted.hostedBusy.value).toBe(false);
-        expect(again.hosted.hostedError.value).toEqual({ tone: `danger`, title: `Couldn't start it over. Try again in a moment.`, detail: `machine gone` });
+        expect(again.hosted.hostedError.value).toEqual({
+            tone: `danger`,
+            title: `Couldn't start it over. Try again in a moment.`,
+            detail: `machine gone`,
+        });
     });
 });

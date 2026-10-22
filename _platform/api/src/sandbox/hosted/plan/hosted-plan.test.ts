@@ -3,8 +3,19 @@ import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import { configSchema, type Config } from "../../../config.js";
 import { call } from "@orpc/server";
+import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../../../context.js";
-import { checkHostedPlanPrices, eraseStripeCustomer, queueStripeErasure, sweepStripeErasures, compedEmail, hostedSlotsOf, onHostedPlan, paidSlotsOf, slotHolders } from "./hosted-plan.js";
+import {
+    checkHostedPlanPrices,
+    eraseStripeCustomer,
+    queueStripeErasure,
+    sweepStripeErasures,
+    compedEmail,
+    hostedSlotsOf,
+    onHostedPlan,
+    paidSlotsOf,
+    slotHolders,
+} from "./hosted-plan.js";
 import { StripeError, type StripeGateway, type StripePrice } from "./hosted-plan-stripe.js";
 import { hostedPlanRoutes } from "./hosted-plan.orpc.js";
 import { hostedPlanHttpRoutes } from "./hosted-plan.routes.js";
@@ -93,17 +104,19 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
                 return existing;
             }),
             // Honors the ordering guard like Postgres would: a row synced later than the event is not a hit.
-            updateMany: jest.fn(async ({ where, data }: { where: { stripeCustomerId: string; syncedAt?: { lte: Date } }; data: Partial<PlanRow> }) => {
-                const hits = plans.filter(
-                    (plan) =>
-                        plan.stripeCustomerId === where.stripeCustomerId &&
-                        (where.syncedAt === undefined || plan.syncedAt === undefined || plan.syncedAt <= where.syncedAt.lte),
-                );
-                for (const hit of hits) {
-                    Object.assign(hit, data);
-                }
-                return { count: hits.length };
-            }),
+            updateMany: jest.fn(
+                async ({ where, data }: { where: { stripeCustomerId: string; syncedAt?: { lte: Date } }; data: Partial<PlanRow> }) => {
+                    const hits = plans.filter(
+                        (plan) =>
+                            plan.stripeCustomerId === where.stripeCustomerId &&
+                            (where.syncedAt === undefined || plan.syncedAt === undefined || plan.syncedAt <= where.syncedAt.lte),
+                    );
+                    for (const hit of hits) {
+                        Object.assign(hit, data);
+                    }
+                    return { count: hits.length };
+                },
+            ),
         },
         hostedPlanItem: {
             upsert: jest.fn(
@@ -398,7 +411,10 @@ describe(`ending the Stripe customer with its account`, () => {
 
     it(`counts a customer Stripe no longer has as deleted, and deletes it even when the cancel was refused`, async () => {
         const gone = fakePrisma({ erasures: [{ customerId: `cus_1`, subscriptionId: `sub_1` }] });
-        const missing = stripeWith({ cancel: new StripeError(`Stripe refused: No such subscription`, 404), delete: new StripeError(`Stripe refused: No such customer`, 404) });
+        const missing = stripeWith({
+            cancel: new StripeError(`Stripe refused: No such subscription`, 404),
+            delete: new StripeError(`Stripe refused: No such customer`, 404),
+        });
         expect(await sweepStripeErasures(gone.prisma, baseConfig, logger, missing.gateway)).toEqual({ erased: 1, pending: 0 });
         expect(gone.erasures).toEqual([]);
 
@@ -421,7 +437,10 @@ describe(`ending the Stripe customer with its account`, () => {
             pending: 1,
         });
         expect(erasures).toEqual([{ customerId: `cus_1`, subscriptionId: `sub_1` }]);
-        expect(errors).toHaveBeenCalledWith(expect.objectContaining({ customer: `cus_1`, subscription: `sub_1` }), expect.stringContaining(`daily sweep`));
+        expect(errors).toHaveBeenCalledWith(
+            expect.objectContaining({ customer: `cus_1`, subscription: `sub_1` }),
+            expect.stringContaining(`daily sweep`),
+        );
 
         const up = stripeWith();
         expect(await sweepStripeErasures(prisma, baseConfig, logger, up.gateway)).toEqual({ erased: 1, pending: 0 });
@@ -548,6 +567,29 @@ describe(`the price the plan sells`, () => {
 describe(`the doors to Stripe`, () => {
     const contextFor = (prisma: PrismaClient): OrpcContext =>
         ({ prisma, config: baseConfig, user: { id: `user-1`, email: `buyer@intentic.dev` }, logger }) as unknown as OrpcContext;
+
+    it.each([
+        [undefined, `/settings/billing?plan=welcome`, `/settings/billing`],
+        [`/start/hosted`, `/start/hosted?tier=${ENTRY.id}&plan=welcome`, `/start/hosted?tier=${ENTRY.id}&plan=cancelled`],
+    ] as const)(`returns checkout to its requested journey: %s`, async (returnTo, success, cancel) => {
+        const checkoutSession = jest.fn<StripeGateway[`checkoutSession`]>(async () => ({ url: `https://checkout.test/session` }));
+        const gateway = unstubbed<StripeGateway>(`stripe`, { checkoutSession });
+        const context = contextFor(fakePrisma().prisma);
+        expect(await call(hostedPlanRoutes(gateway).checkout, { tier: ENTRY.id, returnTo }, { context })).toEqual({
+            url: `https://checkout.test/session`,
+        });
+        expect(checkoutSession.mock.calls).toEqual([
+            [
+                {
+                    priceId: `price_${ENTRY.id}`,
+                    clientReferenceId: `user-1`,
+                    customerEmail: `buyer@intentic.dev`,
+                    successUrl: `${baseConfig.webOrigin}${success}`,
+                    cancelUrl: `${baseConfig.webOrigin}${cancel}`,
+                },
+            ],
+        ]);
+    });
 
     it(`answers a refused checkout with Stripe's reason, not an unhandled error`, async () => {
         const refusing = {

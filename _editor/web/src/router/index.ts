@@ -13,6 +13,7 @@ import {
 import { asyncView } from "../components/asyncView";
 import { conversationRedirect, linkedConversation } from "./conversationLink";
 import { requireAuth, resolveUser, unavailable } from "./sessionGuard";
+import { setupRoutes } from "./setupRoutes";
 import { installNativeApp } from "./nativeHandoff";
 import { mobileChatPath } from "../lib/routes/phoneScreens";
 import SplitViewOutline from "../components/SplitViewOutline.vue";
@@ -164,6 +165,7 @@ const hubOutline = (title: () => string, description: () => string, railRows: nu
 };
 
 const routes: RouteRecordRaw[] = [
+    ...setupRoutes,
     {
         path: `/login`,
         name: `login`,
@@ -202,17 +204,6 @@ const routes: RouteRecordRaw[] = [
         name: `desktop-auth-complete`,
         meta: { title: () => t(`router.index.signingIn`) },
         component: () => import(`../features/auth/DesktopAuthComplete.vue`),
-    },
-    {
-        // Initial-setup / recovery view. Outside the shell; signed-in but bounced back to the workspace once the
-        // sandbox is connected (redirectIfReady).
-        path: `/setup`,
-        name: `setup`,
-        meta: { title: () => t(`router.index.setup`) },
-        beforeEnter: [requireAuth],
-        // Wrapped although it is outside the shell: "Add sandbox" reaches it from the shell, and that click deserves
-        // the same instant flip as any other. Full-screen wizard, so no outline to promise.
-        component: asyncView(() => import(`../features/setup/Setup.vue`)),
     },
     noSandboxRoute,
     {

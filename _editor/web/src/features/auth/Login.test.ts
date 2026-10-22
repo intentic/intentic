@@ -150,6 +150,16 @@ it(`lands on the page that asked for the sign-in`, async () => {
     expect(push).toHaveBeenCalledWith(`/sandbox/usage`);
 });
 
+it(`keeps the cloud purpose and destination after sign-in without suggesting a local install`, async () => {
+    const destination = `/start/hosted?tier=standard`;
+    query.value = { returnTo: destination };
+    const el = await mount();
+    expect(el.textContent).toContain(`Start in the cloud`);
+    expect(el.textContent).toContain(`Start a cloud sandbox`);
+    expect(el.textContent).not.toContain(`Install the app`);
+    expect(push).toHaveBeenCalledWith(destination);
+});
+
 it(`brings Google's redirect back to that same page`, async () => {
     query.value = { returnTo: `/sandbox/usage` };
     renderButton.mockResolvedValue(false);

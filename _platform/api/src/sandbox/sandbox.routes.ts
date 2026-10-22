@@ -1,5 +1,5 @@
 import { type AnnounceRefusal, apiContract, type BootReport, HostedStatusSchema, type SetupReport } from "@intentic/api-contract";
-import { FREE_TIER } from "@intentic/constants";
+import { hostedOfferFor } from "./hosted-offer.js";
 import type { Prisma } from "@intentic/prisma";
 import type { MemberRole } from "@intentic/sandbox-contract/schemas/shared";
 import { GrantedRoleSchema } from "@intentic/sandbox-contract/schemas/shared";
@@ -14,16 +14,9 @@ import { requireOwnedSandbox, requireUser } from "../guards.js";
 import { CloudflareTokenError, listZoneNames } from "./cloudflare.js";
 import { edgeTransports } from "./edge-transports.js";
 import { getMachine, isFlyGone } from "./hosted/fly/fly.js";
-import {
-    HostedAppNotOurs,
-    HostedNothingKept,
-    hostedEnabled,
-    HostedSlotsExhausted,
-    provisionHosted,
-    rollbackHosted,
-} from "./hosted/hosted.js";
+import { HostedAppNotOurs, HostedNothingKept, hostedEnabled, HostedSlotsExhausted, provisionHosted, rollbackHosted } from "./hosted/hosted.js";
 import { HostedBuildRefused, hostedBuildStatus, rebuildOnMovedBase, requestHostedBuild } from "./hosted/build/hosted-build.js";
-import { HostedAtCapacity, hostedCapacity } from "./hosted/hosted-capacity.js";
+import { HostedAtCapacity } from "./hosted/hosted-capacity.js";
 import { HostedImageKept } from "./hosted/gate/state-gate.js";
 import { kickHostedPool } from "./hosted/hosted-pool.js";
 import {
@@ -33,10 +26,7 @@ import {
     kickHostedCleanup,
     releaseHosted,
 } from "./hosted/hosted-cleanup.js";
-import { hostedPlanEnabled, hostedSlotUse, onHostedPlan } from "./hosted/plan/hosted-plan.js";
 import { recordHostedProvision } from "./hosted/abuse/hosted-source.js";
-import { hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
-import { hostedArrivalBudget } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { hostReportsOf, mintFixCode } from "./host-report.js";
 import { duplicateCopiesOf } from "./announce-copies.js";
@@ -46,13 +36,13 @@ import { definitionSeedFor } from "./profiles/profiles.js";
 import { mintSetupCodeFor, ReachabilityUnavailable } from "./setup-code.js";
 import { sendSetupLinkEmail } from "./setup-email.js";
 import { mintOwnerTicket, OWNER_TICKET_TTL_MS } from "@intentic/sandbox-contract/owner-ticket";
-import { arrivalTier, hostedArrivalFor, offeredMachines } from "./hosted/free-lane.js";
+import { arrivalTier, hostedArrivalFor } from "./hosted/free-lane.js";
 import { mintIdentityAssertionFor } from "./identity-assertion.js";
 import { wakeHostedSandbox } from "./hosted/wake/hosted-wake.js";
 import { ingressEnabled } from "./reachability.js";
 import { ADOPTION_TICKET_TTL_MS, mintAdoptionTicket, standingsOf } from "./recovery.js";
 import { hostedSummaryOf } from "./hosted/fly/hosted-state.js";
-import { buildRefusal, hoursOf } from "./hosted-refusals.js";
+import { buildRefusal } from "./hosted-refusals.js";
 import {
     assertHostedAllowance,
     keptVersion,
@@ -191,7 +181,7 @@ export const sandboxRoutes = {
     // setup mint or hosted provision computes in-process.
     create: os.sandbox.create.handler(async ({ context, input }) => {
         const user = requireUser(context);
-        const { sandbox } = await mintSandbox(context.prisma, context.config, { name: input.name, ownerId: user.id });
+        const { sandbox } = await mintSandbox(context.prisma, context.config, { name: input.name, ownerId: user.id }, input.requestId);
         return toSummary(sandbox, `owner`, context);
     }),
     // Renames and/or sets the switcher logo (`null` clears it); the `!== undefined` guards keep the two fields
@@ -269,40 +259,7 @@ export const sandboxRoutes = {
     // Whether this platform hosts sandboxes at all, and how many more the caller may create; read before the editor or
     // wizard offers anything. `projects` says a provision here reads `project` (hosted.ts): a fact about this code, so it
     // is said whatever else the offer says.
-    hostedOffer: os.sandbox.hostedOffer.handler(async ({ context }) => {
-        const user = requireUser(context);
-        if (!hostedEnabled(context.config)) {
-            return { enabled: false, remaining: 0, projects: true };
-        }
-        const [slots, budget, plan, capacity, suspension, arrival] = await Promise.all([
-            // The free rung's, like the gate above: the card offers a machine, and the one on offer is a free one.
-            hostedSlotUse(context.prisma, context.config, user.id, FREE_TIER.id),
-            // Included so the card states the ceiling before it's spent; omitted entirely when unmetered.
-            hostedArrivalBudget(context.prisma, context.config, user.id),
-            // Separate from unmetered: a ceiling-less platform is also unmetered, but its card must not claim an
-            // unbought plan.
-            hostedPlanEnabled(context.config) ? onHostedPlan(context.prisma, context.config, user.id) : Promise.resolve(false),
-            // Fleet-wide capacity, not this account's allowance: a fresh account can still meet a full provider.
-            // Region-aware, since stock the residency rule forbids this caller isn't stock to promise.
-            hostedCapacity(context.prisma, context.config, hostedRegionFor(context.config.hosted, context.headers)),
-            hostedSuspensionOf(context.prisma, context.config, user.id),
-            // An account that signs in only by email reaches the free rung once it links Google (free-lane.ts).
-            hostedArrivalFor(context.prisma, context.config, user.id),
-        ]);
-        const offer = {
-            enabled: true,
-            projects: true,
-            // A suspended account is offered nothing, whatever its slots say, nor is one that must link Google first; an
-            // email-only account's own paid slot is offered as the one machine it can have (free-lane.ts).
-            remaining: offeredMachines(arrival, suspension !== undefined, slots.left),
-            // Absent unless true: a lane with room says nothing, so this can't age into a false scare.
-            ...(capacity.full ? { full: true } : {}),
-            ...(budget.metered ? { hours: hoursOf(budget) } : {}),
-            ...(plan ? { plan: true } : {}),
-            ...(suspension === undefined ? {} : { suspended: true }),
-        };
-        return arrival.lane === `needs-google` ? { ...offer, needsGoogle: true } : offer;
-    }),
+    hostedOffer: os.sandbox.hostedOffer.handler(({ context, input }) => hostedOfferFor(context, input?.tier)),
     // Gives an existing sandbox a machine; idempotent (an existing machine is returned, never duplicated). A warm claim
     // changes the row's token, digest and id, so the summary is re-read after provisioning rather than reused.
     hostedProvision: os.sandbox.hostedProvision.handler(async ({ context, input }) => {
@@ -325,7 +282,7 @@ export const sandboxRoutes = {
             return toSummary(already, `owner`, context);
         }
         const source = { userId: user.id, email: user.email, ip: clientIp(context.headers, context.config) };
-        const arrival = await hostedArrivalFor(context.prisma, context.config, user.id);
+        const arrival = await hostedArrivalFor(context.prisma, context.config, user.id, input.tier);
         const admitted = await assertHostedAllowance(context, source, arrival);
         if (!ingressEnabled(context.config)) {
             throw new ORPCError(`NOT_FOUND`, { message: `this platform has no reachability fabric configured` });

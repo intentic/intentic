@@ -1,4 +1,4 @@
-import { GOOGLE_REQUIRED_REASON,apiContract } from "@intentic/api-contract";
+import { GOOGLE_REQUIRED_REASON, apiContract } from "@intentic/api-contract";
 import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -1293,7 +1293,9 @@ describe(`rollbackHosted`, () => {
         const { record, row } = fakeGateRecord({ previousImage: PINNED });
         const held = Promise.withResolvers<void>();
         const other = fakeHostedAppLock(config(), WAKE_TARGET.appName, true, async () => held.promise);
-        await expect(rollbackHosted(config(), wakeArgs(), { ...WAKE_TARGET, ...row }, logger, record, { busy: `refuse` })).rejects.toBeInstanceOf(HostedMachineBusy);
+        await expect(rollbackHosted(config(), wakeArgs(), { ...WAKE_TARGET, ...row }, logger, record, { busy: `refuse` })).rejects.toBeInstanceOf(
+            HostedMachineBusy,
+        );
         held.resolve();
         await other;
         expect(updatesIn(fly)).toHaveLength(0);
@@ -1545,7 +1547,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             context: routeContext({ prisma: fakePrisma({ hostedMachine: { count: jest.fn().mockResolvedValue(0) } }) }),
         });
         // Ceiling is surfaced before any of it is spent, so the offer card doesn't say "free" and correct itself later.
-        expect(on).toEqual({ enabled: true, projects: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
+        expect(on).toEqual({ enabled: true, startJourney: true, unopenedDays: 21, projects: true, remaining: 1, hours: { allowance: 40, remaining: 40 } });
     });
 
     /* THE CARD OFFERS A FREE MACHINE, so it states the free plan's hours even to somebody on the plan: a plan buys
@@ -1559,6 +1561,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: member }) })).toEqual({
             enabled: true,
+            startJourney: true,
+            unopenedDays: 21,
             projects: true,
             remaining: 1,
             hours: { allowance: config().hosted.monthlyHours, remaining: config().hosted.monthlyHours },
@@ -1567,7 +1571,13 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             prisma: fakePrisma({ hostedMachine: { count: jest.fn().mockResolvedValue(0) } }),
             config: config({ hosted: { ...config().hosted, monthlyHours: 0 } }),
         });
-        expect(await call(sandboxRoutes.hostedOffer, undefined, { context: uncapped })).toEqual({ enabled: true, remaining: 1, projects: true });
+        expect(await call(sandboxRoutes.hostedOffer, undefined, { context: uncapped })).toEqual({
+            enabled: true,
+            startJourney: true,
+            unopenedDays: 21,
+            remaining: 1,
+            projects: true,
+        });
         // Where the plan is actually for sale, the same owner is told they're on it (`plan: true`), distinguishing this
         // from the uncapped case above.
         const selling = routeContext({
@@ -1576,6 +1586,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context: selling })).toEqual({
             enabled: true,
+            startJourney: true,
             projects: true,
             remaining: 1,
             // The hours are the free plan's, which is what the machine on offer would be; the plan buys a rung beside it.
@@ -1718,21 +1729,27 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     // The free rung is a free lane (free-lane.ts): an account that signs in only by email reaches it once Google is
     // linked, and can otherwise arrive straight onto a paid slot it bought.
     describe(`an account that signs in only by email`, () => {
-        const emailOnly = (plan: { status: string; items: { tier: string; quantity: number }[] } | null, machine?: object) =>
+        const emailOnly = (plan: { status: string; items: { tier: string; quantity: number }[] } | null, machine?: object, google = false) =>
             fakePrisma({
-                account: { count: jest.fn().mockResolvedValue(0) },
+                account: { count: jest.fn().mockResolvedValue(google ? 1 : 0) },
                 hostedPlan: { findUnique: jest.fn().mockResolvedValue(plan) },
                 sandbox: {
                     findFirst: jest.fn().mockResolvedValue(ownedRow),
                     findUniqueOrThrow: jest.fn().mockResolvedValue({ ...ownedRow, hosted: { region: `iad`, warm: false } }),
                 },
-                hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue(machine ?? {}) },
+                hostedMachine: {
+                    findUnique: jest.fn().mockResolvedValue(null),
+                    count: jest.fn().mockResolvedValue(0),
+                    create: jest.fn().mockResolvedValue(machine ?? {}),
+                },
                 hostedPoolMachine: { findMany: jest.fn().mockResolvedValue([]) },
             });
 
         it(`is offered no free machine, and told it needs Google`, async () => {
             expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma: emailOnly(null) }) })).toMatchObject({
                 enabled: true,
+                startJourney: true,
+            unopenedDays: 21,
                 remaining: 0,
                 needsGoogle: true,
             });
@@ -1746,16 +1763,51 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
             expect(fetchSpy).toHaveLength(0);
         });
 
-        it(`arrives straight onto a paid slot it holds, built to its rung rather than taken from free stock`, async () => {
+        it(`keeps an explicit free choice free even when the email account has a paid allocation`, async () => {
+            const prisma = emailOnly({ status: `active`, items: [{ tier: PAID.id, quantity: 1 }] });
+            const calls = stubFetch([]);
+            expect(await call(sandboxRoutes.hostedOffer, { tier: FREE_TIER.id }, { context: routeContext({ prisma }) })).toMatchObject({
+                remaining: 0,
+                needsGoogle: true,
+            });
+            await expect(
+                call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n`, tier: FREE_TIER.id }, { context: routeContext({ prisma }) }),
+            ).rejects.toMatchObject({ code: `FORBIDDEN`, data: { reason: GOOGLE_REQUIRED_REASON } });
+            expect(calls).toEqual([]);
+        });
+
+        it(`refuses a requested paid tier with no allocation before touching the provider`, async () => {
+            const calls = stubFetch([]);
+            const prisma = emailOnly(null, undefined, true);
+            expect(await call(sandboxRoutes.hostedOffer, { tier: PAID.id }, { context: routeContext({ prisma }) })).toMatchObject({
+                remaining: 0,
+                hours: { allowance: PAID.monthlyHours, remaining: PAID.monthlyHours },
+            });
+            await expect(
+                call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n`, tier: PAID.id }, { context: routeContext({ prisma }) }),
+            ).rejects.toMatchObject({ code: `BAD_REQUEST` });
+            expect(calls).toEqual([]);
+        });
+
+        it.each([
+            [false, undefined],
+            [false, PAID.id],
+            [true, PAID.id],
+        ] as const)(`uses a paid allocation with Google linked %s and requested tier %s`, async (google, tier) => {
             const calls = stubFetch([
-                { match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`), respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]) },
+                {
+                    match: (method, url) => method === `GET` && url.endsWith(`/api/v2/namespaces`),
+                    respond: () => json([{ namespaceToken: `ns-1`, name: `public`, open: true }]),
+                },
                 { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ id: `app1` }) },
                 { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ id: `vol_1` }) },
                 { match: (method, url) => method === `POST` && url.includes(`/machines`), respond: () => json({ id: `m1`, state: `created` }) },
             ]);
-            const prisma = emailOnly({ status: `active`, items: [{ tier: PAID.id, quantity: 1 }] });
-            expect(await call(sandboxRoutes.hostedOffer, undefined, { context: routeContext({ prisma }) })).toMatchObject({ remaining: 1 });
-            await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) });
+            const prisma = emailOnly({ status: `active`, items: [{ tier: PAID.id, quantity: 1 }] }, undefined, google);
+            expect(
+                await call(sandboxRoutes.hostedOffer, tier === undefined ? undefined : { tier }, { context: routeContext({ prisma }) }),
+            ).toMatchObject({ remaining: 1, hours: { allowance: PAID.monthlyHours, remaining: PAID.monthlyHours } });
+            await call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n`, tier }, { context: routeContext({ prisma }) });
             expect(calls.find((entry) => entry.method === `POST` && entry.url.includes(`/machines`))?.body).toMatchObject({
                 config: { guest: { cpus: PAID.cpus, memory_mb: PAID.memoryMb } },
             });
@@ -1772,6 +1824,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const context = routeContext({ prisma: full, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context })).toEqual({
             enabled: true,
+            startJourney: true,
+            unopenedDays: 21,
             projects: true,
             remaining: 1,
             full: true,
@@ -1791,6 +1845,8 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const context = routeContext({ prisma: stocked, config: config({ hosted: { ...config().hosted, maxMachines: 100 } }) });
         expect(await call(sandboxRoutes.hostedOffer, undefined, { context })).toEqual({
             enabled: true,
+            startJourney: true,
+            unopenedDays: 21,
             projects: true,
             remaining: 1,
             hours: { allowance: 40, remaining: 40 },

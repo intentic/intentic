@@ -49,6 +49,8 @@ export const passkeyNudgeKey = sandboxKeys(`intentic.passkeyNudge.`);
 export const justSetUpKey = sandboxKeys(`intentic.justSetUp.`);
 // Whether the chat's usage rail last had anything to show, per sandbox (features/chat/panel/capacity/capacityMemory.ts).
 export const capacityRailKey = sandboxKeys(`intentic.capacityRail.`);
+// A committed cloud-start request, scoped to its account so reloads and checkout returns reuse the same sandbox.
+export const hostedStartKey = accountKeys(`intentic.hostedStart.`);
 
 // The transcript mirror (models/conversations/transcript/transcriptCache.ts): up to its last few hundred messages per
 // conversation, in IndexedDB. Deleted whole on sign-out; a window holding it open closes on the version change, so the

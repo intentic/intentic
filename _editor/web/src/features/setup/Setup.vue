@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
+import { isHostedTierId, PLATFORM_WEB_ORIGIN } from "@intentic/constants";
 import { sandboxSubdomain } from "@intentic/sandbox-contract/ids/hostnames";
 import {
     AppBrand,
@@ -140,7 +140,7 @@ const { refusal: handoffRefusal, handOff } = useProjectHandoff({
 });
 const row = useSetupRow({ sandbox, enter: enterWorkspace, handOff, name: project?.name });
 const { created, resuming, finished, creating, error, claimedAt, report, announced, autoCreate } = row;
-const hosted = useHostedLane({ platform: apiClient.sandbox, sandbox, row, project: project?.dirName, appTakesProjects: desktopTakesProjects });
+const hosted = useHostedLane({ platform: apiClient.sandbox, sandbox, row, project: project?.dirName, appTakesProjects: desktopTakesProjects, tier: isHostedTierId(route.query[`tier`]) ? route.query[`tier`] : undefined });
 const {
     machine,
     hostedRow,
