@@ -10,7 +10,7 @@
     },
     "app": {
         "title": "Passwörter",
-        "loading": "Passwörter werden gelesen…",
+        "loading": "Wird geladen…",
         "search": "Passwörter suchen",
         "new": "Neues Passwort",
         "settingsAction": "Einstellungen",
@@ -22,7 +22,7 @@
         "manageOnComputer": "Auf diesem Computer verwalten",
         "confirmHere": "Auf diesem Computer bestätigen",
         "error": {
-            "read": "Deine Passwörter konnten nicht gelesen werden.",
+            "read": "Passwörter konnten nicht geladen werden.",
             "act": "Das hat nicht geklappt."
         },
         "lock": {

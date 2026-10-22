@@ -10,7 +10,7 @@
     },
     "app": {
         "title": "Hasła",
-        "loading": "Odczytywanie haseł…",
+        "loading": "Ładowanie…",
         "search": "Szukaj haseł",
         "new": "Nowe hasło",
         "settingsAction": "Ustawienia",
@@ -22,7 +22,7 @@
         "manageOnComputer": "Zarządzaj na tym komputerze",
         "confirmHere": "Potwierdź na tym komputerze",
         "error": {
-            "read": "Nie udało się odczytać Twoich haseł.",
+            "read": "Nie udało się wczytać haseł.",
             "act": "To nie zadziałało."
         },
         "lock": {

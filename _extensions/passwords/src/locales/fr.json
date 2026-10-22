@@ -10,7 +10,7 @@
     },
     "app": {
         "title": "Mots de passe",
-        "loading": "Lecture de vos mots de passe…",
+        "loading": "Chargement…",
         "search": "Rechercher des mots de passe",
         "new": "Nouveau mot de passe",
         "settingsAction": "Réglages",
@@ -22,7 +22,7 @@
         "manageOnComputer": "Gérer sur cet ordinateur",
         "confirmHere": "Confirmer sur cet ordinateur",
         "error": {
-            "read": "Impossible de lire vos mots de passe.",
+            "read": "Impossible de charger les mots de passe.",
             "act": "Ça n'a pas marché."
         },
         "lock": {

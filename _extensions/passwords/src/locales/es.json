@@ -10,7 +10,7 @@
     },
     "app": {
         "title": "Contraseñas",
-        "loading": "Leyendo tus contraseñas…",
+        "loading": "Cargando…",
         "search": "Buscar contraseñas",
         "new": "Contraseña nueva",
         "settingsAction": "Ajustes",
@@ -22,7 +22,7 @@
         "manageOnComputer": "Gestionar en este ordenador",
         "confirmHere": "Confirmar en este ordenador",
         "error": {
-            "read": "No se pudieron leer tus contraseñas.",
+            "read": "No se pudieron cargar las contraseñas.",
             "act": "Eso no funcionó."
         },
         "lock": {

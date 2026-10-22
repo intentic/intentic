@@ -10,7 +10,7 @@
     },
     "app": {
         "title": "Passwords",
-        "loading": "Reading your passwords…",
+        "loading": "Loading…",
         "search": "Search passwords",
         "new": "New password",
         "settingsAction": "Settings",
@@ -22,7 +22,7 @@
         "manageOnComputer": "Manage on this computer",
         "confirmHere": "Confirm on this computer",
         "error": {
-            "read": "Your passwords could not be read.",
+            "read": "Passwords could not be loaded.",
             "act": "That did not work."
         },
         "lock": {
