@@ -294,7 +294,7 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
         <button
             ref="trigger"
             type="button"
-            class="sandbox-switcher icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center overflow-hidden rounded-lg p-2"
+            class="sandbox-switcher icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center overflow-hidden rounded-lg"
             :class="[
                 route.path === '/sandbox' || route.path.startsWith('/sandbox/') ? 'ui-row-select-on text-link' : 'text-muted hover:text-content',
                 open && 'opacity-80',

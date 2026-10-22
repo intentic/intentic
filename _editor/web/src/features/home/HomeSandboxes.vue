@@ -79,7 +79,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
             @click="choose(box.id, 'click')"
             @keydown.enter.prevent="choose(box.id, 'enter')"
         >
-            <SandboxLogo :size="28" :image="box.image ?? null" :name="box.name" />
+            <SandboxLogo :image="box.image ?? null" :name="box.name" class="rounded-lg" />
             <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
         </button>
         <RouterLink
