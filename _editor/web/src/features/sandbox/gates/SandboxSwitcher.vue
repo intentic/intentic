@@ -294,8 +294,11 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
         <button
             ref="trigger"
             type="button"
-            class="sandbox-switcher flex items-center justify-center overflow-hidden transition-opacity hover:opacity-80"
-            :class="[route.path.startsWith('/sandbox') ? 'text-link' : 'text-muted', open && 'opacity-80']"
+            class="sandbox-switcher flex items-center justify-center overflow-hidden rounded-xl transition-opacity hover:opacity-80"
+            :class="[
+                route.path === '/sandbox' || route.path.startsWith('/sandbox/') ? 'text-link ring-2 ring-link ring-offset-2 ring-offset-card' : 'text-muted',
+                open && 'opacity-80',
+            ]"
             :aria-label="
                 folder ? t(`local.placeSwitcher.switchPlace`, { name: folder.name }) : t(`sandbox.sandboxSwitcher.switchSandbox`, { switcherLabel })
             "
