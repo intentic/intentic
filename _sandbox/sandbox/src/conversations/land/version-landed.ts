@@ -12,7 +12,7 @@ import { standing } from "../../rules/rules.js";
 import { reposOf } from "../registry/agents-store.js";
 import { landMarksOf } from "../registry/land-marks.js";
 import { conversationTrailers, describeLanding } from "./landed-subject.js";
-import { rederiveSettled } from "./rederive.js";
+import { rederiveSettled, withRederivedRepo } from "./rederive.js";
 import { opt } from "../../opt.js";
 
 // The `version-landed` built-in at `agent.landed`: keeps the main tree committed for a person who never commits.
@@ -96,7 +96,12 @@ const commitClaim = async (services: Services, id: string, drafted = true): Prom
     );
     const committed: string[] = [];
     for (const claim of claims) {
-        const did = await services.agentWorktrees.withRepoLock(claim.repo, () => commitOnly(claim.dir, claim.paths, message, AGENT_GIT_AUTHOR));
+        const did = await withRederivedRepo(claim.dir, (run) => services.agentWorktrees.withRepoLock(claim.repo, run), async () => {
+            // Another land may have reached the tree while this commit queued. Read the claim under the same lock
+            // as the commit, after that land's writers, rather than staging a file list captured before them.
+            const [current] = await claimsOf(services, id, [claim.repo]);
+            return current === undefined ? false : commitOnly(current.dir, current.paths, message, AGENT_GIT_AUTHOR);
+        });
         if (did) {
             committed.push(claim.repo);
         }

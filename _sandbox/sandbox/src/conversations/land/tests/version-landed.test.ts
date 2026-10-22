@@ -85,6 +85,27 @@ describe(`settling a landing`, () => {
         expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `fix: cascading markers\n\nConversation-Id: c1`);
     });
 
+    test(`includes generated paths that became attributable while the commit waited for its lock`, async () => {
+        let locked = false;
+        const fleet: Services = {
+            ...servicesWith([version(`auto-version`)], `fix: cascading markers`),
+            agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
+                mainDir: () => WORKSPACE_ROOT,
+                withRepoLock: async (_repo, run) => {
+                    locked = true;
+                    return run();
+                },
+            }),
+            agentOrigins: unstubbed<Services["agentOrigins"]>("agentOrigins", {
+                forRepo: async () => locked
+                    ? { "a.ts": ["c1"], "state-shapes.json": ["c1"], "unrelated.ts": ["c2"] }
+                    : { "a.ts": ["c1"] },
+            }),
+        };
+        await settleLanding(fleet, `c1`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`, `state-shapes.json`], `fix: cascading markers\n\nConversation-Id: c1`);
+    });
+
     // The report already tells the owner the draft failed; the landing must still reach history.
     test(`a failed draft still commits, under the conversation's title`, async () => {
         describeLanding.mockRejectedValue(new Error(`every model set for this job names an account this sandbox no longer has`));

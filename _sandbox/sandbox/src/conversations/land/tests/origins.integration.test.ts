@@ -278,7 +278,7 @@ test("advancing HEAD does not re-read a merge-base: the branch point cannot move
     expect(calls.filter((args) => args[0] === "merge-base")).toEqual([]);
 });
 
-test("a scan at an unmoved head over unchanged landings answers from memory: no git, not even a diff", async () => {
+test("a scan at an unmoved head caches source claims but refreshes generated paths", async () => {
     const { work, worktrees, conversation } = await setup();
     await writeFile(join(conversation.cwd, "app.ts"), edited(1));
     const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
@@ -289,7 +289,7 @@ test("a scan at an unmoved head over unchanged landings answers from memory: no 
 
     calls.length = 0;
     expect(await origins.forRepo("root", work, head)).toEqual({ "app.ts": ["c1"] });
-    expect(calls).toEqual([]);
+    expect(calls).toEqual([["diff", "--name-only", "--no-renames", "-z", "HEAD", "--", ":(attr:merge=derived)"]]);
 
     // A head move is a new answer: the user's commit retires the claim, which the remembered map must not hide.
     await sh(work, "add", "-A");

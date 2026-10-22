@@ -452,7 +452,10 @@ flowchart LR
   one that does not say whether it travels, as literals.
   `store/shapes/write-state-shapes.ts --freeze` (which the fixers run next, when the change reached a daemon or
   contract source) reads it and records each document's shape in `store/generated/state-shapes.json` by the release
-  that first shipped it.
+  that first shipped it. These writers run in the background after landing. Staging landed work and committing wait
+  for them before taking the repository lock, so generated outputs join the source changes in the same commit.
+  Attribution caches source claims only and reads generated paths afresh, including release-stamp updates with the
+  latest landed work. Explicit file selections and existing unrelated staging keep their normal Git behavior.
   `--checks` (this package's `pretypecheck`) derives the uncommitted `state-shapes.ts` from it: every released shape
   must still fit today's schema after its conversions and lose no key without a `drop` or `rename`
   (`store/evolution/conversion-types.ts`).

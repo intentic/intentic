@@ -58,9 +58,9 @@ export const createAgentOrigins = (
     const anchors = new Map<string, string>();
     // Unresolvable shas are remembered, so a broken landing fails once, not every scan; a restart retries.
     const unresolvable = new Set<string>();
-    // The last answer per repo, reused while the head and the set of live landings stand still: every span is between
-    // fixed shas, so the same pair derives the same map, and a scan runs about once a second while files land.
-    const answers = new Map<string, { readonly key: string; readonly origins: Readonly<Record<string, readonly string[]>> }>();
+    // Source claims are between fixed shas. Derived paths are read separately on EVERY ask: their background writer
+    // moves neither HEAD nor the landings, so caching them here hid outputs written after the first Changes scan.
+    const answers = new Map<string, { readonly key: string; readonly origins: Record<string, string[]> }>();
 
     // Every path a span touches, including both legs of a rename (`--no-renames`, since git defaults renames on):
     // `--name-only` alone reports a rename only at its destination, hiding the deletion from the panel entirely.
@@ -205,15 +205,15 @@ export const createAgentOrigins = (
             }
             const key = [head, ...landings.map((landing) => `${landing.id} ${landing.head} ${landing.tip}`)].join("\0");
             const answered = answers.get(repo);
-            if (answered?.key === key) {
-                return answered.origins;
+            const sources = answered?.key === key ? answered.origins : {};
+            if (answered?.key !== key) {
+                for (const landing of landings) {
+                    await claim(repo, dir, head, landing, sources);
+                }
+                answers.set(repo, { key, origins: sources });
             }
-            const origins: Record<string, string[]> = {};
-            for (const landing of landings) {
-                await claim(repo, dir, head, landing, origins);
-            }
+            const origins = { ...sources };
             await claimDerived(dir, landings, origins, git);
-            answers.set(repo, { key, origins });
             return origins;
         },
     };

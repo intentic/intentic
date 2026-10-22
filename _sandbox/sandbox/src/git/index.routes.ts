@@ -3,6 +3,7 @@ import { gitContract } from "@intentic/sandbox-contract/contracts/git.contract";
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { withRederivedRepo } from "../conversations/land/rederive.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { syncProjectExcludes } from "../workspace/layout/git-layout.js";
 import { stageHold } from "./changes/index-preflight.js";
@@ -33,6 +34,12 @@ export interface IndexRouteDeps {
     readonly identifyOrigins: (repos: readonly RepoChanges[]) => Record<string, OriginAgent>;
 }
 
+// Counting and staging must see the generated outputs too, even when pressed as soon as a land completes.
+const onReadyRepo = async <T>(deps: IndexRouteDeps, repo: string, task: (dir: string) => Promise<T>): Promise<T> => {
+    const dir = await deps.repoDir(repo);
+    return withRederivedRepo(dir, (run) => deps.onRepo(repo, run), () => task(dir));
+};
+
 export const indexRoutes = (i: GitImplementer, deps: IndexRouteDeps) => {
     const { services, targets } = deps;
     // Re-reads only the just-committed repo, inside the lock, instead of a full rescan: a land landing between commit
@@ -50,7 +57,7 @@ export const indexRoutes = (i: GitImplementer, deps: IndexRouteDeps) => {
     const runs = createIndexRuns({
         logger: services.logger,
         perf: services.perf,
-        onRepo: deps.onRepo,
+        onRepo: (repo, task) => onReadyRepo(deps, repo, task),
         whileCommitting: deps.whileCommitting,
         invalidate: deps.invalidateScan,
         steps: {
@@ -74,7 +81,7 @@ export const indexRoutes = (i: GitImplementer, deps: IndexRouteDeps) => {
         // Marked committing before the lock: queued behind a land still counts as running to the user.
         commit: i.commit.handler(({ input }) =>
             deps.whileCommitting(input.repo, () =>
-                deps.onRepo(input.repo, (dir) =>
+                onReadyRepo(deps, input.repo, (dir) =>
                     services.perf.track("git.commit", { repo: input.repo }, async () => {
                         // Carries git's own refusal text back as a CONFLICT, not an opaque 500 with nothing to act on.
                         try {
@@ -101,7 +108,7 @@ export const indexRoutes = (i: GitImplementer, deps: IndexRouteDeps) => {
         // Index-only: no checkpoint or history notification, since the worktree is untouched. A target means the whole
         // side, not just the rows a response could fit.
         stage: i.stage.handler(({ input }) =>
-            deps.onRepo(input.repo, (dir) =>
+            onReadyRepo(deps, input.repo, (dir) =>
                 services.perf.track("git.stage", { repo: input.repo }, async () => {
                     await (input.chip === undefined ? targets.stageTarget(input.repo, dir, input) : deps.lightChip(input.repo, dir, input.chip));
                     deps.invalidateScan();

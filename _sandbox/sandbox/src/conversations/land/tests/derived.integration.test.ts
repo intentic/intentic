@@ -5,6 +5,12 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { defaultGit } from "@intentic/base/git";
 import { unstubbed } from "@intentic/testing";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
+import { createApp } from "../../../app.js";
+import type { CompositionCore } from "../../../composition.js";
+import { gitSlice } from "../../../git/git-slice.js";
+import { clientFor } from "../../../harness/route-client.testing.js";
+import { services } from "../../../harness/route-services.testing.js";
 import { isolatedAgent } from "../../registry/agents-store.testing.js";
 import type { AgentsRegistry } from "../../registry/agents-registry.js";
 import { createExpiryTracker } from "../../registry/expiry.js";
@@ -17,7 +23,7 @@ import { workspacePaths } from "../../../workspace/workspace.js";
 import { presenceOf } from "../agent-changes.js";
 import { landAgent } from "../land.js";
 import { createAgentOrigins } from "../origins.js";
-import { afterLand, REPO_FIXERS, rederiveSettled, scheduleRederive } from "../rederive.js";
+import { afterLand, REPO_FIXERS, rederiveSettled, scheduleRederive, withRederivedRepo } from "../rederive.js";
 import { syncConversation } from "../sync.js";
 
 // A file the repository marks `merge=derived` is a function of the tree it sits in. The evidence this pins: in two weeks
@@ -33,6 +39,16 @@ const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exe
 const commit = (cwd: string, message: string): Promise<string> => sh(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-am", message);
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 const perf = createPerfTracker(logger);
+const realGit = gitSlice.build(unstubbed<CompositionCore>("core", {})).git;
+
+const originsOf = (entries: readonly ReturnType<typeof isolatedAgent>[]) => {
+    const agents = unstubbed<AgentsRegistry>("agents", {
+        ids: () => entries.map((entry) => entry.id),
+        entry: (id) => entries.find((entry) => entry.id === id),
+        markLandingAbsorbed: async () => {},
+    });
+    return createAgentOrigins({ agents, logger, expiry: createExpiryTracker(defaultGit) });
+};
 
 // What a door does once the land's lease is released, and the wait a version commit makes before it commits.
 const landThenDerive = async (worktrees: AgentWorktrees, work: string, entry: Parameters<typeof landAgent>[1]) => {
@@ -197,14 +213,96 @@ test("a derived path reads as landed, and while it differs from HEAD it is the n
     expect([...presence.inWorkspace].toSorted()).toEqual(["derived.txt", "src/a.txt"]);
 
     const entries = [isolatedAgent(landedFirst.repos), isolatedAgent(landedSecond.repos, { id: "c2" })];
-    const agents = unstubbed<AgentsRegistry>("agents", {
-        ids: () => entries.map((entry) => entry.id),
-        entry: (id) => entries.find((entry) => entry.id === id),
-        markLandingAbsorbed: async () => {},
-    });
-    const origins = createAgentOrigins({ agents, logger, expiry: createExpiryTracker(defaultGit) });
+    const origins = originsOf(entries);
     // The next commit of landed work carries it, from the sources it was written from.
     expect(await origins.forRepo("root", work)).toEqual({ "src/a.txt": ["c1"], "src/b.txt": ["c2"], "derived.txt": ["c2"] });
+});
+
+test("a scan before background generation never hides its later writes or keeps a reverted output attributed", async () => {
+    const { work, worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    await write(conversation.cwd, { "src/a.txt": "a1\n" });
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    const origins = originsOf([isolatedAgent(landed.repos)]);
+    const before = await origins.forRepo("root", work);
+    expect(before).toEqual({ "src/a.txt": ["c1"] });
+
+    afterLand({ agentWorktrees: worktrees, logger }, "c1", landed);
+    await rederiveSettled([work]);
+    expect(await origins.forRepo("root", work)).toEqual({ "src/a.txt": ["c1"], "derived.txt": ["c1"] });
+    // Source claims may be cached; the mutable generated output must be read again, without mutating prior answers.
+    expect(before).toEqual({ "src/a.txt": ["c1"] });
+    await write(work, { "derived.txt": "a\nb\n" });
+    expect(await origins.forRepo("root", work)).toEqual({ "src/a.txt": ["c1"] });
+});
+
+test("staging releases the lock and waits again when a land queues generation while it was acquiring the lock", async () => {
+    const { work, worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    await write(conversation.cwd, { "src/a.txt": "a1\n" });
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    let attempts = 0;
+    const result = await withRederivedRepo(work, (run) => {
+        attempts += 1;
+        if (attempts === 1) {
+            afterLand({ agentWorktrees: worktrees, logger }, "c1", landed);
+        }
+        return worktrees.withRepoLock("root", run);
+    }, async () => {
+        expect(worktrees.repoBusy("root")).toBe(true);
+        return readFile(join(work, "derived.txt"), "utf8");
+    });
+    expect(attempts).toBe(2);
+    expect(result).toBe("a1\nb\n");
+});
+
+test.each(["chip", "scope", "commit", "stage-run", "commit-run"] as const)("%s includes background outputs with landed work and preserves unrelated staging", async (mode) => {
+    const { work, worktrees } = await setup();
+    const conversation = await worktrees.ensure("c1", []);
+    await write(conversation.cwd, { "src/a.txt": "a1\n" });
+    const landed = await landAgent(worktrees, isolatedAgent(conversation.repos));
+    const origins = originsOf([isolatedAgent(landed.repos)]);
+    expect(await origins.forRepo("root", work)).toEqual({ "src/a.txt": ["c1"] });
+    // A staged snapshot with a later worktree edit must survive staging the agent's work.
+    await write(work, { "owner.txt": "staged\n" });
+    await sh(work, "add", "owner.txt");
+    await write(work, { "owner.txt": "unstaged\n", "unrelated.txt": "leave me\n" });
+
+    const handOff = Promise.withResolvers<void>();
+    scheduleRederive({ agentWorktrees: worktrees, logger }, "c1", landed.rederive ?? [], async (cwd, args, options) => {
+        await handOff.promise;
+        return defaultGit(cwd, args, options);
+    });
+    const client = clientFor(createApp(services({ workspace: workspacePaths(work), git: realGit, agentWorktrees: worktrees, agentOrigins: origins })));
+    const scope = { origin: "c1" };
+    const message = "fix: landed sources";
+    // The writer has not even taken its lock yet. Start the user operation before allowing the hand-off through.
+    const operation = mode === "chip" ? client.git.stage({ repo: "root", chip: "c1" })
+        : mode === "scope" ? client.git.stage({ repo: "root", scope })
+        : mode === "commit" ? client.git.commit({ repo: "root", stage: { scope }, message })
+        : mode === "stage-run" ? client.git.indexRunStart({ repo: "root", op: "stage", target: { scope } })
+        : client.git.indexRunStart({ repo: "root", op: "commit", target: { scope }, message });
+    try {
+        if (mode === "stage-run" || mode === "commit-run") {
+            await operation;
+            expect((await client.git.indexRunState({ repo: "root" })).phase).toBe("waiting");
+        }
+    } finally {
+        handOff.resolve();
+    }
+    await operation;
+    if (mode === "stage-run" || mode === "commit-run") {
+        await waitFor(async () => expect((await client.git.indexRunState({ repo: "root" })).status).toBe("passed"), SETTLES);
+        expect((await client.git.indexRunState({ repo: "root" })).files).toEqual({ total: 2, done: 2 });
+    }
+    if (mode !== "commit" && mode !== "commit-run") {
+        expect(await sh(work, "diff", "--cached", "--name-only")).toBe("derived.txt\nowner.txt\nsrc/a.txt");
+        expect(await client.git.commit({ repo: "root", message })).toMatchObject({ committed: true });
+    }
+    expect(await sh(work, "show", "--format=", "--name-only", "HEAD")).toBe("derived.txt\nowner.txt\nsrc/a.txt");
+    expect(await sh(work, "show", "HEAD:derived.txt")).toBe("a1\nb");
+    expect(await sh(work, "show", "HEAD:owner.txt")).toBe("staged");
+    expect(await sh(work, "status", "--porcelain")).toBe("M owner.txt\n?? unrelated.txt");
 });
 
 test("with the repository's merge driver armed, a sync onto a main that moved the derived file does not stop on it", async () => {

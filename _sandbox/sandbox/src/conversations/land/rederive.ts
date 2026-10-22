@@ -228,6 +228,27 @@ export const rederiveSettled = async (mains: readonly string[], capMs: number = 
     cap.abort();
 };
 
+// Stage/commit only after the background writers, without holding the lock those writers need. A land may queue a
+// writer while this caller waits for the lock: check again inside it, release it, and wait for that hand-off too.
+export const withRederivedRepo = async <T>(
+    main: string,
+    locked: <R>(run: () => Promise<R>) => Promise<R>,
+    run: () => Promise<T>,
+): Promise<T> => {
+    for (;;) {
+        await rederiveSettled([main]);
+        const result = await locked(async () => {
+            if ((queues.get(main)?.handed.size ?? 0) > 0) {
+                return { ready: false } as const;
+            }
+            return { ready: true, value: await run() } as const;
+        });
+        if (result.ready) {
+            return result.value;
+        }
+    }
+};
+
 /** The derived paths `dir`'s working tree holds differently from its HEAD: what the next commit of landed work there carries. */
 export const derivedChanges = async (dir: string, git: GitRunner): Promise<readonly string[]> =>
     materializedPaths((await git(dir, ["diff", "--name-only", "--no-renames", "-z", "HEAD", ...DERIVED])).stdout);
