@@ -28,6 +28,8 @@ export const JOB_HOSTED_PROBATION = 11;
 export const JOB_SETUP_FAILURE_MAIL = 12;
 // Durable hosted wake alarms: one sweep across replicas, with a compare-and-set per attempt as well.
 export const JOB_HOSTED_WAKE = 13;
+// One refresh of the public integration catalogs across platform replicas.
+export const JOB_MODEL_CATALOG = 14;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });

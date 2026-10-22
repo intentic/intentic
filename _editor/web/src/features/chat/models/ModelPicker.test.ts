@@ -26,6 +26,8 @@ jest.mock(`vue-router`, () => ({
 const { providerAccounts, translatorAccounts } = await import("../../../models/providers/providerAccounts");
 const { acpProviders, endpointProviders, perProvider, providerModels, trialStatus } = await import("../../../models/providers/providerCatalog");
 const { default: ModelPicker } = await import("./ModelPicker.vue");
+const { browsingCatalog } = await import("../../../models/providers/loadBrowsingCatalog");
+const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract/models/provider-specs");
 
 let app: App | undefined;
 const mountWith = (props: { readonly helperJobs?: boolean }): HTMLElement => {
@@ -55,6 +57,7 @@ const disclosure = (element: HTMLElement): HTMLButtonElement | undefined =>
 const oneModel = (label: string) => [{ value: label.toLowerCase().replaceAll(` `, `-`), label }];
 
 beforeEach(() => {
+    jest.spyOn(browsingCatalog, `refresh`).mockResolvedValue(undefined);
     // Nothing connected, every provider at its seed floor: the exact state a first-time user sees.
     providerAccounts.value = perProvider(() => []);
     translatorAccounts.value = { codex: [], grok: [], kimi: [], gemini: [] };
@@ -69,12 +72,19 @@ beforeEach(() => {
         kimi: oneModel(`Kimi K3`),
         gemini: oneModel(`Gemini 3 Pro`),
     };
+    browsingCatalog.snapshots.value = NATIVE_PROVIDERS.flatMap((provider) => {
+        const models = providerModels.value[provider] ?? [];
+        return models.length === 0 ? [] : [{ provider, verifiedAt: Date.now(), models: models.map((row) => ({ id: row.value, label: row.label })) }];
+    });
+    browsingCatalog.clock.value = Date.now();
 });
 
 afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+    jest.restoreAllMocks();
+    browsingCatalog.snapshots.value = [];
 });
 
 it(`keeps the provider filters from adding a second vertical scroller beside the catalog`, () => {
@@ -181,6 +191,7 @@ it(`carries the way out to the connect view, and drops it while searching`, asyn
 // A model that can only write one-shot jobs is listed, so a connected one does not seem to vanish, and refused for a turn
 // with its reason where its description would be; a helper job's list may pick it.
 it(`lists a helper-only model as refused for a turn, and pickable for a helper job`, () => {
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
     providerModels.value = {
         ...providerModels.value,
         claude: [...oneModel(`Claude Opus 4 6`), { value: `tiny`, label: `Tiny`, helperOnly: `no-tool-calls` }],
@@ -197,4 +208,26 @@ it(`lists a helper-only model as refused for a turn, and pickable for a helper j
     const forHelper = row(mountWith({ helperJobs: true }));
     expect(forHelper.disabled).toBe(false);
     expect(forHelper.textContent).not.toContain(`Helper jobs only`);
+});
+
+it(`shows current browsing models while disconnected and switches to the connected account's own list`, async () => {
+    browsingCatalog.snapshots.value = [{ provider: `claude`, verifiedAt: Date.now(), models: [{ id: `claude-opus-15`, label: `Claude Opus 15` }] }];
+    browsingCatalog.clock.value = Date.now();
+    const element = mount();
+    expect(element.textContent).toContain(`Claude Opus 15`);
+    expect(element.textContent).not.toContain(`Claude Opus 4 6`);
+    expect(element.textContent).toContain(`Connect to check model availability.`);
+    providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
+    await nextTick();
+    expect(element.textContent).toContain(`Claude Opus 4 6`);
+    expect(element.textContent).not.toContain(`Claude Opus 15`);
+});
+
+it(`advertises the connection without stale model numbers when no current browsing catalog exists`, () => {
+    browsingCatalog.snapshots.value = [];
+    const element = mount();
+    expect(element.textContent).toContain(`Connect to discover available models`);
+    expect(element.textContent).not.toContain(`Claude Opus 4 6`);
+    expect(element.textContent).not.toContain(`Couldn't load models`);
+    expect(element.querySelectorAll(`[role="option"]`)).toHaveLength(0);
 });

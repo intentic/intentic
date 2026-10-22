@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { BrowsingCatalogSchema } from "../model-catalog.js";
 import {
     AdoptedSchema,
     AdoptionBodySchema,
@@ -244,6 +245,7 @@ export const PLATFORM_INGRESS = {
         output: IngressOkSchema,
     },
     identity: { method: "GET", path: "/api/identity", auth: "none", body: "none", answer: "json", output: PlatformIdentitySchema },
+    modelCatalog: { method: "GET", path: "/api/model-catalog", auth: "none", body: "none", answer: "json", output: BrowsingCatalogSchema },
 } as const satisfies Record<string, IngressRouteSpec>;
 
 // The base an OpenAI-shaped client is pointed at for the trial (the daemon's translator): `trialModels` and

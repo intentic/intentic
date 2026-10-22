@@ -3,3 +3,4 @@
 export * from "./headers.js";
 export * from "./routes.js";
 export * from "./ingress-schemas.js";
+export * from "../model-catalog.js";

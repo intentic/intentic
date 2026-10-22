@@ -507,6 +507,16 @@ model PlatformIdentity {
     @@map("platform_identity")
 }
 
+// Last successful discovery of the platform's integration catalogs, shared by replicas and retained across restarts.
+// Contains public model IDs and labels only; service-account credentials stay in deployment configuration.
+model ModelCatalog {
+    provider   String   @id
+    verifiedAt DateTime @db.Timestamp(3)
+    models     Json
+
+    @@map("model_catalog")
+}
+
 /* A deleted sandbox for as long as the delete can still be taken back: the identity is gone with the Sandbox row,
  * the disk is not. The machine is STOPPED rather than destroyed, so the app, its volume and the environment it was
  * built on are all still there to restore onto; the sweep hands `appName` to HostedCleanup once the window closes.

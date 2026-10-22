@@ -3862,6 +3862,8 @@
             "modelPicker": "Model picker",
             "models2": "{count} models",
             "noModelsDiscovered": "No models discovered.",
+            "connectToCheckModels": "Connect to check model availability.",
+            "connectToDiscoverModels": "Connect to discover available models",
             "noModelsMatch": "No models match.",
             "notConnected": "not connected",
             "runtime": "Runtime",

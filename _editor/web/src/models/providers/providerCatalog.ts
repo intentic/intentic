@@ -86,8 +86,8 @@ const qualifyCollidingLabels = (options: readonly ModelOption[]): ModelOption[] 
     return options.map((option) => ((count.get(option.label) ?? 0) > 1 ? { ...option, label: `${option.label} (${option.value})` } : option));
 };
 
-// Model options for a provider's picker/chip: live catalog over the static pre-load floor. Shared by
-// the composer pill and menu bodies so list and label logic can't drift.
+// Model options for internal labels/selections retain the pre-load floor. The disconnected picker reads a separate
+// verified platform browsing feed, never this fallback.
 export const modelOptionsFor = (provider: AgentProvider): ModelOption[] => {
     const live = providerModels.value[provider] ?? [];
     return qualifyCollidingLabels(live.length > 0 ? live : modelsFor(provider));

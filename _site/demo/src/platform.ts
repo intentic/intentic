@@ -7,6 +7,9 @@ import { officeOrganisation, officeOrganisations } from "./fixture/offices/organ
 import { demoMode, deskEdition, demoTier } from "./mode";
 import { demoOutage, outageHosted, outageReport } from "./outage";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
+import { ingressPath, type BrowsingCatalog } from "@intentic/api-contract/ingress";
+import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { DEMO_CATALOGS } from "./daemon/accounts";
 
 // Fetch handler for the platform's half of the gates before the workspace renders:
 // GET /api/auth/get-session — session probe
@@ -193,6 +196,12 @@ const ROUTED = new Map<string, () => Response>(
 );
 
 export const platform = async (request: Request, url: URL): Promise<Response> => {
+    if (url.pathname === ingressPath(`modelCatalog`)) {
+        return json({ catalogs: NATIVE_PROVIDERS.flatMap((provider) => {
+            const models = DEMO_CATALOGS[provider]?.models ?? [];
+            return models.length === 0 ? [] : [{ provider, verifiedAt: Date.now(), models: models.map(({ id, label }) => ({ id, label })) }];
+        }) } satisfies BrowsingCatalog);
+    }
     const path = url.pathname;
 
     if (path.startsWith(`/api/auth/`)) {

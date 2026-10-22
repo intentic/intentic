@@ -13,6 +13,8 @@ flowchart LR
 
 - Tables include Better Auth's users and sessions, sandboxes and their members, the hosted lane (machines, pool,
   builds, usage, plan), the wallet and admin stats. The comments in `schema.prisma` say what each column means.
+- `model_catalog` retains each integration's last successful public model discovery and its verification time across
+  platform replicas and restarts (`20261022120000_model_catalog`). Credentials are never stored in it.
 - A sandbox's `scheduledWakeAt` and `scheduledWakeRetryAt` keep its hosted sleep alarm and the next permitted wake
   attempt in Postgres (`20261018120000_scheduled_wake`). The api claims attempts against the unchanged deadline and
   the ready daemon cancels it. (2026-10-18: an in-process timer would disappear on an api restart.)

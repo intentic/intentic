@@ -3862,6 +3862,8 @@
             "modelPicker": "Selector de modelo",
             "models2": "{count} modelos",
             "noModelsDiscovered": "No se ha descubierto ningún modelo.",
+            "connectToCheckModels": "Conecta una cuenta para comprobar la disponibilidad de los modelos.",
+            "connectToDiscoverModels": "Conecta una cuenta para descubrir modelos disponibles",
             "noModelsMatch": "Ningún modelo coincide.",
             "notConnected": "sin conectar",
             "runtime": "Entorno",

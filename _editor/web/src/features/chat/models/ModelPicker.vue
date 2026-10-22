@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { browserOwnsClick, SearchBar, SectionHeader, type Tip, useDevice, useListNavigation } from "@intentic/ui";
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf, isTrialProvider, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
@@ -31,6 +31,8 @@ import PickerFoldRow from "./PickerFoldRow.vue";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { MODELS_PATH, modelsPath } from "../../../lib/routes/modelsPath";
+import { browsingCatalog } from "../../../models/providers/loadBrowsingCatalog";
+import PickerCatalogStatus from "./PickerCatalogStatus.vue";
 
 const t = useT();
 
@@ -250,6 +252,7 @@ const railTo = (target: string | undefined): void => {
 
 // Ticks while the picker is open (it is mounted only then), so a row stops reading "back at 15:04" the moment it is 15:04.
 const now = useNow(true, 30_000);
+watch(now, () => { void browsingCatalog.refresh(); }, { immediate: true });
 
 // No account can serve this model now, by the answer Usage left and the spawn listing read (usageStatus.ts spentModels):
 // dimmed and stamped, never hidden nor disabled, as it comes back on its own. Unlike `isLocked`: a provider with no credential.
@@ -478,6 +481,7 @@ onMounted(() => {
                             </RouterLink>
                         </template>
                     </SectionHeader>
+                    <PickerCatalogStatus v-if="!searching && section.label !== undefined" :provider="section.provider" :row-count="section.rowCount" :state="stateFor(section.providers)" @retry="retrySection(section.providers)" @navigate="closeOnPlainClick" />
                     <template v-for="block in section.blocks" :key="block.key">
                         <!-- Family header, shown only for older-version blocks; the latest band needs none, since the section header above already names the group. -->
                         <p v-if="block.label !== undefined" class="px-3 pb-0.5 pt-1.5 pl-8 text-2xs text-subtle" role="presentation">
@@ -557,19 +561,6 @@ onMounted(() => {
                         <Icon :name="section.expanded ? `chevron-up` : `chevron-down`" class="shrink-0 text-[0.6rem]" aria-hidden="true" />
                         <span>{{ section.expanded ? t(`ui.action.showFewer`) : t(`chat.modelPicker.showOlder`, { hidden: section.hidden }) }}</span>
                     </button>
-                    <!-- Catalog state row (loading / error+retry): searching hides it. -->
-                    <template v-if="!searching && section.label !== undefined && section.rowCount === 0">
-                        <div v-if="stateFor(section.providers) === `error`" class="flex items-center gap-2 px-3 py-1.5 text-2xs text-danger">
-                            <span>{{ t(`chat.modelPicker.couldntLoadModels`) }}</span>
-                            <button type="button" class="text-link" @click="retrySection(section.providers)">{{ t(`ui.action.retry`) }}</button>
-                        </div>
-                        <div v-else-if="stateFor(section.providers) === `loaded`" class="px-3 py-1.5 text-2xs text-subtle">
-                            {{ t(`chat.modelPicker.noModelsDiscovered`) }}
-                        </div>
-                        <div v-else class="flex items-center gap-2 px-3 py-1.5 text-2xs text-subtle">
-                            <Icon name="spinner" spin /> {{ t(`chat.modelPicker.loadingModels`) }}
-                        </div>
-                    </template>
                     <PickerFoldRow v-if="section.key === foldAfter" v-model="othersOpen" />
                 </template>
                 <div v-if="searching && flat.length === 0" class="px-3 py-3 text-center text-2xs text-subtle">

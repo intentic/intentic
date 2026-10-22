@@ -56,8 +56,19 @@ const contractModuleEntries = readdirSync(fromRoot(`_shared/sandbox-contract/src
 // The kit's entry points the app reaches by source; listed here rather than among the hand-named ones below.
 const uiEntries = [[`@intentic/ui/reload-reason`, fromRoot(`_editor/ui/src/lib/reloadReason.ts`)] as const];
 
+// Platform subpaths precede their barrel for the same reason as extension entries above.
+// SAFETY: this repository-owned manifest declares each entry's source condition in its exports map.
+const apiEntries = Object.entries(
+    (JSON.parse(readFileSync(fromRoot(`_shared/api-contract/package.json`), `utf8`)) as {
+        exports: Record<string, { import: { "@intentic/src": string } }>;
+    }).exports,
+).sort(([left], [right]) => right.length - left.length).map(([subpath, target]) => [
+    subpath === `.` ? `@intentic/api-contract` : `@intentic/api-contract/${subpath.slice(2)}`,
+    fromRoot(`_shared/api-contract/${target.import[`@intentic/src`].replace(/^\.\//, ``)}`),
+] as const);
+
 export const sourceAliases = (): Record<string, string> => ({
-    ...Object.fromEntries([...baseEntries, ...contractModuleEntries, ...uiEntries]),
+    ...Object.fromEntries([...baseEntries, ...contractModuleEntries, ...uiEntries, ...apiEntries]),
     // Alias order matters: a string alias also matches `<key>/…`, so a subpath must precede its own barrel, and a
     // prefix-sharing pair (`markdown-document` before `markdown`) must keep that order too, or the import resolves
     // into a directory and fails with ENOTDIR.
@@ -196,7 +207,6 @@ export const sourceAliases = (): Record<string, string> => ({
     "@intentic/extension-ui/diff": fromRoot("_shared/extension-ui/src/diff.ts"),
     "@intentic/extension-ui/worker": fromRoot("_shared/extension-ui/src/worker.ts"),
     "@intentic/extension-ui": fromRoot("_shared/extension-ui/src/index.ts"),
-    "@intentic/api-contract": fromRoot("_shared/api-contract/src/index.ts"),
     // The "+" grid's card/category data; omitted from this map, the app would silently resolve a stale `dist` instead
     // of failing to build.
     "@intentic/capability-catalog": fromRoot("_shared/capability-catalog/src/index.ts"),

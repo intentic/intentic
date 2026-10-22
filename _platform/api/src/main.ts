@@ -22,6 +22,7 @@ import { bootIdentityOf, watchPlatformIdentity } from "./sandbox/recovery.js";
 import { startRetention } from "./retention.js";
 import { emailSignInEnabled } from "./sign-in.js";
 import { startTracing } from "./tracing.js";
+import { startBrowsingCatalog } from "./models/model-catalog.js";
 
 // OTEL_* vars come from the environment; dev scripts pass --env-file so the root .env populates them under Bun.
 const tracing = startTracing();
@@ -81,6 +82,7 @@ switch (boot.kind) {
         break;
     }
 }
+const stopBrowsingCatalog = startBrowsingCatalog(prisma, config, logger);
 startHostedCleanup(prisma, config, logger);
 startRetention(prisma, config, logger);
 // Keeps warm hosted machines built ahead of demand, and drains them when the pool is off (hosted-pool.ts).
@@ -128,6 +130,7 @@ logger.info({ url: `${tls ? `https` : `http`}://localhost:${server.port}` }, `ap
 
 const shutdown = async () => {
     logger.info(`shutting down`);
+    stopBrowsingCatalog();
     await wakeSignals.stop();
     await prisma.$disconnect();
     await server.stop();

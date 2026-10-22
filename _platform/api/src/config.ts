@@ -198,6 +198,14 @@ export const configSchema = z.object({
             abuseStrikeDays: z.coerce.number().int().positive().default(30),
         })
         .prefault({}),
+    // Public model browsing, using only platform-owned source credentials.
+    modelCatalog: z
+        .object({
+            // JSON array of integration catalog sources (models/catalog-sources.ts). Contains service-account headers;
+            // never user credentials. An unconfigured integration is advertised without model versions.
+            sources: z.string().default(`[]`).meta({ secret: true }),
+        })
+        .prefault({}),
     // Intentic's own model keys serving free-trial chat, tried as a pool. Empty (default) disables the trial.
     trial: z
         .object({
@@ -321,6 +329,7 @@ export const CONFIG_SECRETS = [
     `ingress.platformToken`,
     `hosted.flyApiToken`,
     `trial.keys`,
+    `modelCatalog.sources`,
     `hostedPlan.stripeSecretKey`,
     `hostedPlan.stripeWebhookSecret`,
     `apns.keyP8`,

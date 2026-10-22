@@ -307,6 +307,30 @@ flowchart LR
 | `src/wallet` | Agent wallet: payments signed by a custody provider under per-member caps |
 | `src/e2e` | Suites against real Fly and Stripe, gated by `INTENTIC_E2E` |
 
+## Model browsing
+
+The public model browsing feed (`GET /api/model-catalog`, `src/models/`) is refreshed by a replica-locked background
+job. It checks hourly and re-reads each integration source after six hours. Only a complete, nonempty upstream read
+replaces its database snapshot; outages retain the previous verification time. Snapshots a week old are withheld.
+The feed contains model IDs and labels only and establishes no subscriber's access.
+
+Set `MODEL_CATALOG_SOURCES` to a JSON array of integration sources, using **platform-owned service credentials** in
+`headers`, never customer credentials. Each entry has `provider` (the native integration ID), an HTTPS `url`, `format`
+(`anthropic`, `openai`, or `catalog`) and `include` (a stable ID filter). `catalog` accepts `{ "models": [{ "id": "…",
+"label": "…" }] }` from an integration-aware publisher. API formats read `data` and pagination; Anthropic retains
+source order and OpenAI IDs are ordered by numeric release. Choose sources and filters for the integration's chat
+models, rather than publishing a broad vendor list of embeddings or unrelated API products. A source is configured
+once; model release numbers are discovered, not configured. An unconfigured integration offers connection without
+model versions. The entire configuration field is secret-masked in startup logs.
+
+For example, a platform-owned Anthropic catalog source can be configured as:
+
+```json
+[{"provider":"claude","format":"anthropic","url":"https://api.anthropic.com/v1/models","include":"^claude-","headers":{"x-api-key":"<platform-owned key>","anthropic-version":"2023-06-01"}}]
+```
+
+The source advertises model names; the connected Claude account remains the authority on what that subscriber can run.
+
 ## Key files
 
 - [src/main.ts](src/main.ts) — boot: config, Prisma, the background jobs, `Bun.serve`.

@@ -41,6 +41,9 @@ import { walletHttpRoutes } from "./wallet/wallet.routes.js";
 import { trialRoutes } from "./trial/trial.routes.js";
 import { repairRoutes } from "./repair/repair.routes.js";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
+import { modelCatalogRoutes } from "./models/model-catalog.routes.js";
+import { databaseCatalogStore } from "./models/model-catalog.js";
+import { catalogSources } from "./models/catalog-sources.js";
 
 // `Bindings` is Bun's server as Bun.serve hands it to `fetch`, of which only the per-request idle timeout is used; it is
 // absent wherever the app is not served by Bun (the suites' app.request).
@@ -105,9 +108,8 @@ const logUnexpectedError = (log: Logger, error: unknown): void => {
 type BuiltApp = { app: Hono<AppEnv>; auth: Auth };
 
 // The platform is a sandbox registry, never a relay: daemons announce over their own tunnel, the browser talks to them
-// directly. Public routes are /setup/claim, /api/reachability/:id and /api/identity; the rest are connect-token-authenticated
-// relays. `wakeSignals` is what `sandbox.wake` tells a held wakes ask through (sandbox/local-wake/wake-signals.ts): main.ts hands
-// the one that reaches every replica, and an app built without one (the suites) gets one that reaches this process.
+// directly. Public metadata includes identity, reachability and model browsing. `wakeSignals` reaches every replica
+// in production; suites use a process-local one.
 export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, wakeSignals: WakeSignals = localWakeSignals()): BuiltApp => {
     const auth = createAuth(config, prisma, logger);
 
@@ -169,12 +171,10 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
         }),
     );
 
-    // The connect script redeems the setup code for plain KEY=value lines; 404 for unknown and expired alike. Beside
-    // `code`, an `ic` new enough names the machine claiming (`host`, `os`, `instance`; setup-code.ts): the first claim
-    // that does is recorded, and the same code claimed by a different machine is refused with 409 while it lives, so one
-    // pasted command cannot start two copies of a sandbox (2026-10-05). The same machine running it again is let through.
-    // Every route a machine calls is registered under its entry in api-contract's PLATFORM_INGRESS (ingress.ts).
+    // Machine routes use PLATFORM_INGRESS. A setup code redeems to KEY=value lines; unknown and expired answer 404.
+    // The first named host claims it; another host gets 409, while that same host may retry (setup-code.ts).
     const ingress = ingressServer(app);
+    app.route(`/`, modelCatalogRoutes(databaseCatalogStore(prisma), catalogSources(config.modelCatalog.sources)));
 
     ingress(`setupClaim`, async (c, kit) => {
         const form = await kit.body();

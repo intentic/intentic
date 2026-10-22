@@ -3859,6 +3859,8 @@
             "modelPicker": "Wybór modelu",
             "models2": "Modele: {count}",
             "noModelsDiscovered": "Nie wykryto żadnych modeli.",
+            "connectToCheckModels": "Połącz konto, aby sprawdzić dostępność modeli.",
+            "connectToDiscoverModels": "Połącz konto, aby zobaczyć dostępne modele",
             "noModelsMatch": "Żaden model nie pasuje.",
             "runtime": "Środowisko",
             "searchAllProviders": "Szukaj u wszystkich dostawców",

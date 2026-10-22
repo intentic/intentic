@@ -16,6 +16,8 @@ import {
 } from "../../providers/providerCatalog";
 import type { TurnPick } from "../run/turnDefaults";
 import { t } from "@intentic/ui/i18n";
+import { providerReady } from "../../providers/access";
+import { browsingCatalog } from "../../providers/loadBrowsingCatalog";
 
 // Every provider's models flattened into one searchable list; pure derivation over the live catalogs, the picker
 // owns only transient UI state. Harness is a separate axis (footer chips), not a row here. Tier and recency come
@@ -60,14 +62,29 @@ export const chatPickable = (entry: PickerEntry): boolean => entry.helperOnly ==
 
 // Every pickable model across providers, in PROVIDERS order, then endpoint providers' full catalogs, then one row
 // per ACP agent (empty model id: the agent owns its own model).
+const optionsForPicker = (provider: AgentProvider): ModelOption[] =>
+    providerReady(provider) ? modelOptionsFor(provider) : browsingCatalog.optionsFor(provider);
+
 export const pickerEntries = computed<readonly PickerEntry[]>(() => [
-    ...PROVIDERS.flatMap(({ value: provider }) => modelOptionsFor(provider).map((option) => entryFor(provider, option))),
+    ...PROVIDERS.flatMap(({ value: provider }) =>
+        optionsForPicker(provider).map((option) => entryFor(provider, option))),
     ...endpointProviders.value.flatMap((endpoint) => modelOptionsFor(endpoint.id).map((option) => entryFor(endpoint.id, option))),
     ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
 ]);
 
 // The newer version a row's family has superseded it with, if any: the picker tags the row and search sinks it.
-export const newerThanEntry = (entry: PickerEntry): ModelOption | undefined => newerVersionOf(entry.provider, entry.value);
+export const newerThanEntry = (entry: PickerEntry): ModelOption | undefined => {
+    if (providerReady(entry.provider)) {
+        return newerVersionOf(entry.provider, entry.value);
+    }
+    const options = optionsForPicker(entry.provider);
+    if (!options.some((option) => option.value === entry.value)) {
+        return undefined;
+    }
+    return options
+        .filter((option) => familyOf(option.value) === familyOf(entry.value) && compareModelIds(option.value, entry.value) < 0)
+        .toSorted((left, right) => compareModelIds(left.value, right.value))[0];
+};
 export const isOlderEntry = (entry: PickerEntry): boolean => newerThanEntry(entry) !== undefined;
 
 // Lowercase and strip separators, so "gpt5" matches "GPT-5" and "45" matches "4.5". Shared with the composer's `@`

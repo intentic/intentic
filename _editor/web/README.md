@@ -509,6 +509,13 @@ flow in [setup](src/features/setup/README.md). `components/` holds app-specific 
 [ui](../ui). `local/` is the desktop app's window on a folder or document of this computer, and `testing/` holds the
 suites' fakes (daemon client, router, workers).
 
+## Model browsing
+
+The model picker's disconnected providers read the platform's public browsing catalog, cached per platform in the
+browser (`models/providers/browsingCatalog.ts`). Only successful upstream discovery supplies its verification time;
+after a week without verification, the provider offers connection without model versions. Connected providers use
+the sandbox's account catalogs. Browsing refreshes never rewrite a conversation's model or its saved preferences.
+
 ## Key files
 
 - [src/main.ts](src/main.ts) — boot order: self-heal, appearance, i18n, then mount with router, vue-query and `@intentic/ui`.

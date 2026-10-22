@@ -23,6 +23,9 @@ flowchart LR
   `/demo/ext/e-urzad/office-ezd` and `/demo/ext/e-urzad/office-ed`. Their overview, refresh and connection-test requests
   stay in the fixture transport. No government service or credential is used; the snapshots share the extension's wire type.
 
+The fake platform also answers the public model browsing feed from `DEMO_CATALOGS`, using the same model IDs and
+labels as the fake daemon. A fresh sandbox therefore exercises disconnected browsing separately from account access.
+
 ## Key files
 
 - [src/main.ts](src/main.ts) — boot order: transports, seeded storage, switcher, then the app.
