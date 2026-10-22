@@ -1,8 +1,10 @@
 import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
 import {
     addToWindowsPathValue,
+    AGENT_FLOOR_ENV,
     type CurrentCheck,
     CURRENT_FOR_MS,
+    meetsFloor,
     recentlyCurrent,
     removeFromWindowsPathValue,
     selfUpdateBeforeSetup,
@@ -114,6 +116,27 @@ describe("selfUpdateBeforeSetup", () => {
         const second = io({ checkedCurrent: async () => await Promise.resolve(kept) });
         await selfUpdateBeforeSetup(second.io, {}, ["device", "setup"], () => undefined, 1_000_000 + 60_000);
         expect(second.upgraded()).toBe(false);
+    });
+
+    // (2026-10-22) The desktop app names its own release: an agent at it, or past it, sets up without asking anything.
+    it("asks nothing of an agent at or past the release its caller asks for, and updates one older than it", async () => {
+        const at = io({ installed: "1.349.0" });
+        await selfUpdateBeforeSetup(at.io, { [AGENT_FLOOR_ENV]: "1.349.0" }, ["sync", "setup"], () => undefined);
+        expect(at.upgraded()).toBe(false);
+        const past = io({ installed: "1.350.0" });
+        await selfUpdateBeforeSetup(past.io, { [AGENT_FLOOR_ENV]: "1.349.0" }, ["sync", "setup"], () => undefined);
+        expect(past.upgraded()).toBe(false);
+        const older = io({ installed: "1.348.0" });
+        await selfUpdateBeforeSetup(older.io, { [AGENT_FLOOR_ENV]: "1.349.0" }, ["sync", "setup"], () => undefined);
+        expect(older.upgraded()).toBe(true);
+    });
+
+    it("reads only a release as a floor", () => {
+        expect(meetsFloor("1.349.0", "1.349.0")).toBe(true);
+        expect(meetsFloor("1.349.0", undefined)).toBe(false);
+        expect(meetsFloor("1.349.0", "")).toBe(false);
+        expect(meetsFloor("1.349.0", "latest")).toBe(false);
+        expect(meetsFloor("0.0.0-dev", "1.349.0")).toBe(false);
     });
 
     it("reads a finding as current only for the same release and only for a while", () => {

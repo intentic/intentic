@@ -80,9 +80,9 @@ export const upgradeHere = async (target: string, force: boolean, log: Log): Pro
     });
 
 // A distro's installed agent, asked in that distro; undefined where none answers, which is not a version to compare.
-export const installedIn = async (distro: string): Promise<string | undefined> => {
+export const installedIn = async (distro: string, timeoutMs = 60_000): Promise<string | undefined> => {
     const { command, args } = agentInDistro(distro, ["version"]);
-    const answer = await execBounded(command, [...args], { timeoutMs: 60_000 }).catch(() => undefined);
+    const answer = await execBounded(command, [...args], { timeoutMs }).catch(() => undefined);
     return /^\d+\.\d+\.\d+$/.exec(answer?.stdout.trim() ?? "")?.[0];
 };
 
@@ -228,11 +228,17 @@ export const realMachineIo = (ask: MachineUpgradeAsk, log: Log): MachineIo => ({
     children: heldDistros,
     published: publishedVersion,
     installedHere: installedBuild,
-    installedIn,
+    installedIn: async (distro) => await installedIn(distro),
     upgradeIn: async (distro, target) => await upgradeIn(distro, target, ask.force, log),
     upgradeHere: async (target) => await upgradeHere(target, ask.force, log),
     recorded: recordFailure,
 });
+
+// (2026-10-22) HOW LONG SETUP WAITS ON EACH QUESTION before it enrolls: the channel's answer and each other side's
+// version. Their own bounds (20 s, 60 s) are for the update loop, which nobody waits on; a setup is somebody watching a
+// folder's sandbox being made, and one went 30 s here. An answer not in by then is no newer release to move to, and the
+// update loop asks again within the hour.
+const SETUP_ASK_MS = 5_000;
 
 // The versions of every other side this one can reach: a distro sees its Windows side, the Windows side its distros.
 const siblingVersions = async (): Promise<readonly (string | undefined)[]> => {
@@ -241,12 +247,12 @@ const siblingVersions = async (): Promise<readonly (string | undefined)[]> => {
         const answer = await runOnWindows(root, ["version"]);
         return [answer.status === 0 ? /^\d+\.\d+\.\d+$/.exec(answer.output)?.[0] : undefined];
     }
-    return await Promise.all((await heldDistros()).map(installedIn));
+    return await Promise.all((await heldDistros()).map(async (distro) => await installedIn(distro, SETUP_ASK_MS)));
 };
 
 // This side alone, to the newest release the channel or any side of this PC has: what setup runs before it enrolls.
 export const upgradeHereToMachine = async (log: Log): Promise<UpgradeOutcome> => {
-    const [published, siblings] = await Promise.all([publishedVersion(), siblingVersions()]);
+    const [published, siblings] = await Promise.all([publishedVersion(SETUP_ASK_MS), siblingVersions()]);
     const target = machineTarget(published, [MACHINE_VERSION, ...siblings]);
     return target === undefined ? { kind: "failed", reason: "couldn't reach the release channel" } : await upgradeHere(target, false, log);
 };

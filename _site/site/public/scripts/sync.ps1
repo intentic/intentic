@@ -22,6 +22,7 @@
 #                       state backup and no git bridge writing into it
 #   TAKEOVER            any non-empty value takes over sync from another device already connected to this sandbox
 #   AGENT_BIN           local dev: run this command instead of the installed agent, whitespace-separated
+#   INTENTIC_AGENT_ONLY 1: put the agent on this device and stop, enrolling nothing (the desktop app, at launch)
 #
 # The script never ends the PowerShell it runs in: under irm | iex it returns with the code in $LASTEXITCODE.
 param(
@@ -732,6 +733,15 @@ function Invoke-IntenticAgent {
 # <<< end of generated agent-fetch.ps1
 
 Invoke-IntenticScript {
+    # (2026-10-22) THE AGENT ALONE, AHEAD OF ANY SANDBOX: the desktop app runs this script with INTENTIC_AGENT_ONLY=1 at
+    # launch on a computer with no agent (its agent_install.rs), so a first folder's setup does not stop on the agent's
+    # download. It puts the agent in place as this script would for a project folder, then stops: nothing is redeemed or
+    # enrolled.
+    if ($env:INTENTIC_AGENT_ONLY -eq '1') {
+        $null = Get-IntenticAgent -Route $route -Flags @('--remote-dir', '--project')
+        Write-IntenticSay 'intentic-machine is on this device, ready for a first folder.'
+        return
+    }
     $url = $env:SANDBOX_URL
     $pair = $env:PAIR_TOKEN
     $dir = $env:SYNC_DIR

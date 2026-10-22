@@ -25,6 +25,7 @@
 #   TAKEOVER     any non-empty value takes over sync from another device already connected to this sandbox.
 #   AGENT_BIN    run THIS agent command instead of the installed one: for local dev / dogfooding an unreleased build,
 #                e.g. AGENT_BIN="node /path/to/intentic/_devices/machine/dist/cli.js".
+#   INTENTIC_AGENT_ONLY  1: put the agent on this device and stop, enrolling nothing (the desktop app, at launch).
 set -eu
 
 # >>> generated from _site/site/scripts-kit/kit.sh: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
@@ -532,6 +533,16 @@ case "$arch" in
     arm64 | aarch64) arch="arm64" ;;
     *) kit_stop "Desktop sync could not be set up." "this device's processor is $arch, and the device agent is built for amd64 and arm64." ;;
 esac
+
+# (2026-10-22) THE AGENT ALONE, AHEAD OF ANY SANDBOX: the desktop app runs this script with INTENTIC_AGENT_ONLY=1 at launch
+# on a computer with no agent (its agent_install.rs), so a first folder's setup does not stop on the agent's download.
+# It puts the agent in place as this script would for a project folder, then stops: nothing is redeemed or enrolled.
+if [ "${INTENTIC_AGENT_ONLY:-}" = 1 ]; then
+    SPEAKS="--remote-dir --project"
+    agent_fetch
+    kit_say "intentic-machine is on this device, ready for a first folder."
+    exit 0
+fi
 
 # The Worker's /sync/<host>/<code> passes the pair as arguments. A mangled command, or an env-var one missing a value,
 # fails before the download; the code itself is spent after it (below), so a download that breaks leaves it valid for

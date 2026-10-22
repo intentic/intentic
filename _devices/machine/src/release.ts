@@ -55,9 +55,9 @@ export const askpassPath = join(binDir, `intentic-askpass${exe}`);
 export const keyringAssetName = (): string => `intentic-keyring-${osToken()}-${archToken()}${exe}`;
 
 // `releases/latest` redirects to `…/tag/vX.Y.Z`; the API answers the same but is rate-limited per IP.
-export const publishedVersion = async (): Promise<string | undefined> => {
+export const publishedVersion = async (timeoutMs = 20_000): Promise<string | undefined> => {
     try {
-        const response = await fetch(`${RELEASES}/latest`, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(20_000) });
+        const response = await fetch(`${RELEASES}/latest`, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(timeoutMs) });
         return /\/tag\/v(\d+\.\d+\.\d+)$/.exec(response.url)?.[1];
     } catch {
         return undefined;

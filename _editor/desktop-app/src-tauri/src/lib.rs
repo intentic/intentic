@@ -1,4 +1,5 @@
 mod account;
+mod agent_install;
 mod agent_status;
 mod agents;
 mod auth;
@@ -452,6 +453,9 @@ pub fn run() {
             // Each folder's own sandbox, made on its press by a thread of its own rather than any window
             // (folder_setup.rs): a setup the last quit cut short is picked up here.
             onboarding::begin(app.handle());
+            // The machine agent, put in place on a computer that has none, so a first folder's sync does not wait on
+            // its download (agent_install.rs).
+            agent_install::begin(app.handle());
             folder_setup::start(app.handle());
             // Intentic's engine, started again when it stops while this app runs (engine_keeper.rs).
             engine_keeper::start(app.handle());

@@ -7,7 +7,7 @@ import { parseJsonWith } from "@intentic/base/json";
 import { runBounded } from "@intentic/base/process";
 import { renameOver } from "@intentic/base/fs";
 import { homeDir, type Log } from "@intentic/local-agent";
-import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
+import { DEV_VERSION, isNewer } from "@intentic/sandbox-contract/state/versions";
 import { baseDir, binDir } from "./config.js";
 import { adoptRunningDistros } from "./environments/commands.js";
 import { launchUpgrade, UPGRADE_ENV, upgradeHereToMachine } from "./environments/machine-upgrade.js";
@@ -49,6 +49,19 @@ export const CURRENT_FOR_MS = 10 * 60_000;
 export const recentlyCurrent = (check: CurrentCheck | undefined, installed: string, now: number): boolean =>
     check !== undefined && check.version === installed && now - check.at >= 0 && now - check.at < CURRENT_FOR_MS;
 
+// (2026-10-22) THE RELEASE THE CALLER ASKS FOR, AT LEAST. The desktop app runs each setup of its own with its own release
+// here (its commands.rs `app_env`), as it names `IC_VERSION` for `ic`: an agent at that release or newer is one this
+// setup can run on, so nothing is asked of the network first, which on a folder's new sandbox cost 30 s once (the
+// channel's answer and every WSL side's version, asked before the device enrolled). The agent's own update loop
+// (auto-upgrade.ts) still moves it on to anything newer. An agent older than it asks as before, and is updated.
+export const AGENT_FLOOR_ENV = "INTENTIC_AGENT_FLOOR";
+
+const RELEASE = /^\d+\.\d+\.\d+$/;
+
+// Whether `installed` meets the release the caller asked for: a release, and not older than it. Pure.
+export const meetsFloor = (installed: string, floor: string | undefined): boolean =>
+    floor !== undefined && RELEASE.test(floor) && RELEASE.test(installed) && !isNewer(floor, installed);
+
 // An update that throws is one that failed: setup is what pairs the folder, and the agent already installed can do
 // that. (2026-10-21) A rename Windows refused escaped from here and ended a folder's setup before it paired.
 const upgradeOrFailed = async (io: SelfUpdateIo): Promise<UpgradeOutcome> => {
@@ -71,7 +84,7 @@ export const selfUpdateBeforeSetup = async (
     if (env[UPGRADE_ENV] !== undefined || io.installed === DEV_VERSION || !io.installedAgent()) {
         return;
     }
-    if (recentlyCurrent(await io.checkedCurrent?.(), io.installed, now)) {
+    if (meetsFloor(io.installed, env[AGENT_FLOOR_ENV]) || recentlyCurrent(await io.checkedCurrent?.(), io.installed, now)) {
         return;
     }
     const outcome = await upgradeOrFailed(io);

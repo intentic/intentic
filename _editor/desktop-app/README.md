@@ -507,7 +507,23 @@ flowchart LR
   system's notification says once that a folder is in and once each time it newly needs the reader, and nothing while a
   window of this computer has the focus; a press on one about the folder opens its window (`notice.rs` `FOLDER`).
   Each step's seconds are sent as `desktop_install_step` with `run: folder`, and the press-to-ready time as
-  `desktop_folder_sandbox_ready` (`launch.rs` reports), so the time to a folder's first copy is measured.
+  `desktop_folder_sandbox_ready` (`launch.rs` reports), so the time to a folder's first copy is measured. The agents'
+  own steps inside the plan's are timed apart with the plan's step as their `parent` (2026-10-22): `sync-preparing`
+  (the sync shim and the agent's self-update, before its first step), `sync-enrolling`, `sync-linking`,
+  `sync-starting`, and the same `device-*` inside `connecting-machine`, so the plan's own steps still sum to the run.
+  The ready event carries `copySeconds`, `openingSeconds` (the wait for the workspace's page, below) and `workspace`
+  (`shown`, `late` past `WARM_FOR`, or `cold` when no page was put up).
+
+  **A folder is made before this computer is a device** (2026-10-22). `ic` connects this computer as a device last,
+  after `verifying` passed, and never fails a setup over it. The folder is made when that step starts
+  (`folder_setup.rs` `made_ahead`): its copy is followed and its workspace put up while the device connects behind
+  it, and the script's end only files its log.
+
+  **The machine agent is there before the first folder** (`agent_install.rs`, 2026-10-22). At launch, a computer with
+  no `intentic-machine` runs the bundled sync script with `INTENTIC_AGENT_ONLY=1`, which fetches and checks the agent
+  and stops; a setup that starts meanwhile waits for it rather than writing the same partial download. Every script the
+  app runs also carries `INTENTIC_AGENT_FLOOR` (its own release, `commands.rs` `app_env`): an agent at it or newer sets
+  up without asking the release channel and every WSL side first (the machine agent's `install.ts` `meetsFloor`).
 
   **Ready means Open shows a drawn page** (2026-10-22). Once the sandbox answers end to end (its `connecting-machine`
   phase), the app puts the workspace's page up out of sight at the folder's address (`windows.rs` `warm_workspace`):
@@ -846,6 +862,7 @@ reloaded onto their new address and token.
 - [src-tauri/src/wake.rs](src-tauri/src/wake.rs), [src-tauri/src/microphone.rs](src-tauri/src/microphone.rs) and [src-tauri/src/autostart.rs](src-tauri/src/autostart.rs) — the wake word with the window in the tray: what the page says and is told, the tray's rows, the microphone for the workspace alone, and the start at sign-in.
 - [src-tauri/src/found.rs](src-tauri/src/found.rs) — what this computer already uses: the subscriptions its AI tools are signed in to, by who they are for, and the folders their histories name.
 - [src-tauri/src/agents.rs](src-tauri/src/agents.rs) — the machine agents of this computer's environments: this app's own, and each running WSL distro's.
+- [src-tauri/src/agent_install.rs](src-tauri/src/agent_install.rs) — the machine agent put on a computer that has none, at launch, so a first folder's sync does not wait on its download.
 - [src-tauri/src/project.rs](src-tauri/src/project.rs) — a folder and its sandbox: what its dialog draws, the folder asked for a sandbox of its own, and the project verbs its window runs.
 - [src-tauri/src/folder_setup.rs](src-tauri/src/folder_setup.rs) — each folder's own sandbox: the records every window hears, the thread that makes them one at a time, and each first copy followed in.
 - [src-tauri/src/setup_progress.rs](src-tauri/src/setup_progress.rs) — a setup's own lines read into a step, a percent, what it asks for and why it stopped.

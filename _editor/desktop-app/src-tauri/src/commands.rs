@@ -76,6 +76,9 @@ fn app_env_with(version: &str, ic: Option<std::path::PathBuf>) -> Vec<(String, S
     if let Some(url) = ic_url(version) {
         env.push(("IC_URL".into(), url));
         env.push(("IC_VERSION".into(), version.to_string()));
+        // The same floor for the machine agent (its install.ts `AGENT_FLOOR_ENV`): one at this release or newer sets
+        // up without asking the release channel and every WSL side first, which held a folder's setup 30 s once.
+        env.push(("INTENTIC_AGENT_FLOOR".into(), version.to_string()));
     }
     if let Some(ic) = ic {
         env.push(("INTENTIC_IC_PATH".into(), ic.to_string_lossy().into_owned()));
@@ -410,6 +413,8 @@ pub async fn setup_run(app: AppHandle, args: SetupArgs, install: bool) -> Comman
         while crate::folder_setup::running() {
             std::thread::sleep(std::time::Duration::from_secs(2));
         }
+        // The machine agent being put in place ahead (agent_install.rs) would be downloaded a second time beside it.
+        crate::agent_install::wait();
         // A setup an earlier launch left going (a crash, or a quit from before a quit stopped it) is stopped first: two
         // `ic connect`s at once race for one sandbox's row and one docker (scripts.rs `stop_left_running`, 2026-10-12).
         if let Some(left) = scripts::stop_left_running(&handle, SETUP_RUN) {
@@ -1541,6 +1546,8 @@ mod tests {
         let env = app_env_with(RELEASE, None);
         assert_eq!(var(&env, "INTENTIC_IC_PATH"), None);
         assert_eq!(var(&env, "IC_VERSION"), Some(RELEASE));
+        // The machine agent is held to the same release as a floor, never a ceiling (install.ts `meetsFloor`).
+        assert_eq!(var(&env, "INTENTIC_AGENT_FLOOR"), Some(RELEASE));
         assert_eq!(var(&env, "INTENTIC_NO_PROMPT"), Some("1"));
         // A build that is not a release names its file all the same, and pins nothing for a shim to match it against:
         // the shims copy only a pinned `ic`, so `tauri dev` and a 0.0.0 installer download exactly as they did.
@@ -1553,6 +1560,7 @@ mod tests {
             Some("/opt/Intentic/intentic-ic")
         );
         assert_eq!(var(&dev, "IC_VERSION"), None);
+        assert_eq!(var(&dev, "INTENTIC_AGENT_FLOOR"), None);
         // What the app passes is whatever is beside it right now, and the same for every flow.
         assert_eq!(
             var(&app_env(RELEASE), "INTENTIC_IC_PATH").map(std::path::PathBuf::from),

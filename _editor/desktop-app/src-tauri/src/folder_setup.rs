@@ -202,6 +202,9 @@ pub struct Record {
     /// How far the first copy is, as the agent counts it off Mutagen (its pairing's `copy`); none from an older agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy: Option<CopyMeasure>,
+    /// When its first copy was seen in, Unix milliseconds: from then on it waits only for its workspace's page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copied_at: Option<u64>,
     /// Its first copy's session has been seen running ([`copy_seen`]).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub ran: bool,
@@ -1175,6 +1178,8 @@ fn create(app: &AppHandle, path: &str, consent: bool) {
         }
         std::thread::sleep(Duration::from_secs(2));
     }
+    // The machine agent being put in place ahead (agent_install.rs): its download is the one this setup would make.
+    crate::agent_install::wait();
     // A setup a crashed launch left running: followed to its end rather than raced, then the round decides again.
     if follow_live_run(app, path) {
         kick();
@@ -1313,6 +1318,20 @@ fn create(app: &AppHandle, path: &str, consent: bool) {
         .map(|held| held.clone())
         .unwrap_or_else(|poisoned| poisoned.into_inner().clone());
     match ended {
+        // Made at the device's step ([`made_ahead`]), and followed since: the script's end files its log, whatever the
+        // device's own connect came to (the script says that in its log and its warning).
+        Ok(ended)
+            if all(app)
+                .iter()
+                .any(|held| held.path == path && made_this_run(held)) =>
+        {
+            clock_out(app, &clock, if ended.success { "done" } else { "failed" });
+            update(app, path, |record| record.log_path = ended.log.clone());
+            if record_is(app, path, &Standing::Copying) {
+                let report = crate::bindings::refresh(app);
+                follow_copies(app, report.as_ref());
+            }
+        }
         Ok(ended) => {
             let standing = outcome(ended.success, ended.code, &progress);
             clock_out(app, &clock, step_outcome(&standing, ended.code));
@@ -1446,11 +1465,79 @@ pub(crate) fn without_row(
  * `run: folder`), and the press-to-copied time once the folder is in (`desktop_folder_sandbox_ready`): what the
  * ~25 s target is measured by (launch.rs reports). */
 
-/// The step the run is on, since when.
+/// The step the run is on, since when, and within it the agent's own step (`sync-enrolling`…), since when.
 #[derive(Default)]
 struct StepClock {
     phase: Option<String>,
     since: Option<Instant>,
+    inner: Option<(String, Instant)>,
+}
+
+/// A step the clock moved off: the plan's step it ran inside (none for one of the plan's own), its name, how long.
+type Moved = (Option<String>, String, Duration);
+
+/// Which agent's own steps a plan step holds, by the prefix they are named with: the sync agent's in `desktop-sync`,
+/// the device agent's in `connecting-machine`. Before the first of them, the agent's shim and its self-update run, timed
+/// as `<prefix>-preparing` (the stretch that took 30 s once, 2026-10-22). Pure.
+fn inner_prefix(phase: &str) -> Option<&'static str> {
+    match phase {
+        "desktop-sync" => Some("sync"),
+        "connecting-machine" => Some("device"),
+        _ => None,
+    }
+}
+
+impl StepClock {
+    /// A line heard at `now`: the plan's step it leaves the run on (`phase`) and the phase the line itself names, if
+    /// any (`said`). The steps moved off, the inner one before the one holding it. Pure.
+    fn heard(&mut self, phase: Option<&str>, said: Option<&str>, now: Instant) -> Vec<Moved> {
+        let mut moved = Vec::new();
+        if self.phase.as_deref() != phase {
+            moved.extend(self.inner_off(now));
+            if let (Some(left), Some(since)) = (self.phase.take(), self.since) {
+                moved.push((None, left, now.saturating_duration_since(since)));
+            }
+            self.phase = phase.map(str::to_string);
+            self.since = Some(now);
+            if let Some(prefix) = phase.and_then(inner_prefix) {
+                self.inner = Some((format!("{prefix}-preparing"), now));
+            }
+        }
+        let prefix = self.phase.as_deref().and_then(inner_prefix);
+        if let (Some(said), Some(prefix)) = (said, prefix) {
+            let ours = said
+                .strip_prefix(prefix)
+                .is_some_and(|rest| rest.starts_with('-'));
+            if ours && self.inner.as_ref().is_none_or(|(held, _)| held != said) {
+                moved.extend(self.inner_off(now));
+                self.inner = Some((said.to_string(), now));
+            }
+        }
+        moved
+    }
+
+    /// The run ended at `now`: the steps it was on. Pure.
+    fn out(&mut self, now: Instant) -> Vec<Moved> {
+        let mut moved = self.inner_off(now);
+        if let (Some(left), Some(since)) = (self.phase.take(), self.since.take()) {
+            moved.push((None, left, now.saturating_duration_since(since)));
+        }
+        moved
+    }
+
+    fn inner_off(&mut self, now: Instant) -> Vec<Moved> {
+        self.inner
+            .take()
+            .map(|(inner, since)| {
+                (
+                    self.phase.clone(),
+                    inner,
+                    now.saturating_duration_since(since),
+                )
+            })
+            .into_iter()
+            .collect()
+    }
 }
 
 /// Seconds to a tenth, as every timing is reported in.
@@ -1458,29 +1545,33 @@ fn tenths(elapsed: Duration) -> u64 {
     (elapsed.as_millis() / 100) as u64
 }
 
-/// The step the run moved off, reported as done, and the clock moved to `phase`.
-fn clock_to(app: &AppHandle, clock: &Arc<Mutex<StepClock>>, phase: Option<&str>) {
-    let Ok(mut held) = clock.lock() else {
-        return;
-    };
-    if held.phase.as_deref() == phase {
-        return;
+fn report(app: &AppHandle, moved: Vec<Moved>, ending: &str) {
+    for (parent, step, took) in moved {
+        crate::launch::note_folder_step(app, parent.as_deref(), &step, tenths(took), ending);
     }
-    if let (Some(left), Some(since)) = (held.phase.take(), held.since) {
-        crate::launch::note_folder_step(app, &left, tenths(since.elapsed()), "done");
-    }
-    held.phase = phase.map(str::to_string);
-    held.since = Some(Instant::now());
 }
 
-/// The step the run ended on, reported with how it ended.
-fn clock_out(app: &AppHandle, clock: &Arc<Mutex<StepClock>>, ending: &str) {
-    let Ok(mut held) = clock.lock() else {
-        return;
+/// The steps a line moved the run off, reported as done.
+fn clock_to(
+    app: &AppHandle,
+    clock: &Arc<Mutex<StepClock>>,
+    phase: Option<&str>,
+    said: Option<&str>,
+) {
+    let moved = match clock.lock() {
+        Ok(mut held) => held.heard(phase, said, Instant::now()),
+        Err(_) => return,
     };
-    if let (Some(left), Some(since)) = (held.phase.take(), held.since.take()) {
-        crate::launch::note_folder_step(app, &left, tenths(since.elapsed()), ending);
-    }
+    report(app, moved, "done");
+}
+
+/// The steps the run ended on, reported with how it ended.
+fn clock_out(app: &AppHandle, clock: &Arc<Mutex<StepClock>>, ending: &str) {
+    let moved = match clock.lock() {
+        Ok(mut held) => held.out(Instant::now()),
+        Err(_) => return,
+    };
+    report(app, moved, ending);
 }
 
 /// How a run ended, for the step it ended on, in the handed-over setup's words (installTelemetry.ts `runEnding`). Pure.
@@ -1517,7 +1608,8 @@ fn hearing(
             progress.clone()
         };
         if let Some(clock) = &clock {
-            clock_to(&app, clock, shown.phase.as_deref());
+            let said = crate::setup_progress::parse_step(line).map(|(phase, _)| phase);
+            clock_to(&app, clock, shown.phase.as_deref(), said.as_deref());
         }
         update(&app, &path, |record| {
             if matches!(record.standing, Standing::Creating { .. }) {
@@ -1534,9 +1626,66 @@ fn hearing(
             record.requirements.clone_from(&shown.requirements);
         });
         if shown.phase.as_deref() == Some(WARM_FROM) && !warmed.swap(true, Ordering::SeqCst) {
-            warm(&app, &path);
+            made_ahead(&app, &path, shown.sync_unfinished);
         }
     })
+}
+
+/* THE FOLDER IS IN BEFORE THIS COMPUTER IS A DEVICE (2026-10-22). `ic` connects this computer as a device last, after
+ * the sandbox was verified end to end, and never fails a setup over it (connect.rs `run_host_agent`): 4 s at the
+ * median, 13 s with the agent's first start. The folder waited for it all the same, since it was called made only when
+ * the script ended. It is made now at that step's start ([`WARM_FROM`]): its copy is followed and its workspace put up
+ * while the device connects behind it, and the script's end only files its log. */
+
+/// Whether `record` was made by its setup under way now: made since that setup started. Pure.
+pub fn made_this_run(record: &Record) -> bool {
+    record.made
+        && record
+            .made_at
+            .zip(record.started_at)
+            .is_some_and(|(made, started)| made >= started)
+}
+
+/// The sandbox answers end to end and the folder's sync was set up: the folder is made (or made with a sync that never
+/// started, said so), its workspace put up, and its copy followed for as long as the script still runs.
+fn made_ahead(app: &AppHandle, path: &str, sync_unfinished: bool) {
+    let Some(record) = all(app).into_iter().find(|record| record.path == path) else {
+        return;
+    };
+    let (Some(sandbox), Some(name)) = (record.sandbox_id.clone(), record.sandbox_name.clone())
+    else {
+        return;
+    };
+    finished(app, &sandbox, record.slug.as_deref(), &name);
+    let standing = if sync_unfinished {
+        Standing::Failed {
+            reason: no_sync(&record.name),
+        }
+    } else {
+        Standing::Copying
+    };
+    update(app, path, |held| {
+        if !matches!(held.standing, Standing::Creating { .. }) {
+            return;
+        }
+        held.made = true;
+        held.made_at = Some(now_ms());
+        held.consented = false;
+        held.requirements.clear();
+        held.standing = standing;
+    });
+    warm(app, path);
+    let app = app.clone();
+    let path = path.to_string();
+    std::thread::spawn(move || {
+        // The supervisor is held by this run until it ends, and takes the copy over then.
+        let run = run_id(&path);
+        while crate::scripts::is_running(&run) && record_is(&app, &path, &Standing::Copying) {
+            let report = crate::bindings::refresh(&app);
+            follow_copies(&app, report.as_ref());
+            std::thread::sleep(Duration::from_secs(1));
+        }
+    });
 }
 
 /* ONE RUN PER FOLDER, ACROSS LAUNCHES TOO.
@@ -1747,9 +1896,12 @@ fn follow_copies(app: &AppHandle, report: Option<&serde_json::Value>) {
             .sandbox_id
             .as_deref()
             .map_or(crate::windows::Warmth::Cold, crate::windows::warmth);
-        if seen.standing == Standing::Ready && waits_for_page(warmth, record.made_at, now_ms()) {
-            seen.standing = Standing::Copying;
-            seen.status = Some(OPENING.to_string());
+        if seen.standing == Standing::Ready {
+            seen.copied_at = Some(record.copied_at.unwrap_or_else(now_ms));
+            if waits_for_page(warmth, record.made_at, now_ms()) {
+                seen.standing = Standing::Copying;
+                seen.status = Some(OPENING.to_string());
+            }
         }
         let now_ready = seen.standing == Standing::Ready;
         update(app, &record.path, |held| {
@@ -1760,21 +1912,39 @@ fn follow_copies(app: &AppHandle, report: Option<&serde_json::Value>) {
                 held.held_by = seen.held_by.clone();
                 held.copy = seen.copy.clone();
                 held.ran = seen.ran;
+                held.copied_at = seen.copied_at;
             }
         });
         if now_ready {
-            note_ready(app, &record);
+            let workspace = match warmth {
+                crate::windows::Warmth::Shown => "shown",
+                crate::windows::Warmth::Warming => "late",
+                crate::windows::Warmth::Cold => "cold",
+            };
+            note_ready(app, &seen, workspace);
         }
     }
 }
 
-/// The press-to-ready time of a folder just called ready, and the part of it since its sandbox was made.
-fn note_ready(app: &AppHandle, record: &Record) {
-    let asked = Duration::from_millis(now_ms().saturating_sub(record.asked_at));
+/// A folder just called ready: its press-to-ready time, the part of it its copy took after its sandbox was made, and
+/// how long it then waited for its workspace's page, with how that ended (`workspace`).
+fn note_ready(app: &AppHandle, record: &Record, workspace: &str) {
+    let now = now_ms();
+    let asked = Duration::from_millis(now.saturating_sub(record.asked_at));
+    let copied = record.copied_at.unwrap_or(now);
     let copying = record
         .made_at
-        .map(|at| Duration::from_millis(now_ms().saturating_sub(at)));
-    crate::launch::note_folder_ready(app, tenths(asked), copying.map(tenths));
+        .map(|at| Duration::from_millis(copied.saturating_sub(at)));
+    let opening = record
+        .copied_at
+        .map(|at| Duration::from_millis(now.saturating_sub(at)));
+    crate::launch::note_folder_ready(
+        app,
+        tenths(asked),
+        copying.map(tenths),
+        opening.map(tenths),
+        workspace,
+    );
 }
 
 /// The workspace's page, put up for a folder's sandbox, says it shows it (windows.rs): each folder whose copy is in and
@@ -1798,7 +1968,7 @@ pub fn workspace_shown(app: &AppHandle, sandbox: &str) {
             }
         });
         if flipped {
-            note_ready(app, &record);
+            note_ready(app, &record, "shown");
         }
     }
 }
@@ -2382,6 +2552,94 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["failed", "creating"]
         );
+    }
+
+    /* WHERE A SETUP'S TIME GOES, DOWN TO THE AGENT'S OWN STEPS (2026-10-22). */
+    #[test]
+    fn the_agents_own_steps_are_timed_inside_the_plans_and_the_stretch_before_them_too() {
+        let start = Instant::now();
+        let at = |seconds: u64| start + Duration::from_secs(seconds);
+        let named = |moved: Vec<Moved>| {
+            moved
+                .into_iter()
+                .map(|(parent, step, took)| (parent, step, took.as_secs()))
+                .collect::<Vec<_>>()
+        };
+        let mut clock = StepClock::default();
+        assert!(clock
+            .heard(Some("waiting-health"), Some("waiting-health"), at(0))
+            .is_empty());
+        // Into the sync step: what ran before it is the plan's own step.
+        assert_eq!(
+            named(clock.heard(Some("desktop-sync"), Some("desktop-sync"), at(4))),
+            vec![(None, "waiting-health".to_string(), 4)]
+        );
+        // The shim and the agent's self-update, until the agent's first step of its own.
+        assert_eq!(
+            named(clock.heard(Some("desktop-sync"), Some("sync-enrolling"), at(34))),
+            vec![(
+                Some("desktop-sync".to_string()),
+                "sync-preparing".to_string(),
+                30
+            )]
+        );
+        // A line naming nothing, or another agent's step, moves nothing.
+        assert!(clock.heard(Some("desktop-sync"), None, at(35)).is_empty());
+        assert!(clock
+            .heard(Some("desktop-sync"), Some("device-starting"), at(35))
+            .is_empty());
+        assert_eq!(
+            named(clock.heard(Some("desktop-sync"), Some("sync-linking"), at(36))),
+            vec![(
+                Some("desktop-sync".to_string()),
+                "sync-enrolling".to_string(),
+                2
+            )]
+        );
+        // Off the sync step: the agent's last step, then the plan's step that held it.
+        assert_eq!(
+            named(clock.heard(Some("verifying"), Some("verifying"), at(40))),
+            vec![
+                (
+                    Some("desktop-sync".to_string()),
+                    "sync-linking".to_string(),
+                    4
+                ),
+                (None, "desktop-sync".to_string(), 36),
+            ]
+        );
+        clock.heard(
+            Some("connecting-machine"),
+            Some("connecting-machine"),
+            at(41),
+        );
+        assert_eq!(
+            named(clock.out(at(44))),
+            vec![
+                (
+                    Some("connecting-machine".to_string()),
+                    "device-preparing".to_string(),
+                    3
+                ),
+                (None, "connecting-machine".to_string(), 3),
+            ]
+        );
+    }
+
+    /* THE FOLDER IS IN BEFORE THIS COMPUTER IS A DEVICE (2026-10-22). */
+    #[test]
+    fn a_folder_counts_as_made_by_this_run_only_when_made_since_it_started() {
+        let record = |made: bool, made_at: Option<u64>, started_at: Option<u64>| Record {
+            made,
+            made_at,
+            started_at,
+            ..Record::default()
+        };
+        assert!(made_this_run(&record(true, Some(2_000), Some(1_000))));
+        // Made by an earlier attempt, and being set up again: this run has not made it.
+        assert!(!made_this_run(&record(true, Some(500), Some(1_000))));
+        assert!(!made_this_run(&record(false, None, Some(1_000))));
+        assert!(!made_this_run(&record(true, Some(2_000), None)));
     }
 
     /* READY MEANS OPEN SHOWS A DRAWN PAGE (2026-10-22). */

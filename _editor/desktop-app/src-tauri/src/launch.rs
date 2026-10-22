@@ -156,6 +156,11 @@ pub enum Report {
         tenths: u64,
         outcome: String,
         version: String,
+        /// The plan's step this one ran inside (`desktop-sync`, `connecting-machine`), for the agent's own steps
+        /// (`sync-preparing`, `sync-enrolling`…), timed apart since 2026-10-22; none for the plan's own steps, so a sum
+        /// of those is still the run's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent: Option<String>,
     },
     /// `desktop_folder_sandbox_ready`: a folder's first copy in its own sandbox finished, so many tenths of a second
     /// after its press (`tenths`), the copy itself the last `copy_tenths` of them.
@@ -164,6 +169,12 @@ pub enum Report {
         #[serde(default)]
         copy_tenths: Option<u64>,
         version: String,
+        /// How long the folder waited, its copy in, for the workspace's page put up for it (2026-10-22), and how that
+        /// ended: `shown` (the page said so), `late` (it did not say in time) or `cold` (none was put up).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        opening_tenths: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<String>,
     },
 }
 
@@ -543,7 +554,13 @@ pub fn note_engine_restart(
 }
 
 /// One step of a folder's own setup, kept and sent right away (folder_setup.rs).
-pub fn note_folder_step(app: &AppHandle, step: &str, tenths: u64, outcome: &str) {
+pub fn note_folder_step(
+    app: &AppHandle,
+    parent: Option<&str>,
+    step: &str,
+    tenths: u64,
+    outcome: &str,
+) {
     if let Some(dir) = config_dir() {
         keep_report(
             &dir,
@@ -552,14 +569,22 @@ pub fn note_folder_step(app: &AppHandle, step: &str, tenths: u64, outcome: &str)
                 tenths,
                 outcome: outcome.to_string(),
                 version: crate::commands::VERSION.to_string(),
+                parent: parent.map(str::to_string),
             },
         );
     }
     send_reports(app);
 }
 
-/// A folder's first copy into its own sandbox finished: how long after its press, and how long the copy took.
-pub fn note_folder_ready(app: &AppHandle, tenths: u64, copy_tenths: Option<u64>) {
+/// A folder is ready: how long after its press, how long its copy took, and how long it then waited for its
+/// workspace's page and how that ended.
+pub fn note_folder_ready(
+    app: &AppHandle,
+    tenths: u64,
+    copy_tenths: Option<u64>,
+    opening_tenths: Option<u64>,
+    workspace: &str,
+) {
     if let Some(dir) = config_dir() {
         keep_report(
             &dir,
@@ -567,6 +592,8 @@ pub fn note_folder_ready(app: &AppHandle, tenths: u64, copy_tenths: Option<u64>)
                 tenths,
                 copy_tenths,
                 version: crate::commands::VERSION.to_string(),
+                opening_tenths,
+                workspace: Some(workspace.to_string()),
             },
         );
     }
@@ -796,6 +823,7 @@ pub fn event_body(key: &str, install_id: &str, report: &Report) -> serde_json::V
             tenths,
             outcome,
             version,
+            parent,
         } => (
             "desktop_install_step",
             serde_json::json!({
@@ -803,6 +831,7 @@ pub fn event_body(key: &str, install_id: &str, report: &Report) -> serde_json::V
                 "seconds": *tenths as f64 / 10.0,
                 "outcome": outcome,
                 "run": "folder",
+                "parent": parent,
                 "launchVersion": version,
             }),
         ),
@@ -810,11 +839,15 @@ pub fn event_body(key: &str, install_id: &str, report: &Report) -> serde_json::V
             tenths,
             copy_tenths,
             version,
+            opening_tenths,
+            workspace,
         } => (
             "desktop_folder_sandbox_ready",
             serde_json::json!({
                 "seconds": *tenths as f64 / 10.0,
                 "copySeconds": copy_tenths.map(|tenths| tenths as f64 / 10.0),
+                "openingSeconds": opening_tenths.map(|tenths| tenths as f64 / 10.0),
+                "workspace": workspace,
                 "launchVersion": version,
             }),
         ),
@@ -1231,11 +1264,27 @@ mod tests {
                 tenths: 123,
                 outcome: "done".to_string(),
                 version: "1.0.0".to_string(),
+                parent: None,
             },
         );
         assert_eq!(body["event"], "desktop_install_step");
         assert_eq!(body["properties"]["run"], "folder");
         assert_eq!(body["properties"]["seconds"], 12.3);
+        assert!(body["properties"]["parent"].is_null());
+        // The agent's own step inside the plan's names the plan's step it ran in, so the plan's still sum to the run.
+        let inner = event_body(
+            "key",
+            "install-1",
+            &Report::FolderStep {
+                step: "sync-preparing".to_string(),
+                tenths: 303,
+                outcome: "done".to_string(),
+                version: "1.0.0".to_string(),
+                parent: Some("desktop-sync".to_string()),
+            },
+        );
+        assert_eq!(inner["properties"]["parent"], "desktop-sync");
+        assert_eq!(inner["properties"]["step"], "sync-preparing");
         let ready = event_body(
             "key",
             "install-1",
@@ -1243,11 +1292,15 @@ mod tests {
                 tenths: 250,
                 copy_tenths: Some(40),
                 version: "1.0.0".to_string(),
+                opening_tenths: Some(31),
+                workspace: Some("shown".to_string()),
             },
         );
         assert_eq!(ready["event"], "desktop_folder_sandbox_ready");
         assert_eq!(ready["properties"]["seconds"], 25.0);
         assert_eq!(ready["properties"]["copySeconds"], 4.0);
+        assert_eq!(ready["properties"]["openingSeconds"], 3.1);
+        assert_eq!(ready["properties"]["workspace"], "shown");
     }
 
     #[test]

@@ -90,7 +90,7 @@ export const startAutoUpgrade = (log: Log): AutoUpgrade => {
             const asksRelease = config.agentUpdates !== false && Date.now() >= releaseDueAt;
             const [published, children] = await Promise.all([
                 asksRelease ? publishedVersion() : Promise.resolve(undefined),
-                heldDistros().then(async (held) => await Promise.all(held.map(installedIn))),
+                heldDistros().then(async (held) => await Promise.all(held.map(async (distro) => await installedIn(distro)))),
             ]);
             if (asksRelease) {
                 releaseDueAt = Date.now() + RELEASE_EVERY_MS + Math.floor(Math.random() * RELEASE_JITTER_MS);
