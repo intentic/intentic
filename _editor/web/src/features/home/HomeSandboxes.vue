@@ -72,7 +72,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
             :class="{ 'opacity-40': readings.get(box.id)?.unreachable, 'ui-row-select-on': sandbox.activeSandboxId.value === box.id }"
             :aria-label="labelOf(box.id, box.name)"
             :aria-current="sandbox.activeSandboxId.value === box.id ? 'true' : undefined"
-            v-tooltip.right="box.name"
+            v-tooltip.right="{ title: box.name, note: t(`home.doubleClickToEnter`) }"
             @click="choose(box.id, 'click')"
             @keydown.enter.prevent="choose(box.id, 'enter')"
         >

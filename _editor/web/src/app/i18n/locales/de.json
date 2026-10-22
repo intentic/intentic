@@ -7026,6 +7026,7 @@
         },
         "offline": "Diese Sandbox ist nicht verbunden.",
         "retry": "Erneut versuchen",
-        "open": "Alle Sandboxes"
+        "open": "Alle Sandboxes",
+        "doubleClickToEnter": "Doppelklicken zum Öffnen"
     }
 }

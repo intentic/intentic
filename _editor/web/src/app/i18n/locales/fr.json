@@ -6980,6 +6980,7 @@
         },
         "offline": "Ce sandbox n’est pas connecté.",
         "retry": "Réessayer",
-        "open": "Tous les sandboxes"
+        "open": "Tous les sandboxes",
+        "doubleClickToEnter": "Double-cliquez pour entrer"
     }
 }

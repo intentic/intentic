@@ -7061,6 +7061,7 @@
         },
         "offline": "Este sandbox no está conectado.",
         "retry": "Reintentar",
-        "open": "Todos los sandboxes"
+        "open": "Todos los sandboxes",
+        "doubleClickToEnter": "Doble clic para entrar"
     }
 }

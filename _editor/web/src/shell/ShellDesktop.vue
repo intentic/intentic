@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useHomeCommand } from "./commands/useHomeCommand";
+import { followMasterRail, masterRail } from "../models/home/masterRail";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import TourMark from "../features/tour/TourMark.vue";
 import type { MarkStep } from "../features/tour/tourMarks";
@@ -96,6 +97,7 @@ const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
 const onHome = computed(() => route.name === `home`);
+followMasterRail();
 // The audience's words: the maker's + names a new agent rather than a capability.
 const words = useVocabulary();
 // A reader who does not write code meets the rail's + as the start of a conversation, which is what they came to do;
@@ -309,7 +311,7 @@ const sideWidth = computed(() =>
     besideChat.value && !besideFills.value ? layout.chatWidth.value + layout.besideWidth.value : layout.chatWidth.value,
 );
 const gridStyle = computed(() => ({
-    "--side-width": !onHome.value && sideColumnShown.value ? uiLength(sideWidth.value) : `0px`,
+    "--side-width": !masterRail.value && sideColumnShown.value ? uiLength(sideWidth.value) : `0px`,
     // The rail's own measures, shared with a desktop window on a local folder (railFrame.ts, iconRail.css).
     ...railFrame(iconRailSize.value),
 }));
@@ -389,7 +391,7 @@ useGettingStarted();
 <template>
     <div class="shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
         <!-- The master view keeps the rail itself (its look, its account control) and swaps only its tiles for the sandboxes. -->
-        <nav v-if="onHome" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
+        <nav v-if="masterRail" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
             <HomeSandboxes />
             <AccountPanel />
         </nav>
@@ -587,7 +589,7 @@ useGettingStarted();
         </nav>
 
         <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->
-        <SidePanel v-if="!onHome && sideShown" v-show="sideColumnShown" />
+        <SidePanel v-if="!masterRail && sideShown" v-show="sideColumnShown" />
 
         <!-- Under what was opened while it fills the middle: hidden and inert, but mounted at its own size, so the section
              comes back as it was left, scrolled where it was. -->
@@ -618,7 +620,7 @@ useGettingStarted();
 
         <!-- The parked chat's scratch pad, floating in the section's own cell: opening it must not reflow the page the reader
              opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
-        <ChatQuickBar v-if="!onHome" />
+        <ChatQuickBar v-if="!masterRail" />
 
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
         <QuickOpen />

@@ -105,6 +105,12 @@ const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } })
 
             <!-- Sandboxes: tap to switch; the active one's placement mark carries its live status. -->
             <RowGroup :label="t(`shared.sandboxes`)">
+                <!-- Out to the master view (features/home/), quietly, on the header of the list it zooms out of. -->
+                <template #actions>
+                    <RouterLink to="/home" class="flex min-h-9 min-w-9 items-center justify-center text-subtle" :aria-label="t(`home.open`)">
+                        <Icon name="th-large" class="text-sm" />
+                    </RouterLink>
+                </template>
                 <MenuRow v-for="option in switchable" :key="option.id" :selected="isActive(option)" @press="sandbox.select(option.id)">
                     <template #lead="{ mark }"><SandboxLogo :size="mark" :image="option.image ?? null" :name="option.name" /></template>
                     <template #title>
@@ -128,8 +134,6 @@ const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } })
                     </template>
                 </MenuRow>
                 <MenuRow to="/setup" icon="plus" :title="t(`sandbox.words.addSandbox`)" plain />
-                <!-- Out to the master view (features/home/), quietly, beside the list it zooms out of. -->
-                <MenuRow to="/home" icon="th-large" :title="t(`home.open`)" plain />
             </RowGroup>
 
             <!-- Same wording as the desktop switcher: offers the move left, not a machine that doesn't exist yet. -->

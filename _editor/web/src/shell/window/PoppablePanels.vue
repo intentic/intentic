@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { masterRail } from "../../models/home/masterRail";
 import { computed, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { useChatFloating } from "../../models/conversations/panel/chatFloating";
@@ -58,7 +59,7 @@ browsers.onDocked(() => {
 <template>
     <!-- Grid area and border live on the panel, not the slot: the slot is `display: contents` and generates no box. -->
     <Teleport :to="chatTarget">
-        <ChatPanel v-if="chat.shows.value && router.currentRoute.value.name !== `home`" :bar="inBar" style="grid-area: chat" />
+        <ChatPanel v-if="chat.shows.value && !masterRail" :bar="inBar" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <TerminalPanel

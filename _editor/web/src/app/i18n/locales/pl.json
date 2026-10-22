@@ -12846,6 +12846,7 @@
         },
         "offline": "Ten sandboks nie jest połączony.",
         "retry": "Spróbuj ponownie",
-        "open": "Wszystkie sandboksy"
+        "open": "Wszystkie sandboksy",
+        "doubleClickToEnter": "Kliknij dwukrotnie, aby wejść"
     }
 }

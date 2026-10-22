@@ -12846,6 +12846,7 @@
         },
         "offline": "This sandbox is not connected.",
         "retry": "Try again",
-        "open": "All sandboxes"
+        "open": "All sandboxes",
+        "doubleClickToEnter": "Double-click to enter"
     }
 }
