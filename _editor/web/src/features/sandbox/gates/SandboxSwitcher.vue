@@ -115,7 +115,7 @@ const menu = useHoverMenu(panel);
 const open = menu.open;
 const pressed = menu.pressed;
 // The local window's own half (switcherPlace.ts): opening a sandbox through the app, the sign-in, a failure by its row.
-const { folder, local, failure, openFromFolder, signedOut, signingIn, signIn, addSandbox: addFromFolder } = useFolderPlace(open);
+const { folder, local, failure, openFromFolder, openHome, signedOut, signingIn, signIn, addSandbox: addFromFolder } = useFolderPlace(open);
 
 // Reads these counts only while the popover is open, since the control is mounted for the whole session; a second
 // open within the freshness window paints instantly from the store's last read. A pointer resting on the logo starts
@@ -211,8 +211,7 @@ const pick = (option: SandboxSummary): void => {
     sandbox.select(option.id);
 };
 
-// Every row that goes somewhere is a real link, so Ctrl/⌘-click opens a tab instead of hijacking this one; rows
-// that aren't places stay buttons, and a plain click alone closes the popover.
+// Workspace links keep the browser's Ctrl/⌘-click; a plain click alone closes the popover.
 const dismiss = (event: MouseEvent): void => {
     if (!browserOwnsClick(event)) {
         open.value = false;
@@ -220,8 +219,7 @@ const dismiss = (event: MouseEvent): void => {
 };
 
 // THIS COMPUTER, the desktop app's other face: its own window on a folder of this computer, with This device beside it
-// (the app's local shell). Offered only inside the app, whose workspace window this page then is; the app swaps the
-// two in one frame, so this list names every place the window can show. An app older than the local shell opens its
+// (the app's local shell). The app swaps the two in one frame. An app older than the local shell opens its
 // own card for the same link, which is this computer too.
 const inDesktopApp = desktopApp() !== undefined && !local;
 const toThisComputer = (): void => {
@@ -408,18 +406,20 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
             <SectionHeader :label="t(`shared.sandboxes`)" density="dense" class="px-2 py-1.5">
                 <!-- The way out to the master view (features/home/), every sandbox at once: a small mark on the header of
                      the list it zooms out of, quiet until looked for. -->
-                <template v-if="!local" #actions>
-                    <RouterLink
-                        to="/home"
+                <template #actions>
+                    <component
+                        :is="local ? `button` : RouterLink"
+                        v-bind="local ? { type: `button` } : { to: `/home` }"
                         class="flex h-5 w-5 items-center justify-center rounded text-subtle transition-colors hover:bg-content/5 hover:text-content"
                         :aria-label="t(`home.open`)"
                         v-tooltip.top="t(`home.open`)"
-                        @click="dismiss"
+                        @click="openHome"
                     >
                         <Icon name="th-large" class="text-2xs" />
-                    </RouterLink>
+                    </component>
                 </template>
             </SectionHeader>
+            <Notice v-if="failure?.id === `:home`" tone="danger" class="mx-2 mb-1 text-2xs">{{ failure.message }}</Notice>
 
             <!-- A local window with nobody signed in: what agents need, and the sign-in that brings the workspace. -->
             <template v-if="signedOut">

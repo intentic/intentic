@@ -77,7 +77,7 @@ const startGoogleMint = (to: RouteLocationNormalized): true => {
 const requireSetup = async (to: RouteLocationNormalized): Promise<boolean | RouteLocationRaw> => {
     // allow(silent-catch): any failure to list means the same thing here, the platform could not be asked; the outage
     // screen says so and retries.
-    const result = await readSetupRedirect(useSandbox()).then(
+    const result = await readSetupRedirect(useSandbox(), to.path).then(
         (redirect) => ({ redirect }),
         () => undefined,
     );
@@ -234,7 +234,7 @@ const routes: RouteRecordRaw[] = [
     // asks for it here.
     { path: `/floating/preview`, redirect: `/floating/browsers` },
     {
-        // Persistent workspace shell (rail + shared chat + area outlet). Guarded: signed in and sandbox connected;
+        // Persistent workspace shell (rail + shared chat + area outlet). Home needs only an account; other pages need a sandbox;
         // otherwise requireSetup redirects to /setup (in the desktop app, to This computer: thisComputerFirst.ts).
         path: `/`,
         beforeEnter: [requireAuth, async (to) => workspaceAside.settle(await requireSetup(to)), openNamedSandbox],

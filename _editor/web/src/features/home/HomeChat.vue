@@ -14,9 +14,12 @@ import HomeChatSlot from "./HomeChatSlot.vue";
 import { Button, useDevice } from "@intentic/ui";
 import { useRole } from "../../client/sandbox/useRole";
 import { invalidateAgentAction, landAgent, nothingLanded } from "../../models/fleet/agentActions";
+import { switchableSandboxes } from "../../models/sandbox/live/roster";
+import HomeNoSandbox from "./HomeNoSandbox.vue";
 
 const t = useT();
 const sandbox = useSandbox();
+const noSandbox = computed(() => switchableSandboxes(sandbox.sandboxes.value).length === 0);
 const { mobile } = useDevice();
 const conversation = shallowRef<Conversation>();
 const failure = shallowRef(false);
@@ -54,14 +57,17 @@ const land = async (): Promise<void> => {
     }
 };
 watch(
-    () => [sandbox.activeSandboxId.value, sandbox.reachable.value, retry.value] as const,
-    async ([id, reachable], _old, cleanup) => {
+    () => [sandbox.activeSandboxId.value, sandbox.reachable.value, noSandbox.value, retry.value] as const,
+    async ([id, reachable, empty], _old, cleanup) => {
         let current = true;
         cleanup(() => {
             current = false;
         });
         failure.value = false;
-        if (id === undefined || !reachable) {
+        if (empty || id === undefined || !reachable) {
+            if (empty) {
+                conversation.value = undefined;
+            }
             return;
         }
         try {
@@ -81,7 +87,8 @@ watch(
 </script>
 
 <template>
-    <section class="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+    <HomeNoSandbox v-if="noSandbox" />
+    <section v-else class="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <details v-if="ledger.length" class="shrink-0 border-b border-line px-4 py-2 text-xs" open>
             <summary class="cursor-pointer text-muted">{{ t(`home.work`) }} · {{ ledger.length }}</summary>
             <div class="max-h-40 overflow-auto py-1">

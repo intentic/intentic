@@ -533,6 +533,8 @@ connected sandboxes with personal attention counts; on phones the list opens eac
 Single clicks switch sandboxes, double clicks and Enter enter the full sandbox. `features/home/` draws the surface;
 `models/home/` holds attention polling and the pure work ledger projection.
 The desktop status bar stays hidden in the master view, including personal settings opened from it.
+Home also opens from the logo menu in This computer before any sandbox exists. Its rail offers a way back to This
+computer in the desktop app; without a sandbox, the composer is disabled and a beacon and hint point to the + tile.
 
 A **home-only** member (Access ▸ People, Agents: Home only) reaches nothing else: the shell fence
 (`lib/routes/guestPaths.ts` `homeOnlyAllowedPath`) keeps them on `/home`, the sessions their home started, their own

@@ -1,4 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
+import { browserOwnsClick } from "@intentic/ui";
 import { computed, type ComputedRef, onMounted, type Ref, ref, watch } from "vue";
 import { type Router, useRouter } from "vue-router";
 import { localFace } from "../../../app/environments/local";
@@ -45,6 +46,8 @@ export interface FolderPlace {
     /** What went wrong, by the row it is about (a sandbox's id, or `:sign-in`): the app's own sentence. */
     readonly failure: Ref<{ readonly id: string; readonly message: string } | undefined>;
     readonly openFromFolder: (sandboxId: string) => Promise<void>;
+    /** The account's Home, available even before it has a sandbox. */
+    readonly openHome: (event: MouseEvent) => Promise<void>;
     /** Nobody signed in yet: no sandboxes to list, and the sign-in that brings the workspace instead. */
     readonly signedOut: ComputedRef<boolean>;
     readonly signingIn: ComputedRef<boolean>;
@@ -96,6 +99,14 @@ export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
         local,
         failure,
         openFromFolder: (sandboxId) => attempt(sandboxId, () => openSandboxFromFolder(sandboxId)),
+        openHome: async (event) => {
+            if (local) {
+                event.preventDefault();
+                await attempt(`:home`, () => openWorkspacePath(router, `/home`));
+            } else if (!browserOwnsClick(event)) {
+                open.value = false;
+            }
+        },
         signedOut: computed(() => local && user.value === null),
         signingIn,
         signIn: () => attempt(`:sign-in`, () => localHost().signIn()),

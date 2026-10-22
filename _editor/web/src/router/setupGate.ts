@@ -1,5 +1,6 @@
 import type { SandboxSummary } from "@intentic/api-contract";
 import type { RouteLocationRaw } from "vue-router";
+import { isHomePath } from "../lib/routes/home";
 
 // Whether this account has a workspace to open or an unfinished setup to return to. True once any
 // sandbox's lastSeenAt is non-null (set by the daemon's announce or sandbox.attach); a merely down sandbox still
@@ -21,5 +22,8 @@ export interface SetupGateHost {
 // The desktop app may have made or connected a sandbox while this page was hidden. A cached list that has nothing
 // to open must be confirmed before sending the reader to setup; otherwise the next fresh list leaves them on setup
 // offering a sandbox that already works. A failed refresh remains a platform outage, never an empty account.
-export const readSetupRedirect = async (sandbox: SetupGateHost): Promise<RouteLocationRaw | undefined> =>
-    setupRedirect(await sandbox.list()) === undefined ? undefined : setupRedirect(await sandbox.refresh());
+export const readSetupRedirect = async (sandbox: SetupGateHost, path = ``): Promise<RouteLocationRaw | undefined> => {
+    const redirect = setupRedirect(await sandbox.list()) === undefined ? undefined : setupRedirect(await sandbox.refresh());
+    // Home belongs to the account: it stays available before its first sandbox, without starting setup on arrival.
+    return isHomePath(path) ? undefined : redirect;
+};

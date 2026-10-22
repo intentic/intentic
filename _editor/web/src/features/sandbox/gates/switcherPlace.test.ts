@@ -129,13 +129,16 @@ describe(`in a local window`, () => {
         const open = ref(true);
         const mounted = mount(() => useFolderPlace(open));
         await mounted.value.openFromFolder(`sbx-work`);
+        const homeEvent = new MouseEvent(`click`, { cancelable: true });
+        await mounted.value.openHome(homeEvent);
         const event = new MouseEvent(`click`, { cancelable: true });
         mounted.value.addSandbox(event);
         await nextTick();
-        expect({ opened, closed: !open.value, prevented: event.defaultPrevented, stayed: mounted.path() }).toEqual({
-            opened: [`/?sandbox=sbx-work`, `/?add=sandbox`],
+        expect({ opened, closed: !open.value, prevented: event.defaultPrevented, homePrevented: homeEvent.defaultPrevented, stayed: mounted.path() }).toEqual({
+            opened: [`/?sandbox=sbx-work`, `/home`, `/?add=sandbox`],
             closed: true,
             prevented: true,
+            homePrevented: true,
             stayed: `/`,
         });
         mounted.unmount();
@@ -148,6 +151,18 @@ describe(`in a local window`, () => {
         await mounted.value.openFromFolder(`sbx-work`);
         expect({ failure: mounted.value.failure.value, open: open.value }).toEqual({
             failure: { id: `sbx-work`, message: `The workspace window could not be opened.` },
+            open: true,
+        });
+        mounted.unmount();
+    });
+
+    it(`keeps the menu open and explains a refused Home handoff`, async () => {
+        refuse = `The workspace window could not be opened.`;
+        const open = ref(true);
+        const mounted = mount(() => useFolderPlace(open));
+        await mounted.value.openHome(new MouseEvent(`click`, { cancelable: true }));
+        expect({ failure: mounted.value.failure.value, open: open.value }).toEqual({
+            failure: { id: `:home`, message: `The workspace window could not be opened.` },
             open: true,
         });
         mounted.unmount();

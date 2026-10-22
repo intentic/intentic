@@ -21,6 +21,11 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
 });
 
 describe(`checking setup before opening the workspace`, () => {
+    it.each([`/home`, `/home/missing`])(`opens %s without a sandbox and leaves creation to a press`, async (path) => {
+        expect(await readSetupRedirect({ list: async () => [], refresh: async () => [] }, path)).toBeUndefined();
+        expect(await readSetupRedirect({ list: async () => [], refresh: async () => [sandbox({ id: `pending` })] }, path)).toBeUndefined();
+    });
+
     it.each([
         { name: `an empty cached list`, cached: [] },
         { name: `a cached row that had not checked in yet`, cached: [sandbox({ id: `local` })] },

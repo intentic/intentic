@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, useTemplateRef, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { SandboxLogo, ui } from "@intentic/ui";
+import { Beacon, CoachMark, SandboxLogo, ui } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
@@ -12,7 +12,10 @@ import { addsInDialog, askAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import type { ViewBadge } from "@intentic/extension-api";
+import { desktopApp, openThisComputer } from "../../app/environments/desktop";
+import HomeNoSandbox from "./HomeNoSandbox.vue";
 
+defineOptions({ inheritAttrs: false });
 const { phone = false } = defineProps<{ phone?: boolean }>();
 const t = useT();
 const router = useRouter();
@@ -21,6 +24,21 @@ const { homeOnly } = useRole();
 // The switcher's own list (roster.ts `switchableSandboxes`), never the account's raw rows: a setup never finished has no
 // daemon to open a home conversation on, and a desktop folder window's own row is no sandbox at all.
 const boxes = computed(() => orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value)));
+const inDesktopApp = desktopApp() !== undefined;
+const addAnchor = useTemplateRef<HTMLElement>(`addAnchor`);
+const hintOpen = ref(false);
+// The same beacon and anchored hint as getting started, on the actual press that creates the first sandbox.
+watch(
+    () => boxes.value.length === 0,
+    (empty, _old, cleanup) => {
+        hintOpen.value = false;
+        if (empty) {
+            const timer = setTimeout(() => (hintOpen.value = true), 700);
+            cleanup(() => clearTimeout(timer));
+        }
+    },
+    { immediate: true },
+);
 const readings = useHomeAttention();
 const badgeOf = (id: string): ViewBadge | undefined => {
     const count = readings.value.get(id)?.needsYou ?? 0;
@@ -57,7 +75,7 @@ const choose = (id: string, input: `click` | `enter`): void => {
 
 <template>
     <!-- On a phone, the master view IS this list: a page of its own. -->
-    <nav v-if="phone" :aria-label="t(`home.sandboxes`)" class="flex h-full flex-col gap-3 overflow-y-auto bg-card p-3">
+    <nav v-if="phone" v-bind="$attrs" :aria-label="t(`home.sandboxes`)" class="flex h-full flex-col gap-3 overflow-y-auto bg-card p-3">
         <h1 class="px-2 py-3 text-lg font-semibold">{{ t(`home.title`) }}</h1>
         <button
             v-for="box in boxes"
@@ -74,20 +92,34 @@ const choose = (id: string, input: `click` | `enter`): void => {
             <span class="min-w-0 flex-1 truncate">{{ box.name }}</span>
             <ViewBadgeChip :badge="badgeOf(box.id)" class="text-[0.625rem]" />
         </button>
-        <component
-            :is="addsHere ? `button` : RouterLink"
-            v-bind="addTarget"
-            class="flex min-h-11 items-center justify-center rounded-xl px-3 text-muted hover:bg-content/5"
-            :aria-label="t(`sandbox.words.addSandbox`)"
-            @click="add"
-        >
-            <Icon name="plus" aria-hidden="true" />
-        </component>
+        <span ref="addAnchor" class="relative flex shrink-0">
+            <component
+                :is="addsHere ? `button` : RouterLink"
+                v-bind="addTarget"
+                class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-3 text-muted hover:bg-content/5"
+                :aria-label="t(`sandbox.words.addSandbox`)"
+                @click="add"
+            >
+                <Icon name="plus" aria-hidden="true" />
+            </component>
+            <Beacon v-if="!boxes.length" size="sm" class="absolute right-2 top-1" />
+        </span>
+        <HomeNoSandbox v-if="!boxes.length" />
     </nav>
     <!-- On a desktop, the tiles of the shell's own rail (ShellDesktop.vue draws the rail around them, account included),
          worn like every other tile: the same size, selection and corner chip. Only what needs you is counted; a quiet box
          wears nothing, and one that has not answered is dimmed rather than counted. -->
-    <div v-else :aria-label="t(`home.sandboxes`)" role="group" class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
+    <div v-else v-bind="$attrs" :aria-label="t(`home.sandboxes`)" role="group" class="icon-rail-nav scrollbar-none flex flex-col items-center overflow-y-auto overscroll-contain">
+        <button
+            v-if="inDesktopApp"
+            type="button"
+            class="icon-rail-tile ui-row-select ui-row-select-horizontal flex shrink-0 items-center justify-center rounded-lg text-muted hover:text-content"
+            :aria-label="t(`sandbox.sandboxSwitcher.thisComputer`)"
+            v-tooltip.right="t(`sandbox.sandboxSwitcher.thisComputer`)"
+            @click="openThisComputer"
+        >
+            <Icon name="desktop" class="icon-rail-glyph" aria-hidden="true" />
+        </button>
         <button
             v-for="box in boxes"
             :key="box.id"
@@ -103,15 +135,21 @@ const choose = (id: string, input: `click` | `enter`): void => {
             <SandboxLogo :image="box.image ?? null" :name="box.name" class="rounded-lg" />
             <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
         </button>
-        <component
-            :is="addsHere ? `button` : RouterLink"
-            v-bind="addTarget"
-            :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
-            :aria-label="t(`sandbox.words.addSandbox`)"
-            v-tooltip.right="t(`sandbox.words.addSandbox`)"
-            @click="add"
-        >
-            <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
-        </component>
+        <span ref="addAnchor" class="relative flex shrink-0">
+            <component
+                :is="addsHere ? `button` : RouterLink"
+                v-bind="addTarget"
+                :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
+                :aria-label="t(`sandbox.words.addSandbox`)"
+                v-tooltip.right="hintOpen ? undefined : t(`sandbox.words.addSandbox`)"
+                @click="add"
+            >
+                <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
+            </component>
+            <Beacon v-if="!boxes.length" size="sm" class="absolute right-1 top-1" />
+        </span>
     </div>
+    <CoachMark v-if="!boxes.length" v-model="hintOpen" :anchor="addAnchor ?? undefined" :side="phone ? `bottom` : `right`" :title="t(`home.addSandboxHint`)">
+        {{ t(`home.noSandboxLine`) }}
+    </CoachMark>
 </template>
