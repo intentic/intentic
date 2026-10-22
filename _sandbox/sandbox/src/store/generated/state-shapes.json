@@ -1126,7 +1126,7 @@
   "workspace:.intentic/local/cache/field-notes-pins.json": [
     {
       "type": "{ briefs: Record<string, { chars: number; ranksSent: number; ranksTotal: number; revision: string; text: string; unlisted: string[]; writtenAt: number }>; pins: Record<string, { at: number; brief: string }> }",
-      "since": "unreleased"
+      "since": "v1.349.0"
     }
   ],
   "workspace:.intentic/local/extension-dev.json": [
