@@ -113,7 +113,7 @@ const project = setupProjectOf(route.query[`project`]);
 const installer = computed(() => (desktop.value || mobile.value || project !== undefined ? undefined : desktopInstaller()));
 const reader = { mobile, inApp: desktop, installer };
 
-// Lands on `/`, which differs by form factor (a phone has no docked chat, so it opens straight into one). A project's
+// Lands on the full-screen chat, or `/` on a phone (which has no rail, so it opens straight into a conversation). A project's
 // sandbox opens on its folder, the one the reader asked about, rather than on the `/work` around it (projectScope.ts).
 // Where the desktop app found AI tools already signed in on this computer (`?found=`), it lands on Sandbox ▸ Models instead,
 // which offers each of them as one press (lib/foundOnComputer.ts).
@@ -126,7 +126,7 @@ const enterWorkspace = async (): Promise<void> => {
     if (project !== undefined && entered !== undefined) {
         openOnProject(entered, project.dirName);
     }
-    await router.push(landingAfterSetup(foundAfterSetup(route.query[FOUND_QUERY])));
+    await router.push(landingAfterSetup(foundAfterSetup(route.query[FOUND_QUERY]), mobile.value));
     revealConversation(composingConversation());
 };
 

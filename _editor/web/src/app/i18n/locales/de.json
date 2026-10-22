@@ -5599,7 +5599,6 @@
             "intenticMachine": "Intentic-Maschine",
             "keepsGoing": "Du kannst das schließen. Die Einrichtung von {name} läuft weiter, und sie erscheint in deiner Sandbox-Liste, sobald sie bereit ist.",
             "moreWays": "Weitere Wege",
-            "details": "In der Einrichtung öffnen",
             "nameNeeded": "Gib ihr einen Namen.",
             "nameTooLong": "Höchstens {max} Zeichen.",
             "hostedNeedsGoogle": "Eine kostenlose Intentic-Maschine braucht eine Google-Anmeldung für dieses Konto. Verknüpfe sie unter Weitere Wege.",

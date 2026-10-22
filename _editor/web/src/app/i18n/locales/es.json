@@ -5618,7 +5618,6 @@
             "intenticMachine": "Máquina de Intentic",
             "keepsGoing": "Puedes cerrar esto. La configuración de {name} continúa, y aparecerá en tu lista de sandboxes cuando esté listo.",
             "moreWays": "Más opciones",
-            "details": "Abrir en la configuración",
             "nameNeeded": "Ponle un nombre.",
             "nameTooLong": "Como máximo {max} caracteres.",
             "hostedNeedsGoogle": "Una máquina gratuita de Intentic necesita un inicio de sesión de Google en esta cuenta. Vincúlalo en Más opciones.",

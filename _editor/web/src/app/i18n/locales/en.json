@@ -10985,7 +10985,6 @@
             "intenticMachine": "Intentic machine",
             "keepsGoing": "You can close this. Setting up {name} carries on, and it shows up in your sandbox list once it's ready.",
             "moreWays": "More ways",
-            "details": "Open in setup",
             "nameNeeded": "Give it a name.",
             "nameTooLong": "Keep it to {max} characters.",
             "hostedNeedsGoogle": "A free Intentic machine needs a Google sign-in on this account. Use More ways to link one.",

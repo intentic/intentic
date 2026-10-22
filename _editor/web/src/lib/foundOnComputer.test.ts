@@ -22,9 +22,11 @@ beforeEach(() => {
     localStorage.clear();
 });
 
-test("a finished setup lands on Sandbox ▸ Models with what was found, and on / with nothing", () => {
+test("a finished setup lands on Sandbox ▸ Models with what was found, else on the chat (a phone on /)", () => {
     expect(landingAfterSetup([`claude`, `codex`])).toEqual({ path: `/sandbox/models`, query: { found: `claude,codex` } });
-    expect(landingAfterSetup([])).toBe(`/`);
+    expect(landingAfterSetup([`claude`], true)).toEqual({ path: `/sandbox/models`, query: { found: `claude` } });
+    expect(landingAfterSetup([])).toBe(`/chat`);
+    expect(landingAfterSetup([], true)).toBe(`/`);
 });
 
 test("the list survives the sign-in detour: kept on the way into setup, taken once at the landing", () => {

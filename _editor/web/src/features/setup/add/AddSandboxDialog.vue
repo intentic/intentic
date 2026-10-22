@@ -6,7 +6,7 @@
 <script setup lang="ts">
 import { Button, Modal, Notice, SegmentedControl, ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { environment } from "../../../app/environments/environment";
@@ -15,6 +15,7 @@ import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { apiClient } from "../../../lib/useApi";
 import { markJustSetUp } from "../../../models/sandbox/live/justSetUp";
+import { landOnAfterSwitch } from "../../../models/sandbox/sandboxScreen";
 import DesktopSetupProgress from "../DesktopSetupProgress.vue";
 import { useDesktopSetup } from "../desktopSetup";
 import { platformUrlOf } from "../flow/installCommand";
@@ -60,6 +61,17 @@ const add = useAddSandbox({
 });
 const { name, problem, pick, options, loaded, creating, error, started, created, hostedWait, hostedRow, onMachine } = add;
 onMounted(() => void add.read());
+// The new sandbox opens on the full-screen chat, where its first session starts, rather than on the shell's default (the
+// file tree with the chat docked). Recorded the moment the row exists: the switch lands on it once the row is selected.
+// A phone keeps its own landing, a conversation already.
+watch(
+    () => created.value?.id,
+    (id) => {
+        if (id !== undefined && !mobile.value) {
+            landOnAfterSwitch(id, `/chat`);
+        }
+    },
+);
 
 const desktop = useDesktopSetup();
 // The app's report, while it is about this sandbox: its module state may still hold an earlier install's last word.
@@ -68,8 +80,6 @@ const desktopReport = computed(() => {
     return report !== undefined && (report.name === undefined || report.name === created.value?.name) ? report : undefined;
 });
 
-// /setup on this row: its full card, for a run that stopped or a wait that went wrong.
-const details = computed(() => (created.value === null ? undefined : { path: `/setup`, query: { sandbox: created.value.id } }));
 const machineFailed = computed(() => started.value?.kind === `machine` && onMachine.run.failure.value !== undefined);
 const nothingOffered = computed(() => loaded.value && options.value.length === 0);
 </script>
@@ -148,7 +158,7 @@ const nothingOffered = computed(() => loaded.value && options.value.length === 0
         </div>
 
         <template #footer>
-            <div class="flex w-full flex-wrap items-center gap-2">
+            <div class="flex w-full flex-wrap items-center justify-end gap-2">
                 <!-- Every other way (the command, the installer, an own domain) is /setup's, with its picker open. -->
                 <RouterLink
                     v-if="started === undefined"
@@ -157,9 +167,6 @@ const nothingOffered = computed(() => loaded.value && options.value.length === 0
                     @click="emit(`close`)"
                     >{{ t(`setup.addSandbox.moreWays`) }}</RouterLink
                 >
-                <RouterLink v-else-if="details && !opening" :to="details" class="mr-auto text-xs text-link hover:underline" @click="emit(`close`)">{{
-                    t(`setup.addSandbox.details`)
-                }}</RouterLink>
                 <template v-if="started === undefined">
                     <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`close`)" />
                     <Button

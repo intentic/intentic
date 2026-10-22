@@ -255,10 +255,10 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: () => t(`home.title`) },
                 component: asyncView(() => import(`../features/home/MasterHomeView.vue`)),
             },
-            // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the file tree with its chat
-            // already docked, for a maker too: the chat is where a first session starts, and the Projects dashboard
-            // landed on instead read as a second place to begin. A guest has no home tile but the chat: the tree is a
-            // read the daemon refuses it. A home-only guest has only the master view.
+            // The shell's own landing: mobile lands on the agent fleet, desktop on the file tree with its chat docked.
+            // A new sandbox opens on the full-screen chat instead (landingAfterSetup, AddSandboxDialog), since the chat
+            // is where a first session starts. A guest has no home tile but the chat: the tree is a read the daemon
+            // refuses it. A home-only guest has only the master view.
             {
                 path: ``,
                 redirect: () => {

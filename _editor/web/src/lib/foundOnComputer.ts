@@ -129,7 +129,11 @@ export const foundAfterSetup = (value: QueryValue, now: number = Date.now()): Na
     return named.length > 0 ? named : kept;
 };
 
-/** Where a finished setup opens the workspace: Sandbox ▸ Models with what was found, else `/` as it always has. */
-export const landingAfterSetup = (found: readonly NativeProvider[]): RouteLocationRaw =>
-    found.length === 0 ? `/` : modelsPath({ [FOUND_QUERY]: found.join(`,`) });
+/**
+ * Where a finished setup opens the workspace: Sandbox ▸ Models with what was found, else the chat, where a first session
+ * starts: full-screen on its rail tile rather than docked beside the file tree. A phone keeps `/`, which already opens
+ * straight into a conversation.
+ */
+export const landingAfterSetup = (found: readonly NativeProvider[], mobile = false): RouteLocationRaw =>
+    found.length > 0 ? modelsPath({ [FOUND_QUERY]: found.join(`,`) }) : mobile ? `/` : `/chat`;
 
