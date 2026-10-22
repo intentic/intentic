@@ -133,7 +133,13 @@ export const ENGINE_PINS = [
     {
         id: "translator",
         label: "Subscription translator",
-        upstream: { kind: "github-release", repo: "router-for-me/CLIProxyAPI" },
+        // The two archives the pack downloads (arm64 under CLIProxyAPI's own `aarch64` name): a release missing either
+        // is one the image build would 404 on, so it is not a version until both are uploaded.
+        upstream: {
+            kind: "github-release",
+            repo: "router-for-me/CLIProxyAPI",
+            assets: (version) => ["amd64", "aarch64"].map((arch) => `CLIProxyAPI_${version}_linux_${arch}.tar.gz`),
+        },
         sites: [site(pack("translator"), /version=(\S+)/g, 1)],
     },
 ];

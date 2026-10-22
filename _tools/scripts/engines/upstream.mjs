@@ -70,15 +70,27 @@ export const versionOfTag = (tag, prefix) => {
     return tag.startsWith(prefix) ? tag.slice(prefix.length) : undefined;
 };
 
-const githubVersions = async (repo, tagPrefix) => {
+// Whether a release carries every file a pin downloads from it. GitHub publishes the release before its build uploads
+// the assets, and an upload that fails leaves it published and empty (CLIProxyAPI 8.0.39 stood with no files for
+// hours), so a tag alone is not a version anything can install. Without `assets` declared, any release counts.
+export const hasAssets = (release, version, assets) => {
+    if (assets === undefined) {
+        return true;
+    }
+    const uploaded = new Set((Array.isArray(release.assets) ? release.assets : []).map((asset) => asset?.name));
+    return assets(version).every((name) => uploaded.has(name));
+};
+
+const githubVersions = async (repo, tagPrefix, assets) => {
     const body = await getJson(`https://api.github.com/repos/${repo}/releases?per_page=100`, githubHeaders());
     if (!Array.isArray(body)) {
         return undefined;
     }
     return body
         .filter((release) => release.prerelease !== true && release.draft !== true && typeof release.published_at === "string")
-        .map((release) => ({ version: versionOfTag(String(release.tag_name ?? ""), tagPrefix), at: Date.parse(release.published_at) }))
-        .filter((release) => release.version !== undefined && isStable(release.version));
+        .map((release) => ({ release, version: versionOfTag(String(release.tag_name ?? ""), tagPrefix), at: Date.parse(release.published_at) }))
+        .filter((entry) => entry.version !== undefined && isStable(entry.version) && hasAssets(entry.release, entry.version, assets))
+        .map(({ version, at }) => ({ version, at }));
 };
 
 // A vendor CDN that names only its newest version (xAI's https://x.ai/cli/stable): that version, published when its
@@ -108,7 +120,7 @@ const primaryVersions = (upstream) => {
             return pointerVersions(upstream.url, upstream.artifact);
         }
         default: {
-            return githubVersions(upstream.repo, upstream.tagPrefix);
+            return githubVersions(upstream.repo, upstream.tagPrefix, upstream.assets);
         }
     }
 };

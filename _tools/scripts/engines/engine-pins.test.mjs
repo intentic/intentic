@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ENGINE_PINS, readPins, rewrite, withBlessed } from "./engine-pins.mjs";
+import { hasAssets } from "./upstream.mjs";
 
 const CATALOG = ENGINE_PINS.find((engine) => engine.id === "claude").sites[0].pattern;
 const EXCLUDES = ENGINE_PINS.find((engine) => engine.id === "claude").sites[1].pattern;
@@ -82,4 +83,18 @@ test("every engine this repo pins reads back one version per site group", () => 
         assert.match(pin.blessed, /^\d+(\.\d+)+(-R\d+(\.\d+)*)?$/, `${id} has no blessed version to read`);
         assert.match(pin.tracked, /^\d+(\.\d+)+$/, `${id} has no tracked version to read`);
     }
+});
+
+// A release GitHub published before (or without) its build's uploads is not one the pack can install.
+test("a translator release counts only once both archives the pack downloads are uploaded", () => {
+    const { upstream } = ENGINE_PINS.find((engine) => engine.id === "translator");
+    const named = (...names) => ({ assets: names.map((name) => ({ name })) });
+    assert.equal(hasAssets({ assets: [] }, "8.0.39", upstream.assets), false);
+    assert.equal(hasAssets(named("CLIProxyAPI_8.0.39_linux_amd64.tar.gz"), "8.0.39", upstream.assets), false);
+    assert.equal(
+        hasAssets(named("CLIProxyAPI_8.0.38_linux_amd64.tar.gz", "CLIProxyAPI_8.0.38_linux_aarch64.tar.gz"), "8.0.38", upstream.assets),
+        true,
+    );
+    // Engines that declare no assets are not held to any.
+    assert.equal(hasAssets({ assets: [] }, "1.0.0", undefined), true);
 });
