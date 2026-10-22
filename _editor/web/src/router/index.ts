@@ -466,7 +466,7 @@ const localRoutes = (): RouteRecordRaw[] => [
                           component: asyncView(() => import(`../local/setup/LocalSandboxSetup.vue`)),
                       } satisfies RouteRecordRaw,
                   ]),
-            // Repair, the agent that runs on this computer outside every sandbox, routed with no tile of its own. (This PC's
+            // Repair, the agent that runs on this computer outside every sandbox: its tile is on the rail while it is open or at work (LocalShell.vue). (This PC's
             // own first-run setup is the app's This computer view since 2026-10-12, not a route of the shell's.)
             ...(localHost().repair === undefined
                 ? []

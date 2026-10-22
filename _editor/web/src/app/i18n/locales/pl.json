@@ -12714,21 +12714,102 @@
         },
         "repair": {
             "title": "Naprawa",
-            "subtitle": "Działa na tym komputerze, poza Twoją przestrzenią roboczą. Sprawdza i naprawia Intentic, nic więcej.",
-            "bannerSafe": "Twoje pliki i rozmowy w przestrzeni roboczej pozostają bez zmian.",
-            "approvalHint": "O wszystko większe najpierw Cię zapyta.",
-            "composerPlaceholder": "Napisz do Naprawy…",
+            "subtitle": "Sprawdza i naprawia Intentic na tym komputerze, gdy sandbox lub jego silnik przestaje działać.",
+            "promise": {
+                "thisPc": "Działa na tym komputerze",
+                "files": "Nie rusza Twoich plików",
+                "asks": "Pyta, zanim cokolwiek zmieni"
+            },
+            "openedFor": "Otwarta dla",
+            "composerPlaceholder": "Zapytaj Naprawę o to, co widzisz…",
+            "composer": {
+                "keys": "Enter wysyła · Shift+Enter to nowa linia",
+                "working": "Naprawa pracuje. Wyślesz, gdy skończy.",
+                "waiting": "Najpierw odpowiedz na zmianę powyżej: Zezwól lub Odmów."
+            },
             "send": "Wyślij",
-            "signedOut": "Zaloguj się, aby rozmawiać z Naprawą. Jej sprawdzenia i poprawki działają i bez tego.",
-            "offline": "Naprawa nie może teraz połączyć się z modelem. Sprawdzenia i poprawki na tym komputerze nadal działają.",
+            "signedOutTitle": "Zaloguj się, aby zadawać Naprawie pytania",
+            "signedOut": "Sprawdzenia i poprawki powyżej działają bez konta.",
+            "offline": "Naprawa nie może teraz połączyć się z modelem. Sprawdzenia i poprawki na tym komputerze nadal działają; wyślij ponownie, aby spróbować jeszcze raz.",
             "allow": "Zezwól",
             "deny": "Odmów",
+            "askBody": "Nic się nie zmieni bez Twojej zgody.",
             "reset": "Zacznij od nowa",
+            "resetTip": {
+                "title": "Zapomnij tę rozmowę",
+                "note": "Nic, co zrobiła Naprawa, nie jest cofane"
+            },
+            "runChecks": "Uruchom sprawdzenia",
+            "review": "Przejrzyj",
             "thinking": "Naprawa analizuje…",
-            "waitingForOk": "Czeka na Twoją zgodę",
+            "tileWorking": "pracuje",
             "signIn": "Zaloguj się",
-            "showDetails": "Szczegóły",
-            "hideDetails": "Ukryj szczegóły",
+            "showRaw": "Surowe wyjście",
+            "hideRaw": "Ukryj surowe wyjście",
+            "mode": {
+                "label": "Jak pokazać sesję",
+                "summary": "Podsumowanie",
+                "raw": "Surowy log"
+            },
+            "rawHeading": "Log sesji",
+            "rawEmpty": "Jeszcze nic. Uruchom sprawdzenia, aby zacząć log.",
+            "copyLog": "Kopiuj log",
+            "thisPc": "Ten komputer",
+            "asleep": "Uśpiony",
+            "remedy": "Poprawka:",
+            "passed": "Zaliczone",
+            "skipped": {
+                "title": "Niesprawdzone",
+                "note": "Wcześniejszy krok nie działa"
+            },
+            "passedChecks": "Zaliczone sprawdzenia",
+            "tool": {
+                "running": "W toku…",
+                "needsApproval": "Czeka na Twoją zgodę",
+                "refused": "Odmówiono",
+                "failed": "Nie udało się dokończyć",
+                "done": "Gotowe",
+                "allPassed": "{count} sprawdzenie zaliczone | Wszystkie {count} sprawdzenia zaliczone | Wszystkie {count} sprawdzeń zaliczonych",
+                "needAttention": "{count} z {total} sprawdzeń wymaga uwagi | {count} z {total} sprawdzeń wymagają uwagi | {count} z {total} sprawdzeń wymaga uwagi"
+            },
+            "outcome": {
+                "healthy": "Sprawny",
+                "fixed": "Naprawiony",
+                "needsYou": "Potrzebuje Ciebie",
+                "failed": "Poprawka nieudana"
+            },
+            "who": {
+                "auto": "Intentic naprawi to sam.",
+                "consent": "Naprawa może to naprawić, gdy się zgodzisz.",
+                "you": "Tylko Ty możesz to naprawić."
+            },
+            "engine": {
+                "runsOn": "Sandboxy działają na",
+                "state": "Stan",
+                "version": "Wersja",
+                "intentic": "Silniku Intentic",
+                "dockerDesktop": "Docker Desktop",
+                "native": "Dockerze na tym komputerze",
+                "running": "Działa",
+                "stopped": "Nie działa",
+                "held": "Zatrzymany celowo",
+                "notInstalled": "Niezainstalowany"
+            },
+            "verdict": {
+                "empty": "Jeszcze nic nie sprawdzono",
+                "emptyDetail": "Naprawa sprawdza każdy sandbox na tym komputerze i silnik, na którym działają, a potem proponuje poprawki.",
+                "thinking": "Naprawa analizuje…",
+                "workingDetail": "Może to potrwać minutę. Możesz opuścić tę stronę: klucz po lewej pokaże, kiedy skończy.",
+                "asking": "Naprawa chce wprowadzić zmianę | Naprawa chce wprowadzić {count} zmiany | Naprawa chce wprowadzić {count} zmian",
+                "askingDetail": "Przejrzyj ją poniżej. Nic się nie stanie bez Twojej zgody.",
+                "problems": "Znaleziono {count} problem | Znaleziono {count} problemy | Znaleziono {count} problemów",
+                "problemsDetail": "Szczegóły są poniżej. Poproś Naprawę o poprawkę albo zezwól na tę, którą proponuje.",
+                "checkFailed": "Sprawdzenie nie dobiegło końca | {count} sprawdzenia nie dobiegły końca | {count} sprawdzeń nie dobiegło końca",
+                "warnings": "Działa, z {count} ostrzeżeniem | Działa, z {count} ostrzeżeniami | Działa, z {count} ostrzeżeniami",
+                "healthy": "Wszystko w porządku",
+                "healthyDetail": "Każdy sandbox i silnik odpowiedziały. Zapytaj Naprawę, jeśli coś nadal wygląda źle.",
+                "idle": "Naprawa jest gotowa"
+            },
             "allowanceUsed": "Dzienny limit Naprawy się wyczerpał. Odnowi się o {time}. Sprawdzenia i poprawki nadal działają."
         },
         "setUpThisPc": "Skonfiguruj ten komputer",

@@ -5165,21 +5165,102 @@
         },
         "repair": {
             "title": "Repair",
-            "subtitle": "Runs on this PC, outside your workspace. Checks and fixes Intentic, nothing else.",
-            "bannerSafe": "Your files and conversations in the workspace stay as they are.",
-            "approvalHint": "Anything bigger asks you first.",
-            "composerPlaceholder": "Ask Repair…",
+            "subtitle": "Checks and fixes Intentic on this PC when a sandbox or its engine stops working.",
+            "promise": {
+                "thisPc": "Runs on this PC",
+                "files": "Leaves your files alone",
+                "asks": "Asks before it changes anything"
+            },
+            "openedFor": "Opened for",
+            "composerPlaceholder": "Ask Repair about what you see…",
+            "composer": {
+                "keys": "Enter to send · Shift+Enter for a new line",
+                "working": "Repair is working. You can send once it's done.",
+                "waiting": "Answer the change above first: Allow or Deny."
+            },
             "send": "Send",
-            "signedOut": "Sign in to talk to Repair. Its checks and fixes work without it.",
-            "offline": "Repair cannot reach the model right now. Checks and fixes on this PC still work.",
+            "signedOutTitle": "Sign in to ask Repair questions",
+            "signedOut": "The checks and the fixes above work without an account.",
+            "offline": "Repair can't reach its model right now. The checks and fixes on this PC still work; send again to retry.",
             "allow": "Allow",
             "deny": "Deny",
+            "askBody": "Nothing changes unless you allow it.",
             "reset": "Start over",
+            "resetTip": {
+                "title": "Forget this conversation",
+                "note": "Nothing Repair did is undone"
+            },
+            "runChecks": "Run the checks",
+            "review": "Review",
             "thinking": "Repair is thinking…",
-            "waitingForOk": "Waiting for your OK",
+            "tileWorking": "working",
             "signIn": "Sign in",
-            "showDetails": "Details",
-            "hideDetails": "Hide details",
+            "showRaw": "Raw output",
+            "hideRaw": "Hide raw output",
+            "mode": {
+                "label": "How to show the session",
+                "summary": "Summary",
+                "raw": "Raw log"
+            },
+            "rawHeading": "Session log",
+            "rawEmpty": "Nothing yet. Run the checks to start a log.",
+            "copyLog": "Copy log",
+            "thisPc": "This PC",
+            "asleep": "Asleep",
+            "remedy": "Fix:",
+            "passed": "Passed",
+            "skipped": {
+                "title": "Not checked",
+                "note": "An earlier step is down"
+            },
+            "passedChecks": "Checks that passed",
+            "tool": {
+                "running": "Running…",
+                "needsApproval": "Waiting for your OK",
+                "refused": "You said no",
+                "failed": "Couldn't finish",
+                "done": "Done",
+                "allPassed": "{count} check passed | All {count} checks passed",
+                "needAttention": "{count} of {total} checks needs attention | {count} of {total} checks need attention"
+            },
+            "outcome": {
+                "healthy": "Healthy",
+                "fixed": "Fixed",
+                "needsYou": "Needs you",
+                "failed": "Fix failed"
+            },
+            "who": {
+                "auto": "Intentic fixes this by itself.",
+                "consent": "Repair can fix this once you allow it.",
+                "you": "Only you can fix this."
+            },
+            "engine": {
+                "runsOn": "Sandboxes run on",
+                "state": "State",
+                "version": "Version",
+                "intentic": "Intentic's engine",
+                "dockerDesktop": "Docker Desktop",
+                "native": "Docker on this computer",
+                "running": "Running",
+                "stopped": "Not running",
+                "held": "Stopped on purpose",
+                "notInstalled": "Not installed"
+            },
+            "verdict": {
+                "empty": "Nothing checked yet",
+                "emptyDetail": "Repair looks at every sandbox on this PC and the engine they run on, then suggests fixes.",
+                "thinking": "Repair is thinking…",
+                "workingDetail": "It can take a minute. You can leave this page: the wrench on the left shows when it's done.",
+                "asking": "Repair wants to make a change | Repair wants to make {count} changes",
+                "askingDetail": "Look it over below. Nothing happens until you allow it.",
+                "problems": "Found {count} problem | Found {count} problems",
+                "problemsDetail": "The details are below. Ask Repair to fix it, or allow a fix it offers.",
+                "checkFailed": "A check couldn't finish | {count} checks couldn't finish",
+                "warnings": "Working, with {count} warning | Working, with {count} warnings",
+                "healthy": "Everything checks out",
+                "healthyDetail": "Every sandbox and the engine answered. Ask Repair if something still looks wrong.",
+                "idle": "Repair is ready"
+            },
             "allowanceUsed": "Repair's daily allowance is used up. It resets at {time}. Checks and fixes still work."
         },
         "setUpThisPc": "Set up this PC",

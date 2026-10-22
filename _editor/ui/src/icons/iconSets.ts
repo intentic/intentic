@@ -211,6 +211,8 @@ const AREA_ICONS: Readonly<Record<string, IconName>> = {
     devices: `desktop`,
     // A local folder's way to a sandbox of its own (the desktop app's folder windows): the box it goes into.
     "sandbox-setup": `box`,
+    // Repair, the desktop app's agent outside every sandbox: on the rail only while it is open or working (LocalShell.vue).
+    repair: `wrench`,
 };
 
 export const sectionIcon = (section: string, fallback?: IconName): IconName | undefined =>

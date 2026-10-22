@@ -112,7 +112,7 @@ export interface LocalView {
     /** What its tile carries (a setup running here, an update waiting), when it carries anything. */
     readonly badge?: Readonly<Ref<ViewBadge | undefined>>;
     /**
-     * False for a view that is routed but has no rail tile, opened from where it is needed (Repair). Drawn when absent.
+     * False for a view that is routed but has no rail tile, opened from where it is needed. Drawn when absent.
      * A ref for a tile that comes and goes (Passwords, on the rail once this computer has it set up); a view the reader
      * is on keeps its tile either way.
      */

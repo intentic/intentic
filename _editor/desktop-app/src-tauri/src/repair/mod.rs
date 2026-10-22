@@ -376,7 +376,12 @@ async fn bootstrap(app: &AppHandle, slug: Option<&str>) -> Result<(), String> {
     };
     let doctor = run_tool(app, "doctor", &doctor_args, &home).await;
     with_session(app, |session| {
-        let detail = doctor.as_ref().ok().cloned();
+        // A failure's own words are its detail: the page says why, not only that, a check failed.
+        let detail = Some(
+            doctor
+                .clone()
+                .unwrap_or_else(|error| scrub::scrub(&error, &home)),
+        );
         let state = if doctor.is_ok() { "done" } else { "failed" };
         set_tool_row(session, &doctor_row, state, detail);
     });
@@ -390,7 +395,12 @@ async fn bootstrap(app: &AppHandle, slug: Option<&str>) -> Result<(), String> {
     };
     let engine = run_tool(app, "engine_status", &json!({}), &home).await;
     with_session(app, |session| {
-        let detail = engine.as_ref().ok().cloned();
+        // A failure's own words are its detail: the page says why, not only that, a check failed.
+        let detail = Some(
+            engine
+                .clone()
+                .unwrap_or_else(|error| scrub::scrub(&error, &home)),
+        );
         let state = if engine.is_ok() { "done" } else { "failed" };
         set_tool_row(session, &engine_row, state, detail);
         session.history.push(ModelMessage {
@@ -548,7 +558,12 @@ async fn finish_batch(app: &AppHandle) -> Result<bool, String> {
         };
         let output = run_tool(app, &call.name, &args, &home).await;
         with_session(app, |session| {
-            let detail = output.as_ref().ok().cloned();
+            // A failure's own words are its detail: the page says why, not only that, a check failed.
+            let detail = Some(
+                output
+                    .clone()
+                    .unwrap_or_else(|error| scrub::scrub(&error, &home)),
+            );
             let state = if output.is_ok() { "done" } else { "failed" };
             set_tool_row(session, &message_id, state, detail);
             session.history.push(ModelMessage {
@@ -821,7 +836,12 @@ pub async fn repair_answer(app: AppHandle, approval_id: String, allow: bool) -> 
     });
     let output = run_tool(&app, &pending.call.name, &args, &home).await;
     with_session(&app, |session| {
-        let detail = output.as_ref().ok().cloned();
+        // A failure's own words are its detail: the page says why, not only that, a check failed.
+        let detail = Some(
+            output
+                .clone()
+                .unwrap_or_else(|error| scrub::scrub(&error, &home)),
+        );
         let state = if output.is_ok() { "done" } else { "failed" };
         set_tool_row(session, &pending.message_id, state, detail);
         if !standalone {

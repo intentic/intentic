@@ -20,6 +20,7 @@ import { useKeybindings } from "../workbench/commands/useKeybindings";
 import { navigatedPath } from "./appEvents";
 import { takeFolderSwitches } from "./folderSwitch";
 import LocalAccountTile from "./LocalAccountTile.vue";
+import { repairBadgeOf, repairHoldsRail } from "./repair/repairSession";
 import { SANDBOX_SETUP_PATH } from "./setup/setupPath";
 import { useUnsavedGuard } from "./unsaved/useUnsavedGuard";
 import { useLocalProject } from "./useLocalProject";
@@ -63,7 +64,7 @@ const viewTile = (view: LocalView): Tile => {
 const isActive = (to: string): boolean => route.path === to || route.path.startsWith(`${to}/`);
 
 // Files first, as the sandbox shell ranks its workspace, then the app's views in the order it gives them; a view the app
-// routes without a tile (Repair, opened from where it is needed) is left off the rail, and one whose tile comes and goes
+// routes without a tile is left off the rail, and one whose tile comes and goes
 // (Passwords) keeps it while the reader is on it, so the rail never loses the place they stand. This PC's own setup is
 // Devices' (the app's view), not a tile of its own: the Agents tile that held it until 2026-10-12 had nothing else.
 // The folder's way to a sandbox of its own has a tile of its own beside Files while the folder is on its way, and while
@@ -77,9 +78,23 @@ const setupTile = computed<Tile | undefined>(() => {
     const badge = project.badge.value;
     return badge === undefined ? tile : { ...tile, badge };
 });
+// REPAIR'S TILE, temporary like the setup's: on the rail while the reader is on its page, and while it works or waits
+// for their Allow, so they can go back to their files and return to it; gone once it rests and they have left. Its
+// corner says which (repairSession.ts). Until 2026-10-22 Repair had no tile, and leaving its page lost the way back.
+const REPAIR_PATH = `/repair`;
+const repairTile = computed<Tile | undefined>(() => {
+    const repair = host.repair;
+    if (repair === undefined || (!repairHoldsRail(repair.session.value) && !isActive(REPAIR_PATH))) {
+        return undefined;
+    }
+    const tile: Tile = { section: `repair`, to: REPAIR_PATH, label: t(`local.repair.title`) };
+    const badge = repairBadgeOf(repair.session.value);
+    return badge === undefined ? tile : { ...tile, badge };
+});
 const tiles = computed<readonly Tile[]>(() => [
     { section: `workspace`, to: `/workspace`, label: t(`shared.files`) },
     ...(setupTile.value === undefined ? [] : [setupTile.value]),
+    ...(repairTile.value === undefined ? [] : [repairTile.value]),
     ...host.views.filter((view) => unref(view.inRail) !== false || isActive(`/${view.path}`)).map(viewTile),
 ]);
 const tileLabel = (tile: Tile): string => [tile.label, tile.badge?.tooltip, tile.badge?.running].filter((part) => part !== undefined && part !== ``).join(` · `);

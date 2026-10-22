@@ -5,6 +5,9 @@ import LocalRepair from "./LocalRepair.vue";
 import { type RepairFixtureName, repairFixture } from "./repairFixtures";
 
 const NAMES: readonly RepairFixtureName[] = [
+    `empty`,
+    `checking`,
+    `healthy`,
     `findings`,
     `thinking`,
     `needsApproval`,
@@ -27,8 +30,9 @@ watch(picked, (name) => {
 <template>
     <section class="space-y-3 rounded-lg border border-line p-4">
         <h2 class="text-sm font-semibold text-content">Local · Repair</h2>
-        <SegmentedControl v-model="picked" :options="NAMES.map((name) => ({ value: name, label: name }))" />
-        <div class="rounded border border-line bg-canvas">
+        <SegmentedControl v-model="picked" wrap :options="NAMES.map((name) => ({ value: name, label: name }))" />
+        <!-- A window's height, as the shell gives the page one: the composer is pinned to its foot. -->
+        <div class="h-184 overflow-hidden rounded border border-line bg-canvas">
             <LocalRepair :key="picked" :repair="host" />
         </div>
     </section>

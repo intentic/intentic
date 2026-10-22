@@ -4,6 +4,7 @@ import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router, RouterView } from "vue-router";
 import type { CloseQuestion } from "../features/workspace/tabs/useCloseGuard";
+import { localHost, type LocalRepairSession } from "../app/environments/localHost";
 import { useEditBuffers } from "../models/workspace/files/useEditBuffers";
 
 // The window's close, held back by the app for unsaved edits, is answered by the shell whichever screen it is on: Files
@@ -17,7 +18,14 @@ const Nothing = defineComponent({ render: () => null });
 jest.mock(`../shell/AccountPanel.vue`, () => ({ default: Nothing }));
 jest.mock(`./LocalAccountTile.vue`, () => ({ default: Nothing }));
 jest.mock(`../features/sandbox/gates/SandboxSwitcher.vue`, () => ({ default: Nothing }));
-jest.mock(`../shell/rail/RailTile.vue`, () => ({ default: Nothing }));
+// A tile as its section and the corner it carries, so the rail's contents can be read.
+jest.mock(`../shell/rail/RailTile.vue`, () => ({
+    default: defineComponent({
+        props: { section: { type: String, required: true }, badge: { type: Object, default: undefined } },
+        setup: (props: { section: string; badge: { running?: string; tone?: string } | undefined }) => () =>
+            h(`a`, { "data-tile": props.section, "data-badge": props.badge?.running === undefined ? (props.badge?.tone ?? ``) : `running` }),
+    }),
+}));
 jest.mock(`./folderSwitch`, () => ({ takeFolderSwitches: () => () => undefined }));
 jest.mock(`../client/auth/useAccount`, () => ({ useAccount: () => ({ user: ref(null) }) }));
 jest.mock(`../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`local-folder`) }) }));
@@ -73,6 +81,7 @@ afterEach(() => {
     app = undefined;
     unstubAllGlobals();
     delete window.__INTENTIC_DESKTOP__;
+    delete window.__INTENTIC_LOCAL_HOST__;
     resetSandboxScope();
 });
 
@@ -89,6 +98,7 @@ const mountShell = async (): Promise<Router> => {
                 children: [
                     { path: `workspace`, component: Files },
                     { path: `device`, component: ThisComputer },
+                    { path: `repair`, component: ThisComputer },
                 ],
             },
         ],
@@ -145,4 +155,34 @@ test(`with nothing unsaved the close is agreed to at once, from any screen`, asy
     heard = [];
     await askToClose();
     expect([question(), handed()]).toEqual([undefined, [CLOSE]]);
+});
+
+// Repair's tile comes and goes like the setup's: on the rail while the reader is on its page and while it works or waits
+// for their Allow, so they can leave and come back; once it rests and they have left, it is gone.
+test(`Repair's tile is on the rail while it is open or at work, and leaves once it rests elsewhere`, async () => {
+    const session = ref<LocalRepairSession>({ state: `idle`, messages: [] });
+    const quiet = async (): Promise<undefined> => undefined;
+    window.__INTENTIC_LOCAL_HOST__ = { ...localHost(), repair: { session, start: quiet, send: quiet, answer: quiet, reset: quiet } };
+    const router = await mountShell();
+    const tile = (): string | null | undefined => el?.querySelector(`[data-tile="repair"]`)?.getAttribute(`data-badge`);
+    const seen: (string | null | undefined)[] = [tile()];
+
+    await router.push(`/repair`);
+    await nextTick();
+    seen.push(tile());
+    session.value = { state: `thinking`, messages: [] };
+    await router.push(`/workspace`);
+    await nextTick();
+    seen.push(tile());
+    session.value = {
+        state: `waiting`,
+        messages: [{ id: `t`, role: `tool`, text: `Restart`, tool: { name: `sandbox_restart`, state: `needsApproval`, summary: `Restart`, approvalId: `ok-1` } }],
+    };
+    await nextTick();
+    seen.push(tile());
+    session.value = { state: `idle`, messages: [] };
+    await nextTick();
+    seen.push(tile());
+
+    expect(seen).toEqual([undefined, ``, `running`, `warning`, undefined]);
 });
