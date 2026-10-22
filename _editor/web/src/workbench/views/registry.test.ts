@@ -7,8 +7,8 @@ import { setProjectScope } from "../../app/projectScope";
 import { useAudience } from "../../app/useAudience";
 
 // The reader's tier, switched by the guest tests below; everyone else is read as the owner the app defaults to.
-const guestReader = { isGuest: false };
-jest.mock(`../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest: ref(guestReader.isGuest) }) }));
+const guestReader = { isGuest: false, homeOnly: false };
+jest.mock(`../../client/sandbox/useRole`, () => ({ useRole: () => ({ isGuest: ref(guestReader.isGuest), homeOnly: ref(guestReader.homeOnly) }) }));
 import {
     activationBadge,
     sectionReachable,
@@ -534,6 +534,24 @@ describe(`a guest's rail`, () => {
             }
         } finally {
             guestReader.isGuest = false;
+        }
+    });
+
+    // A home-only guest has no chat to start and no board: its one conversation lives in the master view, which the rail
+    // does not tile, so it is offered no tile and no section beyond the access page every guest has business in.
+    it(`tiles nothing for a guest whose only way in is its home conversation`, () => {
+        guestReader.isGuest = true;
+        guestReader.homeOnly = true;
+        try {
+            expect(railPolicy(`chat`)).toBe(`signal`);
+            expect(railPolicy(`agents`)).toBe(`signal`);
+            expect(sectionReachable(`/sandbox/access`)).toBe(true);
+            for (const closed of [`/chat`, `/agents`, `/workspace`, `/sandbox`]) {
+                expect(sectionReachable(closed), closed).toBe(false);
+            }
+        } finally {
+            guestReader.isGuest = false;
+            guestReader.homeOnly = false;
         }
     });
 
