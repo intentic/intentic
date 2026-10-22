@@ -1,11 +1,12 @@
 <!-- ADD A SANDBOX WITHOUT LEAVING THE WORKSPACE: a name, where it runs, one press (useAddSandbox.ts says why it is not /setup).
      Mounted once by the shell, and only while asked for (models/sandbox/addSandbox.ts), so the registry watch and the
      offers it reads live no longer than it. Once the new sandbox reports in, the setup row selects it, which re-points
-     the workspace there, and the dialog closes. -->
+     the workspace there behind the dialog; the dialog stays up through its first start (AddSandboxOpening.vue) and
+     closes onto a workspace ready to use. -->
 <script setup lang="ts">
 import { Button, Modal, Notice, SegmentedControl, ui, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { environment } from "../../../app/environments/environment";
@@ -19,6 +20,7 @@ import { useDesktopSetup } from "../desktopSetup";
 import { platformUrlOf } from "../flow/installCommand";
 import HostedWaitSteps from "../HostedWaitSteps.vue";
 import SetupMachineProgress from "../SetupMachineProgress.vue";
+import AddSandboxOpening from "./AddSandboxOpening.vue";
 import { useAddSandbox } from "./useAddSandbox";
 
 const emit = defineEmits<{ close: [] }>();
@@ -28,6 +30,8 @@ const sandbox = useSandbox();
 const { mobile } = useDevice();
 const { getIdToken, warmIdToken } = useGoogleIdentity();
 const platformUrl = platformUrlOf(environment.api.url);
+// Set once the new sandbox reported in and was selected: the dialog then waits on its first start, not on its setup.
+const opening = ref(false);
 
 const add = useAddSandbox({
     sandbox,
@@ -51,7 +55,7 @@ const add = useAddSandbox({
         }
         // The workspace's first quiet seconds are a connection on its way, not a setup left unfinished (justSetUp.ts).
         markJustSetUp(id);
-        emit(`close`);
+        opening.value = true;
     },
 });
 const { name, problem, pick, options, loaded, creating, error, started, created, hostedWait, hostedRow, onMachine } = add;
@@ -115,7 +119,8 @@ const nothingOffered = computed(() => loaded.value && options.value.length === 0
 
         <!-- THE RUN: what the press started, drawn as /setup draws it. -->
         <div v-else class="flex flex-col gap-3" data-add-sandbox-run>
-            <template v-if="started.kind === `machine`">
+            <AddSandboxOpening v-if="opening && created" :sandbox-id="created.id" :name="created.name" @shown="emit(`close`)" />
+            <template v-else-if="started.kind === `machine`">
                 <SetupMachineProgress :door="started.door" :machine="onMachine" />
             </template>
             <template v-else-if="started.kind === `here`">
@@ -139,7 +144,7 @@ const nothingOffered = computed(() => loaded.value && options.value.length === 0
                     {{ t(`setup.setup.startingMachine`) }}
                 </p>
             </template>
-            <p class="text-2xs text-muted">{{ t(`setup.addSandbox.keepsGoing`, { name: created?.name ?? `` }) }}</p>
+            <p v-if="!opening" class="text-2xs text-muted">{{ t(`setup.addSandbox.keepsGoing`, { name: created?.name ?? `` }) }}</p>
         </div>
 
         <template #footer>
@@ -152,7 +157,7 @@ const nothingOffered = computed(() => loaded.value && options.value.length === 0
                     @click="emit(`close`)"
                     >{{ t(`setup.addSandbox.moreWays`) }}</RouterLink
                 >
-                <RouterLink v-else-if="details" :to="details" class="mr-auto text-xs text-link hover:underline" @click="emit(`close`)">{{
+                <RouterLink v-else-if="details && !opening" :to="details" class="mr-auto text-xs text-link hover:underline" @click="emit(`close`)">{{
                     t(`setup.addSandbox.details`)
                 }}</RouterLink>
                 <template v-if="started === undefined">

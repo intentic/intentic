@@ -10417,7 +10417,9 @@
             "nameNeeded": "Nadaj mu nazwę.",
             "nameTooLong": "Maksymalnie {max} znaków.",
             "hostedNeedsGoogle": "Darmowa maszyna Intentic wymaga logowania Google na tym koncie. Połącz je w Więcej sposobów.",
-            "machineGone": "To urządzenie nie jest już podłączone. Wybierz inne."
+            "machineGone": "To urządzenie nie jest już podłączone. Wybierz inne.",
+            "gettingReady": "Przygotowuję {name}",
+            "connecting": "Łączenie…"
         }
     },
     "shared": {

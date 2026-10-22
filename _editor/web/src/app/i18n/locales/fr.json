@@ -5580,7 +5580,9 @@
             "nameNeeded": "Donnez-lui un nom.",
             "nameTooLong": "{max} caractères au maximum.",
             "hostedNeedsGoogle": "Une machine Intentic gratuite demande une connexion Google sur ce compte. Associez-la via Autres moyens.",
-            "machineGone": "Cette machine n'est plus connectée. Choisissez-en une autre."
+            "machineGone": "Cette machine n'est plus connectée. Choisissez-en une autre.",
+            "gettingReady": "Préparation de {name}",
+            "connecting": "Connexion en cours…"
         }
     },
     "shared": {

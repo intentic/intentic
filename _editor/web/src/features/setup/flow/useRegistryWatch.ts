@@ -117,7 +117,9 @@ export const useRegistryWatch = ({ sandbox, row, hosted, mintedFor }: RegistryWa
     // Looks the row up by id in the fresh list, never through the active sandbox, which can point elsewhere mid-wait.
     const check = async (): Promise<void> => {
         const pending = row.created.value;
-        if (pending === null || checking || hosted.lane.value.asked === `release`) {
+        // A row already handed over is not waited on: a page that stays up after it (the Add sandbox dialog, over the
+        // new sandbox's first start) would otherwise connect it again on every reading.
+        if (pending === null || checking || row.finished.value || hosted.lane.value.asked === `release`) {
             return;
         }
         // An answer after a re-mint must not report the previous command as claimed.

@@ -2,6 +2,7 @@ import "@intentic/testing/dom";
 import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode } from "@intentic/api-contract";
 import type { Device } from "@intentic/sandbox-contract/schemas/devices";
 import { unstubbed } from "@intentic/testing";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { computed, type EffectScope, effectScope, ref } from "vue";
 import { listedDevice } from "../../../testing/listedDevice";
 import { sandboxSummary } from "../../../testing/sandboxSummary";
@@ -83,7 +84,7 @@ const stage = (world: World = {}) => {
             enter,
         }),
     )!;
-    return { add, create, remove, hostedProvision, platform, openDesktopLink };
+    return { add, create, remove, hostedProvision, platform, openDesktopLink, enter, sandboxes };
 };
 
 const rog = listedDevice({ key: `rog`, label: `rog`, hostId: `rog`, online: true, sandboxes: [] });
@@ -212,5 +213,21 @@ describe(`the press`, () => {
         add.name.value = ``;
         await add.create();
         expect(create).not.toHaveBeenCalled();
+    });
+
+    it(`hands the row over once it reports in, and only once while the dialog stays up over its first start`, async () => {
+        jest.useFakeTimers();
+        try {
+            const { add, enter, sandboxes } = stage({ machines: [rog] });
+            await add.read();
+            await add.create();
+            sandboxes.value = [...sandboxes.value, sandboxSummary({ id: `new`, name: `workspace-2`, token: `tok`, lastSeenAt: `2026-10-22T09:00:00Z` })];
+            for (let reading = 0; reading < 4; reading += 1) {
+                await advanceTimersByTimeAsync(3_000);
+            }
+            expect(enter).toHaveBeenCalledTimes(1);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });

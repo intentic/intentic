@@ -10989,7 +10989,9 @@
             "nameNeeded": "Give it a name.",
             "nameTooLong": "Keep it to {max} characters.",
             "hostedNeedsGoogle": "A free Intentic machine needs a Google sign-in on this account. Use More ways to link one.",
-            "machineGone": "That machine is no longer connected. Pick another."
+            "machineGone": "That machine is no longer connected. Pick another.",
+            "gettingReady": "Getting {name} ready",
+            "connecting": "Connecting to it…"
         }
     },
     "shared": {

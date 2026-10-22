@@ -5622,7 +5622,9 @@
             "nameNeeded": "Ponle un nombre.",
             "nameTooLong": "Como máximo {max} caracteres.",
             "hostedNeedsGoogle": "Una máquina gratuita de Intentic necesita un inicio de sesión de Google en esta cuenta. Vincúlalo en Más opciones.",
-            "machineGone": "Esa máquina ya no está conectada. Elige otra."
+            "machineGone": "Esa máquina ya no está conectada. Elige otra.",
+            "gettingReady": "Preparando {name}",
+            "connecting": "Conectando…"
         }
     },
     "shared": {

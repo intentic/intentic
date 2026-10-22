@@ -52,7 +52,9 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   name and where it runs (this computer in the app, a connected machine, a machine of ours with room), then one press.
   It runs this page's own flows on the row (`useSetupRow`, `useHostedLane`, `useSetupOnMachine`, `useRegistryWatch`),
   so `/setup?sandbox=<id>` resumes the same run, and the getting-started ring's "Finish setting up" reaches it once the
-  dialog is closed. Every other way (the command, the installer, an own domain) is "More ways", `/setup?elsewhere=1`,
+  dialog is closed. Once the sandbox reports in it is selected behind the dialog, which stays up through its first start
+  (`add/AddSandboxOpening.vue`, the daemon's boot steps) and closes only once the workspace is on screen, so the
+  connecting and starting gates are never shown. Every other way (the command, the installer, an own domain) is "More ways", `/setup?elsewhere=1`,
   which skips the "You already have a sandbox" question and opens the picker. Which press gets which is
   `models/sandbox/addSandbox.ts`; an account with no working sandbox still comes here.
 

@@ -1,32 +1,20 @@
 <script setup lang="ts">
 import { FreshnessFrame } from "@intentic/ui";
-import { computed, onUnmounted, watch } from "vue";
+import { onUnmounted, watch } from "vue";
 import { announceWorkspaceShown } from "../../../app/environments/desktopShown";
-import { activeSandboxId } from "../../../app/storage/activeSandbox";
-import { sandboxRequiresGate } from "../overview/availability";
-import { useSandboxAvailability } from "../overview/useSandboxAvailability";
-import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { useSandboxEstablished } from "./established";
 import { daemonTooOld } from "../../../client/sandbox/daemon/useDaemonVersion";
 import { useSandboxLiveness } from "../../../client/sandbox/freshness/queryFreshness";
 import SandboxConnecting from "./SandboxConnecting.vue";
 import SandboxTooOld from "./SandboxTooOld.vue";
 import SandboxUnauthorized from "./SandboxUnauthorized.vue";
 import SandboxWarming from "./SandboxWarming.vue";
+import { useSandboxGateState } from "./workspaceShown";
 
 // The sandbox-readiness gates shared by both shells: denied (403), too old for this app, warming, connecting. Once a
 // sandbox has a cached snapshot, transient failures leave the live view mounted, and only exact unreachability gates
 // it; the account-mismatch nudge and busy pill are conditions drawn in the notification lane instead.
 
-const { reachable, connection } = useSandbox();
-// A 403 (daemon refused this account) reads off the failure's tag rather than a separate sticky boolean.
-const denied = computed(() => connection.value.failure?.kind === `forbidden`);
-// A hydrated tree marks the sandbox as previously visited: painted stale-while-revalidate, not gated. So does a roster
-// restored from the last visit, which is what a phone's board draws: without it the first screen waited on the whole
-// connection before drawing a card, the tree being something that board never shows (established.ts).
-const established = useSandboxEstablished();
-const availability = useSandboxAvailability(established);
-const gated = computed(() => sandboxRequiresGate(reachable.value, established.value, availability.value));
+const { denied, gated, availability, shown: shownSandbox } = useSandboxGateState();
 // What stays mounted through a stall is the last answers it had: the frame says when they may be out of date.
 const { offline, lostAt } = useSandboxLiveness();
 
@@ -34,9 +22,6 @@ const { offline, lostAt } = useSandboxLiveness();
 // before it calls the folder ready (desktop.ts `announceWorkspaceShown`): connected, its workspace painted, nothing
 // gating it. Said a moment after it holds, so the routes under the gate have drawn too, and only if it still holds.
 const SHOWN_AFTER_MS = 250;
-const shownSandbox = computed(() =>
-    !denied.value && !daemonTooOld.value && !gated.value && reachable.value && established.value ? activeSandboxId.value : undefined,
-);
 let saying: ReturnType<typeof setTimeout> | undefined;
 watch(
     shownSandbox,

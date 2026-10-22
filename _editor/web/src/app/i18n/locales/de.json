@@ -5603,7 +5603,9 @@
             "nameNeeded": "Gib ihr einen Namen.",
             "nameTooLong": "Höchstens {max} Zeichen.",
             "hostedNeedsGoogle": "Eine kostenlose Intentic-Maschine braucht eine Google-Anmeldung für dieses Konto. Verknüpfe sie unter Weitere Wege.",
-            "machineGone": "Dieses Gerät ist nicht mehr verbunden. Wähle ein anderes."
+            "machineGone": "Dieses Gerät ist nicht mehr verbunden. Wähle ein anderes.",
+            "gettingReady": "{name} wird vorbereitet",
+            "connecting": "Verbindung wird hergestellt…"
         }
     },
     "shared": {
