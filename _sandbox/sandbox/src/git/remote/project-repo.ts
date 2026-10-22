@@ -46,7 +46,7 @@ export const isProjectFolderRepo = async (dir: string, git: GitRunner = defaultG
 // What this boot did, for its log line; "already a repo" is the steady state that changed nothing.
 export type ProjectRepoOutcome = "created" | "pointer restored" | "already a repo" | "left to relocation" | "first commit taken";
 
-const initialSubject = (name: string): string => `Your ${name} folder, as this sandbox received it`;
+export const initialSubject = (name: string): string => `Your ${name} folder, as this sandbox received it`;
 
 // Gives the repo a HEAD if it has none, and says whether it had to. Whatever file sync has delivered so far goes in;
 // a folder it has not reached yet gets an empty commit, since a born HEAD is the whole point and the files arrive at

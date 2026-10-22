@@ -10,6 +10,7 @@ import { onAccountReopened } from "../usage/serviceability/state-log.js";
 import { watchCapacity } from "../usage/serviceability/capacity-watch.js";
 import { adoptChildTurn, childKillNote, childMovingOn } from "../agent/subagents/children.js";
 import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";
+import { followProjectArrival } from "../git/remote/project-arrival.js";
 import { landHeldForWake } from "../conversations/land/wake-held-land.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
 import { childActor, supervisorOf } from "../auth/principal.js";
@@ -100,8 +101,20 @@ const projectDeliveryDeps = (services: BootPhase["services"]): ProjectDeliveryDe
 // (land/project-delivery.ts): only on a sandbox made for one folder (system/project-dir.ts), and only from the daemon
 // that owns the container.
 const startProjectDelivery = ({ role, services, shutdown }: Pick<BootPhase, "role" | "services" | "shutdown">): void => {
-    if (role.container && projectDirOf(services.config) !== undefined) {
+    const name = projectDirOf(services.config);
+    if (role.container && name !== undefined) {
         shutdown.push(createProjectDelivery(projectDeliveryDeps(services)).start());
+        // And the folder's first copy is committed as it lands, so a fresh sandbox's review does not open on every file
+        // the copy delivered (git/remote/project-arrival.ts).
+        shutdown.push(
+            followProjectArrival({
+                workspaceRoot: services.workspace.root,
+                name,
+                withRepoLock: services.agentWorktrees.withRepoLock,
+                subscribe: subscribeWorkspaceChanges,
+                logger: services.logger,
+            }),
+        );
     }
 };
 
