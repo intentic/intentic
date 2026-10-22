@@ -105,8 +105,8 @@ export const landingContent: LandingContent = {
             "An orchestrator for coding agents. Run Claude Code, Codex and more in parallel, each in a sandbox on your machine. They keep running when you close the browser.",
     },
     hero: {
-        headlineLines: ["Neutral AI agent."],
-        subhead: "Models are the fuel. Computer are the engine. Intentic is the rest of the car.",
+        headlineLines: ["Shared AI agent."],
+        subhead: "Models are the fuel. Computers are the engine. Intentic is the rest of the car.",
         screens: {
             app: [
                 {

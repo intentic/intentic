@@ -103,10 +103,10 @@ const { steps: appSteps, alternatives } = content.connect;
                         </p>
                     </div>
 
-                    <!-- One quiet home view; the other surfaces appear while exploring the frame. -->
+                    <!-- One frame cycles through the home view and the other product surfaces. -->
                     <figure class="hero-visual">
                         <div class="hero-stack">
-                            <Window class="window-app" finial label="intentic · /home">
+                            <Window class="window-app" finial>
                                 <div class="window-crop window-crop-app">
                                     {
                                         content.hero.screens.app.map((screen, index) => (
@@ -118,7 +118,6 @@ const { steps: appSteps, alternatives } = content.connect;
                                                 class={`screen screen-app${index === 0 ? " is-on" : ""}`}
                                                 data-screen="app"
                                                 data-hero-frame={index}
-                                                data-frame-label={screen.frameLabel}
                                                 aria-hidden={index > 0 ? "true" : undefined}
                                             />
                                         ))
@@ -493,10 +492,6 @@ const { steps: appSteps, alternatives } = content.connect;
                     frame.classList.toggle("is-on", visible);
                     frame.setAttribute("aria-hidden", String(!visible));
                 });
-                const label = preview.querySelector(".window-address");
-                if (label) {
-                    label.textContent = frames.find((frame) => Number(frame.dataset.heroFrame) === index)?.dataset.frameLabel ?? "intentic · /home";
-                }
             };
             const stop = (): void => {
                 clearInterval(timer);
