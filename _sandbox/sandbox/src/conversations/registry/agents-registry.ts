@@ -34,6 +34,7 @@ import { type LandMarkBooks, type LandMarks, landMarksAmender, markedOnLand } fr
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
 import { unfinishedOf } from "./unfinished-work.js";
 import { identityOf, peopleOfConversation } from "../actor/identity-latch.js";
+import { withHomeTitle } from "./home-title.js";
 import { activityLive, awaitingWake, type ConversationState, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import {
@@ -685,9 +686,11 @@ export const createFleet = (
         return indexed.byId.get(id);
     };
 
-    const replace = (next: PersistedAgent): void => {
-        entries = [...entries.filter((entry) => entry.id !== next.id), next];
+    const replace = (entry: PersistedAgent): PersistedAgent => {
+        const next = withHomeTitle(entry);
+        entries = [...entries.filter((held) => held.id !== next.id), next];
         dirty.add(next.id);
+        return next;
     };
 
     // Every entry changed since the last write and every journal row owed with them, one transaction. Synchronous
@@ -714,6 +717,9 @@ export const createFleet = (
         const entry = entryOf(id);
         const clean = title === undefined ? undefined : sanitizeTitle(title);
         if (entry === undefined || clean === undefined) {
+            return false;
+        }
+        if (entry.identity.home === true && source !== "user") {
             return false;
         }
         const held = entry.social.title;
@@ -1035,8 +1041,7 @@ export const createFleet = (
         if (entry === undefined) {
             return undefined;
         }
-        const next = change(entry);
-        replace(next);
+        const next = replace(change(entry));
         await persist();
         broadcast();
         return summaryOf(next);
@@ -1044,7 +1049,7 @@ export const createFleet = (
 
     const agents: AgentsRegistry = {
         init: async () => {
-            entries = store.agents.load().map(restored);
+            entries = store.agents.load().map(restored).map(withHomeTitle);
             activateLoadedFleet(entries, conversations, broadcast, reprobe);
             await answers.follow(broadcast);
         },
@@ -1055,7 +1060,8 @@ export const createFleet = (
                 ...store.agents
                     .load()
                     .filter((entry) => arrived.has(entry.id))
-                    .map(restored),
+                    .map(restored)
+                    .map(withHomeTitle),
             ];
             standings.forget(ids);
             presences.forget(ids);

@@ -2,7 +2,7 @@ import type { Mock } from "bun:test";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
-import type { Social } from "../../conversations/registry/agents-store.js";
+import type { Identity, Social } from "../../conversations/registry/agents-store.js";
 import { conversationAfter } from "../../conversations/registry/agents-store.testing.js";
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 import { assertAgentExecutionContext, type AgentExecutionContext, withAgentExecution } from "../../workload/agent-execution.js";
@@ -96,11 +96,11 @@ const STOLEN_TITLES = [
 ];
 
 // `turns` is how many turns the conversation finished before the one this pass runs at; 0 is its opening turn.
-const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"]["setTitle"]>, turns = 0): Services =>
+const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"]["setTitle"]>, turns = 0, identity: Identity = {}): Services =>
     unstubbed<Services>("services", {
         privacyShield: privacySliceFake().privacyShield,
         agentExecution: rootExecutionService(),
-        agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns, { social: { title, reactions: [] } }), setTitle }),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns, { identity, social: { title, reactions: [] } }), setTitle }),
     });
 
 beforeEach(() => {
@@ -115,6 +115,15 @@ test("asks nothing when no model is set for session titles", async () => {
 
     await nameAgentTitle(servicesWith({ text: "Fix the auth tests", source: "derived" }, setTitle), "c1", "fix the auth tests");
 
+    expect(ask).not.toHaveBeenCalled();
+    expect(setTitle).not.toHaveBeenCalled();
+});
+
+test.each(["derived", "model", "plan", "user"] as const)("a home with a %s title never asks the naming model", async (source) => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    modelSet.mockClear();
+    await nameAgentTitle(servicesWith({ text: "Presence", source }, setTitle, 0, { home: true }), "home-ada", "Are you there?");
+    expect(modelSet).not.toHaveBeenCalled();
     expect(ask).not.toHaveBeenCalled();
     expect(setTitle).not.toHaveBeenCalled();
 });

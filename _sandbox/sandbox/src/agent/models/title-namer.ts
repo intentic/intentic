@@ -108,7 +108,7 @@ const chosenName = (entry: PersistedAgent): string | undefined => {
 // only what askRoleModel throws; the caller logs it and leaves the derived title standing for the next turn to retry.
 export const nameAgentTitle = async (services: Services, execution: AgentExecutionContext, conversationId: string, prompt: string): Promise<void> => {
     const entry = services.agents.entry(conversationId);
-    if (entry === undefined || !(await roleModelIsSet(services, `session-title`))) {
+    if (entry === undefined || entry.identity.home === true || !(await roleModelIsSet(services, `session-title`))) {
         return;
     }
     // A stolen title (failure sentence, tool-call stand-in, self-identity reply) counts as no name and heals here.

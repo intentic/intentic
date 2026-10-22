@@ -257,6 +257,9 @@ flowchart LR
   else it asks a maintainer (`turn-landing.ts askToLandHome`). Only its owner speaks into it; only they and the
   sandbox's owner see it; it never ages out; its family's pushes go to its owner alone (`push/push-audience.ts`). It
   works by `.intentic/config/home.md`, or the default policy, carried as a note (`conversations/home/`).
+  Its title is derived as `Home · <owner name>` (email when no name is available, `Home` for the loopback owner),
+  without a naming-model call. Older automatic titles follow the same rule when loaded; a person's rename stands,
+  and neither a model nor a plan heading replaces it (`conversations/registry/home-title.ts`).
   `GET /agents/attention/mine` is every member's own attention count, which each sandbox's icon wears there.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
