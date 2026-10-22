@@ -2,6 +2,7 @@
 import { useRowReveal } from "@intentic/ui/motion";
 import { computed, ref } from "vue";
 import { useChat } from "../../../models/conversations/run/useChat";
+import type { Conversation } from "../../../models/conversations/session/conversation";
 import { currentChecklist } from "../../../models/conversations/transcript/transcript";
 import ChatTodoList from "../transcript/ChatTodoList.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -16,7 +17,10 @@ import { useChecklistSpread } from "./railChecklistSpread";
 
 const t = useT();
 
-const { active } = useChat();
+// The conversation it reads: the focused chat's, unless the panel is pinned to one (ChatPanel's `only`, the master view).
+const { conversation } = defineProps<{ conversation?: Conversation | undefined }>();
+const chat = useChat();
+const active = computed(() => conversation ?? chat.active.value);
 
 const todos = computed(() => currentChecklist(active.value.transcript.messages.value));
 // `generating`, not `streaming`: a turn parked on a permission card is waiting on the reader, so nothing should spin.

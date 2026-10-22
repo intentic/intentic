@@ -4,6 +4,7 @@ import { uiLength } from "../../../workbench/window/uiScale";
 import ChatCapacityRail from "./capacity/ChatCapacityRail.vue";
 import ChatRailChecklist from "./ChatRailChecklist.vue";
 import { useT } from "@intentic/ui/i18n";
+import type { Conversation } from "../../../models/conversations/session/conversation";
 
 // The strip in the pop-out window that panes have no use for (chatCapacity's railFitsBeside). Holds what the reader
 // wants standing rather than scrolling past: this chat's checklist, then what they can still run. Presence is decided
@@ -11,6 +12,8 @@ import { useT } from "@intentic/ui/i18n";
 // mid-turn and reflow the panel underneath the answer being read.
 
 const t = useT();
+// The chat whose checklist it shows when the panel is pinned to one (ChatPanel's `only`); absent, the focused chat's.
+const { conversation } = defineProps<{ conversation?: Conversation | undefined }>();
 </script>
 
 <template>
@@ -24,7 +27,7 @@ const t = useT();
         :style="{ width: uiLength(CAPACITY_RAIL_PX), right: `var(--chat-scrollbar)` }"
         :aria-label="t(`chat.chatSideRail.chatWhatRun`)"
     >
-        <ChatRailChecklist />
+        <ChatRailChecklist :conversation="conversation" />
         <ChatCapacityRail />
     </aside>
 </template>

@@ -35,9 +35,9 @@ import { useT } from "@intentic/ui/i18n";
 // `bar` is the quick strip's presentation (ChatQuickBar): the focused chat's composer and nothing else, in a row the
 // shell sizes to its content. It implies no header and no transcript: the strip is a scratch pad, and /chat is where
 // the turns are read.
-// `solo` draws the focused chat alone, never a split: the master view's one chat with a sandbox (features/home/), which
-// shows that conversation whatever panes the shell's own chat holds.
-const { tabs = true, bar = false, solo = false } = defineProps<{ tabs?: boolean; bar?: boolean; solo?: boolean }>();
+// `only` draws that one conversation and nothing else, whatever the shell's own chat holds or focuses: the master view's
+// one chat with a sandbox (models/home/homeChat.ts), which is not among the shell's tabs at all.
+const { tabs = true, bar = false, only } = defineProps<{ tabs?: boolean; bar?: boolean; only?: Conversation | undefined }>();
 
 const t = useT();
 
@@ -66,7 +66,7 @@ const RAIL_PX = DEFAULT_RAIL_WIDTH;
 const dockedRoom = (count: number): number => count * MIN_PANE_PX;
 const paneIds = computed(() => {
     // A strip is one row of composer; a split there would be two boxes with no transcripts to tell them apart.
-    if (mobile.value || bar || solo) {
+    if (mobile.value || bar) {
         return [activeId.value];
     }
     return chatWide.value || layout.chatWidth.value >= dockedRoom(panes.value.length) ? panes.value : [activeId.value];
@@ -75,6 +75,9 @@ const paneIds = computed(() => {
 // the focused chat (which drew it twice, in two columns keyed the same, corrupting Vue's diff). The floor
 // (`active`) is reached only when nothing at all resolves.
 const shown = computed<Conversation[]>(() => {
+    if (only !== undefined) {
+        return [only];
+    }
     const held = paneIds.value.flatMap((id) => {
         const conversation = conversations.value.find((candidate) => candidate.conversationId === id);
         return conversation === undefined ? [] : [conversation];
@@ -316,10 +319,10 @@ watch(
                     <ChatPane
                         v-show="subagentIn(conversation) === undefined"
                         :conversation="conversation"
-                        :focused="conversation.conversationId === activeId"
+                        :focused="only !== undefined || conversation.conversationId === activeId"
                         :closable="split"
                         :strip="bar"
-                        @focus="setActive(conversation.conversationId)"
+                        @focus="only === undefined && setActive(conversation.conversationId)"
                         @close="closePane(conversation.conversationId)"
                     />
                     <!-- A subagent its runtime ran in-process, stepped into from its parent's column; keyed by the subagent, so another one is a fresh read.
@@ -339,7 +342,7 @@ watch(
         </div>
 
         <!-- The focused chat's checklist and what the reader can run next, in room the panes have no use for. -->
-        <ChatSideRail v-if="showsRail" />
+        <ChatSideRail v-if="showsRail" :conversation="only" />
     </div>
 </template>
 

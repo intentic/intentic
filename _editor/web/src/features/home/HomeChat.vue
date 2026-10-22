@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from "vue";
+import { computed, onUnmounted, shallowRef, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
-import { agentTabOf, reveal } from "../../models/conversations/panel/useChat-reveal";
-import { Conversation } from "../../models/conversations/session/conversation";
+import type { Conversation } from "../../models/conversations/session/conversation";
+import { homeConversation, homeConversationFor } from "../../models/home/homeChat";
 import { registry } from "../../models/fleet/useAgents-registry";
 import { workLedger } from "../../models/home/homeFacts";
 import ChatPane from "../chat/panel/ChatPane.vue";
@@ -20,6 +20,11 @@ const conversation = shallowRef<Conversation>();
 const failure = shallowRef(false);
 const now = useNow(() => true);
 const retry = shallowRef(0);
+// The panel the page lends draws exactly this one (models/home/homeChat.ts).
+watch(conversation, (open) => (homeConversation.value = open), { immediate: true });
+onUnmounted(() => {
+    homeConversation.value = undefined;
+});
 const ledger = computed(() => (conversation.value === undefined ? [] : workLedger(registry.value, conversation.value.conversationId, now.value)));
 watch(
     () => [sandbox.activeSandboxId.value, sandbox.reachable.value, retry.value] as const,
@@ -37,14 +42,7 @@ watch(
             if (!current) {
                 return;
             }
-            const entry = home.agent === undefined ? new Conversation(home.conversationId) : { ...agentTabOf(home.agent), isolated: true };
-            const opened = reveal({ verb: `show`, entries: [entry], focus: home.conversationId, caret: false });
-            if (opened !== undefined) {
-                opened.isolated.value = true;
-                // Named before its first turn, so its draft card and the conversation that turn opens read as the home.
-                opened.title.value ??= t(`home.title`);
-                conversation.value = opened;
-            }
+            conversation.value = homeConversationFor(id, home, t(`home.title`));
         } catch {
             if (current) {
                 failure.value = true;
