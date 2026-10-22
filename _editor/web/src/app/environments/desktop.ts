@@ -89,7 +89,18 @@ export const openThisComputer = (): void => openDesktopLink(`${DESKTOP_LAUNCHER_
    platform's session cookie is set; this hands the reader back to the folder they actually asked about, whose own
    sandbox's setup starts by itself once the workspace says who signed in. An app that predates `to=agent` reads the
    bare link, which is This device. */
-export const openAgentOnThisComputer = (): void => openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=agent`);
+// allow(module-state): whether this page last handed its reader to a folder of this computer, until the router reads it.
+let handedToFolder = false;
+export const openAgentOnThisComputer = (): void => {
+    handedToFolder = true;
+    openDesktopLink(`${DESKTOP_LAUNCHER_LINK}?to=agent`);
+};
+/** Whether the reader was just handed to a folder (above), once: router/thisComputerFirst.ts then brings nothing up. */
+export const takeHandedToFolder = (): boolean => {
+    const handed = handedToFolder;
+    handedToFolder = false;
+    return handed;
+};
 
 /* `frameless` above says the window arrived without a platform frame; these are the presses that work it. */
 export type DesktopWindowVerb = "ready" | "minimize" | "maximize" | "close" | "drag" | "raise";

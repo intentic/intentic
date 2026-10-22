@@ -10098,6 +10098,14 @@
             "wrongAddressProblem": "Twój sandbox działa, ale zgłasza się z {announced}, a spodziewamy się go pod {expected}.",
             "wrongAddressRemedy": "Nie damy Ci adresu, za który nie możemy ręczyć. Uruchom go od nowa poniżej, a nowa maszyna wstanie pod właściwym adresem."
         },
+        "noSandbox": {
+            "title": "Nic do otwarcia",
+            "headline": "Zalogowano",
+            "lede": "To konto nie ma jeszcze sandboxa. Ten komputer go nie potrzebuje: Twoje pliki są tam, gotowe do otwarcia.",
+            "openThisComputer": "Otwórz Ten komputer",
+            "setUpSandbox": "Skonfiguruj sandbox",
+            "sandboxLater": "W sandboxie pracują agenci. Skonfiguruj go, kiedy będą Ci potrzebni."
+        },
         "platformUnavailable": {
             "intenticIsntReachable": "Intentic jest nieosiągalny",
             "signInNotChanged": "Twoje logowanie nie zostało zmienione. Sprawdź połączenie i spróbuj ponownie."

@@ -307,7 +307,10 @@ flowchart LR
   a fresh platform list; a sandbox connected while the page was hidden opens through the workspace's connection flow.
 - **Routes.** `/login` and `/setup` sit outside the shell. Everything else lives under `/` in
   `WorkspaceShell.vue`, guarded by `requireAuth` and `requireSetup`, which renders `ShellDesktop.vue` (rail, side
-  panel, terminal and status bar) or `ShellMobile.vue` (the board with a rail beside it, full-screen views). A link naming a sandbox (`/?sandbox=<id>`, the
+  panel, terminal and status bar) or `ShellMobile.vue` (the board with a rail beside it, full-screen views). In the
+  desktop app, an account with nothing to open is not sent to setup (arriving there makes a sandbox): the reader is
+  put on This computer, and the workspace waits behind it on `/no-sandbox`, which offers This computer or setup
+  (`router/thisComputerFirst.ts`). A link naming a sandbox (`/?sandbox=<id>`, the
   desktop app's, for a synced folder or a sandbox picked on a local window's place chip) opens the shell on it if the
   account lists it, and otherwise says that sandbox is not on the account any more; the id leaves the address either
   way (`router/sandboxArrival.ts`). A desktop window on a local folder builds another table instead: `/` is

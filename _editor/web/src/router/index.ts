@@ -28,6 +28,7 @@ import { retryOnEntry } from "../client/auth/platformRetry";
 import { arriveOnSandbox, type SandboxArrivalRoute } from "./sandboxArrival";
 import { openOnProject } from "../app/projectScope";
 import { readSetupRedirect } from "./setupGate";
+import { noSandboxRoute, workspaceAside } from "./thisComputerFirst";
 import { SETTINGS_DEFAULT_SECTION, settingsPartHosts } from "../features/settings/settingsNav";
 import { normalizeDaemonUrl } from "../lib/daemonUrl";
 import { ownsMissingSandboxes } from "../client/directory/deviceDirectory";
@@ -213,6 +214,7 @@ const routes: RouteRecordRaw[] = [
         // the same instant flip as any other. Full-screen wizard, so no outline to promise.
         component: asyncView(() => import(`../features/setup/Setup.vue`)),
     },
+    noSandboxRoute,
     {
         // The sandboxes this device remembers and the account's list lacks, offered back (features/sandbox/recovery).
         path: `/recover`,
@@ -242,9 +244,9 @@ const routes: RouteRecordRaw[] = [
     { path: `/floating/preview`, redirect: `/floating/browsers` },
     {
         // Persistent workspace shell (rail + shared chat + area outlet). Guarded: signed in and sandbox connected;
-        // otherwise requireSetup redirects to /setup, so all shell navigation is blocked until setup completes.
+        // otherwise requireSetup redirects to /setup (in the desktop app, to This computer: thisComputerFirst.ts).
         path: `/`,
-        beforeEnter: [requireAuth, requireSetup, openNamedSandbox],
+        beforeEnter: [requireAuth, async (to) => workspaceAside.settle(await requireSetup(to)), openNamedSandbox],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
             {
