@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHomeCommand } from "./commands/useHomeCommand";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import TourMark from "../features/tour/TourMark.vue";
 import type { MarkStep } from "../features/tour/tourMarks";
@@ -61,11 +62,13 @@ import { RUNNING_MARK_CLASS } from "../workbench/views/viewBadge";
 import PresenceAvatars from "../workbench/presence/PresenceAvatars.vue";
 import QuickOpen from "./commands/QuickOpen.vue";
 import SandboxGate from "../features/sandbox/gates/SandboxGate.vue";
+import HomeSandboxes from "../features/home/HomeSandboxes.vue";
 import SandboxSwitcher from "../features/sandbox/gates/SandboxSwitcher.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // The tiles themselves, and every badge on them, are rail/sectionTiles.ts's, shared with the phone's rail.
 const t = useT();
+useHomeCommand();
 
 // The hover: the name alone, or the name as a card's headline over what the tile is carrying. A warning or danger badge
 // lends the headline its dot, since that tone marks a standing state rather than a count.
@@ -92,6 +95,7 @@ const { iconRailSize } = useIconRailSize();
 const { floats: chatFloats } = useChatFloating();
 const route = useRoute();
 const router = useRouter();
+const onHome = computed(() => route.name === `home`);
 // The audience's words: the maker's + names a new agent rather than a capability.
 const words = useVocabulary();
 // A reader who does not write code meets the rail's + as the start of a conversation, which is what they came to do;
@@ -305,7 +309,7 @@ const sideWidth = computed(() =>
     besideChat.value && !besideFills.value ? layout.chatWidth.value + layout.besideWidth.value : layout.chatWidth.value,
 );
 const gridStyle = computed(() => ({
-    "--side-width": sideColumnShown.value ? uiLength(sideWidth.value) : `0px`,
+    "--side-width": !onHome.value && sideColumnShown.value ? uiLength(sideWidth.value) : `0px`,
     // The rail's own measures, shared with a desktop window on a local folder (railFrame.ts, iconRail.css).
     ...railFrame(iconRailSize.value),
 }));
@@ -384,7 +388,12 @@ useGettingStarted();
 
 <template>
     <div class="shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
-        <nav ref="railNav" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
+        <!-- The master view keeps the rail itself (its look, its account control) and swaps only its tiles for the sandboxes. -->
+        <nav v-if="onHome" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
+            <HomeSandboxes />
+            <AccountPanel />
+        </nav>
+        <nav v-else ref="railNav" class="icon-rail flex flex-col items-center border-r border-line bg-card" style="grid-area: rail">
             <!-- Top of the rail: switch between sandboxes, add one, or manage access. -->
             <SandboxSwitcher />
             <!-- Other members connected right now, live from the daemon's /events roster. -->
@@ -578,19 +587,20 @@ useGettingStarted();
         </nav>
 
         <!-- The right-hand column: things opened beside the section, and the chat when its home is the side. -->
-        <SidePanel v-if="sideShown" v-show="sideColumnShown" />
+        <SidePanel v-if="!onHome && sideShown" v-show="sideColumnShown" />
 
         <!-- Under what was opened while it fills the middle: hidden and inert, but mounted at its own size, so the section
              comes back as it was left, scrolled where it was. -->
         <main
-            :id="besideFills ? undefined : `main-content`"
+            :id="!onHome && besideFills ? undefined : `main-content`"
             tabindex="-1"
             class="relative flex min-w-0 flex-col overflow-hidden"
-            :class="{ invisible: besideFills }"
-            :inert="besideFills ? true : undefined"
+            :class="{ invisible: !onHome && besideFills }"
+            :inert="!onHome && besideFills ? true : undefined"
             style="grid-area: workspace"
         >
-            <SandboxGate>
+            <RouterView v-if="onHome" />
+            <SandboxGate v-else>
                 <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }">
                     <RouterView />
                 </div>
@@ -608,7 +618,7 @@ useGettingStarted();
 
         <!-- The parked chat's scratch pad, floating in the section's own cell: opening it must not reflow the page the reader
              opened it to talk about. Outside the gate, like the chat column: a stalled sandbox is a thing to ask about. -->
-        <ChatQuickBar />
+        <ChatQuickBar v-if="!onHome" />
 
         <!-- Portals to body, so it overlays the whole shell regardless of where it sits in the grid. -->
         <QuickOpen />

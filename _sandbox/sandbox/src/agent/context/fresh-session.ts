@@ -57,6 +57,8 @@ export interface FreshRange {
 export interface FreshScope {
     readonly origin: { readonly id: string; readonly title: string | undefined };
     readonly kind: FreshKind;
+    // The agent that opened it on its own subagent's work, which its report goes to; absent for a person's session.
+    readonly by?: string;
     // Whether its checkout was cut from that work; false when the origin could no longer take it (archived, gone, on
     // another machine since), and the checkout is then the workspace's main line.
     readonly cut: boolean;
@@ -112,8 +114,12 @@ export const freshNote = (scope: FreshScope): TurnNote => {
     lines.push(
         ...(kind === undefined || scope.ranges.length === 0 ? [] : ["", kind]),
         "",
-        "Edits made here go back into that conversation's work, not straight into the workspace. Nothing found here reaches that " +
-            "conversation unless the person you are working with sends it there, so report what you find plainly in this chat.",
+        scope.by === undefined
+            ? "Edits made here go back into that conversation's work, not straight into the workspace. Nothing found here reaches that " +
+                  "conversation unless the person you are working with sends it there, so report what you find plainly in this chat."
+            : `Edits made here go back into that conversation's work, not straight into the workspace. Your report goes to \`${scope.by}\`, ` +
+                  "the agent that opened this session and decides what becomes of that work: end with a plain verdict and every finding, " +
+                  "each with where it is and why it matters.",
     );
     return { title: FRESH_NOTE_TITLE, text: lines.join("\n") };
 };
@@ -149,7 +155,7 @@ export const freshScopeOf = async (deps: FreshScopeDeps, conversationId: string)
     const named = { id: fresh.of, title: origin?.social.title?.text };
     const carried = new Set((worktreeOf(entry)?.repos ?? []).map(({ repo }) => repo));
     if (origin === undefined || !isIsolated(origin) || worktreeOf(entry)?.parent !== fresh.of) {
-        return { origin: named, kind: fresh.kind, cut: false, ranges: [] };
+        return { origin: named, kind: fresh.kind, ...opt("by", fresh.by), cut: false, ranges: [] };
     }
     const ranges: FreshRange[] = [];
     for (const composed of origin.placement.repos.filter(({ repo }) => carried.has(repo))) {
@@ -161,7 +167,7 @@ export const freshScopeOf = async (deps: FreshScopeDeps, conversationId: string)
             deps.logger.warn({ err: error, id: conversationId, origin: fresh.of, repo: composed.repo }, "fresh session: reading the origin's range failed");
         }
     }
-    return { origin: named, kind: fresh.kind, cut: true, ranges };
+    return { origin: named, kind: fresh.kind, ...opt("by", fresh.by), cut: true, ranges };
 };
 
 /** What a fresh session's turn carries: the note on the turns that owe it, and Codex's review scope on every turn. */

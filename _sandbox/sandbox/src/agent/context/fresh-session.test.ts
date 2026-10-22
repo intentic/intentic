@@ -61,6 +61,13 @@ describe("what a fresh session is told", () => {
         expect(text).toContain("unless the person you are working with sends it there");
     });
 
+    it("tells a session an agent opened that its report goes to that agent, with a verdict and every finding", () => {
+        const { text } = freshNote({ ...scope, by: "home-1" });
+        expect(text).toContain("Your report goes to `home-1`");
+        expect(text).toContain("plain verdict");
+        expect(text).not.toContain("unless the person you are working with sends it there");
+    });
+
     // The note rides the preamble ahead of the person's words, so a `/code-review` typed after it still reads as the
     // command, and the transcript shows the note as a note rather than as typing.
     it("is parsed back out of the preamble as its own note", () => {

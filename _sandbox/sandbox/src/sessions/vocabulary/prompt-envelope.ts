@@ -39,6 +39,8 @@ export const CONTEXT_NOTE_HEADER = "## Context of this session";
 export const CONTEXT_NOTE_TITLE = "Context of this session";
 export const FRESH_NOTE_TITLE = "The work this session started from";
 export const FRESH_NOTE_HEADER = `## ${FRESH_NOTE_TITLE}`;
+export const HOME_NOTE_TITLE = "How this home conversation works";
+export const HOME_NOTE_HEADER = `## ${HOME_NOTE_TITLE}`;
 export const CHECKPOINT_NOTE_HEADER = "## Your uncommitted work was committed";
 export const CHECKPOINT_NOTE_TITLE = "Uncommitted work committed";
 // Given when a `/`-leading prompt names no command (agent-commands.ts); its job is positional, so the CLI's slash
@@ -68,6 +70,8 @@ export const INJECTED: readonly { readonly header: string; readonly title: strin
     { header: CONTEXT_NOTE_HEADER, title: CONTEXT_NOTE_TITLE },
     // A fresh session's origin and the exact ranges its work is (agent/context/fresh-session.ts).
     { header: FRESH_NOTE_HEADER, title: FRESH_NOTE_TITLE },
+    // What a home conversation works by: how it delegates, judges, merges and lands (conversations/home/home-policy.ts).
+    { header: HOME_NOTE_HEADER, title: HOME_NOTE_TITLE },
     { header: SKILL_CATALOG_NOTE_HEADER, title: SKILL_CATALOG_NOTE_TITLE },
     { header: TURN_CONTEXT_NOTE_HEADER, title: TURN_CONTEXT_NOTE_TITLE },
     { header: LITERAL_SLASH_NOTE_HEADER, title: "How to read this message" },

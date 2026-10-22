@@ -5,7 +5,7 @@ import { conversationProfile, worktreeOf } from "../../conversations/registry/ag
 import { parentOfActor } from "../../auth/principal.js";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { AgentHarness, AgentProvider, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
+import type { AgentHarness, AgentProvider, FreshOf, TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { AskQuestion, ChildAgentAsk, ChildMove, ChildRun } from "@intentic/sandbox-contract/events/requests";
 import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
@@ -51,7 +51,7 @@ import { opt } from "../../opt.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
 import { freshRunnerSummaries } from "../../runners/runner-peer.js";
 import type { DelegateAsk, LinkListing } from "../../links/linked-children.js";
-import { childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
+import { type ChildRehome, childOpening, childRecordOf, childRouting, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, sameModel, taskLine, withRun } from "./child-spec.js";
 import { BEHIND_MAX_MS, CANCELLED, CANCEL_NOTES, LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
 import { elsewhereFor, spentAsked } from "./child-listing.js";
 import { seatLine } from "./child-admission.js";
@@ -60,6 +60,7 @@ import { resultContract, type ResultSchema, type ResultValue, turnResult } from 
 import { CHILDREN, childResultOf, closeUnstarted, keepChild, SEATS, settleChild } from "./child-records.js";
 import { type Admission, admit, askOwner, HELD_MOVES, labelOf, notYet, refusedByRules, restoredStartAnswer, TURN_GRANTS, unanswerableWhy, unmovable } from "./child-gates.js";
 import { ROSTER } from "../../conversations/actor/subagent-roster.js";
+export type { ChildRehome } from "./child-spec.js";
 
 // Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
 // conversation on the same turn pump, queued until the box has memory for it. A parked question is the parent's to
@@ -107,14 +108,8 @@ export interface ChildSpawnSpec {
     // A worker of a workflow run (script-runs.ts): its endings go to the run, which reads them, and never wake its parent
     // as reports of their own.
     readonly run?: { readonly id: string };
-}
-
-/** Another provider and model for a child's next turn, in the same worktree (sendToChild, a spawn's fallbacks). */
-export interface ChildRehome {
-    readonly provider: AgentProvider;
-    readonly model: string;
-    readonly harness?: AgentHarness;
-    readonly effort?: string;
+    // A review or test session on the work of a subagent this parent spawned (child-gates.ts freshGate), reporting to it.
+    readonly freshOf?: FreshOf;
 }
 
 export interface ChildParent {

@@ -247,6 +247,12 @@ const routes: RouteRecordRaw[] = [
         beforeEnter: [requireAuth, requireSetup, openNamedSandbox],
         component: () => import(`../shell/WorkspaceShell.vue`),
         children: [
+            {
+                path: `home/:sandbox?`,
+                name: `home`,
+                meta: { title: () => t(`home.title`) },
+                component: asyncView(() => import(`../features/home/MasterHomeView.vue`)),
+            },
             // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the file tree with its chat
             // already docked, for a maker too: the chat is where a first session starts, and the Projects dashboard
             // landed on instead read as a second place to begin. A guest has no home tile but the chat: the tree is a

@@ -10,6 +10,8 @@ import { AgentNeedSchema } from "./needs.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
 import { ProgramAskSchema } from "../events/requests.js";
 import { ReviewTallySchema, TurnProofSchema } from "./work-assurance.js";
+import { AgentReactionSchema, SessionOwnerSchema } from "./agent-people.js";
+export { AgentReactionSchema, ReactorSchema, SessionOwnerSchema, type AgentReaction, type Reactor, type SessionOwner } from "./agent-people.js";
 // A fleet agent is any conversation with a registry entry, keyed by conversationId. Isolated ones own a git worktree
 // (branch agent/<id>); workspace conversations have none, but both share one status/activity/cost lifecycle.
 
@@ -237,37 +239,6 @@ export type LandedMessageDraft = z.infer<typeof LandedMessageDraftSchema>;
 // offer the press that clears a refusal without knowing whose refusal it is.
 export const LandConflictReasonSchema = z.enum(["workspace", "diverged", "binary"]);
 export type LandConflictReason = z.infer<typeof LandConflictReasonSchema>;
-// One person behind one mark. The instant rides along so the group can be ordered by who was first, which is also the
-// order the names read in.
-export const ReactorSchema = z.object({
-    email: z.string().describe("Who it was, as the sandbox verified them."),
-    name: z.string().optional().describe("What to call them, when their sign-in carried a name. Absent leaves the address to stand for them."),
-    at: z.number().describe("When they marked it, in milliseconds."),
-});
-export type Reactor = z.infer<typeof ReactorSchema>;
-// The member answerable for a conversation: whose questions its cards are, who a reviewer asks about its work. Derived
-// once from the starter, moved only by `agents.assign`; never a program, which is what `startedBy` is for.
-export const SessionOwnerSchema = z.object({
-    email: z.string().describe("Who answers for this conversation, as the sandbox verified them."),
-    name: z
-        .string()
-        .optional()
-        .describe("What to call them, when the sign-in that made them its owner carried a name. Absent leaves the address to stand for them."),
-    since: z.number().describe("When they became its owner, in milliseconds."),
-});
-export type SessionOwner = z.infer<typeof SessionOwnerSchema>;
-// Grouped by emoji on the wire, not as a flat list of presses: every surface draws one chip per emoji, and grouping
-// here is what stops three of them each grouping it differently.
-export const AgentReactionSchema = z.object({
-    emoji: z.string().describe("The mark itself, one emoji, carried as the character rather than as a name that would need a table on both sides."),
-    by: z
-        .array(ReactorSchema)
-        .min(1)
-        .describe(
-            "Everyone wearing this mark, oldest first, each by name. Carried whole rather than as a count, because a chip reading 3 that cannot say whose is a number nobody can answer. Never empty: the last person taking theirs back takes the whole chip with it.",
-        ),
-});
-export type AgentReaction = z.infer<typeof AgentReactionSchema>;
 export const AgentSummarySchema = z.object({
     id: z.string().describe("The conversation id, which is how every other call addresses it."),
     sessionId: z.string().optional().describe("The provider session behind the last turn. It is retired whenever the model or account changes."),
@@ -412,6 +383,14 @@ export const AgentSummarySchema = z.object({
     fresh: FreshSessionSchema.optional().describe(
         "Set on a conversation started on another conversation's work without its messages (a code review, a test pass, a person's own ask): which one, for what, and when. Absent for every other conversation.",
     ),
+    // Latched on the opening turn (ids/conversation-ids.ts homeConversationId). Rides the summary because it decides who
+    // may see the row at all (auth/fleet-scope.ts visibleTo): its owner, and the sandbox's owner.
+    home: z
+        .literal(true)
+        .optional()
+        .describe(
+            "This is its owner's home conversation in this sandbox: the one long-running chat the master view opens, which orchestrates its own subagents, holds their work until it accepts it, and lands and commits by itself. Only its owner and the sandbox's owner see it. Absent for every other conversation.",
+        ),
     // Root repo's short base sha; per-repo bases stay daemon-internal.
     base: z.string().optional().describe("The commit its private copy started from, shortened."),
     costUsd: z.number().optional().describe("What it has cost so far, in dollars. A subagent's spend is its own and is not folded in here."),

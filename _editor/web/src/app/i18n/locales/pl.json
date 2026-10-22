@@ -12827,5 +12827,25 @@
         "noThanks": "Nie, dziękuję",
         "command": "Dołącz do społeczności na Discordzie",
         "dot": "Konto, z wiadomością od zespołu intentic"
+    },
+    "home": {
+        "title": "Start",
+        "sandboxes": "Sandboksy",
+        "work": "Praca",
+        "loading": "Otwieranie twojej rozmowy głównej…",
+        "failed": "Nie udało się otworzyć twojej rozmowy głównej.",
+        "sandboxAttention": "{name} · potrzebuje cię: {count}",
+        "stage": {
+            "working": "Pracuje",
+            "reviewing": "W przeglądzie",
+            "testing": "W testach",
+            "held": "Wstrzymane",
+            "merged": "Scalone",
+            "landed": "Wprowadzone",
+            "waiting": "Oczekuje"
+        },
+        "offline": "Ten sandboks nie jest połączony.",
+        "retry": "Spróbuj ponownie",
+        "open": "Wszystkie sandboksy"
     }
 }

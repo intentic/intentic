@@ -58,7 +58,7 @@ browsers.onDocked(() => {
 <template>
     <!-- Grid area and border live on the panel, not the slot: the slot is `display: contents` and generates no box. -->
     <Teleport :to="chatTarget">
-        <ChatPanel v-if="chat.shows.value" :bar="inBar" style="grid-area: chat" />
+        <ChatPanel v-if="chat.shows.value && router.currentRoute.value.name !== `home`" :bar="inBar" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <TerminalPanel

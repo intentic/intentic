@@ -215,6 +215,8 @@ const samplesOf = (
         agents: {
             list: undefined,
             archived: undefined,
+            home: undefined,
+            attentionMine: undefined,
             search: { query: `stripe`, caseSensitive: `false` },
             seenAll: undefined,
             diff: { id: fleet.REVIEW_AGENT_ID },

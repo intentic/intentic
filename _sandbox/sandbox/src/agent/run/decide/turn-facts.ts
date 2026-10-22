@@ -21,6 +21,7 @@ import { resolveWithin } from "../../../workspace/files/workspace-files-paths.js
 import type { ProjectSetupStatus } from "../../../workspace/layout/workspace-setup.js";
 import { contextNoteIfDue } from "../../context/conversation-context.js";
 import { type FreshFacts, freshFactsIfAny } from "../../context/fresh-session.js";
+import { homeNoteIfDue } from "../../../conversations/home/home-policy.js";
 import { type AccountRoute, offBlockedAccount } from "../../providers/accounts/blocked-account.js";
 import { routingFor } from "../../../conversations/registry/routing.js";
 import { type FieldNotes, fieldNotes } from "@intentic/agent-context/field-notes";
@@ -75,6 +76,8 @@ export interface AdmittedTurnFacts {
     readonly contextNote: TurnNote | undefined;
     // A fresh session's account of the work it started from (context/fresh-session.ts); absent for any other conversation.
     readonly fresh?: FreshFacts;
+    // A home conversation's policy (conversations/home/home-policy.ts), on the turns that owe it; absent for any other.
+    readonly homeNote?: TurnNote;
     // Undefined when retrieval was never attempted, which is a different fact from a lookup that skipped.
     readonly turnContext: TurnContextOutcome | undefined;
     readonly gates: readonly CredentialGate[];
@@ -137,6 +140,7 @@ const manifests = (
         entry?.identity.fresh === undefined
             ? Promise.resolve(undefined)
             : services.perf.track("turn.plan.fresh", {}, () => freshFactsIfAny(services, input.conversationId, entry, conversationTurns)),
+        entry?.identity.home === true ? services.perf.track("turn.plan.home", {}, () => homeNoteIfDue(services, entry, conversationTurns)) : Promise.resolve(undefined),
     ]);
 };
 
@@ -298,7 +302,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
     ]);
     const declared = windowOf(served);
     const helperOnly = served?.row.helperOnly;
-    const [installed, setup, personas, areas, skillCatalogNote, contextNote, repoChecks, turnContext, fresh] = await manifests(
+    const [installed, setup, personas, areas, skillCatalogNote, contextNote, repoChecks, turnContext, fresh, homeNote] = await manifests(
         services,
         input,
         context,
@@ -344,6 +348,7 @@ export const gatherTurnFacts = async (services: TurnFactsDeps, input: RoutedTurn
         skillCatalogNote,
         contextNote,
         ...opt("fresh", fresh),
+        ...opt("homeNote", homeNote),
         turnContext,
         gates,
         releases: releasesOf(services.credentialGrants, gates, input.conversationId),

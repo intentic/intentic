@@ -12827,5 +12827,25 @@
         "noThanks": "No thanks",
         "command": "Join the community on Discord",
         "dot": "Account, with a note from the intentic team"
+    },
+    "home": {
+        "title": "Home",
+        "sandboxes": "Sandboxes",
+        "work": "Work",
+        "loading": "Opening your home conversation…",
+        "failed": "Could not open your home conversation.",
+        "sandboxAttention": "{name} · needs you: {count}",
+        "stage": {
+            "working": "Working",
+            "reviewing": "Reviewing",
+            "testing": "Testing",
+            "held": "Held",
+            "merged": "Merged",
+            "landed": "Landed",
+            "waiting": "Waiting"
+        },
+        "offline": "This sandbox is not connected.",
+        "retry": "Try again",
+        "open": "All sandboxes"
     }
 }

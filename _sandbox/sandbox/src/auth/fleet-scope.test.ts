@@ -29,6 +29,18 @@ describe("visibleTo", () => {
         expect(visibleTo(undefined, {})).toBe(true);
     });
 
+    test("a home conversation is its owner's and the sandbox owner's to see, no other member's", () => {
+        const home: Provenance = { owner: { email: "ada@example.com" }, startedBy: "ada@example.com", home: true };
+        const owner: ProvenCaller = { email: "own@example.com", role: "owner", methods: ["google"] };
+        const ada: ProvenCaller = { email: "Ada@Example.com", role: "collaborator", methods: ["google"] };
+        expect(visibleTo(ada, home)).toBe(true);
+        expect(visibleTo(owner, home)).toBe(true);
+        expect(visibleTo(viewer, home)).toBe(false);
+        expect(visibleTo({ ...viewer, role: "maintainer" }, home)).toBe(false);
+        // Its subagents are ordinary work on the board.
+        expect(visibleTo(viewer, { owner: { email: "ada@example.com" }, startedBy: "agent:home-1" })).toBe(true);
+    });
+
     // Fencing the files and leaving the transcripts open would be a fence with a door in it: a conversation carries
     // whatever it read.
     test("a fenced member sees work behind their own areas, whoever started it", () => {

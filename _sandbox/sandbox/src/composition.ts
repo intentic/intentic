@@ -86,7 +86,8 @@ import { cardDeps } from "./conversations/actor/card-deps.js";
 import { turnRunOf } from "./conversations/actor/conversation-holdings.js";
 import { dispatchWorkspaceEvent } from "./automations/workspace-events.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
-import { awaitingResolved, turnFinished } from "./push/notifications.js";
+import { awaitingResolved } from "./push/notifications.js";
+import { notifyTurnFinished } from "./push/push-audience.js";
 import { notifyAwaiting } from "./push/awaiting-detail.js";
 import { createDomainEvents, type DomainEvents } from "./seams/domain-events.js";
 import { type Announcer, createAnnouncer } from "./system/boot/announce.js";
@@ -896,9 +897,7 @@ export const wireReactions = (services: Services): void => {
             ...(insist === true ? { insist } : {}),
         }),
     );
-    services.events.subscribe("turn.finished", ({ conversationId, prompt, outcome }) =>
-        services.pushSender.notifyIfAway(turnFinished(conversationId, prompt, outcome)),
-    );
+    services.events.subscribe("turn.finished", ({ conversationId, prompt, outcome }) => notifyTurnFinished(services, conversationId, prompt, outcome));
     // Each card's own push is replaced as it settles (conversations-slice.ts); this is the conversation-wide tag an ask
     // goes out under when its card could not be read, which nothing but the turn's end can say is over.
     services.events.subscribe("turn.finished", ({ conversationId }) =>

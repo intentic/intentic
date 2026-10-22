@@ -128,6 +128,8 @@ const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } })
                     </template>
                 </MenuRow>
                 <MenuRow to="/setup" icon="plus" :title="t(`sandbox.words.addSandbox`)" plain />
+                <!-- Out to the master view (features/home/), quietly, beside the list it zooms out of. -->
+                <MenuRow to="/home" icon="th-large" :title="t(`home.open`)" plain />
             </RowGroup>
 
             <!-- Same wording as the desktop switcher: offers the move left, not a machine that doesn't exist yet. -->

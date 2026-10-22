@@ -14,7 +14,7 @@
 export type ChildMoveKind = "spawn" | "send" | "answer" | "rehome" | "fallback";
 
 // The gates a move can be stopped at, by name.
-export type GateName = "schema" | "depth" | "child-state" | "spent" | "rules";
+export type GateName = "schema" | "fresh" | "depth" | "child-state" | "spent" | "rules";
 
 // One gate's answer: let it through, hold it for the owner, or refuse it with words for the parent.
 export type GateAnswer = { readonly pass: true } | { readonly hold: string } | { readonly refuse: string };

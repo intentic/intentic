@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AgentSummarySchema } from "./agents.js";
+import { ConversationIdSchema } from "./agent.js";
 import { AutomationApprovalSchema } from "./automations.js";
 
 // The fleet list: its own module, since it joins conversations (agents.ts) with held automation wakes (automations.ts),
@@ -35,3 +36,18 @@ export const AgentsAttentionSchema = z.object({
     working: z.number().int().nonnegative().describe("How many conversations are producing something right now."),
 });
 export type AgentsAttention = z.infer<typeof AgentsAttentionSchema>;
+
+// The caller's home conversation in this sandbox (ids/conversation-ids.ts homeConversationId), as the master view opens it:
+// the id is the daemon's answer to whose it is, so no client has to derive it, and the card once its first turn opened it.
+export const HomeConversationSchema = z.object({
+    conversationId: ConversationIdSchema.describe(
+        "Your home conversation's id here. Send to it as to any conversation (`POST /agent`, isolated): its first turn opens it as your home.",
+    ),
+    agent: AgentSummarySchema.optional().describe("Its card, once a first turn has opened it. Absent until then."),
+    lands: z
+        .enum(["itself", "asks"])
+        .describe(
+            "What becomes of the work it accepts: `itself`, it lands and commits when its turn ends, because you may merge here; `asks`, it waits for a maintainer, because you may not.",
+        ),
+});
+export type HomeConversation = z.infer<typeof HomeConversationSchema>;

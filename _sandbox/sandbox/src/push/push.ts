@@ -26,8 +26,9 @@ export interface PushDelivery {
 export interface PushSender {
     // Resolves once every send settles; never rejects, a failing device is only a logged warning.
     readonly notify: (notification: PushNotification) => Promise<PushDelivery>;
-    // Skips the devices of whoever is watching a screen; `notify` remains for the settings page's explicit test send.
-    readonly notifyIfAway: (notification: PushNotification) => Promise<PushDelivery>;
+    // Skips the devices of whoever is watching a screen; `notify` remains for the settings page's explicit test send. `to`
+    // narrows it to one member's devices: a home conversation's news is its owner's alone (push-audience.ts).
+    readonly notifyIfAway: (notification: PushNotification, to?: string) => Promise<PushDelivery>;
     // Replaces an ask that stopped waiting (answered here or elsewhere, stopped) under its tag, on exactly the devices
     // its persistent notification reached: none at all when it never showed, so a settled ask never pushes on its own.
     readonly withdraw: (replacement: PushNotification & { readonly tag: string }) => Promise<PushDelivery>;
@@ -39,11 +40,19 @@ export interface PushSender {
 const NOTHING_SENT: PushDelivery = { delivered: 0, failed: 0 };
 
 // Whether a device is one whose person is away, as presence stands now. Its member decides for it; a device naming none
-// cannot be matched to a tab, so it keeps the sandbox-wide rule and waits until every tab is idle.
-const awayNow = (): ((channel: StoredChannel) => boolean) => {
+// cannot be matched to a tab, so it keeps the sandbox-wide rule and waits until every tab is idle. Named for one member,
+// only that member's own devices count, and one naming nobody is nobody's in particular.
+const awayNow = (to?: string): ((channel: StoredChannel) => boolean) => {
     const present = presentMembers();
     const nobodyWatching = idleEverywhere();
-    return (channel) => (channel.member === undefined ? nobodyWatching : !present.has(channel.member.toLowerCase()));
+    const only = to?.toLowerCase();
+    return (channel) => {
+        const member = channel.member?.toLowerCase();
+        if (only !== undefined && member !== only) {
+            return false;
+        }
+        return member === undefined ? nobodyWatching : !present.has(member);
+    };
 };
 
 // What a native install's notification may say: the relay hands its title and body to Apple in plain text, through the
@@ -116,7 +125,7 @@ export const createPushSender = (store: PushStore, logger: Logger, redact?: Push
     return {
         notify: (notification) => send(notification, () => true),
         // Presence is read as the notification is asked for, not once the store answers.
-        notifyIfAway: (notification) => send(notification, awayNow()),
+        notifyIfAway: (notification, to) => send(notification, awayNow(to)),
         withdraw: async (replacement) => {
             const reached = shown.get(replacement.tag);
             if (reached === undefined) {

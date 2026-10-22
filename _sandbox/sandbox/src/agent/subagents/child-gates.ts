@@ -18,6 +18,8 @@ import { cardDeps } from "../../conversations/actor/card-deps.js";
 import { raiseRequest } from "../../guard/card-offers.js";
 import { ALWAYS_LABEL, MOVE_BUTTON, MOVE_TITLE, unansweredWords } from "./child-words.js";
 import { CHILDREN } from "./child-records.js";
+import { freshRefusal } from "../context/fresh-session.js";
+import { supervisorOf } from "../../auth/principal.js";
 
 // What may stop a parent's move on its children before anything is spent on it (child-admission.ts runs the list): the
 // owner's action rules and the taint floor, the grant they gave for the rest of a turn, the delegation depth, a spent
@@ -131,6 +133,25 @@ const schemaGate: ChildGate<MoveContext> = {
     },
 };
 
+// A review or test session opens only on the work of a subagent this parent spawned, which it supervises and judges; on
+// anybody else's work, a person opens one (agent.routes.ts refuseFresh). The rest is the fresh session's own rules.
+const NOT_YOUR_CHILD = "A review or test session opens on the work of a subagent you spawned: name one of yours (`list` shows them).";
+const freshGate: ChildGate<MoveContext> = {
+    name: "fresh",
+    judge: ({ services, parent, spec }) => {
+        if (spec.freshOf === undefined) {
+            return PASS;
+        }
+        const origin = services.agents.entry(spec.freshOf.conversationId);
+        if (origin === undefined || supervisorOf(origin.identity) !== parent || origin.identity.fresh !== undefined) {
+            return { refuse: NOT_YOUR_CHILD };
+        }
+        // A session not opened yet has no entry of its own, so only the origin's half of the rules can speak.
+        const refused = freshRefusal((id) => services.agents.entry(id), "", spec.freshOf);
+        return refused === undefined ? PASS : { refuse: refused };
+    },
+};
+
 const depthGate: ChildGate<MoveContext> = {
     name: "depth",
     judge: ({ depth }) =>
@@ -180,7 +201,7 @@ const answerableGate: ChildGate<MoveContext> = {
 
 // Each move's gates, in order.
 const GATES = {
-    spawn: [schemaGate, depthGate, spentGate, rulesGate],
+    spawn: [schemaGate, freshGate, depthGate, spentGate, rulesGate],
     send: [rulesGate],
     answer: [answerableGate, rulesGate],
     rehome: [movableGate, spentGate, rulesGate],

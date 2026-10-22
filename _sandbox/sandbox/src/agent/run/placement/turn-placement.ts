@@ -12,7 +12,7 @@ import type { ConversationWorktree } from "../../../conversations/worktrees/work
 import type { Services } from "../../../composition.js";
 import { checkpointWorktree } from "../../checkpoints/checkpoint-worktree.js";
 import { opt } from "../../../opt.js";
-import { childActor } from "../../../auth/principal.js";
+import { childActor, parentOfActor } from "../../../auth/principal.js";
 import type { TurnInput } from "../../../seams/turn-starter.js";
 import type { PlacedTurnEnding, TurnCloser } from "./turn-close.js";
 import { keepLandFailure, landedFrame, settleLandBooks, settleParentBooks } from "../../../conversations/land/turn-landing.js";
@@ -124,8 +124,12 @@ const openingPostures = (input: TurnInput): BeginTurn["postures"] =>
 
 // What a fresh session's opening turn latches: the origin it names, what for, and when, so work the origin changes
 // afterwards reads as work it has not seen.
+// Opened by an agent (its own subagent's work judged), it names that agent too, which it reports to (agents-store.ts
+// supervisorOf).
 const freshSessionOf = (input: TurnInput, now: number): FreshSession | undefined =>
-    input.freshOf === undefined ? undefined : { of: input.freshOf.conversationId, kind: input.freshOf.kind, at: now };
+    input.freshOf === undefined
+        ? undefined
+        : { of: input.freshOf.conversationId, kind: input.freshOf.kind, at: now, ...opt("by", parentOfActor(input.actor)) };
 
 // What a conversation's turn begins as: its profile whole, and what an opening turn decides. Placement is the
 // conversation's: a fresh one takes the request's, later turns follow the registry's own record.
@@ -153,6 +157,7 @@ export const conversationIdentity = (
     // A fork names its source once; `keep` is the cut's index in the source's own record.
     ...(input.forkOf !== undefined ? { forkedFrom: { conversationId: input.forkOf.conversationId, index: input.forkOf.keep, files: input.forkOf.files } } : {}),
     ...opt("fresh", freshSessionOf(input, now)),
+    ...opt("home", input.home),
 });
 
 // A fresh conversation naming a runner nobody paired, refused in the same words whether it is sent now or booked.

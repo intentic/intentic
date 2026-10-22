@@ -98,6 +98,9 @@ const IdentitySchema = z.object({
     actsAs: z.string().optional(),
     forkedFrom: ForkedFromSchema.optional(),
     fresh: FreshSessionSchema.optional(),
+    // Added 2026-10-21, optional: its owner's home conversation (ids/conversation-ids.ts homeConversationId), latched by the
+    // route that verified whose it is (agent.routes.ts). It holds its children's work until it merges it (land-target.ts).
+    home: z.literal(true).optional(),
 });
 export type Identity = z.infer<typeof IdentitySchema>;
 

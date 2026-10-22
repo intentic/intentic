@@ -1,4 +1,5 @@
 import { watch } from "vue";
+import { isHomePath } from "../../lib/routes/home";
 import type { RouteRecordNormalized } from "vue-router";
 import { onNavigation } from "../../workbench/navigation/navigation";
 import { readWindowState, writeWindowState } from "../../workbench/window/windowStore";
@@ -33,7 +34,7 @@ onNavigation((router) => {
     // a failed navigation is not recorded, or the next switch would land on a screen the user was denied.
     router.afterEach((to, _from, failure) => {
         const sandboxId = activeSandboxId.value;
-        if (failure !== undefined || sandboxId === undefined || !inShell(to.matched)) {
+        if (failure !== undefined || sandboxId === undefined || !inShell(to.matched) || isHomePath(to.fullPath)) {
             return;
         }
         writeWindowState(screenKey(sandboxId), to.fullPath);
@@ -45,7 +46,7 @@ onNavigation((router) => {
     watch(
         activeSandboxId,
         (sandboxId) => {
-            if (sandboxId === undefined || !inShell(router.currentRoute.value.matched)) {
+            if (sandboxId === undefined || !inShell(router.currentRoute.value.matched) || isHomePath(router.currentRoute.value.fullPath)) {
                 return;
             }
             void router.replace(readWindowState(screenKey(sandboxId), parseScreen) ?? `/`);

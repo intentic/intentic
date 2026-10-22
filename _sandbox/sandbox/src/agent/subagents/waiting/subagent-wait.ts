@@ -192,6 +192,18 @@ const SPAWN_FIELDS = {
         ),
     fallbacks: FALLBACKS_FIELD,
     schema: SCHEMA_FIELD,
+    freshOf: z
+        .object({
+            conversationId: z.string().min(1).describe("The subagent whose finished work it judges: one you spawned."),
+            kind: z.enum(["review", "test"]).describe("A code review of that work, or a test pass over it."),
+        })
+        .optional()
+        .describe(
+            "Open it as a review or a test session on the finished work of a subagent you spawned, instead of on a task of its own: " +
+                "it starts from that work as it stands now, with none of that subagent's messages, so it judges the result rather " +
+                "than the reasoning, and is told the exact ranges to read. Its edits go back into that subagent's work, and its report " +
+                "comes to you like any child's. Judge before you merge: findings go back to the subagent with send.",
+        ),
 };
 type SpawnArgs = z.infer<z.ZodObject<typeof SPAWN_FIELDS>>;
 
@@ -211,6 +223,7 @@ const spawnAsked = (args: SpawnArgs): ChildSpawnSpec | { readonly refused: strin
         ...opt("on", args.on),
         ...opt("fallbacks", args.fallbacks),
         ...opt("result", schema?.data === undefined ? undefined : { schema: schema.data }),
+        ...opt("freshOf", args.freshOf),
     };
 };
 
@@ -404,10 +417,11 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                       ),
                       sdk().tool(
                           "merge",
-                          "Bring a subagent's finished work into your own checkout when its changes clashed with your edits, " +
-                              "so they were held on its branch (its report or wait's `landing` says so). Writes them with " +
+                          "Bring a subagent's finished work into your own checkout when it was held on its branch: its changes " +
+                              "clashed with your edits, or you are a conversation that judges its subagents' work before taking " +
+                              "it (a home conversation holds all of it), as its report or wait's `landing` says. Writes them with " +
                               "conflict markers where they clash, for you to resolve, as you would merge a branch yourself. " +
-                              "Its work reaches your checkout by itself when nothing clashes.",
+                              "Otherwise its work reaches your checkout by itself.",
                           { child: z.string().min(1).describe("The subagent's id, from spawn.") },
                           async (args) => {
                               const children = deps.children;

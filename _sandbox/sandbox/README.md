@@ -247,7 +247,17 @@ flowchart LR
   conversation's child in every way the daemon keeps (cut from its current work, landing back into it, folded under its
   card) but it stays the person's: it is never woken for its origin and never reports to it, so findings reach the
   origin only when the person sends them. Its opening turn is told the work as exact `git diff <from>...HEAD` ranges per
-  changed repo, and a bare `/review` on Codex reviews those ranges (`agent/context/fresh-session.ts`).
+  changed repo, and a bare `/review` on Codex reviews those ranges (`agent/context/fresh-session.ts`). An agent can
+  open one too, on the work of a subagent it spawned (spawn with `freshOf`): the session still hangs under that work,
+  but it reports to the agent that opened it (`FreshSession.by`, `auth/principal.ts supervisorOf`).
+- Home conversations (2026-10-21): every member has one long-running conversation per sandbox, the one the editor's
+  master view opens (`GET /agents/home`; the id is `homeConversationId(email)`). It is an orchestrator: its subagents'
+  work is held on their branches until it merges what it accepts (`conversations/land/land-target.ts holdsChildren`),
+  it judges that work with review and test sessions, and it lands and commits by itself when its owner may merge,
+  else it asks a maintainer (`turn-landing.ts askToLandHome`). Only its owner speaks into it; only they and the
+  sandbox's owner see it; it never ages out; its family's pushes go to its owner alone (`push/push-audience.ts`). It
+  works by `.intentic/config/home.md`, or the default policy, carried as a note (`conversations/home/`).
+  `GET /agents/attention/mine` is every member's own attention count, which each sandbox's icon wears there.
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.

@@ -9,6 +9,7 @@ import { unstubbed } from "@intentic/testing";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { memberRefusal } from "../auth/role-floor.js";
+import { homeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { createAttentionRoutes } from "./attention.routes.js";
 
 // What the desktop app's status bar reads over the loopback port: the board's Attention cards plus held wakes, and the
@@ -38,6 +39,8 @@ const routesOver = (agents: readonly AgentSummary[], held: readonly AutomationAp
             list: () => [...agents],
         }),
         heldWakes: unstubbed<Services["heldWakes"]>("heldWakes", { list: async () => [...held] }),
+        // Members sign in here: loopback mode (no auth) would make every caller the owner.
+        auth: unstubbed<NonNullable<Services["auth"]>>("auth", {}),
     };
     return { routes: createAttentionRoutes(services), refreshed: () => refreshed };
 };
@@ -78,4 +81,39 @@ test("only the owner reaches it, never a member, a program's token or a panel", 
     expect(memberRefusal({ role: "owner" }, "GET", "/agents/attention")).toBeUndefined();
     const access = routeAccess("GET", agentsContract.attention["~orpc"].meta);
     expect(access).toMatchObject({ auth: "session", floor: "owner", guest: false, agent: false, panel: false, control: "never" });
+});
+
+const asMember = (email: string, role: MemberRole): OrpcContext => ({ ...asOwner, identity: { email, role, methods: ["host"] } });
+
+test("a member's own count is only the conversations they answer for, their subagents through the family's one card", async () => {
+    const mine = { email: "ann@example.com", since: 1 };
+    const { routes } = routesOver([
+        agent("ann-asks", "idle", { owner: mine, attention: { ...NONE, question: true } }),
+        agent("ann-works", "running", { owner: mine }),
+        // Her conversation's children inherit her as owner and fold under its card.
+        agent("ann-child", "idle", { owner: mine, startedBy: "agent:ann-works", attention: { ...NONE, plan: true } }),
+        // Somebody else's waiting work is not hers to count.
+        agent("bob-asks", "idle", { owner: { email: "bob@example.com", since: 1 }, attention: { ...NONE, question: true } }),
+    ]);
+    expect(await call(routes.attentionMine, undefined, { context: asMember("Ann@Example.com", "collaborator") })).toEqual({ needsYou: 2, working: 1 });
+});
+
+test("every member and guest has a home conversation of their own, derived from who they are", async () => {
+    const id = homeConversationId("ann@example.com");
+    const home = agent(id, "idle", { home: true, owner: { email: "ann@example.com", since: 1 } });
+    const { routes } = routesOver([home]);
+    expect(await call(routes.home, undefined, { context: asMember("ann@example.com", "maintainer") })).toEqual({ conversationId: id, agent: home, lands: "itself" });
+    // A collaborator's home may not merge here: what it accepts waits for a maintainer. Bob's is not opened yet.
+    expect(await call(routes.home, undefined, { context: asMember("bob@example.com", "collaborator") })).toEqual({
+        conversationId: homeConversationId("bob@example.com"),
+        lands: "asks",
+    });
+    expect(homeConversationId("ann@example.com")).not.toBe(homeConversationId("bob@example.com"));
+});
+
+test("both are every member's, a guest's too", () => {
+    for (const path of ["/agents/attention/mine", "/agents/home"]) {
+        expect(memberRefusal({ role: "guest" }, "GET", path)).toBeUndefined();
+        expect(memberRefusal({ role: "viewer" }, "GET", path)).toBeUndefined();
+    }
 });

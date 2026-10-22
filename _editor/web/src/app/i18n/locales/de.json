@@ -7007,5 +7007,25 @@
         "noThanks": "Nein, danke",
         "command": "Der Community auf Discord beitreten",
         "dot": "Konto, mit einer Nachricht vom intentic-Team"
+    },
+    "home": {
+        "title": "Start",
+        "sandboxes": "Sandboxes",
+        "work": "Arbeit",
+        "loading": "Deine Startunterhaltung wird geöffnet…",
+        "failed": "Deine Startunterhaltung konnte nicht geöffnet werden.",
+        "sandboxAttention": "{name} · braucht dich: {count}",
+        "stage": {
+            "working": "In Arbeit",
+            "reviewing": "In Prüfung",
+            "testing": "Im Test",
+            "held": "Zurückgehalten",
+            "merged": "Zusammengeführt",
+            "landed": "Übernommen",
+            "waiting": "Wartet"
+        },
+        "offline": "Diese Sandbox ist nicht verbunden.",
+        "retry": "Erneut versuchen",
+        "open": "Alle Sandboxes"
     }
 }

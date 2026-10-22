@@ -102,6 +102,18 @@ test("a device registered before devices named their member keeps the old rule: 
     expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/unnamed", "https://push.example/bob"]);
 });
 
+test("narrowed to one member, only that member's own devices hear it, and only while they are away", async () => {
+    const reached = stubSends();
+    const store = storeOf(device("https://push.example/ada", "ada@example.com"), device("https://push.example/bob", "bob@example.com"), device("https://push.example/unnamed"));
+
+    await expect(sender(store).notifyIfAway(waiting, "Ada@Example.com")).resolves.toEqual({ delivered: 1, failed: 0 });
+    expect(reached.map(({ endpoint }) => endpoint)).toEqual(["https://push.example/ada"]);
+    tab("ada-tab", "ada@example.com");
+    reached.splice(0);
+    await sender(store).notifyIfAway(waiting, "ada@example.com");
+    expect(reached).toEqual([]);
+});
+
 test("a raised need goes out the same way, verbatim, to the devices of whoever is away", async () => {
     const reached = stubSends();
     tab("ada-tab", "ada@example.com");

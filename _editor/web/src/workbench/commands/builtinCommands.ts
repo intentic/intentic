@@ -37,6 +37,7 @@ const switchSlot = (slot: number): CommandDeclaration => ({
 });
 
 export const BUILTIN_COMMANDS = {
+    "view.home": { title: () => t(`home.open`), category: GO_TO, icon: `th-large`, keybinding: `Mod+Alt+H` },
     // The shell (useShellCommands.ts, ShellDesktop.vue).
     "workspace.goToAnything": { title: () => t(`shell.useShellCommands.anything`), category: GO_TO, icon: `search`, keybinding: `Mod+P` },
     // The one command with no family: it is the list the others are read from.

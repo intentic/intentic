@@ -2,7 +2,8 @@ import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import type { Services } from "../../composition.js";
 import { parentOfActor } from "../../auth/principal.js";
-import { recordedTargetOf } from "./land-target.js";
+import { holdsChildren, recordedTargetOf } from "./land-target.js";
+import type { LandStanding } from "./standing.js";
 import { conversationProfile, isIsolated, type PersistedAgent } from "../registry/agents-store.js";
 import { deliverWake } from "../../seams/wake-delivery.js";
 
@@ -86,13 +87,35 @@ export const bookedRerunWords = (rerun: { readonly at?: number | undefined }, ch
 const conflictPaths = (conflicts: readonly LandConflict[]): string[] =>
     conflicts.flatMap(({ repo, paths }) => paths.map(({ path }) => (repo === "root" ? path : `${repo}/${path}`)));
 
+const fileCount = (files: number): string => `${files} file${files === 1 ? "" : "s"}`;
+
+// A parent that judges its children's work first (land-target.ts holdsChildren) holds it off its checkout until it merges
+// it: before the first merge, and again once a later turn left more of it on the branch.
+const heldForParent = (
+    agents: { readonly entry: (id: string) => PersistedAgent | undefined; readonly standingOf?: (id: string) => LandStanding },
+    childId: string,
+    target: ReturnType<typeof recordedTargetOf>,
+    landedHere: boolean,
+    files: number,
+): boolean => target.kind === "parent" && holdsChildren(agents.entry(target.parent)) && files > 0 && (!landedHere || agents.standingOf?.(childId) === "ready");
+
+// What such a parent is told of the work waiting for it, and how its policy judges it before it merges.
+const heldWords = (childId: string, files: number): string =>
+    `Its changes (${fileCount(files)}) wait on its branch for you: nothing of them is in your checkout yet. Judge them first where your ` +
+    `policy asks it (spawn a review or test session on them with \`freshOf: { conversationId: "${childId}", kind: "review" }\` or ` +
+    `\`kind: "test"\`), send it what must be fixed, then bring what you accept in with the merge tool (\`agents merge ${childId}\` ` +
+    "from a shell). Work you leave unmerged never lands.";
+
 /**
  * Where a settled child's work went, as its parent reads it beside the report: in the parent's own checkout, as an
  * in-process subagent's edits are, or held off it by a clash with the parent's edits, with the door that brings it in.
  * Undefined for a child that lands as any conversation does (its parent cannot take its work), and for one whose
  * turn left nothing to bring.
  */
-export const childLandingWords = (agents: { readonly entry: (id: string) => PersistedAgent | undefined }, childId: string): string | undefined => {
+export const childLandingWords = (
+    agents: { readonly entry: (id: string) => PersistedAgent | undefined; readonly standingOf?: (id: string) => LandStanding },
+    childId: string,
+): string | undefined => {
     const child = agents.entry(childId);
     if (child === undefined || !isIsolated(child)) {
         return undefined;
@@ -107,11 +130,14 @@ export const childLandingWords = (agents: { readonly entry: (id: string) => Pers
         return `Its changes clash with the edits in ${where} on ${listed(clashing, PATHS_NAMED)}, so nothing of them was written there: they wait on its branch. Bring them in with conflict markers to resolve yourself (the merge tool, or \`agents merge ${childId}\` from a shell), or leave them. If you bring them in some other way (a patch, a port by hand), say so with the settle tool (\`agents settle ${childId}\`): otherwise the owner is still asked about this land after yours.`;
     }
     const landedHere = target.kind === "parent" ? child.placement.landedInto === target.parent : child.placement.repos.some(({ landedTip }) => landedTip !== undefined);
-    if (!landedHere || (child.landing.diff?.files ?? 0) === 0) {
+    const files = child.landing.diff?.files ?? 0;
+    if (heldForParent(agents, childId, target, landedHere, files)) {
+        return heldWords(childId, files);
+    }
+    if (!landedHere || files === 0) {
         return undefined;
     }
-    const files = child.landing.diff?.files ?? 0;
-    return `Its changes (${files} file${files === 1 ? "" : "s"}) are in ${where} now, uncommitted, as an in-process subagent's edits would be: read them there before you build on them.`;
+    return `Its changes (${fileCount(files)}) are in ${where} now, uncommitted, as an in-process subagent's edits would be: read them there before you build on them.`;
 };
 
 /** A child's work reached the main tree: its parent hears so. */

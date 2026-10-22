@@ -36,3 +36,11 @@ const CHILD_PREFIX = "agent:";
 export const childActor = (parentConversationId: string): string => `${CHILD_PREFIX}${parentConversationId}`;
 export const parentOfActor = (actor: string | undefined): string | undefined =>
     actor !== undefined && actor.startsWith(CHILD_PREFIX) && actor.length > CHILD_PREFIX.length ? actor.slice(CHILD_PREFIX.length) : undefined;
+
+// Who supervises a conversation another one started: the parent that spawned it, or for a review or test an agent opened
+// on its own subagent's work (FreshSession.by), that agent, which the session reports to while it hangs under the work it
+// judges. Undefined for a conversation of its own, and for a session a person opened.
+export const supervisorOf = (identity: {
+    readonly startedBy?: string | undefined;
+    readonly fresh?: { readonly by?: string | undefined } | undefined;
+}): string | undefined => (identity.fresh === undefined ? parentOfActor(identity.startedBy) : identity.fresh.by);

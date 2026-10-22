@@ -36,6 +36,11 @@ export const FreshSessionSchema = z.object({
     of: ConversationIdSchema.describe("The conversation whose work it started from."),
     kind: FreshKindSchema.describe("What it was opened for: a code review, a test pass, or the person's own ask."),
     at: z.number().describe("When it started, in milliseconds. Work its origin changed after this is work it has not seen."),
+    // An orchestrator judging its own subagent's work (spawn with `freshOf`): the session is still the origin's child, cut
+    // from its work and landing back into it, but it reports to the agent that opened it, which supervises it.
+    by: ConversationIdSchema.optional().describe(
+        "The agent that opened it, when an agent did rather than a person: an orchestrator judging the work of a subagent it spawned. Its report goes to that agent. Absent for a person's session.",
+    ),
 });
 export type FreshSession = z.infer<typeof FreshSessionSchema>;
 

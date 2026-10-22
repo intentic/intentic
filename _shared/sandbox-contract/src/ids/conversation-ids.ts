@@ -180,6 +180,17 @@ export const fnvDigest = (text: string): string => {
     return (hash >>> 0).toString(36).padStart(7, "0");
 };
 
+// A PERSON'S HOME CONVERSATION in one sandbox: the one long-running chat the master view opens on it, one per member,
+// so two people with the same sandbox connected never share it. Derived from the email rather than drawn, so every
+// browser and the daemon name the same conversation without asking, and an email never sits in an id other members read
+// on the board. Two independent FNV digests (64 bits between them): a sandbox's members never come near a collision.
+// The daemon is the one that says which id is whose (`GET /agents/home`); a client computing it is only a shortcut.
+export const HOME_PREFIX = "home-";
+const homeKey = (email: string): string => email.trim().toLowerCase();
+export const homeConversationId = (email: string): string => `${HOME_PREFIX}${fnvDigest(homeKey(email))}${fnvDigest(`home:${homeKey(email)}`)}`;
+// Whether an id is shaped like somebody's home conversation; whose it is takes the email (`homeConversationId`).
+export const isHomeConversationId = (id: string): boolean => id.startsWith(HOME_PREFIX);
+
 // A failing main-line check that no conversation still holding the work could take: keyed by the project and the moment
 // it began failing, so every attempt at one streak shares a base and a later streak in the same project starts over.
 // Seconds in base36 keep it short; the workspace root is spelled `workspace`, since its project folder is empty.

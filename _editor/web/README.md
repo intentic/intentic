@@ -520,6 +520,13 @@ pnpm --filter @intentic/web test
 pnpm --filter @intentic/web typecheck
 ```
 
+## Master view
+
+`/home` keeps the shared shell and shows one home conversation for the selected sandbox. The desktop rail lists
+connected sandboxes with personal attention counts; on phones the list opens each sandbox’s chat at `/home/:sandbox`.
+Single clicks switch sandboxes, double clicks and Enter enter the full sandbox. `features/home/` draws the surface;
+`models/home/` holds attention polling and the pure work ledger projection.
+
 ## Local shell: Repair
 
 `/repair` (`local/repair/LocalRepair.vue`) is the Repair view in the desktop app's local shell (no rail tile). Copy: `local.repair.*` in `src/app/i18n/locales/en.json`.

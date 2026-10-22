@@ -36,9 +36,10 @@ export const archivable = (agent: AgentSummary): boolean =>
 
 // Aged out per the retention setting: the unattended sweep's rule, narrower than the board's Clear, which names its ids.
 // A conversation somebody's composer still holds an unsent message for is waiting on them, not finished, however long
-// it has sat idle; a person pressing Clear decides for themselves.
+// it has sat idle; a person pressing Clear decides for themselves. A home conversation is never finished: it is the one
+// chat its owner keeps coming back to (conversations/home/home-conversation.ts).
 export const archivableByAge = (agent: AgentSummary, now: number, retentionMs: number): boolean =>
-    retentionMs > 0 && archivable(agent) && agent.unsentAt === undefined && now - agent.updatedAt >= retentionMs;
+    retentionMs > 0 && agent.home !== true && archivable(agent) && agent.unsentAt === undefined && now - agent.updatedAt >= retentionMs;
 
 export interface AgentArchiveDeps {
     readonly agents: AgentsRegistry;

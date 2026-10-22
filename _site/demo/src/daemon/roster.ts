@@ -1,4 +1,7 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
+import { homeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { fleetAttention } from "@intentic/sandbox-contract/models/agent-lanes";
+import { DEMO_USER } from "../platform";
 import type { PresenceUser, SystemEvent } from "@intentic/sandbox-contract/events/system-events";
 import { refuse } from "@intentic/contract-serve";
 import { automationApprovals } from "../fixture/automations";
@@ -78,4 +81,12 @@ export const TEAMMATE: PresenceUser = {
     role: `collaborator`,
     idle: true,
     view: `agents`,
+};
+
+// The master view's two reads (features/home/): the demo person's home conversation, which no fixture has opened yet,
+// and their own share of the board's Attention lane. Most fixture cards name no owner because the demo person started
+// them, so those count as theirs; a card another member answers for does not.
+export const homeDoors = {
+    home: () => ({ conversationId: homeConversationId(DEMO_USER.email), lands: `itself` as const }),
+    attentionMine: () => fleetAttention(boardAgents().filter((agent) => agent.owner === undefined || agent.owner.email === DEMO_USER.email), []),
 };

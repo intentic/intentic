@@ -20,6 +20,8 @@ export interface Provenance {
     readonly owner?: { readonly email: string } | undefined;
     // The fence the conversation was born with, as area ids. Absent means it was started by someone unfenced.
     readonly areas?: readonly string[] | undefined;
+    // Its owner's home conversation, which only that owner and the sandbox's owner see.
+    readonly home?: true | undefined;
 }
 
 // A registry entry's provenance, read off its latched identity and whoever answers for it now.
@@ -27,11 +29,13 @@ export const provenanceOf = ({ identity, social }: Pick<PersistedAgent, "identit
     startedBy: identity.startedBy,
     owner: social.owner,
     areas: identity.areas,
+    home: identity.home,
 });
 
 const sameEmail = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 
-const theirs = (caller: Caller, agent: Provenance): boolean =>
+// Whether the caller answers for or started it: a guest's whole reach, and what a member's own counts read (attention.routes.ts).
+export const theirs = (caller: Caller, agent: Provenance): boolean =>
     (agent.owner !== undefined && sameEmail(agent.owner.email, caller.email)) ||
     (agent.startedBy !== undefined && sameEmail(agent.startedBy, caller.email));
 
@@ -54,12 +58,13 @@ export const areasCover = (holder: readonly string[] | undefined, work: readonly
 const withinFence = (caller: Caller, agent: Provenance): boolean => areasCover(caller.areas, agent.areas);
 
 // Whether the caller may see this conversation. Undefined identity is the owner's own tool (a panel, loopback), which
-// sees everything.
+// sees everything. A home conversation is its owner's own chat with the sandbox: the sandbox's owner may read it, as they
+// may read everything here, and no other member is shown it (its subagents' work stays on the board like anyone's).
 export const visibleTo = (caller: Caller | undefined, agent: Provenance): boolean => {
     if (caller === undefined) {
         return true;
     }
-    if (caller.role === "guest" && !theirs(caller, agent)) {
+    if ((caller.role === "guest" || agent.home === true) && caller.role !== "owner" && !theirs(caller, agent)) {
         return false;
     }
     return withinFence(caller, agent);

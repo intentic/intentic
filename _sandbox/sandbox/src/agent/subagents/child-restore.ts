@@ -1,6 +1,6 @@
-import { parentOfActor } from "../../auth/principal.js";
 import type { Services } from "../../composition.js";
 import { liveRunOf } from "../../conversations/actor/conversation-holdings.js";
+import { supervisorOf } from "../../auth/principal.js";
 import { bookedRerunWords, sayToParent } from "../../conversations/land/child-lands.js";
 import { opt } from "../../opt.js";
 import { defineInFlight } from "../../seams/restart/in-flight.js";
@@ -77,7 +77,7 @@ const restoreOne = (services: Services, entry: SpawnedChild & { readonly id: str
     const fate = restoredFate(
         entry,
         {
-            child: child === undefined ? undefined : { parent: parentOfActor(child.identity.startedBy) },
+            child: child === undefined ? undefined : { parent: supervisorOf(child.identity) },
             parent: parent === undefined ? undefined : { archived: parent.archivedAt !== undefined },
         },
         now,

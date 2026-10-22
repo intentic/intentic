@@ -12,6 +12,8 @@ import { adoptChildTurn, childKillNote, childMovingOn } from "../agent/subagents
 import { createProjectDelivery, type ProjectDeliveryDeps } from "../conversations/land/project-delivery.js";
 import { landHeldForWake } from "../conversations/land/wake-held-land.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
+import { childActor, supervisorOf } from "../auth/principal.js";
+import { opt } from "../opt.js";
 import { passwordWakeOf } from "../needs/password-wake.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
@@ -34,9 +36,15 @@ const childReportDeps = (services: BootPhase["services"], logger: BootPhase["log
     doors: { turns: services.turns },
     logger,
     conversations: services.conversations,
+    // A review or test an agent opened on its subagent's work reports to that agent, its supervisor (agents-store.ts
+    // supervisorOf); one a person opened reports to nobody.
     entryOf: (conversationId) => {
         const entry = services.agents.entry(conversationId);
-        return entry === undefined ? undefined : { startedBy: entry.identity.startedBy, title: entry.social.title?.text, fresh: entry.identity.fresh !== undefined };
+        if (entry === undefined) {
+            return undefined;
+        }
+        const supervisor = supervisorOf(entry.identity);
+        return { ...opt("startedBy", supervisor === undefined ? undefined : childActor(supervisor)), title: entry.social.title?.text, fresh: entry.identity.fresh !== undefined && entry.identity.fresh.by === undefined };
     },
     profileOf: (conversationId) => {
         const entry = services.agents.entry(conversationId);

@@ -19,6 +19,12 @@ export type LandTarget =
 
 const OWN: LandTarget = { kind: "main", ruled: true };
 
+// A parent that judges its children's work before it takes any: a home conversation (conversations/home/). Their work
+// waits on their branches until it merges what it accepts (agent/subagents/child-held.ts mergeChild), instead of entering
+// its checkout as each of their turns ends. Read by the land's decision (turn-landing.ts decideLanding) and the words a
+// child's report carries (child-lands.ts childLandingWords).
+export const holdsChildren = (parent: Pick<PersistedAgent, "identity"> | undefined): boolean => parent?.identity.home === true;
+
 export interface LandTargetDeps {
     readonly agents: { readonly entry: (id: string) => PersistedAgent | undefined };
     readonly agentWorktrees: Pick<AgentWorktrees, "attached">;

@@ -293,6 +293,24 @@ describe("what a conversation's turn begins as", () => {
     });
 });
 
+describe("a fresh session's and a home's opening", () => {
+    const fresh = { conversationId: "sub-a", kind: "review" } as const;
+
+    test("a review an agent opens on its subagent's work hangs under that work and names the agent it reports to", () => {
+        const opened = conversationIdentity({ prompt: "review it", freshOf: fresh, actor: "agent:home-1" }, "sub-r", { isolated: true, runner: undefined }, 7);
+        expect({ startedBy: opened.startedBy, fresh: opened.fresh }).toStrictEqual({ startedBy: "agent:sub-a", fresh: { of: "sub-a", kind: "review", at: 7, by: "home-1" } });
+    });
+
+    test("a person's fresh session names nobody it reports to", () => {
+        const opened = conversationIdentity({ prompt: "review it", freshOf: fresh, actor: "ada@example.com" }, "f-1", { isolated: true, runner: undefined }, 7);
+        expect(opened.fresh).toStrictEqual({ of: "sub-a", kind: "review", at: 7 });
+    });
+
+    test("a home's opening latches it", () => {
+        expect(conversationIdentity({ prompt: "hi", home: true }, "home-1", { isolated: true, runner: undefined }).home).toBe(true);
+    });
+});
+
 describe("a turn its conversation would not take", () => {
     // Busy is a wait a client knows by its code; archived has no code, since no wait lifts it.
     test("says why and ends, busy by its code and archived in words", () => {

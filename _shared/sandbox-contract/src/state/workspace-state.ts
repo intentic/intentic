@@ -100,6 +100,10 @@ const STATE_FILES = [
     // may do unasked, so a fresh sandbox should start already governed and changes should show in review. Absent falls
     // back to `DEFAULT_SAFETY_POLICY`, not unconfigured.
     { path: ".intentic/config/safety.md", invalidates: ["safety-policy"], portability: "carry", versioned: true },
+    // What every home conversation works by (conversations/home/home-policy.ts): when it reviews, tests, merges and asks a
+    // person. `carry`+`versioned` like the safety policy, since it governs what an orchestrator lands unasked. Absent falls
+    // back to `DEFAULT_HOME_POLICY`.
+    { path: ".intentic/config/home.md", invalidates: [], portability: "carry", versioned: true },
     // Verdicts the policy above produced, newest first. `derived`/`local`: evidence about this machine, self-trimming,
     // not carried. Own query key, separate from the policy's, since a verdict must not invalidate the document someone
     // is editing.
@@ -305,12 +309,7 @@ const STATE_FILES = [
     // Unlike the settings file, this switch is observed by the Extensions tab's query, so a flip elsewhere shows up
     // live. Toggling doesn't itself rerun the host, that happens via the loader's reconcile, triggered by the tab's own
     // toggle.
-    {
-        path: ".intentic/config/extension-enablement.json",
-        invalidates: ["extensions"],
-        portability: "carry",
-        versioned: true,
-    },
+    { path: ".intentic/config/extension-enablement.json", invalidates: ["extensions"], portability: "carry", versioned: true },
     // Workspace extensions: one directory per extension, written directly by the agent's file tools and live
     // immediately (no clone, no install step). `authored`, unlike `.intentic/extensions/` below which holds clones.
     // `versioned`: every other load path is already reviewable (a git-installed extension's sha, a baked one's image);

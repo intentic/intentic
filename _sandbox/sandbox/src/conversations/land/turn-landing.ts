@@ -4,7 +4,7 @@ import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automati
 import { landAgent, type LandOutcome } from "./land.js";
 import { afterLand } from "./rederive.js";
 import { landFailureOf } from "./land-failure.js";
-import { intoOf, type LandTarget, landTargetOf, type Upstream, upstreamOf, underLeases } from "./land-target.js";
+import { holdsChildren, intoOf, type LandTarget, landTargetOf, type Upstream, upstreamOf, underLeases } from "./land-target.js";
 import { landingPaths } from "./landing-paths.js";
 import { noteLandHeldForWake } from "./wake-held.js";
 import { versionCommitsSettled, versionProjectFolders } from "./version-landed.js";
@@ -183,6 +183,7 @@ async function* recordLand(
     const id = turn.conversationId;
     await deps.agents.recordLanded(id, landed);
     books.outcome = landedOutcomeOf(landed);
+    await askToLandHome(deps, finished, books.outcome);
     if (landed.into !== undefined) {
         yield landedFrame(landed, undefined);
         await settleParentBooks(deps, landed);
@@ -210,6 +211,16 @@ async function* recordLand(
     });
 }
 
+// A home conversation lands what it accepted by itself, when its owner may merge here (home-conversation.ts). Held instead
+// (its owner is a collaborator, or a landing rule kept it), it asks a maintainer in its owner's name, as its owner would
+// press Request, since nobody reviews its work by hand: the ask is what reaches a maintainer's board.
+export const askToLandHome = async (deps: Pick<LandingDeps, "agents">, finished: IsolatedAgent, outcome: LandedOutcome): Promise<void> => {
+    const owner = finished.social.owner;
+    if (outcome === "ready" && finished.identity.home === true && owner !== undefined) {
+        await deps.agents.requestLand(finished.id, { email: owner.email, ...opt("name", owner.name) }, Date.now());
+    }
+};
+
 // A parent's card reads its branch: what a child just put into its checkout is committed there and measured, as an ended
 // turn's own work is, so a parent at rest reads what it now holds. A parent whose own turn is live does that at its land.
 export const settleParentBooks = async (
@@ -223,6 +234,9 @@ export const settleParentBooks = async (
 
 // What lands with no rule to ask: a child's work into its parent, as the parent's in-process subagents' edits go there.
 const UNRULED: LandingDecision = { mode: "check", writes: [] };
+// A child of a parent that judges its work first (land-target.ts holdsChildren): measured into that checkout, written
+// nowhere, so it waits on its branch for the parent's merge.
+const HELD_FOR_PARENT: LandingDecision = { mode: "measure", writes: [] };
 
 /**
  * Whether a finished turn's work lands by itself, going where `target` says: what the sandbox's landing rules say of work
@@ -231,12 +245,15 @@ const UNRULED: LandingDecision = { mode: "check", writes: [] };
  * (wake-held-land.ts) both make.
  */
 export const decideLanding = async (
-    deps: Pick<Services, "sandboxSettings" | "agentWorktrees" | "logger">,
+    deps: Pick<Services, "sandboxSettings" | "agentWorktrees" | "logger"> & { readonly agents: Pick<Services["agents"], "entry"> },
     target: LandTarget,
     finished: IsolatedAgent,
     autoLand: boolean | undefined,
     span: LandBooks["span"],
 ): Promise<LandingDecision> => {
+    if (target.kind === "parent" && holdsChildren(deps.agents.entry(target.parent))) {
+        return HELD_FOR_PARENT;
+    }
     if (target.kind !== "main" || !target.ruled) {
         return UNRULED;
     }

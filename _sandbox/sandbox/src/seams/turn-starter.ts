@@ -54,6 +54,9 @@ export type TurnInput = AgentTurn & {
     // a maintainer's to whether finished work lands by itself (`conversationAutoLand`). Read only by the turn that opens
     // the conversation, so no later turn overwrites an answer its owner gave since.
     readonly postures?: { readonly limit?: LimitPolicy; readonly stopped?: RetryPolicy; readonly autoLand?: boolean };
+    // Set by POST /agent alone, once it verified the id is the speaker's own home conversation (agent.routes.ts homeTurn);
+    // read only by the turn that opens the conversation.
+    readonly home?: true;
 };
 
 // A turn as the engine takes it: provider and loop named, by the port it came in through (routeTurn), so

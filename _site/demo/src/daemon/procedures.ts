@@ -71,7 +71,7 @@ import { agentFlow, sandboxFlow } from "./deviceFlows";
 import { events } from "./events";
 import { demoAreas, demoPersonas, removeArea, saveArea, savePersona } from "./personas";
 import { queueDoors, sayOrBook, switchAccount } from "./queue";
-import { agentAnswer, amendAgent, boardAgents, broadcastRoster, heldApprovals, patchAgent, roster, STARTED_AT } from "./roster";
+import { agentAnswer, amendAgent, boardAgents, broadcastRoster, heldApprovals, homeDoors, patchAgent, roster, STARTED_AT } from "./roster";
 import { DEMO_REPO_CHECKS, DEMO_RUN_TARGETS, DEMO_SAFETY_POLICY, DEMO_SAVINGS, DEMO_SETTINGS, DEMO_SYSTEM_PROMPT } from "./settings";
 import { attach, reply, stopTurn } from "./turns";
 
@@ -204,6 +204,7 @@ export const procedures = {
         rename: ({ id, title }) => agentAnswer(patchAgent(id, { title })),
         seen: ({ id }) => agentAnswer(patchAgent(id, { seenAt: Date.now() })),
         ...draftDoors,
+        ...homeDoors,
         // As the daemon does for a client keeping its words to itself: records since when a composer held them.
         unsent: ({ id, at }) => agentAnswer(amendAgent(id, ({ unsentAt: _cleared, ...card }) => (at === null ? card : { ...card, unsentAt: at }))),
         react: reactToAgent,
@@ -239,8 +240,7 @@ export const procedures = {
     workspace: {
         tree: () => workspaceTree(),
         children: ({ path }) => workspaceChildren(path),
-        // A missing path answers "nothing there" in a 200 body, not a 404; several surfaces read a file just to
-        // check existence.
+        // A missing path answers "nothing there" in a 200 body, not a 404; several surfaces read a file just to check existence.
         file: ({ path }) => readFile(path),
         dimensions: ({ paths }) => pictureDimensions(paths),
         resolve: ({ path }) => resolveReference(path),

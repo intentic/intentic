@@ -6961,5 +6961,25 @@
         "noThanks": "Non merci",
         "command": "Rejoindre la communauté sur Discord",
         "dot": "Compte, avec un mot de l'équipe intentic"
+    },
+    "home": {
+        "title": "Accueil",
+        "sandboxes": "Sandboxes",
+        "work": "Travail",
+        "loading": "Ouverture de votre conversation d’accueil…",
+        "failed": "Impossible d’ouvrir votre conversation d’accueil.",
+        "sandboxAttention": "{name} · a besoin de vous : {count}",
+        "stage": {
+            "working": "En cours",
+            "reviewing": "En revue",
+            "testing": "En test",
+            "held": "En attente d’intégration",
+            "merged": "Fusionné",
+            "landed": "Intégré",
+            "waiting": "En attente"
+        },
+        "offline": "Ce sandbox n’est pas connecté.",
+        "retry": "Réessayer",
+        "open": "Tous les sandboxes"
     }
 }

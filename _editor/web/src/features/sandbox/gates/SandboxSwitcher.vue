@@ -518,6 +518,18 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
                     </span>
                     <span class="min-w-0 flex-1">{{ t(`sandbox.words.addSandbox`) }}</span>
                 </component>
+                <!-- The way out to the master view (features/home/): every sandbox at once, one chat with each. Kept quiet, a
+                     muted row under the list it zooms out of, rather than a tile of its own on the rail. -->
+                <RouterLink
+                    v-if="!local"
+                    to="/home"
+                    data-menu-row
+                    class="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-xs text-muted transition-colors hover:bg-content/5 hover:text-content"
+                    @click="dismiss"
+                >
+                    <span class="flex h-7 w-7 shrink-0 items-center justify-center"><Icon name="th-large" class="text-sm" /></span>
+                    <span class="min-w-0 flex-1">{{ t(`home.open`) }}</span>
+                </RouterLink>
             </template>
 
             <!-- The sandbox management hub has no rail tile; this chip is its home. It is the workspace's, so a local

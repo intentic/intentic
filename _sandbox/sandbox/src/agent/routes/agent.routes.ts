@@ -26,6 +26,7 @@ import { applyReply } from "../run/turn/turn-interactions.js";
 import { carryOnTurn } from "../run/turn/turn-resume.js";
 import { freshRefusal } from "../context/fresh-session.js";
 import { answeredAfterDraft } from "../../conversations/drafts/composer-drafts.js";
+import { type HomeOpening, homeOpening } from "../../conversations/home/home-conversation.js";
 
 // What the audit trail keeps of an answer to a card: which card, what kind, and for a permission the decision itself.
 const replyNote = (input: AgentReply): AuditNote => ({
@@ -45,6 +46,21 @@ const refuseFresh = (services: Services, context: OrpcContext, conversationId: s
     if (refused !== undefined) {
         throw new ORPCError("BAD_REQUEST", { message: refused });
     }
+};
+
+// What a conversation's opening turn latches from this door, refused first where it may not open: a fresh session on work
+// the caller may not see, somebody else's home conversation (home-conversation.ts). The opening answer to whether its work
+// lands by itself is a maintainer's alone, as `agents.autoLand` is, except that a home's is the route's own.
+const openingOf = (
+    services: Services,
+    context: OrpcContext,
+    conversationId: string,
+    input: { readonly freshOf?: FreshOf | undefined; readonly isolated?: boolean | undefined; readonly conversationAutoLand?: boolean | undefined },
+): HomeOpening => {
+    refuseFresh(services, context, conversationId, input.freshOf);
+    const home = homeOpening(services, context, { conversationId, isolated: input.isolated });
+    const autoLand = home.conversationAutoLand ?? (operatorHere(services, context) ? input.conversationAutoLand : undefined);
+    return { ...opt("home", home.home), ...opt("conversationAutoLand", autoLand) };
 };
 
 export const createAgentRoutes = (services: Services) => {
@@ -89,7 +105,7 @@ export const createAgentRoutes = (services: Services) => {
             // checked before anything is started. An unfenced caller pays no read for this.
             await refuseUnlessReachable(services, context.identity, input.actsAs);
             own(context, conversationId);
-            refuseFresh(services, context, conversationId, input.freshOf);
+            const opening = openingOf(services, context, conversationId, input);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const speaker = speakerOf(context.identity, context.principal);
             // A person's words reopen an archived conversation, here at their door; the engine refuses every archived one.
@@ -98,8 +114,7 @@ export const createAgentRoutes = (services: Services) => {
             // A client composes only the land-conflict errand (the editor's own words); every other errand is the sandbox's,
             // so a request naming one would pass its sender's words off as the sandbox's. The opening answer to whether
             // work lands by itself is a maintainer's alone, as `agents.autoLand` is: a collaborator's work waits for a land.
-            const { errand, continues, conversationAutoLand, draft, ...asked } = input;
-            const opensLanding = operatorHere(services, context) ? conversationAutoLand : undefined;
+            const { errand, continues, conversationAutoLand: _opening, draft, ...asked } = input;
             // A Continue carries no words, so it skips the queue, which holds words: it starts the turn or is refused.
             if (continues === true) {
                 const started = await carryOnTurn(services, {
@@ -117,7 +132,7 @@ export const createAgentRoutes = (services: Services) => {
                 voice: speaker === undefined ? "person" : speakerVoice(speaker),
                 turn: {
                     ...asked,
-                    ...opt("conversationAutoLand", opensLanding),
+                    ...opening,
                     ...opt("errand", errand === "land-conflict" ? errand : undefined),
                     conversationId,
                     ...spokenBy(speaker),

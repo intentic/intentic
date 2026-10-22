@@ -5,7 +5,15 @@ import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break"
 import { canonicalHarness, loopLabel, loopOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { opt } from "../../opt.js";
-import type { ChildParent, ChildRecord, ChildRehome, ChildSpawnSpec, ChildTurnTally, PendingChildCard } from "./children.js";
+import type { ChildParent, ChildRecord, ChildSpawnSpec, ChildTurnTally, PendingChildCard } from "./children.js";
+
+/** Another provider and model for a child's next turn, in the same worktree (sendToChild, a spawn's fallbacks). */
+export interface ChildRehome {
+    readonly provider: AgentProvider;
+    readonly model: string;
+    readonly harness?: AgentHarness;
+    readonly effort?: string;
+}
 
 // What a spawned child runs as, read off its spec alone: its routing and profile, a move's spec, and which of its
 // endings move it on or count against its provider. children.ts holds the records these are asked of.
@@ -154,10 +162,12 @@ export const taskLine = (spec: Pick<ChildSpawnSpec, "prompt" | "description">): 
 // that stopped short (a vendor loop's hard cap reached mid-work, a crashed harness) is carried on the same way, on the
 // stop ladder's bounded tries: two Gemini children that had edited a dozen files each ended as plain failures at the
 // 30-minute cap, and their work was rescued by hand (2026-10-17).
-export const childOpening = (spec: ChildSpawnSpec, sandboxLimit: LimitPolicy): Pick<TurnInput, "title" | "titleSource" | "postures"> => ({
+export const childOpening = (spec: ChildSpawnSpec, sandboxLimit: LimitPolicy): Pick<TurnInput, "title" | "titleSource" | "postures" | "freshOf"> => ({
     title: taskLine(spec).slice(0, 80),
     ...opt("titleSource", spec.description === undefined ? undefined : ("model" as const)),
     postures: { ...opt("limit", sandboxLimit === "move" ? undefined : ("move" as const)), stopped: "retry" },
+    // A review or test of a subagent's work opens on that work (agent/context/fresh-session.ts), reporting to this parent.
+    ...opt("freshOf", spec.freshOf),
 });
 
 // A child's spec on another provider and model: its task, description and placement kept, every knob of the old model

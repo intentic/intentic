@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHomeCommand } from "./commands/useHomeCommand";
 import { useGettingStarted } from "../features/gettingStarted/useGettingStarted";
 import { type PageBack, providePageBack, useDevice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
@@ -21,10 +22,12 @@ import { embedded } from "../app/environments/nativeApp";
 // edge swipe there, only the page.
 
 const t = useT();
+useHomeCommand();
 const { keyboardOpen } = useDevice();
 
 const route = useRoute();
 const router = useRouter();
+const onHome = computed(() => route.name === `home`);
 const inApp = embedded();
 // The board itself, where the rail is drawn. Not its drill-downs: a conversation keeps the whole width of the screen.
 const onBoard = computed(() => route.path === PHONE_HOME);
@@ -95,7 +98,8 @@ useKeybindings();
                 <!-- Outside the gate, as the desktop's rail is: a sandbox that stopped answering still has a way to another. -->
                 <MobileRail v-if="onBoard && !inApp" />
                 <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
-                    <SandboxGate>
+                    <RouterView v-if="onHome" />
+                    <SandboxGate v-else>
                         <div class="min-h-0 flex-1 overflow-auto" :class="{ 'wallpaper-surface': wallpapered }" style="overscroll-behavior: contain">
                             <RouterView />
                         </div>

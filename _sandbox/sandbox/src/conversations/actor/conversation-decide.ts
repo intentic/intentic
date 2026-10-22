@@ -69,15 +69,15 @@ export interface BeginTurn {
     readonly postures?: { readonly limit?: LimitPolicy; readonly autoLand?: boolean };
     readonly origin?: AgentOrigin;
     readonly startIn?: string;
-    // Who asked for this turn, as the daemon verified it.
-    readonly startedBy?: string;
+    readonly startedBy?: string; // Who asked for this turn, as the daemon verified it.
     // The member the conversation belongs to when this turn opens it.
     readonly owner?: Pick<SessionOwner, "email" | "name">;
-    // The fence that member holds, as area ids.
-    readonly areas?: readonly string[];
+    readonly areas?: readonly string[]; // The fence that member holds, as area ids.
     readonly forkedFrom?: ForkedFrom;
-    // A fresh session's origin and kind, named by its opening turn; `startedBy` then names that origin as its parent.
+    // A fresh session's origin and kind (`startedBy` then names that origin as its parent), and whether this opens its
+    // owner's home conversation, which only the route that verified whose it is says (agent.routes.ts homeTurn).
     readonly fresh?: FreshSession;
+    readonly home?: true;
 }
 
 // Why a turn does not claim the conversation: a turn or a rewind holds it, or it is archived and no person sent this one.

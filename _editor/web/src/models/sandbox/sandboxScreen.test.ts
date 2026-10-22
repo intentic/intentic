@@ -141,3 +141,21 @@ describe(`what counts as a sandbox's screen`, () => {
         expect(replace).toHaveBeenLastCalledWith(`/agents`);
     });
 });
+
+
+describe(`the master view spans sandboxes`, () => {
+    it(`keeps switching on the master view instead of restoring a sandbox screen`, async () => {
+        navigate(shellRoute(`/home`));
+        await switchTo(`sb2`);
+        expect(replace).not.toHaveBeenCalled();
+    });
+
+    it(`does not replace the sandbox's remembered screen with the master view`, async () => {
+        navigate(shellRoute(`/agents`));
+        navigate(shellRoute(`/home/sb1`));
+        await switchTo(`sb2`);
+        navigate(shellRoute(`/workspace`));
+        await switchTo(`sb1`);
+        expect(replace).toHaveBeenLastCalledWith(`/agents`);
+    });
+});

@@ -1,5 +1,8 @@
 import {
     CI_FIX_PREFIX,
+    CONVERSATION_ID,
+    homeConversationId,
+    isHomeConversationId,
     ciFixConversationId,
     fixAttemptId,
     fixAttemptOf,
@@ -135,4 +138,16 @@ test("an attempt id passes the guard and fits, even for the widest run id a forg
         expect(ConversationIdSchema.safeParse(id).success).toBe(true);
         expect(id.length).toBeLessThanOrEqual(64);
     }
+});
+
+// One home conversation per member, derived from who they are: the same in every browser and in the daemon, whatever the
+// email's case, a valid conversation id, and never the email itself.
+test("a home conversation id is its member's alone, stable and folded, and says nothing of the address", () => {
+    const ada = homeConversationId("ada@example.com");
+    expect(homeConversationId(" Ada@Example.COM ")).toBe(ada);
+    expect(homeConversationId("bob@example.com")).not.toBe(ada);
+    expect(CONVERSATION_ID.test(ada)).toBe(true);
+    expect(isHomeConversationId(ada)).toBe(true);
+    expect(isHomeConversationId(newConversationId())).toBe(false);
+    expect(ada).not.toContain("ada");
 });

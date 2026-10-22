@@ -88,6 +88,27 @@ test("lands a child's own work into its parent's checkout, uncommitted, and noth
     expect(landed.repos[0]?.landedTip).toBe(await sh(child, "rev-parse", "HEAD"));
 });
 
+// A home conversation judges its children's work before it takes any (land-target.ts holdsChildren): its children's
+// lands measure into its checkout and write nothing, so the work waits on their branches until the home merges it.
+test("a child held for its parent writes nothing into the parent's checkout until the parent merges it", async () => {
+    const { worktrees, parent, child, cut } = await family();
+    await writeFile(join(child, "checkout.ts"), "export const checkout = true;\n");
+
+    const held = await landAgent(worktrees, childEntry([{ repo: "root", base: cut }]), "measure", "outstanding", "p1");
+
+    expect({ landed: held.landed, held: held.held, changed: held.changed, into: held.into, files: held.diff.files }).toEqual({
+        landed: false,
+        held: true,
+        changed: true,
+        into: "p1",
+        files: 1,
+    });
+    expect(existsSync(join(parent, "checkout.ts"))).toBe(false);
+    const merged = await landAgent(worktrees, childEntry(held.repos), "merge", "outstanding", "p1");
+    expect(merged.landed).toBe(true);
+    expect(await readFile(join(parent, "checkout.ts"), "utf8")).toBe("export const checkout = true;\n");
+});
+
 // Measured from the parent commit it was cut from, never from the main line: the parent's work under it is the
 // parent's, so even a child landing into the main tree (its parent gone) carries its own change alone.
 test("measures a child's delta from the parent commit it stands on, not from the main line", async () => {

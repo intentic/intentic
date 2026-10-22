@@ -1,3 +1,4 @@
+import { askedOf } from "./push-audience.js";
 import type { AskQuestion } from "@intentic/sandbox-contract/events/requests";
 import type { ParkKind } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import { planParts } from "@intentic/sandbox-contract/text/title";
@@ -79,7 +80,9 @@ export const notifyAwaiting = async (
     const card = parked.run === undefined ? undefined : awaitingCard(parked.run.rows, parked.kind);
     const title = services.agents.entry(parked.conversationId)?.social.title?.text;
     const notification = turnAwaiting(parked.conversationId, parked.kind, card, title);
-    const delivery = await (parked.insist === true ? services.pushSender.notify(notification) : services.pushSender.notifyIfAway(notification));
+    // In a home's family, its owner's devices alone (push-audience.ts).
+    const to = askedOf((id) => services.agents.entry(id), parked.conversationId);
+    const delivery = await (parked.insist === true ? services.pushSender.notify(notification) : services.pushSender.notifyIfAway(notification, to));
     // Whether the owner's devices were told is half of "did the card reach anyone"; the other half is the card's own
     // line (parked-cards.ts).
     services.logger?.info(

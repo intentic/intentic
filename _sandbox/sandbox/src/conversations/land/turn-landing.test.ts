@@ -11,9 +11,12 @@ import {
     landingDecision,
     type LandingDeps,
     type LandingHooks,
+    askToLandHome,
+    decideLanding,
     landTurn,
     settleLandBooks,
 } from "./turn-landing.js";
+import { conversationEntry, isolatedAgent } from "../registry/agents-store.testing.js";
 import { unlinkedMessage } from "../worktrees/checkout-link.js";
 import { noteLandHeldForWake, takeLandHeldForWake } from "./wake-held.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -182,5 +185,34 @@ describe("a land that breaks", () => {
         const agentWorktrees = unstubbed<AgentWorktrees>("worktrees", { relink: async () => ["root"] });
         await settleLandBooks({ agents, conversations, perf, logger, agentWorktrees }, "c");
         expect(agents.get("c")?.landFailure).toEqual({ reason: unlinkedMessage(["root"]), code: "unlinked", at: expect.any(Number) });
+    });
+});
+
+// A home conversation judges its children's work before it takes any (land-target.ts holdsChildren), and asks a
+// maintainer for its own land where it may not land by itself.
+describe("a home's family", () => {
+    const home = conversationEntry({ id: "home-1", identity: { home: true } });
+    const decideDeps = {
+        sandboxSettings: unstubbed<LandingDeps["sandboxSettings"]>("sandboxSettings", {}),
+        agentWorktrees: unstubbed<LandingDeps["agentWorktrees"]>("agentWorktrees", {}),
+        logger: unstubbed<LandingDeps["logger"]>("logger", {}),
+        agents: { entry: (id: string) => (id === "home-1" ? home : conversationEntry({ id })) },
+    };
+    const child = isolatedAgent([{ repo: "root", base: "cut" }], { id: "sub-a" });
+
+    test("holds a child's work off a home's checkout, asking no rule; any other parent takes it", async () => {
+        expect(await decideLanding(decideDeps, { kind: "parent", parent: "home-1" }, child, undefined, [])).toEqual({ mode: "measure", writes: [] });
+        expect(await decideLanding(decideDeps, { kind: "parent", parent: "other" }, child, undefined, [])).toEqual({ mode: "check", writes: [] });
+    });
+
+    test("a home whose work was held asks a maintainer in its owner's name; nothing else does", async () => {
+        const asked: unknown[] = [];
+        const deps = { agents: unstubbed<LandingDeps["agents"]>("agents", { requestLand: async (...args: unknown[]) => void asked.push(args.slice(0, 2)) }) };
+        const owner = { email: "ada@example.com", name: "Ada", since: 1 };
+        const held = isolatedAgent([], { id: "home-1", identity: { home: true }, social: { owner, reactions: [] } });
+        await askToLandHome(deps, held, "ready");
+        await askToLandHome(deps, held, "landed");
+        await askToLandHome(deps, { ...held, identity: {} }, "ready");
+        expect(asked).toEqual([["home-1", { email: "ada@example.com", name: "Ada" }]]);
     });
 });

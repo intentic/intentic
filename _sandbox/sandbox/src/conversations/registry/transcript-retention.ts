@@ -18,7 +18,7 @@ import { isIsolated, type PersistedAgent } from "./agents-store.js";
 // has landed (ready, conflict), and a parent while any of its children is kept. Those go on the first sweep after they
 // settle and age.
 
-// Settled, with nothing left to land or answer.
+// Settled, with nothing left to land or answer. A home conversation never ages out: it is its owner's one standing chat.
 const SETTLED: ReadonlySet<AgentStatus> = new Set(["idle", "landed", "stopped", "error", "interrupted"]);
 
 export type TranscriptRetentionDeps = AgentArchiveDeps & {
@@ -32,6 +32,7 @@ export interface TranscriptRetentionResult {
 }
 
 const idle = (deps: TranscriptRetentionDeps, agent: AgentSummary): boolean =>
+    agent.home !== true &&
     SETTLED.has(agent.status) &&
     !deps.conversations.running(agent.id) &&
     !deps.conversations.turnActive(agent.id) &&

@@ -1,10 +1,10 @@
 import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
 import { unstubbed } from "@intentic/testing";
 import { childActor } from "../../../auth/principal.js";
-import type { PersistedAgent } from "../../registry/agents-store.js";
-import { conversationEntry } from "../../registry/agents-store.testing.js";
+import type { IsolatedAgent, PersistedAgent } from "../../registry/agents-store.js";
+import { conversationEntry, isolatedAgent } from "../../registry/agents-store.testing.js";
 import { fakeTurns, type FakeTurns } from "../../../seams/turn-starter.testing.js";
-import { type ChildNewsDeps, reportChildConflict, reportChildLanded } from "../child-lands.js";
+import { type ChildNewsDeps, childLandingWords, reportChildConflict, reportChildLanded } from "../child-lands.js";
 
 // A child's land or conflict is its parent's news while the parent supervises, and nobody else's.
 
@@ -92,5 +92,43 @@ describe("a conflicted press of Land, told to the child's parent", () => {
                 "main line and the conflicts are resolved. The owner can have it do that from its card, or you can tell it to; a message you send while another " +
                 "turn runs on it waits for that turn to end.",
         ]);
+    });
+});
+
+describe("where a child's work went, as its parent reads it beside the report", () => {
+    const ROOT = [{ repo: "root", base: "cut" }];
+    const familyOf = (parent: Partial<IsolatedAgent>, child: Partial<IsolatedAgent>) => {
+        const entries = new Map<string, PersistedAgent>([
+            ["home-1", isolatedAgent(ROOT, { id: "home-1", ...parent })],
+            ["sub-a", isolatedAgent(ROOT, { id: "sub-a", identity: { startedBy: childActor("home-1") }, landing: { diff: { files: 2, insertions: 3, deletions: 1 } }, ...child })],
+        ]);
+        return { entry: (id: string) => entries.get(id) };
+    };
+
+    it("tells a parent that judges its children first that the work waits for it, and how to judge and take it", () => {
+        const words = childLandingWords(familyOf({ identity: { home: true } }, {}), "sub-a");
+        expect(words).toContain("Its changes (2 files) wait on its branch for you");
+        expect(words).toContain('freshOf: { conversationId: "sub-a", kind: "review" }');
+        expect(words).toContain("agents merge sub-a");
+    });
+
+    it("says it waits again once a later turn left more on the branch after a merge", () => {
+        const agents = { ...familyOf({ identity: { home: true } }, {}), standingOf: () => "ready" as const };
+        const merged = agents.entry("sub-a");
+        if (merged === undefined || merged.placement.kind !== "worktree") {
+            throw new Error("fixture");
+        }
+        const again = { entry: (id: string) => (id === "sub-a" ? { ...merged, placement: { ...merged.placement, landedInto: "home-1" } } : agents.entry(id)), standingOf: agents.standingOf };
+        expect(childLandingWords(again, "sub-a")).toContain("wait on its branch for you");
+    });
+
+    it("tells any other parent the work is already in its checkout", () => {
+        const agents = familyOf({}, {});
+        const child = agents.entry("sub-a");
+        if (child === undefined || child.placement.kind !== "worktree") {
+            throw new Error("fixture");
+        }
+        const inParent = { entry: (id: string) => (id === "sub-a" ? { ...child, placement: { ...child.placement, landedInto: "home-1" } } : agents.entry(id)) };
+        expect(childLandingWords(inParent, "sub-a")).toContain("are in your checkout now");
     });
 });

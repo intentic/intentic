@@ -4,7 +4,7 @@ import { AgentToolChildrenSchema, SessionTranscriptSchema } from "../events/tran
 import { AgentTranscriptSchema } from "../events/agent-transcript.js";
 import { AgentAssignSchema, AgentAutoLandSchema, AgentBreakPolicySchema, AgentFileDiffQuerySchema, AgentIdSchema, AgentToolChildrenQuerySchema, AgentTranscriptQuerySchema, AgentIdsSchema, AgentLandSchema, AgentReactSchema, AgentRenameSchema, AgentStopJobSchema, AgentStopWatchingSchema, AgentSubagentQuerySchema, AgentsArchivedSchema, AgentsMovedSchema, AgentsRemovedSchema, AgentSummarySchema, AgentUnsentSchema, LandResultSchema } from "../schemas/agents.js";
 import { AgentSearchQuerySchema, AgentSearchResultSchema } from "../schemas/agent-search.js";
-import { AgentsAttentionSchema, AgentsListSchema } from "../schemas/agents-list.js";
+import { AgentsAttentionSchema, AgentsListSchema, HomeConversationSchema } from "../schemas/agents-list.js";
 import { AgentChangesSchema, AgentConflictsSchema, AgentIgnoredSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -43,6 +43,29 @@ export const agentsContract = {
         })
         .meta({ floor: "owner", control: "never", panel: false })
         .output(AgentsAttentionSchema),
+    // Every member's own, guests' too: the count a rail chip of the master view wears for this sandbox, over the caller's
+    // own conversations rather than the fleet, so a member's chip never counts somebody else's waiting work.
+    attentionMine: procedure
+        .route({
+            method: "GET",
+            path: "/agents/attention/mine",
+            summary: "What needs you, and what is working, of your own conversations",
+            description:
+                "The same two counts as `attention`, over only the conversations you answer for (and their subagents, through their family's one card). What a sandbox's icon shows in the master view without reading the whole fleet.",
+        })
+        .meta({ guest: true })
+        .output(AgentsAttentionSchema),
+    // The id is minted here, from the verified caller, never from a body: a client deriving it could name somebody else's.
+    home: procedure
+        .route({
+            method: "GET",
+            path: "/agents/home",
+            summary: "Your home conversation in this sandbox",
+            description:
+                "The one long-running conversation the master view opens on this sandbox, yours alone among its members: its id, its card once it has started, and whether the work it accepts lands by itself. It orchestrates subagents, judges their work with review and test sessions, and merges what it accepts.",
+        })
+        .meta({ guest: true })
+        .output(HomeConversationSchema),
     archived: procedure
         .route({
             method: "GET",

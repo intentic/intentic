@@ -33,6 +33,7 @@ import { activateLoadedFleet } from "./fleet-activation.js";
 import { type LandMarkBooks, type LandMarks, landMarksAmender, markedOnLand } from "./land-marks.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
 import { unfinishedOf } from "./unfinished-work.js";
+import { identityOf, peopleOfConversation } from "../actor/identity-latch.js";
 import { activityLive, awaitingWake, type ConversationState, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import {
@@ -40,7 +41,6 @@ import {
     type AgentTitleSource,
     type Composition,
     endingStatus,
-    type Identity,
     isIsolated,
     type Landing,
     type PersistedAgent,
@@ -193,54 +193,6 @@ const sessionBinding = (
     const moved = entry.sessionId !== frame.sessionId || entry.profile.account !== account;
     return moved ? { sessionId: frame.sessionId, ...(account !== undefined ? { account } : {}) } : undefined;
 };
-
-// The fence it was born with: kept once set, else the opening turn's, else the parent's for a spawned child. A child
-// inherits rather than starting unfenced, since a delegate a fenced turn opens is that turn continuing by other means.
-// `undefined` is the whole workspace, so a child of an unfenced parent is unfenced too, which is the same answer.
-const areasOfConversation = (
-    existing: Identity,
-    turn: BeginTurn,
-    entryOf: (id: string) => PersistedAgent | undefined,
-): { readonly areas?: string[] } => {
-    if (existing.areas !== undefined) {
-        return { areas: [...existing.areas] };
-    }
-    const parentId = parentOfActor(existing.startedBy ?? turn.startedBy);
-    const inherited = turn.areas ?? (parentId === undefined ? undefined : entryOf(parentId)?.identity.areas);
-    return inherited === undefined ? {} : { areas: [...inherited] };
-};
-
-// Everyone whose word this conversation acts on: kept once set, and grown by each person who asks it for a turn. A turn
-// an agent speaks (a spawned child's opening, a peer's message) brings that conversation's people with it, since its
-// words are theirs at one remove. Never shrinks: what the conversation may spend is what every one of them may
-// (secrets/credential-reach.ts), so a person joining narrows it and nobody leaving widens it. A row from before the field
-// starts from the member it belongs to, the one person it can name.
-const peopleOfConversation = (
-    held: PersistedAgent,
-    turn: BeginTurn,
-    entryOf: (id: string) => PersistedAgent | undefined,
-): { readonly people?: string[] } => {
-    const speaking = parentOfActor(turn.startedBy);
-    const joined = [
-        ...(held.identity.people ?? (held.social.owner === undefined ? [] : [held.social.owner.email])),
-        ...(turn.owner === undefined ? [] : [turn.owner.email]),
-        ...(speaking === undefined ? [] : (entryOf(speaking)?.identity.people ?? [])),
-    ];
-    const people = [...new Set(joined.map((email) => email.toLowerCase()))];
-    return people.length === 0 ? {} : { people };
-};
-
-// Latched with the conversation: each field keeps the first answer it got, and a later turn's differing persona does
-// not move the conversation to another project.
-const identityOf = (existing: Identity, turn: BeginTurn, entryOf: (id: string) => PersistedAgent | undefined): Identity => ({
-    ...opt("origin", existing.origin ?? turn.origin),
-    ...opt("startedBy", existing.startedBy ?? turn.startedBy),
-    ...areasOfConversation(existing, turn, entryOf),
-    ...opt("startIn", existing.startIn ?? turn.startIn),
-    ...opt("actsAs", existing.actsAs ?? turn.profile.actsAs),
-    ...opt("forkedFrom", existing.forkedFrom ?? turn.forkedFrom),
-    ...opt("fresh", existing.fresh ?? turn.fresh),
-});
 
 // Who answers for it: kept once set, else the opening turn's member, else the parent's owner for a child (`since` is
 // the child's own birth, not the parent's; a parent handed over later keeps its children where they were). A program's
@@ -430,6 +382,7 @@ const describedBy = ({ placement, identity, profile, social, sessionId, archived
     ...opt("areas", identity.areas),
     ...opt("forkedFrom", identity.forkedFrom),
     ...opt("fresh", identity.fresh),
+    ...opt("home", identity.home),
     ...opt("title", social.title?.text),
     ...opt("titleAction", social.title?.action),
     ...opt("model", profile.model),
