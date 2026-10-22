@@ -68,7 +68,7 @@ afterEach(async () => {
 });
 
 // One panel over a fixed session list, plus the kills it issued.
-const openPanel = async (sessions: Listed[]) => {
+const openPanel = async (sessions: Listed[], extra: { poppable?: boolean } = {}) => {
     const killed: string[] = [];
     const host = document.createElement(`div`);
     document.body.append(host);
@@ -77,6 +77,7 @@ const openPanel = async (sessions: Listed[]) => {
             h(TerminalPanel, {
                 storageKey: `test`,
                 resizable: false,
+                ...extra,
                 source: {
                     list: () => Promise.resolve(sessions),
                     create: () => `web-new`,
@@ -219,4 +220,18 @@ test(`a strip of terminals in use sweeps nothing`, async () => {
     await nextTick();
     expect(killed).toEqual([]);
     expect(dialogText()).not.toContain(`Kill anyway`);
+});
+
+// A phone has no windows: the pop-out there opened a second browser tab with a second copy of the terminal.
+const popOut = (host: HTMLElement): Element | undefined =>
+    [...host.querySelectorAll(`[aria-label]`)].find((el) => (el.getAttribute(`aria-label`) ?? ``).startsWith(`New window`));
+
+test(`the panel offers its own window where it can have one`, async () => {
+    const { host } = await openPanel([idle(`web-1`)]);
+    expect(popOut(host)).toEqual(expect.any(Object));
+});
+
+test(`a panel that cannot have a window offers none`, async () => {
+    const { host } = await openPanel([idle(`web-1`)], { poppable: false });
+    expect(popOut(host)).toBeUndefined();
 });

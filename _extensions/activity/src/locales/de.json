@@ -12,17 +12,61 @@
         "voiceMinutes": "{minutes} Min.: {speakers}"
     },
     "episodeRow": {
+        "error": "Fehler",
         "failed": "fehlgeschlagen",
+        "from": "von {author}",
         "openTranscript": "Transkript öffnen",
+        "outboundCalls": "{count} ausgehender Aufruf | {count} ausgehende Aufrufe",
         "session": "Session {sessionId}",
         "source": "Quelle {sourceKey}"
+    },
+    "episodes": {
+        "today": "Heute",
+        "turn": "Zug",
+        "type": {
+            "apiCall": "API-Aufruf",
+            "automationPending": "Automation wartet auf Genehmigung",
+            "automationRun": "Automationslauf",
+            "depsFixUnarmed": "Behebung verfügbar, nichts scharf geschaltet",
+            "depsInstallFailed": "Installation der Abhängigkeiten fehlgeschlagen",
+            "depsInstallLost": "Installation der Abhängigkeiten unbeobachtet",
+            "depsInstallStarted": "Abhängigkeiten werden installiert",
+            "depsVerifyGreen": "Prüfungen bestanden",
+            "depsVerifyLost": "Prüfungen unbeobachtet",
+            "depsVerifyRed": "Prüfungen fehlgeschlagen",
+            "depsVerifySkipped": "Keine Prüfungen auszuführen",
+            "dispatchFailed": "Zustellung fehlgeschlagen",
+            "gatewayLoginFailed": "Gateway-Anmeldung fehlgeschlagen",
+            "messageEdit": "Nachricht bearbeitet",
+            "messageReceived": "Nachricht empfangen",
+            "messageSend": "Nachricht gesendet",
+            "messagesRead": "Nachrichten gelesen",
+            "reactionAdd": "Reaktion hinzugefügt",
+            "reactionRemove": "Reaktion entfernt",
+            "turnCompleted": "Zug abgeschlossen",
+            "turnError": "Fehler im Zug",
+            "turnPlan": "Plan vorgeschlagen",
+            "turnStarted": "Zug gestartet",
+            "voiceSessionEnded": "Sprachsitzung beendet",
+            "voiceSessionStarted": "Sprachsitzung gestartet",
+            "voiceTranscriptReceived": "Sprachtranskript",
+            "voiceUtteranceReceived": "Sprachäußerung"
+        },
+        "yesterday": "Gestern"
     },
     "filter": "Nach Text, Kanal, Session filtern…",
     "source": "Quelle",
     "sourceFilter": {
         "allSources": "Alle Quellen",
         "connections": "Verbindungen",
-        "direct": "Direkt"
+        "direct": "Direkt",
+        "failed": "{count} fehlgeschlagen | {count} fehlgeschlagen",
+        "gateway": {
+            "connecting": "verbindet…",
+            "disconnected": "nicht verbunden",
+            "idle": "untätig",
+            "pairing": "wartet auf Verknüpfung"
+        }
     },
     "sourceLabel": "Aktivitätsquelle",
     "sources": {

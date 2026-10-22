@@ -1,4 +1,17 @@
 {
+    "extension": {
+        "branchesFailing": "{count} branches en échec",
+        "pipelines": "Pipelines",
+        "streakOnCommit": "{repo} {branch} · {runs} en échec · {sha}",
+        "streakOverCommits": "{repo} {branch} · {commits} commits · {runs} en échec",
+        "running": "{count} en cours",
+        "queued": "{count} en file d'attente",
+        "noRunsYet": "Aucune exécution pour l'instant",
+        "nothingFailing": "Rien en échec",
+        "branchCountFailing": "{count} branche en échec | {count} branches en échec",
+        "runCount": "{count} exécution | {count} exécutions",
+        "webhookNotRegistered": "webhook non enregistré"
+    },
     "mainFailure": {
         "autoFixAgent": "Agent de correction auto",
         "continueFix": "Continuer la correction",
@@ -37,11 +50,17 @@
         },
         "title": "{branch} échoue"
     },
+    "pipelineDag": {
+        "step": "Étape {n}"
+    },
     "pipelineDagGraph": {
         "expand": "Déplier",
         "fit": "Ajuster",
         "fitAll": "Tout ajuster",
         "fullScreen": "Plein écran"
+    },
+    "pipelineGraph": {
+        "jobs": "{count} tâche | {count} tâches"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Un agent travaille déjà sur {branch}, lancé depuis l'exécution #{runId} — ouvrez-le",
@@ -76,7 +95,20 @@
             "ready": "Relire, puis intégrer",
             "waiting": "Quota épuisé",
             "working": "Ouvrir pour suivre"
-        }
+        },
+        "attemptWord": "tentative {n}",
+        "attemptSummary": "Tentative {n}",
+        "filesOnBranch": "{count} fichier sur sa branche | {count} fichiers sur sa branche",
+        "files": "{count} fichier | {count} fichiers",
+        "age": {
+            "days": "{n} j",
+            "hours": "{n} h",
+            "minutes": "{n} min",
+            "underMinute": "<1 min"
+        },
+        "startedAgo": "démarrée {ago}",
+        "fixAria": "Agent de correction : {state} — ouvrir la conversation",
+        "fixAriaFacts": "Agent de correction : {state}, {facts} — ouvrir la conversation"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Chargement des pipelines"
@@ -94,6 +126,7 @@
         "noWorkspaceRepoMaps": "Aucun dépôt de l'espace de travail ne correspond à un compte GitHub/GitLab connecté : clonez un dépôt depuis votre hébergeur connecté, ou connectez la capacité correspondante sur la page +.",
         "openPipelines": "Ouvrir les pipelines de {project}",
         "openRepo": "Ouvrir le dépôt",
+        "pipelines": "Pipelines",
         "runs": "{runs} exécutions",
         "thisRepo": "ce dépôt"
     },
@@ -102,6 +135,28 @@
         "openOn": "Ouvrir sur {forge}",
         "run": "Exécution {number}",
         "unreadable": "Cet onglet ne désigne aucune exécution."
+    },
+    "statusVisual": {
+        "status": {
+            "canceled": "annulée",
+            "failed": "en échec",
+            "queued": "en file d'attente",
+            "running": "en cours",
+            "skipped": "ignorée",
+            "success": "réussie"
+        },
+        "trigger": {
+            "api": "API",
+            "dispatch": "Dispatch",
+            "manual": "Manuel",
+            "mergeRequest": "Merge request",
+            "pullRequest": "Pull request",
+            "release": "Release",
+            "scheduled": "Planifié",
+            "tag": "Tag",
+            "trigger": "Déclencheur",
+            "upstream": "Amont"
+        }
     },
     "tip": {
         "attempt": "Tentative",
@@ -120,10 +175,5 @@
         "runs": "Exécutions",
         "started": "Démarré",
         "updated": "Mis à jour"
-    },
-    "extension": {
-        "branchesFailing": "{count} branches en échec",
-        "streakOnCommit": "{repo} {branch} · {runs} en échec · {sha}",
-        "streakOverCommits": "{repo} {branch} · {commits} commits · {runs} en échec"
     }
 }

@@ -1,6 +1,12 @@
 {
+    "common": {
+        "couldNotRenderDocument": "No se ha podido mostrar este documento."
+    },
     "deck": {
-        "pictureInFormatBrowsers": "Imagen en un formato que los navegadores no pueden dibujar"
+        "chart": "Gráfico",
+        "embeddedObject": "Objeto incrustado",
+        "pictureInFormatBrowsers": "Imagen en un formato que los navegadores no pueden dibujar",
+        "smartArt": "Diagrama SmartArt"
     },
     "documentPaper": {
         "documentNoTextIn": "Este documento no tiene texto."
@@ -23,7 +29,9 @@
     "epubViewer": {
         "bookNoChaptersIn": "Este libro no tiene capítulos.",
         "chapter": "Capítulo",
-        "contents": "Contenido"
+        "contents": "Contenido",
+        "couldNotOpen": "No se ha podido abrir este libro.",
+        "noPackageDocument": "Este archivo no contiene un documento de paquete EPUB."
     },
     "mediaViewer": {
         "back10s": "Atrás 10 s",
@@ -46,6 +54,7 @@
         "volume": "Volumen"
     },
     "odfSlidesViewer": {
+        "couldNotRender": "No se ha podido mostrar esta presentación.",
         "presentationNoSlides": "Esta presentación no tiene diapositivas."
     },
     "pdfViewer": {
@@ -53,13 +62,18 @@
         "pdfCantDisplayedInline": "Este PDF no se puede mostrar incrustado."
     },
     "pptxViewer": {
+        "couldNotRead": "No se ha podido leer esta presentación.",
         "pictureOnSlide": "Imagen en la diapositiva {number}",
         "presentationNoSlides": "Esta presentación no tiene diapositivas.",
         "slide": "Diapositiva {number}",
+        "slideCount": "{count} diapositiva | {count} diapositivas",
         "speakerNotes": "Notas del ponente"
     },
     "sheetViewer": {
-        "sheetEmpty": "Esta hoja está vacía."
+        "couldNotRead": "No se ha podido leer esta hoja de cálculo.",
+        "sheetEmpty": "Esta hoja está vacía.",
+        "workerFailed": "Ha fallado el proceso de la hoja de cálculo.",
+        "workerUnexpected": "El proceso de la hoja de cálculo ha devuelto una respuesta inesperada."
     },
     "svgViewer": {
         "preview": "Vista previa",

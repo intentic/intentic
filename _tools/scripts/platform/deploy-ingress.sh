@@ -32,6 +32,15 @@
 #                     the config (one with an [http_service] sits behind Fly's proxy), and a config that disagrees fails
 #                     before anything is deployed, so a fly.toml that somehow went back to the proxy shape cannot put
 #                     production behind a proxy holding no certificate. Only a hand-run fallback says `proxy`.
+#   INGRESS_FORCE_ROLL set to 1 to roll the machines even when they already serve this build (see below).
+#
+# AN EDGE ALREADY SERVING THIS BUILD IS NOT ROLLED. The edge holds every tunnel in memory and production runs one
+# machine, so a roll drops every sandbox's tunnel at once and each workspace goes dark until its netd redials. The
+# build is content-addressed over the ingress package (fly.toml included) and the crates it compiles, so an unchanged
+# build is an unchanged edge, and rolling it anyway is an outage bought for nothing. That is what this did on every
+# platform push: turbo-406abe0921f407ab was rolled four times on 2026-10-21, the last at 21:12:58, and a new user on
+# a hosted sandbox lost his workspace three minutes into his first session and left while it was still coming back.
+# The read-back and the door and transport checks below still run, so an edge that drifted fails the job as before.
 #
 # TLS MODE, the default: the edge holds the certificate and serves UDP beside it, and it must also DECLARE that on
 # /health (`"transports":["quic","h3","webtransport"]`), since netd instances and editors reach for QUIC and WebTransport only
@@ -103,8 +112,21 @@ if [ -z "$EXPECTED" ] || [ "$EXPECTED" = "unreleased" ]; then
     exit 1
 fi
 
-echo "deploying $IMAGE to Fly app '$APP' (build $EXPECTED) with $(basename "$CONFIG")$([ "$SHAPE" = tls ] && echo ', terminating TLS at the edge')"
-flyctl deploy --config "$CONFIG" --app "$APP" --image "$IMAGE" --yes
+# What the edge serves right now. Skipping needs both halves to match: the build, and in TLS mode the UDP transports,
+# since an edge put behind Fly's proxy by hand (fly.edge-proxy.toml) can carry the same build and declares none, and
+# the way back from it is this deploy.
+running_health="$(curl -fsS --max-time 10 "$HEALTH_URL" 2>/dev/null || true)"
+running_build="$(printf '%s' "$running_health" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')"
+running_shape=proxy
+case "$running_health" in
+    *'"transports":['*'"quic"'*) running_shape=tls ;;
+esac
+if [ "${INGRESS_FORCE_ROLL:-}" != 1 ] && [ "$running_build" = "$EXPECTED" ] && [ "$running_shape" = "$SHAPE" ]; then
+    echo "$APP already serves build $EXPECTED in $SHAPE mode; not rolling it (a roll drops every tunnel). INGRESS_FORCE_ROLL=1 rolls anyway."
+else
+    echo "deploying $IMAGE to Fly app '$APP' (build $EXPECTED, running ${running_build:-unknown}) with $(basename "$CONFIG")$([ "$SHAPE" = tls ] && echo ', terminating TLS at the edge')"
+    flyctl deploy --config "$CONFIG" --app "$APP" --image "$IMAGE" --yes
+fi
 
 # AND THEN READ IT BACK FROM THE PUBLIC ADDRESS, not from Fly's own report of the release. Fly answering
 # "deployed" means its machines took the new image; it says nothing about whether the process came up and is

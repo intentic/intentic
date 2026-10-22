@@ -1,4 +1,17 @@
 {
+    "extension": {
+        "branchesFailing": "{count} Branches rot",
+        "pipelines": "Pipelines",
+        "streakOnCommit": "{repo} {branch} · {runs} fehlgeschlagen · {sha}",
+        "streakOverCommits": "{repo} {branch} · {commits} Commits · {runs} fehlgeschlagen",
+        "running": "{count} laufen",
+        "queued": "{count} eingereiht",
+        "noRunsYet": "Noch keine Läufe",
+        "nothingFailing": "Keine Fehler",
+        "branchCountFailing": "{count} Branch mit Fehlern | {count} Branches mit Fehlern",
+        "runCount": "{count} Lauf | {count} Läufe",
+        "webhookNotRegistered": "Webhook nicht registriert"
+    },
     "mainFailure": {
         "autoFixAgent": "Auto-Reparatur-Agent",
         "continueFix": "Reparatur fortsetzen",
@@ -37,11 +50,17 @@
         },
         "title": "{branch} schlägt fehl"
     },
+    "pipelineDag": {
+        "step": "Schritt {n}"
+    },
     "pipelineDagGraph": {
         "expand": "Aufklappen",
         "fit": "Einpassen",
         "fitAll": "Alles einpassen",
         "fullScreen": "Vollbild"
+    },
+    "pipelineGraph": {
+        "jobs": "{count} Job | {count} Jobs"
     },
     "pipelineRunRow": {
         "agentAlreadyWorkingOn": "Ein Agent arbeitet bereits an {branch}, gestartet aus Lauf #{runId} — öffnen",
@@ -76,7 +95,20 @@
             "ready": "Prüfen, dann landen",
             "waiting": "Kontingent aufgebraucht",
             "working": "Öffnen zum Zusehen"
-        }
+        },
+        "attemptWord": "Versuch {n}",
+        "attemptSummary": "Versuch {n}",
+        "filesOnBranch": "{count} Datei auf seinem Branch | {count} Dateien auf seinem Branch",
+        "files": "{count} Datei | {count} Dateien",
+        "age": {
+            "days": "{n} T.",
+            "hours": "{n} Std.",
+            "minutes": "{n} Min.",
+            "underMinute": "<1 Min."
+        },
+        "startedAgo": "gestartet {ago}",
+        "fixAria": "Reparaturagent: {state} — Unterhaltung öffnen",
+        "fixAriaFacts": "Reparaturagent: {state}, {facts} — Unterhaltung öffnen"
     },
     "pipelinesSkeleton": {
         "loadingPipelines": "Pipelines werden geladen"
@@ -94,6 +126,7 @@
         "noWorkspaceRepoMaps": "Kein Workspace-Repo passt zu einem verbundenen GitHub-/GitLab-Konto: klonen Sie ein Repo von Ihrem verbundenen Host, oder verbinden Sie die passende Fähigkeit auf der +-Seite.",
         "openPipelines": "{project}-Pipelines öffnen",
         "openRepo": "Repo öffnen",
+        "pipelines": "Pipelines",
         "runs": "{runs} Läufe",
         "thisRepo": "dieses Repo"
     },
@@ -102,6 +135,28 @@
         "openOn": "Auf {forge} öffnen",
         "run": "Lauf {number}",
         "unreadable": "Dieser Tab nennt keinen Lauf."
+    },
+    "statusVisual": {
+        "status": {
+            "canceled": "abgebrochen",
+            "failed": "fehlgeschlagen",
+            "queued": "eingereiht",
+            "running": "läuft",
+            "skipped": "übersprungen",
+            "success": "bestanden"
+        },
+        "trigger": {
+            "api": "API",
+            "dispatch": "Manuell",
+            "manual": "Manuell",
+            "mergeRequest": "Merge Request",
+            "pullRequest": "Pull Request",
+            "release": "Freigeben",
+            "scheduled": "Geplant",
+            "tag": "Tag",
+            "trigger": "Auslöser",
+            "upstream": "Upstream"
+        }
     },
     "tip": {
         "attempt": "Versuch",
@@ -120,10 +175,5 @@
         "runs": "Läufe",
         "started": "Gestartet",
         "updated": "Aktualisiert"
-    },
-    "extension": {
-        "branchesFailing": "{count} Branches rot",
-        "streakOnCommit": "{repo} {branch} · {runs} fehlgeschlagen · {sha}",
-        "streakOverCommits": "{repo} {branch} · {commits} Commits · {runs} fehlgeschlagen"
     }
 }

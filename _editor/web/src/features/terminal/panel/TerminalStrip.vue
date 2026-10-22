@@ -16,13 +16,15 @@ import { clearedLabel, cycled, iconFor, labelFor, segmentColor, stripIndex, tool
 
 // Every kill goes through `requestKill`, so each route to it (×, middle-click, menu, chord) asks the same question.
 
-const { tabs, floating, vertical } = defineProps<{
+const { tabs, floating, vertical, offersWindow = true } = defineProps<{
     tabs: Pick<
         TerminalTabs,
         `order` | `groups` | `answer` | `remembered` | `activeName` | `switchTab` | `joinTabs` | `unsplit` | `newTab` | `splitTab` | `killTabs`
     >;
     floating: Pick<ReturnType<typeof useTerminalFloating>, `floats` | `toggle`>;
     vertical: boolean;
+    // False where the panel cannot have a window of its own (a phone): the menu then offers no pop-out.
+    offersWindow?: boolean;
 }>();
 
 const { order, groups, activeName, switchTab, joinTabs, unsplit, newTab, splitTab, killTabs } = tabs;
@@ -189,14 +191,13 @@ const stripItems = computed<MenuItem[]>(() => {
             command: () => requestKill(killable.value),
         });
     }
-    items.push(
-        ...(items.length > 0 ? [{ separator: true }] : []),
-        {
+    if (offersWindow) {
+        items.push(...(items.length > 0 ? [{ separator: true }] : []), {
             label: floating.floats.value ? t(`terminal.terminalStrip.dockPanelBack`) : t(`terminal.terminalStrip.movePanelToWindow`),
             shortcut: commandShortcut(`terminal.toggleFloating`),
             command: floating.toggle,
-        },
-    );
+        });
+    }
     return items;
 });
 

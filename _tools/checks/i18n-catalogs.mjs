@@ -22,9 +22,9 @@ if (!locales.includes(BASE)) {
 }
 const translations = locales.filter((code) => code !== BASE);
 
-// Languages whose catalogs must hold every key English has. Polish has users (the 2026-09-28 session-replay review found
-// them meeting English on the stopped-turn strip, the discard dialog and /connect); the others may still fall back.
-const COMPLETE = new Set(["pl"]);
+// Every shipped translation has users. The 2026-10-21 replay review found a Spanish reader meeting English during
+// setup and recovery; the catalog fill brings German and French under the same completeness rule as Polish.
+const COMPLETE = new Set(["de", "es", "fr", "pl"]);
 
 // Undefined only for a file that is not there: `--fix` writes an empty catalog over whatever this could not read.
 const readText = (path) => {

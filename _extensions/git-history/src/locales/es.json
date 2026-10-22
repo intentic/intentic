@@ -7,6 +7,7 @@
         "delete": "¿Eliminar {name}?",
         "delete2": "Eliminar",
         "deleteBranch": "Eliminar la rama",
+        "detached": "sin rama",
         "filterBranches": "Filtrar ramas",
         "filterBranches2": "Filtrar ramas…",
         "forceDelete": "Forzar la eliminación",
@@ -17,6 +18,7 @@
         "upstreamBranchDeleted": "Upstream eliminado"
     },
     "extension": {
+        "git": "Git",
         "gitHistory": "Historial de git",
         "history": "Historial"
     },
@@ -31,8 +33,11 @@
         "cancel": "Cancelar",
         "changed": "{count} cambiados",
         "changedFiles": "{count} archivo cambiado | {count} archivos cambiados",
+        "checkout": "Cambiar de rama…",
+        "checkout2": "Cambiar de rama",
         "checkout3": "Checkout de {local}",
         "cherryPick": "Cherry pick…",
+        "commit": "Commit",
         "conflicted": "{conflicted} en conflicto",
         "copyCommitHash": "Copiar el hash del commit",
         "copyCommitSubject": "Copiar el asunto del commit",
@@ -49,6 +54,7 @@
         "filterCommits": "Filtrar commits…",
         "filterCommitsByMessage": "Filtrar commits por mensaje, autor o sha",
         "hardDiscardsUncommittedChanges": "Hard: descarta los cambios sin commit del worktree.",
+        "head": "HEAD",
         "inProgress": "Hay un {operation} en curso",
         "keepsStash": "Conserva el stash",
         "keepStaged": "Mantener preparado",
@@ -63,6 +69,7 @@
         "noLoadedCommitMatches": "Ningún commit cargado coincide. Desplázate para cargar más historial y busca de nuevo.",
         "of": "{count} de {count2}",
         "parents": "Padres",
+        "push": "Push",
         "pushTo": "Push a {remote}",
         "readingRepositorysHistory": "Leyendo el historial de este repositorio…",
         "rebaseCurrentBranchOn": "Rebasar la rama actual sobre este commit…",
@@ -77,6 +84,74 @@
         "rightClick": "Clic derecho",
         "scrollOlderCommits": "Desplázate para ver commits más antiguos",
         "softKeepsChangesStaged": "Soft: deja tus cambios preparados.",
-        "stashedWork": "Trabajo apartado"
+        "stashedWork": "Trabajo apartado",
+        "uncommittedChanges": "Cambios sin commit",
+        "failedToLoadCommit": "No se ha podido cargar el commit.",
+        "dialog": {
+            "branch": "Crear rama",
+            "branchConfirm": "Crear",
+            "checkout": "Cambiar al commit",
+            "checkoutConfirm": "Cambiar",
+            "cherryPick": "Aplicar commit con cherry-pick",
+            "cherryPickConfirm": "Cherry-pick",
+            "drop": "Eliminar commit",
+            "dropConfirm": "Eliminar",
+            "merge": "Fusionar con la rama actual",
+            "mergeConfirm": "Fusionar",
+            "rebase": "Rebasar la rama actual",
+            "rebaseConfirm": "Rebasar",
+            "reset": "Restablecer la rama actual",
+            "resetConfirm": "Restablecer",
+            "revert": "Revertir commit",
+            "revertConfirm": "Revertir",
+            "tag": "Añadir etiqueta",
+            "tagConfirm": "Añadir etiqueta"
+        },
+        "body": {
+            "checkout": "Cambiar directamente a {sha} (HEAD separado). Los cambios sin commit bloquearán esta operación.",
+            "cherryPick": "Copiar el cambio de {sha} a la rama actual como un commit nuevo.",
+            "drop": "Eliminar {sha} del historial, reaplicando los commits posteriores sobre su padre.",
+            "merge": "Fusionar {sha} con la rama actual ({branch}).",
+            "rebase": "Reaplicar los commits de la rama actual sobre {sha}.",
+            "reset": "Mover la rama actual ({branch}) a {sha}.",
+            "revert": "Añadir un commit nuevo que deshaga {sha}. No se reescribe nada."
+        },
+        "conflict": "No se ha podido realizar {action} sin problemas: hay un conflicto o cambios sin commit. Resuélvelo en un terminal.",
+        "resetSoft": "Soft",
+        "resetMixed": "Mixto",
+        "resetHard": "Hard"
+    },
+    "useAsyncAction": {
+        "actionFailed": "La acción ha fallado."
+    },
+    "useBranches": {
+        "checkoutFailed": "No se ha podido cambiar de rama. Primero haz commit, prepara o descarta tus cambios.",
+        "couldntCreate": "No se ha podido crear esa rama.",
+        "couldntDelete": "No se ha podido eliminar esa rama.",
+        "couldntPush": "No se ha podido enviar esa rama.",
+        "pushRefused": "El push ha sido rechazado.",
+        "pushRefusedBecause": "El push ha sido rechazado: {reason}",
+        "unmerged": "La rama tiene commits sin fusionar; eliminándola los perderías."
+    },
+    "useOperation": {
+        "couldntAbort": "No se ha podido abortar: inténtalo en un terminal."
+    },
+    "useStashes": {
+        "conflict": "No se ha podido aplicar sin problemas: resuelve el conflicto en el panel Cambios. El stash sigue ahí.",
+        "couldntApply": "No se ha podido aplicar ese stash.",
+        "couldntDrop": "No se ha podido eliminar ese stash.",
+        "nothingApplied": "No se ha aplicado nada: {reason}. El stash sigue ahí."
+    },
+    "useUndo": {
+        "amend": "Deshacer amend",
+        "cherryPick": "Deshacer cherry-pick",
+        "commit": "Deshacer commit",
+        "couldntUndo": "No se ha podido deshacer.",
+        "merge": "Deshacer fusión",
+        "other": "Deshacer última acción",
+        "pull": "Deshacer pull",
+        "rebase": "Deshacer rebase",
+        "reset": "Deshacer reset",
+        "revert": "Deshacer revert"
     }
 }

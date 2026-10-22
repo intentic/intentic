@@ -36,6 +36,7 @@ const {
     initial,
     surfaced,
     resizable = true,
+    poppable = true,
 } = defineProps<{
     source: TerminalTabsSource;
     storageKey: string;
@@ -43,6 +44,9 @@ const {
     // Session to relist as a tab without focusing it (the agent's live terminal); distinct from `initial`.
     surfaced?: { readonly name: string };
     resizable?: boolean;
+    // Whether this view offers to move the panel into a window of its own. A phone has no windows: there the offer
+    // opened a second browser tab holding a second copy of the terminal (seen in a replay, 2026-10-21).
+    poppable?: boolean;
 }>();
 const emit = defineEmits<{ close: [] }>();
 
@@ -53,6 +57,8 @@ const activeShell = computed(() => order.value.find((tab) => tab.name === active
 const floating = useTerminalFloating();
 // The bar becomes a left rail while the panel has a window of its own.
 const vertical = computed(() => floating.here.value);
+// Docking back is always offered: a panel already floating must be able to come home.
+const offersWindow = computed(() => poppable || floating.floats.value);
 const floatWords = computed(() => (floating.floats.value ? t(`terminal.terminalPanel.dockBack`) : t(`terminal.terminalPanel.newWindow`)));
 const floatHint = computed(() => withShortcut(floatWords.value, `terminal.toggleFloating`));
 const floatTip = computed(() => tipWithShortcut(floatWords.value, `terminal.toggleFloating`));
@@ -202,7 +208,7 @@ watch(
             :reset="DEFAULT_HEIGHT"
             :title="t(`ui.resizeSeam.doubleClickResets`)"
         />
-        <TerminalStrip :tabs="tabs" :floating="floating" :vertical="vertical">
+        <TerminalStrip :tabs="tabs" :floating="floating" :vertical="vertical" :offers-window="offersWindow">
             <WorkTerminals />
             <BackgroundProcesses />
             <button
@@ -226,7 +232,7 @@ watch(
                 <Icon name="refresh" class="text-xs" />
             </button>
             <!-- Keep the pop-out action beside close because both change the window. -->
-            <button type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatTip" :aria-label="floatHint">
+            <button v-if="offersWindow" type="button" :class="ui.iconButton()" @click="floating.toggle()" v-tooltip.top="floatTip" :aria-label="floatHint">
                 <Icon :name="floating.floats.value ? 'arrow-down-left' : 'external-link'" class="text-xs" />
             </button>
             <button type="button" :class="ui.iconButton()" @click="emit(`close`)" v-tooltip.top="closeTip" :aria-label="closeHint">

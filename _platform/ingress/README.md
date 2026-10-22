@@ -105,7 +105,9 @@ On a push to main, CI's `images-platform` job pushes `ghcr.io/intentic/ingress` 
 waits until `/health` reports the build baked into the image, lists the tunnel door this checkout's netd dials, and
 declares `quic`, `h3` and `webtransport`. It refuses a config of the proxy shape unless told `INGRESS_EDGE_MODE=proxy`,
 and its last line is the one to look for in CI's log: `edge-mode: tls — intentic-ingress declares quic, h3 and
-webtransport`. An empty `FLY_API_TOKEN` skips it (`No FLY_API_TOKEN — skipping the edge deploy`); the Actions secret
+webtransport`. An edge already serving the image's build in the same mode is not rolled, since a roll drops every
+tunnel at once (four no-op rolls on 2026-10-21 alone; the last one cut a new user off mid-session); the checks still
+run, and `INGRESS_FORCE_ROLL=1` rolls anyway. An empty `FLY_API_TOKEN` skips it (`No FLY_API_TOKEN — skipping the edge deploy`); the Actions secret
 is a deploy token scoped to the app, `fly tokens create deploy -a intentic-ingress`. Without it, roll by hand once the
 image is pushed: `bash _tools/scripts/platform/deploy-ingress.sh` with `FLY_API_TOKEN` in the environment.
 

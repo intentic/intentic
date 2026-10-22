@@ -1,11 +1,13 @@
 {
     "branchSwitcher": {
+        "branch": "Branch",
         "branches": "Branches",
         "cancel": "Abbrechen",
         "create": "Erstellen",
         "delete": "{name} löschen?",
         "delete2": "Löschen",
         "deleteBranch": "Branch löschen",
+        "detached": "losgelöst",
         "filterBranches": "Branches filtern",
         "filterBranches2": "Branches filtern…",
         "forceDelete": "Löschen erzwingen",
@@ -16,6 +18,7 @@
         "upstreamBranchDeleted": "Upstream gelöscht"
     },
     "extension": {
+        "git": "Git",
         "gitHistory": "Git-Historie",
         "history": "Historie"
     },
@@ -34,6 +37,7 @@
         "checkout2": "Auschecken",
         "checkout3": "{local} auschecken",
         "cherryPick": "Cherry-Pick…",
+        "commit": "Commit",
         "conflicted": "{conflicted} in Konflikt",
         "copyCommitHash": "Commit-Hash kopieren",
         "copyCommitSubject": "Commit-Betreff kopieren",
@@ -50,6 +54,7 @@
         "filterCommits": "Commits filtern…",
         "filterCommitsByMessage": "Commits nach Nachricht, Autor oder SHA filtern",
         "hardDiscardsUncommittedChanges": "Hart: verwirft nicht committete Änderungen im Worktree.",
+        "head": "HEAD",
         "inProgress": "Ein {operation} läuft gerade",
         "keepsStash": "Behält den Stash",
         "keepStaged": "Gestaged lassen",
@@ -64,6 +69,7 @@
         "noLoadedCommitMatches": "Kein geladener Commit passt. Scrollen Sie, um mehr Historie zu laden, und suchen Sie dann erneut.",
         "of": "{count} von {count2}",
         "parents": "Eltern",
+        "push": "Push",
         "pushTo": "Zu {remote} pushen",
         "readingRepositorysHistory": "Die Historie dieses Repositorys wird gelesen…",
         "rebaseCurrentBranchOn": "Aktuellen Branch auf diesen Commit rebasen…",
@@ -78,6 +84,74 @@
         "rightClick": "Rechtsklick",
         "scrollOlderCommits": "Scrollen für ältere Commits",
         "softKeepsChangesStaged": "Weich: lässt Ihre Änderungen gestaged.",
-        "stashedWork": "Gestashte Arbeit"
+        "stashedWork": "Gestashte Arbeit",
+        "uncommittedChanges": "Nicht committete Änderungen",
+        "failedToLoadCommit": "Commit konnte nicht geladen werden.",
+        "dialog": {
+            "branch": "Branch erstellen",
+            "branchConfirm": "Erstellen",
+            "checkout": "Commit auschecken",
+            "checkoutConfirm": "Auschecken",
+            "cherryPick": "Commit mit Cherry-pick übernehmen",
+            "cherryPickConfirm": "Cherry-pick",
+            "drop": "Commit entfernen",
+            "dropConfirm": "Entfernen",
+            "merge": "In aktuellen Branch zusammenführen",
+            "mergeConfirm": "Zusammenführen",
+            "rebase": "Aktuellen Branch rebasen",
+            "rebaseConfirm": "Rebase",
+            "reset": "Aktuellen Branch zurücksetzen",
+            "resetConfirm": "Zurücksetzen",
+            "revert": "Commit rückgängig machen",
+            "revertConfirm": "Revert",
+            "tag": "Tag hinzufügen",
+            "tagConfirm": "Tag hinzufügen"
+        },
+        "body": {
+            "checkout": "{sha} direkt auschecken (losgelöster HEAD). Nicht committete Änderungen blockieren dies.",
+            "cherryPick": "Die Änderung von {sha} als neuen Commit auf den aktuellen Branch kopieren.",
+            "drop": "{sha} aus dem Verlauf entfernen und spätere Commits auf seinem Vorgänger erneut anwenden.",
+            "merge": "{sha} in den aktuellen Branch ({branch}) zusammenführen.",
+            "rebase": "Die Commits des aktuellen Branches auf {sha} erneut anwenden.",
+            "reset": "Den aktuellen Branch ({branch}) auf {sha} verschieben.",
+            "revert": "Einen neuen Commit hinzufügen, der {sha} rückgängig macht. Nichts wird umgeschrieben."
+        },
+        "conflict": "{action} konnte nicht sauber ausgeführt werden: Konflikt oder nicht committete Änderungen. Lösen Sie das im Terminal.",
+        "resetSoft": "Soft",
+        "resetMixed": "Gemischt",
+        "resetHard": "Hard"
+    },
+    "useAsyncAction": {
+        "actionFailed": "Aktion fehlgeschlagen."
+    },
+    "useBranches": {
+        "checkoutFailed": "Auschecken fehlgeschlagen. Committen, stagen oder verwerfen Sie zuerst Ihre Änderungen.",
+        "couldntCreate": "Dieser Branch konnte nicht erstellt werden.",
+        "couldntDelete": "Dieser Branch konnte nicht gelöscht werden.",
+        "couldntPush": "Dieser Branch konnte nicht gepusht werden.",
+        "pushRefused": "Push wurde abgelehnt.",
+        "pushRefusedBecause": "Push wurde abgelehnt: {reason}",
+        "unmerged": "Der Branch hat nicht zusammengeführte Commits, die beim Löschen verloren gingen."
+    },
+    "useOperation": {
+        "couldntAbort": "Konnte nicht abgebrochen werden: Versuchen Sie es im Terminal."
+    },
+    "useStashes": {
+        "conflict": "Konnte nicht sauber angewendet werden: Lösen Sie den Konflikt im Panel Änderungen. Der Stash bleibt erhalten.",
+        "couldntApply": "Dieser Stash konnte nicht angewendet werden.",
+        "couldntDrop": "Dieser Stash konnte nicht entfernt werden.",
+        "nothingApplied": "Nichts angewendet: {reason}. Der Stash bleibt erhalten."
+    },
+    "useUndo": {
+        "amend": "Amend rückgängig machen",
+        "cherryPick": "Cherry-pick rückgängig machen",
+        "commit": "Commit rückgängig machen",
+        "couldntUndo": "Konnte nicht rückgängig gemacht werden.",
+        "merge": "Merge rückgängig machen",
+        "other": "Letzte Aktion rückgängig machen",
+        "pull": "Pull rückgängig machen",
+        "rebase": "Rebase rückgängig machen",
+        "reset": "Reset rückgängig machen",
+        "revert": "Revert rückgängig machen"
     }
 }

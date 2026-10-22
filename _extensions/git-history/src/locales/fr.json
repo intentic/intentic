@@ -7,6 +7,7 @@
         "delete": "Supprimer {name} ?",
         "delete2": "Supprimer",
         "deleteBranch": "Supprimer la branche",
+        "detached": "détachée",
         "filterBranches": "Filtrer les branches",
         "filterBranches2": "Filtrer les branches…",
         "forceDelete": "Forcer la suppression",
@@ -17,6 +18,7 @@
         "upstreamBranchDeleted": "Amont supprimé"
     },
     "extension": {
+        "git": "Git",
         "gitHistory": "Historique git",
         "history": "Historique"
     },
@@ -31,13 +33,17 @@
         "cancel": "Annuler",
         "changed": "{count} modifiés",
         "changedFiles": "{count} fichier modifié | {count} fichiers modifiés",
+        "checkout": "Checkout…",
+        "checkout2": "Checkout",
         "checkout3": "Checkout de {local}",
         "cherryPick": "Cherry-pick…",
+        "commit": "Commit",
         "conflicted": "{conflicted} en conflit",
         "copyCommitHash": "Copier le hash du commit",
         "copyCommitSubject": "Copier le sujet du commit",
         "copySha": "Copier le SHA",
         "createBranch": "Créer une branche…",
+        "date": "Date",
         "deleteBranch": "Supprimer la branche",
         "deleteTag": "Supprimer l'étiquette",
         "deleteTagOn": "Supprimer l'étiquette sur {remote}",
@@ -48,6 +54,7 @@
         "filterCommits": "Filtrer les commits…",
         "filterCommitsByMessage": "Filtrer les commits par message, auteur ou sha",
         "hardDiscardsUncommittedChanges": "Hard : jette les changements non committés du worktree.",
+        "head": "HEAD",
         "inProgress": "Un {operation} est en cours",
         "keepsStash": "Garde le stash",
         "keepStaged": "Garder indexé",
@@ -61,6 +68,8 @@
         "noCommitsYetIn": "Pas encore de commits dans ce dépôt.",
         "noLoadedCommitMatches": "Aucun commit chargé ne correspond. Faites défiler pour charger plus d'historique, puis cherchez à nouveau.",
         "of": "{count} sur {count2}",
+        "parents": "Parents",
+        "push": "Pousser",
         "pushTo": "Push vers {remote}",
         "readingRepositorysHistory": "Lecture de l'historique de ce dépôt…",
         "rebaseCurrentBranchOn": "Rebaser la branche actuelle sur ce commit…",
@@ -70,10 +79,79 @@
         "restorePointSaved": "Point de restauration préalable",
         "restorePointSavedFirst2": "Un point de restauration est enregistré d'abord : ceci est donc réversible depuis Points de restauration.",
         "restoreWork": "Récupérer le travail",
+        "revert": "Revert…",
         "rewindBranch": "Reculer la branche",
         "rightClick": "Clic droit",
         "scrollOlderCommits": "Faites défiler pour des commits plus anciens",
         "softKeepsChangesStaged": "Soft : laisse vos changements indexés.",
-        "stashedWork": "Travail remisé"
+        "stashedWork": "Travail remisé",
+        "uncommittedChanges": "Changements non committés",
+        "failedToLoadCommit": "Impossible de charger le commit.",
+        "dialog": {
+            "branch": "Créer une branche",
+            "branchConfirm": "Créer",
+            "checkout": "Checkout du commit",
+            "checkoutConfirm": "Checkout",
+            "cherryPick": "Cherry-pick du commit",
+            "cherryPickConfirm": "Cherry-pick",
+            "drop": "Abandonner le commit",
+            "dropConfirm": "Abandonner",
+            "merge": "Fusionner dans la branche courante",
+            "mergeConfirm": "Fusionner",
+            "rebase": "Rebaser la branche courante",
+            "rebaseConfirm": "Rebaser",
+            "reset": "Réinitialiser la branche courante",
+            "resetConfirm": "Réinitialiser",
+            "revert": "Annuler le commit (revert)",
+            "revertConfirm": "Revert",
+            "tag": "Ajouter une étiquette",
+            "tagConfirm": "Ajouter l'étiquette"
+        },
+        "body": {
+            "checkout": "Faire un checkout direct de {sha} (HEAD détachée). Des changements non committés l'empêcheront.",
+            "cherryPick": "Copier le changement de {sha} sur la branche courante sous forme d'un nouveau commit.",
+            "drop": "Retirer {sha} de l'historique, en rejouant les commits suivants sur son parent.",
+            "merge": "Fusionner {sha} dans la branche courante ({branch}).",
+            "rebase": "Rejouer les commits de la branche courante par-dessus {sha}.",
+            "reset": "Déplacer la branche courante ({branch}) sur {sha}.",
+            "revert": "Ajouter un nouveau commit qui annule {sha}. Rien n'est réécrit."
+        },
+        "conflict": "Impossible de faire {action} proprement : un conflit ou des changements non committés. Résolvez-le dans un terminal.",
+        "resetSoft": "Soft",
+        "resetMixed": "Mixed",
+        "resetHard": "Hard"
+    },
+    "useAsyncAction": {
+        "actionFailed": "L'action a échoué."
+    },
+    "useBranches": {
+        "checkoutFailed": "Le checkout a échoué. Committez, indexez ou jetez d'abord vos changements.",
+        "couldntCreate": "Impossible de créer cette branche.",
+        "couldntDelete": "Impossible de supprimer cette branche.",
+        "couldntPush": "Impossible de pousser cette branche.",
+        "pushRefused": "Le push a été refusé.",
+        "pushRefusedBecause": "Le push a été refusé : {reason}",
+        "unmerged": "La branche a des commits non fusionnés : la supprimer les perdrait."
+    },
+    "useOperation": {
+        "couldntAbort": "Impossible d'annuler : essayez dans un terminal."
+    },
+    "useStashes": {
+        "conflict": "Application impossible sans conflit : résolvez-le dans le panneau Changements. Le stash est toujours là.",
+        "couldntApply": "Impossible d'appliquer ce stash.",
+        "couldntDrop": "Impossible de jeter ce stash.",
+        "nothingApplied": "Rien n'a été appliqué : {reason}. Le stash est toujours là."
+    },
+    "useUndo": {
+        "amend": "Annuler l'amend",
+        "cherryPick": "Annuler le cherry-pick",
+        "commit": "Annuler le commit",
+        "couldntUndo": "Impossible d'annuler.",
+        "merge": "Annuler la fusion",
+        "other": "Annuler la dernière action",
+        "pull": "Annuler le pull",
+        "rebase": "Annuler le rebase",
+        "reset": "Annuler le reset",
+        "revert": "Annuler le revert"
     }
 }

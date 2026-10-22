@@ -5,14 +5,21 @@
     },
     "portRow": {
         "address": "Dirección",
+        "command": "Comando",
+        "commandUnreadable": "no se puede leer: el proceso ha borrado su propio argv",
+        "folder": "Carpeta",
         "forwarded": "reenviado",
         "loopbackAlias": "Alias de loopback",
+        "noTerminal": "ninguno: aquí nada puede mostrar su salida ni detenerlo",
         "notForwardable": "no reenviable",
+        "notReadable": "no se puede leer",
         "openPortPreviewIn": "Abrir la vista previa del puerto {port} en una pestaña nueva",
         "openTerminal": "Abrir terminal",
         "preview": "Vista previa",
+        "process": "proceso {pid}",
         "proxyCantReach": "El proxy no llega",
-        "stop": "Detener"
+        "stop": "Detener",
+        "terminal": "Terminal"
     },
     "portsView": {
         "nothingYoursListeningYet": "Todavía no hay nada tuyo escuchando.",
@@ -39,14 +46,17 @@
         "anyoneLinkOpen": "Cualquiera con este enlace puede abrirlo",
         "copyLink": "Copiar el enlace",
         "openPreviewInNew": "Abrir la vista previa en una pestaña nueva",
+        "share": "Compartir",
         "shareLivePreview": "Compartir esta vista previa en vivo"
     },
     "sharedConversations": {
         "chatsYouvePublished": "Chats que has publicado",
         "copyLink": "Copiar el enlace",
         "eachReadOnlyPage": "Cada uno de estos es una página de solo lectura que puede abrir cualquiera con el enlace: sin iniciar sesión. Muestra la conversación tal y como estaba cuando la compartiste, así que todo lo dicho desde entonces sigue siendo privado hasta que pulses",
+        "hoursAgo": "hace {n} h",
         "linkStaysSame": "Mismo enlace",
         "messagesOnly": "solo mensajes",
+        "minutesAgo": "hace {n} min",
         "openInNewTab": "Abrir {title} en una pestaña nueva",
         "publishLatest": "Publicar lo nuevo",
         "sandboxNoPublicAddress": "Este sandbox no tiene dirección pública, así que no se puede llegar a esta página.",
@@ -57,6 +67,7 @@
         "withAgentWork": "con el trabajo del agente"
     },
     "common": {
+        "actionFailed": "La acción falló.",
         "newTab": "Nueva pestaña"
     }
 }

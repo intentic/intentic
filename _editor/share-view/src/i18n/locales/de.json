@@ -10,6 +10,7 @@
         "nothingToShow": "Nichts zu zeigen",
         "runOwnAgents": ": eigene Agenten laufen lassen →",
         "shared": "Geteilt von",
+        "subtitle": "{count} Nachricht · geteilt {date} | {count} Nachrichten · geteilt {date}",
         "thinking": "Denkt nach"
     }
 }

@@ -1,6 +1,12 @@
 {
+    "common": {
+        "couldNotRenderDocument": "Impossible d'afficher ce document."
+    },
     "deck": {
-        "pictureInFormatBrowsers": "Image dans un format que les navigateurs ne savent pas dessiner"
+        "chart": "Graphique",
+        "embeddedObject": "Objet incorporé",
+        "pictureInFormatBrowsers": "Image dans un format que les navigateurs ne savent pas dessiner",
+        "smartArt": "Diagramme SmartArt"
     },
     "documentPaper": {
         "documentNoTextIn": "Ce document ne contient pas de texte."
@@ -23,7 +29,9 @@
     "epubViewer": {
         "bookNoChaptersIn": "Ce livre ne contient pas de chapitres.",
         "chapter": "Chapitre",
-        "contents": "Sommaire"
+        "contents": "Sommaire",
+        "couldNotOpen": "Impossible d'ouvrir ce livre.",
+        "noPackageDocument": "Ce fichier ne contient pas de document de package EPUB."
     },
     "mediaViewer": {
         "back10s": "10 s en arrière",
@@ -36,14 +44,17 @@
         "fullScreen": "Plein écran",
         "loop": "Boucle",
         "mute": "Couper le son",
+        "pause": "Pause",
         "pictureInPicture": "Image dans l'image",
         "play": "Lire",
         "playbackSpeed": "Vitesse de lecture",
         "seek": "Se déplacer : {displayTime} sur {duration}",
         "spaceToPlayArrows": "{filename} : espace pour lire, flèches pour se déplacer, F pour le plein écran",
-        "unmute": "Rétablir le son"
+        "unmute": "Rétablir le son",
+        "volume": "Volume"
     },
     "odfSlidesViewer": {
+        "couldNotRender": "Impossible d'afficher cette présentation.",
         "presentationNoSlides": "Cette présentation n'a aucune diapositive."
     },
     "pdfViewer": {
@@ -51,15 +62,21 @@
         "pdfCantDisplayedInline": "Ce PDF ne peut pas être affiché en ligne."
     },
     "pptxViewer": {
+        "couldNotRead": "Impossible de lire cette présentation.",
         "pictureOnSlide": "Image sur la diapositive {number}",
         "presentationNoSlides": "Cette présentation n'a aucune diapositive.",
         "slide": "Diapositive {number}",
+        "slideCount": "{count} diapositive | {count} diapositives",
         "speakerNotes": "Notes du présentateur"
     },
     "sheetViewer": {
-        "sheetEmpty": "Cette feuille est vide."
+        "couldNotRead": "Impossible de lire ce classeur.",
+        "sheetEmpty": "Cette feuille est vide.",
+        "workerFailed": "Le worker du classeur a échoué.",
+        "workerUnexpected": "Le worker du classeur a renvoyé une réponse inattendue."
     },
     "svgViewer": {
-        "preview": "Aperçu"
+        "preview": "Aperçu",
+        "source": "Source"
     }
 }

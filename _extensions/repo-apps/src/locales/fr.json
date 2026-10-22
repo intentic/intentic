@@ -7,8 +7,11 @@
         "pickOneMoreTemplates": "Choisissez un ou plusieurs modèles à générer dans ce monorepo. Nommez chaque instance pour en faire tourner plusieurs du même type."
     },
     "appsView": {
+        "actionFailed": "L'action a échoué.",
         "addApp": "Ajouter une application",
         "addingAppsFollowProgress": "Ajout d'applications : suivez la progression dans le terminal.",
+        "api": "API",
+        "healthy": "opérationnel",
         "libraryTests": "Tests de bibliothèque",
         "noAppsYetUse": "Pas encore d'applications : utilisez « Ajouter une application » pour en générer une et obtenir un aperçu en direct.",
         "noVitestProjectsFound": "Aucun projet de tests trouvé : rien ici ne possède de fichier vitest.config.*, bunfig.toml ou *.test.*.",
@@ -22,15 +25,126 @@
         "runTests": "Lancer les tests",
         "start": "Démarrer",
         "startAll": "Tout démarrer",
+        "starting": "démarrage",
         "stop": "Arrêter",
-        "stopAll": "Tout arrêter"
+        "stopAll": "Tout arrêter",
+        "stopped": "arrêté",
+        "terminal": "Terminal",
+        "tests": "Tests",
+        "web": "Web"
     },
     "dependenciesView": {
         "devDependencies": "Dépendances de dev",
         "noWorkspacePackagesFound": "Aucun paquet de l'espace de travail trouvé : pnpm-workspace.yaml ne nomme aucun répertoire de paquet.",
         "readingWorkspaceGraph": "Lecture du graphe de l'espace de travail…",
         "usedBy": "utilisé par",
-        "uses": "utilise"
+        "uses": "utilise",
+        "tabs": {
+            "overview": "Vue d'ensemble",
+            "graph": "Graphe",
+            "inside": "Intérieur de {name}"
+        },
+        "grouping": {
+            "label": "Grouper par",
+            "component": "Composants",
+            "folder": "Dossiers"
+        },
+        "stats": {
+            "packages": "Paquets",
+            "runtime": "Dépendances d'exécution",
+            "runtimeNote": "plus {dev} de dev",
+            "essential": "Après réduction",
+            "essentialNote": "{implied} impliquée(s) par un chemin plus long",
+            "longest": "Chaîne la plus longue",
+            "longestNote": "paquets de profondeur"
+        },
+        "findings": {
+            "heading": "Ce que dit le code",
+            "none": "Rien à signaler : chaque dépendance d'exécution est utilisée par le code livré, et aucune paire de zones ne dépend l'une de l'autre.",
+            "unused": {
+                "title": "Déclarées, jamais utilisées",
+                "caption": "Dépendances d'exécution que rien dans le paquet n'importe ni ne nomme. Retirez-les de package.json."
+            },
+            "toolingOnly": {
+                "title": "Dépendance d'exécution utilisée seulement par les tests ou l'outillage",
+                "caption": "Seuls des tests, des scripts ou des fichiers de configuration les utilisent. Déplacez-les dans devDependencies."
+            },
+            "mutual": {
+                "title": "{from} → {to}, à contre-courant",
+                "caption": "{count} arête va dans ce sens, {against} dans l'autre. Le sens le plus léger est généralement celui qui n'est pas à sa place. | {count} arêtes vont dans ce sens, {against} dans l'autre. Le sens le plus léger est généralement celui qui n'est pas à sa place."
+            }
+        },
+        "matrix": {
+            "heading": "Zones croisées",
+            "caption": "Chaque ligne dépend de chaque colonne, en comptant les arêtes d'exécution. Les zones sont ordonnées des fondations vers le haut : les nombres à droite de la diagonale vont donc à contre-courant ; une cellule encadrée est la moitié la plus légère d'une paire qui dépend dans les deux sens. Sélectionnez une cellule pour lister ses arêtes, ou une zone pour l'ouvrir dans le graphe.",
+            "cell": "{from} → {to}",
+            "openArea": "Ouvrir {area} dans le graphe"
+        },
+        "usageTable": {
+            "heading": "Comment les dépendances déclarées sont utilisées",
+            "caption": "Lu dans les propres fichiers de chaque paquet : l'usage le plus fort trouvé l'emporte.",
+            "runtime": "Exécution",
+            "dev": "Dev"
+        },
+        "usage": {
+            "code": "code",
+            "types": "types seulement",
+            "reference": "référence de fichier",
+            "tooling": "tests et outillage",
+            "none": "inutilisée"
+        },
+        "usageAbout": {
+            "code": "Un fichier livré en importe une valeur.",
+            "types": "Les fichiers livrés n'en importent que les types, qui disparaissent à la compilation.",
+            "reference": "Rien ne l'importe, mais un fichier livré la nomme, comme un Dockerfile qui copie son build.",
+            "tooling": "Seuls des tests, des scripts et des fichiers de configuration l'utilisent.",
+            "none": "Rien dans le paquet ne la nomme."
+        },
+        "graph": {
+            "focus": "Zone : {area}",
+            "clearFocus": "Afficher toutes les zones",
+            "dashed": "pas un import de valeur",
+            "findingEdge": "constat",
+            "allEdges": "Arêtes implicites ({count})",
+            "hubsAsCards": "Hubs en cartes",
+            "hubs": "Hubs, utilisés presque partout :",
+            "hubTitle": "{name} : {count} paquets en dépendent à l'exécution. Affiché comme une marque sur chaque carte plutôt que comme une ligne.",
+            "hubOnly": "Hubs seulement ({count}) :",
+            "standalone": "Autonomes ({count}) :",
+            "noRuntime": "Sans arête d'exécution ({count}) :",
+            "empty": "Aucune arête à dessiner avec ces réglages."
+        },
+        "inspector": {
+            "close": "Fermer",
+            "reach": "Tout ce qu'il atteint à travers ses dépendances, et tout ce qu'une modification de celui-ci peut affecter.",
+            "lookInside": "Voir l'intérieur",
+            "declares": "Déclare",
+            "declaredBy": "Déclaré par"
+        },
+        "inside": {
+            "declared": "Répertoires empilés selon les couches déclarées par son layers.json, la plus basse en bas. Un module peut importer sa propre couche et toute couche inférieure.",
+            "inferred": "Répertoires empilés selon leurs imports : un répertoire qui n'importe rien d'ici est tout en bas, et chacun se place au-dessus de tout ce qu'il importe.",
+            "reading": "Lecture de ses modules…",
+            "empty": "Aucun module source trouvé.",
+            "emptyLayer": "rien ici",
+            "unitTitle": "{unit} : {count} module | {unit} : {count} modules",
+            "inCycle": "Dans un cycle d'imports",
+            "reachesUp": "Importe une couche supérieure",
+            "imports": "{unit} importe",
+            "importedBy": "Importé par",
+            "upward": "Imports qui remontent d'une couche",
+            "upwardCaption": "La vérification des frontières du paquet les refuse, sauf s'ils figurent dans sa baseline.",
+            "cycle": "Cycle {n}",
+            "unplaced": "Aucune couche ne place : {units}. Ajoutez-les à layers.json.",
+            "declareHint": "Ajoutez un layers.json à côté du package.json de ce paquet pour nommer ses couches. Cette vue montre alors tout import qui va à leur encontre.",
+            "stats": {
+                "modules": "Modules",
+                "units": "Répertoires",
+                "imports": "Imports entre eux",
+                "upward": "Remontants",
+                "cycles": "Cycles"
+            }
+        }
     },
     "extension": {
         "apps": "Applications",

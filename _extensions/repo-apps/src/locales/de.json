@@ -3,11 +3,15 @@
         "add": "Hinzufügen",
         "addApp": "Eine App hinzufügen",
         "eGShopApi": "z. B. shop-api",
+        "name": "Name:",
         "pickOneMoreTemplates": "Wählen Sie eine oder mehrere Vorlagen, die in dieses Monorepo gerüstet werden. Benennen Sie jede Instanz, um mehrere derselben Art zu betreiben."
     },
     "appsView": {
+        "actionFailed": "Die Aktion ist fehlgeschlagen.",
         "addApp": "App hinzufügen",
         "addingAppsFollowProgress": "Apps werden hinzugefügt: verfolgen Sie den Fortschritt im Terminal.",
+        "api": "API",
+        "healthy": "in Ordnung",
         "libraryTests": "Bibliothekstests",
         "noAppsYetUse": "Noch keine Apps: nutzen Sie „App hinzufügen“, um eine zu gerüsten und eine Live-Vorschau zu bekommen.",
         "noVitestProjectsFound": "Keine Testprojekte gefunden: nichts hier besitzt eine vitest.config.*-, bunfig.toml- oder *.test.*-Datei.",
@@ -21,17 +25,129 @@
         "runTests": "Tests ausführen",
         "start": "Starten",
         "startAll": "Alle starten",
+        "starting": "startet",
         "stop": "Stoppen",
-        "stopAll": "Alle stoppen"
+        "stopAll": "Alle stoppen",
+        "stopped": "gestoppt",
+        "terminal": "Terminal",
+        "tests": "Tests",
+        "web": "Web"
     },
     "dependenciesView": {
         "devDependencies": "Dev-Abhängigkeiten",
         "noWorkspacePackagesFound": "Keine Workspace-Pakete gefunden: pnpm-workspace.yaml nennt keine Paketverzeichnisse.",
         "readingWorkspaceGraph": "Der Workspace-Graph wird gelesen…",
         "usedBy": "benutzt von",
-        "uses": "benutzt"
+        "uses": "benutzt",
+        "tabs": {
+            "overview": "Überblick",
+            "graph": "Graph",
+            "inside": "In {name}"
+        },
+        "grouping": {
+            "label": "Gruppieren nach",
+            "component": "Komponenten",
+            "folder": "Ordner"
+        },
+        "stats": {
+            "packages": "Pakete",
+            "runtime": "Laufzeitabhängigkeiten",
+            "runtimeNote": "plus {dev} Entwicklungsabhängigkeiten",
+            "essential": "Nach Reduktion",
+            "essentialNote": "{implied} durch längeren Pfad impliziert",
+            "longest": "Längste Kette",
+            "longestNote": "Pakete tief"
+        },
+        "findings": {
+            "heading": "Was der Code sagt",
+            "none": "Nichts zu melden: Jede Laufzeitabhängigkeit wird vom ausgelieferten Code verwendet und keine zwei Bereiche hängen gegenseitig voneinander ab.",
+            "unused": {
+                "title": "Deklariert, nie verwendet",
+                "caption": "Laufzeitabhängigkeiten, die nichts im Paket importiert oder nennt. Entfernen Sie sie aus package.json."
+            },
+            "toolingOnly": {
+                "title": "Laufzeitabhängigkeit, nur in Tests oder Werkzeugen verwendet",
+                "caption": "Nur Tests, Skripte oder Konfigurationsdateien verwenden diese. Verschieben Sie sie nach devDependencies."
+            },
+            "mutual": {
+                "title": "{from} → {to}, gegen die Richtung",
+                "caption": "{count} Kante führt in diese Richtung, {against} in die andere. Meist ist die schwächere Richtung fehl am Platz. | {count} Kanten führen in diese Richtung, {against} in die andere. Meist ist die schwächere Richtung fehl am Platz."
+            }
+        },
+        "matrix": {
+            "heading": "Bereiche gegenüber Bereichen",
+            "caption": "Jede Zeile hängt von jeder Spalte ab; gezählt werden Laufzeitkanten. Grundlagen stehen zuerst, daher zeigen Zahlen rechts der Diagonale gegen die übliche Richtung. Eine umrandete Zelle ist die schwächere Hälfte einer gegenseitigen Abhängigkeit. Wählen Sie eine Zelle für ihre Kanten oder einen Bereich, um ihn im Graphen zu öffnen.",
+            "cell": "{from} → {to}",
+            "openArea": "{area} im Graphen öffnen"
+        },
+        "usageTable": {
+            "heading": "So werden deklarierte Abhängigkeiten verwendet",
+            "caption": "Aus den eigenen Dateien jedes Pakets gelesen: Die stärkste gefundene Nutzung entscheidet.",
+            "runtime": "Laufzeit",
+            "dev": "Entwicklung"
+        },
+        "usage": {
+            "code": "Code",
+            "types": "nur Typen",
+            "reference": "Dateiverweis",
+            "tooling": "Tests und Werkzeuge",
+            "none": "ungenutzt"
+        },
+        "usageAbout": {
+            "code": "Eine ausgelieferte Datei importiert daraus einen Wert.",
+            "types": "Ausgelieferte Dateien importieren nur die Typen, die beim Build verschwinden.",
+            "reference": "Nichts importiert es, aber eine ausgelieferte Datei nennt es, etwa ein Dockerfile, das seinen Build kopiert.",
+            "tooling": "Nur Tests, Skripte und Konfigurationsdateien verwenden es.",
+            "none": "Nichts im Paket nennt es."
+        },
+        "graph": {
+            "focus": "Bereich: {area}",
+            "clearFocus": "Alle Bereiche anzeigen",
+            "dashed": "kein Wertimport",
+            "findingEdge": "Fund",
+            "allEdges": "Implizierte Kanten ({count})",
+            "hubsAsCards": "Zentrale Pakete als Karten",
+            "hubs": "Fast überall verwendete zentrale Pakete:",
+            "hubTitle": "{name}: {count} Pakete hängen zur Laufzeit davon ab. Statt einer Linie als Markierung auf jeder Karte angezeigt.",
+            "hubOnly": "Nur zentrale Pakete ({count}):",
+            "standalone": "Eigenständig ({count}):",
+            "noRuntime": "Keine Laufzeitkanten ({count}):",
+            "empty": "Mit diesen Einstellungen sind keine Kanten zu zeichnen."
+        },
+        "inspector": {
+            "close": "Schließen",
+            "reach": "Alles, was es über seine Abhängigkeiten erreicht, und alles, was eine Änderung daran beeinflussen kann.",
+            "lookInside": "Hineinsehen",
+            "declares": "Deklariert",
+            "declaredBy": "Deklariert von"
+        },
+        "inside": {
+            "declared": "Verzeichnisse in den von layers.json deklarierten Schichten, die niedrigste unten. Ein Modul darf seine eigene und jede darunterliegende Schicht importieren.",
+            "inferred": "Verzeichnisse nach ihren Imports gestapelt: Ein Verzeichnis, das hier nichts importiert, steht unten. Jedes andere steht über allem, was es importiert.",
+            "reading": "Module werden gelesen…",
+            "empty": "Keine Quellmodule gefunden.",
+            "emptyLayer": "nichts hier",
+            "unitTitle": "{unit}: {count} Modul | {unit}: {count} Module",
+            "inCycle": "In einem Importzyklus",
+            "reachesUp": "Importiert eine höhere Schicht",
+            "imports": "{unit} importiert",
+            "importedBy": "Importiert von",
+            "upward": "Imports in eine höhere Schicht",
+            "upwardCaption": "Die Grenzprüfung des Pakets lehnt diese ab, sofern sie nicht auf seiner Baseline stehen.",
+            "cycle": "Zyklus {n}",
+            "unplaced": "Keiner Schicht zugeordnet: {units}. Fügen Sie sie zu layers.json hinzu.",
+            "declareHint": "Fügen Sie neben package.json dieses Pakets eine layers.json hinzu, um seine Schichten zu benennen. Diese Ansicht zeigt dann jeden Import, der dagegen verstößt.",
+            "stats": {
+                "modules": "Module",
+                "units": "Verzeichnisse",
+                "imports": "Imports dazwischen",
+                "upward": "Nach oben",
+                "cycles": "Zyklen"
+            }
+        }
     },
     "extension": {
+        "apps": "Apps",
         "dependencies": "Abhängigkeiten"
     }
 }

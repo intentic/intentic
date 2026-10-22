@@ -1,14 +1,25 @@
 {
+    "extension": {
+        "ports": "Ports",
+        "public": "Public"
+    },
     "portRow": {
         "address": "Adresse",
+        "command": "Commande",
+        "commandUnreadable": "illisible : le processus a effacé son propre argv",
+        "folder": "Dossier",
         "forwarded": "transféré",
         "loopbackAlias": "Alias loopback",
+        "noTerminal": "aucun : rien ici ne peut afficher sa sortie ni l'arrêter",
         "notForwardable": "non transférable",
+        "notReadable": "illisible",
         "openPortPreviewIn": "Ouvrir l'aperçu du port {port} dans un nouvel onglet",
         "openTerminal": "Ouvrir le terminal",
         "preview": "Aperçu",
+        "process": "processus {pid}",
         "proxyCantReach": "Hors de portée du proxy",
-        "stop": "Arrêter"
+        "stop": "Arrêter",
+        "terminal": "Terminal"
     },
     "portsView": {
         "nothingYoursListeningYet": "Rien à vous n'écoute encore.",
@@ -35,14 +46,17 @@
         "anyoneLinkOpen": "Quiconque a ce lien peut l'ouvrir",
         "copyLink": "Copier le lien",
         "openPreviewInNew": "Ouvrir l'aperçu dans un nouvel onglet",
+        "share": "Partager",
         "shareLivePreview": "Partager cet aperçu en direct"
     },
     "sharedConversations": {
         "chatsYouvePublished": "Chats que vous avez publiés",
         "copyLink": "Copier le lien",
         "eachReadOnlyPage": "Chacun d'eux est une page en lecture seule que quiconque a le lien peut ouvrir : sans connexion. Elle montre la conversation telle qu'elle était au moment du partage : tout ce qui a été dit depuis reste privé jusqu'à ce que vous appuyiez sur",
+        "hoursAgo": "il y a {n} h",
         "linkStaysSame": "Même lien",
         "messagesOnly": "messages seuls",
+        "minutesAgo": "il y a {n} min",
         "openInNewTab": "Ouvrir {title} dans un nouvel onglet",
         "publishLatest": "Publier la suite",
         "sandboxNoPublicAddress": "Ce sandbox n'a pas d'adresse publique : cette page ne peut donc pas être atteinte.",
@@ -53,6 +67,7 @@
         "withAgentWork": "avec le travail de l'agent"
     },
     "common": {
+        "actionFailed": "L'action a échoué.",
         "newTab": "Nouvel onglet"
     }
 }

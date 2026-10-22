@@ -7,8 +7,11 @@
         "pickOneMoreTemplates": "Elige una o más plantillas para andamiar en este monorepo. Ponle nombre a cada instancia para tener varias del mismo tipo."
     },
     "appsView": {
+        "actionFailed": "La acción falló.",
         "addApp": "Añadir aplicación",
         "addingAppsFollowProgress": "Añadiendo aplicaciones: sigue el progreso en el terminal.",
+        "api": "API",
+        "healthy": "en buen estado",
         "libraryTests": "Pruebas de biblioteca",
         "noAppsYetUse": "Todavía no hay aplicaciones: usa «Añadir aplicación» para andamiar una y tener una vista previa en vivo.",
         "noVitestProjectsFound": "No se han encontrado proyectos de pruebas: nada de aquí tiene un archivo vitest.config.*, bunfig.toml o *.test.*.",
@@ -22,15 +25,126 @@
         "runTests": "Ejecutar las pruebas",
         "start": "Iniciar",
         "startAll": "Iniciar todo",
+        "starting": "iniciando",
         "stop": "Detener",
-        "stopAll": "Detener todo"
+        "stopAll": "Detener todo",
+        "stopped": "detenido",
+        "terminal": "Terminal",
+        "tests": "Pruebas",
+        "web": "Web"
     },
     "dependenciesView": {
         "devDependencies": "Dependencias de desarrollo",
         "noWorkspacePackagesFound": "No se han encontrado paquetes del espacio de trabajo: pnpm-workspace.yaml no nombra directorios de paquetes.",
         "readingWorkspaceGraph": "Leyendo el grafo del espacio de trabajo…",
         "usedBy": "usado por",
-        "uses": "usa"
+        "uses": "usa",
+        "tabs": {
+            "overview": "Resumen",
+            "graph": "Grafo",
+            "inside": "Dentro de {name}"
+        },
+        "grouping": {
+            "label": "Agrupar por",
+            "component": "Componentes",
+            "folder": "Carpetas"
+        },
+        "stats": {
+            "packages": "Paquetes",
+            "runtime": "Dependencias de ejecución",
+            "runtimeNote": "más {dev} de desarrollo",
+            "essential": "Tras la reducción",
+            "essentialNote": "{implied} implícitas por una ruta más larga",
+            "longest": "Cadena más larga",
+            "longestNote": "paquetes de profundidad"
+        },
+        "findings": {
+            "heading": "Lo que dice el código",
+            "none": "Nada que señalar: todas las dependencias de ejecución se usan en el código distribuido y ninguna pareja de áreas depende mutuamente.",
+            "unused": {
+                "title": "Declaradas, nunca usadas",
+                "caption": "Dependencias de ejecución que nada en el paquete importa ni menciona. Elimínalas de package.json."
+            },
+            "toolingOnly": {
+                "title": "Dependencia de ejecución usada solo en pruebas o herramientas",
+                "caption": "Solo las usan pruebas, scripts o archivos de configuración. Muévelas a devDependencies."
+            },
+            "mutual": {
+                "title": "{from} → {to}, contra el flujo",
+                "caption": "{count} enlace va en este sentido y {against} en el otro. La dirección con menos enlaces suele ser la que sobra. | {count} enlaces van en este sentido y {against} en el otro. La dirección con menos enlaces suele ser la que sobra."
+            }
+        },
+        "matrix": {
+            "heading": "Áreas frente a áreas",
+            "caption": "Cada fila depende de cada columna, contando enlaces de ejecución. Las áreas se ordenan desde la base, así que los números a la derecha de la diagonal van contra el flujo habitual; una celda con borde señala el lado con menos enlaces de una dependencia mutua. Selecciona una celda para ver sus enlaces o un área para abrirla en el grafo.",
+            "cell": "{from} → {to}",
+            "openArea": "Abrir {area} en el grafo"
+        },
+        "usageTable": {
+            "heading": "Cómo se usan las dependencias declaradas",
+            "caption": "Leído de los propios archivos de cada paquete: decide el uso más fuerte encontrado.",
+            "runtime": "Entorno",
+            "dev": "Desarrollo"
+        },
+        "usage": {
+            "code": "código",
+            "types": "solo tipos",
+            "reference": "referencia en archivo",
+            "tooling": "pruebas y herramientas",
+            "none": "sin usar"
+        },
+        "usageAbout": {
+            "code": "Un archivo distribuido importa un valor de ella.",
+            "types": "Los archivos distribuidos solo importan sus tipos, que desaparecen al compilar.",
+            "reference": "Nada la importa, pero un archivo distribuido la menciona, como un Dockerfile que copia su compilación.",
+            "tooling": "Solo la usan pruebas, scripts y archivos de configuración.",
+            "none": "Nada en el paquete la menciona."
+        },
+        "graph": {
+            "focus": "Área: {area}",
+            "clearFocus": "Mostrar todas las áreas",
+            "dashed": "no importa un valor",
+            "findingEdge": "hallazgo",
+            "allEdges": "Enlaces implícitos ({count})",
+            "hubsAsCards": "Nodos centrales como tarjetas",
+            "hubs": "Nodos centrales, usados casi en todas partes:",
+            "hubTitle": "{name}: {count} paquetes dependen de él durante la ejecución. Se muestra como marca en cada tarjeta en vez de una línea.",
+            "hubOnly": "Solo nodos centrales ({count}):",
+            "standalone": "Independientes ({count}):",
+            "noRuntime": "Sin enlaces de ejecución ({count}):",
+            "empty": "No hay enlaces que dibujar con estos ajustes."
+        },
+        "inspector": {
+            "close": "Cerrar",
+            "reach": "Todo lo que alcanza mediante sus dependencias y todo lo que puede verse afectado por un cambio en él.",
+            "lookInside": "Ver por dentro",
+            "declares": "Declara",
+            "declaredBy": "Declarado por"
+        },
+        "inside": {
+            "declared": "Directorios apilados en las capas declaradas en su layers.json, con la inferior abajo. Un módulo puede importar su propia capa y cualquiera inferior.",
+            "inferred": "Directorios apilados según sus importaciones: el que no importa nada de aquí queda abajo y cada uno queda por encima de todo lo que importa.",
+            "reading": "Leyendo sus módulos…",
+            "empty": "No se han encontrado módulos de código fuente.",
+            "emptyLayer": "nada aquí",
+            "unitTitle": "{unit}: {count} módulo | {unit}: {count} módulos",
+            "inCycle": "En un ciclo de importaciones",
+            "reachesUp": "Importa una capa superior",
+            "imports": "{unit} importa",
+            "importedBy": "Importado por",
+            "upward": "Importaciones que suben de capa",
+            "upwardCaption": "La comprobación de límites del paquete las rechaza salvo que figuren en su línea base.",
+            "cycle": "Ciclo {n}",
+            "unplaced": "Ninguna capa incluye: {units}. Añádelos a layers.json.",
+            "declareHint": "Añade un layers.json junto al package.json de este paquete para nombrar sus capas. Esta vista mostrará las importaciones que las incumplan.",
+            "stats": {
+                "modules": "Módulos",
+                "units": "Directorios",
+                "imports": "Importaciones entre ellos",
+                "upward": "Hacia arriba",
+                "cycles": "Ciclos"
+            }
+        }
     },
     "extension": {
         "apps": "Aplicaciones",

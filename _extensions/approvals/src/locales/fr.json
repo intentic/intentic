@@ -43,6 +43,7 @@
         "goingAhead": "Part",
         "hookLedgerUnreadable": "Le registre des hooks que vous avez approuvés est illisible : aucun hook de l'espace de travail ne s'exécute tant que vous n'en approuvez pas un à nouveau.",
         "hookSetTitle": "Hook Claude Code | {count} hooks Claude Code",
+        "hooks": "Hooks",
         "hooksFound": "Trouvé par un tour",
         "hooksWaiting": "Hooks en attente de votre accord",
         "inProgress": "en cours",
@@ -52,6 +53,7 @@
         "needsReview": "Demande votre revue",
         "nothingUndone": "Rien n'est annulé",
         "nothingWaitingPostsAgent": "Rien en attente. Les publications que votre agent veut publier, tout ce qu'il ne doit pas faire sans demander, et les automatisations réglées pour demander d'abord atterrissent toutes ici pour votre approbation.",
+        "seeWhatAgentsWaitOn": "Voir ce que vos agents attendent",
         "open": "Ouvrir",
         "postStaysUpOn": "La publication reste en ligne sur {rejecting} : seule cette trace en est supprimée.",
         "proposed": "proposée {createdAt}",
@@ -69,7 +71,30 @@
         "stop": "Arrêter",
         "stopPutBackIn": "Arrêter {item} et le remettre en revue",
         "whatDoneStaysDone": "Ce qui a été fait reste fait : seule cette trace en est supprimée.",
-        "wontGoAhead": "Ne part pas"
+        "wontGoAhead": "Ne part pas",
+        "action": "Action",
+        "actions": "Actions",
+        "allApprovals": "Toutes les approbations",
+        "starting": "démarrage…",
+        "startsInUnlessCancel": "démarre dans {seconds} s sauf si vous annulez",
+        "couldntStartAutomation": "Impossible de démarrer l'automatisation.",
+        "couldntDropHeldAutomation": "Impossible d'abandonner l'automatisation retenue.",
+        "couldntApproveEverything": "Impossible de tout approuver.",
+        "couldntRemoveIt": "Impossible de la retirer.",
+        "couldntSaveChanges": "Impossible d'enregistrer vos modifications.",
+        "couldntHoldBack": "Impossible de les retenir.",
+        "couldntUpdateIt": "Impossible de la mettre à jour.",
+        "inWhen": "dans {when}",
+        "goesAheadOne": "« {item} » part {when}.",
+        "goAheadMany": "{count} élément part, le premier {when}. | {count} éléments partent, le premier {when}.",
+        "holdItBack": "Le retenir",
+        "holdThemBack": "Les retenir",
+        "characters": "{count} caractère | {count} caractères",
+        "cancelItem": "Annuler {item}",
+        "startItem": "Démarrer {item}",
+        "approveItem": "Approuver {item}",
+        "invalidFiles": "{count} fichier n'a pas pu être lu et ne s'exécutera pas : | {count} fichiers n'ont pas pu être lus et ne s'exécuteront pas :",
+        "unreadableHeldWakes": "{count} automatisation retenue n'a pas pu être lue et ne peut pas être libérée : | {count} automatisations retenues n'ont pas pu être lues et ne peuvent pas être libérées :"
     },
     "extension": {
         "approvals": "Approbations"
@@ -83,6 +108,7 @@
         "fromPlugin": "une connexion de plugin",
         "fromProjectSettings": ".claude/settings.json de l'espace de travail",
         "fromSkills": "un dossier de plugin parmi les skills",
+        "fromUserSettings": "~/.claude/settings.json",
         "marketplace": "Ajoute la place de marché de plugins {name} ({location}), d'où Claude Code peut installer les plugins activés.",
         "powers": {
             "asksModel": "interroge un modèle",
@@ -117,8 +143,15 @@
         "postText": "Texte de la publication",
         "postTitle": "Titre de la publication"
     },
+    "postText": {
+        "anyMomentNow": "d'un instant à l'autre",
+        "replyIn": "réponse dans",
+        "replyOn": "réponse sur",
+        "replyToCommentIn": "réponse à un commentaire dans"
+    },
     "scheduleControl": {
         "clickToSchedule": "Cliquer pour planifier",
+        "dueNow": "À faire maintenant",
         "goAheadAt": "Lancer {label} le",
         "goesAtOnce": "Part aussitôt",
         "noDate": "Pas de date"

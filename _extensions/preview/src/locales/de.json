@@ -1,17 +1,25 @@
 {
     "extension": {
+        "ports": "Ports",
         "public": "Öffentlich"
     },
     "portRow": {
         "address": "Adresse",
+        "command": "Befehl",
+        "commandUnreadable": "nicht lesbar: Der Prozess hat sein eigenes argv gelöscht",
+        "folder": "Ordner",
         "forwarded": "weitergeleitet",
         "loopbackAlias": "Loopback-Alias",
+        "noTerminal": "keines: Hier kann nichts seine Ausgabe zeigen oder ihn stoppen",
         "notForwardable": "nicht weiterleitbar",
+        "notReadable": "nicht lesbar",
         "openPortPreviewIn": "Die Vorschau von Port {port} in einem neuen Tab öffnen",
         "openTerminal": "Terminal öffnen",
         "preview": "Vorschau",
+        "process": "Prozess {pid}",
         "proxyCantReach": "Proxy erreicht es nicht",
-        "stop": "Stoppen"
+        "stop": "Stoppen",
+        "terminal": "Terminal"
     },
     "portsView": {
         "nothingYoursListeningYet": "Noch lauscht nichts von Ihnen.",
@@ -38,14 +46,17 @@
         "anyoneLinkOpen": "Jeder mit diesem Link kann es öffnen",
         "copyLink": "Link kopieren",
         "openPreviewInNew": "Die Vorschau in einem neuen Tab öffnen",
+        "share": "Teilen",
         "shareLivePreview": "Diese Live-Vorschau teilen"
     },
     "sharedConversations": {
         "chatsYouvePublished": "Chats, die Sie veröffentlicht haben",
         "copyLink": "Link kopieren",
         "eachReadOnlyPage": "Jede davon ist eine Nur-Lese-Seite, die jeder mit dem Link öffnen kann: ohne Anmeldung. Sie zeigt die Unterhaltung so, wie sie beim Teilen war, alles seither Gesagte bleibt also privat, bis Sie drücken",
+        "hoursAgo": "vor {n} Std.",
         "linkStaysSame": "Gleicher Link",
         "messagesOnly": "nur Nachrichten",
+        "minutesAgo": "vor {n} Min.",
         "openInNewTab": "{title} in einem neuen Tab öffnen",
         "publishLatest": "Neues veröffentlichen",
         "sandboxNoPublicAddress": "Diese Sandbox hat keine öffentliche Adresse, diese Seite ist also nicht erreichbar.",
@@ -56,6 +67,7 @@
         "withAgentWork": "mit der Arbeit des Agenten"
     },
     "common": {
+        "actionFailed": "Die Aktion ist fehlgeschlagen.",
         "newTab": "Neuer Tab"
     }
 }

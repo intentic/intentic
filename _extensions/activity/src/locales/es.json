@@ -8,20 +8,65 @@
     },
     "activityView": {
         "noSpeakersYet": "todavía sin hablantes",
-        "transcribing": "transcribiendo"
+        "transcribing": "transcribiendo",
+        "voiceMinutes": "{minutes} min: {speakers}"
     },
     "episodeRow": {
+        "error": "error",
         "failed": "falló",
+        "from": "de {author}",
         "openTranscript": "Abrir la transcripción",
+        "outboundCalls": "{count} llamada saliente | {count} llamadas salientes",
         "session": "sesión {sessionId}",
         "source": "origen {sourceKey}"
+    },
+    "episodes": {
+        "today": "Hoy",
+        "turn": "Turno",
+        "type": {
+            "apiCall": "Llamada API",
+            "automationPending": "Automatización retenida para aprobación",
+            "automationRun": "Ejecución de automatización",
+            "depsFixUnarmed": "Solución disponible, nada activado",
+            "depsInstallFailed": "Instalación de dependencias fallida",
+            "depsInstallLost": "Instalación de dependencias sin supervisión",
+            "depsInstallStarted": "Instalando dependencias",
+            "depsVerifyGreen": "Comprobaciones correctas",
+            "depsVerifyLost": "Comprobaciones sin supervisión",
+            "depsVerifyRed": "Comprobaciones fallidas",
+            "depsVerifySkipped": "Sin comprobaciones que ejecutar",
+            "dispatchFailed": "Envío fallido",
+            "gatewayLoginFailed": "Inicio de sesión de la pasarela fallido",
+            "messageEdit": "Mensaje editado",
+            "messageReceived": "Mensaje recibido",
+            "messageSend": "Mensaje enviado",
+            "messagesRead": "Mensajes leídos",
+            "reactionAdd": "Reacción añadida",
+            "reactionRemove": "Reacción eliminada",
+            "turnCompleted": "Turno completado",
+            "turnError": "Error de turno",
+            "turnPlan": "Plan propuesto",
+            "turnStarted": "Turno iniciado",
+            "voiceSessionEnded": "Sesión de voz finalizada",
+            "voiceSessionStarted": "Sesión de voz iniciada",
+            "voiceTranscriptReceived": "Transcripción de voz",
+            "voiceUtteranceReceived": "Intervención de voz"
+        },
+        "yesterday": "Ayer"
     },
     "filter": "Filtrar por texto, canal, sesión…",
     "source": "Origen",
     "sourceFilter": {
         "allSources": "Todos los orígenes",
         "connections": "Conexiones",
-        "direct": "Directo"
+        "direct": "Directo",
+        "failed": "{count} fallida | {count} fallidas",
+        "gateway": {
+            "connecting": "conectando…",
+            "disconnected": "sin conectar",
+            "idle": "inactivo",
+            "pairing": "esperando a vincularse"
+        }
     },
     "sourceLabel": "Origen de la actividad",
     "sources": {

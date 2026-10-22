@@ -1,6 +1,12 @@
 {
+    "common": {
+        "couldNotRenderDocument": "Dieses Dokument konnte nicht dargestellt werden."
+    },
     "deck": {
-        "pictureInFormatBrowsers": "Bild in einem Format, das Browser nicht zeichnen können"
+        "chart": "Diagramm",
+        "embeddedObject": "Eingebettetes Objekt",
+        "pictureInFormatBrowsers": "Bild in einem Format, das Browser nicht zeichnen können",
+        "smartArt": "SmartArt-Diagramm"
     },
     "documentPaper": {
         "documentNoTextIn": "Dieses Dokument enthält keinen Text."
@@ -23,7 +29,9 @@
     "epubViewer": {
         "bookNoChaptersIn": "Dieses Buch enthält keine Kapitel.",
         "chapter": "Kapitel",
-        "contents": "Inhalt"
+        "contents": "Inhalt",
+        "couldNotOpen": "Dieses Buch konnte nicht geöffnet werden.",
+        "noPackageDocument": "Diese Datei enthält kein EPUB-Paketdokument."
     },
     "mediaViewer": {
         "back10s": "10 s zurück",
@@ -36,6 +44,7 @@
         "fullScreen": "Vollbild",
         "loop": "Schleife",
         "mute": "Stummschalten",
+        "pause": "Pausieren",
         "pictureInPicture": "Bild im Bild",
         "play": "Abspielen",
         "playbackSpeed": "Wiedergabegeschwindigkeit",
@@ -45,6 +54,7 @@
         "volume": "Lautstärke"
     },
     "odfSlidesViewer": {
+        "couldNotRender": "Diese Präsentation konnte nicht dargestellt werden.",
         "presentationNoSlides": "Diese Präsentation hat keine Folien."
     },
     "pdfViewer": {
@@ -52,13 +62,18 @@
         "pdfCantDisplayedInline": "Dieses PDF lässt sich nicht eingebettet anzeigen."
     },
     "pptxViewer": {
+        "couldNotRead": "Diese Präsentation konnte nicht gelesen werden.",
         "pictureOnSlide": "Bild auf Folie {number}",
         "presentationNoSlides": "Diese Präsentation hat keine Folien.",
         "slide": "Folie {number}",
+        "slideCount": "{count} Folie | {count} Folien",
         "speakerNotes": "Sprechernotizen"
     },
     "sheetViewer": {
-        "sheetEmpty": "Dieses Blatt ist leer."
+        "couldNotRead": "Diese Tabelle konnte nicht gelesen werden.",
+        "sheetEmpty": "Dieses Blatt ist leer.",
+        "workerFailed": "Tabellen-Worker fehlgeschlagen.",
+        "workerUnexpected": "Der Tabellen-Worker hat eine unerwartete Antwort geliefert."
     },
     "svgViewer": {
         "preview": "Vorschau",

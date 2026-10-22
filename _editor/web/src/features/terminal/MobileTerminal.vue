@@ -12,6 +12,6 @@ const { keyboardInset } = useDevice();
 
 <template>
     <div class="h-full" :style="{ paddingBottom: `${keyboardInset}px` }">
-        <TerminalPanel :resizable="false" :source="globalTerminalSource" storage-key="sandbox" @close="router.back()" />
+        <TerminalPanel :resizable="false" :poppable="false" :source="globalTerminalSource" storage-key="sandbox" @close="router.back()" />
     </div>
 </template>

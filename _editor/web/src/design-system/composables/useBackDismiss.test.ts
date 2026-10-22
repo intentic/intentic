@@ -62,6 +62,22 @@ describe(`a pick that closes a sheet and navigates`, () => {
     }
 });
 
+// A RouterLink inside a sheet runs its own navigate before the click handler that closes the sheet, so the push is
+// already under way when the sheet steps back (the model picker's "Connect a model, or manage accounts", 2026-10-21).
+it(`a link in the sheet, which navigates before the sheet closes, still lands on its route`, async () => {
+    await withRouter(async (router, open) => {
+        open.value = true;
+        await nextTick();
+        const navigated = router.push(`/agents/picked`);
+        open.value = false;
+        const failure = await navigated;
+        await settle(1000);
+        expect(failure).toBeUndefined();
+        expect(router.currentRoute.value.path).toBe(`/agents/picked`);
+        expect(location.pathname).toBe(`/agents/picked`);
+    });
+});
+
 it(`gives the entry back when the sheet closes without navigating, so one back press still leaves the page`, async () => {
     await withRouter(async (_router, open) => {
         const below = position();

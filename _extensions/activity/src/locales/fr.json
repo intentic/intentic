@@ -12,13 +12,61 @@
         "voiceMinutes": "{minutes} min : {speakers}"
     },
     "episodeRow": {
+        "error": "erreur",
         "failed": "échoué",
-        "openTranscript": "Ouvrir la transcription"
+        "from": "de {author}",
+        "openTranscript": "Ouvrir la transcription",
+        "outboundCalls": "{count} appel sortant | {count} appels sortants",
+        "session": "session {sessionId}",
+        "source": "source {sourceKey}"
+    },
+    "episodes": {
+        "today": "Aujourd'hui",
+        "turn": "Tour",
+        "type": {
+            "apiCall": "Appel d'API",
+            "automationPending": "Automatisation retenue pour approbation",
+            "automationRun": "Exécution d'automatisation",
+            "depsFixUnarmed": "Correctif disponible, rien d'armé",
+            "depsInstallFailed": "Échec de l'installation des dépendances",
+            "depsInstallLost": "Installation des dépendances non suivie",
+            "depsInstallStarted": "Installation des dépendances",
+            "depsVerifyGreen": "Vérifications réussies",
+            "depsVerifyLost": "Vérifications non suivies",
+            "depsVerifyRed": "Vérifications en échec",
+            "depsVerifySkipped": "Aucune vérification à exécuter",
+            "dispatchFailed": "Échec de l'envoi",
+            "gatewayLoginFailed": "Échec de connexion de la passerelle",
+            "messageEdit": "Message modifié",
+            "messageReceived": "Message reçu",
+            "messageSend": "Message envoyé",
+            "messagesRead": "Messages lus",
+            "reactionAdd": "Réaction ajoutée",
+            "reactionRemove": "Réaction retirée",
+            "turnCompleted": "Tour terminé",
+            "turnError": "Erreur de tour",
+            "turnPlan": "Plan proposé",
+            "turnStarted": "Tour démarré",
+            "voiceSessionEnded": "Session vocale terminée",
+            "voiceSessionStarted": "Session vocale démarrée",
+            "voiceTranscriptReceived": "Transcription vocale",
+            "voiceUtteranceReceived": "Énoncé vocal"
+        },
+        "yesterday": "Hier"
     },
     "filter": "Filtrer par texte, canal, session…",
+    "source": "Source",
     "sourceFilter": {
         "allSources": "Toutes les sources",
-        "connections": "Connexions"
+        "connections": "Connexions",
+        "direct": "Direct",
+        "failed": "{count} échec | {count} échecs",
+        "gateway": {
+            "connecting": "connexion…",
+            "disconnected": "non connectée",
+            "idle": "inactive",
+            "pairing": "en attente d'association"
+        }
     },
     "sourceLabel": "Source de l'activité",
     "sources": {

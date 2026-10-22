@@ -43,6 +43,7 @@
         "goingAhead": "Geht los",
         "hookLedgerUnreadable": "Die Aufzeichnung, welche Hooks Sie genehmigt haben, ließ sich nicht lesen. Bis Sie wieder welche genehmigen, läuft kein Workspace-Hook.",
         "hookSetTitle": "Claude-Code-Hook | {count} Claude-Code-Hooks",
+        "hooks": "Hooks",
         "hooksFound": "Von einem Turn gefunden",
         "hooksWaiting": "Hooks, die auf Ihr Ja warten",
         "inProgress": "läuft",
@@ -52,6 +53,7 @@
         "needsReview": "Braucht Ihre Durchsicht",
         "nothingUndone": "Nichts wird zurückgenommen",
         "nothingWaitingPostsAgent": "Nichts wartet. Beiträge, die Ihr Agent veröffentlichen will, alles andere, was er nicht ungefragt tun soll, und Automationen, die erst fragen sollen, landen alle hier zur Genehmigung.",
+        "seeWhatAgentsWaitOn": "Sehen, worauf Ihre Agenten warten",
         "open": "Öffnen",
         "postStaysUpOn": "Der Beitrag bleibt auf {rejecting} stehen: nur dieser Eintrag darüber wird gelöscht.",
         "proposed": "vorgeschlagen {createdAt}",
@@ -69,7 +71,30 @@
         "stop": "Stoppen",
         "stopPutBackIn": "{item} stoppen und zurück in die Durchsicht legen",
         "whatDoneStaysDone": "Was getan wurde, bleibt getan: nur dieser Eintrag darüber wird gelöscht.",
-        "wontGoAhead": "Geht nicht los"
+        "wontGoAhead": "Geht nicht los",
+        "action": "Aktion",
+        "actions": "Aktionen",
+        "allApprovals": "Alle Genehmigungen",
+        "starting": "startet…",
+        "startsInUnlessCancel": "startet in {seconds} s, sofern Sie nicht abbrechen",
+        "couldntStartAutomation": "Die Automation ließ sich nicht starten.",
+        "couldntDropHeldAutomation": "Die zurückgehaltene Automation ließ sich nicht verwerfen.",
+        "couldntApproveEverything": "Es ließ sich nicht alles genehmigen.",
+        "couldntRemoveIt": "Ließ sich nicht entfernen.",
+        "couldntSaveChanges": "Ihre Änderungen ließen sich nicht speichern.",
+        "couldntHoldBack": "Diese ließen sich nicht zurückhalten.",
+        "couldntUpdateIt": "Ließ sich nicht aktualisieren.",
+        "inWhen": "in {when}",
+        "goesAheadOne": "„{item}“ geht {when} los.",
+        "goAheadMany": "{count} Sache geht los, die erste {when}. | {count} Sachen gehen los, die erste {when}.",
+        "holdItBack": "Zurückhalten",
+        "holdThemBack": "Alle zurückhalten",
+        "characters": "{count} Zeichen | {count} Zeichen",
+        "cancelItem": "{item} abbrechen",
+        "startItem": "{item} starten",
+        "approveItem": "{item} genehmigen",
+        "invalidFiles": "{count} Datei ließ sich nicht lesen und wird nicht ausgeführt: | {count} Dateien ließen sich nicht lesen und werden nicht ausgeführt:",
+        "unreadableHeldWakes": "{count} zurückgehaltene Automation ließ sich nicht lesen und kann nicht freigegeben werden: | {count} zurückgehaltene Automationen ließen sich nicht lesen und können nicht freigegeben werden:"
     },
     "extension": {
         "approvals": "Genehmigungen"
@@ -83,6 +108,7 @@
         "fromPlugin": "eine Plugin-Verbindung",
         "fromProjectSettings": "Workspace .claude/settings.json",
         "fromSkills": "ein Plugin-Ordner unter den Skills",
+        "fromUserSettings": "~/.claude/settings.json",
         "marketplace": "Fügt den Plugin-Marktplatz {name} ({location}) hinzu, aus dem Claude Code aktivierte Plugins installieren kann.",
         "powers": {
             "asksModel": "befragt ein Modell",
@@ -117,8 +143,15 @@
         "postText": "Beitragstext",
         "postTitle": "Beitragstitel"
     },
+    "postText": {
+        "anyMomentNow": "jeden Moment",
+        "replyIn": "Antwort in",
+        "replyOn": "Antwort auf",
+        "replyToCommentIn": "Antwort auf einen Kommentar in"
+    },
     "scheduleControl": {
         "clickToSchedule": "Klicken zum Planen",
+        "dueNow": "Jetzt fällig",
         "goAheadAt": "{label} losschicken am",
         "goesAtOnce": "Geht sofort los",
         "noDate": "Kein Datum"

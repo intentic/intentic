@@ -15,9 +15,30 @@ let traversing: Promise<void> | undefined;
 // A same-document traversal lands within a frame or two; this only bounds a popstate that never comes.
 const TRAVERSAL_MS = 500;
 
+// The traversal being swallowed, if any: it lands as a popstate nobody else may hear.
+let swallowing: (() => void) | undefined;
+
 // Steps off this overlay's entry without the router or any other open overlay hearing it: the entry had the page's
 // own URL, so for them nothing moved, and hearing it the router would start a navigation of its own that cancels the
 // pick's, while an overlay underneath would close too.
+//
+// THE LISTENER THAT HIDES IT IS ADDED ONCE, AT IMPORT, BEFORE THE ROUTER EXISTS. Listeners on `window` itself run in
+// the order they were added, capture or not (Chromium, 2026-10-22: a bubble listener added before a capture one ran
+// first), so one added only as the sheet closed ran after vue-router's: the router heard the step back, navigated to
+// the page already showing, and that cancelled the push a link in the sheet had just started. The model picker's
+// "Connect a model, or manage accounts" did nothing on a phone because of it (a replay, 2026-10-21). The router module
+// imports this one, so this listener is in place before createWebHistory adds its own.
+const swallow = (event: PopStateEvent): void => {
+    if (swallowing === undefined) {
+        return;
+    }
+    event.stopImmediatePropagation();
+    swallowing();
+};
+if (globalThis.window !== undefined) {
+    addEventListener(`popstate`, swallow, true);
+}
+
 const retreat = (): void => {
     let landed: () => void = () => undefined;
     const settled = new Promise<void>((resolve) => {
@@ -25,19 +46,16 @@ const retreat = (): void => {
     });
     const finish = (): void => {
         clearTimeout(timer);
-        removeEventListener(`popstate`, swallow, true);
+        if (swallowing === finish) {
+            swallowing = undefined;
+        }
         if (traversing === settled) {
             traversing = undefined;
         }
         landed();
     };
-    // Capture on the window runs before the router's own listener there, so stopping it here keeps it from them all.
-    function swallow(event: PopStateEvent): void {
-        event.stopImmediatePropagation();
-        finish();
-    }
     const timer = setTimeout(finish, TRAVERSAL_MS);
-    addEventListener(`popstate`, swallow, true);
+    swallowing = finish;
     traversing = settled;
     history.back();
 };

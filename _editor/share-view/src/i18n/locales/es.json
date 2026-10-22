@@ -10,6 +10,7 @@
         "nothingToShow": "Nada que mostrar",
         "runOwnAgents": ": ejecuta tus propios agentes →",
         "shared": "Compartido desde",
+        "subtitle": "{count} mensaje · compartido {date} | {count} mensajes · compartido {date}",
         "thinking": "Pensando"
     }
 }
