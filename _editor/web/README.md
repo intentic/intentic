@@ -181,8 +181,8 @@ flowchart LR
   shows the build going and keeps its button held. An outcome read where it ended goes when that view closes, as it
   always did. One that ended while nobody watched raises a receipt with a way back, and waits in its view until it has
   been seen. A view inside a hub also marks that hub's row while the work runs. `useAsyncAction()` and
-  `useConcurrentActions()` keep their state per caller, so `viewWork.guard.test.ts` refuses them anywhere they would
-  die with a view. Questions (a confirm dialog, a form's inputs) stay the view's own. A commit from the Changes
+  `useConcurrentActions()` keep their state per caller; work that must survive a view belongs in the ledger.
+  Questions (a confirm dialog, a form's inputs) stay the view's own. A commit from the Changes
   panels is a ledger run too (`COMMIT_RUN` in `models/changes/useChanges.ts`, the press as pressed kept as its
   progress), so a second press while one runs is refused rather than clearing the first one's record, and the press bar's one
   line is picked from every source that wants it by one function (`changes/commit/commitBar.ts`), so a panel opened
@@ -191,16 +191,16 @@ flowchart LR
   through `<Await :of imprint>` (`@intentic/ui`), never from `isLoading`/`isPending`: a read held while the sandbox
   wakes is a wait, never an empty answer, and one its view has not asked for is never a wait.
   `useSandboxQuery` returns `loaded` beside the query, and every such read joins the region it is read in, whose host
-  (a route, a hub section, an extension view) is an `<Await>` too. `viewWait.guard.test.ts` refuses a view that
-  wires its own wait from `SkeletonSnapshot`, `v-skeleton-source` or `useLoadingReveal`.
+  (a route, a hub section, an extension view) is an `<Await>` too. A view hands its read to that region rather than
+  wiring its own wait from `SkeletonSnapshot`, `v-skeleton-source` or `useLoadingReveal`.
   A failed read is said as a failure, never as an absence or a default. Only a `ready` read can say something is not
   there: the read models (`usePanels`, `useCapabilities`, `useExtensions`, `usePublicOutbox`) hand out their `loaded`,
   not a "fetched or failed" flag, so the rail keeps the tiles it remembers, an extension page and Preview say the read
   failed with a retry, and Capabilities leaves an address alone while its list is unread. A page that would otherwise
   draw schema defaults (Retention, Guardrails) or an empty drawing (Map) sits behind an `<Await>` of its read. A try a
   failed read makes by itself (an interval, a push) keeps the failure on screen; only a retry the person presses is a
-  wait again (`useLoaded`, with `useSandboxQuery` keeping the failure through vue-query's reset). The same guard test
-  refuses `isFetched || isError` read as an answer. _2026-10-20: under failing reads, four extension pages said their
+  wait again (`useLoaded`, with `useSandboxQuery` keeping the failure through vue-query's reset).
+  `isFetched || isError` cannot stand for an answer. _2026-10-20: under failing reads, four extension pages said their
   view was "no longer in the workspace", Retention showed "0 · forever" for every record, and the safety policy was an
   empty document with a Save that would have wiped the real one._
 - **When the sandbox stops answering.** A failed `/events` stream starts a diagnosis (`features/sandbox/diagnosis/`):

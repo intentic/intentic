@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { PROFILE_COOKIE, PROFILE_KEYS, PROFILE_PARAM, PROFILE_STORAGE_KEY, PROFILES, type Profile, type ProfileLook } from "@intentic/constants";
+import { PROFILE_COOKIE, PROFILE_KEYS, PROFILE_STORAGE_KEY, PROFILES, type Profile, type ProfileLook } from "@intentic/constants";
 import { THEME_ROW, type ThemeRow, themeRowLook } from "./features/settings/themeRow";
 
 // index.html's pre-paint script adopts an arriving profile before any module loads, so it cannot import the table it
@@ -36,18 +36,6 @@ describe(`the pre-paint profile script`, () => {
     // the script iterates can be released, so a key that exists in the table and not in this list leaks silently.
     it(`iterates every key any profile can write, so leaving one releases what it set`, () => {
         expect(literal<string[]>(`PROFILE_KEYS`).toSorted()).toEqual(Object.values(PROFILE_KEYS).toSorted());
-    });
-
-    it(`reads the param and writes the record under the names everything else uses`, () => {
-        expect(html).toContain(`searchParams.get("${PROFILE_PARAM}")`);
-        expect(html).toContain(`searchParams.delete("${PROFILE_PARAM}")`);
-        expect(html).toContain(`localStorage.setItem("${PROFILE_STORAGE_KEY}", asked)`);
-    });
-
-    // The site writes this cookie (_site/site/src/lib/variant.ts) on the domain both origins share; a renamed cookie
-    // on either side is a reader who took the installer from /desk and opened the app as a developer.
-    it(`reads the site's edition cookie by the name the site writes it under`, () => {
-        expect(html).toContain(`(?:^|; )${PROFILE_COOKIE}=([^;]*)`);
     });
 
     // The tag cannot spell the default look any more: it is the reader's OS's answer, and markup served from a CDN

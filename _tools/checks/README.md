@@ -80,8 +80,8 @@ A finding that is right where it stands is excused in one of three ways, and no 
   `<!-- allow(…) -->` in markup, `{/* allow(…) */}` in JSX, on the flagged line or in the comment block right above
   it. In a template a finding inside a tag's attributes is excused above the tag itself. It sits on what it excuses,
   so a rename carries it and a deletion takes it away. `lib/allow.mjs` reads it (parsed in
-  `@intentic/constants/allow`, so a guard suite such as `_editor/web/src/moduleState.guard.test.ts` reads it the same
-  way). The door checks report an `allow(<id>)` comment that excuses nothing, so a stale one cannot linger.
+  `@intentic/constants/allow`). The door checks report an `allow(<id>)` comment that excuses nothing, so a stale one
+  cannot linger.
 - A baseline in `baselines/`, for the standing backlog only (`lib/ratchet.mjs`, above): it may shrink and never grows
   unasked, with a reason on each entry that grew.
 - `Allow: <check> — <reason>` as a commit trailer, for a whole change: CI's push check (`verify-push.mjs`) accepts what

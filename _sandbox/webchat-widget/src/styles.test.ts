@@ -1,8 +1,7 @@
 import type { WebchatPublicConfig } from "@intentic/sandbox-contract/schemas/automations";
 import { styles } from "./styles.js";
 
-// Pins the widget's palette to intentic's numbers, sampled from the app and cross-checked against @intentic/ui's oklch
-// tokens; a moved token fails here.
+// Custom accents must stay readable and fall back consistently when their colour cannot be parsed.
 
 const config = (overrides: Partial<WebchatPublicConfig> = {}): WebchatPublicConfig => ({
     automationId: `a1`,
@@ -15,23 +14,6 @@ const config = (overrides: Partial<WebchatPublicConfig> = {}): WebchatPublicConf
     antiBot: `off`,
     aiDisclosure: true,
     ...overrides,
-});
-
-// Expected hex is the app's own bubble color: color-mix(overlay 35%, transparent) over the scroller card, sampled as
-// #26221e in dark.
-test(`the dark bubbles are the app's two chat surfaces, not a flat panel and a block of accent`, () => {
-    const sheet = styles(config());
-    expect(sheet).toContain(`--bubble-agent: #26221f`);
-    expect(sheet).toContain(`--bubble-visitor: #292522`);
-    expect(sheet).toContain(`.msg.visitor { align-self: flex-end; background: var(--bubble-visitor); border: 1px solid var(--accent-line); }`);
-});
-
-// Accent is stepped 15% toward the scheme's extreme, mimicking the app's ink ramp (brand-700 light, brand-400 dark);
-// asserted against those steps.
-test(`the accent is stepped per scheme, landing beside the ramp steps the app uses for ink`, () => {
-    const sheet = styles(config());
-    expect(sheet).toContain(`--accent-ink: #c26000`); // light; brand-700 is #c25600
-    expect(sheet).toContain(`--accent-ink: #e88626`); // dark;  brand-500 is #e48233
 });
 
 test(`the label on a solid accent is the one that actually contrasts, not a hardcoded white`, () => {

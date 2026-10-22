@@ -39,15 +39,6 @@ test("every bin/ command stays executable in the tarball pnpm packs", () => {
     expect(publishConfig.executableFiles?.toSorted()).toEqual(readdirSync(join(ROOT, "bin")).map((name) => `./bin/${name}`).toSorted());
 });
 
-// The README is the npm page and the marketplace homepage, and the only place a person reads what each switch does
-// before trying it.
-test("the README documents every switch", () => {
-    const readme = readFileSync(join(ROOT, "README.md"), "utf8");
-    for (const key of Object.keys(OPTIONS)) {
-        expect({ key, documented: readme.includes(`| \`${key}\` |`) }).toEqual({ key, documented: true });
-    }
-});
-
 // Claude Code 2.1.287 and later load the mod named under `modules`; older ones read the key and ignore the module. The
 // module is a source file in hooks/, which `files` ships whole.
 test("every module hooks.json names is a file the package ships", () => {

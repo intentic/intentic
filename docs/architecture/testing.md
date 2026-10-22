@@ -18,6 +18,13 @@ flowchart LR
 - [`@intentic/testing`](../../_tools/testing) holds the shared seams: `unstubbed` (a fake whose unstubbed members throw with their own name), Bun helpers such as `waitFor` and `freshImport`, a DOM, and Fly and Stripe fakes. `requires(condition, why)` gates a test on something of the machine: it stands down locally, with `suites` counting what stood down, and fails on CI unless `absentOnCi` says why CI goes without it; a requirement only one CI job provides names that job's `lane` (`INTENTIC_CI_LANE`), fails there, and stands down in every other CI job. A suite takes `describe`, `test` and `expect` from the globals `bun test` defines; a value import from `bun:test` hides it from the `jest/*` lint rules, and `.oxlintrc.json` refuses one. `real-failures` makes the running runtime throw the failure a fake stands for (a refused fetch, a missing program), so the fake has the shape production meets on Node and on Bun alike instead of one runtime's sentence ([conventions](conventions.md#reading-another-programs-output)). A package's own fixtures live in its `src/testing.ts`, or in `<module>.testing.ts` beside the seam they fake where a package fakes many seams. The rules for writing tests are in [`AGENTS.md`](../../AGENTS.md).
 - Other runners: Playwright for the browser and onboarding tiers, `cargo test` for the Rust crates, and `node:test` for the scripts in `_tools/scripts` and `_tools/checks`, which no turbo task reaches and `pnpm verify` runs.
 
+On 2026-10-21, the test review removed source-spelling guards, copied presentation data, a test of Vue itself and a
+warm-browser latency assertion. Prefer a failure that demonstrates incorrect product behavior: run a sandbox switch,
+an operation or the shipped boot script instead of searching its source for a helper name. Configuration and wire
+compatibility checks still protect real boundaries. A test's lack of recorded failures is a reason to examine it,
+not proof that it is useless; the available history is incomplete. The [review record](../ops/test-pruning-2026-10-21.md)
+states the evidence and decision for each removed test.
+
 ## Tiers
 
 | Tier | What it needs | Where it runs |

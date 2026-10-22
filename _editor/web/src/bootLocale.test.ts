@@ -49,10 +49,6 @@ describe(`the pre-paint language script`, () => {
         expect(literal<string[]>(`UI_LOCALES`)).toEqual([...LOCALE_CODES]);
     });
 
-    it(`reads the choice from the key the preference writes it to`, () => {
-        expect(html).toContain(`localStorage.getItem("${LOCALE_KEY}")`);
-    });
-
     // The rule itself, case by case, against the module that the app runs a moment later.
     it.each([
         { languages: [`pl-PL`, `pl`, `en-US`], as: `a region tag matching on its primary subtag` },

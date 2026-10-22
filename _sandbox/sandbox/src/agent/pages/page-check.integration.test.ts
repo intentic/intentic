@@ -58,19 +58,4 @@ describe("checkPage", () => {
         expect(result.check.contentHeight).toBeGreaterThanOrEqual(400);
         expect(result.check.contentHeight).toBeLessThan(500);
     }, 60_000);
-
-    it("answers a settled page well inside the old fixed 1.1s of waiting, once its browser is warm", async () => {
-        const page = `<div style="height:240px">still</div>`;
-        const warm = await checkPage(page);
-        if (!warm.ok) {
-            expect(warm.reason).toContain("browser");
-            return;
-        }
-        const started = performance.now();
-        const result = await checkPage(page);
-        const took = performance.now() - started;
-        expect(result.ok && result.check.contentHeight).toBeGreaterThanOrEqual(240);
-        // ~0.47s measured against ~1.25s before; the bound leaves a loaded machine room.
-        expect(took).toBeLessThan(1_100);
-    }, 60_000);
 });

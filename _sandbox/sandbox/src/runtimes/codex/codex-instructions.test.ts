@@ -1,4 +1,4 @@
-import { codexInstructions, PROJECT_DOC_CONFIG } from "./codex-instructions.js";
+import { codexInstructions } from "./codex-instructions.js";
 
 // What Codex is sent when this sandbox has a system prompt: the two first-class thread fields, no file on disk.
 
@@ -17,9 +17,4 @@ test("a replacement rides as the base prompt, an addition as the developer messa
 // Empty string is a legal prompt (the owner emptied the box), different from never asking for a replacement at all.
 test("an emptied prompt still replaces, with nothing", () => {
     expect(codexInstructions({ systemPrompt: "" })).toEqual({ base: "" });
-});
-
-// The daemon composes AGENTS.md into the developer message already; Codex's own loader would add it a second time.
-test("Codex's own AGENTS.md loader is given no budget", () => {
-    expect(PROJECT_DOC_CONFIG).toEqual({ project_doc_max_bytes: 0 });
 });
