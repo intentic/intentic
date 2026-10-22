@@ -11,7 +11,7 @@
 # BETTER_AUTH_SECRET, SECRETS_KEY, WEB_ORIGIN, API_URL, GOOGLE_CLIENT_*, INTENTIC_CLOUDFLARE_*, STRIPE_*, …
 # The Bun pin is one of _tools/scripts/tools/tool-pins.mjs's, moved with CI's, the sandbox image's and the `bun`
 # catalog entry's by the tool bump; the `tool-pins` check refuses a hand edit that moves only some of them.
-FROM oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288
+FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # pg_dump and pg_restore for the pre-migration backup (src/migration-backup.ts), the one thing in this image not COPYed.
 # Same major as the server: pg_dump refuses a server newer than itself, and the platform's Postgres is postgres:18

@@ -101,14 +101,14 @@ RUN ocr=/opt/privacy-models/pp-ocrv6 \
 # a glibc this image satisfies.
 # The pin is one of _tools/scripts/tools/tool-pins.mjs's, moved with the sandbox image's, the platform api's and the
 # `bun` catalog entry's by the tool bump; the `tool-pins` check refuses a hand edit that moves only some of them.
-COPY --from=oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 /usr/local/bin/bun /usr/local/bin/bun
 
 # ruff and pyright, the two binaries the daemon's python check runs on every `.py` edit
 # (_sandbox/sandbox/src/agent/verification/python/python-diagnostics.ts). Its integration suite spawns the real ones,
 # because only that proves the parsers read what the binaries print, and pyright's `--outputjson` is a wire format.
 # So CI runs the SAME versions the sandbox image ships, fetched the same way (~62 MB, ~6s of build).
 # ponytail: keep both versions in lockstep with _sandbox/sandbox/image-packs/python.Dockerfile.
-RUN ruff_version=0.17.0 \
+RUN ruff_version=0.17.1 \
     && case "$(dpkg --print-architecture)" in \
         amd64) triple=x86_64-unknown-linux-gnu ;; \
         arm64) triple=aarch64-unknown-linux-gnu ;; \
@@ -131,7 +131,7 @@ RUN ruff_version=0.17.0 \
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.13.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.15.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 

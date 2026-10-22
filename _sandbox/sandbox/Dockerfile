@@ -225,7 +225,7 @@ RUN printf '%s\n' \
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.13.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.15.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 # bun on PATH. Every package's tests run on Bun (`suites` is `bun test`), every typecheck is `bun check`, and the
@@ -239,7 +239,7 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.13.0 SHELL=/
 # release dies with SIGILL. -slim is trixie, this image's own release, so the glibc it links against is here.
 # The pin is one of _tools/scripts/tools/tool-pins.mjs's: the tool bump moves it with ci-base's, the platform api's
 # and the catalog's, and the `tool-pins` check refuses a hand edit that moves only some of them.
-COPY --from=oven/bun:1.4.3-slim@sha256:14a223fa35747ec728bce300ef85888bc5f7958164d15bbba6a54b22b52a3288 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s bun /usr/local/bin/bunx && bun --version && bunx --version
 # node-gyp on PATH, for an agent compiling a native dep by hand. Pinned like every other tool in this image so a
 # bad upstream release fails a deliberate bump, not the next pipeline.
@@ -267,7 +267,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # fabric; that fabric is the platform's own edge now, which the daemon dials over an outbound WebSocket with
 # no binary to install (sandbox-contract/ingress-contract.ts). Placed HERE, before the tree COPYs below, so
 # the layer stays cache-stable across source changes.
-ARG CLOUDFLARED_VERSION=2026.10.0
+ARG CLOUDFLARED_VERSION=2026.10.3
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
@@ -334,11 +334,11 @@ RUN arch="$(dpkg --print-architecture)" \
 # it at 2.46.0 (March 2024, still the version in unstable), and gh is a client for an API that keeps moving under it.
 # A static Go binary, sha256-checked per architecture like ripgrep and jq; the tool bumper
 # (_tools/scripts/tools/bump-tools.mjs) moves the version and both checksums together.
-ARG GH_VERSION=2.102.0
+ARG GH_VERSION=2.103.0
 RUN set -eu; arch="$(dpkg --print-architecture)"; \
     case "$arch" in \
-      amd64) gh_sha=bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386 ;; \
-      arm64) gh_sha=7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484 ;; \
+      amd64) gh_sha=fdd768eb70f6409f80fcfa9f3a1c0adf0fc98d827ab3ce0bed2ac22762c5d786 ;; \
+      arm64) gh_sha=7f322df34e624d14f5ec0c4acb121fd6dfa14392fdbbd1066aa8e0a05ac3721e ;; \
       *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${arch}.tar.gz" -o /tmp/gh.tar.gz; \

@@ -47,7 +47,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 # CLI that mints the own-Cloudflare host tunnel. Both track the latest release like connect.ps1.
 $DindImage = if ($env:DIND_IMAGE) { $env:DIND_IMAGE } else { 'ghcr.io/intentic/dind-host:latest' }
 $SandboxImage = if ($env:SANDBOX_IMAGE) { $env:SANDBOX_IMAGE } else { 'ghcr.io/intentic/sandbox:stable' }
-$CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.10.0@sha256:9b49eed8f62806d5d45ddf59ecefb5710429598ea6d3fcccd2af938f621b2b07' }
+$CloudflaredImage = if ($env:CLOUDFLARED_IMAGE) { $env:CLOUDFLARED_IMAGE } else { 'cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39' }
 
 # >>> generated from _site/site/scripts-kit/kit.ps1: edit it there, then run node _tools/checks/scripts-kit.mjs --fix
 # The shim kit: the protocol's shapes (docs/ops/cli-output-protocol.md) for the few lines a script prints before it
