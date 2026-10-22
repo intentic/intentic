@@ -12,12 +12,20 @@ flowchart LR
 
 - Holds no code. The manifest declares the `pi` capability (`kind: agent`) and an `environment` fragment. The
   directory is copied into the sandbox image whole.
-- Adding the card bakes the CLI into the image, a one-time rebuild. After that the card's `command`, `env` and
-  login fields configure how the daemon spawns it.
-- The daemon drives Pi over Pi's own RPC protocol, which carries mid-turn steering and an effort level. Pi has no
-  MCP seam, so it gets none of the sandbox's tools.
-- Sign-in and the default model live inside Pi itself (`/login`, `/model` in a terminal), or API keys go in the
-  card's environment field.
+- Add the card, then rebuild from Sandbox > Environment to install the pinned CLI. A missing CLI leaves the card
+  saved and pending, so its install fragment can join the rebuild. After that the card's `command`, `env` and login
+  fields configure how the daemon spawns it.
+- The daemon checks Pi over its own RPC protocol, including whether Pi has configured models. The card distinguishes
+  a missing CLI from a missing provider sign-in. It never sends Pi an ACP handshake or a model prompt for this check.
+- Pi's RPC carries mid-turn steering and an effort level. The daemon's extension mounts the sandbox's MCP tools,
+  loads the turn's instructions and skills, and puts tool calls and results through the sandbox's hooks.
+- Use **Sign in** on the card to open Pi, then `/login` and `/model` to save a provider and default model. For Claude
+  Pro/Max, use `/login anthropic` and choose subscription sign-in; remote OAuth flows accept a pasted redirect URL
+  or code. [Pi's authentication guide](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md)
+  describes its current providers. Claude subscription authentication in third-party harnesses uses paid extra usage,
+  billed per token, rather than the plan's included allowance. API keys can instead go in the card's environment field.
+- Pi keeps its own credentials and settings in `~/.pi/agent` (or `PI_CODING_AGENT_DIR`). A chat uses that same directory
+  inside its isolated namespace; it does not import the sandbox's Claude Code or Codex account credentials.
 
 ## Key files
 

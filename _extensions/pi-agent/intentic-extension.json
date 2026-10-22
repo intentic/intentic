@@ -14,17 +14,18 @@
                 "kind": "agent",
                 "catalog": {
                     "name": "Pi",
-                    "description": "Run the Pi coding agent as a chat provider.",
+                    "description": "Run Pi with Claude, ChatGPT, and other model providers using Pi's own sign-in or API keys.",
                     "category": "extend",
-                    "hint": "Served over Pi's own protocol, not ACP: mid-turn steering, effort control, slash commands.",
+                    "hint": "Includes sandbox tools through MCP, mid-turn steering, effort control, and slash commands.",
                     "guide": {
                         "url": "https://pi.dev",
                         "linkLabel": "About Pi",
                         "steps": [
-                            "Adding bakes the Pi CLI into the image: a one-time rebuild.",
-                            "Run `pi` in a Terminal and type /login, or add API keys below.",
-                            "Pick a default inside Pi with /model.",
-                            "Pi then appears in the chat's model picker."
+                            "Add Pi, then rebuild from Sandbox > Environment to install its CLI. Until then the card shows that a rebuild is needed.",
+                            "Open Sign in on the Pi card to start Pi in the terminal. Run /login and choose your provider, or supply API keys in Environment below.",
+                            "For Claude Pro/Max, run /login anthropic and choose subscription sign-in. If the browser cannot return to this sandbox, paste the redirect URL or code into Pi when prompted.",
+                            "Claude subscription sign-in in third-party harnesses uses paid extra usage, billed per token, rather than the plan's included allowance.",
+                            "Choose the default model with /model, then exit Pi. Select Pi in the chat's model picker; it uses that model and Pi's saved sign-in."
                         ]
                     }
                 },

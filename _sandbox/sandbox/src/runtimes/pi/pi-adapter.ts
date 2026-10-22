@@ -19,7 +19,6 @@ import { releasingMounts } from "../../agent/tools/turn-mounts.js";
 import { turnToolsOf, type TurnToolsDeps } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
-import { onPath } from "../../image/on-path.js";
 import { personaSkillsRoot } from "../../personas/persona-kit.js";
 import { skillFolderNames } from "../../skill-file.js";
 import { loadedSkillsRoot } from "../../store/loaded-skills.js";
@@ -37,7 +36,9 @@ import { type DaemonServersDeps, daemonServersFor } from "../daemon-tools/daemon
 
 // What the Pi adapter reads: the installed manifest its capability lives in, the daemon's tools it passes through, and
 // the loop that spawns it.
-export type PiAdapterDeps = TurnToolsDeps & DaemonServersDeps & Pick<Services, "capabilities" | "piAgent" | "sandboxSettings">;
+export type PiAdapterDeps = TurnToolsDeps &
+    DaemonServersDeps &
+    Pick<Services, "capabilities" | "piAgent" | "probePiAgent" | "sandboxSettings" | "workspace">;
 
 // The skills a Pi turn loads (`--skill`, with Pi's own discovery off): the workspace's loaded skills less those the
 // persona or a credential gate denies (TurnPolicy.disallowedTools names them `Skill(<name>)`, as the Claude Code loop
@@ -49,7 +50,10 @@ export const piSkillsOf = async (context: Pick<TurnContext, "localCwd" | "effect
         .filter((name) => !denied.has(`Skill(${name})`))
         .map((name) => join(loadedSkillsRoot(context.effectiveCwd), name));
     const persona = context.persona?.persona?.id;
-    const kit = persona === undefined || (await skillFolderNames(personaSkillsRoot(context.localCwd, persona))).length === 0 ? [] : [personaSkillsRoot(context.effectiveCwd, persona)];
+    const kit =
+        persona === undefined || (await skillFolderNames(personaSkillsRoot(context.localCwd, persona))).length === 0
+            ? []
+            : [personaSkillsRoot(context.effectiveCwd, persona)];
     return [...loaded, ...kit];
 };
 
@@ -108,9 +112,7 @@ export const planPiTurn = async (
 export const PI_ADAPTER: AgentAdapter<"pi", PiAdapterDeps> = {
     runtime: "pi",
     preflight: (services, input, context, installed) => planPiTurn(services, input, context, installed),
-    // Two things must hold, each a different fix: the `pi` capability installed (Setup ▸ Extend), and its command on
-    // PATH (a card added before the image rebuild is exactly this state). Probed on the command's head, the OpenCode
-    // precedent.
+    // The same RPC/auth availability as the capability card; an installed binary alone cannot serve a turn.
     health: async (services) => {
         const installed = await attemptProbe(() => services.capabilities.list());
         if (installed === undefined) {
@@ -120,8 +122,12 @@ export const PI_ADAPTER: AgentAdapter<"pi", PiAdapterDeps> = {
         if (capability === undefined || capability.kind !== "agent") {
             return healthUnavailable("Add the Pi Agent capability to run Pi here.");
         }
-        const head = capability.config.command.trim().split(/\s+/)[0] ?? "";
-        return (await onPath(head)) ? healthReady() : healthUnavailable(`\`${head}\` is not on PATH, rebuild the sandbox so the Pi install lands in the image.`);
+        const status = await attemptProbe(() => services.probePiAgent(capability.config, services.workspace.root));
+        return status === undefined
+            ? healthUnknown()
+            : status.state === "active"
+              ? healthReady()
+              : healthUnavailable(status.detail ?? "Sign in to Pi to run it here.");
     },
     // A Pi session is a JSONL file (the id on the wire is its path); resume-ability is whether the file still exists,
     // asked of the filesystem since there's no process between turns to ask. Only a missing file is a lost session.

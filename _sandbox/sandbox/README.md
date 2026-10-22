@@ -128,6 +128,9 @@ flowchart LR
   (`personas/owner-grants.ts`). Those lines live on the auth root, which a turn cannot write. They are listed under
   Sandbox-wide permissions on Access ▸ Allowed and are never shipped in a definition export.
   When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
+- The Pi capability uses its own RPC probe (`runtimes/pi/pi-probe.ts`), shared by the card's status and runtime
+  health. A missing CLI stays pending so adding the card can save its image fragment before the install rebuild;
+  an installed Pi with no configured models asks for sign-in. The probe sends no model prompt and creates no session.
 - A conversation's results, the documents its calls recorded writing (Word, OpenDocument, RTF, PDF, decks, sheets, web
   pages), are listed at `GET /agents/{id}/documents` and served as bytes at `GET /agents/{id}/documents/raw?path=`
   (`conversations/produced-files.ts`, 2026-10-13). Both are on a guest's list, which has no Files: a guest takes the

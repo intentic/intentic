@@ -1,7 +1,13 @@
 import { join } from "node:path";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { invalidExtensionFragment } from "@intentic/sandbox-contract/policy/overlay-lint";
-import { contributionFor, contributionFragmentPath, contributionPackName, contributionRegistry } from "../capabilities/contributions.js";
+import {
+    contributionFor,
+    contributionFragmentPath,
+    contributionKey,
+    contributionPackName,
+    contributionRegistry,
+} from "../capabilities/contributions.js";
 import { packFragment, readPack } from "../image/packs.js";
 import { registry } from "../capabilities/registry.js";
 import { extensionDir, extensionRead, extensionRootOf, readExtensionManifest } from "../capabilities/extension-dirs.js";
@@ -32,6 +38,7 @@ export const capabilityFragments = async (services: Services, capability: Capabi
             fragments.push(...(await readFragment(services, capability.id, join(dir, fragmentPath))));
         }
     }
+    fragments.push(...(await agentFragments(services, capability)));
     // A cli connector's tools come from a named pack, skipped if already baked, or an allowlisted fragment.
     if (capability.kind === "cli") {
         const connector = contributionFor(await contributionRegistry(services), "cli", capability.config);
@@ -45,6 +52,19 @@ export const capabilityFragments = async (services: Services, capability: Capabi
         }
     }
     return fragments;
+};
+
+// Baked agent extensions have no installed extension card. Adding their declared agent capability is what pulls in
+// the extension's install layer (Pi's CLI), before that command can pass its first runtime probe.
+const agentFragments = async (services: Services, capability: Capability): Promise<string[]> => {
+    if (capability.kind !== "agent") {
+        return [];
+    }
+    const contribution = (await contributionRegistry(services)).get(contributionKey("agent", capability.id));
+    const fragmentPath = contribution?.extension.manifest.contributes?.environment?.fragment;
+    return contribution === undefined || fragmentPath === undefined
+        ? []
+        : readFragment(services, capability.id, join(contribution.extension.dir, fragmentPath));
 };
 
 // A named pack as a fragment, or nothing when the base already bakes that exact version. The two other empty cases are

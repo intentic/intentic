@@ -59,6 +59,7 @@ export interface CapabilityCtx {
     // Spawns an ACP agent and initializes it, proving the command speaks ACP: the agent handler's apply and status. A
     // runtime of its own (runtimes/acp/acp-probe.ts), above capabilities/, so it arrives through Services.
     readonly probeAcpAgent: Services["probeAcpAgent"];
+    readonly probePiAgent: Services["probePiAgent"];
     // Where an SSH private key goes instead of a file the agent reads: the ssh card's key and a git account's
     // (ssh-key-store.ts), signed with by the sandbox's ssh agent.
     readonly sshKeys: Services["sshKeys"];
@@ -124,6 +125,7 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         ensureIntentInstallable: (session) => ensureIntentInstallable(services, session),
         scaffoldMonorepo: (name, session) => scaffoldAppMonorepo(services, name, session),
         probeAcpAgent: services.probeAcpAgent,
+        probePiAgent: services.probePiAgent,
         sshKeys: services.sshKeys,
     };
 };

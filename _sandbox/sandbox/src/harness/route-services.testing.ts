@@ -14,6 +14,7 @@ import { capabilitiesSliceFake } from "../capabilities/capabilities-slice.testin
 import { type Services, wireReactions } from "../composition.js";
 import { environmentSourcesOf } from "../environment-composers.js";
 import { probeAcpAgent } from "../runtimes/acp/acp-probe.js";
+import { probePiAgent } from "../runtimes/pi/pi-probe.js";
 import { conversationsSliceFake } from "../conversations/conversations-slice.testing.js";
 import { deriveBytes } from "../derived/derived-blob.js";
 import { deriveText, readDerivedText } from "../derived/derived-text.js";
@@ -230,6 +231,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         environmentSources: environmentSourcesOf(context.self),
         // The real probe, as composition.ts fills it: a suite adding an ACP agent spawns its command.
         probeAcpAgent,
+        probePiAgent,
         async *intentic() {},
         // The engine's own announcements, as composition binds them, and the reactions it subscribes.
         events: createDomainEvents((name, error) => context.self().logger.warn({ err: error, event: name }, "domain event: a reaction failed")),

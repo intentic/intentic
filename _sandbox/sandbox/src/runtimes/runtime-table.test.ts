@@ -230,6 +230,8 @@ const services = (overrides: Record<string, unknown>) =>
         claudeStore: { list: async () => [] },
         openCode: { connected: async () => false },
         capabilities: { list: async () => [] },
+        workspace: { root: WORKSPACE_ROOT },
+        probePiAgent: async () => ({ state: "active", detail: "Pi RPC · 1 model" }),
         ...overrides,
     }) as any;
 
@@ -271,6 +273,26 @@ test("a probe that cannot run answers unknown rather than greying the provider o
     expect(
         (await healthOf("claude-code", { claudeStore: { list: boom }, config: { translator: { url: "" }, anthropicApiKey: "", openaiApiKey: "" } }))
             .state,
+    ).toBe("unknown");
+});
+
+test("Pi health uses its RPC model probe, so rebuild and sign-in states cannot appear ready", async () => {
+    const capabilities = { list: async () => [{ kind: "agent", id: "pi", config: { command: "pi" } }] };
+    for (const detail of ["Rebuild the sandbox", "Sign in to Pi"]) {
+        expect(await healthOf("pi", { capabilities, probePiAgent: async () => ({ state: "pending", detail }) })).toMatchObject({
+            state: "unavailable",
+            detail,
+        });
+    }
+    expect(
+        (
+            await healthOf("pi", {
+                capabilities,
+                probePiAgent: async () => {
+                    throw new Error("probe failed");
+                },
+            })
+        ).state,
     ).toBe("unknown");
 });
 

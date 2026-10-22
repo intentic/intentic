@@ -14,6 +14,7 @@ import { PROVIDER_MODULES, RUNTIME_ADAPTERS } from "./runtimes/runtime-table.js"
 import { createAcpConnections } from "./runtimes/acp/acp-connection.js";
 import { createPiAgent } from "./runtimes/pi/pi-agent.js";
 import { piSpawner } from "./runtimes/pi/pi-rpc.js";
+import { probePiAgent } from "./runtimes/pi/pi-probe.js";
 import { activityLogDocument, type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
 import { type AuditService, auditServiceOf } from "./audit/audit-service.js";
 import { cliProxyAuthDir, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient } from "./agent/providers/translator.js";
@@ -195,11 +196,10 @@ export interface Services
     // Where the overlay's contributed fragments come from (capabilities, extensions, connected providers): a port the
     // environment reads, since every composer of them sits above environment/.
     readonly environmentSources: EnvironmentSources;
-    // Spawns an ACP agent and initializes it: what the agent capability's handler checks a command with, a seam since the
-    // ACP runtime sits above capabilities/.
+    // Agent capability probes, owned by their runtimes and passed to capabilities/ through these ports.
     readonly probeAcpAgent: typeof probeAcpAgent;
-    // Every live turn's MCP mounts (its browser routers, peers and extension cards), reached at /mcp/<name> with the
-    // turn's own bearer, which opens only what that turn mounted.
+    readonly probePiAgent: typeof probePiAgent;
+    // Every live turn's MCP mounts, reached at /mcp/<name> with the turn's own bearer.
     readonly turnMounts: TurnMounts;
     // This sandbox's identity for the Connections card; undefined means /info returns {} (loopback/test).
     readonly info: SandboxInfo | undefined;
@@ -508,6 +508,7 @@ const createDaemonMembers = (
         browserRouters: createBrowserRouters(() => ({ capabilities, workspace, logger })),
         desktopServers: desktopServersOf,
         probeAcpAgent,
+        probePiAgent,
         turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),
         info: sandboxInfoOf(config),
         presentation: () => fetchPresentation(config),
