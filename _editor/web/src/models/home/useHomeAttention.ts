@@ -2,6 +2,7 @@ import { onScopeDispose, shallowRef, watch } from "vue";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { sandboxRpc } from "../../client/sandbox/sandboxRpc";
 import { onScreen } from "../../workbench/window/onScreen";
+import { switchableSandboxes } from "../sandbox/live/roster";
 import { mergeAttention, type AttentionReading } from "./homeFacts";
 
 // Mounted by the home surface only: leaving it stops ambient calls to other sandboxes.
@@ -14,7 +15,8 @@ export function useHomeAttention() {
         if (!onScreen.value) {
             return;
         }
-        for (const box of sandboxes.value) {
+        // The rail's own tiles: a row with no daemon behind it has nobody to ask.
+        for (const box of switchableSandboxes(sandboxes.value)) {
             if (pending.has(box.id)) {
                 continue;
             }
@@ -33,7 +35,7 @@ export function useHomeAttention() {
             readings.value = new Map(readings.value).set(id, mergeAttention(readings.value.get(id), count));
         }
     };
-    watch(() => [onScreen.value, sandboxes.value.map((box) => box.id)], poll, { immediate: true });
+    watch(() => [onScreen.value, switchableSandboxes(sandboxes.value).map((box) => box.id)], poll, { immediate: true });
     const timer = setInterval(poll, 15_000);
     onScopeDispose(() => {
         disposed = true;

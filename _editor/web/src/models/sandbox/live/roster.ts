@@ -1,9 +1,18 @@
 import type { SandboxSummary } from "@intentic/api-contract";
+import { isLocalFolderRow } from "../../../app/environments/local";
 
 // The sandbox list is two lists: ones that have checked in (switchable) and ones that never have (unfinished, no daemon
 // to select). `lastSeenAt` is the test, stamped once and never un-happening; a merely down sandbox keeps its stamp and
 // stays switchable.
 export const connectedSandboxes = (rows: readonly SandboxSummary[]): readonly SandboxSummary[] => rows.filter((entry) => entry.lastSeenAt !== null);
+
+// THE SANDBOXES A PERSON CAN GO TO, the one list every place that offers them draws from: the switcher (and its Alt+N
+// chords), the phone's menu and the home rail. The checked-in half above, less a desktop folder window's own folder,
+// which the app lists first (desktop-app local/platform.ts) and which is the place that window already stands on.
+// Each surface used to filter for itself, and the home rail filtered nothing: a setup never finished, or the folder's
+// own row, showed there as a tile that could only open onto "This sandbox is not connected" (2026-10-22).
+export const switchableSandboxes = (rows: readonly SandboxSummary[]): readonly SandboxSummary[] =>
+    connectedSandboxes(rows).filter((entry) => !isLocalFolderRow(entry.id));
 
 // Only the reader's own: finishing a setup means opening /setup on it, which resumes nothing but an owner's row and starts
 // a fresh sandbox on the reader's account for anyone else's (setupArrival.ts `rowToOpen`). A shared sandbox its owner has

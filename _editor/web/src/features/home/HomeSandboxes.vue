@@ -6,6 +6,7 @@ import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { orderedSandboxes, tileAction } from "../../models/home/homeFacts";
+import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import type { ViewBadge } from "@intentic/extension-api";
@@ -14,7 +15,9 @@ const { phone = false } = defineProps<{ phone?: boolean }>();
 const t = useT();
 const router = useRouter();
 const sandbox = useSandbox();
-const boxes = computed(() => orderedSandboxes(sandbox.sandboxes.value));
+// The switcher's own list (roster.ts `switchableSandboxes`), never the account's raw rows: a setup never finished has no
+// daemon to open a home conversation on, and a desktop folder window's own row is no sandbox at all.
+const boxes = computed(() => orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value)));
 const readings = useHomeAttention();
 const badgeOf = (id: string): ViewBadge | undefined => {
     const count = readings.value.get(id)?.needsYou ?? 0;

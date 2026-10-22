@@ -7,7 +7,7 @@ import { useRebuildOffer } from "../features/sandbox/environment/rebuild/useRebu
 import { identityHue } from "../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../workbench/presence/usePresence";
 import { useSandbox } from "../client/sandbox/useSandbox";
-import { connectedSandboxes, unfinishedSandboxes } from "../models/sandbox/live/roster";
+import { switchableSandboxes, unfinishedSandboxes } from "../models/sandbox/live/roster";
 import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availability";
 import { placementOf, type SandboxPlacement } from "../features/sandbox/overview/placement";
 import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
@@ -50,7 +50,7 @@ const { state: pushState } = usePushNotifications();
 const pushRow = computed(() => pushMenuRow(pushState.value));
 
 // Split so an unreachable sandbox isn't offered beside ones that can actually be switched to.
-const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value));
+const switchable = computed(() => switchableSandboxes(sandbox.sandboxes.value));
 const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
 // Where each box runs. The active row borrows the refined answer (a named device, this very computer); the others

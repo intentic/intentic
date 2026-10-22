@@ -1,5 +1,6 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { connectedSandboxes, unfinishedSandboxes } from "./roster";
+import { type LocalFace, localSandboxId } from "../../../app/environments/local";
+import { connectedSandboxes, switchableSandboxes, unfinishedSandboxes } from "./roster";
 
 /* The partition every sandbox list draws itself from. */
 
@@ -52,4 +53,24 @@ it(`splits a mixed list in place, keeping each half in the list's own order`, ()
     const rows = [row({ id: `a`, lastSeenAt: SEEN }), row({ id: `b` }), row({ id: `c`, lastSeenAt: SEEN }), row({ id: `d` })];
     expect(connectedSandboxes(rows).map((entry) => entry.id)).toEqual([`a`, `c`]);
     expect(unfinishedSandboxes(rows).map((entry) => entry.id)).toEqual([`b`, `d`]);
+});
+
+/* ONE LIST OF PLACES TO GO, which the switcher, the phone's menu and the home rail all draw. */
+
+// The home rail drew the account's raw rows: a setup never finished showed as a tile that opened onto "not connected".
+it(`offers the checked-in sandboxes only, in the list's own order`, () => {
+    const rows = [row({ id: `draft`, name: `W` }), row({ id: `a`, lastSeenAt: SEEN }), row({ id: `b`, lastSeenAt: SEEN })];
+    expect(switchableSandboxes(rows).map((entry) => entry.id)).toEqual([`a`, `b`]);
+});
+
+// A desktop folder window lists its own folder first (desktop-app local/platform.ts); it is where the window stands.
+it(`leaves a folder window's own folder out of the places to go`, () => {
+    const face: LocalFace = { id: `f1`, name: `work`, path: `/work`, daemonUrl: `http://127.0.0.1:1`, token: `t` };
+    window.__INTENTIC_LOCAL__ = face;
+    try {
+        const rows = [row({ id: localSandboxId(face), lastSeenAt: SEEN }), row({ id: `a`, lastSeenAt: SEEN })];
+        expect(switchableSandboxes(rows).map((entry) => entry.id)).toEqual([`a`]);
+    } finally {
+        delete window.__INTENTIC_LOCAL__;
+    }
 });

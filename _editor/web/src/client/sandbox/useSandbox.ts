@@ -84,10 +84,12 @@ const persistActive = (id: string | undefined): void => {
     storeValue(ACTIVE_KEY, id);
 };
 
-// Keeps the active selection if it still exists, else falls back to the first sandbox. Shared by list/refresh.
+// Keeps the active selection if it still exists, else falls back to the first sandbox that has checked in (the first
+// row the switcher offers, models/sandbox/live/roster.ts), and to the first row only when none has: a setup never
+// finished has no daemon, so landing on it would paint a connecting gate that never resolves. Shared by list/refresh.
 const reconcileActive = (live: SandboxSummary[]): SandboxSummary[] => {
     if (activeSandboxId.value === undefined || !live.some((sandbox) => sandbox.id === activeSandboxId.value)) {
-        persistActive(live[0]?.id);
+        persistActive((live.find((sandbox) => sandbox.lastSeenAt !== null) ?? live[0])?.id);
     }
     return live;
 };

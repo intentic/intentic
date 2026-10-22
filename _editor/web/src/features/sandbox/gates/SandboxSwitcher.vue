@@ -25,14 +25,14 @@ import { sandboxAvailabilityVisual } from "../overview/availability";
 import { placementOf, type SandboxPlacement } from "../overview/placement";
 import { useSandboxPlacement } from "../overview/useSandboxPlacement";
 import { attentionByBox, otherBoxes, subscribe as watchOtherBoxes } from "../../../models/sandbox/live/fleetAcross";
-import { connectedSandboxes } from "../../../models/sandbox/live/roster";
+import { switchableSandboxes } from "../../../models/sandbox/live/roster";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
 import { operationRunning } from "../../../workbench/operations/operations";
 import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
-import { isLocalFolderRow, localFace } from "../../../app/environments/local";
+import { localFace } from "../../../app/environments/local";
 import { useAuth } from "../../../client/auth/useAuth";
 import { useFolderPlace } from "./switcherPlace";
 import { answerNote } from "./switcherRows";
@@ -139,7 +139,8 @@ onUnmounted(() => {
 // A sandbox that never reported in has no daemon, so switching to it can only paint a connecting gate that never
 // resolves; those rows are unfinished errands on the getting-started ring, not places to switch to.
 // A local window's own folder is in the list too (it is the "sandbox" that window shows) and is not a place to switch to.
-const switchable = computed(() => connectedSandboxes(sandbox.sandboxes.value).filter((option) => !isLocalFolderRow(option.id)));
+// Both rules are roster.ts `switchableSandboxes`, which the home rail and the phone's menu draw from as well.
+const switchable = computed(() => switchableSandboxes(sandbox.sandboxes.value));
 
 // How much is waiting in every other sandbox; absent for the active row since its badge is already on the rail.
 // An unanswered box gets undefined, which draws nothing rather than a zero.
