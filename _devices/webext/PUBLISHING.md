@@ -27,10 +27,15 @@ turns remembering on; justify them as:
   and fill UI on pages where the person signs in. Separate from the agent's per-site grants; does not widen what
   the sandbox may read or click.
 
-Uploading the package
-through the API does not fill those fields. The store can accept the upload and then reject `:publish` with HTTP 400,
-"Your submission does not meet the requirements to be published in the store." Check every dashboard tab for incomplete
-fields before retrying; the API response does not name the missing field.
+Uploading the package through the API does not fill those fields. The store can accept the upload and then reject
+`:publish` with HTTP 400, "Your submission does not meet the requirements to be published in the store." The API
+response does not name the missing field. Open the item in the Developer Dashboard and select **Why can't I submit?**
+beside **Submit for review** to see the exact validation errors. Fill the missing fields and select **Save draft**;
+the submit button becomes enabled when the requirements are met. Optional permissions require justifications too:
+the missing `nativeMessaging` justification blocked release `1.353.0` despite a successful upload.
+
+After correcting dashboard metadata, rerun the failed publish job at the same release tag. The uploaded package
+does not need a new version just to submit its corrected listing.
 
 ## Each release
 
