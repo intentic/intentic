@@ -294,9 +294,9 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
         <button
             ref="trigger"
             type="button"
-            class="sandbox-switcher flex items-center justify-center overflow-hidden rounded-xl transition-opacity hover:opacity-80"
+            class="sandbox-switcher icon-rail-tile ui-row-select ui-row-select-horizontal flex items-center justify-center overflow-hidden rounded-lg p-2"
             :class="[
-                route.path === '/sandbox' || route.path.startsWith('/sandbox/') ? 'text-link ring-2 ring-link ring-offset-2 ring-offset-card' : 'text-muted',
+                route.path === '/sandbox' || route.path.startsWith('/sandbox/') ? 'ui-row-select-on text-link' : 'text-muted hover:text-content',
                 open && 'opacity-80',
             ]"
             :aria-label="
@@ -307,8 +307,10 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
             v-on="menu.trigger"
         >
             <!-- A local window's chip is its folder's letter: the place it shows, as the workspace's is its sandbox's logo. -->
-            <SandboxLogo v-if="folder" :name="folder.name" />
-            <SandboxLogo v-else :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
+            <span class="flex size-full items-center justify-center overflow-hidden rounded-md [&_span]:text-inherit">
+                <SandboxLogo v-if="folder" :name="folder.name" />
+                <SandboxLogo v-else :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
+            </span>
         </button>
         <!-- WHERE IT RUNS AND WHETHER IT ANSWERS, on the bottom-left corner: bottom-right is where every icon on the
              rail shows its running mark, so that corner belongs to the spinner below. The glyph
