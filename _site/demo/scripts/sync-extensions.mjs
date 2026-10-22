@@ -34,12 +34,35 @@ const SHA = /^[0-9a-f]{40}$/;
 const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
 const headers = token === undefined || token === "" ? {} : { authorization: `Bearer ${token}` };
 
+// A connection GitHub's CDN never answered (fetch throws) or a 5xx/429 is the network's moment, not the pin's fault: one
+// such timeout to raw.githubusercontent failed a whole CI build. Asked again after a pause; a 404 or 403 is an answer
+// and fails at once, and the last failure is the one thrown.
+const RETRY_PAUSES_MS = [1_000, 4_000];
+const transientStatus = (status) => status === 429 || status >= 500;
+
 const fetchText = async (url) => {
-    const response = await fetch(url, { headers });
-    if (!response.ok) {
-        throw new Error(`${url}: ${response.status} ${response.statusText}`);
+    for (let attempt = 0; ; attempt += 1) {
+        const retry = attempt < RETRY_PAUSES_MS.length;
+        let response;
+        try {
+            response = await fetch(url, { headers });
+        } catch (error) {
+            if (!retry) {
+                throw error;
+            }
+            console.warn(`${url}: ${error.cause?.code ?? error.message}, asking again`);
+            await new Promise((resolve) => setTimeout(resolve, RETRY_PAUSES_MS[attempt]));
+            continue;
+        }
+        if (response.ok) {
+            return response.text();
+        }
+        if (!retry || !transientStatus(response.status)) {
+            throw new Error(`${url}: ${response.status} ${response.statusText}`);
+        }
+        console.warn(`${url}: ${response.status} ${response.statusText}, asking again`);
+        await new Promise((resolve) => setTimeout(resolve, RETRY_PAUSES_MS[attempt]));
     }
-    return response.text();
 };
 
 // One source per pin: a local checkout, or GitHub at the exact commit.

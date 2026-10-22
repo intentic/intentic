@@ -12,6 +12,9 @@ export interface OrpcLink<Client> {
     readonly client: Client;
     // The dialling side's socket: terminate it to drop the link under a call.
     readonly peer: WebSocket;
+    // Drops the link and settles once the client's side has seen its socket close, so a call made after it meets the
+    // closed socket rather than racing the close across the loopback (a fixed sleep lost that race on a loaded runner).
+    readonly drop: () => Promise<void>;
     readonly close: () => void;
 }
 
@@ -28,11 +31,17 @@ export const orpcLink = async <Client>(router: AnyRouter): Promise<OrpcLink<Clie
     // only spell addEventListener's options more narrowly, as runner-link.ts and peer-routes.ts already cast for.
     new RPCHandler(router).upgrade(peer as unknown as Parameters<RPCHandler<object>["upgrade"]>[0]);
     await once(peer, "open");
+    const hub = await accepted;
     // SAFETY: as above, the accepting side's `ws` socket for the link.
-    const link = new RPCLink({ websocket: (await accepted) as unknown as globalThis.WebSocket });
+    const link = new RPCLink({ websocket: hub as unknown as globalThis.WebSocket });
     // SAFETY: the caller names the client shape of the router it handed in; oRPC's proxy answers any path.
     const client = createORPCClient(link) as unknown as Client;
-    return { client, peer, close: () => server.close() };
+    const drop = async (): Promise<void> => {
+        const closed = hub.readyState === WebSocket.CLOSED ? Promise.resolve() : once(hub, "close").then(() => undefined);
+        peer.terminate();
+        await closed;
+    };
+    return { client, peer, drop, close: () => server.close() };
 };
 
 // The error a call settles with; a call that answers is the test's premise failing.

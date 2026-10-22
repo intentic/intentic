@@ -43,11 +43,10 @@ test("anything else that escapes stays an error with its stack, even with the sa
 // installed oRPC: a send on a peer socket that has closed, which is what an abandoned call's cancel meets. The fixture
 // above stands in for the stack; this is the real throw it was copied from.
 test("oRPC's refused send on a closed peer socket is the one recognised", async () => {
-    const { client, peer, close } = await orpcLink<{ ping: () => Promise<string> }>({ ping: os.handler(() => "pong") });
+    const { client, drop, close } = await orpcLink<{ ping: () => Promise<string> }>({ ping: os.handler(() => "pong") });
     try {
         expect(await client.ping()).toBe("pong");
-        peer.terminate();
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await drop();
         expect(isAbandonedPeerSend(await failureOf(client.ping()))).toBe(true);
     } finally {
         close();

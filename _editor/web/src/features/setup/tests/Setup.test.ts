@@ -450,7 +450,7 @@ it(`offers the sandbox an account already works in, and makes nothing until anot
     expect(replace).not.toHaveBeenCalled();
 
     buttonLabelled(`Open chat`)!.click();
-    await waitFor(() => expect(push).toHaveBeenCalledWith(`/`));
+    await waitFor(() => expect(push).toHaveBeenCalledWith(`/chat`));
     expect(create).not.toHaveBeenCalled();
 });
 
@@ -854,7 +854,7 @@ describe(`a folder the app picked, where the platform's machines can hold it`, (
         jest.useFakeTimers();
         await mount();
         await advanceTimersByTimeAsync(3_000);
-        await waitFor(() => expect(push).toHaveBeenCalledWith(`/`));
+        await waitFor(() => expect(push).toHaveBeenCalledWith(`/chat`));
         expect(mintSyncPairing).toHaveBeenCalledTimes(1);
         expect(openDesktopLink.mock.calls).toEqual([
             [`intentic://sync?url=https%3A%2F%2Fsandbox-abc.sbx.test&pair=pair-token&name=My+App&project=My-App&sandbox=new`],
@@ -1288,7 +1288,7 @@ it(`opens the sandbox the account already lists at a live address of ours, and d
     stubGlobal(`fetch`, () => Promise.resolve(new Response(`{}`, { status: 200 })));
     try {
         buttonLabelled(`Connect`)!.click();
-        await waitFor(() => expect(push).toHaveBeenCalledWith(`/`));
+        await waitFor(() => expect(push).toHaveBeenCalledWith(`/chat`));
     } finally {
         unstubAllGlobals();
     }

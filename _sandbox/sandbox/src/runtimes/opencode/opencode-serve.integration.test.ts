@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -223,6 +224,13 @@ test.skipIf(!linuxProc.runs)(linuxProc.title("waitForExit looks for the stamp ag
     const binary = await standIn(`trap '' TERM\necho '${LISTENING}'\nexec sleep 60`);
     const served = await serve(binary);
     const exited = exitOf(served);
+    // The stand-in says it listens BEFORE its own `exec sleep`, and on a loaded runner that exec was still under way as
+    // the looks began, so six more of them read the empty environ (run 39823305195). Waited out on the real clock, until
+    // the process is `sleep` and carries its stamp, so the one miss below is the one this test forces.
+    const own = served.process ?? { pid: 0, stamp: "" };
+    await waitFor(() => expect([readFileSync(`/proc/${String(own.pid)}/comm`, "utf8").trim(), carriesStamp(own.pid, own.stamp)]).toEqual(["sleep", true]), {
+        timeout: 5_000,
+    });
     // The first look past the grace misses, as one landing inside an exec does; every later one reads the real environ.
     const looks: boolean[] = [];
     const carries = (pid: number, stamp: string): boolean => {
