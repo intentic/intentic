@@ -246,7 +246,7 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: () => t(`home.title`) },
                 component: asyncView(() => import(`../features/home/MasterHomeView.vue`)),
             },
-            // The shell's own landing: mobile lands on the agent fleet, desktop on the file tree with its chat docked.
+            // The shell's own landing is the agent fleet on both desktop and mobile.
             // A new sandbox opens on the full-screen chat instead (landingAfterSetup, AddSandboxDialog), since the chat
             // is where a first session starts. A guest has no home tile but the chat: the tree is a read the daemon
             // refuses it. A home-only guest has only the master view.
@@ -257,7 +257,7 @@ const routes: RouteRecordRaw[] = [
                     if (isGuest.value) {
                         return homeOnly.value ? `/home` : `/chat`;
                     }
-                    return useDevice().mobile.value ? `/agents` : `/workspace`;
+                    return `/agents`;
                 },
             },
             // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so

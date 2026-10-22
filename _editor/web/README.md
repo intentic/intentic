@@ -530,7 +530,8 @@ pnpm --filter @intentic/web typecheck
 
 `/home` keeps the shared shell and shows one home conversation for the selected sandbox. The desktop rail lists
 connected sandboxes with personal attention counts; on phones the list opens each sandbox’s chat at `/home/:sandbox`.
-Single clicks switch sandboxes, double clicks and Enter enter the full sandbox. `features/home/` draws the surface;
+Single clicks switch sandboxes; double clicks and Enter enter the full sandbox on `/agents`, the default landing
+view on both desktop and mobile. `features/home/` draws the surface;
 `models/home/` holds attention polling and the pure work ledger projection.
 The desktop status bar stays hidden in the master view, including personal settings opened from it.
 Home also opens from the logo menu in This computer before any sandbox exists. Its rail offers a way back to This
