@@ -7,6 +7,7 @@ import { type InputHistory, inputHistoryFor, recallStep } from "../../drafts/inp
 import type { Conversation } from "../../../../models/conversations/session/conversation";
 import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import type { ComposerPopovers } from "./composerPopovers";
+import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
 
 // One pane's composer keyboard: who gets each key, in order (an open list, then recall, then Escape's own ladder, then
 // Enter), what a keystroke of the user's own ends, and the one hint slot that teaches whichever key matters now.
@@ -43,17 +44,60 @@ export interface KeysHost {
     readonly voice: Pick<ComposerVoice, "live" | "quit" | "slotHint">;
     readonly reachable: Readonly<Ref<boolean>>;
     readonly mobile: Readonly<Ref<boolean>>;
-    // What Enter does on an empty box over a stopped turn (continue now, or at a spent account's reopen), as a sentence;
-    // undefined when it does neither.
-    readonly continueKeyHint: Readonly<Ref<string | undefined>>;
     readonly grow: () => void;
-    readonly submit: () => void;
+    // The pane's Send (composerSend.ts): what Enter does on an empty box over a stopped turn (continue now, or at a spent
+    // account's reopen) as a sentence, undefined when it does neither; the press; and Cmd/Ctrl+Enter's draft for a new
+    // agent (freshAgentSend.ts): whether the key would open one, and the press itself.
+    readonly send: {
+        readonly continueKeyHint: Readonly<Ref<string | undefined>>;
+        readonly submit: () => void;
+        readonly freshAgent: { readonly offered: Readonly<Ref<boolean>>; readonly start: () => boolean };
+    };
 }
+
+// An empty box can't take a newline but can take a recall, so the slot advertises whichever key is live.
+const composerHintOf = (host: KeysHost): ComputedRef<string> => {
+    const { view, popovers, history } = host;
+    const { draft, streaming, awaitingDecision } = view;
+    const t = useT();
+    const recallable = computed(() => draft.value === `` && history.value?.recallable === true);
+    return computed(() => {
+        // Live voice outranks everything: while it's on, Escape means "catch the mic", not "stop streaming".
+        const spoken = host.voice.slotHint.value;
+        if (spoken !== undefined) {
+            return spoken;
+        }
+        // While generating, the way out is the shortcut worth the slot: the only place Escape's meaning is learned. A
+        // turn already ending has nothing left to stop.
+        if (streaming.value && view.ending.value === undefined && !awaitingDecision.value) {
+            return t(`chat.chatPane.escToStop`);
+        }
+        // A draft that runs as a command sends nothing to the model, so say so before Enter, not after.
+        const command = popovers.commandRun.value;
+        if (command !== undefined) {
+            return t(`chat.chatPane.enterRunsCommand`, { name: command.name });
+        }
+        // Ranked ahead of recall: rarer, more useful, and the one place anyone learns the key exists.
+        const continuing = host.send.continueKeyHint.value;
+        if (continuing !== undefined) {
+            return continuing;
+        }
+        if (recallable.value) {
+            return t(`chat.chatPane.upForPreviousMessage`);
+        }
+        if (draft.value === ``) {
+            return t(`chat.chatPane.atForFilesAndSettings`);
+        }
+        // The one place anyone learns the new-agent key, said only while it would open one.
+        return host.send.freshAgent.offered.value
+            ? t(`chat.chatPane.shiftEnterOrNewAgent`, { chord: formatChord(`Mod+Enter`, isApplePlatform()) })
+            : t(`chat.chatPane.shiftEnterNewLine`);
+    });
+};
 
 export const useComposerKeys = (host: KeysHost) => {
     const { view, popovers, history } = host;
     const { draft, streaming, awaitingDecision } = view;
-    const t = useT();
 
     // True when recall consumed the key; claims nothing while text is selected, since arrows then collapse the
     // selection. Reads the live element, not the `caret` ref, which goes stale under an auto-repeating arrow.
@@ -126,12 +170,11 @@ export const useComposerKeys = (host: KeysHost) => {
         return true;
     };
 
-    // Enter (or Cmd/Ctrl+Enter) sends and Shift+Enter breaks the line; on a phone Enter is the newline, since its
-    // keyboard has no Shift+Enter and the send button submits.
+    // Enter sends and Shift+Enter breaks the line; Cmd/Ctrl+Enter opens a new agent with the draft where one is offered,
+    // and sends here otherwise. On a phone Enter is the newline, since its keyboard has no Shift+Enter and the send
+    // button submits.
     const sends = (event: KeyboardEvent): boolean =>
         event.key === `Enter` && !host.mobile.value && !(event.shiftKey && !event.metaKey && !event.ctrlKey);
-
-    const recallable = computed(() => draft.value === `` && history.value?.recallable === true);
 
     return {
         onKeydown: (event: KeyboardEvent): void => {
@@ -157,7 +200,11 @@ export const useComposerKeys = (host: KeysHost) => {
                 return;
             }
             event.preventDefault();
-            host.submit();
+            // A draft that runs as a slash command acts on this chat, never a new one.
+            if ((event.metaKey || event.ctrlKey) && popovers.commandRun.value === undefined && host.send.freshAgent.start()) {
+                return;
+            }
+            host.send.submit();
         },
         // Typing reclaims a recalled draft as the user's own and catches an armed voice send; only real keystrokes reach
         // here, since programmatic writes go through v-model with no input event.
@@ -167,32 +214,6 @@ export const useComposerKeys = (host: KeysHost) => {
             host.voice.quit();
             history.value?.reset();
         },
-        // An empty box can't take a newline but can take a recall, so the slot advertises whichever key is live.
-        composerHint: computed(() => {
-            // Live voice outranks everything: while it's on, Escape means "catch the mic", not "stop streaming".
-            const spoken = host.voice.slotHint.value;
-            if (spoken !== undefined) {
-                return spoken;
-            }
-            // While generating, the way out is the shortcut worth the slot: the only place Escape's meaning is learned. A
-            // turn already ending has nothing left to stop.
-            if (streaming.value && view.ending.value === undefined && !awaitingDecision.value) {
-                return t(`chat.chatPane.escToStop`);
-            }
-            // A draft that runs as a command sends nothing to the model, so say so before Enter, not after.
-            const command = popovers.commandRun.value;
-            if (command !== undefined) {
-                return t(`chat.chatPane.enterRunsCommand`, { name: command.name });
-            }
-            // Ranked ahead of recall: rarer, more useful, and the one place anyone learns the key exists.
-            const continuing = host.continueKeyHint.value;
-            if (continuing !== undefined) {
-                return continuing;
-            }
-            if (recallable.value) {
-                return t(`chat.chatPane.upForPreviousMessage`);
-            }
-            return draft.value === `` ? t(`chat.chatPane.atForFilesAndSettings`) : t(`chat.chatPane.shiftEnterNewLine`);
-        }),
+        composerHint: composerHintOf(host),
     };
 };

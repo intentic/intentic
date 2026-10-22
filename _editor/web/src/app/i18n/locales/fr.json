@@ -1541,6 +1541,7 @@
             "runMessageThrough": "Faire passer ce message par",
             "sandboxBusy": "Sandbox occupé",
             "shiftEnterNewLine": "Maj+Entrée pour une nouvelle ligne",
+            "shiftEnterOrNewAgent": "Maj+Entrée pour une nouvelle ligne, {chord} pour un nouvel agent",
             "startConversation": "Commencez une conversation avec {providerName}.",
             "talkHandsFree": "Parler sans les mains",
             "thisChatUnchanged": "Ce chat reste intact",

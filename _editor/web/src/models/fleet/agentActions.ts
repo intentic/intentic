@@ -4,6 +4,7 @@ import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/sch
 import type { AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import { type AgentRunChoice, useDevice } from "@intentic/ui";
 import type { Conversation } from "../conversations/session/conversation";
+import type { ChatAttachment } from "../conversations/transcript/transcript";
 import { errands } from "../conversations/run/errands";
 import { summonChat, summonTurn } from "../conversations/run/summon";
 import { useChat } from "../conversations/run/useChat";
@@ -45,8 +46,14 @@ export const landRequestWork = (id: string, at: AgentReach = undefined): string 
 // alone). Without it the draft opens on whatever the composer last held, which is the reader's chat model and says
 // nothing about the job the press starts.
 // `opening` answers what the opening message carries for the conversation as a whole: whether its finished work lands by
-// itself (a session opened by voice from across the room does not, unless the reader says so on its card).
-export const startAgent = (prompt?: string, actsAs?: string, run?: AgentRunChoice, opening?: { readonly autoLand?: boolean }): string => {
+// itself (a session opened by voice from across the room does not, unless the reader says so on its card), and the files
+// staged with it (a composer's Cmd/Ctrl+Enter carrying its chips into the new agent).
+export const startAgent = (
+    prompt?: string,
+    actsAs?: string,
+    run?: AgentRunChoice,
+    opening?: { readonly autoLand?: boolean; readonly files?: readonly ChatAttachment[] },
+): string => {
     const conversation = draftConversation();
     if (run !== undefined) {
         wearRunChoice(conversation, run);
@@ -69,7 +76,7 @@ export const startAgent = (prompt?: string, actsAs?: string, run?: AgentRunChoic
     // The prompt rides the summons, so the turn runs in the window drawing the chat rather than whichever one was
     // clicked (summonTurn).
     if (fitted === undefined && prompt !== undefined) {
-        summonTurn(conversation, prompt);
+        summonTurn(conversation, prompt, opening?.files);
         revealConversation(conversation);
         return conversation.conversationId;
     }
@@ -86,7 +93,7 @@ export const startAgent = (prompt?: string, actsAs?: string, run?: AgentRunChoic
             console.warn(`startAgent: project persona for ${project} was refused; the conversation runs unfenced`, error);
             conversation.selection.apply({ kind: `set`, picks: { actsAs: undefined } });
         })
-        .then(() => (prompt === undefined ? undefined : summonTurn(conversation, prompt)));
+        .then(() => (prompt === undefined ? undefined : summonTurn(conversation, prompt, opening?.files)));
     return conversation.conversationId;
 };
 

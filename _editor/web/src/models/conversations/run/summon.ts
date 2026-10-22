@@ -4,6 +4,7 @@ import { drawsChat } from "./chatEcho";
 import { floatingWindowPanel, raiseFloating } from "../../../workbench/window/floating";
 import { Conversation } from "../session/conversation";
 import { traceFocus } from "./focusTrace";
+import type { ChatAttachment } from "../transcript/transcript";
 import { showRun } from "./chatRun";
 import { closeSubagent, showSubagent } from "../panel/subagentView";
 import { snapshotTab, type StoredTab } from "../tabs/tabSnapshot";
@@ -123,7 +124,9 @@ export const summonChat = (summons: Summons): void => {
  * from such a window, the prompt rides the summons and the chat's own window sends it, raised so the answer is where
  * the eye already goes.
  */
-export const summonTurn = (conversation: Conversation, prompt: string): void => {
+// `files` are staged chips the opening message carries; they ride only a turn run here, since a summons to another
+// window delivers words alone.
+export const summonTurn = (conversation: Conversation, prompt: string, files?: readonly ChatAttachment[]): void => {
     const here = drawsChat.value;
     summonChat({
         kind: `reveal`,
@@ -134,7 +137,7 @@ export const summonTurn = (conversation: Conversation, prompt: string): void => 
         ...(here ? {} : { deliver: prompt }),
     });
     if (here) {
-        void conversation.turn.say(prompt);
+        void conversation.turn.say(prompt, files);
         return;
     }
     // Raises the window already holding the chat, so the answer arrives where the eye goes; never opens one.

@@ -3278,6 +3278,7 @@
             "runMessageThrough": "Run this message through",
             "sandboxBusy": "Sandbox busy",
             "shiftEnterNewLine": "Shift+Enter for new line",
+            "shiftEnterOrNewAgent": "Shift+Enter for new line, {chord} for a new agent",
             "startConversation": "Start a conversation with {providerName}.",
             "startConversationAny": "Start a conversation.",
             "talkHandsFree": "Talk hands-free",

@@ -290,30 +290,7 @@ const { personas, pickedPersona, personaName, personaNotice, pickPersona } = use
 const history = useRecallRing(() => props.conversation);
 // This chat's answer to a spent allowance, which a scheduled press sets and a stopped turn's bare press may find set.
 const limitResend = useLimitResend(() => props.conversation);
-const {
-    intent,
-    scheduledLabel,
-    scheduledIcon,
-    scheduledWhen,
-    continueStrip,
-    continueOffer,
-    continueAtReopen,
-    pickUpPressable,
-    spentUntil,
-    atReopen,
-    continueKeyHint,
-    canSend,
-    refusal,
-    sendShown,
-    composerPlaceholder,
-    sendHint,
-    stopLabel,
-    stopHint,
-    submit,
-    continueTurn,
-    approvePlan,
-    keepPlanning,
-} = useComposerSend({
+const composerSend = useComposerSend({
     view: paneView,
     voiceAgent,
     staging,
@@ -343,6 +320,29 @@ const {
     laterOffered,
     titleOf,
 });
+const {
+    intent,
+    scheduledLabel,
+    scheduledIcon,
+    scheduledWhen,
+    continueStrip,
+    continueOffer,
+    continueAtReopen,
+    pickUpPressable,
+    spentUntil,
+    atReopen,
+    canSend,
+    refusal,
+    sendShown,
+    composerPlaceholder,
+    sendHint,
+    stopLabel,
+    stopHint,
+    submit,
+    continueTurn,
+    approvePlan,
+    keepPlanning,
+} = composerSend;
 
 // A spent account turns Send into a schedule; the caret beside it offers the ways that skip the wait.
 const scheduledWays = useScheduledWays({
@@ -472,9 +472,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
     voice: { ...voice, slotHint: computed(() => talk.hint.value ?? voice.slotHint.value) },
     reachable,
     mobile,
-    continueKeyHint,
     grow,
-    submit,
+    send: composerSend,
 });
 </script>
 

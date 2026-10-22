@@ -49,9 +49,12 @@ const keysOf = () => {
         voice,
         reachable: ref(true),
         mobile: ref(false),
-        continueKeyHint: ref<string | undefined>(undefined),
         grow: jest.fn(),
-        submit: jest.fn(),
+        send: {
+            continueKeyHint: ref<string | undefined>(undefined),
+            submit: jest.fn(),
+            freshAgent: { offered: ref(false), start: jest.fn(() => false) },
+        },
     };
     let keys: ReturnType<typeof useComposerKeys> | undefined;
     const app = createApp({
@@ -91,7 +94,7 @@ describe(`an open list`, () => {
         expect(host.lists.mention.value.pickActive).toHaveBeenCalledTimes(2);
         expect(press(`Escape`)).toBe(true);
         expect(host.popovers.popoverDismissed.value).toBe(true);
-        expect(host.submit).not.toHaveBeenCalled();
+        expect(host.send.submit).not.toHaveBeenCalled();
     });
 
     it(`lets Enter through to the composer when no row is active, and never takes Shift+Enter`, () => {
@@ -100,10 +103,10 @@ describe(`an open list`, () => {
         host.lists.command.value = { move: jest.fn(), pickActive: jest.fn(() => false) };
 
         press(`Enter`);
-        expect(host.submit).toHaveBeenCalledTimes(1);
+        expect(host.send.submit).toHaveBeenCalledTimes(1);
 
         expect(press(`Enter`, { shiftKey: true })).toBe(false);
-        expect(host.submit).toHaveBeenCalledTimes(1);
+        expect(host.send.submit).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -115,7 +118,33 @@ describe(`Enter`, () => {
         expect(press(`Enter`, { shiftKey: true, metaKey: true })).toBe(true);
         expect(press(`Enter`, { shiftKey: true })).toBe(false);
 
-        expect(host.submit).toHaveBeenCalledTimes(2);
+        expect(host.send.submit).toHaveBeenCalledTimes(2);
+    });
+
+    it(`with Cmd/Ctrl opens a new agent where one is offered, and only then`, () => {
+        const { host, press } = keysOf();
+        host.send.freshAgent.start.mockReturnValue(true);
+
+        expect(press(`Enter`, { metaKey: true })).toBe(true);
+        expect(press(`Enter`, { ctrlKey: true })).toBe(true);
+        press(`Enter`);
+        expect(host.send.freshAgent.start).toHaveBeenCalledTimes(2);
+        expect(host.send.submit).toHaveBeenCalledTimes(1);
+
+        host.send.freshAgent.start.mockReturnValue(false);
+        expect(press(`Enter`, { metaKey: true })).toBe(true);
+        expect(host.send.submit).toHaveBeenCalledTimes(2);
+    });
+
+    it(`with Cmd/Ctrl runs a slash command here, never in a new agent`, () => {
+        const { host, command, press } = keysOf();
+        host.send.freshAgent.start.mockReturnValue(true);
+        command.value = { name: `review`, description: `Review the diff.` };
+
+        press(`Enter`, { metaKey: true });
+
+        expect(host.send.freshAgent.start).not.toHaveBeenCalled();
+        expect(host.send.submit).toHaveBeenCalledTimes(1);
     });
 
     it(`never sends mid-composition, or on a phone, where it is the newline`, () => {
@@ -125,7 +154,7 @@ describe(`Enter`, () => {
         host.mobile.value = true;
         press(`Enter`);
 
-        expect(host.submit).not.toHaveBeenCalled();
+        expect(host.send.submit).not.toHaveBeenCalled();
     });
 });
 
@@ -222,12 +251,15 @@ describe(`the hint slot`, () => {
 
         chat.draft.value = `half`;
         expect(keys.composerHint.value).toBe(t(`chat.chatPane.shiftEnterNewLine`));
+        host.send.freshAgent.offered.value = true;
+        expect(keys.composerHint.value).toContain(`Enter for a new agent`);
+        host.send.freshAgent.offered.value = false;
 
         chat.draft.value = ``;
         host.history.value.record(`the one before`);
         expect(keys.composerHint.value).toBe(t(`chat.chatPane.upForPreviousMessage`));
 
-        host.continueKeyHint.value = t(`chat.chatPane.enterToContinue`);
+        host.send.continueKeyHint.value = t(`chat.chatPane.enterToContinue`);
         expect(keys.composerHint.value).toBe(t(`chat.chatPane.enterToContinue`));
 
         command.value = { name: `review`, description: `Review the diff.` };

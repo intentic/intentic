@@ -36,6 +36,7 @@ import { track } from "../../../../app/analytics";
 import { invalidateAgentTranscript } from "../../../../models/conversations/transcript/agentTranscript";
 import { type ChatAttachment, type ChatMessage, continuationFor } from "../../../../models/conversations/transcript/transcript";
 import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
+import { useFreshAgentSend } from "./freshAgentSend";
 
 // What one pane's Send means and does. The meaning is composerIntent.ts's ladder read against this composer's state
 // (what it says, whether it may, what Stop and the queue will do); the doing is the press itself, in the precedence
@@ -262,6 +263,30 @@ const reopenReadings = (on: {
         pressable: computed(() => on.situation.value.pickUp?.ready === true),
         // What Enter does on the empty box, said under it: continue now, or at the reopen the button beside it names.
         keyHint: computed(() => continueKeyHintOf(on.continueOffer.value, on.spentUntil.value, reopenPress.value, on.now.value)),
+    };
+};
+
+// The Stop press: offered for every live turn, a parked one included, naming what goes with it there.
+// Plain words say Stop: a non-coder has no "turn" to stop, only an assistant that is working.
+const stopPress = (host: Pick<SendHost, "mobile">, words: Readonly<Ref<ComposerWords>>, awaitingDecision: Readonly<Ref<boolean>>) => {
+    const t = useT();
+    return {
+        stopLabel: computed(() =>
+            words.value.plain === true
+                ? t(`ui.action.stop`)
+                : awaitingDecision.value
+                  ? t(`chat.composerSend.stopTheTurn`)
+                  : t(`chat.composerSend.stopGenerating`),
+        ),
+        stopHint: computed((): TooltipValue => {
+            if (awaitingDecision.value) {
+                return {
+                    title: words.value.plain === true ? t(`ui.action.stop`) : t(`chat.composerIntent.stopTurn`),
+                    note: t(`chat.composerIntent.discardsRequest`),
+                };
+            }
+            return host.mobile.value ? t(`ui.action.stop`) : { title: t(`ui.action.stop`), keys: t(`ui.keys.esc`) };
+        }),
     };
 };
 
@@ -521,23 +546,10 @@ export const useComposerSend = (host: SendHost) => {
             const shown = reopenShown.value;
             return shown === undefined ? sendHintFor(intent.value, words.value) : reopenHintFor(shown, words.value);
         }),
-        // Offered for every live turn, a parked one included, naming what goes with it there.
-        // Plain words say Stop: a non-coder has no "turn" to stop, only an assistant that is working.
-        stopLabel: computed(() =>
-            words.value.plain === true
-                ? t(`ui.action.stop`)
-                : awaitingDecision.value
-                  ? t(`chat.composerSend.stopTheTurn`)
-                  : t(`chat.composerSend.stopGenerating`),
-        ),
-        stopHint: computed((): TooltipValue => {
-            if (awaitingDecision.value) {
-                return { title: words.value.plain === true ? t(`ui.action.stop`) : t(`chat.composerIntent.stopTurn`), note: t(`chat.composerIntent.discardsRequest`) };
-            }
-            return host.mobile.value ? t(`ui.action.stop`) : { title: t(`ui.action.stop`), keys: t(`ui.keys.esc`) };
-        }),
+        ...stopPress(host, words, awaitingDecision),
         submit,
         approvePlan,
         keepPlanning,
+        freshAgent: useFreshAgentSend({ view, staging: host.staging, history, reachable: host.reachable, intent, refusal }),
     };
 };
