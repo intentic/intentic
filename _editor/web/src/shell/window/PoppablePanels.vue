@@ -45,6 +45,8 @@ const terminalTarget = computed(() => terminalSlot.value ?? park);
 // Its section, then its tab in the side panel, then parked, where a live app keeps its own state and the streams pause.
 const browsersTarget = computed(() => browsersSlot.value ?? sideBrowsersSlot.value ?? park);
 const browsersParked = computed(() => browsersTarget.value === park);
+// In the side panel, each of its tabs is a side tab, so the view draws no strip of its own there (SideBrowsers.vue).
+const browsersBeside = computed(() => sideBrowsersSlot.value !== null && browsersTarget.value === sideBrowsersSlot.value);
 
 // Only a dock lands a panel visible on its route home; one whose window merely went away returns without moving the reader.
 chat.onDocked(() => {
@@ -80,6 +82,6 @@ browsers.onDocked(() => {
     </Teleport>
     <!-- Mounts once opened, then stays; parked, a framed app keeps its state between looks and the live pictures pause. -->
     <Teleport :to="browsersTarget">
-        <LiveBrowser v-if="browsersOpened && browsers.shows.value" :parked="browsersParked" />
+        <LiveBrowser v-if="browsersOpened && browsers.shows.value" :parked="browsersParked" :beside="browsersBeside" />
     </Teleport>
 </template>

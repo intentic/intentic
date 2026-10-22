@@ -2,16 +2,17 @@ import { parseJsonOr } from "@intentic/base/json";
 import { sandboxRef } from "@intentic/extension-api";
 import { computed } from "vue";
 import type { Router } from "vue-router";
+import { z } from "zod";
 import { storedValue, storeValue } from "../../app/storage/browserStorage";
 import { guestAllowedPath } from "../../lib/routes/guestPaths";
-import { openBeside, sideDocked } from "../side/sideTabs";
+import { openBeside, sideDocked, type SideInput } from "../side/sideTabs";
 import { handOffToMainWindow } from "../window/mainWindow";
 import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { browsersPath, parseTabKey, sameTab, tabKey, WEB_FRONT, type LiveTab, type PinnedTab } from "./browsersPaths";
 
 // THE BROWSERS VIEW'S OWN STATE: which tabs its strip holds besides the web pages of the window in front, which tab is in
-// front, and whether the view exists at all. Module-level, like the chat's and the terminal's, since the view is one
+// front, what each tab is called, and whether the view exists at all. Module-level, like the chat's and the terminal's, since the view is one
 // panel per window that mounts above the router and moves between /browsers, the side panel and a window of its own
 // (PoppablePanels.vue). Nothing mounts until someone first looks, and once opened it stays mounted, parked, so a
 // previewed app keeps its state between looks.
@@ -86,6 +87,16 @@ export const browsersPinned = pinned;
 export const browsersFront = front;
 export const browsersWantPreview = wantsPreview;
 
+// What each tab is called, by key, as the view itself names them (it alone reads the apps, windows and pages): what a
+// side tab standing for one says, since a side tab's words are a lookup, never a fetch. A web window's key names its page
+// in front; the empty key, the web as it stands.
+export interface BrowsersTabName {
+    readonly title: string;
+    // The hover's second line: an address, or whose window.
+    readonly note?: string | undefined;
+}
+export const browsersTabNames = sandboxRef<ReadonlyMap<string, BrowsersTabName>>(() => new Map());
+
 export const markBrowsersOpened = (): void => {
     opened.value = true;
 };
@@ -120,8 +131,20 @@ export const requestDefaultPreview = (): void => {
 
 // --- Ways in --------------------------------------------------------------------------------------------------------
 
-// The side panel's name for the view: one tab, since a window draws one Browsers view.
+// The side panel's name for the view. Beside the section each of the view's tabs is a side tab of its own (an app, the
+// desktop, a web window), so the panel's strip is the only one there; the one view a window draws is shared between them
+// and shows whichever is on screen (shell/side/SideBrowsers.vue).
 export const BROWSERS_SIDE_VIEW = `browsers`;
+
+// The side tab that stands for a tab of the view: `{ tab: <key> }`, or nothing for the web as it stands.
+export const browsersSideInput = (tab: LiveTab): SideInput => {
+    const key = tabKey(tab);
+    return key === `` ? {} : { tab: key };
+};
+
+// The tab of the view a side tab stands for.
+const BrowsersSideInputSchema = z.object({ tab: z.string().min(1).optional() });
+export const browsersTabOfInput = (input: SideInput): LiveTab => parseTabKey(BrowsersSideInputSchema.safeParse(input).data?.tab);
 
 // Opens the view on a tab (or where it was) and goes to its route.
 export const openBrowsers = (router: Router, tab?: LiveTab): void => {
@@ -158,7 +181,7 @@ export const openBrowsersBeside = (router: Router, tab?: LiveTab): void => {
         showTab(tab);
     }
     markBrowsersOpened();
-    openBeside(BROWSERS_SIDE_VIEW, {}, { keep: true });
+    openBeside(BROWSERS_SIDE_VIEW, browsersSideInput(front.value), { keep: true });
 };
 
 export const openPreviewBeside = (router: Router, targetId?: string): void => {

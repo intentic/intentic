@@ -17,7 +17,7 @@ import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 export const browsersKey = rpcKey(`system.browsers`);
 export const fetchBrowsers = (): Promise<BrowsersList> => sandboxRpc.system.browsers();
 
-export const useBrowsersQuery = (): { sessions: ComputedRef<BrowserSession[]>; refetch: () => Promise<unknown> } => {
+export const useBrowsersQuery = (): { sessions: ComputedRef<BrowserSession[]>; listed: ComputedRef<boolean>; refetch: () => Promise<unknown> } => {
     const { query } = useSandboxQuery(rpcQuery(`system.browsers`));
     // Live browsers first (what someone came for), then most recently finished, newest-first like a record.
     const sessions = computed(() =>
@@ -25,7 +25,9 @@ export const useBrowsersQuery = (): { sessions: ComputedRef<BrowserSession[]>; r
             (left, right) => Number(right.running) - Number(left.running) || right.activityAt - left.activityAt,
         ),
     );
-    return { sessions, refetch: () => query.refetch() };
+    // Whether the daemon has answered at all: before that, no window is known to be closed.
+    const listed = computed(() => query.data.value !== undefined);
+    return { sessions, listed, refetch: () => query.refetch() };
 };
 
 // Drops the row from the shared list the moment the close is issued, like killTerminal, so the status bar doesn't keep

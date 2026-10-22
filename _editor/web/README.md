@@ -380,9 +380,12 @@ flowchart LR
   launcher of all of it, and the start page offers the same. The toolbar is the browser's, with whatever the tab in
   front owns teleported into it (an app's Start and Stop, the hand on the desktop), and a phone frame for an app or a
   web page (`emulate` on the browser's socket). The view is one panel per window above the router
-  (`shell/window/PoppablePanels.vue`), moved between `/browsers`, a side panel tab and a window of its own, never
-  rebuilt: parked, a framed app keeps its state and the streams pause. Its state (pins, the tab in front, opening one
-  beside) is `workbench/browsers/`, which any feature may call; a tab's key is the route's tail (`browsersPaths.ts`).
+  (`shell/window/PoppablePanels.vue`), moved between `/browsers`, the side panel and a window of its own, never
+  rebuilt: parked, a framed app keeps its state and the streams pause. Beside the section it draws no strip: each of
+  its tabs (an app, the desktop, a web window) is a side tab of its own, all sharing the one view (a `shared` side
+  view, `shell/side/SideBrowsers.vue`), so the panel's strip is the only one there. Its state (pins, the tab in front,
+  opening one beside) is `workbench/browsers/`, which any feature may call; a tab's key is the route's tail
+  (`browsersPaths.ts`).
   _2026-10-08: the Preview and Desktop views became tabs of Browsers. Both had been a screen of their own for one kind
   of live thing, with a picker standing in for tabs; `/preview` and `/desktop` redirect to their tabs._
 - **The browser tab.** `shell/browser-tab/` (its chimes and preferences in `workbench/browser-tab/`) shows the fleet's

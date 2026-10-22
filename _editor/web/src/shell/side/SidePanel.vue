@@ -150,6 +150,25 @@ const bodyOf = (tab: SideTab): Component => {
 // A tab whose side view is not registered still draws, under the only name it has left: the view's own id.
 const labelOf = (tab: SideTab): SideViewLabel => describeTab(tab) ?? { title: tab.view.slice(tab.view.lastIndexOf(`/`) + 1), icon: `extensions` };
 const items = computed<readonly SideStripItem[]>(() => shownSideTabs.value.map((tab) => ({ id: tab.id, label: labelOf(tab) })));
+
+// The bodies, as the tabs they draw: one per tab, except a shared view's tabs, which have one between them (sideViews.ts),
+// given the input of whichever of them is on screen, else its first. In a list of their own, after the others, so tabs
+// coming and going never move a shared body in the document, which would reload what is framed in it.
+interface SideBody {
+    readonly key: string;
+    readonly tab: SideTab;
+}
+const ownBodies = computed<readonly SideBody[]>(() =>
+    panel.tabs.value.flatMap((tab) => (sideViewOf(tab.view)?.shared === true ? [] : [{ key: tab.id, tab }])),
+);
+const sharedBodies = computed<readonly SideBody[]>(() => {
+    const views = [...new Set(panel.tabs.value.filter((tab) => sideViewOf(tab.view)?.shared === true).map((tab) => tab.view))];
+    return views.flatMap((view) => {
+        const ofView = panel.tabs.value.filter((tab) => tab.view === view);
+        const tab = ofView.find((candidate) => candidate.id === shownSideActive.value) ?? ofView[0];
+        return tab === undefined ? [] : [{ key: `shared:${view}`, tab }];
+    });
+});
 const activeTab = computed(() => shownSideTabs.value.find((tab) => tab.id === shownSideActive.value));
 const activeHome = computed(() => (activeTab.value === undefined ? undefined : homeOf(activeTab.value)));
 
@@ -285,8 +304,23 @@ onBeforeUnmount(() => {
                  the attribute's presence alone makes a subtree inert. -->
             <div class="relative min-h-0 flex-1 bg-canvas">
                 <div
-                    v-for="tab in panel.tabs.value"
-                    :key="tab.id"
+                    v-for="{ key, tab } in ownBodies"
+                    :key="key"
+                    :id="`${domIdOf(tab.id)}-body`"
+                    role="tabpanel"
+                    :aria-labelledby="domIdOf(tab.id)"
+                    class="absolute inset-0 flex min-h-0 flex-col"
+                    :class="tab.id === shownSideActive ? `` : `invisible`"
+                    :inert="tab.id === shownSideActive ? undefined : true"
+                >
+                    <!-- Per tab, so a slow read in a hidden tab never speaks for the one shown. -->
+                    <FreshnessFrame :offline="offline" :lost-at="lostAt">
+                        <component :is="bodyOf(tab)" :input="tab.input" :jump="panel.jumps.value[tab.id]" />
+                    </FreshnessFrame>
+                </div>
+                <div
+                    v-for="{ key, tab } in sharedBodies"
+                    :key="key"
                     :id="`${domIdOf(tab.id)}-body`"
                     role="tabpanel"
                     :aria-labelledby="domIdOf(tab.id)"

@@ -9,7 +9,7 @@ const chatInSidePanel = ref(true);
 jest.mock("../../models/conversations/panel/chatPanelLayout", () => ({ chatInSidePanel }));
 
 const { default: SidePanel } = await import("./SidePanel.vue");
-const { closeAllTabs, openBeside, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
+const { closeAllTabs, closeTab, openBeside, sideTabId, useSidePanel } = await import("../../workbench/side/sideTabs");
 const { registerSideView } = await import("../../workbench/side/sideViews");
 const { chatSlot } = await import("../../workbench/window/panelSlots");
 
@@ -34,6 +34,15 @@ beforeAll(() => {
             home: () => ({ label: `Things`, open: openedHome }),
             component: async () => Body,
             lent: () => lent.value,
+        }),
+        // One live thing per window, shown under whichever of its tabs is on screen.
+        registerSideView({
+            id: `live`,
+            owner: `builtin`,
+            label: `Live`,
+            describe: (input) => ({ title: `Live ${String(input[`n`])}`, icon: `eye` }),
+            shared: true,
+            component: async () => Body,
         }),
     );
 });
@@ -122,6 +131,34 @@ it(`keeps every body mounted and shows only the tab on screen`, async () => {
     expect(bodies.map((body) => body.textContent)).toEqual([`body 1`, `body 2`]);
     expect(bodies.map((body) => body.classList.contains(`invisible`))).toEqual([true, false]);
     expect(bodies.map((body) => body.hasAttribute(`inert`))).toEqual([true, false]);
+});
+
+it(`draws a shared view's tabs as one body, never moved or rebuilt, handed the input of the tab on screen`, async () => {
+    openBeside(`live`, { n: 1 }, { keep: true });
+    openBeside(`stub`, { n: 9 }, { keep: true });
+    openBeside(`live`, { n: 2 }, { keep: true });
+    const host = await mount();
+
+    expect(tabTitles(host)).toEqual([`Live 1`, `Thing 9`, `Live 2`]);
+    const bodies = (): Element[] => [...host.querySelectorAll(`[role="tabpanel"]`)];
+    expect(bodies().map((body) => body.textContent)).toEqual([`body 9`, `body 2`]);
+    const shared = bodies()[1]?.querySelector(`.stub-body`);
+
+    openBeside(`live`, { n: 1 });
+    await settle();
+    expect(bodies().map((body) => body.textContent)).toEqual([`body 9`, `body 1`]);
+    expect(bodies()[1]?.querySelector(`.stub-body`)).toBe(shared);
+
+    // A tab of another view on screen hides the shared body, which keeps its place and its last look.
+    openBeside(`stub`, { n: 9 });
+    await settle();
+    expect(bodies().map((body) => body.classList.contains(`invisible`))).toEqual([false, true]);
+
+    // Its first tab closing neither moves nor rebuilds it.
+    closeTab(sideTabId(`live`, { n: 1 }));
+    await settle();
+    expect(bodies()[1]?.querySelector(`.stub-body`)).toBe(shared);
+    expect(bodies()[1]?.textContent).toBe(`body 2`);
 });
 
 it(`offers Keep open on the peek alone, and keeps it`, async () => {

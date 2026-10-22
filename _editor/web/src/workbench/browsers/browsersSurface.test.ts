@@ -154,11 +154,33 @@ describe(`a running app someone points at, with the side panel in the window`, (
         openPreviewBeside(router, `port:5173`);
 
         expect(panel.tabs.value.map((tab) => tab.view)).toEqual([`browsers`]);
-        expect(panel.active.value).toBe(sideTabId(`browsers`, {}));
+        expect(panel.active.value).toBe(sideTabId(`browsers`, { tab: `preview:port:5173` }));
         expect(panel.peek.value).toBeNull();
         expect(browsersOpened.value).toBe(true);
         expect(browsersFront.value).toEqual({ kind: `preview`, id: `port:5173` });
         expect(router.push).not.toHaveBeenCalled();
+    });
+
+    it(`gives each app its own side tab, so the panel's strip is the only one`, async () => {
+        const { openPreviewBeside, browsersFront } = await load();
+        openPreviewBeside(router, `port:5173`);
+        openPreviewBeside(router, `app:site/landing`);
+        openPreviewBeside(router, `port:5173`);
+
+        expect(panel.tabs.value.map((tab) => tab.input)).toEqual([{ tab: `preview:port:5173` }, { tab: `preview:app:site/landing` }]);
+        expect(panel.active.value).toBe(sideTabId(`browsers`, { tab: `preview:port:5173` }));
+        expect(browsersFront.value).toEqual({ kind: `preview`, id: `port:5173` });
+    });
+
+    it(`stands a side tab opened on no tab in particular for the one in front`, async () => {
+        const { openBrowsersBeside, showTab, browsersSideInput, browsersTabOfInput } = await load();
+        showTab({ kind: `desktop` });
+        openBrowsersBeside(router);
+
+        expect(panel.tabs.value.map((tab) => tab.input)).toEqual([{ tab: `desktop` }]);
+        expect(browsersSideInput({ kind: `web`, session: undefined })).toEqual({});
+        expect(browsersTabOfInput({})).toEqual({ kind: `web`, session: undefined });
+        expect(browsersTabOfInput({ tab: `browser-own` })).toEqual({ kind: `web`, session: `browser-own` });
     });
 
     it(`comes to front in place while the reader stands on /browsers`, async () => {

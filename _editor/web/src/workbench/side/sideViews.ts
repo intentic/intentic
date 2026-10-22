@@ -43,6 +43,10 @@ export interface SideViewEntry {
     readonly opening?: (input: SideInput) => SideInput;
     // Opened kept, never as a peek: a live thing (the running app) the next link followed must not replace.
     readonly kept?: true;
+    // Every tab of this view is one body between them, mounted once and drawn under whichever of its tabs is on screen,
+    // with that tab's input: a view that is one live thing per window (Browsers) shows one of its tabs at a time, and
+    // moving it from one tab's body to another's would reload every app framed in it.
+    readonly shared?: true;
     // Rendered with `input` (and `jump`, for a view that scrolls to a line) bound.
     readonly component: () => Promise<Component>;
     // Whether the main area is showing this very thing right now (Browsers while you stand on /browsers): its tab

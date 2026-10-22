@@ -8,6 +8,9 @@ import { activePageOf } from "../../features/browsers/activePage";
 import { toUrl } from "../../features/browsers/address";
 import { useHeldAddress } from "../../features/browsers/heldAddress";
 import { browsersFront, browsersOpened, browsersPinned, browsersWantPreview, showTab, unpinTab } from "../../workbench/browsers/browsersSurface";
+import { cycleTab } from "../../workbench/side/sideTabs";
+import { shownSideTabs } from "../../workbench/side/sideViews";
+import { BLANK, pageLabel, publishTabNames } from "./tabNames";
 import { parseTabKey, sameTab, tabKey, type LiveTab, type PinnedTab } from "../../workbench/browsers/browsersPaths";
 import { toggleBrowsersFloating, useBrowsersFloating } from "../../workbench/browsers/browsersFloating";
 import LiveTabStrip from "../../features/browsers/LiveTabStrip.vue";
@@ -47,9 +50,12 @@ import { useT } from "@intentic/ui/i18n";
 // menu. The web windows are the person's own to use: their own window takes every click and key, an agent's window does
 // too once its turn is over, and only while that agent's turn runs is it watched instead, with Take over to step in.
 
-const { parked = false } = defineProps<{
+const { parked = false, beside = false } = defineProps<{
     // In the parking stage, out of sight: nothing streams, framed apps keep running.
     parked?: boolean;
+    // In the side panel, where each tab is a side tab of its own (SideBrowsers.vue): no strip here, and the browser's
+    // next-tab keys walk the panel's tabs.
+    beside?: boolean;
 }>();
 
 const t = useT();
@@ -139,26 +145,6 @@ const activePage = computed<BrowserPage | undefined>(() => activePageOf(pages.va
 const pickPage = (page: BrowserPage): void => {
     pickedPage.value = page.id;
     view.bindPage(page.id);
-};
-
-// A tab's text: title, else host, else raw url, the same ladder the daemon uses for the session label, so a tab and
-// its window row never disagree. A page with none of them is a fresh tab, and says so.
-const BLANK = `about:blank`;
-const hostOf = (url: string): string => {
-    try {
-        return new URL(url).host;
-    } catch {
-        return url;
-    }
-};
-const pageLabel = (page: BrowserPage): string => {
-    if (page.title !== undefined && page.title !== ``) {
-        return page.title;
-    }
-    if (page.url === `` || page.url === BLANK) {
-        return t(`browsers.browsers.newTab`);
-    }
-    return hostOf(page.url) || page.url;
 };
 
 // Whose profile a window runs in: `web` is credential-free and the person's own window is theirs; anything else is a
@@ -460,6 +446,10 @@ const deskPins = computed(() => pinned.value.flatMap((pin) => (pin.kind === `des
 const live = (pin: PinnedTab): boolean => seen.value && isFront(pin);
 
 const stripTabs = computed<readonly StripTab[]>(() => [...pinned.value.map(pinTab), ...webTabs.value]);
+
+// Every tab's name, for the side tabs that stand for them beside the section.
+publishTabNames({ current, pickedPage, newTabPage, windows, pinned, pinTab, windowName });
+
 const activeStripId = computed(() => {
     if (!webInFront.value) {
         return tabKey(front.value);
@@ -923,8 +913,8 @@ const COMMANDS: Record<BrowserCommand, () => void> = {
         }
     },
     address: focusAddress,
-    nextTab: () => pickNeighbour(1),
-    prevTab: () => pickNeighbour(-1),
+    nextTab: () => (beside ? cycleTab(1, shownSideTabs.value) : pickNeighbour(1)),
+    prevTab: () => (beside ? cycleTab(-1, shownSideTabs.value) : pickNeighbour(-1)),
     back: view.back,
     forward: view.forward,
     reload: view.reload,
@@ -1145,8 +1135,9 @@ const { floats } = useBrowsersFloating();
 
 <template>
     <div ref="rootEl" class="flex h-full min-h-0 w-full flex-col overflow-hidden bg-card">
-        <!-- The strip: the pins, every open window's pages, the +, and at its far end the list of open windows when there is more than one. -->
-        <div class="flex shrink-0 items-end bg-canvas pt-1">
+        <!-- The strip: the pins, every open window's pages, the +, and at its far end the list of open windows when there is more than one.
+             None beside the section, where the side panel's own strip holds a tab for each. -->
+        <div v-if="!beside" class="flex shrink-0 items-end bg-canvas pt-1">
             <LiveTabStrip
                 :tabs="stripTabs"
                 :active-id="activeStripId"

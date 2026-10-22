@@ -1,15 +1,23 @@
 import type { Disposable } from "@intentic/extension-api";
 import { isLockedWorkspacePath } from "@intentic/sandbox-contract/state/workspace-state";
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
-import { explorerColorClass, iconForEntry, useExplorerStyle } from "@intentic/ui";
+import { explorerColorClass, iconForEntry, type IconName, useExplorerStyle } from "@intentic/ui";
 import { basename } from "@intentic/ui/path";
-import { z } from "zod";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../workbench/views/vocabulary";
 import { useAgents } from "../../models/fleet/useAgents";
 import { loopbackPreviewTarget } from "../../models/preview/previewModel";
-import { BROWSERS_SIDE_VIEW, browsersFront, markBrowsersOpened, openBrowsers, showTab } from "../../workbench/browsers/browsersSurface";
-import { browsersPath, parseTabKey, tabKey, type LiveTab } from "../../workbench/browsers/browsersPaths";
+import {
+    BROWSERS_SIDE_VIEW,
+    browsersFront,
+    browsersSideInput,
+    browsersTabNames,
+    browsersTabOfInput,
+    markBrowsersOpened,
+    openBrowsers,
+    showTab,
+} from "../../workbench/browsers/browsersSurface";
+import { browsersPath, tabKey, type LiveTab } from "../../workbench/browsers/browsersPaths";
 import { openInWorkspace } from "../../models/workspace/files/openFileRef";
 import { rpcKey } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
@@ -19,10 +27,9 @@ import { browsersSlot } from "../../workbench/window/panelSlots";
 import { FILE_SIDE_VIEW, FileSideInputSchema } from "../../workbench/side/sideFileInput";
 import { registerSideView } from "../../workbench/side/sideViews";
 
-// What the side tab names the view by: the app, server or page in front, read off the tab itself, since the live lists
-// are the view's to fetch. `app:shop/web` is `web`, `repo:shop` is `shop`, `port:5173` is `:5173`; a web window or a
-// window on the desktop says nothing more than the view's own name.
-const targetName = (id: string): string | undefined => {
+// What a side tab calls its tab of the view before the view has named it (browsersTabNames): the app, server or window
+// read off the key itself. `app:shop/web` is `web`, `repo:shop` is `shop`, `port:5173` is `:5173`.
+const targetName = (id: string): string => {
     const at = id.indexOf(`:`);
     const kind = id.slice(0, at);
     const rest = id.slice(at + 1);
@@ -32,18 +39,28 @@ const targetName = (id: string): string | undefined => {
     if (kind === `repo`) {
         return rest;
     }
-    return kind === `port` ? `:${rest}` : undefined;
+    return kind === `port` ? `:${rest}` : id;
 };
 
 // The ports the shell already holds (usePorts, at the rail), read at the click rather than fetched for it.
 const heldPorts = (): readonly PortSummary[] =>
     queryClient.getQueryData<{ readonly ports: readonly PortSummary[] }>(rpcKey(`ports.list`))?.ports ?? [];
 
-const frontName = (tab: LiveTab): string | undefined =>
-    tab.kind === `preview` ? targetName(tab.id) : tab.kind === `desktop` ? t(`shared.desktop`) : undefined;
+const fallbackName = (tab: LiveTab): string => {
+    switch (tab.kind) {
+        case `preview`:
+            return targetName(tab.id);
+        case `desktop`:
+            return t(`shared.desktop`);
+        case `app`:
+            return t(`browsers.kind.window`);
+        case `web`:
+            return t(`shared.browsers`);
+    }
+};
 
-// What a claimed link hands the view: the tab it names (a live app's, by its key), which the one side tab then shows.
-const BrowsersInputSchema = z.object({ tab: z.string().min(1).optional() });
+// The glyph a tab of the view wears, as on the view's own strip: what kind of thing it is.
+const ICONS = { preview: `eye`, web: `globe`, desktop: `screen`, app: `window-maximize` } as const satisfies Record<LiveTab[`kind`], IconName>;
 
 // The side views the core draws itself, registered by each window with a side panel (the desktop shell, a popped-out
 // chat). Each names its home, the section its thing belongs to, so a peek can be moved there whole.
@@ -87,47 +104,49 @@ export const registerCoreSideViews = (): readonly Disposable[] => {
         component: async () => (await import(`./SideFile.vue`)).default,
     });
 
-    // One tab, since a window draws one Browsers view: its own strip says what is in front.
+    // One side tab per tab of the view (an app, the desktop, a web window), so beside the section the panel's strip is the
+    // only strip; the one view a window draws is shared between them and shows the tab on screen.
     const browsers = registerSideView({
         id: BROWSERS_SIDE_VIEW,
         owner: `builtin`,
         get label() {
             return t(`shared.browsers`);
         },
-        describe: () => {
-            const label = t(`shared.browsers`);
-            const front = browsersFront.value;
-            const name = frontName(front);
+        describe: (input) => {
+            const tab = browsersTabOfInput(input);
+            const named = browsersTabNames.value.get(tabKey(tab));
+            const title = named?.title ?? fallbackName(tab);
             return {
-                title: name === undefined ? label : `${label} · ${name}`,
-                icon: front.kind === `preview` ? `eye` : front.kind === `web` ? `browsers` : `screen`,
+                title,
+                icon: ICONS[tab.kind],
+                tip: named?.note === undefined ? undefined : { title, note: named.note },
             };
         },
-        // From a popped-out chat, the app's own window goes to its Browsers; this one has no section to go to.
-        home: () => ({
+        // The tab, in the full view; from a popped-out chat, in the app's own window.
+        home: (input) => ({
             label: t(`shared.browsers`),
             open: () => {
-                if (!handOffToMainWindow({ kind: `route`, path: browsersPath(browsersFront.value) })) {
-                    openBrowsers(navigation());
+                const tab = browsersTabOfInput(input);
+                if (!handOffToMainWindow({ kind: `route`, path: browsersPath(tab) })) {
+                    openBrowsers(navigation(), tab);
                 }
             },
         }),
         claim: (url) => {
             const target = loopbackPreviewTarget(url, heldPorts());
-            return target === undefined ? undefined : { tab: tabKey({ kind: `preview`, id: target }) };
+            return target === undefined ? undefined : browsersSideInput({ kind: `preview`, id: target });
         },
-        // Brings the tab a claimed link named to front, and keeps the one side tab a window's one view has.
+        // Opened on no tab in particular, it stands for the one in front.
         kept: true,
         opening: (input) => {
-            const key = BrowsersInputSchema.safeParse(input).data?.tab;
-            if (key !== undefined) {
-                showTab(parseTabKey(key));
-            }
             markBrowsersOpened();
-            return {};
+            const tab = input[`tab`] === undefined ? browsersFront.value : browsersTabOfInput(input);
+            showTab(tab);
+            return browsersSideInput(tab);
         },
+        shared: true,
         component: async () => (await import(`./SideBrowsers.vue`)).default,
-        // Standing on /browsers, the section draws the one view; the side tab steps aside until the reader leaves.
+        // Standing on /browsers, the section draws the one view; its side tabs step aside until the reader leaves.
         lent: () => browsersSlot.value !== null,
     });
 
