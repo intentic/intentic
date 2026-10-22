@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon, isOverlayTarget, ProgressRing } from "@intentic/ui";
+import { Icon, isOverlayTarget } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { chatParked, quickBarShowAsk } from "../../../models/conversations/panel/chatPanelLayout";
@@ -49,14 +49,14 @@ const standing = computed<Standing>(() => {
     return title.value === undefined ? `inviting` : `named`;
 });
 
-// The pill's own rim, which is the chat's and not the cards' (their rim is progress only, tileRim): a turn in flight
-// spins, otherwise context fullness, since this pill is the conversation itself and context is acted on here.
-const rim = computed<{ percent: number; tone: string; spin: boolean } | undefined>(() => {
-    if (streaming.value) {
-        return { percent: 25, tone: `text-link`, spin: true };
-    }
+// The pill states what the chat is doing with one small mark AFTER the words, never a ring round the face: the pill's
+// own edge is the only line drawn, and a ring inside it read as a border within a border. A turn in flight breathes in
+// opacity (ui-freshness-dot, which also answers reduced motion) rather than spinning, since a resting pill is ambient
+// and a rotating arc pulls the eye from wherever the reader is working. Context fullness is the composer footer's
+// gauge once the pad is open; the resting pill says it only when it is worth acting on.
+const contextWarn = computed(() => {
     const percent = contextPct(contextUsage.value?.tokens, contextUsage.value?.contextWindow);
-    return percent === undefined ? undefined : { percent, tone: percent >= 80 ? `text-warning` : `text-accent`, spin: false };
+    return percent !== undefined && percent >= 80 ? percent : undefined;
 });
 
 // A question is answered where its card is drawn, which is /chat, so nothing opens for one. Only a press asks for the
@@ -190,10 +190,10 @@ const restingLine = computed(() => {
             <!-- The form not showing leaves the flow, so the box is always the size of what is in it. `inert` is not a
                  boolean Vue knows, so a false value is written as `undefined` to drop the attribute. -->
             <div
-                class="chat-quick-rest mx-auto w-fit max-w-full origin-bottom rounded-full border border-line-strong bg-card/80 shadow-lg backdrop-blur-md transition-[opacity,scale] motion-reduce:transition-none"
+                class="chat-quick-rest mx-auto w-fit max-w-full origin-bottom rounded-full border border-line-strong bg-card/80 shadow-lg backdrop-blur-md transition-opacity motion-reduce:transition-none"
                 :class="
                     open
-                        ? `pointer-events-none absolute inset-x-0 bottom-0 scale-110 opacity-0 duration-200 ease-out`
+                        ? `pointer-events-none absolute inset-x-0 bottom-0 opacity-0 duration-150 ease-out`
                         : `pointer-events-auto duration-150 ease-out`
                 "
             >
@@ -206,31 +206,17 @@ const restingLine = computed(() => {
                     :aria-label="standing === `asking` ? t(`chat.chatQuickBar.openChatAgentWaiting`) : t(`chat.chatQuickBar.writeToAgentHere`)"
                     @click="onPress"
                 >
-                    <!-- The board's identity mark, ring included (AgentCard): one chat wears one face wherever it is named. -->
-                    <span
-                        class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                        :class="
-                            rim !== undefined
-                                ? ``
-                                : standing === `asking`
-                                  ? `ring-(length:--ring-track) ring-inset ring-warning`
-                                  : `ring-(length:--ring-track) ring-inset ring-content/12`
-                        "
-                    >
-                        <ProgressRing
-                            v-if="rim !== undefined"
-                            :value="rim.percent"
-                            :size="28"
-                            :stroke="1.5"
-                            class="absolute inset-0"
-                            :class="[rim.tone, rim.spin ? `animate-spin [animation-duration:2.4s]` : ``]"
-                        />
-                        <IdentityTile :title="title" :provider="provider" class="h-5.5 w-5.5 text-xs" />
-                    </span>
+                    <!-- The board's identity mark (AgentCard), as a plain filled face: one chat wears one face wherever it is named. -->
+                    <IdentityTile :title="title" :provider="provider" class="h-6 w-6 text-xs" />
                     <span
                         class="min-w-0 truncate text-2xs"
                         :class="standing === `asking` ? `text-warning` : standing === `inviting` ? `text-subtle` : `text-muted`"
                         >{{ restingLine }}</span
+                    >
+                    <span v-if="standing === `working`" class="ui-freshness-dot h-1.5 w-1.5 shrink-0 rounded-full text-link" aria-hidden="true"></span>
+                    <span v-else-if="standing === `asking`" class="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true"></span>
+                    <span v-else-if="contextWarn !== undefined" class="shrink-0 text-2xs tabular-nums text-warning"
+                        >{{ t(`chat.chatPaneStatus.context`) }} {{ contextWarn }}%</span
                     >
                 </button>
             </div>
@@ -255,19 +241,11 @@ const restingLine = computed(() => {
                     @click="openChat"
                 >
                     <span class="flex w-full min-w-0 items-center gap-2">
-                        <span class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
-                            <ProgressRing
-                                v-if="rim !== undefined"
-                                :value="rim.percent"
-                                :size="24"
-                                :stroke="1.5"
-                                class="absolute inset-0"
-                                :class="[rim.tone, rim.spin ? `animate-spin [animation-duration:2.4s]` : ``]"
-                            />
-                            <IdentityTile :title="title" :provider="provider" class="h-4.5 w-4.5 text-2xs" />
-                        </span>
+                        <IdentityTile :title="title" :provider="provider" class="h-6 w-6 text-2xs" />
                         <span class="min-w-0 flex-1 truncate text-xs font-medium text-content">{{ title ?? t(`chat.words.newChat`) }}</span>
-                        <span v-if="streaming" class="shrink-0 text-2xs text-link">{{ t(`ui.status.working`) }}</span>
+                        <span v-if="streaming" class="inline-flex shrink-0 items-center gap-1.5 text-2xs text-link">
+                            <span class="ui-freshness-dot h-1.5 w-1.5 rounded-full" aria-hidden="true"></span>{{ t(`ui.status.working`) }}
+                        </span>
                         <Icon name="arrow-right" class="shrink-0 text-2xs text-subtle transition-colors group-hover:text-content" />
                     </span>
                     <span v-if="said !== undefined" class="chat-quick-said line-clamp-2 pl-8 text-2xs text-muted">
