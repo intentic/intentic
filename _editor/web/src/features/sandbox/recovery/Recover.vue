@@ -7,6 +7,7 @@ import { useAuth } from "../../../client/auth/useAuth";
 import { normalizeDaemonUrl } from "../../../lib/daemonUrl";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { rememberedAccount } from "../../../client/directory/deviceDirectory";
+import { setupOrThisComputer } from "../../../app/environments/standAside";
 import { liveRecoveryDeps } from "./recoveryDeps";
 import { type Candidate, useRecovery } from "./useRecovery";
 
@@ -70,7 +71,8 @@ const open = async (): Promise<void> => {
 onMounted(async () => {
     await check();
     if (candidates.value.length === 0) {
-        await router.replace(hasWorkspace.value ? `/` : `/setup`);
+        // Nothing to open: setup, or This computer in the desktop app (app/environments/standAside.ts).
+        await router.replace(hasWorkspace.value ? `/` : setupOrThisComputer());
     }
 });
 </script>

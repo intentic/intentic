@@ -1004,10 +1004,13 @@ pub async fn sandbox_remove(app: AppHandle, slug: String) -> CommandResult<()> {
         .map_err(|error| error.to_string())??;
     let sandbox_id = crate::project::sandbox_id_of_slug(&app, &slug);
     app.state::<AppState>().forget(&slug);
-    // Not waited for: the row is done when its removal is, and the agent's answer goes to the log either way.
+    // Not waited for: the row is done when its removal is, and the agent's answer goes to the log either way. The agent
+    // is read again after, so the folder's binding goes with its pairing: without it Home's recents went on saying the
+    // folder "has a sandbox" until something else happened to read the agent (2026-10-22).
     let forgotten = slug.clone();
     tauri::async_runtime::spawn_blocking(move || {
         crate::project::forget_sandbox(Some(&forgotten), sandbox_id.as_deref());
+        crate::bindings::refresh(&app);
     });
     Ok(())
 }

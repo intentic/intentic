@@ -35,6 +35,7 @@ import HostedRollbackDialog from "../overview/version/HostedRollbackDialog.vue";
 import { announceDesktopRoster, desktopApp, openThisComputer } from "../../../app/environments/desktop";
 import { localFace } from "../../../app/environments/local";
 import { useAuth } from "../../../client/auth/useAuth";
+import { setupOrThisComputer } from "../../../app/environments/standAside";
 import { useFolderPlace } from "./switcherPlace";
 import { answerNote } from "./switcherRows";
 import { removalKey } from "./removal/removalPlan";
@@ -281,13 +282,13 @@ const askRollBack = (option: SandboxSummary): void => {
 const stillListed = ref<{ readonly name: string; readonly reason: string }>();
 
 // Drops the account row (a member first leaves the sandbox's own list); with none left, the setup is where the reader
-// goes next.
+// goes next, or in the desktop app This computer, as the shell's gate has it (app/environments/standAside.ts, 2026-10-22).
 const removeRow = async (target: SandboxSummary): Promise<void> => {
     const outcome = await sandbox.remove(target.id);
     // Only once the row is really gone: leaving for the setup on the optimistic drop took the reader off the shell, and
     // the dialog with it, before a refusal could bring the row back and say why.
     if (!local && sandbox.sandboxes.value.length === 0) {
-        void router.push(`/setup`);
+        void router.push(setupOrThisComputer());
     }
     if (outcome?.grant === `kept`) {
         stillListed.value = { name: target.name, reason: outcome.reason };

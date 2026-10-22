@@ -1,53 +1,12 @@
-import type { RouteLocationRaw, RouteRecordRaw } from "vue-router";
+import type { RouteRecordRaw } from "vue-router";
 import { t } from "@intentic/ui/i18n";
-import { desktopVersion, openThisComputer, takeHandedToFolder } from "../app/environments/desktop";
-import { sandboxFace } from "../app/environments/local";
+import { NO_SANDBOX_PATH } from "../app/environments/standAside";
 import { requireAuth } from "./sessionGuard";
 
-/* THE DESKTOP APP'S WORKSPACE WITH NOTHING TO OPEN (2026-10-22). An account with no sandbox used to land on setup the
-moment the workspace's page arrived anywhere (a sign-in coming back, a launch onto the workspace), and setup is not a
-screen to look at: arriving there makes the account a sandbox (features/setup/flow/useSetupArrival.ts). The app has a
-place that needs no sandbox, This computer, and a reader who signed in may want nothing more than its files. So in the
-app the reader is put on This computer, and the workspace's page waits behind it on a screen that says there is nothing
-to open yet and offers both ways on (NoSandbox.vue): what the reader sees if they bring the workspace up from the tray.
-Setup is still one press away there, and by its own address ("Add a sandbox", "Put agents to work"), which never passes
-through here. A browser has no This computer, and keeps the setup it always had. */
-
-export const NO_SANDBOX_PATH = `/no-sandbox`;
-
-export interface StandAsideHost {
-    /** Whether this page is the desktop app's workspace, the one window with a This computer to step aside for. */
-    readonly inApp: () => boolean;
-    /** Bring This computer to the front, in the workspace's place. */
-    readonly showThisComputer: () => void;
-    /** Whether the reader was just put on a folder of this computer (a sign-in begun there), once: nothing to bring up. */
-    readonly takeHandedBack: () => boolean;
-}
-
-export interface StandAside {
-    /** The shell gate's answer as it stands in the app: a blank setup is This computer, and the page waits behind it. */
-    readonly settle: (gate: boolean | RouteLocationRaw) => boolean | RouteLocationRaw;
-}
-
-export const createStandAside = (host: StandAsideHost): StandAside => ({
-    settle: (gate) => {
-        const alreadyThere = host.takeHandedBack();
-        if (gate !== `/setup` || !host.inApp()) {
-            return gate;
-        }
-        if (!alreadyThere) {
-            host.showThisComputer();
-        }
-        return NO_SANDBOX_PATH;
-    },
-});
-
-export const workspaceAside: StandAside = createStandAside({
-    // The app's offline sandbox face runs these routes too, on this computer's own sandboxes: not the workspace.
-    inApp: () => desktopVersion() !== undefined && !sandboxFace(),
-    showThisComputer: openThisComputer,
-    takeHandedBack: takeHandedToFolder,
-});
+// The rule that puts the app's reader on This computer instead of a blank setup lives in app/environments/standAside.ts,
+// below the features that leave for setup themselves (a removal of the last sandbox, recovery finding nothing); this is
+// the page the workspace waits on behind it.
+export { createStandAside, NO_SANDBOX_PATH, type StandAside, type StandAsideHost, workspaceAside } from "../app/environments/standAside";
 
 // Outside the shell, as setup is; signed in, since it speaks of the account.
 export const noSandboxRoute: RouteRecordRaw = {

@@ -1019,6 +1019,27 @@ fn paired_sandboxes(status: &serde_json::Value, rows: &[crate::bindings::Row]) -
         .unwrap_or_default()
 }
 
+/// When the agent is read again after a roster drops a sandbox. The roster says so the moment Remove is pressed (the
+/// workspace drops its row before the removal runs), and the removal that lets go of the folder's sync lands seconds to a
+/// minute later, through the sandbox's machine rather than this app: read only at the press, Home's recents went on
+/// saying the folder "has a sandbox" until the app was restarted (2026-10-22).
+const REREAD_AFTER_REMOVAL: [Duration; 3] = [
+    Duration::from_secs(5),
+    Duration::from_secs(20),
+    Duration::from_secs(60),
+];
+
+/// The agent read again a few times after a roster dropped a sandbox ([`REREAD_AFTER_REMOVAL`]), on a thread of its own.
+fn reread_after_removal(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        for wait in REREAD_AFTER_REMOVAL {
+            std::thread::sleep(wait);
+            crate::bindings::refresh(&app);
+        }
+    });
+}
+
 /// The workspace said again which sandboxes the account has (windows.rs, `intentic://roster`): this machine's sync lets
 /// go of every sandbox that went, whose folders' pairings are their bindings, and the agent is read again. Off the
 /// calling thread, since the agent is asked.
@@ -1047,6 +1068,7 @@ pub fn roster_changed(app: &AppHandle, before: Roster, after: Roster) {
         if gone.is_empty() {
             return;
         }
+        reread_after_removal(&app);
         let Some(report) = crate::bindings::refresh(&app) else {
             return;
         };
