@@ -33,7 +33,7 @@
 # ever does.
 ENV UV_LINK_MODE=copy
 RUN version=0.13.1 \
-    && ruff_version=0.17.0 \
+    && ruff_version=0.17.1 \
     && case "$(dpkg --print-architecture)" in \
         amd64) triple=x86_64-unknown-linux-gnu ;; \
         arm64) triple=aarch64-unknown-linux-gnu ;; \
