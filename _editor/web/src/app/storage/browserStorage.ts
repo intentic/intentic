@@ -47,6 +47,8 @@ export const pictureSizesKey = sandboxKeys(`intentic.pictureSizes.`);
 export const passkeyNudgeKey = sandboxKeys(`intentic.passkeyNudge.`);
 // When /setup last opened a sandbox it had just set up, per sandbox (models/sandbox/live/justSetUp.ts).
 export const justSetUpKey = sandboxKeys(`intentic.justSetUp.`);
+// Whether the chat's usage rail last had anything to show, per sandbox (features/chat/panel/capacity/capacityMemory.ts).
+export const capacityRailKey = sandboxKeys(`intentic.capacityRail.`);
 
 // The transcript mirror (models/conversations/transcript/transcriptCache.ts): up to its last few hundred messages per
 // conversation, in IndexedDB. Deleted whole on sign-out; a window holding it open closes on the version change, so the

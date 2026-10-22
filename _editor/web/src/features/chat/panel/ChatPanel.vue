@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Button, Icon, useDevice, ui } from "@intentic/ui";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { CAPACITY_RAIL_PX, hasCapacity, railFitsBeside } from "./capacity/chatCapacity";
-import { accountsLoaded } from "../../../models/providers/providerAccounts";
+import { CAPACITY_RAIL_PX, railFitsBeside } from "./capacity/chatCapacity";
+import { useCapacityRail } from "./capacity/capacityMemory";
 import { chatRun, closeRun, modeForSessions, type RunSession, runOnFocus, runToFollow, showingRunGraph, showRun } from "../../../models/conversations/run/chatRun";
 import type { Conversation } from "../../../models/conversations/session/conversation";
 import { traceFocus } from "../../../models/conversations/run/focusTrace";
@@ -125,16 +125,18 @@ onBeforeUnmount(stopMeasuring);
 
 // `tabs: false` means no rail is taking width off the panes, so nothing is reserved. Only reserved with something
 // in it (hasCapacity), or the panel would hold 240px of padding for a rail rendering nothing; mid-load counts as
-// non-empty so the transcript doesn't reflow when it lands. Keyed on capacity alone, never on the chat's checklist,
+// non-empty only where the rail last had figures (capacityMemory.ts), so the transcript doesn't reflow when they land
+// and a sandbox with nothing connected never draws skeletons for figures that aren't coming. Keyed on capacity alone, never on the chat's checklist,
 // so picking up a first task can't reflow the panel mid-turn. Shown when floating in its own window or when docked
 // to the main icons rail (chatWide without floating, i.e. /chat full-window view).
+const capacityRail = useCapacityRail();
 const showsRail = computed(
     () =>
         (floating.value || chatWide.value) &&
         !mobile.value &&
         // The window's side panel stands where the rail would, while it holds anything (FloatingSection.vue).
         shownSideTabs.value.length === 0 &&
-        (!accountsLoaded.value || hasCapacity()) &&
+        capacityRail.value &&
         railFitsBeside(panelWidth.value, tabs ? railWidth.value : 0, shown.value.length),
 );
 
