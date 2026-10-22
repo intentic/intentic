@@ -3,7 +3,7 @@ import { sandboxKey } from "../app/storage/activeSandbox";
 
 // Every cache key's path, written once: `sandboxKey` scopes to the active sandbox, so `.of()` is that sandbox's exact
 // key and `.every` is the deliberate wider prefix across all sandboxes. Imports only `sandboxKey` at runtime, nothing
-// app-specific, to avoid an import cycle; queryKeys.guard.test.ts enforces this as the only place a key is spelled.
+// app-specific, to avoid an import cycle; this is meant to be the only place a key is spelled.
 
 // A contract read's key is derived, never declared: its route name, its input, any storage marks, then the sandbox,
 // which stays last so sandboxQueryPredicate can sweep one box. `rpcPrefix` reaches every input in every box.

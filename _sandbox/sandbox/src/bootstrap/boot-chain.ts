@@ -269,7 +269,7 @@ const BOOT_STEPS: readonly BootChainStep[] = [
         failure: "ssh keys not moved into the key store, so those aliases still read their key from a file the agent can read",
     },
     { key: "vaultSecrets", label: "Securing stored credentials", run: vaultLooseSecrets },
-    // Before any step that starts a process of its own (boot-order.test.ts pins it).
+    // Before any step that starts a process of its own.
     { key: "staleSessions", label: "Sweeping stale sessions", when: ({ role }) => role.container, run: sweepStaleSessions },
     // A failure reads as not fresh, so the baseline commit is skipped; local roots are taken as they stand.
     {

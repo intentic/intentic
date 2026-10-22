@@ -5,8 +5,7 @@ import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 
 // Checks the extension half of "a push that lands on nothing": an invalidated name nothing is registered under fails
 // silently, and the view just keeps its stale state.
-// composables/queryKeys.guard.test.ts checks the core side; this checks first-party extensions, since a runtime
-// registry can't enumerate third-party ones.
+// This checks first-party extensions, since a runtime registry can't enumerate third-party ones.
 // Only in-repo builtins can be checked here; third-party extensions have nothing to read until installed.
 
 // The registry's runtime chain reaches useSandbox, which wants a browser at import; only the push table is read here.

@@ -191,7 +191,7 @@ const readModule = (file) => {
     return program === undefined ? undefined : { file, source, program, bindings: bindingsOf(program), ...exportsOf(program) };
 };
 
-// A specifier to the file holding its source, the way the repo's other resolvers read one (sandboxScope.guard.test.ts):
+// A specifier to the file holding its source, the way the repo's other resolvers read one:
 // a relative `.js` is the `.ts` beside it, and an extensionless one is a `.ts` or `.vue` file before a directory's index.
 const fileOf = (from, specifier) => {
     if (!specifier.startsWith(".")) {

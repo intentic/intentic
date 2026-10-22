@@ -32,7 +32,14 @@ const settle = async (ms: number): Promise<void> => {
     jest.advanceTimersByTime(ms);
     await nextTick();
 };
-const line = (el: HTMLElement): boolean => el.querySelector(`.ui-freshness-sweep`) !== null;
+// The line leaves through a fade (FreshnessFrame's <Transition>), which Vue ends a few animation frames on: the frames
+// a reader would watch it go in.
+const fadedOut = async (): Promise<void> => {
+    for (let frame = 0; frame < 5; frame++) {
+        await settle(100);
+    }
+};
+const line = (el: HTMLElement): boolean => el.querySelector(`.ui-freshness-edge`) !== null;
 const pill = (el: HTMLElement): string | undefined => el.querySelector(`[role="status"]`)?.textContent?.trim();
 
 beforeEach(() => {
@@ -71,13 +78,15 @@ it(`draws nothing for a quick refresh of an old answer`, async () => {
 it(`draws the line for a slow refresh of an old answer, then says how old the answer is`, async () => {
     facts.value = { ...facts.value, updatedAt: START - 5 * MINUTE, refreshingSince: START };
     const el = await mount();
-    await settle(600);
+    // The line waits out a second (FreshnessFrame's LINE_AFTER_MS): under that, a reader stays in their flow.
+    await settle(1_200);
     expect(line(el)).toBe(true);
     expect(pill(el)).toBeUndefined();
-    await settle(3_000);
+    await settle(2_400);
     expect(pill(el)).toContain(`5`);
     facts.value = { ...facts.value, updatedAt: Date.now(), refreshingSince: undefined };
     await settle(1_000);
+    await fadedOut();
     expect(line(el)).toBe(false);
     expect(pill(el)).toBeUndefined();
 });
