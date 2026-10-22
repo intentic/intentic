@@ -2,6 +2,7 @@ import { apiContract, type HostedPlanState, type SandboxSummary, type TrashedSan
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { inviteRecords } from "./fixture/access";
 import { DESK_SANDBOX_NAME } from "./fixture/desk";
+import { homeSandboxLogos } from "./fixture/home/logos";
 import { officeOrganisation, officeOrganisations } from "./fixture/offices/organisation";
 import { demoMode, deskEdition, demoTier } from "./mode";
 import { demoOutage, outageHosted, outageReport } from "./outage";
@@ -43,7 +44,11 @@ export const DEMO_SANDBOX: SandboxSummary = {
 };
 
 export const DEMO_SANDBOXES: SandboxSummary[] = demoMode.id === `home`
-    ? [DEMO_SANDBOX, { ...DEMO_SANDBOX, id: `demo-research`, name: `Research` }, { ...DEMO_SANDBOX, id: `demo-personal`, name: `Personal` }]
+    ? [
+        { ...DEMO_SANDBOX, image: homeSandboxLogos.shop },
+        { ...DEMO_SANDBOX, id: `demo-research`, name: `Research`, image: homeSandboxLogos.research },
+        { ...DEMO_SANDBOX, id: `demo-personal`, name: `Personal`, image: homeSandboxLogos.personal },
+    ]
     : [DEMO_SANDBOX];
 
 // The rung the demo account's machine is on; the Billing page reads its shape off the machine, not the account.

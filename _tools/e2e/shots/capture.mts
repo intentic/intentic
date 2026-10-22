@@ -197,7 +197,7 @@ const SHOTS: Shot[] = [
         settleMs: 900,
     },
 
-    // The hero rests on /home and rotates to the board and a review on hover. The portrait chat shots below remain
+    // The hero opens on /home and automatically rotates to the board and a review. The portrait chat shots below remain
     // in use on feature pages.
     //
     // The board with the chat parked on the rail, so its three lanes get the whole window: one card asking for you,

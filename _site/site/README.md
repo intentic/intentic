@@ -13,7 +13,7 @@ flowchart LR
 ```
 
 - Pages are `.astro` files under `src/pages/`; their words, navigation and metadata come from `@intentic/site-content`. `/docs`, `/developers` and `/api` share one layout, sidebar and search index (`src/components/docs/`), and `/api` is generated from `@intentic/sandbox-openapi`.
-- The landing hero rests on a screenshot of the real `/home` view, captured from the demo's `home` recording with three sandboxes, a short conversation and the plan-usage rail. Hover or keyboard focus cycles through the product screenshots; leaving restores home. Reduced motion keeps the home view still. Its layout is scoped in `focused-hero.css` so `/desk/` keeps its own composition.
+- The landing hero opens on a screenshot of the real `/home` view, captured from the demo's `home` recording with three sandboxes, a short conversation and the plan-usage rail. It automatically cycles through the product screenshots while the page is visible. Reduced motion keeps the home view still. Its layout is scoped in `focused-hero.css` so `/desk/` keeps its own composition.
 - `/accessibility/` and `/pl/deklaracja-dostepnosci/` share `src/components/legal/AccessibilityStatement.astro` and are linked
   in the footer. The Polish page sets `lang="pl"`; the statement records the scoped axe review and tells public offices
   to assess and publish a statement for their own deployment. Update its date and findings after each new review.

@@ -478,12 +478,13 @@ const { steps: appSteps, alternatives } = content.connect;
             }).observe(bar);
         }
 
-        // Rest on /home. Mouse hover or keyboard focus explores the other views; leaving restores home.
+        // Cycle through the product views while the page is visible, starting on /home.
         const preview = document.querySelector<HTMLElement>(".home-focused .window-app");
         const frames = [...document.querySelectorAll<HTMLElement>("[data-hero-frame]")];
         if (preview && frames.length > 1) {
             let shown = 0;
             let timer: ReturnType<typeof setInterval> | undefined;
+            const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
             const count = new Set(frames.map((frame) => frame.dataset.heroFrame)).size;
             const show = (index: number): void => {
                 shown = index;
@@ -500,31 +501,26 @@ const { steps: appSteps, alternatives } = content.connect;
             const stop = (): void => {
                 clearInterval(timer);
                 timer = undefined;
-                show(0);
             };
             const start = (): void => {
-                if (timer !== undefined || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+                if (timer !== undefined) {
                     return;
                 }
                 timer = setInterval(() => show((shown + 1) % count), 3200);
             };
-            preview.addEventListener("pointerenter", (event) => {
-                if (event.pointerType === "mouse") {
+            const syncPlayback = (): void => {
+                if (document.hidden || reducedMotion.matches) {
+                    stop();
+                    if (reducedMotion.matches) {
+                        show(0);
+                    }
+                } else {
                     start();
                 }
-            });
-            preview.addEventListener("pointerleave", stop);
-            preview.addEventListener("focusin", start);
-            preview.addEventListener("focusout", (event) => {
-                if (!(event.relatedTarget instanceof Node) || !preview.contains(event.relatedTarget)) {
-                    stop();
-                }
-            });
-            document.addEventListener("visibilitychange", () => {
-                if (document.hidden) {
-                    stop();
-                }
-            });
+            };
+            document.addEventListener("visibilitychange", syncPlayback);
+            reducedMotion.addEventListener("change", syncPlayback);
+            syncPlayback();
         }
     </script>
 </BaseLayout>
