@@ -573,26 +573,40 @@
     --tw-ring-color: color-mix(in oklab, var(--color-primary-500) 40%, transparent);
 }
 
-/* THE FRESHNESS LINE (FreshnessFrame.vue): a short bar crossing the pane's top edge while a newer answer is on its way.
-   With motion reduced it stands still across the whole edge, so "checking" is still seen. */
-@keyframes ui-freshness-sweep {
-    from {
-        left: -33%;
-    }
-    to {
-        left: 100%;
-    }
-}
+/* THE FRESHNESS EDGE (FreshnessFrame.vue): while a newer answer is slow to come, a 1px hairline along the pane's top edge
+   in the ink's own hue, faded out toward both ends, that breathes in opacity and never travels. What it stands over is
+   already readable, so it is ambient, not an alert: no accent colour, nothing crossing the eye's periphery. Its
+   companion is the dot in the age pill, breathing on the same clock.
 
-.ui-freshness-sweep {
-    animation: ui-freshness-sweep 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-:root[data-motion="reduced"] .ui-freshness-sweep {
-    animation: none;
-    left: 0;
-    width: 100%;
-    opacity: 0.5;
+   Drawn as SMIL inside a mask, like the skeleton's sheen and for the same reason: it starts on a request, and a CSS
+   animation starting there rebuilds an open DevTools Styles editor (_tools/checks/reduced-motion.mjs). Under reduced
+   motion it breathes slower rather than standing still, since a still mark beside a slow request reads as a hung one. */
+@layer components {
+    :root {
+        /* Ends faded to nothing, a flat middle; the whole of it easing between 25% and full every 2.8s. */
+        --ui-freshness-edge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='g'%3E%3Cstop offset='0' stop-opacity='0'/%3E%3Cstop offset='.3'/%3E%3Cstop offset='.7'/%3E%3Cstop offset='1' stop-opacity='0'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23g)'%3E%3Canimate attributeName='opacity' values='.25;1;.25' calcMode='spline' keySplines='.45 0 .55 1;.45 0 .55 1' dur='2.8s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E");
+        /* The same breath, whole: the pill's dot. */
+        --ui-freshness-breath: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3Crect width='1' height='1'%3E%3Canimate attributeName='opacity' values='.35;1;.35' calcMode='spline' keySplines='.45 0 .55 1;.45 0 .55 1' dur='2.8s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E");
+    }
+    :root[data-motion="reduced"] {
+        --ui-freshness-edge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='g'%3E%3Cstop offset='0' stop-opacity='0'/%3E%3Cstop offset='.3'/%3E%3Cstop offset='.7'/%3E%3Cstop offset='1' stop-opacity='0'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23g)'%3E%3Canimate attributeName='opacity' values='.4;.9;.4' calcMode='spline' keySplines='.45 0 .55 1;.45 0 .55 1' dur='4.2s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E");
+        --ui-freshness-breath: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3Crect width='1' height='1'%3E%3Canimate attributeName='opacity' values='.5;1;.5' calcMode='spline' keySplines='.45 0 .55 1;.45 0 .55 1' dur='4.2s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E");
+    }
+    .ui-freshness-edge {
+        background-color: color-mix(in oklab, var(--color-content) 38%, transparent);
+        mask-image: var(--ui-freshness-edge);
+        mask-size: 100% 100%;
+        mask-repeat: no-repeat;
+    }
+    /* A check that failed: the same edge, in the warning's hue rather than louder. */
+    .ui-freshness-edge-warn {
+        background-color: color-mix(in oklab, var(--color-warning) 70%, transparent);
+    }
+    .ui-freshness-dot {
+        background-color: currentColor;
+        mask-image: var(--ui-freshness-breath);
+        mask-size: 100% 100%;
+    }
 }
 
 /* Kept for the tiny tooltip and anchored-overlay reveal. */

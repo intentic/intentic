@@ -1,4 +1,4 @@
-<!-- A pane that says when what it shows may be out of date: a quiet line along its top edge while a newer answer is slow to come, and how old the shown answer is once that is worth reading. Every read with an answer on screen reports to it (freshness.ts); the content itself is never dimmed or animated. -->
+<!-- A pane that says when what it shows may be out of date: a hairline breathing along its top edge while a newer answer is slow to come, and how old the shown answer is once that is worth reading. Every read with an answer on screen reports to it (freshness.ts); the content itself is never dimmed or animated. -->
 <script setup lang="ts">
 import { computed, onBeforeUnmount, provide, type Ref, ref, shallowReactive, watch } from "vue";
 import { useNow } from "../../composables/useNow.js";
@@ -12,8 +12,9 @@ import Icon from "../primitives/Icon.vue";
 // An answer this young when its refresh began was confirmed a moment ago (a poll, a push right after a write): checking
 // it again says nothing about whether it is true, and drawing every poll would draw the line all day.
 const ROUTINE_REFRESH_MS = 10_000;
-// A refresh shorter than this (plus the reveal's own delay) is never drawn: the answer lands before the eye looks up.
-const LINE_AFTER_MS = 300;
+// A refresh shorter than this (plus the reveal's own delay) is never drawn. What it stands over is already readable, so
+// under a second a reader stays in their flow and any mark at all is only a flicker at the edge of the eye.
+const LINE_AFTER_MS = 1_000;
 // A refresh still out after this has stopped being a blip, and how old the shown answer is becomes worth saying.
 const AGE_AFTER_MS = 3_000;
 // Younger than this, the age is "just now" and saying it would only add noise.
@@ -112,18 +113,26 @@ const why = computed(() => {
 <template>
     <slot />
     <!-- Over the pane, never in its flow: drawing either must not move a pixel of what the reader is looking at. -->
-    <div v-if="line || age !== undefined" class="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col items-center">
-        <div v-if="line" class="relative h-0.5 w-full self-stretch overflow-hidden" aria-hidden="true">
-            <div class="ui-freshness-sweep absolute inset-y-0 w-1/3" :class="warned ? `bg-warning` : `bg-primary-500`" />
-        </div>
+    <div class="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-col items-center">
+        <!-- Fades in and out on the house clock rather than cutting, so its coming and going draws no eye either. -->
+        <Transition leave-active-class="transition-opacity duration-(--motion-base)" leave-to-class="opacity-0">
+            <div
+                v-if="line"
+                class="ui-freshness-edge ui-enter-fade h-px w-full self-stretch"
+                :class="warned ? `ui-freshness-edge-warn` : ``"
+                aria-hidden="true"
+            />
+        </Transition>
         <!-- Centred under the edge: a page's header keeps its title at the left and its actions at the right. -->
         <p
             v-if="age !== undefined"
             v-tooltip.bottom="why"
             role="status"
-            class="pointer-events-auto mt-1.5 flex items-center gap-1.5 rounded-full border border-line bg-card px-2.5 py-0.5 text-2xs text-muted shadow-sm"
+            class="ui-enter pointer-events-auto mt-1.5 flex items-center gap-1.5 rounded-full border border-line bg-card px-2.5 py-0.5 text-2xs text-muted shadow-sm"
         >
-            <Icon :name="warned ? `exclamation-circle` : `refresh`" :spin="!warned" :class="warned ? `text-warning` : ``" aria-hidden="true" />
+            <Icon v-if="warned" name="exclamation-circle" class="text-warning" aria-hidden="true" />
+            <!-- Still checking: the edge's breath, not a spinner, which would be the busiest thing on the page. -->
+            <span v-else class="ui-freshness-dot size-1.5 shrink-0 rounded-full" aria-hidden="true" />
             <span class="tabular-nums">{{ t(`ui.freshness.updated`, { ago: age }) }}</span>
         </p>
     </div>
