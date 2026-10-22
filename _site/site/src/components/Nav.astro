@@ -625,18 +625,6 @@ const shownPreview = (index: number): string | undefined => {
         color: var(--color-gold-bright);
         opacity: 1;
     }
-    /* The section you are in also carries the house's mark for "you are standing here": an ember lozenge, lit. */
-    .bar-link.active::after {
-        content: "";
-        position: absolute;
-        bottom: 0.05rem;
-        left: 50%;
-        width: 5px;
-        height: 5px;
-        background: var(--color-primary-500);
-        filter: var(--house-ember-mark-glow);
-        transform: translateX(-50%) rotate(45deg);
-    }
     .chev {
         opacity: 0.7;
         transition:
