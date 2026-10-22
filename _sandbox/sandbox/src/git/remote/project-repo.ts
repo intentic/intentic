@@ -20,7 +20,7 @@ import { commitWorktreeRemainder } from "./root-repo.js";
 // never holds the folder, the root repo excludes the path as it excludes every repo, and so anything an agent writes
 // there reaches no branch, no review, no land and no board. Left to the owner it would never be taken, since nobody
 // commits a folder they only ever see through sync, and these commits are the daemon's own bookkeeping either way:
-// the git bridge refuses a project pairing (devices/machine sync/git-bridge.ts), so nothing here ever reaches the
+// the git bridge refuses a project pairing (devices/machine sync/bridge/git-bridge.ts), so nothing here ever reaches the
 // owner's own `.git`, and landed work goes to their folder as files (conversations/land/project-delivery.ts).
 
 // Git-dir config the daemon writes on a project folder's repo, read wherever only the repo's directory is at hand: the

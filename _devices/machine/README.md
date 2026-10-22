@@ -532,7 +532,15 @@ whose it is.
   top of that the watcher marks its progress at every step; one that has made none for 20 minutes is abandoned, says so
   in one line ("no progress for 20 minutes (it was at: ...); restarting it"), releases its tunnels and is replaced by a
   fresh loop. Its heartbeat going stale is what `status` reports meanwhile.
-- **A git fetch that cannot finish is not run again every pass** (2026-10-18, [`sync/git-bridge.ts`](src/sync/git-bridge.ts)).
+- **Stalled means the agent's own restart is overdue** (2026-10-21, [`sync/heartbeat.ts`](src/sync/heartbeat.ts)). The
+  heartbeat (`mirror.tick`, the report's `lastTickAt`) is stamped as the loop moves, at most every 5 s, rather than at
+  the end of a whole pass, and read as stalled only past the 20-minute restart plus two minutes (the contract's
+  `WATCHER_STALL_MS` and `agentStalled`, which this loop's stall check shares). A loop that ends because its last
+  pairing went removes its stamp, and the report leaves the stamp out while nothing is paired, so `status` says
+  "nothing paired to sync". Before, a stamp left behind by a loop that had ended on purpose read as "sync stalled" on
+  `status` and "Agent stalled" on the Devices page for as long as the agent ran, and a healthy pass against one slow
+  sandbox read the same after one minute.
+- **A git fetch that cannot finish is not run again every pass** (2026-10-18, [`sync/bridge/git-bridge.ts`](src/sync/bridge/git-bridge.ts)).
   The bridge's fetch shared the two-minute bound of every other command and ran again on the next pass when cut off;
   a repository whose history did not fit in two minutes over the owner's connection was killed mid-transfer every time,
   and each killed fetch left its half-received `tmp_pack_*` in `.git/objects/pack`, which git never removes by itself.
@@ -542,10 +550,15 @@ whose it is.
   (`startBridge` in [`sync/mirror.ts`](src/sync/mirror.ts)). One that ends unfinished has the temporary files it left
   removed (never a finished pack, never a file still growing, which may be the owner's own git), and the repo is held
   (`bridgeHolds` on the pairing) for a wait that starts at 10 minutes and doubles to half a day; a fetch that ran out
-  of time starts at half a day, and a shallow sandbox copy refused by a clone with full history of its own at a day,
-  up to a week. A clone the bridge started, or one already shallow, takes the sandbox's shallow boundary
-  (`--update-shallow`), so a shallow sandbox repo no longer leaves a whole refused pack behind on every pass. Leftovers
-  older than an hour from an earlier agent are cleared once per process. Holds are in `status` and the report.
+  of time starts at half a day. A clone the bridge started, or one already shallow, takes the sandbox's shallow boundary
+  (`--update-shallow`). A clone with a full history of its own is never made shallow: it fetches as usual when it holds
+  every commit the sandbox's history is cut at (read from the sandbox's `shallow` file, then `cat-file -e` here), and
+  is held only when it lacks one, the case where git takes the whole pack and then refuses the ref
+  ([`sync/bridge/shallow-sandbox.ts`](src/sync/bridge/shallow-sandbox.ts)). That hold asks again at 10 minutes, up to an hour, since
+  asking fetches nothing; a hold an older agent set for longer than its reason now waits is due at once. A fetch that
+  exits 0 with a ref refused counts as failed, never as landed. Before 2026-10-21 every full clone behind a shallow
+  sandbox was held for a day, then up to a week, including clones that held the cut commit. Leftovers older than an
+  hour from an earlier agent are cleared once per process. Holds are in `status` and the report.
 - **A nearly full drive holds folder sync still** (2026-10-18, [`sync/low-disk.ts`](src/sync/low-disk.ts)). Every
   pass measures the drive holding each folder whose session writes there (not a copy-first project, which only sends).
   Under 2% of the drive, clamped to 5–20 GiB, the pairing's sync and git bridge hold still (`lowDisk`); they carry on

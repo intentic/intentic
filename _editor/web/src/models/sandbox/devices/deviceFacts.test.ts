@@ -1,5 +1,5 @@
 import { listedDevice } from "../../../testing/listedDevice";
-import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import { AGENT_STALL_AFTER_MS, type Device } from "@intentic/sandbox-contract/schemas/devices";
 import { distroMark } from "@intentic/ui/device-machine";
 import {
     agentBehind,
@@ -353,10 +353,10 @@ test(`ages a reading by when it landed, not by how long it has been held`, () =>
 test(`judges the agent's rounds on the machine's own clock`, () => {
     const ticking = watching({ capturedAt: NOW - 19 * 60_000, agent: { running: true, lastTickAt: NOW - 19 * 60_000 - 3_000 } });
     expect(agentHalted(device({ report: ticking }))).toBe(false);
-    const halted = watching({ agent: { running: true, lastTickAt: NOW - 61_000 } });
+    const halted = watching({ agent: { running: true, lastTickAt: NOW - AGENT_STALL_AFTER_MS - 1_000 } });
     expect(agentHalted(device({ report: halted }))).toBe(true);
     // A stopped loop is a different sentence (`agent stopped`), decided on `running`, not on the tick.
-    expect(agentHalted(device({ report: watching({ agent: { running: false, lastTickAt: NOW - 61_000 } }) }))).toBe(false);
+    expect(agentHalted(device({ report: watching({ agent: { running: false, lastTickAt: NOW - AGENT_STALL_AFTER_MS - 1_000 } }) }))).toBe(false);
 });
 
 test(`says nothing about an old reading of a machine that was syncing and answering`, () => {

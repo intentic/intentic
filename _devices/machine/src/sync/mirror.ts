@@ -1,12 +1,10 @@
 import net from "node:net";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
-import { writeFileAtomic } from "@intentic/base/fs";
 import type { Log } from "@intentic/local-agent";
-import type { DeviceReport, PortSkipReason } from "@intentic/sandbox-contract/schemas/devices";
+import { type DeviceReport, type PortSkipReason, WATCHER_STALL_MS } from "@intentic/sandbox-contract/schemas/devices";
 import { type PortSummary, PortsListSchema } from "@intentic/sandbox-contract/schemas/ports";
 import {
-    mirrorHeartbeatPath,
     type MirroredPort,
     type Pairing,
     pairingKey,
@@ -29,8 +27,9 @@ import { retireSandbox } from "./retire.js";
 import { readSwaps } from "../device/sandbox-rounds/ic-swaps.js";
 import type { SwapRecord } from "../device/sandbox-rounds/swap-records.js";
 import { type PublishedPorts, publishedPortsReader } from "./docker-ports.js";
-import { realBridgeExec, runGitBridge } from "./git-bridge.js";
+import { realBridgeExec, runGitBridge } from "./bridge/git-bridge.js";
 import { holdSessions, holdsSync, recordOf, RELEASE_FORWARDS_MS, shouldReleaseForwards, swapBegan, swapStep, syncHeld, syncHolds, UNREACHABLE_HOLD_MS } from "./holds.js";
+import { createHeartbeat, stopHeartbeat } from "./heartbeat.js";
 import { guardDisks } from "./low-disk.js";
 import {
     ensureSyncSession,
@@ -401,10 +400,6 @@ export const handOver = (holding: Map<number, string>, sandboxId: string, mirror
 // The forwards one pairing's skips are named off: every pairing's but its own.
 export const othersHolding = (holding: ReadonlyMap<number, string>, sandboxId: string): ReadonlyMap<number, string> =>
     new Map([...holding].filter(([, holder]) => holder !== sandboxId));
-
-// Stamps the end of a pass; a failed write must not stop mirroring, so it silently under-claims.
-// allow(silent-catch): a heartbeat that could not be written reads as stale, which `intentic-machine status` already reports.
-const beat = async (): Promise<void> => await writeFileAtomic(mirrorHeartbeatPath, String(Date.now())).catch(() => {});
 
 // Persists one pairing's ports, leaving every other pairing's alone: avoids clobbering a concurrent `setup`'s
 // write with this tick's stale read.
@@ -1024,15 +1019,14 @@ const standingSweeps = async (
     }
 };
 
-/* A WATCHER THAT STOPPED MOVING IS RESTARTED, NOT ONLY REPORTED (2026-10-05). The heartbeat this loop stamps at the end
-   of each pass was only ever reported: an await that never settled (a child with no bound, a socket nothing closed) left
+/* A WATCHER THAT STOPPED MOVING IS RESTARTED, NOT ONLY REPORTED (2026-10-05). The heartbeat this loop stamps was only
+   ever reported: an await that never settled (a child with no bound, a socket nothing closed) left
    the process up, the pidfile claimed, mirroring, the git bridge and file sync stopped, and `status` saying "stalled"
    to nobody. Every child call is bounded now, and on top of that the loop marks its progress at every step; a loop with
    no progress for WATCHER_STALL_MS is abandoned (its signal aborts: it stops at the next step it marks, whenever its
    stuck await returns, and its tunnel pool binds nothing more), its tunnels are released, it says so in one line, and
-   a fresh loop takes over with fresh memory. The agent's own hang
-   watchdog (watchdog.ts) is for the other kind of stuck: an event loop that cannot run at all. */
-export const WATCHER_STALL_MS = 20 * 60_000;
+   a fresh loop takes over with fresh memory. WATCHER_STALL_MS is the contract's, which reads a stamp as stalled only
+   once this restart is overdue. The agent's hang watchdog (watchdog.ts) is for an event loop that cannot run at all. */
 const STALL_CHECK_MS = 30_000;
 
 // Whether a loop last seen moving at `progress` counts as stuck. Longer than any one bounded step (a create is five
@@ -1052,6 +1046,8 @@ export const runMirrorWatch = async (log: Log): Promise<void> => {
     for (;;) {
         // one loop at a time; a stalled one is replaced, never joined
         if ((await watchGeneration(log)) === "done") {
+            // Nothing paired any more: no loop is owed, so no stamp is left to read as one that stopped (heartbeat.ts).
+            await stopHeartbeat();
             return;
         }
     }
@@ -1186,6 +1182,8 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
     const reportUnsupported = new Set<string>();
     const fate: FateSeams = { releaseForwards: async (sandboxId) => await retirePairingMirror(mutagen, sandboxId), say };
     const gone = async (pairing: Pairing): Promise<void> => await sandboxSaidGone(fate, pairing.sandboxId, "edge");
+    // This run's pulse, stamped as it moves (heartbeat.ts); an abandoned run marks no step, so it stamps nothing either.
+    const heartbeat = createHeartbeat();
     const watch: Watch = {
         log,
         say,
@@ -1197,6 +1195,7 @@ const startWatch = async (log: Log, generation: Generation): Promise<Watch | und
             generation.signal.throwIfAborted();
             generation.progress = Date.now();
             generation.step = step;
+            heartbeat.moved();
         },
         tunnels,
         bases,
@@ -1315,9 +1314,6 @@ const watchTick = async (watch: Watch, tick: number): Promise<"next" | "stop"> =
     }
     await standingSweeps(context, dialed);
     progress("the end of a pass");
-    // Stamped at the bottom of the pass that did the work: its whole meaning is that everything above it ran. A tick
-    // skipped for unparseable state leaves it where it was.
-    await beat();
     return "next";
 };
 

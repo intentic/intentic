@@ -248,32 +248,35 @@ export const pairingItem = (pairing: DeviceReport["pairings"][number]): Item => 
     return { tone, name: pairing.sandboxId, meta: [where, ...state.map(([, text]) => text)].join(" · ") };
 };
 
-// The agent's row: running, stopped, or the third state that had no words, a live process whose sync agent is
+// The agent's row: running, stopped, or the third state that had no words, a live process whose sync loop is
 // gone. The agent holds its tunnel listeners on the event loop, so anything that escapes it leaves a process
-// that is alive with mirroring and the git bridge stopped underneath; a pid is not a pulse, the stamp the agent
-// writes at the end of each pass is (sync/config.ts).
-export const agentItem = (agent: DeviceReport["agent"], now: number): Item => {
+// that is alive with mirroring and the git bridge stopped underneath; a pid is not a pulse, the stamp the loop
+// writes as it moves is (sync/heartbeat.ts). `paired` false is a device with nothing to sync: no loop runs, none is owed.
+export const agentItem = (agent: DeviceReport["agent"], now: number, paired = true): Item => {
     if (!agent.running) {
         return { tone: "fail", name: "agent", meta: "not running: file sync and port mirroring are stopped" };
+    }
+    if (!paired) {
+        return { tone: "ok", name: "agent", meta: `running (pid ${agent.pid}), nothing paired to sync` };
     }
     const since = agent.lastTickAt === undefined ? undefined : now - agent.lastTickAt;
     if (agentStalled(agent, now) && since !== undefined) {
         return {
             tone: "fail",
             name: "agent",
-            meta: `sync stalled (pid ${agent.pid}): its last full pass was ${plural(Math.round(since / 60_000), "minute")} ago`,
+            meta: `sync stalled (pid ${agent.pid}): it has not moved for ${plural(Math.round(since / 60_000), "minute")}`,
         };
     }
-    // An agent too old to stamp reports no lastTickAt at all, and so does one whose first pass hasn't finished.
+    // An agent too old to stamp reports no lastTickAt at all, and so does one whose loop hasn't taken its first step.
     // Neither is a stall and neither is a clean bill of health, so the row says which it is rather than picking one.
     return since === undefined
         ? { tone: "ok", name: "agent", meta: `running (pid ${agent.pid}), no sync pass reported yet` }
-        : { tone: "ok", name: "agent", meta: `running (pid ${agent.pid}), last sync pass ${Math.round(since / 1000)}s ago` };
+        : { tone: "ok", name: "agent", meta: `running (pid ${agent.pid}), sync loop last moved ${Math.round(since / 1000)}s ago` };
 };
 
 // What a row too short to say it leaves out about the agent: why a stall matters, and why no pass is not a fault.
-export const agentNote = (agent: DeviceReport["agent"], now: number): string | undefined => {
-    if (!agent.running) {
+export const agentNote = (agent: DeviceReport["agent"], now: number, paired = true): string | undefined => {
+    if (!agent.running || !paired) {
         return undefined;
     }
     if (agent.lastTickAt === undefined) {
@@ -447,12 +450,13 @@ export const status = buildCommand<StatusFlags>({
         const later: Footnote[] = [];
         // The agent's liveness is the whole of sync's liveness, not just mirroring's: it holds the SSH transport every
         // session rides (sync/tunnel.ts).
-        const agent = agentItem(report.sync.agent, Date.now());
+        const paired = report.sync.pairings.length > 0;
+        const agent = agentItem(report.sync.agent, Date.now(), paired);
         const skew = buildSkewItem(report.sync);
         ui.items(skew === undefined ? [agent] : [agent, skew]);
         // The keyring's one row, beside the agent's: a process of its own, alive or not on its own.
         ui.items([keyringLine(report.keyring)]);
-        const why = agentNote(report.sync.agent, Date.now());
+        const why = agentNote(report.sync.agent, Date.now(), paired);
         if (why !== undefined) {
             ui.note(why);
         }

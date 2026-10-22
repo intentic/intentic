@@ -1,5 +1,5 @@
 import { listedDevice } from "../../../testing/listedDevice";
-import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import { AGENT_STALL_AFTER_MS, type Device } from "@intentic/sandbox-contract/schemas/devices";
 import { deviceAttention } from "./deviceAttention";
 import {
     batchable,
@@ -100,9 +100,17 @@ test(`agrees with itself about a dead loop: the word is amber, so it cannot read
 });
 
 test(`calls a live process with a dead loop the same errand as a stopped one`, () => {
-    const stalled = device({ report: report({ agent: { running: true, lastTickAt: NOW - 61_000 } }) });
+    const stalled = device({ report: report({ agent: { running: true, lastTickAt: NOW - AGENT_STALL_AFTER_MS - 1_000 } }) });
     expect(deviceState(stalled, NOW)).toBe(`needs attention`);
     expect(deviceTone(stalled, NOW)).toBe(`warning`);
+});
+
+// A pass against one slow sandbox takes minutes and is healthy all the while; the agent restarts a loop that truly
+// stopped moving by itself, so only one past that restart's deadline is anybody's errand (rog, 2026-10-21).
+test(`calls a loop that moved minutes ago live, not stalled`, () => {
+    const slow = device({ report: report({ agent: { running: true, lastTickAt: NOW - 5 * 60_000 } }) });
+    expect(deviceState(slow, NOW)).toBe(`live`);
+    expect(deviceTone(slow, NOW)).toBe(`success`);
 });
 
 // The verdict is a function of the reading and its arrival, never of the clock: a reading that was fresh when it

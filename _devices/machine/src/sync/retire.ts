@@ -4,7 +4,7 @@ import type { Log } from "@intentic/local-agent";
 import { sandboxNames } from "@intentic/sandbox-run";
 import { baseDir } from "../config.js";
 import { isProjectPairing, type Pairing, pairingKey, pairingTransport, readState, removeSandboxPairings,pairingSlugs } from "./config.js";
-import { realBridgeExec, realUnbridgeFs, unbridgeRepos } from "./git-bridge.js";
+import { realBridgeExec, realUnbridgeFs, unbridgeRepos } from "./bridge/git-bridge.js";
 import { runProcessSync } from "./exec.js";
 import { existingSyncSessions, MUTAGEN_CALL_TIMEOUT_MS, ourForwardSessions, forwardSessionName, syncSessionNames } from "./mutagen.js";
 import { listingRecordPath } from "./project/project-local.js";

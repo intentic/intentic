@@ -7,6 +7,7 @@ import type { Chore } from "../../system/chore-clock.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { commonDirOf, gitDirOf } from "../git-dir.js";
+import { repairShallow } from "./shallow-repair.js";
 import type { GitQuietProbe } from "./stale-git-locks.js";
 
 // Git housekeeping the daemon runs itself, since a sandbox has no systemd/cron for `git maintenance start` to register
@@ -87,6 +88,8 @@ export const runGitMaintenance = async (
     try {
         for (const repo of ["root", ...(await discoverRepos(workspace.root))]) {
             const dir = repo === "root" ? workspace.root : join(workspace.root, repo);
+            // A cut that hides history still on disk is undone before anything reads the repo as shallow (shallow-repair.ts).
+            await repairShallow(dir, repo, logger, git);
             const mayRun = await maintenanceMayRun(dir, repo, logger, probe).catch((error: unknown) => {
                 logger.warn({ err: error, repo }, "git maintenance: could not read the maintenance lock, running anyway");
                 return true;

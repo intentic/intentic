@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { pidFileBody } from "@intentic/local-agent";
+import { WATCHER_STALL_MS } from "@intentic/sandbox-contract/schemas/devices";
 import type { PortSummary } from "@intentic/sandbox-contract/schemas/ports";
 import { unstubbed } from "@intentic/testing";
 import { stubGlobal } from "@intentic/testing/bun";
@@ -35,10 +36,11 @@ const {
     SyncAuthError,
     unpreparedSetups,
     watcherStalled,
-    WATCHER_STALL_MS,
 } = await import("../mirror.js");
 const { SandboxGoneError } = await import("../gone.js");
-const { readState, upsertPairing } = await import("../config.js");
+const { mirrorHeartbeatPath, readState, updateState, upsertPairing } = await import("../config.js");
+const { createHeartbeat, stopHeartbeat } = await import("../heartbeat.js");
+const { deviceReport } = await import("../report.js");
 const { readResidentPid, runForeground, signalExitCode } = await import("../../resident/resident.js");
 const { stopResident } = await import("../../resident/supervision.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("../mutagen.js");
@@ -762,5 +764,48 @@ describe("mutagen forward args", () => {
         expect(
             mutagenForwardArgs({ name: "n", port: 5173, remote: { kind: "docker", container: "intentic-sandbox-sandbox-x" }, host: "::1" }),
         ).toEqual(["forward", "create", "--name", "n", "tcp:127.0.0.1:5173", "docker://intentic-sandbox-sandbox-x:tcp:[::1]:5173"]);
+    });
+});
+
+// THE LOOP'S PULSE (heartbeat.ts): stamped as the loop moves, gone when it ends on purpose, and read by the report only
+// while something is paired.
+describe("the sync loop's heartbeat", () => {
+    const stamped = async (): Promise<string | undefined> => await readFile(mirrorHeartbeatPath, "utf8").catch(() => undefined);
+    const settle = async (): Promise<void> => await new Promise((resolve) => setTimeout(resolve, 50));
+
+    it("stamps as the loop moves, at most once per beat, and goes when the loop ends on purpose", async () => {
+        let now = 1_000_000;
+        const heartbeat = createHeartbeat(() => now);
+        heartbeat.moved();
+        await settle();
+        expect(await stamped()).toBe("1000000");
+        now += 1_000;
+        heartbeat.moved();
+        await settle();
+        expect(await stamped()).toBe("1000000");
+        now += 5_000;
+        heartbeat.moved();
+        await settle();
+        expect(await stamped()).toBe("1006000");
+        await stopHeartbeat();
+        expect(await stamped()).toBeUndefined();
+        // Nothing there to remove is no failure.
+        await stopHeartbeat();
+    });
+
+    // rog, 2026-10-21: the stamp the ended loop left read as a stalled agent on the Devices page for as long as it ran.
+    it("leaves the stamp out of the report while nothing is paired, and carries it once something is", async () => {
+        const before = await readState();
+        try {
+            await updateState(() => ({ pairings: [] }));
+            await mkdir(dirname(mirrorHeartbeatPath), { recursive: true });
+            await writeFile(mirrorHeartbeatPath, "42");
+            expect((await deviceReport(undefined)).agent.lastTickAt).toBeUndefined();
+            await upsertPairing({ sandboxUrl: "https://pulse.example.dev/", sandboxId: "pulse", mode: "mirror" });
+            expect((await deviceReport(undefined)).agent.lastTickAt).toBe(42);
+        } finally {
+            await updateState(() => before);
+            await stopHeartbeat();
+        }
     });
 });

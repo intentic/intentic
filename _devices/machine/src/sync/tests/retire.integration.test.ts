@@ -3,7 +3,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import type { BridgeExec, UnbridgeFs } from "../git-bridge.js";
+import type { BridgeExec, UnbridgeFs } from "../bridge/git-bridge.js";
 
 // (2026-10-05) What a gone sandbox leaves on this machine, and the one rule for taking it away: everything this agent made
 // for it goes, the owner's folder and restore points stay. On a throwaway home, since config.ts fixes its paths at import
@@ -18,7 +18,7 @@ const { checkContainers, checkKeptHere, sandboxAnswered, sandboxSaidGone } = awa
 const { distroAnswer, forgetSandbox, forgotInWords } = await import("../forget-command.js");
 const { listingRecordPath } = await import("../project/project-local.js");
 const { restoreDir } = await import("../restore-points.js");
-const { bridgedRepoCandidates, unbridgeRepos } = await import("../git-bridge.js");
+const { bridgedRepoCandidates, unbridgeRepos } = await import("../bridge/git-bridge.js");
 const { knownHostsPath, sshConfigPath } = await import("../config.js");
 const { pairingSshConfig, sshAlias, writeManagedSshConfig } = await import("../ssh.js");
 const { syncSshPort } = await import("../tunnel.js");

@@ -7,14 +7,16 @@ import {
     bridgeRepo,
     type FetchResult,
     failureReason,
+    holdWaiting,
     listSandboxRepos,
     nextHold,
+    refusedRef,
     type PackFs,
     type PackTemp,
     runGitBridge,
     STALE_TEMP_MS,
     strandedTemps,
-} from "../git-bridge.js";
+} from "../bridge/git-bridge.js";
 
 // Maps a command-line prefix to its stdout (undefined = failure); first match wins, unscripted succeeds empty.
 // `existing` is the fake filesystem; an array answers successive calls in order (last entry repeats). A fetch is
@@ -405,19 +407,36 @@ describe("nextHold", () => {
         expect(hold.retryAt - NOW).toBe(12 * 60 * MINUTE);
     });
 
-    it("starts a fetch that ran out of time at half a day, and a shallow refusal at a day capped at a week", () => {
+    // Asking again whether a shallow sandbox is still cut beyond this clone fetches nothing, so it is asked within the hour.
+    it("starts a fetch that ran out of time at half a day, and a shallow refusal at ten minutes capped at an hour", () => {
         expect(nextHold("proj", undefined, "too-long", NOW).retryAt - NOW).toBe(12 * 60 * MINUTE);
-        expect(nextHold("proj", undefined, "shallow", NOW).retryAt - NOW).toBe(24 * 60 * MINUTE);
+        expect(nextHold("proj", undefined, "shallow", NOW).retryAt - NOW).toBe(10 * MINUTE);
         let hold = nextHold("proj", undefined, "shallow", NOW);
         for (let tries = 0; tries < 10; tries += 1) {
             hold = nextHold("proj", hold, "shallow", NOW);
         }
-        expect(hold.retryAt - NOW).toBe(7 * 24 * 60 * MINUTE);
+        expect(hold.retryAt - NOW).toBe(60 * MINUTE);
+    });
+
+    // rog, 2026-10-21: an older agent's shallow hold said 96 hours; the agent that asks hourly must not keep to it.
+    it("calls a hold due that waits longer than its reason waits now", () => {
+        const hold = (reason: BridgeHold["reason"], wait: number): BridgeHold => ({ repo: "proj", reason, failures: 3, since: NOW, retryAt: NOW + wait });
+        expect(holdWaiting(hold("shallow", 30 * MINUTE), NOW)).toBe(true);
+        expect(holdWaiting(hold("shallow", 96 * 60 * MINUTE), NOW)).toBe(false);
+        expect(holdWaiting(hold("stalled", 11 * 60 * MINUTE), NOW)).toBe(true);
+        expect(holdWaiting(hold("stalled", 0), NOW)).toBe(false);
+        expect(holdWaiting(undefined, NOW)).toBe(false);
     });
 
     it("reads git's shallow refusal as its own reason and anything else as a plain failure", () => {
         expect(failureReason(" ! [rejected] main -> sandbox/main (shallow roots are not allowed to be updated)")).toBe("shallow");
         expect(failureReason("fatal: Could not read from remote repository.")).toBe("failed");
+    });
+
+    // git exits 0 when it refuses a ref for a shallow boundary, keeping the stale tracking ref as it was.
+    it("reads a ref git refused while exiting 0 as no fetch that landed", () => {
+        expect(refusedRef("warning: rejected refs/remotes/sandbox/main because shallow roots are not allowed to be updated\n")).toBe(true);
+        expect(refusedRef("remote: Enumerating objects: 5, done.\nReceiving objects: 100% (5/5), done.\n")).toBe(false);
     });
 });
 
@@ -493,23 +512,53 @@ describe("bridgeRepo holds", () => {
         const { holds, memory } = remembered();
         await bridgeRepo(exec, ALIAS, LOCAL, "shallow", () => undefined, { memory, packs: packFolder([[]]).packs, now: () => NOW });
         expect(holds.get("shallow")?.reason).toBe("shallow");
-        expect(holds.get("shallow")?.retryAt).toBe(NOW + 24 * 60 * MINUTE);
+        expect(holds.get("shallow")?.retryAt).toBe(NOW + 10 * MINUTE);
     });
 
-    it("asks the sandbox first, and fetches nothing while its copy is shallow and this clone's history is full", async () => {
-        const { handlers, existing } = behind("probed", { ssh: "true\n" });
+    // Where the sandbox's history is cut, and whether this clone has that commit: `cat-file -e` fails for one it lacks.
+    const ROOT = "c".repeat(40);
+    const cutAt = (has: boolean) => ({
+        [`ssh -o BatchMode=yes ${ALIAS} git`]: "true\n",
+        [`ssh -o BatchMode=yes ${ALIAS} cat`]: `${ROOT}\n`,
+        "git cat-file -e": has ? "" : undefined,
+    });
+
+    it("asks the sandbox first, and fetches nothing while its copy is cut at a commit this full clone lacks", async () => {
+        const { handlers, existing } = behind("probed", cutAt(false));
         const { calls, exec } = scripted(handlers, existing);
         const { holds, memory } = remembered();
         const said: string[] = [];
         await bridgeRepo(exec, ALIAS, LOCAL, "probed", (line) => said.push(line), { memory, packs: packFolder([[]]).packs, now: () => NOW });
         expect(calls).toContain(`ssh -o BatchMode=yes ${ALIAS} git --git-dir=/history/gits/probed rev-parse --is-shallow-repository`);
+        expect(calls).toContain(`ssh -o BatchMode=yes ${ALIAS} cat /history/gits/probed/shallow`);
+        expect(calls).toContain(`git cat-file -e ${ROOT}^{commit}`);
         expect(calls.some((line) => line.startsWith("git fetch"))).toBe(false);
-        expect(holds.get("probed")).toMatchObject({ reason: "shallow", failures: 1, retryAt: NOW + 24 * 60 * MINUTE });
+        expect(holds.get("probed")).toMatchObject({ reason: "shallow", failures: 1, retryAt: NOW + 10 * MINUTE });
         expect(said.join("\n")).toContain("not fetched from the sandbox");
         // Once its wait is over it asks again, still without fetching, and waits twice as long.
-        await bridgeRepo(exec, ALIAS, LOCAL, "probed", () => undefined, { memory, packs: packFolder([[]]).packs, now: () => NOW + 25 * 60 * MINUTE });
+        await bridgeRepo(exec, ALIAS, LOCAL, "probed", () => undefined, { memory, packs: packFolder([[]]).packs, now: () => NOW + 11 * MINUTE });
         expect(calls.some((line) => line.startsWith("git fetch"))).toBe(false);
-        expect(holds.get("probed")).toMatchObject({ failures: 2, retryAt: NOW + 25 * 60 * MINUTE + 48 * 60 * MINUTE });
+        expect(holds.get("probed")).toMatchObject({ failures: 2, retryAt: NOW + 11 * MINUTE + 20 * MINUTE });
+    });
+
+    // rog, 2026-10-18 to 10-21: its clone held the cut commit and two weeks above it, and was held for days all the same.
+    it("fetches as usual, never taking the boundary, when the sandbox is cut at commits this full clone has", async () => {
+        const { handlers, existing } = behind("covered", cutAt(true));
+        const { calls, exec } = scripted(handlers, existing);
+        const { holds, memory } = remembered([{ repo: "covered", reason: "shallow", failures: 3, since: NOW - 72 * 60 * MINUTE, retryAt: NOW + 95 * 60 * MINUTE }]);
+        await bridgeRepo(exec, ALIAS, LOCAL, "covered", () => undefined, { memory, packs: packFolder([[]]).packs, now: () => NOW });
+        expect(calls).toContain("git fetch --progress sandbox +refs/heads/main:refs/remotes/sandbox/main");
+        expect(calls).toContain(`git reset -q ${TIP}`);
+        expect(holds.has("covered")).toBe(false);
+    });
+
+    it("holds a full clone when the sandbox says it is shallow but will not say where", async () => {
+        const { handlers, existing } = behind("unlisted", { ...cutAt(true), [`ssh -o BatchMode=yes ${ALIAS} cat`]: undefined });
+        const { calls, exec } = scripted(handlers, existing);
+        const { holds, memory } = remembered();
+        await bridgeRepo(exec, ALIAS, LOCAL, "unlisted", () => undefined, { memory, packs: packFolder([[]]).packs, now: () => NOW });
+        expect(calls.some((line) => line.startsWith("git fetch"))).toBe(false);
+        expect(holds.get("unlisted")?.reason).toBe("shallow");
     });
 
     it("fetches once the sandbox says its copy is whole", async () => {

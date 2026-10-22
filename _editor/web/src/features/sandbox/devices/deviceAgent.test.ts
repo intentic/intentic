@@ -1,4 +1,4 @@
-import type { Device } from "@intentic/sandbox-contract/schemas/devices";
+import { AGENT_STALL_AFTER_MS, type Device } from "@intentic/sandbox-contract/schemas/devices";
 import { deviceAgentPanel, machineAgent } from "./deviceAgent";
 import { deviceRow, machineRow } from "../../../models/sandbox/devices/deviceRows";
 
@@ -125,7 +125,7 @@ test(`says a stopped process is why nothing reaches this device, and still offer
 });
 
 test(`distinguishes a process that has stopped making rounds from one that has stopped`, () => {
-    const stalled = { agent: { running: true, lastTickAt: NOW - 61_000, build: `1.2.0`, installed: `1.2.0` } };
+    const stalled = { agent: { running: true, lastTickAt: NOW - AGENT_STALL_AFTER_MS - 1_000, build: `1.2.0`, installed: `1.2.0` } };
     expect(said({}, stalled, `1.2.0`)).toBe(`Agent stalled — what is below may be out of date.`);
     expect(hints({}, stalled, `1.2.0`)).toContain(`Rounds stopped`);
     expect(panelOf({}, stalled, `1.2.0`)?.state).toEqual({ word: `stalled`, variant: `warning` });

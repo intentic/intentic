@@ -6,9 +6,10 @@ import { HISTORY_ROOT, STATE_DIR } from "@intentic/constants";
 import { GIT_GLOBAL_ARGS } from "@intentic/base/git";
 import { untranslatedEnv } from "@intentic/base/process";
 import type { Log } from "@intentic/local-agent";
-import { type BridgeHold, type BridgeHoldReason, isProjectPairing, type Pairing, pairingKey, pruneBridgeHolds, setBridgeHold } from "./config.js";
-import { runProcess, runWatched } from "./exec.js";
-import { sshAlias } from "./ssh.js";
+import { type BridgeHold, type BridgeHoldReason, isProjectPairing, type Pairing, pairingKey, pruneBridgeHolds, setBridgeHold } from "../config.js";
+import { runProcess, runWatched } from "../exec.js";
+import { cutBeyondClone } from "./shallow-sandbox.js";
+import { sshAlias } from "../ssh.js";
 
 // Moves git state, not worktree files, which file sync owns, from the sandbox's real git dirs to the local clone:
 // fetch, then fast-forward. One-way only: local commits or staged work the sandbox lacks freeze the bridge rather
@@ -87,7 +88,7 @@ export const realBridgeExec: BridgeExec = {
                   ? "too-long"
                   : result.ending === "stopped"
                     ? "stopped"
-                    : result.status === 0
+                    : result.status === 0 && !refusedRef(result.stderr)
                       ? "fetched"
                       : "failed";
         return { outcome, stderr: result.stderr };
@@ -98,8 +99,8 @@ export const realBridgeExec: BridgeExec = {
 // HOW LONG A HELD REPO WAITS. The first wait after a stall or a plain failure is ten minutes and each later one twice
 // the last, up to half a day: a sandbox that was briefly unreachable is followed again soon, and a fetch that will
 // never fit costs a couple of tries a day instead of one a pass. A fetch still moving at its ceiling starts at half a
-// day, since the next one will be as long; a shallow sandbox copy at a day, since nothing on this side changes it (and
-// for it the next try only asks the sandbox again, fetching nothing: `sandboxIsShallow`).
+// day, since the next one will be as long. A shallow sandbox copy is asked again within the hour, since asking fetches
+// nothing and the clone may get what the sandbox stops at any moment (shallow-sandbox.ts).
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -107,8 +108,13 @@ const WAITS = {
     stalled: { first: 10 * MINUTE, most: 12 * HOUR },
     failed: { first: 10 * MINUTE, most: 12 * HOUR },
     "too-long": { first: 12 * HOUR, most: 2 * DAY },
-    shallow: { first: DAY, most: 7 * DAY },
+    shallow: { first: 10 * MINUTE, most: HOUR },
 } as const satisfies Record<BridgeHoldReason, { readonly first: number; readonly most: number }>;
+
+// Whether a held repo still waits. A hold set to wait longer than its reason ever waits now was written by an agent with
+// longer waits (a shallow hold of days, before 2026-10-21), and is due rather than kept to its old day.
+export const holdWaiting = (hold: BridgeHold | undefined, now: number): boolean =>
+    hold !== undefined && now < hold.retryAt && hold.retryAt - now <= WAITS[hold.reason].most;
 
 // The hold a fetch that did not finish leaves, from the one before it (if any).
 export const nextHold = (repo: string, previous: BridgeHold | undefined, reason: BridgeHoldReason, now: number): BridgeHold => {
@@ -124,6 +130,9 @@ export const nextHold = (repo: string, previous: BridgeHold | undefined, reason:
 // fetch-pack/fetch) as words only, with no exit code of its own; an unmatched wording reads as `failed`, which only waits
 // the shorter time before trying again.
 export const failureReason = (stderr: string): BridgeHoldReason => (/shallow/i.test(stderr) ? "shallow" : "failed");
+// A ref git refused while exiting 0 is no fetch that landed: its stale tracking ref would read as the sandbox's tip.
+// allow(dependency-text): git's warning, pinned to English by untranslatedEnv ("warning: rejected <ref> because shallow roots are not allowed to be updated"); unmatched, a fetch reads as it did before.
+export const refusedRef = (stderr: string): boolean => /^warning: rejected /m.test(stderr);
 
 // Where the bridge reads and keeps its holds: the pairing's record (`pairingMemory`), or a test's map.
 export interface BridgeMemory {
@@ -245,7 +254,7 @@ const untilWhen = (at: number, now: number): string => {
 const HOLD_SAID = {
     stalled: "the fetch stopped moving",
     "too-long": `the fetch was still running after ${FETCH_CEILING_MS / HOUR} hours`,
-    shallow: "the sandbox's copy is a shallow clone, which this folder's full history cannot take",
+    shallow: "the sandbox's copy is a shallow clone, cut at a commit this folder does not have",
     failed: "git refused the fetch",
 } as const satisfies Record<BridgeHoldReason, string>;
 
@@ -295,16 +304,6 @@ const packDirOf = async (exec: BridgeExec, dir: string): Promise<string | undefi
     return out === undefined || out === "" ? undefined : resolve(dir, out);
 };
 
-// WHETHER THE SANDBOX'S COPY IS SHALLOW, asked of its git dir over the alias the fetch rides; undefined when it could not
-// be asked. Asked before a clone with a full history of its own fetches, never after: git refuses refs that would make
-// that clone shallow only once it has received the whole pack, and keeps the pack, so every try that fetched left
-// another whole copy of the history on this drive.
-const sandboxIsShallow = async (exec: BridgeExec, alias: string, repo: string): Promise<boolean | undefined> => {
-    const gitDir = `${HISTORY_ROOT}/gits/${encodeURIComponent(repo)}`;
-    const said = (await exec.run("ssh", ["-o", "BatchMode=yes", alias, "git", `--git-dir=${gitDir}`, "rev-parse", "--is-shallow-repository"]))?.trim();
-    return said === "true" ? true : said === "false" ? false : undefined;
-};
-
 // Leftovers in one repo's pack folder, at most once an hour: everything there now counts as before this sweep, so only
 // what is over an hour old (and holding still) goes.
 const sweepLeftovers = async (seams: Pick<FetchSeams, "exec" | "packs" | "now" | "log">, dir: string, repo: string): Promise<void> => {
@@ -327,8 +326,9 @@ const sweepLeftovers = async (seams: Pick<FetchSeams, "exec" | "packs" | "now" |
 // ONE FETCH OF THE SANDBOX'S BRANCH, and everything that follows from how it ended: true when the objects are here.
 // A clone the bridge itself started (no commits yet) or one already shallow may take the sandbox's shallow boundary as
 // its own (`--update-shallow`); a clone with a full history of its own is never made shallow behind its owner's back, so
-// for it a shallow sandbox copy is a hold that says so, found by asking before fetching (`sandboxIsShallow`). Whatever did
-// not finish has its temporary files cleared and the repo held; a fetch this agent stopped holds nothing.
+// for it a shallow sandbox copy cut at a commit it lacks is a hold that says so, found by asking before fetching
+// (shallow-sandbox.ts); one cut at commits it has fetches as usual. Whatever did not finish has its temporary files
+// cleared and the repo held; a fetch this agent stopped holds nothing.
 const fetchFromSandbox = async (
     seams: FetchSeams,
     dir: string,
@@ -339,7 +339,7 @@ const fetchFromSandbox = async (
 ): Promise<boolean> => {
     const { exec, packs, memory, now, log } = seams;
     const shallowOk = head === undefined || (await exec.run("git", ["rev-parse", "--is-shallow-repository"], dir))?.trim() === "true";
-    if (!shallowOk && (await sandboxIsShallow(exec, seams.alias, repo)) === true) {
+    if (!shallowOk && (await cutBeyondClone(exec, seams.alias, repo, dir))) {
         const next = nextHold(repo, hold, "shallow", now());
         await memory.record(repo, next);
         log(`  ${repo}: not fetched from the sandbox (${HOLD_SAID.shallow}); asking again in ${untilWhen(next.retryAt, now())}`);
@@ -440,7 +440,7 @@ export const bridgeRepo = async (
         return;
     }
     const hold = memory.held(repo);
-    if (hold !== undefined && now() < hold.retryAt) {
+    if (holdWaiting(hold, now())) {
         return; // said when it was held, and in the report since: not again every pass
     }
     if (!(await fetchFromSandbox({ exec, alias, packs, memory, now, log, signal: options.signal }, dir, repo, branch, head, hold))) {

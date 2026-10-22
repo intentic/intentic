@@ -580,7 +580,10 @@ flowchart LR
   raise again is recorded as cancelled, never left pending.
 - Housekeeping runs on one clock that remembers across restarts (`system/chore-clock.ts`, `/history/chore-clock.json`,
   wired in `bootstrap/boot-chores.ts`; 2026-10-05): git maintenance hourly (a stale `maintenance.lock` is now named
-  and cleared instead of skipping silently), stale git locks and temp packs at boot and hourly with no git running,
+  and cleared instead of skipping silently; since 2026-10-21 it first undoes a shallow cut, such as one an agent's
+  `git fetch --depth` writes into a full clone, whenever every object behind the cut is still on disk, under git's own
+  `shallow.lock`, and leaves a cut with missing history alone, `git/ops/shallow-repair.ts`; the daily gc does the same
+  before it prunes), stale git locks and temp packs at boot and hourly with no git running,
   `gc --prune=2.weeks.ago` daily while idle, parked `refs/agent/*` of conversations archived over 90 days ago daily, with their
   `refs/intentic/carried` and `refs/intentic/dropped` markers (`conversations/land/parked-ref-retention.ts`), `/history/trash` past 14 days hourly, checkouts and overlays no
   conversation owns daily (`conversations/worktrees/orphan-checkouts.ts`), and the agents' dockerd's stopped

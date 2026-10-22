@@ -27,8 +27,10 @@ const lastTick = async (): Promise<number | undefined> => {
 
 // Two facts, not one: the agent's own build (from its pidfile stamp) and the build installed on disk, since a
 // swapped binary leaves a live agent running the old code. `installed` is passed in because it costs a syscall/spawn.
-const agentState = async (installed: string | undefined): Promise<DeviceAgent> => {
-    const [resident, lastTickAt] = await Promise.all([livePidRecord(runPidPath), lastTick()]);
+// The loop's stamp only while something is paired (2026-10-21): with nothing paired no loop runs and none is owed, so a
+// stamp still on disk (the loop that ended with its last pairing, an agent that died) is not a loop that stopped.
+const agentState = async (installed: string | undefined, paired: boolean): Promise<DeviceAgent> => {
+    const [resident, lastTickAt] = await Promise.all([livePidRecord(runPidPath), paired ? lastTick() : undefined]);
     return { running: resident !== undefined, pid: resident?.pid, build: resident?.build, installed, lastTickAt };
 };
 
@@ -200,7 +202,8 @@ export const buildReport = (
 
 // The report for this machine right now, the one entry point every carrier uses.
 export const deviceReport = async (mutagen: string | undefined): Promise<DeviceReport> => {
-    const [state, agent, wsl] = await Promise.all([readState(), agentState(installedBuild()), wslEnvironment()]);
+    const [state, wsl] = await Promise.all([readState(), wslEnvironment()]);
+    const agent = await agentState(installedBuild(), state.pairings.length > 0);
     // Read only when some pairing syncs files: a machine that only mirrors ports has no session to ask about.
     const syncing = mutagen !== undefined && state.pairings.some((pairing) => pairing.mode === "sync");
     // A daemon that did not answer leaves every session status out, as Mutagen not consulted does: never "no session".

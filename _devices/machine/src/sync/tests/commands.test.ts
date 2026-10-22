@@ -396,6 +396,22 @@ describe("agentItem", () => {
         expect(agentNote({ running: true, pid }, NOW)).toContain("never reports them");
     });
 
+    // rog, 2026-10-21: its last pairing went, the loop ended as it should, and its stamp read "FAIL agent — sync stalled"
+    // for as long as the agent ran. With nothing paired no loop is owed, whatever is on disk.
+    it("calls an agent with nothing paired running, never stalled", () => {
+        const old = { running: true, pid: 4242, lastTickAt: NOW - AGENT_STALL_AFTER_MS - 60 * 60_000 };
+        const line = said(agentItem(old, NOW, false))!;
+        expect(line).toMatch(/^ok /);
+        expect(line).toContain("nothing paired");
+        expect(agentNote(old, NOW, false)).toBeUndefined();
+    });
+
+    it("lets a slow pass go on moving without calling it stalled, up to the agent's own restart deadline", () => {
+        const slow = agentLine({ running: true, pid: 4242, lastTickAt: NOW - 5 * 60_000 }, NOW);
+        expect(slow).toMatch(/^ok /);
+        expect(agentLine({ running: true, pid: 4242, lastTickAt: NOW - AGENT_STALL_AFTER_MS - 1 }, NOW)).toMatch(/^fail /);
+    });
+
     it("tells a stopped agent's reader that file sync stopped with it", () => {
         const stopped = agentLine({ running: false }, NOW);
         const running = agentLine({ running: true, pid: 4242, lastTickAt: NOW - 7000 }, NOW);

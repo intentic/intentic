@@ -5,6 +5,7 @@ import type { Chore } from "../../system/chore-clock.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { maintenanceMayRun } from "./maintenance.js";
+import { repairShallow } from "./shallow-repair.js";
 import { type GitQuietProbe, waitForNoGit } from "./stale-git-locks.js";
 
 // THE DAILY GC (2026-10-05). The hourly maintenance (maintenance.ts) packs and indexes but never prunes, so objects
@@ -56,6 +57,8 @@ export const runGitGc = async (deps: GitGcDeps): Promise<void> => {
                 logger.info({ repo }, "git gc: another git kept running, this repo waits for the next run");
                 continue;
             }
+            // Before the gc, which would count what a shallow cut hides as unreachable and prune it (shallow-repair.ts).
+            await repairShallow(dir, repo, logger, deps.git ?? politeGit);
             from = now();
             await (deps.git ?? politeGit)(dir, gcArgs());
             logger.info({ repo, ms: now() - from, prune: GC_PRUNE_EXPIRE }, "git gc: ran");

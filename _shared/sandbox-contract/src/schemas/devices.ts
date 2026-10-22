@@ -304,8 +304,7 @@ export const DevicePortSchema = z.object({
     command: z.string().optional(),
 });
 export type DevicePort = z.infer<typeof DevicePortSchema>;
-// The device's one agent process as a single block; `running` also gates whether the rest of the report is still
-// current, a dead loop leaves every other row reading as it did before it died.
+// The device's one agent process; `running` gates whether the rest of a report is current (a dead loop freezes it).
 export const DeviceAgentSchema = z.object({
     running: z.boolean(),
     pid: z.number().int().optional(),
@@ -313,12 +312,13 @@ export const DeviceAgentSchema = z.object({
     installed: z.string().optional(),
     // Build actually serving, stamped in the pidfile; can lag `installed` indefinitely (see `agentBuildSkew`).
     build: z.string().optional(),
-    // When the loop last finished a pass; a live process can have a dead loop (see `agentStalled`).
+    // When the sync loop last moved; absent while nothing is paired (no loop runs). A live process can have a dead loop.
     lastTickAt: z.number().optional(),
 });
 export type DeviceAgent = z.infer<typeof DeviceAgentSchema>;
-// Loop polls every 5s with two 10s network timeouts per pairing; a minute is several passes of slack.
-export const AGENT_STALL_AFTER_MS = 60_000;
+// Stalled only once the agent's own restart of a loop that stopped moving (machine sync/mirror.ts) is overdue.
+export const WATCHER_STALL_MS = 20 * 60_000;
+export const AGENT_STALL_AFTER_MS = WATCHER_STALL_MS + 2 * 60_000;
 export const agentStalled = (agent: DeviceAgent, now: number): boolean =>
     agent.running && agent.lastTickAt !== undefined && now - agent.lastTickAt > AGENT_STALL_AFTER_MS;
 export const DeviceReportSchema = z.object({
