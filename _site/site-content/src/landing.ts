@@ -105,10 +105,8 @@ export const landingContent: LandingContent = {
             "An orchestrator for coding agents. Run Claude Code, Codex and more in parallel, each in a sandbox on your machine. They keep running when you close the browser.",
     },
     hero: {
-        // Split 2+1 so line two lands the promise; three beats, last one alone.
-        headlineLines: ["More work. Less AI waste.", "Same subscriptions."],
-        // Names the category in the word the category's own pages use ("orchestrator"); nothing else above the fold does.
-        subhead: "An orchestrator for parallel coding agents, each in a sandbox on your machine.",
+        headlineLines: ["Neutral AI agent."],
+        subhead: "Models are the fuel. Computer are the engine. Intentic is the rest of the car.",
         screens: {
             app: [
                 {

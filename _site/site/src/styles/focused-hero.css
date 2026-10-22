@@ -1,0 +1,73 @@
+/* The developer landing page's single frame; /desk keeps its own composition. */
+.home.home-focused .hero-grid {
+    padding-top: calc(var(--bar-height) + 3.5rem);
+}
+.home.home-focused .hero-copy {
+    max-width: 52rem;
+}
+.home.home-focused .headline {
+    margin-top: 0;
+    font-size: clamp(2.55rem, 5.6vw, 4.6rem);
+}
+.home.home-focused .hero-sub {
+    max-width: 62ch;
+    margin-top: 1rem;
+}
+.home.home-focused .hero-copy .hero-actions {
+    margin-top: 1.6rem;
+}
+.home.home-focused .hero-visual {
+    margin-top: 2.8rem;
+}
+.home.home-focused .window-app {
+    width: 81%;
+}
+.home.home-focused .window-crop-app {
+    aspect-ratio: 16 / 9;
+    container-type: inline-size;
+}
+.home.home-focused .screen-app {
+    width: 100%;
+}
+.home.home-focused .play {
+    background: transparent;
+}
+.home.home-focused .play .btn {
+    opacity: 0;
+    transform: translateY(0.3rem);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.home.home-focused .window-app:hover .play .btn,
+.home.home-focused .window-app:focus-within .play .btn {
+    opacity: 1;
+    transform: none;
+}
+@media (hover: none) {
+    .home.home-focused .play .btn {
+        opacity: 1;
+        transform: none;
+    }
+}
+@media (max-width: 48rem) {
+    .home.home-focused .hero-grid {
+        padding-top: calc(var(--bar-height) + 1.5rem);
+    }
+    .home.home-focused .headline {
+        font-size: clamp(2rem, 7.8vw, 3.6rem);
+    }
+    .home.home-focused .hero-sub {
+        max-width: 36ch;
+    }
+    .home.home-focused .window-app {
+        width: 100%;
+    }
+    .home.home-focused .hero-visual {
+        margin-top: 2.4rem;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .home.home-focused .play .btn {
+        transition: none;
+        transform: none;
+    }
+}
