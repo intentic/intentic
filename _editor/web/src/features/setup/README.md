@@ -47,6 +47,15 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   `progress/`, and draws the run with `<StagedProgress>`, the card every long run on a machine uses: the steps, a bar
   sized by them, the time left, and the raw output behind "Show log", which opens by itself when the run fails.
 
+- **Adding a sandbox when the account already has one** is not this page. "Add sandbox" (the switcher, the home rail,
+  the phone's Menu) opens a dialog over the workspace instead (`add/AddSandboxDialog.vue`, `add/useAddSandbox.ts`): a
+  name and where it runs (this computer in the app, a connected machine, a machine of ours with room), then one press.
+  It runs this page's own flows on the row (`useSetupRow`, `useHostedLane`, `useSetupOnMachine`, `useRegistryWatch`),
+  so `/setup?sandbox=<id>` resumes the same run, and the getting-started ring's "Finish setting up" reaches it once the
+  dialog is closed. Every other way (the command, the installer, an own domain) is "More ways", `/setup?elsewhere=1`,
+  which skips the "You already have a sandbox" question and opens the picker. Which press gets which is
+  `models/sandbox/addSandbox.ts`; an account with no working sandbox still comes here.
+
 ## Key files
 
 - [setupArrival.ts](setupArrival.ts) — what an arrival does by itself, a project's included, and the folder's name in the sandbox.
@@ -62,5 +71,6 @@ The `/setup` page: it makes the sandbox row a visit sets up, decides by itself w
   is slow enough to offer a machine of ours instead. Taking that offer inside the app first sends `intentic://setup-stop`,
   so the PC stops downloading for a sandbox whose address the machine of ours takes over.
 - [Setup.vue](Setup.vue) — the page that wires the flows together.
+- [add/useAddSandbox.ts](add/useAddSandbox.ts) — the Add sandbox dialog's press, over the same flows.
 - [SetupAccount.vue](SetupAccount.vue) — the masthead's account and its sign-out, the page being outside the shell's
   account menu; the page discards its draft row first, while the session can still delete it.

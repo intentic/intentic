@@ -125,7 +125,7 @@ describe(`in a local window`, () => {
         mounted.unmount();
     });
 
-    it(`opens a sandbox, the setup and the recently deleted as the workspace, through the app`, async () => {
+    it(`opens a sandbox, the add dialog and the recently deleted as the workspace, through the app`, async () => {
         const open = ref(true);
         const mounted = mount(() => useFolderPlace(open));
         await mounted.value.openFromFolder(`sbx-work`);
@@ -133,7 +133,7 @@ describe(`in a local window`, () => {
         mounted.value.addSandbox(event);
         await nextTick();
         expect({ opened, closed: !open.value, prevented: event.defaultPrevented, stayed: mounted.path() }).toEqual({
-            opened: [`/?sandbox=sbx-work`, `/setup`],
+            opened: [`/?sandbox=sbx-work`, `/?add=sandbox`],
             closed: true,
             prevented: true,
             stayed: `/`,

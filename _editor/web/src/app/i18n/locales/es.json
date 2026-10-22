@@ -5609,6 +5609,20 @@
         },
         "words": {
             "useLettersNumbersHyphens": "Usa solo letras, números y guiones."
+        },
+        "addSandbox": {
+            "title": "Añadir sandbox",
+            "description": "Un sandbox nuevo con su propio espacio de trabajo, agentes y herramientas.",
+            "lookingForMachines": "Buscando dónde puede ejecutarse…",
+            "nothingInOnePress": "Nada conectado puede iniciarlo con un clic. Más opciones abajo: un comando que ejecutar o un dominio propio.",
+            "intenticMachine": "Máquina de Intentic",
+            "keepsGoing": "Puedes cerrar esto. La configuración de {name} continúa, y aparecerá en tu lista de sandboxes cuando esté listo.",
+            "moreWays": "Más opciones",
+            "details": "Abrir en la configuración",
+            "nameNeeded": "Ponle un nombre.",
+            "nameTooLong": "Como máximo {max} caracteres.",
+            "hostedNeedsGoogle": "Una máquina gratuita de Intentic necesita un inicio de sesión de Google en esta cuenta. Vincúlalo en Más opciones.",
+            "machineGone": "Esa máquina ya no está conectada. Elige otra."
         }
     },
     "shared": {

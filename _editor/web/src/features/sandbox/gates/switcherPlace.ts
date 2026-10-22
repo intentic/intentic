@@ -5,6 +5,7 @@ import { localFace } from "../../../app/environments/local";
 import { localHost } from "../../../app/environments/localHost";
 import { useAccount } from "../../../client/auth/useAccount";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { ADD_SANDBOX_PATH } from "../../../models/sandbox/addSandbox";
 
 // WHERE THE SANDBOX SWITCHER STANDS, the one thing about it that differs between the two windows that draw it. In the
 // workspace it stands on a sandbox and moves by selecting another, a route of its own. In the desktop app's window on a
@@ -98,10 +99,12 @@ export const useFolderPlace = (open: Ref<boolean>): FolderPlace => {
         signedOut: computed(() => local && user.value === null),
         signingIn,
         signIn: () => attempt(`:sign-in`, () => localHost().signIn()),
+        // The workspace window opens the Add sandbox dialog on this address (SandboxSwitcher.vue): this window cannot
+        // read the owner's connected machines, which the dialog offers.
         addSandbox: (event) => {
             event.preventDefault();
             open.value = false;
-            void openWorkspacePath(router, `/setup`);
+            void openWorkspacePath(router, ADD_SANDBOX_PATH);
         },
     };
 };

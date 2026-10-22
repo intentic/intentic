@@ -5,12 +5,12 @@
 const BASE = `workspace`;
 
 // The platform refuses a longer name (`sandbox.create`), and a folder's name can run to any length.
-const NAME_MAX = 60;
+export const SANDBOX_NAME_MAX = 60;
 
 export const autoSandboxName = (existing: readonly string[], base: string = BASE): string => {
     const taken = new Set(existing.map((name) => name.trim().toLowerCase()));
     // Cut to leave room for the suffix, so a long folder name still fits once it is numbered.
-    const named = (suffix: string): string => `${base.slice(0, NAME_MAX - suffix.length)}${suffix}`;
+    const named = (suffix: string): string => `${base.slice(0, SANDBOX_NAME_MAX - suffix.length)}${suffix}`;
     if (!taken.has(named(``).toLowerCase())) {
         return named(``);
     }

@@ -10404,6 +10404,20 @@
             "startingSandbox": "uruchamiamy sandbox",
             "verifying": "sprawdzamy, czy jest osiągalny od początku do końca",
             "waitingHealth": "czekamy, aż wstanie"
+        },
+        "addSandbox": {
+            "title": "Dodaj sandbox",
+            "description": "Nowy sandbox z własną przestrzenią roboczą, agentami i narzędziami.",
+            "lookingForMachines": "Szukam, gdzie może działać…",
+            "nothingInOnePress": "Żadne podłączone urządzenie nie uruchomi go jednym kliknięciem. Więcej sposobów poniżej: polecenie do uruchomienia albo własna domena.",
+            "intenticMachine": "Maszyna Intentic",
+            "keepsGoing": "Możesz to zamknąć. Konfiguracja {name} trwa dalej, a sandbox pojawi się na liście, gdy będzie gotowy.",
+            "moreWays": "Więcej sposobów",
+            "details": "Otwórz w konfiguracji",
+            "nameNeeded": "Nadaj mu nazwę.",
+            "nameTooLong": "Maksymalnie {max} znaków.",
+            "hostedNeedsGoogle": "Darmowa maszyna Intentic wymaga logowania Google na tym koncie. Połącz je w Więcej sposobów.",
+            "machineGone": "To urządzenie nie jest już podłączone. Wybierz inne."
         }
     },
     "shared": {

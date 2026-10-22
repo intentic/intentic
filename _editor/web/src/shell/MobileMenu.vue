@@ -8,6 +8,7 @@ import { identityHue } from "../lib/identityHue";
 import { presenceActivity, presenceOthers } from "../workbench/presence/usePresence";
 import { useSandbox } from "../client/sandbox/useSandbox";
 import { switchableSandboxes, unfinishedSandboxes } from "../models/sandbox/live/roster";
+import { addsInDialog, askAddSandbox } from "../models/sandbox/addSandbox";
 import { sandboxAvailabilityVisual } from "../features/sandbox/overview/availability";
 import { placementOf, type SandboxPlacement } from "../features/sandbox/overview/placement";
 import { useSandboxPlacement } from "../features/sandbox/overview/useSandboxPlacement";
@@ -133,7 +134,9 @@ const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } })
                         }}</span>
                     </template>
                 </MenuRow>
-                <MenuRow to="/setup" icon="plus" :title="t(`sandbox.words.addSandbox`)" plain />
+                <!-- A dialog while there is a sandbox to stay in, /setup's first run before that (models/sandbox/addSandbox.ts). -->
+                <MenuRow v-if="addsInDialog(sandbox.sandboxes.value)" icon="plus" :title="t(`sandbox.words.addSandbox`)" @press="askAddSandbox" />
+                <MenuRow v-else to="/setup" icon="plus" :title="t(`sandbox.words.addSandbox`)" plain />
             </RowGroup>
 
             <!-- Same wording as the desktop switcher: offers the move left, not a machine that doesn't exist yet. -->

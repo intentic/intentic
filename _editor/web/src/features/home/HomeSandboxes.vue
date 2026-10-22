@@ -8,6 +8,7 @@ import { useSandbox } from "../../client/sandbox/useSandbox";
 import { useRole } from "../../client/sandbox/useRole";
 import { orderedSandboxes, tileAction } from "../../models/home/homeFacts";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
+import { addsInDialog, askAddSandbox } from "../../models/sandbox/addSandbox";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
 import ViewBadgeChip from "../../workbench/views/ViewBadgeChip.vue";
 import type { ViewBadge } from "@intentic/extension-api";
@@ -29,6 +30,14 @@ const badgeOf = (id: string): ViewBadge | undefined => {
 const route = useRoute();
 const selected = (id: string): boolean => route.name === `home` && sandbox.activeSandboxId.value === id;
 const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`, { name, count: readings.value.get(id)?.needsYou ?? `—` });
+// "Add sandbox" opens its dialog while there is a sandbox to stay in, else /setup's first run (models/sandbox/addSandbox.ts).
+const addsHere = computed(() => addsInDialog(sandbox.sandboxes.value));
+const addTarget = computed(() => (addsHere.value ? { type: `button` } : { to: `/setup` }));
+const add = (): void => {
+    if (addsHere.value) {
+        askAddSandbox();
+    }
+};
 let last: { id: string; at: number } | undefined;
 const choose = (id: string, input: `click` | `enter`): void => {
     const now = Date.now();
@@ -65,9 +74,15 @@ const choose = (id: string, input: `click` | `enter`): void => {
             <span class="min-w-0 flex-1 truncate">{{ box.name }}</span>
             <ViewBadgeChip :badge="badgeOf(box.id)" class="text-[0.625rem]" />
         </button>
-        <RouterLink to="/setup" class="flex min-h-11 items-center justify-center rounded-xl px-3 text-muted hover:bg-content/5" :aria-label="t(`sandbox.words.addSandbox`)">
+        <component
+            :is="addsHere ? `button` : RouterLink"
+            v-bind="addTarget"
+            class="flex min-h-11 items-center justify-center rounded-xl px-3 text-muted hover:bg-content/5"
+            :aria-label="t(`sandbox.words.addSandbox`)"
+            @click="add"
+        >
             <Icon name="plus" aria-hidden="true" />
-        </RouterLink>
+        </component>
     </nav>
     <!-- On a desktop, the tiles of the shell's own rail (ShellDesktop.vue draws the rail around them, account included),
          worn like every other tile: the same size, selection and corner chip. Only what needs you is counted; a quiet box
@@ -88,13 +103,15 @@ const choose = (id: string, input: `click` | `enter`): void => {
             <SandboxLogo :image="box.image ?? null" :name="box.name" class="rounded-lg" />
             <ViewBadgeChip :badge="badgeOf(box.id)" class="icon-rail-mark absolute right-0.5 top-0.5" />
         </button>
-        <RouterLink
-            to="/setup"
+        <component
+            :is="addsHere ? `button` : RouterLink"
+            v-bind="addTarget"
             :class="ui.addTile(`icon-rail-tile rounded-lg hover:bg-overlay`)"
             :aria-label="t(`sandbox.words.addSandbox`)"
             v-tooltip.right="t(`sandbox.words.addSandbox`)"
+            @click="add"
         >
             <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
-        </RouterLink>
+        </component>
     </div>
 </template>

@@ -16,6 +16,7 @@ import { mobileChatPath } from "../lib/routes/phoneScreens";
 import { useGuestFence } from "./guestFence";
 import SkipToContent from "./SkipToContent.vue";
 import { markBoot } from "../app/perf/boot";
+import { ADD_SANDBOX_QUERY, ADD_SANDBOX_VALUE, addSandboxAsked, askAddSandbox, closeAddSandbox } from "../models/sandbox/addSandbox";
 import { loadShellDesktop, loadShellMobile } from "./shellChunks";
 
 // Persistent post-login chrome, split by form factor: ShellDesktop (rail, side panel, terminal) under a
@@ -24,6 +25,8 @@ import { loadShellDesktop, loadShellMobile } from "./shellChunks";
 
 const ShellDesktop = defineAsyncComponent(() => loadChunk(loadShellDesktop));
 const ShellMobile = defineAsyncComponent(() => loadChunk(loadShellMobile));
+// Fetched the first time somebody presses "Add sandbox", not with the shell.
+const AddSandboxDialog = defineAsyncComponent(() => import(`../features/setup/add/AddSandboxDialog.vue`));
 
 const { mobile } = useDevice();
 // Boot installed third-party extensions once the sandbox is reachable (idempotent across shell remounts).
@@ -66,6 +69,21 @@ watch(mobile, (isMobile) => {
     }
 });
 
+// The desktop app's folder window hands "Add sandbox" here as an address (switcherPlace.ts): the dialog opens over the
+// workspace, and the address loses its ask so a reload does not raise it again.
+watch(
+    () => route.query[ADD_SANDBOX_QUERY],
+    (value) => {
+        if (value !== ADD_SANDBOX_VALUE) {
+            return;
+        }
+        askAddSandbox();
+        const { [ADD_SANDBOX_QUERY]: _asked, ...rest } = route.query;
+        void router.replace({ query: rest });
+    },
+    { immediate: true },
+);
+
 // A dead sandbox no longer bounces the shell to /setup, which now only creates a new one.
 // SandboxSwitcher and the liveness probe handle switching or adding one instead.
 </script>
@@ -74,4 +92,5 @@ watch(mobile, (isMobile) => {
     <SkipToContent />
     <ShellMobile v-if="mobile" />
     <ShellDesktop v-else />
+    <AddSandboxDialog v-if="addSandboxAsked" @close="closeAddSandbox" />
 </template>

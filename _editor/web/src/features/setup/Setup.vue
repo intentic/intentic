@@ -44,6 +44,7 @@ import SetupCompose from "./SetupCompose.vue";
 import SetupAccount from "./SetupAccount.vue";
 import SetupHandoff from "./SetupHandoff.vue";
 import SetupHereButton from "./SetupHereButton.vue";
+import HostedWaitSteps from "./HostedWaitSteps.vue";
 import SetupNeedsGoogle from "./SetupNeedsGoogle.vue";
 import SetupNudge from "./SetupNudge.vue";
 import SetupOnMachine from "./SetupOnMachine.vue";
@@ -987,28 +988,7 @@ const discardBeforeSignOut = (): Promise<void> => row.discardDraft(committed.val
                                     </Button>
                                 </template>
                                 <!-- Healthy waits show one row per step and spin the current row. -->
-                                <template v-else>
-                                    <ul class="flex flex-col gap-1.5">
-                                        <li
-                                            v-for="step in hostedWait.steps"
-                                            :key="step.key"
-                                            class="flex items-center gap-2 text-xs"
-                                            :class="step.state === `todo` ? `text-subtle` : `text-content`"
-                                        >
-                                            <Icon
-                                                :name="step.state === `done` ? `check` : step.state === `active` ? `spinner` : `circle`"
-                                                :spin="step.state === `active`"
-                                                class="shrink-0 text-xs"
-                                                :class="
-                                                    step.state === `done` ? `text-success` : step.state === `active` ? `text-info` : `text-subtle`
-                                                "
-                                            />
-                                            <span>{{ step.label }}</span>
-                                        </li>
-                                    </ul>
-                                    <!-- The wait note uses the origin estimate and elapsed time. -->
-                                    <p class="text-xs text-muted">{{ hostedWait.note }}</p>
-                                </template>
+                                <HostedWaitSteps v-else :wait="hostedWait" />
                             </template>
                             <ProgressMeter v-else-if="hostedBusy && provisionWait" :progress="provisionWait" :what="t(`setup.setup.startingMachine`)" />
                             <!-- The action states the no-backup commitment at the decision point. -->
