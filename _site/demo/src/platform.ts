@@ -3,7 +3,7 @@ import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { inviteRecords } from "./fixture/access";
 import { DESK_SANDBOX_NAME } from "./fixture/desk";
 import { officeOrganisation, officeOrganisations } from "./fixture/offices/organisation";
-import { deskEdition, demoTier } from "./mode";
+import { demoMode, deskEdition, demoTier } from "./mode";
 import { demoOutage, outageHosted, outageReport } from "./outage";
 import { DEMO_DAEMON_ORIGIN, json } from "./transport";
 
@@ -41,6 +41,10 @@ export const DEMO_SANDBOX: SandboxSummary = {
     // What the sandbox's own machine last reported, which only an outage gives it reason to (outage.ts).
     hostReport: outageReport(),
 };
+
+export const DEMO_SANDBOXES: SandboxSummary[] = demoMode.id === `home`
+    ? [DEMO_SANDBOX, { ...DEMO_SANDBOX, id: `demo-research`, name: `Research` }, { ...DEMO_SANDBOX, id: `demo-personal`, name: `Personal` }]
+    : [DEMO_SANDBOX];
 
 // The rung the demo account's machine is on; the Billing page reads its shape off the machine, not the account.
 const DEMO_MACHINE_TIER = hostedTier(`standard`);
@@ -135,7 +139,7 @@ const sent = () => ({ members: inviteRecords(), link: INVITE_LINK, delivery: `lo
 const ANSWERS: PlatformAnswers = {
     org: { list: () => officeOrganisations, get: () => officeOrganisation },
     sandbox: {
-        list: () => ({ sandboxes: [DEMO_SANDBOX] }),
+        list: () => ({ sandboxes: DEMO_SANDBOXES }),
         hostedOffer: () => ({
             enabled: true,
             startJourney: true,

@@ -110,6 +110,11 @@ export const landingContent: LandingContent = {
         screens: {
             app: [
                 {
+                    name: "hero-home",
+                    alt: "The real intentic home view with three sandboxes in the left rail, a conversation about the day's work in the center, and Claude and Codex plan usage on the right.",
+                    frameLabel: "intentic · /home",
+                },
+                {
                     name: "hero-agents",
                     alt: "The intentic agents board over a misty forest: one agent in Attention with a question for you; three in Active, auditing the test suite, adding Stripe checkout and chasing a latency spike; and three in Finished, where a soft-delete migration offers Land now above release notes already landed and a nightly dependency audit started from Discord. Each card carries a plain-English title, the model behind it, its branch and what it has cost.",
                     frameLabel: "acme-shop · /agents",

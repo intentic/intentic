@@ -10,7 +10,6 @@ import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import ProductShot from "./ProductShot.astro";
-import HomePreview from "./figures/HomePreview.astro";
 import AutomateFigure from "./figures/AutomateFigure.astro";
 import Bullet from "./Bullet.astro";
 import Corners from "./Corners.astro";
@@ -109,17 +108,18 @@ const { steps: appSteps, alternatives } = content.connect;
                         <div class="hero-stack">
                             <Window class="window-app" finial label="intentic · /home">
                                 <div class="window-crop window-crop-app">
-                                    <HomePreview />
                                     {
                                         content.hero.screens.app.map((screen, index) => (
                                             <ProductShot
                                                 name={screen.name}
                                                 alt={screen.alt}
                                                 sizes={appSizes}
-                                                class="screen screen-app"
+                                                priority={index === 0}
+                                                class={`screen screen-app${index === 0 ? " is-on" : ""}`}
                                                 data-screen="app"
-                                                data-hero-frame={index + 1}
-                                                aria-hidden="true"
+                                                data-hero-frame={index}
+                                                data-frame-label={screen.frameLabel}
+                                                aria-hidden={index > 0 ? "true" : undefined}
                                             />
                                         ))
                                     }
@@ -494,7 +494,7 @@ const { steps: appSteps, alternatives } = content.connect;
                 });
                 const label = preview.querySelector(".window-address");
                 if (label) {
-                    label.textContent = index === 0 ? "intentic · /home" : "intentic · /agents";
+                    label.textContent = frames.find((frame) => Number(frame.dataset.heroFrame) === index)?.dataset.frameLabel ?? "intentic · /home";
                 }
             };
             const stop = (): void => {

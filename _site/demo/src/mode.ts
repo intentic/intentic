@@ -12,7 +12,7 @@ import {
 // roster carries and which extensions are on, plus teammate presence and open chats. Applied where served (daemon.ts,
 // sandbox.ts), not by rewriting the fixtures.
 
-export type DemoModeId = `minimal` | `default` | `full` | `showcase` | `desk` | `fresh`;
+export type DemoModeId = `minimal` | `default` | `full` | `showcase` | `home` | `desk` | `fresh`;
 
 export interface DemoMode {
     readonly id: DemoModeId;
@@ -106,7 +106,18 @@ const FRESH: DemoMode = {
     quiet: true,
 };
 
-export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, SHOWCASE, DESK, FRESH];
+const HOME: DemoMode = {
+    id: `home`,
+    label: `Home`,
+    note: `A home conversation, three sandboxes and connected model plans.`,
+    agents: [],
+    extensions: [],
+    teammate: false,
+    openChats: false,
+    quiet: true,
+};
+
+export const DEMO_MODES: readonly DemoMode[] = [MINIMAL, DEFAULT, FULL, SHOWCASE, HOME, DESK, FRESH];
 
 // Session storage: per tab, surviving the reload a switch causes but not a new visit.
 const STORAGE_KEY = `intentic.demo.mode`;

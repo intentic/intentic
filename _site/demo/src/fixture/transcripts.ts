@@ -1,4 +1,6 @@
 import { SPECIMEN_CHAT_ID, SPECIMEN_TRANSCRIPT } from "./specimen";
+import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { homeMessages } from "./home/recording";
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { producedDocumentPaths } from "@intentic/sandbox-contract/text/documents";
 import type { SandboxHandlerOutput } from "@intentic/sandbox-contract/protocol/procedure-types";
@@ -17,7 +19,7 @@ import {
 } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 import { PAYOUTS_PAGE } from "./pages";
-import { demoQuiet } from "../mode";
+import { demoMode, demoQuiet } from "../mode";
 
 // Transcript route body: messages plus the session id, provider, harness and account they're bound to. A reopened tab
 // needs all three to decide whether its next message resumes this session.
@@ -581,6 +583,9 @@ const quietly = (id: string, transcript: AgentTranscript): AgentTranscript => {
 
 // Each recording is one whole page: it starts at the record's first message, and nothing older precedes it.
 export const transcriptFor = (id: string): SandboxHandlerOutput<`agents`, `transcript`> => {
+    if (demoMode.id === `home` && isHomeConversationId(id)) {
+        return { sessionId: `ses_demo_home`, provider: `claude`, harness: `claude-code`, account: `acc_claude_demo`, messages: homeMessages, from: 0, more: false };
+    }
     const transcript = TRANSCRIPTS[id];
     return { ...(transcript === undefined ? { messages: [] } : quietly(id, transcript)), from: 0, more: false };
 };

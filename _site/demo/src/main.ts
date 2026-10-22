@@ -3,7 +3,7 @@ import { daemon, sockets } from "./daemon";
 import { openTabSnapshot } from "./fixture/openChats";
 import { demoMode } from "./mode";
 import { demoOutage, withOutage } from "./outage";
-import { DEMO_SANDBOX, DEMO_USER, platform } from "./platform";
+import { DEMO_SANDBOX, DEMO_SANDBOXES, DEMO_USER, platform } from "./platform";
 import { readsNote, withReads } from "./reads";
 import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
 import { coverage } from "./unserved";
@@ -13,13 +13,14 @@ import { coverage } from "./unserved";
 // never faked or bypassed.
 
 const ACTIVE_SANDBOX_KEY = `intentic.activeSandboxId`;
-const SESSION_KEY = `intentic.session.${DEMO_SANDBOX.id}`;
 // Key the app reads to restore a window's open chat tabs (composables/chat/tabSnapshot.ts).
 const CHAT_TABS_KEY = `intentic.chatTabs.${DEMO_SANDBOX.id}`;
 
 const seedCredentials = (): void => {
     localStorage.setItem(ACTIVE_SANDBOX_KEY, DEMO_SANDBOX.id);
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: DEMO_USER.email }));
+    for (const sandbox of DEMO_SANDBOXES) {
+        localStorage.setItem(`intentic.session.${sandbox.id}`, JSON.stringify({ token: `demo-session`, expiresAt: Date.now() + 30 * 24 * 3_600_000, email: DEMO_USER.email }));
+    }
     // Declines the local-shortcut offer: no real sandbox here for it to reach faster.
     localStorage.setItem(`intentic.localShortcut.declined.${DEMO_SANDBOX.id}`, `yes`);
 };

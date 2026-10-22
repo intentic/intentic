@@ -24,7 +24,6 @@
 }
 .home.home-focused .window-crop-app {
     aspect-ratio: 16 / 9;
-    container-type: inline-size;
 }
 .home.home-focused .screen-app {
     width: 100%;

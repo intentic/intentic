@@ -9,6 +9,7 @@ import { DESK_AWAITING_ID, DESK_FEATURED_ID, deskRoster } from "../fixture/desk"
 import { AWAITING_AGENT_ID, FEATURED_AGENT_ID, fleetRoster, quietCard } from "../fixture/fleet";
 import { demoNeeds } from "../fixture/needs";
 import { specimenCard } from "../fixture/specimen";
+import { homeAgent } from "../fixture/home/recording";
 import { demoMode, demoQuiet, deskEdition, freshEdition, photographed } from "../mode";
 
 // The live agent board the demo mutates and re-broadcasts: the roster, who it waits on, and the pub/sub every
@@ -21,6 +22,9 @@ export const FEATURED_ID = deskEdition ? DESK_FEATURED_ID : FEATURED_AGENT_ID;
 export const AWAITING_ID = deskEdition ? DESK_AWAITING_ID : AWAITING_AGENT_ID;
 
 const servedRoster = (): AgentSummary[] => {
+    if (demoMode.id === `home`) {
+        return [homeAgent(DEMO_USER.email, STARTED_AT)];
+    }
     const agents = deskEdition ? deskRoster(STARTED_AT) : fleetRoster(STARTED_AT).filter((agent) => demoMode.agents?.includes(agent.id) ?? true);
     // The transcript specimen (fixture/specimen.ts) rides along in a dev build only, whatever the mode, and never into
     // a screenshot: a shot taken off a dev server must match one taken off the build.
@@ -83,10 +87,14 @@ export const TEAMMATE: PresenceUser = {
     view: `agents`,
 };
 
-// The master view's two reads (features/home/): the demo person's home conversation, which no fixture has opened yet,
+// The master view's two reads (features/home/): the demo person's home conversation,
 // and their own share of the board's Attention lane. Most fixture cards name no owner because the demo person started
 // them, so those count as theirs; a card another member answers for does not.
 export const homeDoors = {
-    home: () => ({ conversationId: homeConversationId(DEMO_USER.email), lands: `itself` as const }),
+    home: () => ({
+        conversationId: homeConversationId(DEMO_USER.email),
+        agent: demoMode.id === `home` ? roster.agents.find((agent) => agent.id === homeConversationId(DEMO_USER.email)) : undefined,
+        lands: `itself` as const,
+    }),
     attentionMine: () => fleetAttention(boardAgents().filter((agent) => agent.owner === undefined || agent.owner.email === DEMO_USER.email), []),
 };

@@ -141,7 +141,7 @@ interface Shot {
     /* Stop trimming at this content-specific editorial floor. */
     stopAt?: number;
     /** The demo recording; `showcase` unless a shot names another. `desk` is the documents recording. */
-    mode?: "showcase" | "desk";
+    mode?: "showcase" | "home" | "desk";
     /** A disturbance the quiet recording should still serve, for a shot that is a picture of it. */
     keep?: readonly "proposal"[];
     /**
@@ -176,6 +176,15 @@ const wing = (column: { chat: number; height: number }, dock = TERMINAL_DOCK): P
 });
 
 const SHOTS: Shot[] = [
+    {
+        name: "hero-home",
+        path: "/home",
+        mode: "home",
+        viewport: { width: 1280, height: 720 },
+        waitFor: "text=I'll walk through it in the browser",
+        settleMs: 1400,
+        fullHeight: true,
+    },
     // A CUSTOMER'S website with the Visitor chat open on it. Its own window, since the subject is not our app.
     {
         name: "visitor-chat",
@@ -188,8 +197,8 @@ const SHOTS: Shot[] = [
         settleMs: 900,
     },
 
-    // THE HERO. Its centre window rotates between the board and a review; its two wings stand either side of it: the
-    // plan an agent is waiting on (before) and the report another one left (after).
+    // The hero rests on /home and rotates to the board and a review on hover. The portrait chat shots below remain
+    // in use on feature pages.
     //
     // The board with the chat parked on the rail, so its three lanes get the whole window: one card asking for you,
     // three at work, three done (the showcase roster, _site/demo/src/mode.ts). Opened from a conversation first, since
