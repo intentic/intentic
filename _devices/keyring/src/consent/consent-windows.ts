@@ -16,10 +16,23 @@ const AVAILABLE_FOR_MS = 5 * 60_000;
 const FORMS = String.raw`
 using System;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
 namespace IntenticKeyring {
+  // PowerShell is started hidden (windowsHide: STARTF_USESHOWWINDOW with SW_HIDE), and Windows applies that to the
+  // first ShowWindow call in the process: ShowDialog's own. The box would exist, run its timer and close unseen, so
+  // each one shows itself again from Shown, which a second ShowWindow call does.
+  public static class Reveal {
+    const int SW_SHOWNORMAL = 1;
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr window, int command);
+    public static void Show(Form form) {
+      ShowWindow(form.Handle, SW_SHOWNORMAL);
+      form.Activate();
+    }
+  }
+
   public static class Passphrase {
     public static string Ask(string title, string message, int seconds) {
       Application.EnableVisualStyles();
@@ -62,7 +75,7 @@ namespace IntenticKeyring {
       System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
       timer.Interval = seconds * 1000;
       timer.Tick += delegate(object sender, EventArgs e) { form.DialogResult = DialogResult.Cancel; form.Close(); };
-      form.Shown += delegate(object sender, EventArgs e) { form.Activate(); box.Focus(); timer.Start(); };
+      form.Shown += delegate(object sender, EventArgs e) { Reveal.Show(form); box.Focus(); timer.Start(); };
       DialogResult result = form.ShowDialog();
       timer.Stop();
       return result == DialogResult.OK ? box.Text : null;
@@ -132,7 +145,7 @@ namespace IntenticKeyring {
       System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
       timer.Interval = seconds * 1000;
       timer.Tick += delegate(object sender, EventArgs e) { form.DialogResult = DialogResult.Cancel; form.Close(); };
-      form.Shown += delegate(object sender, EventArgs e) { form.Activate(); if (askUser && userBox.Text == "") userBox.Focus(); else box.Focus(); timer.Start(); };
+      form.Shown += delegate(object sender, EventArgs e) { Reveal.Show(form); if (askUser && userBox.Text == "") userBox.Focus(); else box.Focus(); timer.Start(); };
       DialogResult result = form.ShowDialog();
       timer.Stop();
       if (result != DialogResult.OK || box.Text == "") return null;
@@ -178,7 +191,7 @@ namespace IntenticKeyring {
       System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
       timer.Interval = seconds * 1000;
       timer.Tick += delegate(object sender, EventArgs e) { chosen = -1; form.Close(); };
-      form.Shown += delegate(object sender, EventArgs e) { form.Activate(); timer.Start(); };
+      form.Shown += delegate(object sender, EventArgs e) { Reveal.Show(form); timer.Start(); };
       form.ShowDialog();
       timer.Stop();
       return chosen;

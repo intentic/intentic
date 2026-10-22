@@ -24,6 +24,8 @@ namespace IntenticKeyring {
     const int WS_EX_TOPMOST = 0x8;
     const int WS_EX_TOOLWINDOW = 0x80;
     const int WS_EX_NOACTIVATE = 0x08000000;
+    const int SW_SHOWNOACTIVATE = 4;
+    [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool ShowWindow(IntPtr window, int command);
     readonly Label label;
     public Chip() {
       FormBorderStyle = FormBorderStyle.None;
@@ -50,7 +52,8 @@ namespace IntenticKeyring {
     public void ShowAt(string text, int x, int y) {
       label.Text = text;
       Location = new Point(x, y);
-      if (!Visible) { Show(); }
+      // Show's own ShowWindow is the process's first, which a hidden spawn's SW_HIDE overrides: a second one shows it.
+      if (!Visible) { Show(); ShowWindow(Handle, SW_SHOWNOACTIVATE); }
     }
   }
 
