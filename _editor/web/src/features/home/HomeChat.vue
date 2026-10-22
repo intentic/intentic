@@ -10,9 +10,12 @@ import { Conversation } from "../../models/conversations/session/conversation";
 import { registry } from "../../models/fleet/useAgents-registry";
 import { workLedger } from "../../models/home/homeFacts";
 import ChatPane from "../chat/panel/ChatPane.vue";
+import HomeChatSlot from "./HomeChatSlot.vue";
+import { useDevice } from "@intentic/ui";
 
 const t = useT();
 const sandbox = useSandbox();
+const { mobile } = useDevice();
 const conversation = shallowRef<Conversation>();
 const failure = shallowRef(false);
 const now = useNow(() => true);
@@ -73,13 +76,17 @@ watch(
                 </div>
             </div>
         </details>
-        <ChatPane
-            v-if="conversation"
-            :key="`${sandbox.activeSandboxId.value}:${conversation.conversationId}`"
-            :conversation="conversation"
-            :focused="true"
-            :closable="false"
-        />
+        <!-- A desktop lends the shell's chat panel this page (HomeChatSlot.vue); a phone, with no panel above its router,
+             draws the pane itself on the chat's own surface. -->
+        <HomeChatSlot v-if="conversation && !mobile" :key="`${sandbox.activeSandboxId.value}:${conversation.conversationId}`" />
+        <div v-else-if="conversation" class="ground-card flex min-h-0 flex-1 bg-card">
+            <ChatPane
+                :key="`${sandbox.activeSandboxId.value}:${conversation.conversationId}`"
+                :conversation="conversation"
+                :focused="true"
+                :closable="false"
+            />
+        </div>
         <p v-else class="p-6 text-sm text-muted" role="status">
             {{ !sandbox.reachable.value ? t(`home.offline`) : failure ? t(`home.failed`) : t(`home.loading`) }}
             <button v-if="failure" type="button" class="ml-3 underline" @click="retry++">{{ t(`home.retry`) }}</button>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { SandboxLogo, ui } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
@@ -20,6 +20,9 @@ const badgeOf = (id: string): ViewBadge | undefined => {
     const count = readings.value.get(id)?.needsYou ?? 0;
     return count > 0 ? { count, tooltip: t(`home.sandboxAttention`, { name: boxes.value.find((box) => box.id === id)?.name ?? ``, count }) } : undefined;
 };
+// The tile of the sandbox whose chat the page shows; on a page of the person's own (settings), none is.
+const route = useRoute();
+const selected = (id: string): boolean => route.name === `home` && sandbox.activeSandboxId.value === id;
 const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`, { name, count: readings.value.get(id)?.needsYou ?? `—` });
 let last: { id: string; at: number } | undefined;
 const choose = (id: string, input: `click` | `enter`): void => {
@@ -46,9 +49,9 @@ const choose = (id: string, input: `click` | `enter`): void => {
             :key="box.id"
             type="button"
             class="relative flex w-full shrink-0 items-center gap-3 rounded-xl p-2 text-left hover:bg-content/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-link"
-            :class="{ 'opacity-40': readings.get(box.id)?.unreachable, 'ring-2 ring-link': sandbox.activeSandboxId.value === box.id }"
+            :class="{ 'opacity-40': readings.get(box.id)?.unreachable, 'ring-2 ring-link': selected(box.id) }"
             :aria-label="labelOf(box.id, box.name)"
-            :aria-current="sandbox.activeSandboxId.value === box.id ? 'true' : undefined"
+            :aria-current="selected(box.id) ? 'true' : undefined"
             @click="choose(box.id, 'click')"
             @keydown.enter.prevent="choose(box.id, 'enter')"
         >
@@ -69,9 +72,9 @@ const choose = (id: string, input: `click` | `enter`): void => {
             :key="box.id"
             type="button"
             class="icon-rail-tile ui-row-select ui-row-select-horizontal relative flex items-center justify-center rounded-lg"
-            :class="{ 'opacity-40': readings.get(box.id)?.unreachable, 'ui-row-select-on': sandbox.activeSandboxId.value === box.id }"
+            :class="{ 'opacity-40': readings.get(box.id)?.unreachable, 'ui-row-select-on': selected(box.id) }"
             :aria-label="labelOf(box.id, box.name)"
-            :aria-current="sandbox.activeSandboxId.value === box.id ? 'true' : undefined"
+            :aria-current="selected(box.id) ? 'true' : undefined"
             v-tooltip.right="{ title: box.name, note: t(`home.doubleClickToEnter`) }"
             @click="choose(box.id, 'click')"
             @keydown.enter.prevent="choose(box.id, 'enter')"

@@ -37,6 +37,8 @@ const chatTarget = computed(() => chatFullSlot.value ?? (chatOnRail.value ? (cha
 // Read off where it actually went, like every other presentation question here: the strip takes the composer alone.
 // The side panel draws its own edge and seam around the chat, as it does around everything it holds.
 const inBar = computed(() => chatTarget.value === chatBarSlot.value);
+// The master view lends the chat its page (features/home/HomeChatSlot.vue), unless another window holds the chat.
+const homeChat = computed(() => router.currentRoute.value.name === `home` && chatFullSlot.value !== null && !chat.floats.value);
 const terminalTarget = computed(() => terminalSlot.value ?? park);
 // Its section, then its tab in the side panel, then parked, where a live app keeps its own state and the streams pause.
 const browsersTarget = computed(() => browsersSlot.value ?? sideBrowsersSlot.value ?? park);
@@ -59,7 +61,9 @@ browsers.onDocked(() => {
 <template>
     <!-- Grid area and border live on the panel, not the slot: the slot is `display: contents` and generates no box. -->
     <Teleport :to="chatTarget">
-        <ChatPanel v-if="chat.shows.value && !masterRail" :bar="inBar" style="grid-area: chat" />
+        <!-- In the master view, its one chat: the same panel a popped-out window draws, without the tab row (HomeChatSlot.vue). -->
+        <ChatPanel v-if="homeChat" :tabs="false" solo style="grid-area: chat" />
+        <ChatPanel v-else-if="chat.shows.value && !masterRail" :bar="inBar" style="grid-area: chat" />
     </Teleport>
     <Teleport :to="terminalTarget">
         <TerminalPanel

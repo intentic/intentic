@@ -35,7 +35,9 @@ import { useT } from "@intentic/ui/i18n";
 // `bar` is the quick strip's presentation (ChatQuickBar): the focused chat's composer and nothing else, in a row the
 // shell sizes to its content. It implies no header and no transcript: the strip is a scratch pad, and /chat is where
 // the turns are read.
-const { tabs = true, bar = false } = defineProps<{ tabs?: boolean; bar?: boolean }>();
+// `solo` draws the focused chat alone, never a split: the master view's one chat with a sandbox (features/home/), which
+// shows that conversation whatever panes the shell's own chat holds.
+const { tabs = true, bar = false, solo = false } = defineProps<{ tabs?: boolean; bar?: boolean; solo?: boolean }>();
 
 const t = useT();
 
@@ -64,7 +66,7 @@ const RAIL_PX = DEFAULT_RAIL_WIDTH;
 const dockedRoom = (count: number): number => count * MIN_PANE_PX;
 const paneIds = computed(() => {
     // A strip is one row of composer; a split there would be two boxes with no transcripts to tell them apart.
-    if (mobile.value || bar) {
+    if (mobile.value || bar || solo) {
         return [activeId.value];
     }
     return chatWide.value || layout.chatWidth.value >= dockedRoom(panes.value.length) ? panes.value : [activeId.value];
