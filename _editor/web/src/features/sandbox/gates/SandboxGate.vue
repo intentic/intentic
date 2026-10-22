@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { FreshnessFrame } from "@intentic/ui";
-import { computed } from "vue";
+import { computed, onUnmounted, watch } from "vue";
+import { announceWorkspaceShown } from "../../../app/environments/desktopShown";
+import { activeSandboxId } from "../../../app/storage/activeSandbox";
 import { sandboxRequiresGate } from "../overview/availability";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -27,6 +29,30 @@ const availability = useSandboxAvailability(established);
 const gated = computed(() => sandboxRequiresGate(reachable.value, established.value, availability.value));
 // What stays mounted through a stall is the last answers it had: the frame says when they may be out of date.
 const { offline, lostAt } = useSandboxLiveness();
+
+// The desktop app waits on this page, put up out of sight for a folder's new sandbox, to say it shows that sandbox
+// before it calls the folder ready (desktop.ts `announceWorkspaceShown`): connected, its workspace painted, nothing
+// gating it. Said a moment after it holds, so the routes under the gate have drawn too, and only if it still holds.
+const SHOWN_AFTER_MS = 250;
+const shownSandbox = computed(() =>
+    !denied.value && !daemonTooOld.value && !gated.value && reachable.value && established.value ? activeSandboxId.value : undefined,
+);
+let saying: ReturnType<typeof setTimeout> | undefined;
+watch(
+    shownSandbox,
+    (sandbox) => {
+        clearTimeout(saying);
+        if (sandbox !== undefined) {
+            saying = setTimeout(() => {
+                if (shownSandbox.value === sandbox) {
+                    announceWorkspaceShown(sandbox);
+                }
+            }, SHOWN_AFTER_MS);
+        }
+    },
+    { immediate: true },
+);
+onUnmounted(() => clearTimeout(saying));
 </script>
 
 <template>

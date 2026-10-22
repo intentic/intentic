@@ -495,7 +495,8 @@ flowchart LR
   folder's: `queued` (`behind` another folder's), `signedOut`, `signedIn`, `needsDocker` (not installed, not running,
   or turning this account away), `creating`, `waiting` (this PC's own setup, a yes to what the setup's first pass
   found, or a restart or sign-out), `copying` (made; its first copy followed in `intentic-machine status --json` until
-  Mutagen watches for changes, with the agent's `heldBy` when held), `ready`, `failed` (with its log; a made sandbox
+  Mutagen watches for changes, with the agent's `heldBy` when held, then `status: opening` until the workspace is up,
+  below), `ready`, `failed` (with its log; a made sandbox
   whose folder never started syncing says so and offers the sandbox), and `interrupted`. A quit stops a setup under way
   with everything it started; the next launch finds it `creating`, and runs it again on the same row with its code
   minted afresh. A run holds a lock in the app's data folder (`folder-setup-<key>.pid.json`), so a launch after a hard
@@ -505,8 +506,17 @@ flowchart LR
   folders that went in are forgotten at the next launch: which folder is in which sandbox is the agent's pairing. The
   system's notification says once that a folder is in and once each time it newly needs the reader, and nothing while a
   window of this computer has the focus; a press on one about the folder opens its window (`notice.rs` `FOLDER`).
-  Each step's seconds are sent as `desktop_install_step` with `run: folder`, and the press-to-copied time as
+  Each step's seconds are sent as `desktop_install_step` with `run: folder`, and the press-to-ready time as
   `desktop_folder_sandbox_ready` (`launch.rs` reports), so the time to a folder's first copy is measured.
+
+  **Ready means Open shows a drawn page** (2026-10-22). Once the sandbox answers end to end (its `connecting-machine`
+  phase), the app puts the workspace's page up out of sight at the folder's address (`windows.rs` `warm_workspace`):
+  built there when the frame has no workspace, routed there when it has one nobody is looking at, and left alone when
+  the reader is looking at it. The folder stays `copying` with `status: opening` until that page says it shows the
+  sandbox, connected and drawn (`intentic://window?do=shown&sandbox=<id>`, the web's `SandboxGate.vue`), or for
+  `WARM_FOR` (25 s) after the sandbox was made, so a page older than the verb never holds a folder for good. Open then
+  swaps that page in without telling it anything, and skips `ic sandbox list` for it. Before, Open built the page from
+  nothing after the folder was called ready, and the reader watched seconds of the workspace loading.
 
   _(2026-10-21) **One sandbox per computer went.** From 2026-10-05 the app made one sandbox for the whole computer after
   sign-in ("Local", `machine_sandbox.rs`), with `SYNC_PROJECTS_HOST=1` and no folder of its own, and attached every

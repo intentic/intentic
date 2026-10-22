@@ -143,6 +143,18 @@ const copyingDraft = (setup: LocalFolderSetup, preview: LocalProjectPreview | un
     if (setup.status === `paused`) {
         return { tone: `waiting`, hero: house(`lit`), title: t(`local.setup.paused`, { name }), detail: heldDetail(setup.heldBy), actions: [`open`] };
     }
+    // The copy is in, and the workspace's page is coming up out of sight (the app's windows.rs `warm_workspace`): the
+    // folder is called ready once Open has a drawn page to show, a moment from now.
+    if (setup.status === `opening`) {
+        return {
+            tone: `working`,
+            hero: house(`moving`),
+            title: t(`local.setup.opening`, { name }),
+            detail: t(`local.setup.openingDetail`),
+            step: t(`local.setup.openingStep`),
+            actions: [],
+        };
+    }
     const copy = copyMeasureOf(setup, preview);
     return {
         tone: `working`,
@@ -316,7 +328,10 @@ const onItsWayLabel = (setup: LocalFolderSetup, signingIn: boolean): [string, bo
         case `interrupted`:
             return [t(`local.setup.button.waiting`), true];
         case `copying`:
-            return setup.status === `paused` ? [t(`local.setup.button.paused`), false] : [t(`local.setup.button.copying`), true];
+            if (setup.status === `paused`) {
+                return [t(`local.setup.button.paused`), false];
+            }
+            return setup.status === `opening` ? [t(`local.setup.button.opening`), true] : [t(`local.setup.button.copying`), true];
         case `failed`:
             return [t(`local.setup.button.failed`), false];
         case `needsDocker`:

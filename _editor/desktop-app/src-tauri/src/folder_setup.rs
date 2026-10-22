@@ -482,6 +482,20 @@ pub fn pause_for(records: &[Record]) -> Duration {
 
 /// The status a held session is said with.
 const PAUSED: &str = "paused";
+/// The status of a folder whose copy is in while the workspace's page, put up out of sight for its sandbox, comes up
+/// (windows.rs `warm_workspace`): the folder is called ready once Open has a drawn page to show (2026-10-22).
+pub const OPENING: &str = "opening";
+/// The phase from which the sandbox answers end to end (ic's `verifying` passed), so its workspace's page can be put
+/// up while this computer is connected to it and the folder's copy goes in.
+const WARM_FROM: &str = "connecting-machine";
+
+/// Whether a folder whose copy is in still waits for the workspace's page: only while that page was put up for its
+/// sandbox, has not said it shows it, and [`crate::windows::WARM_FOR`] has not passed since the sandbox was made. Pure.
+pub fn waits_for_page(warmth: crate::windows::Warmth, made_at: Option<u64>, now: u64) -> bool {
+    warmth == crate::windows::Warmth::Warming
+        && made_at
+            .is_none_or(|at| now.saturating_sub(at) < crate::windows::WARM_FOR.as_millis() as u64)
+}
 /// The hold that is the reader's own pause (the agent's `DeviceSyncHold`), the one a press lifts.
 const OWNER: &str = "owner";
 
@@ -1305,6 +1319,8 @@ fn create(app: &AppHandle, path: &str, consent: bool) {
             let made = standing == Standing::Copying;
             if made {
                 finished(app, &sandbox_id, slug.as_deref(), &name);
+                // A run whose last phase was not heard (an older `ic`) puts the page up now.
+                warm(app, path);
             } else if matches!(standing, Standing::Failed { .. }) {
                 discard_unannounced(app, &window, path);
             }
@@ -1489,6 +1505,7 @@ fn hearing(
     let path = path.to_string();
     let progress = Arc::clone(progress);
     let clock = clock.map(Arc::clone);
+    let warmed = Arc::new(AtomicBool::new(false));
     Arc::new(move |stream: Stream, line: &str| {
         let shown = {
             let Ok(mut progress) = progress.lock() else {
@@ -1516,6 +1533,9 @@ fn hearing(
             }
             record.requirements.clone_from(&shown.requirements);
         });
+        if shown.phase.as_deref() == Some(WARM_FROM) && !warmed.swap(true, Ordering::SeqCst) {
+            warm(&app, &path);
+        }
     })
 }
 
@@ -1719,9 +1739,18 @@ fn follow_copies(app: &AppHandle, report: Option<&serde_json::Value>) {
             }
             continue;
         };
-        let Some(seen) = copy_seen(&record, pairing) else {
+        let Some(mut seen) = copy_seen(&record, pairing) else {
             continue;
         };
+        // The copy is in: ready once Open has a drawn page to show, not a page to load.
+        let warmth = record
+            .sandbox_id
+            .as_deref()
+            .map_or(crate::windows::Warmth::Cold, crate::windows::warmth);
+        if seen.standing == Standing::Ready && waits_for_page(warmth, record.made_at, now_ms()) {
+            seen.standing = Standing::Copying;
+            seen.status = Some(OPENING.to_string());
+        }
         let now_ready = seen.standing == Standing::Ready;
         update(app, &record.path, |held| {
             // Only a folder still copying: one asked again meanwhile is its own.
@@ -1734,12 +1763,58 @@ fn follow_copies(app: &AppHandle, report: Option<&serde_json::Value>) {
             }
         });
         if now_ready {
-            let asked = Duration::from_millis(now_ms().saturating_sub(record.asked_at));
-            let copying = record
-                .made_at
-                .map(|at| Duration::from_millis(now_ms().saturating_sub(at)));
-            crate::launch::note_folder_ready(app, tenths(asked), copying.map(tenths));
+            note_ready(app, &record);
         }
+    }
+}
+
+/// The press-to-ready time of a folder just called ready, and the part of it since its sandbox was made.
+fn note_ready(app: &AppHandle, record: &Record) {
+    let asked = Duration::from_millis(now_ms().saturating_sub(record.asked_at));
+    let copying = record
+        .made_at
+        .map(|at| Duration::from_millis(now_ms().saturating_sub(at)));
+    crate::launch::note_folder_ready(app, tenths(asked), copying.map(tenths));
+}
+
+/// The workspace's page, put up for a folder's sandbox, says it shows it (windows.rs): each folder whose copy is in and
+/// waited on that page is ready now, rather than at the supervisor's next round.
+pub fn workspace_shown(app: &AppHandle, sandbox: &str) {
+    let opening: Vec<Record> = all(app)
+        .into_iter()
+        .filter(|record| {
+            record.standing == Standing::Copying
+                && record.status.as_deref() == Some(OPENING)
+                && record.sandbox_id.as_deref() == Some(sandbox)
+        })
+        .collect();
+    for record in opening {
+        let mut flipped = false;
+        update(app, &record.path, |held| {
+            if held.standing == Standing::Copying && held.status.as_deref() == Some(OPENING) {
+                held.standing = Standing::Ready;
+                held.status = Some("watching".to_string());
+                flipped = true;
+            }
+        });
+        if flipped {
+            note_ready(app, &record);
+        }
+    }
+}
+
+/// Put the workspace's page up out of sight for the folder's sandbox, on the folder (windows.rs `warm_workspace`), once
+/// the sandbox answers end to end. Nothing for a record with no sandbox yet.
+fn warm(app: &AppHandle, path: &str) {
+    let Some(record) = all(app).into_iter().find(|record| record.path == path) else {
+        return;
+    };
+    if let Some(sandbox) = record.sandbox_id.as_deref() {
+        crate::windows::warm_workspace(
+            app,
+            sandbox,
+            &crate::project::project_path(sandbox, &record.name),
+        );
     }
 }
 
@@ -2307,6 +2382,25 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["failed", "creating"]
         );
+    }
+
+    /* READY MEANS OPEN SHOWS A DRAWN PAGE (2026-10-22). */
+    #[test]
+    fn a_folder_whose_copy_is_in_waits_for_its_page_only_while_it_comes_up() {
+        use crate::windows::{Warmth, WARM_FOR};
+        let made = 1_000_000;
+        let within = made + WARM_FOR.as_millis() as u64 - 1;
+        // Put up for its sandbox and not yet drawn: the folder waits.
+        assert!(waits_for_page(Warmth::Warming, Some(made), within));
+        // Drawn, or never put up (a workspace the reader is looking at): ready at once, as before.
+        assert!(!waits_for_page(Warmth::Shown, Some(made), within));
+        assert!(!waits_for_page(Warmth::Cold, Some(made), within));
+        // A page that never says (one older than this app): ready once the wait is out, never held for good.
+        assert!(!waits_for_page(
+            Warmth::Warming,
+            Some(made),
+            made + WARM_FOR.as_millis() as u64
+        ));
     }
 
     #[test]

@@ -79,9 +79,11 @@ const copyStep = (setup: LocalFolderSetup | undefined, name: string): JourneySte
     const title = t(`local.journey.copy.title`, { name });
     switch (setup?.state) {
         case `copying`:
-            return setup.status === `paused`
-                ? step(`copy`, title, `attention`, t(`local.journey.copy.paused`))
-                : step(`copy`, title, `running`, copyMeasureOf(setup).step);
+            if (setup.status === `paused`) {
+                return step(`copy`, title, `attention`, t(`local.journey.copy.paused`));
+            }
+            // In, with the workspace's page coming up out of sight before the folder is called ready (setupView.ts).
+            return step(`copy`, title, `running`, setup.status === `opening` ? t(`local.setup.openingStep`) : copyMeasureOf(setup).step);
         case `ready`:
             return step(`copy`, title, `done`);
         case `failed`:

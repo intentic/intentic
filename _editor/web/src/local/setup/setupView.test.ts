@@ -131,6 +131,17 @@ describe(`the page after the press`, () => {
         expect(paused?.detail).toContain(`nearly full`);
     });
 
+    it(`calls the folder ready only once its workspace is up, saying so meanwhile with nothing to press`, () => {
+        const opening = viewOf(setupAt({ state: `copying` }, { made: true, status: `opening` }));
+        expect(opening).toMatchObject({ tone: `working`, title: `Opening shop's sandbox`, step: `Loading the workspace`, percent: undefined, actions: [] });
+        expect(opening?.steps.at(-1)).toMatchObject({ state: `running`, note: `Loading the workspace` });
+        expect(folderButtonOf({ hasSandbox: true, setup: setupAt({ state: `copying` }, { made: true, status: `opening` }) })).toMatchObject({
+            label: `Opening the sandbox…`,
+            busy: true,
+            press: `view`,
+        });
+    });
+
     it(`offers to try again after a failed setup, and the sandbox itself after a sync that never started`, () => {
         expect(viewOf(setupAt({ state: `failed`, reason: `no` }, { hasLog: true }))).toMatchObject({ tone: `failed`, detail: `no`, actions: [`retry`, `log`, `dismiss`] });
         expect(viewOf(setupAt({ state: `failed`, reason: `no` }))?.actions).toEqual([`retry`, `dismiss`]);

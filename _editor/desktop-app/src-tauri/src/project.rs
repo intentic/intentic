@@ -467,6 +467,13 @@ fn open_existing(app: &AppHandle, asked_in: Option<&str>, project: &Project) {
         show_project(app, asked_in, project);
         return;
     };
+    // A page put up for this sandbox ahead of the press (windows.rs `warm_workspace`) is a sandbox running here a moment
+    // ago: swapped in at once, without a second or two of `ic sandbox list` first. Gone since, the page says so itself.
+    let warm = project.sandbox_id.as_deref().map(crate::windows::warmth);
+    if matches!(warm, Some(crate::windows::Warmth::Shown)) {
+        show_project(app, asked_in, project);
+        return;
+    }
     let app = app.clone();
     let project = project.clone();
     let asked_in = asked_in.map(str::to_owned);

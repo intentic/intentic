@@ -12635,6 +12635,9 @@
             "noSync": "{name} nie synchronizuje się ze swoją piaskownicą",
             "copying": "Kopiuję {name} do jej piaskownicy",
             "copyingDetail": "Agenci mogą zacząć, gdy tylko kopia będzie w środku.",
+            "opening": "Otwieram piaskownicę dla {name}",
+            "openingDetail": "Jej przestrzeń robocza się wczytuje, żeby była na ekranie, gdy tylko ją otworzysz.",
+            "openingStep": "Wczytuję przestrzeń roboczą",
             "copy": {
                 "connecting": "Łączę z piaskownicą",
                 "counting": "Liczę pliki",
@@ -12657,6 +12660,7 @@
                 "waitingPercent": "Tworzę piaskownicę tego folderu ({percent}%)",
                 "behind": "Czeka na piaskownicę innego folderu…",
                 "copying": "Kopiuję folder…",
+                "opening": "Otwieram piaskownicę…",
                 "paused": "Kopiowanie wstrzymane",
                 "failed": "Nie udało się utworzyć piaskownicy tego folderu",
                 "signingIn": "Czekam na zalogowanie…",

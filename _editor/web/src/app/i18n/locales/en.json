@@ -5087,6 +5087,9 @@
             "noSync": "{name} isn't syncing to its sandbox",
             "copying": "Copying {name} into its sandbox",
             "copyingDetail": "Agents can start as soon as it's in.",
+            "opening": "Opening {name}'s sandbox",
+            "openingDetail": "Its workspace is loading, so it's on screen the moment you open it.",
+            "openingStep": "Loading the workspace",
             "copy": {
                 "connecting": "Connecting to the sandbox",
                 "counting": "Counting files",
@@ -5109,6 +5112,7 @@
                 "waitingPercent": "Making this folder's sandbox ({percent}%)",
                 "behind": "Waiting for another folder's sandbox…",
                 "copying": "Copying your folder…",
+                "opening": "Opening the sandbox…",
                 "paused": "Copying is paused",
                 "failed": "Couldn't make this folder's sandbox",
                 "signingIn": "Waiting for you to sign in…",

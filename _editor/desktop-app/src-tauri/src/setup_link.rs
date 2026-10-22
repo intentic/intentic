@@ -561,7 +561,7 @@ pub struct AuthArgs {
 const PROFILES: [&str; 2] = ["default", "desk"];
 
 /* Window links carry their action in the `do` query parameter. */
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WindowVerb {
     /* THE PAGE ANNOUNCING ITS OWN BAR IS UP, which is what keeps a frameless window from ever being a trap. */
     Ready,
@@ -589,6 +589,9 @@ pub enum WindowVerb {
     /// The page saying which colour scheme it is drawn in, on load and whenever it changes — how the app's
     /// own faces come to be drawn in the same light as the workspace they stand in for.
     Mode(crate::state::Mode),
+    /// The workspace's page saying it shows this sandbox, connected and drawn (`window?do=shown&sandbox=<id>`): what a
+    /// folder's setup waits for before it calls the folder ready (windows.rs `warm_workspace`).
+    Shown(String),
 }
 
 /// Where `intentic://launcher` puts the reader down on this computer's face.
@@ -962,6 +965,7 @@ pub fn parse_link(url: &str, source: Source) -> Option<Link> {
             "raise" => WindowVerb::Raise,
             "fit" => WindowVerb::Fit(get("width")?.parse().ok()?),
             "mode" => WindowVerb::Mode(crate::state::Mode::parse(&get("mode")?)?),
+            "shown" => WindowVerb::Shown(get("sandbox").filter(|id| is_sandbox_id(id))?),
             _ => return None,
         })),
         "window" => None,
@@ -1555,6 +1559,10 @@ L"}"#,
             ("intentic://window?do=drag", WindowVerb::Drag),
             ("intentic://window?do=raise", WindowVerb::Raise),
             ("intentic://window?do=fit&width=1280", WindowVerb::Fit(1280)),
+            (
+                "intentic://window?do=shown&sandbox=cmvjklu9p000201oznem6o5e3",
+                WindowVerb::Shown("cmvjklu9p000201oznem6o5e3".to_string()),
+            ),
             (
                 "intentic://window?do=mode&mode=light",
                 WindowVerb::Mode(crate::state::Mode::Light),
