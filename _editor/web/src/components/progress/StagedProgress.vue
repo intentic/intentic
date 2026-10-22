@@ -123,7 +123,8 @@ const elapsedLabel = computed(() => (props.progress.elapsedMs === undefined ? un
         <!-- Verbatim, unsummarised, and only ever on purpose. -->
         <DeviceRunLog v-if="showLog" :lines="lines" :running="live" :empty="emptyLog" :note="logNote" />
 
-        <div class="flex flex-wrap items-center gap-x-3">
+        <!-- Keep the text buttons' expanded tap targets inside the content's scroll bounds. -->
+        <div class="flex flex-wrap items-center gap-x-3 py-1.5">
             <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" :aria-expanded="showLog" @click="showLog = !showLog">
                 <Icon :name="showLog ? `chevron-down` : `chevron-right`" />{{ showLog ? hideLogLabel : showLogLabel }}
             </button>
