@@ -1,4 +1,4 @@
-import { elapsedWords, estimatedShare, gaveUp, overdue, progressAt, progressShare, progressWords, spanWords } from "../progress";
+import { elapsedWords, estimatedShare, gaveUp, overdue, progressAt, progressFigure, progressShare, progressWords, spanWords } from "../progress";
 
 // What a piece of work says about itself, in the one progress model every readout shares. The promises under test: the bar is an estimate that never claims the wait is over,
 // the words stop promising the usual length once it has passed, and the give-up sentence disappears the moment it is
@@ -59,6 +59,18 @@ describe(`the words`, () => {
     it(`say nothing about time for work adopted mid-flight, whose start nothing saw`, () => {
         expect(progressWords({ elapsedMs: undefined, expectedMs: 60_000 })).toEqual({ elapsed: undefined, usual: `usually about 1 minute`, giveUp: undefined });
         expect(overdue({ elapsedMs: undefined, expectedMs: 1 })).toBe(false);
+    });
+});
+
+describe(`the one-row figure`, () => {
+    it(`reads elapsed against the usual length while on time, and stops promising it once past`, () => {
+        expect(progressFigure({ elapsedMs: 6_000, expectedMs: 30_000 })).toBe(`6s / ~30s`);
+        expect(progressFigure({ elapsedMs: 45_000, expectedMs: 30_000 })).toBe(`45s, longer than usual`);
+    });
+
+    it(`is the elapsed time alone with no usual length, and absent with no clock`, () => {
+        expect(progressFigure({ elapsedMs: 72_000 })).toBe(`1m 12s`);
+        expect(progressFigure({ elapsedMs: undefined, expectedMs: 30_000 })).toBeUndefined();
     });
 });
 

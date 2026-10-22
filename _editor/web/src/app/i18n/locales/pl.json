@@ -1427,12 +1427,10 @@
             "costRebuild": "Buduje zatwierdzony przepis na obrazie, na którym ten sandbox już działa, co niczego nie przerywa, a potem restartuje Twój sandbox na jakieś pół minuty. Twoje pliki (w /work) zostają.",
             "costRestartOnly": "Jest już pobrana, więc zostaje tylko restart: jakieś pół minuty. Twoje pliki (w /work) zostają.",
             "doesButton": "robi to jednym przyciskiem.",
-            "environmentApprovedBeingSwapped": "Środowisko, które zatwierdziłeś, jest właśnie podmieniane — jakieś pół minuty, a potem ta strona łączy się sama z powrotem. Twoje pliki w /work zostają.",
             "intenticWindows": "Intentic dla Windows",
             "now": "{action} teraz",
             "onlySandboxRestartsNothing": "Restartuje się tylko sandbox — nic innego na tym urządzeniu nie zostaje ruszone. Twoje pliki (w /work) zostają.",
             "rebuildVerb": "Przebuduj",
-            "restartingOntoImageRan": "Restartuje na obrazie, na którym działał przed ostatnią aktualizacją — jakieś pół minuty, a potem ta strona łączy się sama z powrotem. Twoje pliki w /work zostają.",
             "restartingOntoRebuiltEnvironment": "Restart na przebudowanym środowisku",
             "restartingOntoUpdate": "Restart na aktualizacji",
             "rollBackHeader": "Cofnąć ten sandbox?",
@@ -1444,7 +1442,6 @@
             "runsOnDeviceHosting": "Działa na urządzeniu, które gości ten sandbox. {cost}",
             "skipTerminalNextTime": "Następnym razem pomiń terminal:",
             "startingOnDevice": "Uruchamianie na tamtym urządzeniu…",
-            "updateAppliedReplacesSandboxs": "Aktualizacja, którą zastosowałeś, wymienia kontener tego sandboxa — jakieś pół minuty, a potem ta strona łączy się sama z powrotem. Twoje pliki w /work zostają.",
             "updateVerb": "Zaktualizuj",
             "workDownloaded": "Najpierw aktualizacja jest pobierana i budowana",
             "workRebuilt": "Najpierw przebudowywane jest Twoje środowisko",
@@ -4649,7 +4646,12 @@
             "longerThanUsual": "dłużej niż zwykle (ok. {usual})",
             "giveUp": "Jeśli potrwa dłużej niż {limit}, pokażemy, co możesz zrobić.",
             "estimate": "Szacowany postęp",
-            "details": "Szczegóły techniczne"
+            "details": "Szczegóły techniczne",
+            "figureOfUsual": "{elapsed} / ~{usual}",
+            "figureOverdue": "{elapsed}, dłużej niż zwykle"
+        },
+        "restartQuiet": {
+            "detail": "Ta strona sama połączy się ponownie. Twoje pliki w /work zostają."
         }
     },
     "connect": {
@@ -7597,7 +7599,6 @@
             "havingTrouble": "Masz problem?",
             "troubleLead": "Jeśli coś przestało działać po ostatniej aktualizacji, możesz wrócić do wersji, której ten sandbox używał wcześniej.",
             "takePublishedImageInstead": "Weź zamiast tego opublikowany obraz",
-            "updateAppliedReplacesSandboxs": "Aktualizacja, którą zastosowałeś, wymienia kontener tego sandboxa — jakieś pół minuty, a potem ta strona łączy się sama z powrotem. Twoje pliki w /work zostają.",
             "waitFleetToSettle": "Poczekaj, aż flota się uspokoi, albo kontynuuj, jeśli to akceptowalne.",
             "whatUpdatesNeverBreak": "czego aktualizacje nigdy nie psują",
             "updateConvertsStoredFiles": "Przy pierwszym uruchomieniu ta aktualizacja przekształci jeden zapisany plik | Przy pierwszym uruchomieniu ta aktualizacja przekształci {count} zapisane pliki | Przy pierwszym uruchomieniu ta aktualizacja przekształci {count} zapisanych plików",
@@ -7942,9 +7943,8 @@
         },
         "useDevRebuild": {
             "couldntReachDevice": "Nie udało się połączyć z tym urządzeniem, żeby przebudować ten sandbox.",
-            "rebuildSwapsSandboxOnto": "Twoja przebudowa przestawia ten sandbox na nowy obraz, gdy skończy: jakieś pół minuty ciszy, a potem ta strona łączy się sama z powrotem. Twoje pliki w /work zostają.",
             "rebuildingFromCheckout": "Przebudowa z Twojego checkoutu",
-            "restartingOntoImageBuilt": "Restart na obrazie, który zbudowałeś"
+            "restartingOntoImageBuilt": "Restart na Twoim nowym buildzie"
         },
         "useEngines": {
             "couldNotChangeSource": "Nie udało się zmienić źródła wersji {label}.",
@@ -7958,10 +7958,8 @@
             "comesEverySandbox": "Przychodzi z każdym sandboxem"
         },
         "useHostedBuild": {
-            "buildDoneSandboxBeing": "Budowanie skończone i Twój sandbox jest właśnie na nie przestawiany — jakieś pół minuty, a potem ta strona łączy się sama z powrotem. Twoje pliki w /work zostają.",
             "buildingEnvironment": "Budowanie Twojego środowiska",
-            "restartingOntoNewEnvironment": "Restart na Twoim nowym środowisku",
-            "sandboxRestartsOntoNew": "Twój sandbox zrestartuje na nowym obrazie, gdy budowanie się skończy — jakieś pół minuty ciszy, a potem ta strona łączy się sama z powrotem. Twoje pliki w /work zostają."
+            "restartingOntoNewEnvironment": "Restart na Twoim nowym środowisku"
         },
         "useSandboxLiveness": {
             "noSandboxSelected": "Nie wybrano żadnego sandboxa.",

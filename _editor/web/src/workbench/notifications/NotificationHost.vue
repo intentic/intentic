@@ -57,6 +57,10 @@ const TINT: Record<NotificationTone, string> = {
     danger: `text-danger`,
 };
 
+// A spinning glyph is work under way, and wears the accent the progress bar under it fills with, whatever the tone:
+// an info-tinted spinner above an accent bar read as two unrelated signals on one card.
+const tintOf = (entry: Notification): string => (entry.spin === true ? `text-primary-600` : TINT[entry.tone]);
+
 // Receipt width fits its sentence; other cards take the lane's width or more if they carry a body. All
 // right-align, but below `sm` they span the full lane so a narrow phone doesn't misalign.
 const widthOf = (entry: Notification): string =>
@@ -100,7 +104,7 @@ const press = (entry: Notification, action: NotificationAction): void => {
                 <Icon
                     :name="entry.icon ?? GLYPH[entry.tone]"
                     class="self-center text-xs"
-                    :class="TINT[entry.tone]"
+                    :class="tintOf(entry)"
                     :spin="entry.spin === true"
                     aria-hidden="true"
                 />

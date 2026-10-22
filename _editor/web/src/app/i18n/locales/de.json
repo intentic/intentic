@@ -989,12 +989,10 @@
             "costRebuild": "Es baut das genehmigte Rezept auf dem Image, das diese Sandbox schon betreibt, was nichts unterbricht, und startet dann Ihre Sandbox für etwa eine halbe Minute neu. Ihre Dateien (in /work) bleiben erhalten.",
             "costRestartOnly": "Es ist bereits heruntergeladen, das hier ist also nur der Neustart: etwa eine halbe Minute. Ihre Dateien (in /work) bleiben erhalten.",
             "doesButton": "macht das mit einem Knopf.",
-            "environmentApprovedBeingSwapped": "Die Umgebung, die Sie genehmigt haben, wird eingewechselt — etwa eine halbe Minute, dann verbindet sich diese Seite von selbst wieder. Ihre Dateien in /work bleiben erhalten.",
             "intenticWindows": "Intentic für Windows",
             "now": "Jetzt {action}",
             "onlySandboxRestartsNothing": "Nur die Sandbox startet neu — sonst wird auf diesem Gerät nichts angerührt. Ihre Dateien (in /work) bleiben erhalten.",
             "rebuildVerb": "Neu bauen",
-            "restartingOntoImageRan": "Sie startet auf dem Image neu, das sie vor ihrem letzten Update hatte — etwa eine halbe Minute, dann verbindet sich diese Seite von selbst wieder. Ihre Dateien in /work bleiben erhalten.",
             "restartingOntoRebuiltEnvironment": "Startet auf Ihrer neu gebauten Umgebung neu",
             "restartingOntoUpdate": "Startet auf dem Update neu",
             "rollBackHeader": "Diese Sandbox zurückrollen?",
@@ -1006,7 +1004,6 @@
             "runsOnDeviceHosting": "Läuft auf dem Gerät, das diese Sandbox beherbergt. {cost}",
             "skipTerminalNextTime": "Das Terminal beim nächsten Mal überspringen:",
             "startingOnDevice": "Wird auf diesem Gerät gestartet…",
-            "updateAppliedReplacesSandboxs": "Das Update, das Sie angewendet haben, ersetzt den Container dieser Sandbox — etwa eine halbe Minute, dann verbindet sich diese Seite von selbst wieder. Ihre Dateien in /work bleiben erhalten.",
             "updateVerb": "Aktualisieren",
             "workDownloaded": "Das Update wird zuerst heruntergeladen und gebaut",
             "workRebuilt": "Ihre Umgebung wird zuerst neu gebaut",
@@ -2342,6 +2339,13 @@
             "expiresIn": "Einmalig gültig, läuft in {time} ab.",
             "expired": "Dieser Befehl ist abgelaufen.",
             "renew": "Neuer Befehl"
+        },
+        "waitProgress": {
+            "figureOfUsual": "{elapsed} / ~{usual}",
+            "figureOverdue": "{elapsed}, länger als üblich"
+        },
+        "restartQuiet": {
+            "detail": "Diese Seite verbindet sich von selbst neu. Ihre Dateien in /work bleiben erhalten."
         }
     },
     "connect": {
@@ -3990,7 +3994,6 @@
             "havingTrouble": "Probleme?",
             "troubleLead": "Wenn seit dem letzten Update etwas nicht mehr funktioniert, kannst du zur Version zurückkehren, die diese Sandbox vorher nutzte.",
             "takePublishedImageInstead": "Stattdessen das veröffentlichte Image nehmen",
-            "updateAppliedReplacesSandboxs": "Das Update, das Sie angewendet haben, ersetzt den Container dieser Sandbox — etwa eine halbe Minute, dann verbindet sich diese Seite von selbst wieder. Ihre Dateien in /work bleiben erhalten.",
             "waitFleetToSettle": "Warten Sie, bis sich die Flotte beruhigt hat, oder machen Sie weiter, wenn das in Ordnung ist.",
             "whatUpdatesNeverBreak": "was Updates nie kaputt machen",
             "offerTitle": "Intentic {version} ist da",
@@ -4234,8 +4237,7 @@
             "folderLacks": "Dieser Teil der App ({area}) ist für einen Ordner auf diesem Computer nicht verfügbar, nur in einer Sandbox."
         },
         "useDevRebuild": {
-            "rebuildSwapsSandboxOnto": "Ihr Neubau wechselt diese Sandbox auf ihr neues Image, sobald er fertig ist: etwa eine halbe Minute Ruhe, dann verbindet sich diese Seite von selbst wieder. Ihre Dateien in /work bleiben erhalten.",
-            "restartingOntoImageBuilt": "Startet auf dem Image neu, das Sie gebaut haben"
+            "restartingOntoImageBuilt": "Neustart auf Ihrem neuen Build"
         },
         "useEngines": {
             "onlySandboxMaintainerChange": "Nur ein Sandbox-Maintainer kann ändern, welche Agenten-Engines diese Sandbox betreibt."
@@ -4246,10 +4248,8 @@
             "comesEverySandbox": "Kommt mit jeder Sandbox"
         },
         "useHostedBuild": {
-            "buildDoneSandboxBeing": "Der Build ist fertig und Ihre Sandbox wird darauf umgestellt — etwa eine halbe Minute, dann verbindet sich diese Seite von selbst wieder. Ihre Dateien in /work bleiben erhalten.",
             "buildingEnvironment": "Ihre Umgebung wird gebaut",
-            "restartingOntoNewEnvironment": "Startet auf Ihrer neuen Umgebung neu",
-            "sandboxRestartsOntoNew": "Ihre Sandbox startet auf dem neuen Image neu, sobald der Build fertig ist — etwa eine halbe Minute Ruhe, dann verbindet sich diese Seite von selbst wieder. Ihre Dateien in /work bleiben erhalten."
+            "restartingOntoNewEnvironment": "Startet auf Ihrer neuen Umgebung neu"
         },
         "useSandboxLiveness": {
             "noSandboxSelected": "Es ist keine Sandbox ausgewählt.",

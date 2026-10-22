@@ -203,7 +203,7 @@ const what = (): string => t(`sandbox.useDevRebuild.rebuildingFromCheckout`);
 // poll four seconds stale can't tell the swap from a machine the build has buried, and both are this rebuild's doing.
 const quiet = (): RestartQuiet => ({
     title: t(`sandbox.useDevRebuild.restartingOntoImageBuilt`),
-    detail: t(`sandbox.useDevRebuild.rebuildSwapsSandboxOnto`),
+    detail: t(`common.restartQuiet.detail`),
 });
 const marks = new Map<string, () => void>();
 

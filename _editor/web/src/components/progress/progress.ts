@@ -104,6 +104,25 @@ export const progressWords = (progress: Progress): ProgressWords => {
     return { elapsed, usual, giveUp };
 };
 
+/**
+ * The same facts as one short figure, for a surface with room for a single row beside its bar (a card in the
+ * notification lane): "6s / ~30s" while it is on time, "2m 5s, longer than usual" past it, the elapsed time alone with
+ * no expected length. Undefined when nothing saw it start.
+ */
+export const progressFigure = (progress: Progress): string | undefined => {
+    if (progress.elapsedMs === undefined) {
+        return undefined;
+    }
+    const elapsed = formatElapsed(progress.elapsedMs / 1000);
+    const expected = progress.expectedMs;
+    if (expected === undefined || !(expected > 0)) {
+        return elapsed;
+    }
+    return overdue(progress)
+        ? t(`common.waitProgress.figureOverdue`, { elapsed })
+        : t(`common.waitProgress.figureOfUsual`, { elapsed, usual: formatElapsed(expected / 1000) });
+};
+
 // A wait most cases of which end in a moment (a reconnect, a first frame) says how long it has run only once it has
 // outlasted one: "Reconnecting…" read the same after five seconds as after five minutes, and only the second is worth a
 // look, while a counter on every blip would be noise.

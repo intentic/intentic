@@ -2,26 +2,30 @@
 import { DeviceRunLog, Meter, ui } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref } from "vue";
-import { type Progress, progressShare, progressWords } from "./progress";
+import { type Progress, progressFigure, progressShare, progressWords } from "./progress";
 
 // WORK THAT ENDS BY ITSELF, said in full under the sentence that names it: a bar (the work's own count, else an
 // estimate), how long it has run, how long it should take, and when the screen stops waiting and offers something to
 // do (progress.ts). The raw facts behind the sentence stay behind one press, for a reader who wants them, and are never
 // shown unasked.
 
-const { progress, details = [], what } = defineProps<{
+const { progress, details = [], what, compact = false } = defineProps<{
     readonly progress: Progress;
     // What was observed, verbatim (probe results, the machine's report, the work's own output). Shown only on request.
     readonly details?: readonly string[];
     // What is happening, in one short sentence with a spinner, for work that has no sentence of its own above it
     // (a press whose work runs for minutes). A gate or a card that already names the wait leaves this out.
     readonly what?: string | undefined;
+    // One row: the bar with its figure beside it ("6s / ~30s"), and no give-up line. For a card in the notification
+    // lane, which has already said what is happening and has no room for the full account.
+    readonly compact?: boolean;
 }>();
 
 const t = useT();
 
 const share = computed(() => progressShare(progress));
 const words = computed(() => progressWords(progress));
+const figure = computed(() => progressFigure(progress));
 const open = ref(false);
 </script>
 
@@ -31,12 +35,24 @@ const open = ref(false);
             <Icon name="spinner" spin class="size-3 shrink-0 text-info" aria-hidden="true" />
             <span>{{ what }}</span>
         </p>
-        <Meter v-if="share !== undefined" :value="share" :label="t(`common.waitProgress.estimate`)" :valuetext="words.usual ?? words.elapsed" />
-        <p v-if="words.elapsed || words.usual" class="flex flex-wrap justify-between gap-x-3 text-2xs text-muted" aria-live="off">
-            <span class="tabular-nums">{{ words.elapsed }}</span>
-            <span v-if="words.usual">{{ words.usual }}</span>
-        </p>
-        <p v-if="words.giveUp" class="text-2xs text-subtle">{{ words.giveUp }}</p>
+        <div v-if="compact" class="flex items-center gap-2.5">
+            <Meter
+                v-if="share !== undefined"
+                :value="share"
+                :label="t(`common.waitProgress.estimate`)"
+                :valuetext="words.usual ?? words.elapsed"
+                class="min-w-0 flex-1"
+            />
+            <span v-if="figure" class="ml-auto shrink-0 text-2xs tabular-nums text-muted" aria-live="off">{{ figure }}</span>
+        </div>
+        <template v-else>
+            <Meter v-if="share !== undefined" :value="share" :label="t(`common.waitProgress.estimate`)" :valuetext="words.usual ?? words.elapsed" />
+            <p v-if="words.elapsed || words.usual" class="flex flex-wrap justify-between gap-x-3 text-2xs text-muted" aria-live="off">
+                <span class="tabular-nums">{{ words.elapsed }}</span>
+                <span v-if="words.usual">{{ words.usual }}</span>
+            </p>
+            <p v-if="words.giveUp" class="text-2xs text-subtle">{{ words.giveUp }}</p>
+        </template>
         <template v-if="details.length > 0">
             <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` }, `self-start`)" :aria-expanded="open" @click="open = !open">
                 <Icon :name="open ? `chevron-down` : `chevron-right`" class="size-3" aria-hidden="true" />

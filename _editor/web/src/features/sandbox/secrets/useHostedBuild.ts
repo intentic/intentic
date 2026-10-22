@@ -20,7 +20,7 @@ const buildingWork = (sandbox: string): Omit<RestartWork, "startedAt"> => ({
     what: t(`sandbox.useHostedBuild.buildingEnvironment`),
     quiet: {
         title: t(`sandbox.useHostedBuild.buildingEnvironment`),
-        detail: t(`sandbox.useHostedBuild.sandboxRestartsOntoNew`),
+        detail: t(`common.restartQuiet.detail`),
     },
 });
 
@@ -30,7 +30,7 @@ const switchingWork = (sandbox: string): Omit<RestartWork, "startedAt"> => ({
     what: t(`sandbox.useHostedBuild.restartingOntoNewEnvironment`),
     quiet: {
         title: t(`sandbox.useHostedBuild.restartingOntoNewEnvironment`),
-        detail: t(`sandbox.useHostedBuild.buildDoneSandboxBeing`),
+        detail: t(`common.restartQuiet.detail`),
     },
     untilAnswered: true,
 });

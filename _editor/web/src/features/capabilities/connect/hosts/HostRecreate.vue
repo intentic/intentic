@@ -246,15 +246,15 @@ const confirmBody = computed(() => {
 const QUIET = computed((): Record<Action, RestartQuiet> => ({
     Update: {
         title: t(`capabilities.hostRecreate.restartingOntoUpdate`),
-        detail: t(`capabilities.hostRecreate.updateAppliedReplacesSandboxs`),
+        detail: t(`common.restartQuiet.detail`),
     },
     Rebuild: {
         title: t(`capabilities.hostRecreate.restartingOntoRebuiltEnvironment`),
-        detail: t(`capabilities.hostRecreate.environmentApprovedBeingSwapped`),
+        detail: t(`common.restartQuiet.detail`),
     },
     "Roll back": {
         title: t(`capabilities.hostRecreate.rollingSandboxBack`),
-        detail: t(`capabilities.hostRecreate.restartingOntoImageRan`),
+        detail: t(`common.restartQuiet.detail`),
     },
 }));
 

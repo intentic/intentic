@@ -17,15 +17,20 @@ const outage = useVisibleOutage();
 const notice = useDiagnosisNotice(outage);
 const details = useOutageDetails(outage);
 
+const restarting = computed(() => restartExpected(active.value?.id) !== undefined && outage.elapsed.value < RESTART_PATIENCE_MS);
+
 const wait = computed<Progress | undefined>(() => {
-    const elapsedMs = outage.elapsed.value;
-    if (restartExpected(active.value?.id) !== undefined && elapsedMs < RESTART_PATIENCE_MS) {
-        return { elapsedMs, expectedMs: USUAL_RESTART_MS, giveUpMs: RESTART_PATIENCE_MS };
+    if (restarting.value) {
+        return { elapsedMs: outage.elapsed.value, expectedMs: USUAL_RESTART_MS, giveUpMs: RESTART_PATIENCE_MS };
     }
     return notice.value?.waiting === true ? notice.value.wait : undefined;
 });
+
+// A restart the reader asked for has nothing to diagnose while it is on time: the probes only say the sandbox is quiet,
+// which the card already does. Past the patience window the diagnosis takes over, with its details.
+const shownDetails = computed(() => (restarting.value ? [] : details.value));
 </script>
 
 <template>
-    <ProgressMeter v-if="wait" :progress="wait" :details="details" />
+    <ProgressMeter v-if="wait" :progress="wait" :details="shownDetails" compact />
 </template>

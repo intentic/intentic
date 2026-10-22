@@ -11,7 +11,7 @@ export const rollBackHosted = async (sandboxId: string): Promise<void> => {
         sandbox: sandboxId,
         id: `update`,
         what: t(`capabilities.hostRecreate.rollingSandboxBack`),
-        quiet: { title: t(`capabilities.hostRecreate.rollingSandboxBack`), detail: t(`capabilities.hostRecreate.restartingOntoImageRan`) },
+        quiet: { title: t(`capabilities.hostRecreate.rollingSandboxBack`), detail: t(`common.restartQuiet.detail`) },
         untilAnswered: true,
     });
     try {

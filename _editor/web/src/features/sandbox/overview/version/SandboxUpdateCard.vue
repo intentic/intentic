@@ -96,7 +96,7 @@ const restartNotice = restartOp.failure;
 // What the sandbox going quiet means, for every surface that isn't this card.
 const RESTART_QUIET = computed((): RestartQuiet => ({
     title: t(`sandbox.sandboxUpdateCard.restartingOntoNewImage`),
-    detail: t(`sandbox.sandboxUpdateCard.updateAppliedReplacesSandboxs`),
+    detail: t(`common.restartQuiet.detail`),
 }));
 
 const restartHosted = async (): Promise<void> => {

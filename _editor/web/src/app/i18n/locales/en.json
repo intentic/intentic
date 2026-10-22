@@ -1430,12 +1430,10 @@
             "costRebuild": "It builds the approved recipe on the image this sandbox already runs, which interrupts nothing, then restarts your sandbox for about half a minute. Your files (in /work) are kept.",
             "costRestartOnly": "It is already downloaded, so this is just the restart: about half a minute. Your files (in /work) are kept.",
             "doesButton": "does this with a button.",
-            "environmentApprovedBeingSwapped": "The environment you approved is being swapped in — about half a minute, then this page reconnects on its own. Your files in /work are kept.",
             "intenticWindows": "Intentic for Windows",
             "now": "{action} now",
             "onlySandboxRestartsNothing": "Only the sandbox restarts — nothing else on that device is touched. Your files (in /work) are kept.",
             "rebuildVerb": "Rebuild",
-            "restartingOntoImageRan": "It is restarting onto the image it ran before its last update — about half a minute, then this page reconnects on its own. Your files in /work are kept.",
             "restartingOntoRebuiltEnvironment": "Restarting onto your rebuilt environment",
             "restartingOntoUpdate": "Restarting onto the update",
             "rollBackHeader": "Roll this sandbox back?",
@@ -1447,7 +1445,6 @@
             "runsOnDeviceHosting": "Runs on the device hosting this sandbox. {cost}",
             "skipTerminalNextTime": "Skip the terminal next time:",
             "startingOnDevice": "Starting on that device…",
-            "updateAppliedReplacesSandboxs": "The update you applied replaces this sandbox's container — about half a minute, then this page reconnects on its own. Your files in /work are kept.",
             "updateVerb": "Update",
             "workDownloaded": "The update is downloaded and built first",
             "workRebuilt": "Your environment is rebuilt first",
@@ -4649,7 +4646,12 @@
             "longerThanUsual": "longer than the usual {usual}",
             "giveUp": "If it takes more than {limit}, we'll show you what you can do.",
             "estimate": "Estimated progress",
-            "details": "Technical details"
+            "details": "Technical details",
+            "figureOfUsual": "{elapsed} / ~{usual}",
+            "figureOverdue": "{elapsed}, longer than usual"
+        },
+        "restartQuiet": {
+            "detail": "This page reconnects by itself. Your files in /work are kept."
         }
     },
     "connect": {
@@ -8005,7 +8007,6 @@
             "havingTrouble": "Having trouble?",
             "troubleLead": "If something stopped working after the last update, you can go back to the version this sandbox ran before it.",
             "takePublishedImageInstead": "Take the published image instead",
-            "updateAppliedReplacesSandboxs": "The update you applied replaces this sandbox's container — about half a minute, then this page reconnects on its own. Your files in /work are kept.",
             "waitFleetToSettle": "Wait for the fleet to settle, or continue if that is acceptable.",
             "whatUpdatesNeverBreak": "what updates never break",
             "updateConvertsStoredFiles": "On its first boot, this update converts one stored file | On its first boot, this update converts {count} stored files",
@@ -8217,9 +8218,8 @@
         },
         "useDevRebuild": {
             "couldntReachDevice": "Couldn't reach that device to rebuild this sandbox.",
-            "rebuildSwapsSandboxOnto": "Your rebuild swaps this sandbox onto its new image when it's done: about half a minute of quiet, then this page reconnects on its own. Your files in /work are kept.",
             "rebuildingFromCheckout": "Rebuilding from your checkout",
-            "restartingOntoImageBuilt": "Restarting onto the image you built"
+            "restartingOntoImageBuilt": "Restarting onto your new build"
         },
         "useEngines": {
             "couldNotChangeSource": "Could not change {label} version source.",
@@ -8233,10 +8233,8 @@
             "comesEverySandbox": "Comes with every sandbox"
         },
         "useHostedBuild": {
-            "buildDoneSandboxBeing": "The build is done and your sandbox is being swapped onto it — about half a minute, then this page reconnects on its own. Your files in /work are kept.",
             "buildingEnvironment": "Building your environment",
-            "restartingOntoNewEnvironment": "Restarting onto your new environment",
-            "sandboxRestartsOntoNew": "Your sandbox restarts onto the new image once the build is done — about half a minute of quiet, then this page reconnects on its own. Your files in /work are kept."
+            "restartingOntoNewEnvironment": "Restarting onto your new environment"
         },
         "useSandboxLiveness": {
             "noSandboxSelected": "No sandbox is selected.",
