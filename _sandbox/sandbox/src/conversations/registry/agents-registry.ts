@@ -34,7 +34,6 @@ import { type LandMarkBooks, type LandMarks, landMarksAmender, markedOnLand } fr
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
 import { unfinishedOf } from "./unfinished-work.js";
 import { identityOf, peopleOfConversation } from "../actor/identity-latch.js";
-import { withHomeTitle } from "./home-title.js";
 import { activityLive, awaitingWake, type ConversationState, NO_USAGE, type TurnUsage, nextPromptDayAt } from "../actor/conversation-state.js";
 import { conversationStatus, parkedKinds, permissionAskOf } from "../actor/conversation-status.js";
 import {
@@ -75,6 +74,18 @@ const sanitizeLine = (text: string, limit: number): string | undefined => {
 };
 
 const sanitizeTitle = (prompt: string): string | undefined => sanitizeLine(prompt, MAX_TITLE_LENGTH);
+
+// A home is a person's standing conversation, not the job their first message described. Derive its name wherever an
+// entry enters the fleet, including older homes with model or plan titles. A person's explicit rename always stands.
+const withHomeTitle = (entry: PersistedAgent): PersistedAgent => {
+    if (entry.identity.home !== true || entry.social.title?.source === "user") {
+        return entry;
+    }
+    const owner = entry.social.owner;
+    const who = owner?.name?.trim() || owner?.email;
+    const text = oneLine(who === undefined ? "Home" : `Home · ${who}`, MAX_TITLE_LENGTH, { ellipsis: false });
+    return { ...entry, social: { ...entry.social, title: { text, source: "derived" } } };
+};
 
 // A provider's failure sentence or a tool-call stand-in; never written as a name except by an explicit rename, and a
 // stored one forfeits its rank so the next honest title replaces it.
