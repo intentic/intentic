@@ -314,9 +314,9 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
             :aria-expanded="open"
             v-on="menu.trigger"
         >
-            <!-- A local window's chip is its folder's letter: the place it shows, as the workspace's is its sandbox's logo. -->
+            <!-- This computer has one mark, whichever folder the local window shows. -->
             <span class="flex size-full items-center justify-center overflow-hidden rounded-md [&_span]:text-inherit">
-                <SandboxLogo v-if="folder" :name="folder.name" />
+                <Icon v-if="folder" name="desktop" class="size-2/3" aria-hidden="true" />
                 <SandboxLogo v-else :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
             </span>
         </button>
@@ -328,16 +328,8 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
              is unreadable. The plate is the tile's own ground, so it reads as a notch cut into the logo rather than a
              second badge. No active sandbox is no link to report, so the corner stays empty rather than guessing.
              aria-hidden: both sentences are already in the button's label above. -->
-        <!-- A folder's mark is the computer it is on, and says nothing of a connection: there is none to report. -->
         <span
-            v-if="folder"
-            class="sandbox-switcher-mark pointer-events-none absolute bottom-0.5 left-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none text-subtle"
-            aria-hidden="true"
-        >
-            <Icon name="desktop" class="text-[0.9em]" />
-        </span>
-        <span
-            v-else-if="placement"
+            v-if="placement"
             class="sandbox-switcher-mark pointer-events-none absolute bottom-0.5 left-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none"
             :class="connectionInkClass"
             aria-hidden="true"
