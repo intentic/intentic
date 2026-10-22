@@ -26,7 +26,7 @@ import { applyReply } from "../run/turn/turn-interactions.js";
 import { carryOnTurn } from "../run/turn/turn-resume.js";
 import { freshRefusal } from "../context/fresh-session.js";
 import { answeredAfterDraft } from "../../conversations/drafts/composer-drafts.js";
-import { type HomeOpening, homeOpening } from "../../conversations/home/home-conversation.js";
+import { type HomeOpening, homeOpening, refuseUnlessHome } from "../../conversations/home/home-conversation.js";
 
 // What the audit trail keeps of an answer to a card: which card, what kind, and for a permission the decision itself.
 const replyNote = (input: AgentReply): AuditNote => ({
@@ -63,16 +63,27 @@ const openingOf = (
     return { ...opt("home", home.home), ...opt("conversationAutoLand", autoLand) };
 };
 
+// A guest drives only its own conversations (auth/fleet-scope.ts); one the registry has never seen is nobody's yet, and
+// becomes the caller's on its first turn.
+const ownedBy = (services: Services, context: OrpcContext, conversationId: string | undefined): void => {
+    const entry = conversationId === undefined ? undefined : services.agents.entry(conversationId);
+    if (entry !== undefined) {
+        refuseUnlessVisible(context.identity, provenanceOf(entry));
+    }
+};
+
+// What a write into a conversation asks besides: a home-only member writes into their own home and nothing else
+// (home-conversation.ts refuseUnlessHome). Reading a run, and answering a card, stay with `ownedBy`: the sessions their
+// home started are theirs to watch, and a permission one of them waits on is their consent to give.
+const drivenBy = (services: Services, context: OrpcContext, conversationId: string): void => {
+    ownedBy(services, context, conversationId);
+    refuseUnlessHome(services, context, conversationId);
+};
+
 export const createAgentRoutes = (services: Services) => {
     const i = implement(agentContract).$context<OrpcContext>();
-    // A guest drives only its own conversations (auth/fleet-scope.ts); one the registry has never seen is nobody's
-    // yet, and becomes the caller's on its first turn.
-    const own = (context: OrpcContext, conversationId: string | undefined): void => {
-        const entry = conversationId === undefined ? undefined : services.agents.entry(conversationId);
-        if (entry !== undefined) {
-            refuseUnlessVisible(context.identity, provenanceOf(entry));
-        }
-    };
+    const own = (context: OrpcContext, conversationId: string | undefined): void => ownedBy(services, context, conversationId);
+    const drive = (context: OrpcContext, conversationId: string): void => drivenBy(services, context, conversationId);
     // A change to a waiting message answered with the queue it left, or refused as the change found it.
     const queueAnswer = (conversationId: string, change: QueueChange): ConversationQueue => {
         if (change === "stale") {
@@ -104,7 +115,7 @@ export const createAgentRoutes = (services: Services) => {
             // The card has to work in the part of the workspace this caller holds, and a guest has to name one at all;
             // checked before anything is started. An unfenced caller pays no read for this.
             await refuseUnlessReachable(services, context.identity, input.actsAs);
-            own(context, conversationId);
+            drive(context, conversationId);
             const opening = openingOf(services, context, conversationId, input);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const speaker = speakerOf(context.identity, context.principal);
@@ -151,7 +162,7 @@ export const createAgentRoutes = (services: Services) => {
         // renamed by the press. NOT_FOUND when nothing is held; never CONFLICT, since a running turn already cleared
         // the entry.
         resume: i.resume.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             // A person's press, which reopens an archived conversation at this door: the engine refuses every archived one.
             await services.agents.clearArchived([input.conversationId]);
             const run = await services.turns.resume(input.conversationId, input.routing);
@@ -166,7 +177,7 @@ export const createAgentRoutes = (services: Services) => {
         }),
         // The one command that moves who pays (agent/providers/accounts/switch-account.ts); asked to `run`, a held turn re-runs there at once.
         switchAccount: i.switchAccount.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             const outcome = await switchAccount(services, input);
             if (outcome.kind === "unknown") {
                 throw new ORPCError("NOT_FOUND", { message: "no conversation with that id" });
@@ -178,7 +189,7 @@ export const createAgentRoutes = (services: Services) => {
         }),
         // A person's pick of how a held turn continues once its cache is cold (agent/providers/limit-handoff.ts).
         chooseHandoff: i.chooseHandoff.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             const taken = await services.conversations.send(input.conversationId, { kind: "handoff-chosen", handoff: input.handoff }).settled;
             if (!taken) {
                 throw new ORPCError("NOT_FOUND", { message: "no turn a spent allowance holds there can continue that way" });
@@ -267,7 +278,7 @@ export const createAgentRoutes = (services: Services) => {
         // Injects a message into a running turn, between tool calls; NOT_FOUND means nothing running takes words.
         // Composed exactly like a turn's own prompt, so a mid-turn attachment reads like one on a fresh message.
         steer: i.steer.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             const { conversationId, ...steer } = input;
             const steered = await services.turns.steerIn(conversationId, steer);
             if ("invalid" in steered) {
@@ -281,11 +292,11 @@ export const createAgentRoutes = (services: Services) => {
         // Hard-cancels the conversation's running turn daemon-side; the browser's own fetch abort can't. Answers, rather
         // than refuses, a stop that found its run already over: the press raced the turn's own end.
         stop: i.stop.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             return services.turns.stop(input);
         }),
         queueEdit: i.queueEdit.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             // Taking words back is what removal is for; an edit to nothing would send a message with nothing in it.
             if (input.text.trim().length === 0) {
                 throw new ORPCError("BAD_REQUEST", { message: "A waiting message needs words: take it back instead of emptying it." });
@@ -293,14 +304,14 @@ export const createAgentRoutes = (services: Services) => {
             return queueAnswer(input.conversationId, await services.turns.reword(input));
         }),
         queueRemove: i.queueRemove.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             const change = await services.turns.unqueue(input);
             // The message took the conversation it opened with it: answered with the queue the removal left, since nothing
             // reads one back from a conversation that is gone, and said so, for the window to make it a draft again.
             return typeof change === "object" ? { ...queueView(change.unopened), unopened: true } : queueAnswer(input.conversationId, change);
         }),
         queueResume: i.queueResume.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             // A press on a held queue is a person's say-so, as their message would be.
             await services.agents.clearArchived([input.conversationId]);
             const released = await services.turns.release(input);
@@ -311,7 +322,7 @@ export const createAgentRoutes = (services: Services) => {
         // Books what waits for another instant or for after another conversation's work lands. Answered with the queue it
         // left, which is empty of these words when what they would wait for has already come and they went out.
         queueSchedule: i.queueSchedule.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             const outcome = await services.turns.reschedule(input);
             if (outcome === "missing") {
                 throw new ORPCError("NOT_FOUND", {
@@ -326,7 +337,7 @@ export const createAgentRoutes = (services: Services) => {
         // Rewinds a message, its files, transcript and session together. CONFLICT rather than queuing behind a running
         // turn: by the time it finished, the workspace would have moved on from what the user is looking at.
         rewind: i.rewind.handler(async ({ input, context }) => {
-            own(context, input.conversationId);
+            drive(context, input.conversationId);
             const outcome = await rewindConversation(services, input.conversationId, input);
             if (outcome === "busy") {
                 throw new ORPCError("CONFLICT", { message: "This agent is running a turn, stop it before going back." });

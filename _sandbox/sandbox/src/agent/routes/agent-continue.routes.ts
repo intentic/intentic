@@ -3,6 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import type { Services } from "../../composition.js";
+import { refuseUnlessHome } from "../../conversations/home/home-conversation.js";
 import { queueView } from "../../conversations/actor/conversation-queue.js";
 import type { ContinueBooked } from "../../seams/turn-starter.js";
 import { speakerOf, spokenBy } from "../../seams/turn-speaker.js";
@@ -25,7 +26,7 @@ const refusalOf = (outcome: ContinueBooked): ORPCError<string, unknown> | undefi
     return new ORPCError("BAD_REQUEST", { message: outcome.invalid });
 };
 
-export const createAgentContinueRoutes = (services: Pick<Services, "agents" | "conversations" | "turns">) => {
+export const createAgentContinueRoutes = (services: Pick<Services, "agents" | "conversations" | "turns" | "auth">) => {
     const i = implement(agentContract).$context<OrpcContext>();
     return {
         // Answered with the queue it left, which holds no continuation when its time had already come and it carried on now.
@@ -35,6 +36,7 @@ export const createAgentContinueRoutes = (services: Pick<Services, "agents" | "c
             if (entry !== undefined) {
                 refuseUnlessVisible(context.identity, provenanceOf(entry));
             }
+            refuseUnlessHome(services, context, input.conversationId);
             const refusal = refusalOf(await services.turns.continueAt({ ...input, ...spokenBy(speakerOf(context.identity, context.principal)) }));
             if (refusal !== undefined) {
                 throw refusal;

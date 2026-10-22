@@ -14,6 +14,7 @@ import { landingVerdict, type RuleFacts, standing } from "../../rules/rules.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { ReconcileOutcome } from "../../workspace/deps/reconcile-deps.js";
 import { opt } from "../../opt.js";
+import { homeOwnerLands } from "../../auth/operator.js";
 
 // A finished isolated turn's land, step 4 of the turn's close (turn-close.ts). Whether its work reaches the main tree or
 // waits on its branch is decided purely, from the rules and the paths it touched; no check holds it, and none runs after
@@ -78,7 +79,19 @@ export interface LandBooks {
 
 export type LandingDeps = Pick<
     Services,
-    "agents" | "conversations" | "sandboxSettings" | "agentWorktrees" | "logger" | "perf" | "activity" | "ruleFirings" | "events" | "dependencies"
+    | "agents"
+    | "conversations"
+    | "sandboxSettings"
+    | "agentWorktrees"
+    | "logger"
+    | "perf"
+    | "activity"
+    | "ruleFirings"
+    | "events"
+    | "dependencies"
+    | "auth"
+    | "members"
+    | "ownerEmail"
 >;
 
 // The hand-off a land makes that needs the whole daemon, bound by the caller that has it.
@@ -245,7 +258,9 @@ const HELD_FOR_PARENT: LandingDecision = { mode: "measure", writes: [] };
  * (wake-held-land.ts) both make.
  */
 export const decideLanding = async (
-    deps: Pick<Services, "sandboxSettings" | "agentWorktrees" | "logger"> & { readonly agents: Pick<Services["agents"], "entry"> },
+    deps: Pick<Services, "sandboxSettings" | "agentWorktrees" | "logger" | "auth" | "members" | "ownerEmail"> & {
+        readonly agents: Pick<Services["agents"], "entry">;
+    },
     target: LandTarget,
     finished: IsolatedAgent,
     autoLand: boolean | undefined,
@@ -259,7 +274,20 @@ export const decideLanding = async (
     }
     const { rules } = await deps.sandboxSettings.get();
     const facts = await landingFacts(deps, rules, finished, span);
-    return landingDecision(rules, facts, autoLand ?? finished.postures.autoLand);
+    return landingDecision(rules, facts, await homeOverride(deps, finished, autoLand ?? finished.postures.autoLand));
+};
+
+// A home's own answer to landing is its owner's authority now (auth/operator.ts homeOwnerLands), whatever its opening
+// latched: lands when they may land, else the rules decide as for anyone's work. A "hold" somebody set on it still holds.
+const homeOverride = async (
+    deps: Pick<Services, "auth" | "members" | "ownerEmail">,
+    finished: IsolatedAgent,
+    asked: boolean | undefined,
+): Promise<boolean | undefined> => {
+    if (finished.identity.home !== true || asked === false) {
+        return asked;
+    }
+    return (await homeOwnerLands(deps, finished.social.owner?.email)) ? true : undefined;
 };
 
 // Lands a clean turn, or runs the same pass in `measure` where it is held; nothing at all for a failed or stopped one,

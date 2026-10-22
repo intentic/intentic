@@ -3,6 +3,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { OrpcContext } from "../../app-env.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import type { Services } from "../../composition.js";
+import { refuseUnlessHome } from "../../conversations/home/home-conversation.js";
 import { queueView } from "../../conversations/actor/conversation-queue.js";
 import { opt } from "../../opt.js";
 
@@ -10,7 +11,7 @@ import { opt } from "../../opt.js";
 // (conversation-queue.ts, rerouted). Beside agent.routes.ts rather than in it: router.ts merges them into the `agent`
 // group.
 
-export const createAgentQueueRoutes = (services: Pick<Services, "agents" | "conversations">) => {
+export const createAgentQueueRoutes = (services: Pick<Services, "agents" | "conversations" | "auth">) => {
     const i = implement(agentContract).$context<OrpcContext>();
     return {
         // The words otherwise go by themselves on the pick they were sent under, whatever the composer says now. Held ones
@@ -21,6 +22,7 @@ export const createAgentQueueRoutes = (services: Pick<Services, "agents" | "conv
             if (entry !== undefined) {
                 refuseUnlessVisible(context.identity, provenanceOf(entry));
             }
+            refuseUnlessHome(services, context, input.conversationId);
             if (services.conversations.queued(input.conversationId).items.length === 0) {
                 throw new ORPCError("NOT_FOUND", { message: "Nothing waits in that conversation's queue to move: it has gone out, or was taken back." });
             }

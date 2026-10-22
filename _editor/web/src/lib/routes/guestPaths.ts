@@ -3,9 +3,25 @@
 // shell sends it home rather than draw a screen of refusals. The daemon is the fence; this only spares the screen.
 // Pure, apart from the composable that applies it (guestFence.ts), so the table can be pinned without a window.
 
-export const GUEST_HOME = `/chat`;
+const GUEST_HOME = `/chat`;
 
 // Matched on prefixes, since chat, agents and settings all carry their own sub-paths.
 const GUEST_ROOTS = [`/chat`, `/agents`, `/agent/`, `/settings`, `/sandbox/access`, `/accept-invite`, `/login`, `/floating/chat`] as const;
 
 export const guestAllowedPath = (path: string): boolean => GUEST_ROOTS.some((root) => path === root || path.startsWith(root.endsWith(`/`) ? root : `${root}/`));
+
+// A home-only guest (members.ts `agents: "home"`) has one conversation, its home, and the master view it lives in: no
+// chat of its own to start, no board. It may read the sessions its home started (the ledger links to each), its own
+// settings and the one sandbox section every guest has business in.
+const HOME_ONLY_HOME = `/home`;
+
+const HOME_ONLY_ROOTS = [`/home`, `/agents/`, `/settings`, `/sandbox/access`, `/accept-invite`, `/login`] as const;
+
+export const homeOnlyAllowedPath = (path: string): boolean =>
+    HOME_ONLY_ROOTS.some((root) =>
+        root.endsWith(`/`) ? path.startsWith(root) && path.length > root.length : path === root || path.startsWith(`${root}/`),
+    );
+
+/** Where a guest may stand, and where the shell sends it from anywhere else, by which kind of guest it is. */
+export const guestFenceOf = (homeOnly: boolean): { readonly home: string; readonly allowed: (path: string) => boolean } =>
+    homeOnly ? { home: HOME_ONLY_HOME, allowed: homeOnlyAllowedPath } : { home: GUEST_HOME, allowed: guestAllowedPath };

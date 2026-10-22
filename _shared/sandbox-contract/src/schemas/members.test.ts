@@ -1,4 +1,4 @@
-import { accessRefusal, memberAccess, tierOf } from "./members.js";
+import { accessRefusal, landsHere, memberAccess, tierOf } from "./members.js";
 
 // A person's access is three answers, and the tier is what they add up to; a row from before the answers reads as its
 // role meant, so nobody's access moves when the daemon learns the new fields.
@@ -43,5 +43,33 @@ describe(`accessRefusal`, () => {
         expect(accessRefusal(access({ see: [`web`], edit: [`web`, `finance`] }))).toContain(`finance`);
         expect(accessRefusal(access({ edit: [`web`] }))).toBeUndefined();
         expect(accessRefusal(access({ edit: [] }))).toContain(`at least one area`);
+    });
+});
+
+// Home only: a guest whose one conversation is its home, and whose home lands by itself exactly when they may land it.
+describe(`home-only access`, () => {
+    it(`is a guest that edits nothing and needs no area, carrying its answer to landing`, () => {
+        expect(memberAccess({ role: `guest`, agents: `home` })).toEqual({ manage: false, agents: `home`, see: undefined, edit: `none` });
+        expect(memberAccess({ role: `guest`, agents: `home`, edit: `all`, lands: true })).toEqual({
+            manage: false,
+            agents: `home`,
+            see: undefined,
+            edit: `none`,
+            lands: true,
+        });
+        expect(tierOf({ manage: false, agents: `home`, see: undefined, edit: `none` })).toBe(`guest`);
+        expect(accessRefusal({ manage: false, agents: `home`, see: undefined, edit: `none`, lands: true })).toBeUndefined();
+    });
+
+    it(`refuses landing on anyone but a home-only person, and editing on one`, () => {
+        expect(accessRefusal({ manage: false, agents: `run`, see: undefined, edit: `none`, lands: true })).toMatch(/home-only/);
+        expect(accessRefusal({ manage: false, agents: `home`, see: undefined, edit: [`web`] })).toMatch(/changes nothing by hand/);
+    });
+
+    it(`gives one answer to whether work lands by itself and whether they may land it`, () => {
+        expect(landsHere({ manage: true, agents: `run` })).toBe(true);
+        expect(landsHere({ manage: false, agents: `home`, lands: true })).toBe(true);
+        expect(landsHere({ manage: false, agents: `home` })).toBe(false);
+        expect(landsHere({ manage: false, agents: `run`, lands: true })).toBe(false);
     });
 });

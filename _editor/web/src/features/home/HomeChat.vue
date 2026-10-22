@@ -11,7 +11,9 @@ import { registry } from "../../models/fleet/useAgents-registry";
 import { workLedger } from "../../models/home/homeFacts";
 import ChatPane from "../chat/panel/ChatPane.vue";
 import HomeChatSlot from "./HomeChatSlot.vue";
-import { useDevice } from "@intentic/ui";
+import { Button, useDevice } from "@intentic/ui";
+import { useRole } from "../../client/sandbox/useRole";
+import { invalidateAgentAction, landAgent, nothingLanded } from "../../models/fleet/agentActions";
 
 const t = useT();
 const sandbox = useSandbox();
@@ -26,6 +28,31 @@ onUnmounted(() => {
     homeConversation.value = undefined;
 });
 const ledger = computed(() => (conversation.value === undefined ? [] : workLedger(registry.value, conversation.value.conversationId, now.value)));
+// What the home holds back: its work, when a landing rule kept it or its person may not land (`ready`), or a clash with
+// the workspace (`conflict`). Who may press Land is who the home lands for (useRole `canLandHome`), the same answer the
+// daemon gives its own land, so the person and the agent working for them never differ on it.
+const { canLandHome } = useRole();
+const homeCard = computed(() => registry.value.find((agent) => agent.id === conversation.value?.conversationId));
+const held = computed(() => homeCard.value?.status === `ready` || homeCard.value?.status === `conflict`);
+const landing = shallowRef(false);
+const landNote = shallowRef<string>();
+const land = async (): Promise<void> => {
+    const id = conversation.value?.conversationId;
+    if (id === undefined || landing.value) {
+        return;
+    }
+    landing.value = true;
+    landNote.value = undefined;
+    try {
+        const result = await landAgent(id);
+        await invalidateAgentAction(id);
+        landNote.value = !result.landed ? t(`home.landConflict`) : result.changed ? undefined : nothingLanded();
+    } catch {
+        landNote.value = t(`home.landFailed`);
+    } finally {
+        landing.value = false;
+    }
+};
 watch(
     () => [sandbox.activeSandboxId.value, sandbox.reachable.value, retry.value] as const,
     async ([id, reachable], _old, cleanup) => {
@@ -74,6 +101,13 @@ watch(
                 </div>
             </div>
         </details>
+        <div v-if="held" class="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2 text-xs" role="status">
+            <span class="min-w-0 flex-1 text-muted">{{
+                homeCard?.status === `conflict` ? t(`home.heldConflict`) : canLandHome ? t(`home.heldForYou`) : t(`home.heldForMaintainer`)
+            }}</span>
+            <Button v-if="canLandHome && homeCard?.status === `ready`" :label="t(`home.land`)" size="small" :loading="landing" @click="land" />
+        </div>
+        <p v-if="landNote" class="shrink-0 border-b border-line px-4 py-2 text-xs text-muted" role="status">{{ landNote }}</p>
         <!-- A desktop lends the shell's chat panel this page (HomeChatSlot.vue); a phone, with no panel above its router,
              draws the pane itself on the chat's own surface. -->
         <HomeChatSlot v-if="conversation && !mobile" :key="`${sandbox.activeSandboxId.value}:${conversation.conversationId}`" />

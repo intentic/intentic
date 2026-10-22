@@ -1,3 +1,4 @@
+import { memberAccess } from "@intentic/sandbox-contract/schemas/members";
 import { fenceHoldsPersona } from "@intentic/sandbox-contract/policy/persona-home";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { MembersStore } from "../auth/auth.js";
@@ -45,7 +46,8 @@ export const checks = ({ areas, members, personas }: AreaRosterDeps): readonly I
             // folder is edited, or the card deleted, long after the grant was made — which is why it is swept for.
             const [cards, manifest, roster] = await Promise.all([personas.list(), areas.list(), members.list()]);
             const stranded = roster
-                .filter((member) => member.role === "guest")
+                // A home-only guest talks to its own home conversation, which needs no card.
+                .filter((member) => member.role === "guest" && memberAccess(member).agents === "chat")
                 .filter((member) => !cards.some((card) => fenceHoldsPersona(foldersOf(manifest, member.areas), card)))
                 .map((member) => member.email);
             if (stranded.length > 0) {

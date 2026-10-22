@@ -14,7 +14,7 @@ import { takeLandHeldForWake } from "./wake-held.js";
 // it: the skipped land runs here, deciding as the close would have (the rules, the turn's own answer to landing by
 // itself) and landing as a person's press does (land-by-hand.ts).
 
-export type WakeHeldLandDeps = LandByHandDeps & Pick<Services, "sandboxSettings" | "activity" | "ruleFirings">;
+export type WakeHeldLandDeps = LandByHandDeps & Pick<Services, "sandboxSettings" | "activity" | "ruleFirings" | "auth" | "members" | "ownerEmail">;
 
 // Whether the held land is not this moment's to run: a turn or a land is under way, or the conversation still waits on
 // another wake, whose turn's own close decides the land again.

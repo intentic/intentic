@@ -2,7 +2,7 @@ import type { Activation, CapabilityFacts, Disposable, RepoFacts, ViewBadge, Vie
 import { computed, shallowRef } from "vue";
 import { type Audience, useAudience } from "../../app/useAudience";
 import { useRole } from "../../client/sandbox/useRole";
-import { guestAllowedPath } from "../../lib/routes/guestPaths";
+import { guestFenceOf } from "../../lib/routes/guestPaths";
 import { badgeSpeaks } from "./viewBadge";
 import { t } from "@intentic/ui/i18n";
 
@@ -145,22 +145,29 @@ export const railGroupsFor = (audience: Audience): readonly RailGroup[] => railG
 
 // A guest's rail: the chat it drives and the board of its own conversations, whichever audience it answered. Every
 // other tile opens on a read the daemon refuses a guest, and a tile that only ever shows a refusal is not a tile.
-export const guestRailGroups = (): readonly RailGroup[] => [
-    { id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] },
-];
+// A home-only guest's rail holds nothing: its one conversation is the master view's, which draws its own rail.
+export const guestRailGroups = (homeOnly = false): readonly RailGroup[] =>
+    homeOnly ? [] : [{ id: `work`, label: t(`views.registry.work`), items: [always(`chat`), always(`agents`)] }];
 
 // Whether this reader can open a tile at all, asked of every list of sections the shell draws: the rail's tiles, its
 // More menu, the phone's rail. A guest is fenced to a handful of paths (lib/routes/guestPaths.ts) and a tile
 // outside them answers a press by bouncing to the chat, which reads as a broken tile rather than as a boundary —
 // so the offer is withdrawn instead. Keyed on the destination, not the id, so a section added later is covered by the
 // fence it will actually meet.
-export const sectionReachable = (to: string): boolean => !useRole().isGuest.value || guestAllowedPath(to);
+// A home-only guest stands only in the master view and the sessions its home started (guestPaths.ts homeOnlyAllowedPath).
+export const sectionReachable = (to: string): boolean => {
+    const { isGuest, homeOnly } = useRole();
+    return !isGuest.value || guestFenceOf(homeOnly.value).allowed(to);
+};
 
 // The developer's table, which is also what every surface read before there were two.
 export const railGroups = (): readonly RailGroup[] => railGroupsByAudience().developer;
 
 // The table for whoever is looking; reactive when read inside a computed, like everything below that reads it.
-const activeGroups = (): readonly RailGroup[] => (useRole().isGuest.value ? guestRailGroups() : railGroupsFor(useAudience().audience.value));
+const activeGroups = (): readonly RailGroup[] => {
+    const { isGuest, homeOnly } = useRole();
+    return isGuest.value ? guestRailGroups(homeOnly.value) : railGroupsFor(useAudience().audience.value);
+};
 
 // An unlisted id is `signal`, matching railRank's default: it appends and earns its place by badging.
 export const railPolicy = (id: string): RailPolicy =>

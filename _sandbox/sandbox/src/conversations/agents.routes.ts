@@ -35,6 +35,7 @@ import { armKeepWarm, dropKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
 import { subagentTranscriptOf } from "../agent/subagents/subagent-transcript.js";
 import { cancelFamily, familyOf } from "../agent/subagents/children.js";
 import { draftRoutes } from "./drafts/drafts.routes.js";
+import { refuseUnlessHome } from "./home/home-conversation.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
@@ -63,18 +64,22 @@ export const createAgentsRoutes = (services: Services) => {
     // The one lookup every route here addresses a conversation through: unknown is NOT_FOUND, and one the caller may not
     // see (a guest's colleague's, or work outside a fenced member's areas) is FORBIDDEN (auth/fleet-scope.ts). A route's
     // role floor says what a caller may do, never to whose conversation, so no route reads or acts on an id without it.
-    const entryFor = (id: string, context: OrpcContext): PersistedAgent => {
+    // `drive`: a write a home-only member makes on their own home alone (home-conversation.ts refuseUnlessHome).
+    const entryFor = (id: string, context: OrpcContext, drive?: "drive"): PersistedAgent => {
         const entry = services.agents.entry(id);
         if (entry === undefined) {
             throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
         }
         refuseUnlessVisible(context.identity, provenanceOf(entry));
+        if (drive !== undefined) {
+            refuseUnlessHome(services, context, id);
+        }
         return entry;
     };
     // Branch-only half of the registry, for routes that act on a worktree; a workspace conversation can't answer these,
     // so it's BAD_REQUEST, not NOT_FOUND.
-    const isolatedEntryOf = (id: string, context: OrpcContext): IsolatedAgent => {
-        const entry = entryFor(id, context);
+    const isolatedEntryOf = (id: string, context: OrpcContext, drive?: "drive"): IsolatedAgent => {
+        const entry = entryFor(id, context, drive);
         if (!isIsolated(entry)) {
             throw new ORPCError("BAD_REQUEST", { message: "this conversation works in the shared workspace and has no isolated branch" });
         }
@@ -261,7 +266,7 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Legal mid-turn: a title touches no worktree state, and the registry re-reads the entry at begin/finish.
         rename: i.rename.handler(async ({ input, context }) => {
-            entryFor(input.id, context);
+            entryFor(input.id, context, "drive");
             const summary = await services.agents.setTitle(input.id, input.title, "user");
             if (summary === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "title is empty" });
@@ -301,11 +306,7 @@ export const createAgentsRoutes = (services: Services) => {
                     throw new ORPCError("CONFLICT", { message: answer.refused });
                 }
             }
-            const summary = services.agents.get(entry.id);
-            if (summary === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
-            }
-            return summary;
+            return summaryAfter(services, entry.id);
         }),
         // Isolated agents only, a workspace conversation has no land to ask for. Legal mid-turn, like `autoLand`; needs
         // a verified identity to attribute the request to.
@@ -406,11 +407,7 @@ export const createAgentsRoutes = (services: Services) => {
             // is disarmed alone; an unknown name is already-gone, not an error, since it may have fired mid-press.
             await (input.watchId === undefined ? cancelWatchersFor(entry.id) : cancelWatcher(entry.id, input.watchId));
             // Reads back through `get`, not the live roster: an archived conversation can still hold armed watches.
-            const summary = services.agents.get(entry.id);
-            if (summary === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
-            }
-            return summary;
+            return summaryAfter(services, entry.id);
         }),
         // A person's way to end what a conversation left running: the server it handed over, the build it waits on.
         // Legal in every state, mid-turn included; the job's watch is disarmed before it ends, so nothing wakes.
@@ -421,11 +418,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (job !== undefined) {
                 await stopJob({ conversations: services.conversations, logger: services.logger }, job, "person");
             }
-            const summary = services.agents.get(entry.id);
-            if (summary === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
-            }
-            return summary;
+            return summaryAfter(services, entry.id);
         }),
         // Measured against main as it stands, not the last land's record. A committed row leaves the list; uncommitted
         // stays flagged `landed`; discarded-after-land goes back to unflagged.
@@ -523,7 +516,8 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         // Manual land, the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input, context }) => {
-            const entry = isolatedEntryOf(input.id, context);
+            // A home-only member reaches this press only when their home lands by itself (auth/role-floor.ts), and only on it.
+            const entry = isolatedEntryOf(input.id, context, "drive");
             landable(input.id, input.force === true);
             // A second press while one is in flight would rebase the worktree the first is reading; the card already
             // reads `landing`, so a refusal is all it needs.
@@ -554,7 +548,7 @@ export const createAgentsRoutes = (services: Services) => {
         // overlapping requests can't undo each other.
         archive: i.archive.handler(async ({ input, context }) => {
             for (const id of input.ids) {
-                entryFor(id, context);
+                entryFor(id, context, "drive");
                 notRunning(id);
             }
             const { archived, failed } = await archiveAgents(services, input.ids, Date.now());
@@ -567,7 +561,7 @@ export const createAgentsRoutes = (services: Services) => {
         }),
         unarchive: i.unarchive.handler(async ({ input, context }) => {
             for (const id of input.ids) {
-                entryFor(id, context);
+                entryFor(id, context, "drive");
             }
             // No worktree restore: the next turn's ensure() rebuilds the checkout from the branch.
             await services.agents.clearArchived(input.ids);

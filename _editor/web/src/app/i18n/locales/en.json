@@ -7567,7 +7567,12 @@
             "partPrograms": "Programs",
             "partAllowed": "Allowed",
             "allowedEmpty": "Nothing is allowed past the rules",
-            "allowedEmptyLine": "When you let a conversation past its persona or area, or allow something for the whole sandbox from a card, it is listed here to take back."
+            "allowedEmptyLine": "When you let a conversation past its persona or area, or allow something for the whole sandbox from a card, it is listed here to take back.",
+            "agentsHome": "Home only",
+            "agentsHomeNote": "Only their own home conversation, from the master view: it delegates, judges and merges for them. Nothing else of the sandbox.",
+            "homeLands": "Lands its work",
+            "homeLandsNote": "Their home conversation lands and commits what it accepts by itself, and they may land it too. Off, it waits for you.",
+            "wordHomeOnly": "Home only"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Agent settings category",
@@ -12849,6 +12854,12 @@
         "offline": "This sandbox is not connected.",
         "retry": "Try again",
         "open": "All sandboxes",
-        "doubleClickToEnter": "Double-click to enter"
+        "doubleClickToEnter": "Double-click to enter",
+        "land": "Land",
+        "landConflict": "It clashed with the workspace and nothing landed: ask your home conversation to resolve it.",
+        "landFailed": "Could not land it. Try again.",
+        "heldConflict": "Its work clashes with the workspace: ask it to resolve that, then it lands.",
+        "heldForYou": "Its work is held, waiting for you to land it.",
+        "heldForMaintainer": "Its work is held until a maintainer lands it."
     }
 }

@@ -19,6 +19,7 @@ import { defineDocument } from "../store/evolution/documents.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
 import { tokenEquals } from "./token-equals.js";
+import { memberRow } from "./members/member-row.js";
 import type { Listener } from "./proofs/listener.js";
 import { assertChannel, meetsPasskeyPolicy } from "./proofs/proof-methods.js";
 import { spentOnce } from "./proofs/spent-once.js";
@@ -137,6 +138,9 @@ export interface Member {
     // (sandbox-contract `memberAccess`).
     readonly agents?: AgentAccess;
     readonly edit?: EditScope;
+    // A home-only person's answer to whether their home lands its work by itself, which is also whether they may land
+    // it (sandbox-contract `landsHere`). Absent is no; never on any other row.
+    readonly lands?: true;
     // Whether the platform's identity assertion opens this sandbox for them (they sign in with an email code), which the
     // owner decides per person. Absent means no: Google, a passkey or a recovery code are their only ways in.
     readonly emailSignIn?: boolean;
@@ -153,6 +157,7 @@ export interface MemberGrant {
     readonly areas?: readonly string[] | undefined;
     readonly agents?: AgentAccess | undefined;
     readonly edit?: EditScope | undefined;
+    readonly lands?: boolean | undefined;
     readonly emailSignIn?: boolean | undefined;
     readonly credentials?: CredentialReach | "all" | undefined;
 }
@@ -182,6 +187,8 @@ const MemberSchema = z
         // Added 2026-10-13, optional: a row written before them reads as its role meant (sandbox-contract `memberAccess`).
         agents: AgentAccessSchema.optional(),
         edit: EditScopeSchema.optional(),
+        // Added 2026-10-22, optional: a row written before it is nobody whose work lands by itself.
+        lands: z.literal(true).optional(),
     })
     .refine((member) => accessRefusal(memberAccess(member)) === undefined && tierOf(memberAccess(member)) === member.role, {
         message: "a row's access must be one a grant could write, and its role the tier that access makes",
@@ -199,52 +206,7 @@ export const membersDocument = defineDocument({
     schema: z.object({ members: z.array(MemberSchema) }),
 });
 
-// The row a grant writes: an area list is kept whatever the tier, and its absence is the whole workspace, so an
-// omitted field can never read as an empty fence. Email sign-in is written only when on, and a grant that does not say
-// keeps the previous row's.
-// A roster row while it is being built, its optional fields added one at a time.
-interface MemberRowDraft {
-    email: string;
-    role: GrantedRole;
-    areas?: string[];
-    agents?: AgentAccess;
-    edit?: EditScope;
-    emailSignIn?: boolean;
-    credentials?: CredentialReach;
-}
-
-// The reach a grant leaves on the row: `all` lifts it, a list replaces it, silence keeps the previous row's. A
-// maintainer holds none, whatever the grant or the row before it said: the tier reads every credential, so a reach kept
-// on it would read as a limit nothing enforces, and would come back the day the person is graded down.
-const reachOfRow = (grant: MemberGrant, previous: Member | undefined): CredentialReach | undefined => {
-    if (grant.role === "maintainer" || grant.credentials === "all") {
-        return undefined;
-    }
-    const reach = grant.credentials ?? previous?.credentials;
-    return reach === undefined ? undefined : { capabilities: [...reach.capabilities], secrets: [...reach.secrets] };
-};
-
-export const memberRow = (email: string, grant: MemberGrant, previous?: Member): Member => {
-    const row: MemberRowDraft = { email, role: grant.role };
-    if (grant.areas !== undefined) {
-        row.areas = [...grant.areas];
-    }
-    // Written as the grant said them, and never on a maintainer, whose tier already answers both.
-    if (grant.agents !== undefined && grant.role !== "maintainer") {
-        row.agents = grant.agents;
-    }
-    if (grant.edit !== undefined && grant.role !== "maintainer") {
-        row.edit = grant.edit === "all" ? "all" : [...grant.edit];
-    }
-    if (grant.emailSignIn ?? previous?.emailSignIn === true) {
-        row.emailSignIn = true;
-    }
-    const credentials = reachOfRow(grant, previous);
-    if (credentials !== undefined) {
-        row.credentials = credentials;
-    }
-    return row;
-};
+export { memberRow };
 
 // Same substrate as the owner store; the per-file update queue lets two grants landing together both survive instead of
 // one erasing the other.
@@ -334,6 +296,8 @@ export interface Caller extends VerifiedIdentity {
     // tier means, which for the owner is everything.
     readonly agents?: AgentAccess;
     readonly edits?: "none" | "all" | readonly string[];
+    // A home-only member's answer to whether their home lands by itself and they may land it (`landsHere`).
+    readonly lands?: true;
     // Area ids fencing what of the workspace this caller reaches, and with it which persona cards they may wear;
     // absent means the whole workspace, which is what the owner always holds. Carried as ids, not folders, so one read
     // of the area manifest per request answers it freshly: editing an area narrows its holders on their very next
@@ -537,13 +501,9 @@ export const createAuthorizer = (deps: {
         // (`memberAccess` answers a maintainer with no fence).
         // The tier is the one the access makes, never the row's own word for it: every floor reads it.
         const access = memberAccess(member);
-        return {
-            ...proof,
-            role: tierOf(access),
-            agents: access.agents,
-            edits: access.edit,
-            ...(access.see === undefined ? {} : { areas: access.see }),
-        };
+        const areas = access.see === undefined ? {} : { areas: access.see };
+        const caller: ProvenCaller = { ...proof, role: tierOf(access), agents: access.agents, edits: access.edit, ...areas };
+        return access.lands === true ? { ...caller, lands: true } : caller;
     };
     // The require-passkey policy, read per request like the roster (proof-methods.ts says which proofs pass it).
     const requirePasskey = async (caller: ProvenCaller, enrolment: boolean): Promise<void> => {

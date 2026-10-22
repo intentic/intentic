@@ -38,8 +38,8 @@ export function useNavigationCommands(): void {
     const { panels } = usePanels();
     const { capabilities } = useCapabilities();
     // Maintainer-and-up rows: the sandbox hub hides the rest, and the daemon refuses them anyway. A guest keeps the two
-    // tiles its rail has.
-    const { canShip, isGuest } = useRole();
+    // tiles its rail has, and a home-only guest neither: its one conversation is the master view's.
+    const { canShip, isGuest, homeOnly } = useRole();
     const { offered: planOffered } = useHostedPlan();
     const { hidden: orgHidden } = useOrgPolicy();
     const words = useVocabulary();
@@ -126,7 +126,7 @@ export function useNavigationCommands(): void {
     );
 
     const destinations = computed<readonly NavCommand[]>(() => [
-        ...shellSections.value,
+        ...(homeOnly.value ? [] : shellSections.value),
         ...extensionSections.value,
         ...sandboxDestinations.value,
         ...settingsPlaces.value,

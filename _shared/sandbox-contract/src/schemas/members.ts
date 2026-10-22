@@ -44,7 +44,10 @@ export const REACHABLE_CREDENTIAL_KINDS: readonly CapabilityKind[] = [
 // (`memberAccess`).
 // `chat` is the guest's way of working: it talks to the assistants that work in its areas and is shown nothing else of
 // the sandbox. `off` watches; `run` drives agents, whose work lands only when somebody who manages the sandbox lands it.
-export const AgentAccessSchema = z.enum(["off", "chat", "run"]);
+// `home` is the master view's way in, and the only one: the person talks to their own home conversation (an orchestrator
+// that delegates, judges and merges for them) and is shown nothing else of the sandbox but what that conversation started.
+// Whether its work lands by itself is `lands`, which is also whether they may land it: the agent never holds more.
+export const AgentAccessSchema = z.enum(["off", "chat", "run", "home"]);
 export type AgentAccess = z.infer<typeof AgentAccessSchema>;
 
 // Where a person may change files by hand: every folder they may see, or the areas named (each one they may see too).
@@ -57,6 +60,9 @@ export interface MemberAccess {
     readonly agents: AgentAccess;
     readonly see: readonly string[] | undefined;
     readonly edit: "none" | "all" | readonly string[];
+    // A home-only person's answer to whether their home conversation lands what it accepts by itself, and so whether
+    // they may land it (`landsHere`). Absent is no; only `agents: "home"` may carry it.
+    readonly lands?: boolean | undefined;
 }
 
 // The fields of a row or a grant that decide a person's access.
@@ -65,6 +71,7 @@ interface AccessFields {
     readonly areas?: readonly string[] | undefined;
     readonly agents?: AgentAccess | undefined;
     readonly edit?: EditScope | undefined;
+    readonly lands?: boolean | undefined;
 }
 
 /** A row's access: what it says, and for a row written before `agents` and `edit` existed, what its role meant then. */
@@ -75,15 +82,24 @@ export const memberAccess = (row: AccessFields): MemberAccess => {
     const agents = row.agents ?? (row.role === "guest" ? "chat" : row.role === "viewer" ? "off" : "run");
     // A writer from before `edit` changes files where it sees them, which its areas always named.
     const edit = row.edit ?? (row.role === "writer" && row.areas !== undefined ? [...row.areas] : "none");
-    return { manage: false, agents, see: row.areas, edit: agents === "chat" ? "none" : edit };
+    const access: MemberAccess = { manage: false, agents, see: row.areas, edit: agents === "chat" || agents === "home" ? "none" : edit };
+    return row.lands === true ? { ...access, lands: true } : access;
 };
+
+/**
+ * Whether work done for this person lands by itself, and whether they may land it: one answer for both, so the agent that
+ * works for them never holds an authority they do not. A maintainer lands everything; a home-only person their own home's
+ * work when granted `lands`; anyone else asks a maintainer.
+ */
+export const landsHere = (access: Pick<MemberAccess, "manage" | "agents" | "lands">): boolean =>
+    access.manage || (access.agents === "home" && access.lands === true);
 
 /** The tier an access makes: what every route's floor, the platform's record and the presence list read. */
 export const tierOf = (access: MemberAccess): GrantedRole => {
     if (access.manage) {
         return "maintainer";
     }
-    if (access.agents === "chat") {
+    if (access.agents === "chat" || access.agents === "home") {
         return "guest";
     }
     if (access.edit !== "none") {
@@ -97,8 +113,14 @@ export const accessRefusal = (access: MemberAccess): string | undefined => {
     if (access.manage) {
         return undefined;
     }
+    if (access.lands === true && access.agents !== "home") {
+        return "landing their own work by itself is a home-only answer; anyone else's work lands when somebody who manages the sandbox lands it";
+    }
     if (access.agents === "chat" && (access.see?.length ?? 0) === 0) {
         return "chatting with assistants needs at least one area: the assistants that work there are the ones they talk to";
+    }
+    if (access.agents === "home" && access.edit !== "none") {
+        return "a home-only person changes nothing by hand: their home conversation does the work";
     }
     if (access.edit === "all") {
         return access.see === undefined ? undefined : "editing everything they see needs the whole workspace; name the areas to edit instead";
@@ -121,11 +143,15 @@ export const MemberSchema = z.object({
     role: GrantedRoleSchema.describe("The tier their access makes: maintainer when they manage the sandbox, else what `agents` and `edit` add up to."),
     areas: z.array(z.string()).optional().describe("The areas they may see, and their agents work in. Absent means the whole workspace."),
     agents: AgentAccessSchema.optional().describe(
-        "Whether their conversations run agents: off (they watch), chat (only with the assistants in their areas, nothing else of the sandbox), or run. Absent means what their role meant.",
+        "Whether their conversations run agents: off (they watch), chat (only with the assistants in their areas, nothing else of the sandbox), run, or home (only their own home conversation, nothing else of the sandbox). Absent means what their role meant.",
     ),
     edit: EditScopeSchema.optional().describe(
         "Where they may change files by hand: everything they see, or these areas. Absent means nowhere, or for a writer its areas.",
     ),
+    lands: z
+        .boolean()
+        .optional()
+        .describe("For a home-only person: whether their home conversation lands its work by itself, and so whether they may land it. Absent means no."),
     emailSignIn: z
         .boolean()
         .optional()
@@ -153,7 +179,8 @@ export type MembersRoster = z.infer<typeof MembersRosterSchema>;
 // so a re-grade that never mentions it can never widen what a person's conversations may spend. A maintainer is refused
 // a list: that tier reads every credential.
 // `agents` and `edit` decide the rest of the access; absent, the role's own meaning stands, so an editor that predates
-// them still grants what it always did. The role sent must be the tier the access makes (`tierOf`): two answers to one
+// them still grants what it always did. `lands` is written as sent: absent is no, so a re-grade that never mentions it
+// can never hand a home-only person's agent the authority to land. The role sent must be the tier the access makes (`tierOf`): two answers to one
 // question are refused rather than one of them guessed away.
 export const MemberGrantSchema = z.object({
     email: z.string(),
@@ -161,6 +188,7 @@ export const MemberGrantSchema = z.object({
     areas: z.array(z.string().min(1)).max(20).optional(),
     agents: AgentAccessSchema.optional(),
     edit: EditScopeSchema.optional(),
+    lands: z.boolean().optional(),
     emailSignIn: z.boolean().optional(),
     credentials: z.union([z.literal("all"), CredentialReachSchema]).optional(),
 });
@@ -173,6 +201,10 @@ export const MemberSelfSchema = z.object({
     agents: AgentAccessSchema.describe("Whether their conversations run agents."),
     areas: z.array(z.string()).optional().describe("The areas they may see. Absent means the whole workspace."),
     edit: z.union([z.literal("none"), EditScopeSchema]).describe("Where they may change files by hand."),
+    lands: z
+        .boolean()
+        .optional()
+        .describe("Whether work done for them lands by itself and they may land it: a maintainer's everywhere, a home-only person's on their home. Absent means no."),
 });
 export type MemberSelf = z.infer<typeof MemberSelfSchema>;
 

@@ -3694,7 +3694,12 @@
             "sureEveryoneWorkingIn": "¿Seguro? Todo el que esté trabajando en este sandbox ahora mismo tendrá que iniciar sesión de nuevo.",
             "viewer": "Espectador",
             "writer": "Editor",
-            "aiNotice": "Aviso de IA"
+            "aiNotice": "Aviso de IA",
+            "agentsHome": "Solo inicio",
+            "agentsHomeNote": "Solo su propia conversación de inicio, desde la vista general: delega, evalúa e integra por ellos. Nada más del sandbox.",
+            "homeLands": "Integra su trabajo",
+            "homeLandsNote": "Su conversación de inicio integra y confirma por sí misma lo que acepta, y también pueden integrarlo ellos. Desactivado, espera por ti.",
+            "wordHomeOnly": "Solo inicio"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Categoría de ajustes del agente",
@@ -7062,6 +7067,12 @@
         "offline": "Este sandbox no está conectado.",
         "retry": "Reintentar",
         "open": "Todos los sandboxes",
-        "doubleClickToEnter": "Doble clic para entrar"
+        "doubleClickToEnter": "Doble clic para entrar",
+        "land": "Integrar",
+        "landConflict": "Chocó con el espacio de trabajo y no se integró nada: pide a tu conversación de inicio que lo resuelva.",
+        "landFailed": "No se pudo integrar. Inténtalo de nuevo.",
+        "heldConflict": "Su trabajo choca con el espacio de trabajo: pídele que lo resuelva y luego se integrará.",
+        "heldForYou": "Su trabajo está retenido, esperando a que lo integres.",
+        "heldForMaintainer": "Su trabajo está retenido hasta que un mantenedor lo integre."
     }
 }

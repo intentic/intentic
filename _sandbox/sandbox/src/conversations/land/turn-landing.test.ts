@@ -1,4 +1,4 @@
-import type { Rule } from "@intentic/sandbox-contract/schemas/settings";
+import { type Rule, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
 import type { LandOutcome } from "./land.js";
 import { services } from "../../harness/route-services.testing.js";
@@ -196,6 +196,9 @@ describe("a home's family", () => {
         sandboxSettings: unstubbed<LandingDeps["sandboxSettings"]>("sandboxSettings", {}),
         agentWorktrees: unstubbed<LandingDeps["agentWorktrees"]>("agentWorktrees", {}),
         logger: unstubbed<LandingDeps["logger"]>("logger", {}),
+        auth: undefined,
+        members: unstubbed<LandingDeps["members"]>("members", {}),
+        ownerEmail: async () => undefined,
         agents: { entry: (id: string) => (id === "home-1" ? home : conversationEntry({ id })) },
     };
     const child = isolatedAgent([{ repo: "root", base: "cut" }], { id: "sub-a" });
@@ -203,6 +206,33 @@ describe("a home's family", () => {
     test("holds a child's work off a home's checkout, asking no rule; any other parent takes it", async () => {
         expect(await decideLanding(decideDeps, { kind: "parent", parent: "home-1" }, child, undefined, [])).toEqual({ mode: "measure", writes: [] });
         expect(await decideLanding(decideDeps, { kind: "parent", parent: "other" }, child, undefined, [])).toEqual({ mode: "check", writes: [] });
+    });
+
+    // Whether a home lands by itself is its owner's authority at the land (home-conversation.ts homeOwnerLands), never the
+    // answer its opening latched: a member granted `lands` later lands, and one whose grant was taken back is held.
+    test("a home's own land follows its owner's grant as it stands at the land", async () => {
+        const owner = { email: "ada@example.com", name: "Ada", since: 1 };
+        const atRest = (autoLand: boolean | undefined) =>
+            isolatedAgent([{ repo: "root", base: "cut" }], {
+                id: "home-1",
+                identity: { home: true },
+                social: { owner, reactions: [] },
+                postures: autoLand === undefined ? {} : { autoLand },
+            });
+        const ada = { email: "ada@example.com", role: "guest", agents: "home" } as const;
+        const withGrant = (lands: boolean) => ({
+            ...decideDeps,
+            auth: unstubbed<NonNullable<LandingDeps["auth"]>>("auth", {}),
+            sandboxSettings: unstubbed<LandingDeps["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
+            ownerEmail: async () => "owner@example.com",
+            members: unstubbed<LandingDeps["members"]>("members", {
+                list: async () => [lands ? { ...ada, lands: true } : ada],
+            }),
+        });
+        const main = { kind: "main", ruled: true } as const;
+        expect(await decideLanding(withGrant(true), main, atRest(undefined), undefined, [])).toEqual({ mode: "check", writes: [] });
+        expect(await decideLanding(withGrant(false), main, atRest(true), undefined, [])).toEqual({ mode: "measure", writes: [] });
+        expect(await decideLanding(withGrant(true), main, atRest(false), undefined, [])).toEqual({ mode: "measure", writes: [] });
     });
 
     test("a home whose work was held asks a maintainer in its owner's name; nothing else does", async () => {

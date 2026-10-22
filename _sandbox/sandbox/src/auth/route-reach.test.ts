@@ -9,7 +9,7 @@ import { unstubbed } from "@intentic/testing";
 import type { ControlTokens } from "./tokens/control-tokens.js";
 import { controlScoped } from "./tokens/control-tokens.js";
 import { grantsOf } from "./grants.js";
-import { guestReach, routeFloor } from "./role-floor.js";
+import { guestReach, homeLandReach, routeFloor } from "./role-floor.js";
 
 // Every route the contract declares, and what each gate in front of it decides (app.ts, role-floor.ts, grants.ts,
 // control-tokens.ts), held to what the route's own RouteMeta says it should be. The expectation is read off the
@@ -33,6 +33,7 @@ const FIELDS = {
     stream: "reach",
     floor: "reach",
     guest: "reach",
+    home: "reach",
     attachmentFloor: "reach",
     enrolment: "reach",
     agent: "reach",
@@ -53,7 +54,7 @@ const PINNED = {
     "GET /health": "door early timed viewer panel read drive land",
     "POST /agent": "bearer waits timed collaborator guest panel editor drive land",
     "POST /agent/attach": "bearer waits stream viewer guest panel editor read drive land",
-    "POST /agents/{id}/land": "bearer waits timed maintainer panel land",
+    "POST /agents/{id}/land": "bearer waits timed maintainer home-land panel land",
     "POST /agents/{id}/place": "bearer waits timed maintainer panel",
     "GET /capabilities/{id}/otp": "bearer waits timed maintainer panel agent",
     "GET /listeners/{provider}/state": "bearer waits timed maintainer",
@@ -109,6 +110,7 @@ const declaredRowOf = (route: ContractRoute, intoAttachments: boolean): string =
         meta.stream === true ? "stream" : "timed",
         attachment ? meta.attachmentFloor : floor,
         ...(meta.guest === true || attachment ? ["guest"] : []),
+        ...(meta.home === "land" ? ["home-land"] : []),
         ...(meta.embedded === true ? ["embedded"] : []),
         ...(meta.enrolment === true ? ["enrolment"] : []),
         ...(meta.panel === false ? [] : ["panel"]),
@@ -127,6 +129,7 @@ const sessionGatesOf = (method: string, path: string, target: string | undefined
         meta.stream === true ? "stream" : "timed",
         routeFloor(method, path, target),
         ...(guestReach(method, path, target) ? ["guest"] : []),
+        ...(homeLandReach(method, path) ? ["home-land"] : []),
         ...(meta.embedded === true ? ["embedded"] : []),
         ...(meta.enrolment === true ? ["enrolment"] : []),
     ];

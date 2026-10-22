@@ -7082,7 +7082,12 @@
             "partPrograms": "Programy",
             "partAllowed": "Dozwolone",
             "allowedEmpty": "Nic nie wykracza teraz poza reguły",
-            "allowedEmptyLine": "Gdy pozwolisz rozmowie wyjść poza jej personę lub obszar albo zezwolisz na coś z karty dla całego sandboxa, pojawi się to tutaj, aby można było to cofnąć."
+            "allowedEmptyLine": "Gdy pozwolisz rozmowie wyjść poza jej personę lub obszar albo zezwolisz na coś z karty dla całego sandboxa, pojawi się to tutaj, aby można było to cofnąć.",
+            "agentsHome": "Tylko dom",
+            "agentsHomeNote": "Tylko ich własna rozmowa domowa w widoku głównym: deleguje, ocenia i scala za nich. Nic więcej z piaskownicy.",
+            "homeLands": "Scala swoją pracę",
+            "homeLandsNote": "Ich rozmowa domowa sama scala i zatwierdza to, co przyjmie, a oni też mogą ją scalić. Wyłączone: czeka na ciebie.",
+            "wordHomeOnly": "Tylko dom"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Kategoria ustawień agenta",
@@ -12849,6 +12854,12 @@
         "offline": "Ten sandboks nie jest połączony.",
         "retry": "Spróbuj ponownie",
         "open": "Wszystkie sandboksy",
-        "doubleClickToEnter": "Kliknij dwukrotnie, aby wejść"
+        "doubleClickToEnter": "Kliknij dwukrotnie, aby wejść",
+        "land": "Scal",
+        "landConflict": "Wystąpił konflikt z obszarem roboczym i nic nie zostało scalone: poproś swoją rozmowę domową, by go rozwiązała.",
+        "landFailed": "Nie udało się scalić. Spróbuj ponownie.",
+        "heldConflict": "Jej praca koliduje z obszarem roboczym: poproś ją o rozwiązanie konfliktu, a potem zostanie scalona.",
+        "heldForYou": "Jej praca czeka, aż ją scalisz.",
+        "heldForMaintainer": "Jej praca czeka, aż scali ją opiekun."
     }
 }

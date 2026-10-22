@@ -528,6 +528,13 @@ Single clicks switch sandboxes, double clicks and Enter enter the full sandbox. 
 `models/home/` holds attention polling and the pure work ledger projection.
 The desktop status bar stays hidden in the master view, including personal settings opened from it.
 
+A **home-only** member (Access ▸ People, Agents: Home only) reaches nothing else: the shell fence
+(`lib/routes/guestPaths.ts` `homeOnlyAllowedPath`) keeps them on `/home`, the sessions their home started, their own
+settings and their access card, and the rail and command palette offer no chat or board. The access panel's "Lands its
+work" switch decides both whether their home lands by itself and whether they may press Land on it. `useRole`
+`canLandHome` reads that answer from `/members/self`, and the home view shows the Land press on held work only to
+whoever has it. Anyone else sees a line saying the work waits for a maintainer.
+
 ## Local shell: Repair
 
 `/repair` (`local/repair/LocalRepair.vue`) is the Repair view in the desktop app's local shell (no rail tile). Copy: `local.repair.*` in `src/app/i18n/locales/en.json`.

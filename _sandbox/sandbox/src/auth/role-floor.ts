@@ -17,13 +17,18 @@ const attachment = (target: string | undefined): boolean => target !== undefined
 // not on its list. Undefined admits. `target` is the upload's `?path=`, the one route whose floor depends on where
 // the bytes land.
 export const memberRefusal = (
-    caller: { readonly role: MemberRole; readonly areas?: readonly string[] | undefined; readonly agents?: AgentAccess | undefined },
+    caller: {
+        readonly role: MemberRole;
+        readonly areas?: readonly string[] | undefined;
+        readonly agents?: AgentAccess | undefined;
+        readonly lands?: true | undefined;
+    },
     method: string,
     path: string,
     target?: string,
 ): { readonly error: string; readonly floor: MemberRole } | undefined => {
     if (caller.role === "guest") {
-        return guestReach(method, path, target) ? undefined : { error: "not open to a guest member", floor: "viewer" };
+        return guestReach(method, path, target) || homeReach(caller, method, path) ? undefined : { error: "not open to a guest member", floor: "viewer" };
     }
     const floor = routeFloor(method, path, target);
     if (!roleAtLeast(caller.role, floor)) {
@@ -40,6 +45,14 @@ export const guestReach = (method: string, path: string, target?: string): boole
     const meta = sandboxRouteFor(method, path)?.meta;
     return meta?.guest === true || (meta?.attachmentFloor !== undefined && attachment(target));
 };
+
+// What a home-only guest reaches beyond the guest list: the land press, when their home lands by itself (`landsHere`),
+// which the route then admits on that home alone (conversations/home/home-conversation.ts refuseUnlessHome).
+const homeReach = (caller: { readonly agents?: AgentAccess | undefined; readonly lands?: true | undefined }, method: string, path: string): boolean =>
+    caller.agents === "home" && caller.lands === true && homeLandReach(method, path);
+
+// Whether a route is the land press a home-only member who lands may make (route-meta.ts `home`).
+export const homeLandReach = (method: string, path: string): boolean => sandboxRouteFor(method, path)?.meta.home === "land";
 
 // `target` is the workspace path a byte-write addresses (upload's `?path=`); absent for every other route.
 export const routeFloor = (method: string, path: string, target?: string): MemberRole => {

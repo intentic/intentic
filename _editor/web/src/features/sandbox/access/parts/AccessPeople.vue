@@ -87,6 +87,7 @@ const accessOf = (member: InviteRecord): AccessDraft => draftOf(grantOf(member.e
 const WORDS = {
     manages: () => t(`sandbox.sandboxAccess.wordManages`),
     chats: () => t(`sandbox.sandboxAccess.wordChats`),
+    homeOnly: () => t(`sandbox.sandboxAccess.wordHomeOnly`),
     edits: () => t(`sandbox.sandboxAccess.wordEdits`),
     runsAgents: () => t(`sandbox.sandboxAccess.wordRunsAgents`),
     sees: () => t(`sandbox.sandboxAccess.wordSees`),

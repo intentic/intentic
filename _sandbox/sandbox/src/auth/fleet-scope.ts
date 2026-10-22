@@ -5,6 +5,8 @@ import type { SubagentSession } from "@intentic/sandbox-contract/schemas/termina
 import { ORPCError } from "@orpc/server";
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Caller } from "./auth.js";
+import { homeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
+import { supervisorOf } from "./principal.js";
 
 // What a caller may see of the fleet, on two independent narrowings. A GUEST sees the conversations they own or
 // started and nothing else. A FENCED member — anyone granted areas of the workspace — sees only conversations whose
@@ -22,6 +24,8 @@ export interface Provenance {
     readonly areas?: readonly string[] | undefined;
     // Its owner's home conversation, which only that owner and the sandbox's owner see.
     readonly home?: true | undefined;
+    // For a review or test an agent opened on its own subagent's work, that agent (principal.ts supervisorOf).
+    readonly fresh?: { readonly by?: string | undefined } | undefined;
 }
 
 // A registry entry's provenance, read off its latched identity and whoever answers for it now.
@@ -30,6 +34,7 @@ export const provenanceOf = ({ identity, social }: Pick<PersistedAgent, "identit
     owner: social.owner,
     areas: identity.areas,
     home: identity.home,
+    fresh: identity.fresh,
 });
 
 const sameEmail = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
@@ -63,6 +68,11 @@ const withinFence = (caller: Caller, agent: Provenance): boolean => areasCover(c
 export const visibleTo = (caller: Caller | undefined, agent: Provenance): boolean => {
     if (caller === undefined) {
         return true;
+    }
+    // A home-only member sees their home and what it started or opened to judge, the sessions its ledger names, and nothing
+    // else: the rest of the sandbox is no part of their access (conversations/home/home-conversation.ts).
+    if (caller.agents === "home") {
+        return ((agent.home === true && theirs(caller, agent)) || supervisorOf(agent) === homeConversationId(caller.email)) && withinFence(caller, agent);
     }
     if ((caller.role === "guest" || agent.home === true) && caller.role !== "owner" && !theirs(caller, agent)) {
         return false;

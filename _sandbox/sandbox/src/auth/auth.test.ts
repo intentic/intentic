@@ -524,6 +524,17 @@ describe("memberRow", () => {
         expect(memberRow("bo@example.org", { role: "collaborator", emailSignIn: false }, previous)).toEqual({ email: "bo@example.org", role: "collaborator" });
         expect(memberRow("bo@example.org", { role: "viewer", emailSignIn: true })).toEqual({ email: "bo@example.org", role: "viewer", emailSignIn: true });
     });
+
+    test("writes a home-only person's answer to landing as granted, and never keeps it through a grant that leaves it out", () => {
+        const previous: Member = { email: "bo@example.org", role: "guest", agents: "home", lands: true };
+        expect(memberRow("bo@example.org", { role: "guest", agents: "home", lands: true })).toEqual(previous);
+        expect(memberRow("bo@example.org", { role: "guest", agents: "home" }, previous)).toEqual({ email: "bo@example.org", role: "guest", agents: "home" });
+        expect(memberRow("bo@example.org", { role: "collaborator", agents: "run", lands: true }, previous)).toEqual({
+            email: "bo@example.org",
+            role: "collaborator",
+            agents: "run",
+        });
+    });
 });
 
 // The require-passkey policy: read per request like the roster, satisfied by a passkey or a recovery code, and open to

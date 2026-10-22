@@ -256,10 +256,16 @@ const routes: RouteRecordRaw[] = [
             // Where setup lets go of the user: mobile lands on the agent fleet, desktop on the file tree with its chat
             // already docked, for a maker too: the chat is where a first session starts, and the Projects dashboard
             // landed on instead read as a second place to begin. A guest has no home tile but the chat: the tree is a
-            // read the daemon refuses it.
+            // read the daemon refuses it. A home-only guest has only the master view.
             {
                 path: ``,
-                redirect: () => (useRole().isGuest.value ? `/chat` : useDevice().mobile.value ? `/agents` : `/workspace`),
+                redirect: () => {
+                    const { isGuest, homeOnly } = useRole();
+                    if (isGuest.value) {
+                        return homeOnly.value ? `/home` : `/chat`;
+                    }
+                    return useDevice().mobile.value ? `/agents` : `/workspace`;
+                },
             },
             // Full-screen chat: the rail-docked chat's own surface, expanded. A route rather than a layout switch, so
             // the rail, back button and reload already know how to enter and leave it. On a phone, the conversation's own screen.

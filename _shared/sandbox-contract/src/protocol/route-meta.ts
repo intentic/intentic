@@ -23,6 +23,9 @@ export interface RouteMeta {
     readonly floor?: MemberRole;
     // On a guest member's allowlist, which is the whole of what a guest reaches.
     readonly guest?: true;
+    // Beyond the guest list, for a home-only member (members.ts `agents: "home"`) whose work lands by itself
+    // (`landsHere`): `land` is the press on their own home conversation, the one conversation the handler then admits.
+    readonly home?: "land";
     // The floor an upload aimed inside ATTACHMENTS_DIR gets instead, one a guest may also make.
     readonly attachmentFloor?: MemberRole;
     // A passkey-registration door: a proof with no passkey yet may pass the require-passkey policy.
@@ -59,6 +62,7 @@ const ACCESS = {
     stream: (meta) => meta.stream === true,
     floor: (meta, method) => meta.floor ?? defaultFloor(method),
     guest: (meta) => meta.guest === true,
+    home: (meta) => meta.home ?? "none",
     attachmentFloor: (meta) => meta.attachmentFloor ?? "none",
     enrolment: (meta) => meta.enrolment === true,
     agent: (meta) => meta.agent === true,

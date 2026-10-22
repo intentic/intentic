@@ -5,6 +5,7 @@ import { SandboxLogo, ui } from "@intentic/ui";
 import Icon from "@intentic/ui/icon";
 import { useT } from "@intentic/ui/i18n";
 import { useSandbox } from "../../client/sandbox/useSandbox";
+import { useRole } from "../../client/sandbox/useRole";
 import { orderedSandboxes, tileAction } from "../../models/home/homeFacts";
 import { switchableSandboxes } from "../../models/sandbox/live/roster";
 import { useHomeAttention } from "../../models/home/useHomeAttention";
@@ -15,6 +16,7 @@ const { phone = false } = defineProps<{ phone?: boolean }>();
 const t = useT();
 const router = useRouter();
 const sandbox = useSandbox();
+const { homeOnly } = useRole();
 // The switcher's own list (roster.ts `switchableSandboxes`), never the account's raw rows: a setup never finished has no
 // daemon to open a home conversation on, and a desktop folder window's own row is no sandbox at all.
 const boxes = computed(() => orderedSandboxes(switchableSandboxes(sandbox.sandboxes.value)));
@@ -30,7 +32,8 @@ const labelOf = (id: string, name: string): string => t(`home.sandboxAttention`,
 let last: { id: string; at: number } | undefined;
 const choose = (id: string, input: `click` | `enter`): void => {
     const now = Date.now();
-    const action = tileAction(input, last?.id === id, last === undefined ? Infinity : now - last.at);
+    // A home-only guest has no sandbox to enter: its home is the whole of what it reaches there.
+    const action = homeOnly.value ? `select` : tileAction(input, last?.id === id, last === undefined ? Infinity : now - last.at);
     last = { id, at: now };
     sandbox.select(id);
     if (action === `enter`) {

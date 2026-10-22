@@ -44,7 +44,8 @@ export const refuseUnlessReachable = async (services: PersonaReachDeps, caller: 
     if (caller === undefined) {
         return;
     }
-    const guest = caller.role === "guest";
+    // A home-only guest speaks to its own home conversation, which is no card (conversations/home/home-conversation.ts).
+    const guest = caller.role === "guest" && caller.agents !== "home";
     if (!guest && (actsAs === undefined || caller.areas === undefined)) {
         return;
     }

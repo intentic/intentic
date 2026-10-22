@@ -367,8 +367,9 @@ export const agentsContract = {
             description:
                 "Brings the conversation's branches into the main tree, one repo at a time. A conflict is reported rather than raised and nothing is lost when it fails. Refused while a turn is running, and refused for a conversation that works directly in the shared tree, which has nothing to merge.",
         })
-        // The irreversible press a program may hold, kept to its own rung apart from the work.
-        .meta({ control: "land" })
+        // The irreversible press a program may hold, kept to its own rung apart from the work. A home-only member whose
+        // home lands by itself may press it on that home alone (agents.routes.ts).
+        .meta({ control: "land", home: "land" })
         .input(AgentLandSchema)
         .output(LandResultSchema),
     // Stamps `AgentSummarySchema.landRequested` with the caller's identity.

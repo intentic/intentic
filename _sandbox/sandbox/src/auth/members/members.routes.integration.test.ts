@@ -56,6 +56,22 @@ test("a guest fenced to areas no assistant works in is refused; another tier the
     expect((await postJson(app, "/members", { email: "fay@example.com", role: "viewer", areas: ["finance"] })).status).toBe(200);
 });
 
+// Home only: a guest whose one conversation is its own home, which needs no area or card to talk to; and the one tier
+// whose answer to landing is its own, refused anywhere else so no agent ever holds more than its person.
+test("a home-only grant needs no area, carries its answer to landing, and that answer is refused on anyone else", async () => {
+    const { app, members } = await ownerApp();
+    const granted = await postJson(app, "/members", { email: "Bo@Example.org", role: "guest", agents: "home", lands: true });
+    expect(granted.status).toBe(200);
+    expect(await granted.json()).toEqual({ members: [{ email: "bo@example.org", role: "guest", agents: "home", lands: true }] });
+    // Fenced to an area no card works in is no stranding here: their home is who they talk to.
+    expect((await postJson(app, "/members", { email: "bo@example.org", role: "guest", agents: "home", areas: ["finance"] })).status).toBe(200);
+    expect(await members.list()).toEqual([{ email: "bo@example.org", role: "guest", agents: "home", areas: ["finance"] }]);
+
+    const elsewhere = await postJson(app, "/members", { email: "cy@example.org", role: "collaborator", agents: "run", lands: true });
+    expect(elsewhere.status).toBe(400);
+    expect(await elsewhere.json()).toEqual({ error: expect.stringContaining("home-only") });
+});
+
 // Whether the platform's identity assertion opens the sandbox for a person is the owner's call per member, carried on
 // the grant; a re-grade from an editor that predates it keeps what the row said.
 test("a grant carries a member's email sign-in, a re-grade without it keeps it, and the owner can take it back", async () => {
@@ -161,6 +177,7 @@ test("GET /members/self answers the caller's own access", async () => {
         role: "owner",
         agents: "run",
         edit: "all",
+        lands: true,
     });
     const members = fileMembersStore(join(await mkdtemp(join(tmpdir(), "members-")), "members.json"));
     const app = createApp(
@@ -177,5 +194,22 @@ test("GET /members/self answers the caller's own access", async () => {
         role: "writer",
         agents: "off",
         edit: ["support"],
+    });
+    // A home-only member is told whether their home's work lands by itself, which is whether they may land it.
+    const homeOnly = createApp(
+        services({
+            auth: {
+                authorize: async () => ({ ...proven(`bo@example.com`, `guest`), agents: `home`, edits: `none`, lands: true }),
+                authorizeOwner: async () => undefined,
+            },
+            ownerEmail: async () => `ada@example.com`,
+            members,
+        }),
+    );
+    expect(await (await homeOnly.request("/members/self", { headers: { authorization: "Bearer bo" } })).json()).toEqual({
+        role: "guest",
+        agents: "home",
+        edit: "none",
+        lands: true,
     });
 });

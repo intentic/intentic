@@ -61,6 +61,10 @@ export const draftGrant = (email: string, draft: AccessDraft): MemberGrant => {
     if (draft.edit !== `none`) {
         body.edit = draft.edit === `all` ? `all` : [...draft.edit];
     }
+    // Only a home-only person's home lands by itself, and only when said: silence takes it back.
+    if (draft.agents === `home` && draft.lands === true) {
+        body.lands = true;
+    }
     body.credentials = draft.credentials === `all` ? `all` : { capabilities: [...draft.credentials.capabilities], secrets: [...draft.credentials.secrets] };
     return body;
 };
@@ -89,9 +93,12 @@ export const draftProblem = (draft: AccessDraft, reaches: number): DraftProblem 
 };
 
 /** The one word a person's tile says of them. */
-export type AccessWord = `manages` | `chats` | `edits` | `runsAgents` | `sees`;
+export type AccessWord = `manages` | `chats` | `homeOnly` | `edits` | `runsAgents` | `sees`;
 
 export const accessWord = (access: MemberAccess): AccessWord => {
+    if (!access.manage && access.agents === `home`) {
+        return `homeOnly`;
+    }
     const tier = tierOf(access);
     return ({ maintainer: `manages`, guest: `chats`, writer: `edits`, collaborator: `runsAgents`, viewer: `sees` } as const)[tier];
 };

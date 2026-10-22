@@ -19,6 +19,8 @@ import { ownershipDenied, unavailableIfUnreadable } from "../owner-gates.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { orgAdmits } from "../../org/org-roster.js";
 import { revokeHeld } from "./revoke-held.js";
+import { callerLands } from "../operator.js";
+import { opt } from "../../opt.js";
 
 // The shared-access roster (/members): who besides the owner may reach this sandbox, and at what tier.
 // Owner-gated by ownership rather than the maintainer-equivalent operating gate, since membership is the one thing a
@@ -43,8 +45,8 @@ const memberGrant = async (c: Context): Promise<MemberGrantRequest | undefined> 
     if (!body.success) {
         return undefined;
     }
-    const { email, role, areas, agents, edit, emailSignIn, credentials } = body.data;
-    return { email: email.toLowerCase(), role, areas, agents, edit, emailSignIn, credentials };
+    const { email, role, areas, agents, edit, lands, emailSignIn, credentials } = body.data;
+    return { email: email.toLowerCase(), role, areas, agents, edit, lands, emailSignIn, credentials };
 };
 
 // A grant as the route reads it: who, at what tier, fenced to what, whether email sign-in is theirs, and what their
@@ -55,6 +57,7 @@ interface MemberGrantRequest {
     readonly areas?: readonly string[] | undefined;
     readonly agents?: AgentAccess | undefined;
     readonly edit?: EditScope | undefined;
+    readonly lands?: boolean | undefined;
     readonly emailSignIn?: boolean | undefined;
     readonly credentials?: CredentialReach | "all" | undefined;
 }
@@ -65,6 +68,7 @@ const grantDetails = (grant: MemberGrantRequest, previous: GrantedRole | undefin
     role: grant.role,
     previousRole: previous ?? "none",
     areas: grant.areas ?? "all",
+    ...opt("home", grant.agents === "home" ? (grant.lands === true ? "lands" : "asks") : undefined),
 });
 
 // The refusals an access makes on its face, in the order a reader fixes them: a writer named with nowhere to write (what
@@ -77,7 +81,7 @@ const accessRefused = (grant: MemberGrantRequest): string | undefined => {
     if (grant.role === "writer" && access.edit === "none") {
         return "a writer needs at least one area to write in";
     }
-    if (grant.role === "guest" && (grant.areas?.length ?? 0) === 0) {
+    if (grant.role === "guest" && access.agents === "chat" && (grant.areas?.length ?? 0) === 0) {
         return "a guest needs at least one area: the assistants that work there are the ones it speaks through";
     }
     const refused = accessRefusal(access);
@@ -114,9 +118,10 @@ const reachRefusal = (grant: { role: GrantedRole; credentials?: CredentialReach 
 
 // Why a guest's fence cannot be granted even though its areas exist: no card works in the folders it names. A guest
 // reaches nothing but its assistants, so such a grant would sign somebody in to a chat that answers nothing.
-// Checked only for a guest: every other tier has business in a workspace with no card homed in its folders.
-const guestReachRefusal = async (services: PersonaReachDeps, grant: { role: GrantedRole; areas?: readonly string[] | undefined }): Promise<string | undefined> => {
-    if (grant.role !== "guest") {
+// Checked only for a chatting guest: every other tier, and a home-only guest whose home is the one it talks to, has
+// business in a workspace with no card homed in its folders.
+const guestReachRefusal = async (services: PersonaReachDeps, grant: MemberGrantRequest): Promise<string | undefined> => {
+    if (grant.role !== "guest" || memberAccess(grant).agents !== "chat") {
         return undefined;
     }
     const reached = await reachablePersonas(services, grant.areas);
@@ -195,10 +200,13 @@ const createMembersRoutes = (services: MembersRoutesDeps) => ({
     self: (c: Context<AppEnv>): Response => {
         const identity = c.get("identity");
         if (identity === undefined || identity.role === "owner") {
-            return c.json({ role: identity?.role ?? "owner", agents: "run", edit: "all" } satisfies MemberSelf);
+            return c.json({ role: identity?.role ?? "owner", agents: "run", edit: "all", lands: true } satisfies MemberSelf);
         }
         const edits = identity.edits ?? "all";
         const self: MemberSelf = { role: identity.role, agents: identity.agents ?? "run", edit: edits === "all" || edits === "none" ? edits : [...edits] };
+        if (callerLands(identity)) {
+            self.lands = true;
+        }
         if (identity.areas !== undefined) {
             self.areas = [...identity.areas];
         }

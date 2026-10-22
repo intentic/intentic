@@ -1,3 +1,4 @@
+import { homeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { ProvenCaller } from "./auth.js";
 import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import type { SubagentSession } from "@intentic/sandbox-contract/schemas/terminal";
@@ -43,6 +44,19 @@ describe("visibleTo", () => {
 
     // Fencing the files and leaving the transcripts open would be a fence with a door in it: a conversation carries
     // whatever it read.
+    test("a home-only member sees their home and the sessions it started or opened to judge, nothing else", () => {
+        const bo: ProvenCaller = { email: "Bo@Example.com", role: "guest", agents: "home", methods: ["google"] };
+        const home = homeConversationId("bo@example.com");
+        expect(visibleTo(bo, { owner: { email: "bo@example.com" }, startedBy: "bo@example.com", home: true })).toBe(true);
+        expect(visibleTo(bo, { startedBy: `agent:${home}` })).toBe(true);
+        expect(visibleTo(bo, { startedBy: "agent:sub-a", fresh: { by: home } })).toBe(true);
+        // What they started under an access they no longer hold, and what their home's subagents started in turn, is not it.
+        expect(visibleTo(bo, { owner: { email: "bo@example.com" }, startedBy: "bo@example.com" })).toBe(false);
+        expect(visibleTo(bo, { startedBy: "agent:sub-a" })).toBe(false);
+        expect(visibleTo(bo, { startedBy: `agent:${homeConversationId("ada@example.com")}` })).toBe(false);
+        expect(visibleTo(bo, { owner: { email: "ada@example.com" }, home: true })).toBe(false);
+    });
+
     test("a fenced member sees work behind their own areas, whoever started it", () => {
         expect(visibleTo(fenced, { owner: { email: "ada@example.com" }, areas: ["support"] })).toBe(true);
         expect(visibleTo(fenced, { owner: { email: "ada@example.com" }, areas: ["finance"] })).toBe(false);

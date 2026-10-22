@@ -381,6 +381,10 @@
     {
       "type": "{ members: ({ agents?: \"off\" | \"chat\" | \"run\"; areas?: string[]; credentials?: { capabilities: string[]; secrets: string[] }; edit?: \"all\" | string[]; email: string; emailSignIn?: boolean; role: \"guest\" | \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\" })[] }",
       "since": "v1.335.0"
+    },
+    {
+      "type": "{ members: ({ agents?: \"off\" | \"chat\" | \"run\" | \"home\"; areas?: string[]; credentials?: { capabilities: string[]; secrets: string[] }; edit?: \"all\" | string[]; email: string; emailSignIn?: boolean; lands?: true; role: \"guest\" | \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\" })[] }",
+      "since": "unreleased"
     }
   ],
   "history:identity/owner.json": [

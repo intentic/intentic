@@ -3683,7 +3683,12 @@
             "sureEveryoneWorkingIn": "Sûr ? Tous ceux qui travaillent dans ce sandbox en ce moment devront se reconnecter.",
             "viewer": "Observateur",
             "writer": "Rédacteur",
-            "aiNotice": "Avis sur l’IA"
+            "aiNotice": "Avis sur l’IA",
+            "agentsHome": "Accueil seulement",
+            "agentsHomeNote": "Uniquement leur propre conversation d’accueil, depuis la vue d’ensemble : elle délègue, évalue et fusionne pour eux. Rien d’autre du sandbox.",
+            "homeLands": "Intègre son travail",
+            "homeLandsNote": "Leur conversation d’accueil intègre et valide d’elle-même ce qu’elle accepte, et ils peuvent l’intégrer aussi. Désactivé, elle vous attend.",
+            "wordHomeOnly": "Accueil seulement"
         },
         "sandboxAgent": {
             "agentSettingsCategory": "Catégorie de paramètres de l'agent",
@@ -6981,6 +6986,12 @@
         "offline": "Ce sandbox n’est pas connecté.",
         "retry": "Réessayer",
         "open": "Tous les sandboxes",
-        "doubleClickToEnter": "Double-cliquez pour entrer"
+        "doubleClickToEnter": "Double-cliquez pour entrer",
+        "land": "Intégrer",
+        "landConflict": "Il est entré en conflit avec l’espace de travail et rien n’a été intégré : demandez à votre conversation d’accueil de le résoudre.",
+        "landFailed": "Impossible de l’intégrer. Réessayez.",
+        "heldConflict": "Son travail entre en conflit avec l’espace de travail : demandez-lui de le résoudre, puis il sera intégré.",
+        "heldForYou": "Son travail est en attente que vous l’intégriez.",
+        "heldForMaintainer": "Son travail est en attente qu’un mainteneur l’intègre."
     }
 }

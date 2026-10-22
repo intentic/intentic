@@ -47,6 +47,16 @@ describe(`draftGrant`, () => {
     });
 });
 
+describe(`draftGrant for a home-only person`, () => {
+    // A guest's tier with no area needed, and `lands` only when on: silence is what takes it back.
+    it(`sends lands only when their home lands by itself`, () => {
+        expect(draftGrant(`h@x.example`, draft({ agents: `home`, lands: true }))).toMatchObject({ role: `guest`, agents: `home`, lands: true });
+        expect(draftGrant(`h@x.example`, draft({ agents: `home` }))).not.toHaveProperty(`lands`);
+        expect(draftGrant(`h@x.example`, draft({ agents: `run`, lands: true }))).not.toHaveProperty(`lands`);
+        expect(draftProblem(draft({ agents: `home` }), 0)).toBeUndefined();
+    });
+});
+
 describe(`draftOf`, () => {
     // A row from before agents and edit reads as its role meant, and a person the daemon never wrote as the platform's tier.
     it(`reads what the daemon holds, else the platform's tier`, () => {
@@ -78,6 +88,7 @@ describe(`accessWord`, () => {
         expect(accessWord(draft({ agents: `run` }))).toBe(`runsAgents`);
         expect(accessWord(draft({ agents: `off`, edit: [`web`] }))).toBe(`edits`);
         expect(accessWord(draft({ agents: `chat`, see: [`support`] }))).toBe(`chats`);
+        expect(accessWord(draft({ agents: `home` }))).toBe(`homeOnly`);
         expect(accessWord(draft({ manage: true }))).toBe(`manages`);
     });
 });

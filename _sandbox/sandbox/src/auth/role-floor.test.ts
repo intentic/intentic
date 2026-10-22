@@ -182,3 +182,35 @@ describe("memberRefusal for a person with agents off", () => {
         expect(memberRefusal({ role: "writer", agents: "run" }, "POST", "/agent")).toBeUndefined();
     });
 });
+
+// A home-only member is a guest whose one conversation is its home (conversations/home/home-conversation.ts): the guest
+// list, and the land press when its home lands by itself, which the route then admits on that home alone.
+describe("a home-only member", () => {
+    const homeOnly = { role: "guest", agents: "home" } as const;
+
+    test("reaches what a guest reaches, and the land press only when its work lands by itself", () => {
+        expect(memberRefusal(homeOnly, "POST", "/agent")).toBeUndefined();
+        expect(memberRefusal(homeOnly, "GET", "/agents/home")).toBeUndefined();
+        expect(memberRefusal(homeOnly, "POST", "/agents/abc/land")).toEqual({ error: "not open to a guest member", floor: "viewer" });
+        expect(memberRefusal({ ...homeOnly, lands: true }, "POST", "/agents/abc/land")).toBeUndefined();
+    });
+
+    test("never discards, settles, sets a conversation's landing, or commits, whatever it may land", () => {
+        const lands = { ...homeOnly, lands: true } as const;
+        for (const [method, path] of [
+            ["POST", "/agents/abc/discard"],
+            ["POST", "/agents/abc/settle"],
+            ["POST", "/agents/abc/auto-land"],
+            ["POST", "/git/root/commit"],
+        ] as const) {
+            expect(memberRefusal(lands, method, path)).toEqual({ error: "not open to a guest member", floor: "viewer" });
+        }
+    });
+
+    test("a chatting guest granted nothing of the kind does not reach the land press", () => {
+        expect(memberRefusal({ role: "guest", agents: "chat", lands: true }, "POST", "/agents/abc/land")).toEqual({
+            error: "not open to a guest member",
+            floor: "viewer",
+        });
+    });
+});

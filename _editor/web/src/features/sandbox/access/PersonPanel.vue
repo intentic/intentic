@@ -94,19 +94,27 @@ const status = computed((): SaveStatus => {
 });
 
 // AGENTS: chatting is the guest's way of working, held to areas; leaving it keeps the areas, and coming to it drops
-// hand edits, which a chat never has.
+// hand edits, which a chat never has. Home only is the master view's one conversation and nothing else: no hand edits
+// either, its areas optional, and whether its work lands by itself (`lands`) is also whether they may land it.
 const AGENTS = computed(() => [
     { value: `off` as const, label: t(`sandbox.sandboxAccess.agentsOff`) },
     { value: `chat` as const, label: t(`sandbox.sandboxAccess.agentsChat`) },
+    { value: `home` as const, label: t(`sandbox.sandboxAccess.agentsHome`) },
     { value: `run` as const, label: t(`sandbox.sandboxAccess.agentsRun`) },
 ]);
 const AGENT_NOTES = {
     off: () => t(`sandbox.sandboxAccess.agentsOffNote`),
     chat: () => t(`sandbox.sandboxAccess.agentsChatNote`),
+    home: () => t(`sandbox.sandboxAccess.agentsHomeNote`),
     run: () => t(`sandbox.sandboxAccess.agentsRunNote`),
 } satisfies Record<AgentAccess, () => string>;
-const pickAgents = (agents: AgentAccess): void =>
-    set(agents === `chat` ? { agents, see: draft.value.see ?? [], edit: `none` } : { agents });
+const pickAgents = (agents: AgentAccess): void => {
+    if (agents === `chat`) {
+        set({ agents, see: draft.value.see ?? [], edit: `none` });
+        return;
+    }
+    set(agents === `home` ? { agents, edit: `none` } : { agents });
+};
 
 // SEE: editing never reaches past it, so narrowing what they see narrows what they edit with it.
 const pickSee = (see: string[] | undefined): void => {
@@ -138,6 +146,7 @@ const PROBLEMS = {
 
 const confirmingRemove = ref(false);
 const manageId = useId();
+const landsId = useId();
 const signInId = useId();
 </script>
 
@@ -185,6 +194,18 @@ const signInId = useId();
                 <div class="flex flex-col gap-2">
                     <SegmentedControl :model-value="draft.agents" :options="AGENTS" @update:model-value="pickAgents" />
                     <p class="text-xs text-muted">{{ AGENT_NOTES[draft.agents]() }}</p>
+                    <div v-if="draft.agents === `home`" class="flex items-center gap-3 py-1.5">
+                        <label :for="landsId" class="flex min-w-0 flex-1 cursor-pointer flex-col">
+                            <span class="text-sm text-content">{{ t(`sandbox.sandboxAccess.homeLands`) }}</span>
+                            <span class="text-xs text-muted">{{ t(`sandbox.sandboxAccess.homeLandsNote`) }}</span>
+                        </label>
+                        <ToggleSwitch
+                            :input-id="landsId"
+                            :model-value="draft.lands === true"
+                            class="ui-switch-sm shrink-0"
+                            @update:model-value="(lands: boolean) => set({ lands })"
+                        />
+                    </div>
                 </div>
             </Section>
 
@@ -192,7 +213,7 @@ const signInId = useId();
                 <AreaPicker :picked="draft.see" :chat="draft.agents === `chat`" @change="pickSee" />
             </Section>
 
-            <Section v-if="draft.agents !== `chat`" :label="t(`sandbox.sandboxAccess.editSection`)">
+            <Section v-if="draft.agents !== `chat` && draft.agents !== `home`" :label="t(`sandbox.sandboxAccess.editSection`)">
                 <EditPicker :edit="draft.edit" :see="draft.see" @change="(edit) => set({ edit })" />
             </Section>
 

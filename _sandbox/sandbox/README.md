@@ -256,7 +256,7 @@ flowchart LR
 - Home conversations (2026-10-21): every member has one long-running conversation per sandbox, the one the editor's
   master view opens (`GET /agents/home`; the id is `homeConversationId(email)`). It is an orchestrator: its subagents'
   work is held on their branches until it merges what it accepts (`conversations/land/land-target.ts holdsChildren`),
-  it judges that work with review and test sessions, and it lands and commits by itself when its owner may merge,
+  it judges that work with review and test sessions, and it lands and commits by itself when its owner may land,
   else it asks a maintainer (`turn-landing.ts askToLandHome`). Only its owner speaks into it; only they and the
   sandbox's owner see it; it never ages out; its family's pushes go to its owner alone (`push/push-audience.ts`). It
   works by `.intentic/config/home.md`, or the default policy, carried as a note (`conversations/home/`).
@@ -264,6 +264,14 @@ flowchart LR
   without a naming-model call. Older automatic titles follow the same rule when loaded; a person's rename stands,
   and neither a model nor a plan heading replaces it (`withHomeTitle` in `conversations/registry/agents-registry.ts`).
   `GET /agents/attention/mine` is every member's own attention count, which each sandbox's icon wears there.
+- Home-only members (2026-10-22): a grant of `agents: "home"` (tier `guest`, areas optional) makes a person's home
+  conversation their only way in. Every write that names a conversation refuses any other
+  (`conversations/home/home-conversation.ts refuseUnlessHome`), so they start nothing of their own. They see their
+  home and the sessions it started or opened to judge, and nothing else (`auth/fleet-scope.ts visibleTo`). The grant's
+  `lands` is one answer to two questions, whether their home lands by itself and whether they may press Land on it
+  (`landsHere` in the contract's `schemas/members.ts`; `POST /agents/{id}/land` carries `home: "land"`, read by
+  `auth/role-floor.ts`). For every home, that answer is read from its owner's grant at the land, not latched when the
+  home opened, so a re-grade holds the next land (`turn-landing.ts decideLanding`).
 - Archive is sticky: only a person's message un-archives a conversation. A turn the daemon starts itself (a retry,
   a nudge, an automation's thread) is refused on an archived one (`conversations/actor/conversation-decide.ts`), and a
   thread whose conversation was archived opens a fresh one instead.

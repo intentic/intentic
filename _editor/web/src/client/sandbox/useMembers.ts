@@ -52,26 +52,39 @@ export const grantMember = async (grant: MemberGrant): Promise<MembersList> => a
 
 export const revokeMember = async (email: string): Promise<MembersList> => adopt(await sandboxRaw(`DELETE /members`, { input: { email } }));
 
-// WHETHER THE SIGNED-IN PERSON RUNS AGENTS, for the one tier whose name does not say: a writer edits files by hand and
-// may or may not drive agents (sandbox-contract `memberAccess`). Every other tier answers it by itself, so the read is
-// made for a writer alone. One query for the whole app, made once in its own scope, since `useRole` is read from plain
-// functions as well as components and a per-call query would need a component to belong to.
+// WHETHER THE SIGNED-IN PERSON RUNS AGENTS, for the two tiers whose name does not say: a writer edits files by hand and
+// may or may not drive agents, and a guest either chats with the assistants in its areas or has only its home
+// conversation (sandbox-contract `memberAccess`). Every other tier answers it by itself, so the read is made for those
+// two alone. One query for the whole app, made once in its own scope, since `useRole` is read from plain functions as
+// well as components and a per-call query would need a component to belong to.
 
-let agents: ComputedRef<AgentAccess | undefined> | undefined;
+let self: ComputedRef<MemberSelf | undefined> | undefined;
 
-export const selfAgents = (): ComputedRef<AgentAccess | undefined> => {
-    if (agents === undefined) {
+const selfAccess = (): ComputedRef<MemberSelf | undefined> => {
+    if (self === undefined) {
         // Detached: it lives as long as the app, like the sandbox list it reads.
-        agents = effectScope(true).run(() => {
+        self = effectScope(true).run(() => {
             const { active } = useSandbox();
             const { query } = useSandboxQuery<MemberSelf>({
                 queryKey: SANDBOX_SELF_ACCESS.of(),
                 queryFn: () => sandboxRaw(`GET /members/self`),
-                enabled: computed(() => active.value?.role === `writer`),
+                enabled: computed(() => active.value?.role === `writer` || active.value?.role === `guest`),
             });
-            return computed(() => query.data.value?.agents);
+            return computed(() => query.data.value);
         });
     }
     // SAFETY: `run` on a scope that is active answers what its callback returned, which is always a computed here.
-    return agents as ComputedRef<AgentAccess | undefined>;
+    return self as ComputedRef<MemberSelf | undefined>;
+};
+
+export const selfAgents = (): ComputedRef<AgentAccess | undefined> => {
+    const access = selfAccess();
+    return computed(() => access.value?.agents);
+};
+
+// Whether work done for the signed-in person lands by itself, which is also whether they may land it (sandbox-contract
+// `landsHere`). Read only where the tier does not answer it: a home-only guest, granted it or not.
+export const selfLands = (): ComputedRef<boolean> => {
+    const access = selfAccess();
+    return computed(() => access.value?.lands === true);
 };
