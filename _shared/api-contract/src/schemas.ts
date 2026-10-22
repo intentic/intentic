@@ -92,8 +92,7 @@ export const HostedPlanHostedSchema = z.object({
     // The account's free hours (`kind` is always `free`): what every machine off a paid slot spends, and what a new
     // hosted sandbox starts on. Present with no machine at all, since a released machine's minutes stay in it.
     freeHours: HostedHoursMeterSchema,
-    // The rung a machine lands on with nothing bought, and the shape this deployment gives it: an operator running
-    // their own fleet may size the free rung differently from the published ladder.
+    // The rung a machine lands on with nothing bought, in this deployment's shape (an operator may size free its own way).
     freeTier: z.object({ id: z.string(), shape: HostedShapeSchema, monthlyHours: z.number().int().nonnegative() }),
 });
 export type HostedPlanHosted = z.infer<typeof HostedPlanHostedSchema>;
@@ -106,6 +105,7 @@ export const HostedPlanStateSchema = z.object({
     renewsAt: z.iso.datetime().optional(),
     cancelAtPeriodEnd: z.boolean().optional(),
     priceUsd: z.number(),
+    onSale: z.array(z.string()).optional(), // Paid rungs with a Stripe price, cheapest first; absent = only `priceUsd`'s.
     hosted: HostedPlanHostedSchema.optional(),
 });
 export type HostedPlanState = z.infer<typeof HostedPlanStateSchema>;

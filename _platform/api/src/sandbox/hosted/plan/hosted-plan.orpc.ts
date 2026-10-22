@@ -5,7 +5,7 @@ import {
     type HostedPlanHosted,
     type HostedPlanState,
 } from "@intentic/api-contract";
-import { FREE_TIER, type HostedTier, hostedTier, isHostedTierId } from "@intentic/constants";
+import { FREE_TIER, type HostedTier, hostedTier, isHostedTierId, PAID_TIERS } from "@intentic/constants";
 import { implement, ORPCError } from "@orpc/server";
 import type { Config } from "../../../config.js";
 import type { OrpcContext } from "../../../context.js";
@@ -84,7 +84,9 @@ const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPl
 // rung costs. It rides even on a disabled answer, since it describes the offer to someone who has not bought it.
 const planOffer = (config: Config): HostedPlanState => {
     const entry = entryTier(config);
-    return { enabled: hostedPlanEnabled(config), onPlan: false, priceUsd: entry === undefined ? 0 : entry.tier.priceUsd };
+    // Every rung on sale, so the page can offer each one rather than only the cheapest.
+    const onSale = PAID_TIERS.filter((tier) => hostedPrices(config).has(tier.id)).map((tier) => tier.id);
+    return { enabled: hostedPlanEnabled(config), onPlan: false, priceUsd: entry === undefined ? 0 : entry.tier.priceUsd, onSale };
 };
 
 // The whole answer, for `state` and every write that ends by re-reading it. Plan half from the mirror row and comp list

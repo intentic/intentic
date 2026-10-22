@@ -1,130 +1,113 @@
 <script setup lang="ts">
-import { FREE_TIER, PAID_TIERS } from "@intentic/constants";
-import { Button, Card, Icon, SectionHeader } from "@intentic/ui";
-import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
+import { Button, Icon } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
+import { RouterLink } from "vue-router";
+import HostedTierCard from "./HostedTierCard.vue";
+import type { Rung } from "./planLadder";
 
-// The only thing this product charges for, said as it is: the free machine shares the account's free hours and is
-// removed after weeks unopened; a slot gives one sandbox a bigger machine with a month of hours to itself, never
-// collected, and changes nothing else. No rung is "always on": every machine sleeps once nobody is using it.
-// Price comes from the plan state, and every hour figure from the ladder, never typed here.
+// The only buying surface in the product, built to be compared rather than read: one line of value, every machine as
+// a card side by side with its own button (the cheapest on sale lifted as the recommendation), then the four
+// answers people look for next to a price. Everything long-form lives in the page's questions, not here.
+//
+// Honest by construction: every figure comes from the ladder, a rung with no Stripe price offers no button, and the
+// free rung is a real choice with its own way in rather than a foil.
 
 const t = useT();
 
 const props = defineProps<{
-    // Subscribe or Resubscribe: the last thing read before the decision.
-    subscribeLabel: string;
-    working?: boolean;
+    ladder: readonly Rung[];
+    // The rung this account's hosted machine already stands on, when it has one.
+    currentTier?: string;
+    // The rung whose checkout is being opened, so only that card's button waits.
+    opening?: string;
 }>();
 
-const emit = defineEmits<{ checkout: [] }>();
+const emit = defineEmits<{ checkout: [tier: string] }>();
 
-const { priceUsd, hosted } = useHostedPlan();
+const maxHours = computed(() => Math.max(...props.ladder.map((rung) => rung.hours)));
 
-// The hours on either side of the purchase: the free machine's share of the account's (as this deployment sets it),
-// and the range a paid slot gives one sandbox to itself.
-const hours = computed(() => {
-    const paid = PAID_TIERS.map((tier) => tier.monthlyHours);
-    return {
-        freeHours: hosted.value?.freeTier.monthlyHours ?? FREE_TIER.monthlyHours,
-        minHours: Math.min(...paid),
-        maxHours: Math.max(...paid),
-    };
-});
+// Setup always names the platform's machine from here: unnamed, the app would install one on this computer instead.
+const HOSTED_SETUP = { name: `setup`, query: { machine: `hosted` } } as const;
+const OWN_SETUP = { name: `setup`, query: { machine: `mine` } } as const;
 
-// What the money buys, stated as facts: the three things a slot changes about the free machine.
-const buys = computed(() => [
-    {
-        icon: `clock` as const,
-        title: t(`settings.hostedPlanOffer.moreHours`),
-        body: t(`settings.hostedPlanOffer.moreHoursBody`, hours.value),
-    },
-    {
-        icon: `shield` as const,
-        title: t(`settings.hostedPlanOffer.neverRemoved`),
-        body: t(`settings.hostedPlanOffer.freeMachineCollectedAfter`),
-    },
-    {
-        icon: `box` as const,
-        title: t(`settings.hostedPlanOffer.sameWorkspace`),
-        body: t(`settings.hostedPlanOffer.everyFeatureCapabilityExtension`),
-    },
-]);
-
-// The questions asked at the button, answered next to it rather than in a help page.
 const assurances = computed(() => [
-    {
-        icon: `eye-slash` as const,
-        title: t(`settings.hostedPlanOffer.flatPrice`),
-        body: t(`settings.hostedPlanOffer.flatPriceBody`),
-    },
-    {
-        icon: `undo` as const,
-        title: t(`settings.hostedPlanOffer.leaveAnyTime`),
-        body: t(`settings.hostedPlanOffer.moveWorkspaceToOwn`),
-    },
-    {
-        icon: `credit-card` as const,
-        title: t(`settings.hostedPlanOffer.cancelAnyTime`),
-        body: t(`settings.hostedPlanOffer.oneClickInStripes`),
-    },
+    { icon: `undo` as const, title: t(`settings.hostedPlanOffer.cancelAnyTime`), body: t(`settings.hostedPlanOffer.cancelAnyTimeBody`) },
+    { icon: `shield` as const, title: t(`settings.hostedPlanOffer.noOverage`), body: t(`settings.hostedPlanOffer.noOverageBody`) },
+    { icon: `sliders-h` as const, title: t(`settings.hostedPlanOffer.switchAnyTime`), body: t(`settings.hostedPlanOffer.switchAnyTimeBody`) },
+    { icon: `lock` as const, title: t(`settings.hostedPlanOffer.secureCheckout`), body: t(`settings.hostedPlanOffer.secureCheckoutBody`) },
 ]);
 </script>
 
 <template>
-    <!-- Accent-tinted hero: the first thing a new reader should land on, price boxed on the side the eye finishes on. -->
-    <Card class="border-primary-fill/25 bg-primary-fill/[0.07]">
-        <div class="flex flex-col gap-5 @2xl:flex-row @2xl:items-center @2xl:gap-8">
-            <div class="min-w-0 flex-1">
-                <SectionHeader :label="t(`settings.hostedPlanOffer.hosted`)" density="dense">
-                    <template #mark><Icon name="star" class="text-base text-link" /></template>
-                </SectionHeader>
-                <h2 class="mt-3 text-2xl font-semibold leading-tight text-content">{{ t(`settings.hostedPlanOffer.biggerMachineOwnHours`) }}</h2>
-                <p class="mt-2 text-sm text-muted">
-                    {{ t(`settings.hostedPlanOffer.freeSharesSlotOwns`, hours) }}
-                </p>
-            </div>
+    <section class="flex flex-col gap-8" :aria-label="t(`settings.hostedPlanOffer.eyebrow`)">
+        <header class="flex max-w-2xl flex-col gap-2">
+            <span class="inline-flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.14em] text-accent">
+                <Icon name="cloud" class="text-sm" />
+                {{ t(`settings.hostedPlanOffer.eyebrow`) }}
+            </span>
+            <h2 class="text-2xl font-semibold leading-tight tracking-tight text-content @2xl:text-[1.75rem]">
+                {{ t(`settings.hostedPlanOffer.headline`) }}
+            </h2>
+            <p class="text-sm text-muted">{{ t(`settings.hostedPlanOffer.subhead`) }}</p>
+        </header>
 
-            <div class="shrink-0 rounded-lg bg-card shadow-sm p-4 @2xl:w-64">
-                <div class="flex items-baseline gap-1.5">
-                    <span class="text-4xl font-semibold leading-none tracking-tight text-content">${{ priceUsd }}</span>
-                    <span class="text-sm text-muted">/month</span>
-                </div>
-                <!-- A slot is a machine: stated next to the price. -->
-                <p class="mt-1 text-2xs text-subtle">{{ t(`settings.hostedPlanOffer.perHostedSandbox`) }}</p>
-                <Button :label="props.subscribeLabel" :loading="props.working" tier="loud" @click="emit(`checkout`)" />
-                <p class="mt-2 text-center text-2xs text-subtle">{{ t(`settings.hostedPlanOffer.paidThroughStripeCancel`) }}</p>
-            </div>
+        <div class="grid grid-cols-1 items-stretch gap-x-4 gap-y-6 pt-2 @2xl:grid-cols-3">
+            <!-- Stacked on a narrow column, the recommended card leads; side by side, the ladder keeps its order. -->
+            <HostedTierCard
+                v-for="rung in props.ladder"
+                :key="rung.id"
+                :rung="rung"
+                :max-hours="maxHours"
+                :current="rung.id === props.currentTier"
+                :class="rung.recommended ? `order-first @2xl:order-none` : ``"
+            >
+                <template #action>
+                    <!-- Free: the way in, or nothing to press once a machine already stands on it. -->
+                    <template v-if="rung.free">
+                        <Button v-if="rung.id === props.currentTier" :label="t(`settings.hostedPlanOffer.yourCurrentPlan`)" tier="quiet" disabled class="w-full" />
+                        <Button v-else :as="RouterLink" :to="HOSTED_SETUP" :label="t(`settings.hostedPlanOffer.startFree`)" tier="boring" class="w-full" />
+                    </template>
+                    <Button
+                        v-else-if="rung.onSale"
+                        :label="t(`settings.hostedPlanOffer.getRung`, { name: rung.name })"
+                        :tier="rung.recommended ? `loud` : `boring`"
+                        :loading="props.opening === rung.id"
+                        :disabled="props.opening !== undefined && props.opening !== rung.id"
+                        class="w-full"
+                        @click="emit(`checkout`, rung.id)"
+                    />
+                    <p v-else class="py-1.5 text-center text-2xs text-subtle">{{ t(`settings.hostedPlanOffer.notSoldHere`) }}</p>
+                </template>
+            </HostedTierCard>
         </div>
-    </Card>
 
-    <div class="grid grid-cols-1 gap-3 @xl:grid-cols-3">
-        <Card v-for="item in buys" :key="item.title" class="flex flex-col gap-1">
-            <span class="flex size-7 items-center justify-center rounded-md bg-primary-fill/12 text-link"><Icon :name="item.icon" /></span>
-            <p class="mt-1.5 text-lg font-semibold leading-tight text-content">{{ item.title }}</p>
-            <p class="text-xs text-muted">{{ item.body }}</p>
-        </Card>
-    </div>
-
-    <Card>
-        <div class="grid grid-cols-1 gap-x-6 gap-y-3 @lg:grid-cols-3">
-            <div v-for="item in assurances" :key="item.title" class="flex items-start gap-2.5 text-xs">
-                <Icon :name="item.icon" class="shrink-0 text-sm text-success" />
+        <!-- The four questions asked at a price, answered in a line each. -->
+        <ul class="grid grid-cols-1 gap-x-6 gap-y-4 @md:grid-cols-2 @3xl:grid-cols-4">
+            <li v-for="item in assurances" :key="item.title" class="flex items-start gap-3">
+                <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-success-tint text-success">
+                    <Icon :name="item.icon" class="text-sm" />
+                </span>
                 <div class="min-w-0">
                     <p class="text-xs font-semibold text-content">{{ item.title }}</p>
-                    <p class="text-xs text-muted">{{ item.body }}</p>
+                    <p class="text-2xs text-muted">{{ item.body }}</p>
                 </div>
-            </div>
-        </div>
-        <div class="mt-7 flex flex-wrap items-center gap-x-4 gap-y-3">
-            <Button :label="props.subscribeLabel" :loading="props.working" tier="loud" @click="emit(`checkout`)" />
-            <!-- Not "leave": moving the workspace to your own machine costs nothing. -->
-            <!-- The rung is named, or setup answers with whatever the surface would have picked — which on this link
-                 of all links would be a machine on the platform (setupArrival.ts). -->
-            <RouterLink :to="{ name: `setup`, query: { machine: `mine` } }" class="text-xs text-link hover:underline">{{
-                t(`settings.hostedPlanOffer.runOnOwnComputer`)
-            }}</RouterLink>
-        </div>
-    </Card>
+            </li>
+        </ul>
+
+        <!-- The free alternative that costs nothing at all, offered plainly rather than hidden. -->
+        <RouterLink
+            :to="OWN_SETUP"
+            class="group flex items-center gap-3 rounded-xl border border-dashed border-line px-4 py-3 transition-colors hover:border-primary-fill/50 hover:bg-content/[0.03]"
+        >
+            <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-content/[0.07] text-muted">
+                <Icon name="desktop" class="text-sm" />
+            </span>
+            <span class="min-w-0 flex-1">
+                <span class="block text-xs font-semibold text-content">{{ t(`settings.hostedPlanOffer.ownComputerTitle`) }}</span>
+                <span class="block text-2xs text-muted">{{ t(`settings.hostedPlanOffer.ownComputerBody`) }}</span>
+            </span>
+            <Icon name="arrow-right" class="shrink-0 text-sm text-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-link" />
+        </RouterLink>
+    </section>
 </template>

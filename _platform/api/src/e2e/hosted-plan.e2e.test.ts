@@ -256,7 +256,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     it(`sells the plan to everyone and describes the free plan to a signed-in account`, async () => {
         const signedOut = await state();
         expect(signedOut.status).toBe(200);
-        expect(signedOut.body).toEqual({ enabled: true, onPlan: false, priceUsd: ENTRY.priceUsd });
+        expect(signedOut.body).toEqual({ enabled: true, onPlan: false, priceUsd: ENTRY.priceUsd, onSale: expect.arrayContaining([ENTRY.id]) });
 
         const signedIn = await state(alice);
         expect(signedIn.body).toMatchObject({ enabled: true, onPlan: false, priceUsd: ENTRY.priceUsd });

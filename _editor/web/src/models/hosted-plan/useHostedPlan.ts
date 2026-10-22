@@ -67,12 +67,6 @@ export function useHostedPlan() {
     };
 }
 
-// Button label read right before the decision; "Resubscribe" for someone who has been on the plan before.
-export const subscribeLabel = (state: HostedPlanState | undefined, returning: boolean): string =>
-    returning
-        ? t(`settings.hostedPlanOffer.resubscribe`, { price: state?.priceUsd ?? 0 })
-        : t(`settings.hostedPlanOffer.subscribe`, { price: state?.priceUsd ?? 0 });
-
 // Whether the account was ever on the plan: a lapsed subscription leaves `status` set while `onPlan` is false, the one
 // trace a never-subscriber lacks.
 export const hasReturned = (state: HostedPlanState | undefined): boolean => state?.onPlan === false && state.status !== undefined;

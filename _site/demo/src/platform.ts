@@ -52,6 +52,7 @@ const DEMO_HOSTED_PLAN: HostedPlanState = {
     status: `active`,
     renewsAt: `2026-10-01T00:00:00.000Z`,
     priceUsd: 20,
+    onSale: [`standard`, `max`],
     hosted: {
         slots: 2,
         // One free slot and one bought at the rung the demo machine stands on.
