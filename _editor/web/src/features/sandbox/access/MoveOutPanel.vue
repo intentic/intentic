@@ -25,6 +25,9 @@ import { PUBLISH_ANCHOR } from "./publishAnchor";
 import { useOperation } from "../../../workbench/operations/operations";
 import { useT } from "@intentic/ui/i18n";
 import ProgressMeter from "../../../components/progress/ProgressMeter.vue";
+import { queryClient } from "../../../lib/queryPersistence";
+import { rpcPrefix } from "../../../lib/queryKeys";
+import { invalidatePushedQueries } from "../../../lib/pushInvalidation";
 
 // Body of <ExportCard>: everything that leaves this sandbox, at three fidelities (published workspace,
 // sandbox.toml document, bundle), in that order since publishing unlocks what a definition can carry and comparing
@@ -90,6 +93,7 @@ const publish = async (): Promise<void> => {
     });
     if (outcome?.state === `done`) {
         confirmingPublish.value = false;
+        void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`git.remoteRepos`) });
     }
 };
 

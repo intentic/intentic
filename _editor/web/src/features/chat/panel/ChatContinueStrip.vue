@@ -52,6 +52,7 @@ const props = defineProps<{
 const emit = defineEmits<{ (event: "continue", options?: ContinueOptions): void; (event: "continueAtReopen"): void }>();
 
 const { conversation, connected, pickUp, provider, model, account, accounts, servingAccount, selectModel, chooseHandoff } = usePaneView();
+const continuing = computed(() => conversation.value.turn.continuing.value);
 const { reachable } = useSandbox();
 const { settings } = useSandboxSettings();
 const { mobile } = useDevice();
@@ -163,7 +164,7 @@ watch(
 );
 const continueOnModel = (value: string): void => {
     modelsOpen.value = false;
-    if (!reachable.value) {
+    if (!reachable.value || continuing.value) {
         return;
     }
     selectModel({ provider: provider.value, value });
@@ -231,7 +232,11 @@ const pickHandoff = (next: HandoffMode): void => {
         void chooseHandoff(next);
     }
 };
-const pressContinue = (): void => emit(`continue`, handoff.value === undefined ? undefined : { handoff: handoff.value });
+const pressContinue = (): void => {
+    if (!continuing.value) {
+        emit(`continue`, handoff.value === undefined ? undefined : { handoff: handoff.value });
+    }
+};
 
 // The only control here that changes whether a press can work, rather than when: reopens the account's five-hour
 // window on demand (once a week), leaving the weekly pool alone. Asked about the conversation's own account pick
@@ -298,7 +303,7 @@ watch(
 // recorded is lost). Where no held turn is this sandbox's to move (nothing held, another box), the pick then the press.
 const continueOnFallback = async (carry: boolean, way?: HandoffMode): Promise<void> => {
     const target = fallback.value;
-    if (target === undefined || !reachable.value) {
+    if (target === undefined || !reachable.value || continuing.value) {
         return;
     }
     waysOpen.value = false;
@@ -402,7 +407,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                             v-if="otherModels.length > 0"
                             size="small"
                             tier="boring"
-                            :disabled="!reachable || !ready"
+                            :disabled="!reachable || !ready || continuing"
                             :aria-expanded="modelsOpen"
                             v-tooltip.top="otherModelHint"
                             @click="modelsOpen = !modelsOpen"
@@ -410,20 +415,20 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                             {{ t(`chat.chatContinueStrip.continueOnOther`) }}<Icon name="chevron-down" class="ml-1 text-2xs" />
                         </Button>
                     </span>
-                    <Button size="small" thumb :disabled="!reachable || !ready" v-tooltip.top="retryHint" @click="emit(`continue`)">
+                    <Button size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.retryOn`, { model: modelLabel })" v-tooltip.top="retryHint" @click="pressContinue">
                         {{ t(`chat.chatContinueStrip.retryOn`, { model: modelLabel }) }}
                     </Button>
                 </template>
                 <!-- The account is spent until a named reopen: trying now is a quiet press, and the solid one continues then. -->
                 <template v-else-if="spent">
-                    <Button size="small" thumb tier="quiet" :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="pressContinue">
+                    <Button size="small" thumb tier="quiet" :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`chat.chatContinueStrip.tryNow`)" v-tooltip.top="continueHint" @click="pressContinue">
                         {{ t(`chat.chatContinueStrip.tryNow`) }}
                     </Button>
                     <Button
                         v-if="atReopen === `book`"
                         size="small"
                         thumb
-                        :disabled="!reachable"
+                        :disabled="!reachable || continuing"
                         v-tooltip.top="continueAtHint"
                         @click="emit(`continueAtReopen`)"
                     >
@@ -431,7 +436,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                     </Button>
                 </template>
                 <!-- The card's one solid press: every other control here decides WHEN, this one does it now. -->
-                <Button v-else size="small" thumb :disabled="!reachable || !ready" v-tooltip.top="continueHint" @click="pressContinue">
+                <Button v-else size="small" thumb :disabled="!reachable || !ready || continuing" :loading="continuing" :aria-label="t(`ui.action.continue`)" v-tooltip.top="continueHint" @click="pressContinue">
                     {{ t(`ui.action.continue`) }}
                 </Button>
                 <Button
@@ -439,7 +444,7 @@ const waysRows = computed((): readonly { key: string; icon: IconName; title: str
                     size="small"
                     thumb
                     tier="quiet"
-                    :disabled="!reachable"
+                    :disabled="!reachable || continuing"
                     :aria-label="t(`chat.chatContinueStrip.otherWaysOn`)"
                     :aria-expanded="waysOpen"
                     v-tooltip.top="t(`chat.chatContinueStrip.otherAccounts`)"

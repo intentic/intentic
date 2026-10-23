@@ -239,6 +239,27 @@ it(`makes Enter on an empty composer continue, and says so under the box`, async
     expect(say).not.toHaveBeenCalled();
 });
 
+it(`shows a pending Continue request and prevents another button press until it settles`, async () => {
+    const conversation = stoppedChat();
+    const carry = jest.spyOn(conversation.turn, `continueTurn`).mockResolvedValue(undefined);
+    await mountPanel();
+
+    conversation.turn.continuing.value = true;
+    await settle();
+    expect(continueButton()?.disabled).toBe(true);
+    expect(continueButton()?.getAttribute(`aria-busy`)).toBe(`true`);
+    expect(continueButton()?.getAttribute(`aria-label`)).toBe(`Continue`);
+    continueButton()!.click();
+    expect(carry).not.toHaveBeenCalled();
+
+    conversation.turn.continuing.value = false;
+    await settle();
+    expect(continueButton()?.disabled).toBe(false);
+    continueButton()!.click();
+    await settle();
+    expect(carry).toHaveBeenCalledTimes(1);
+});
+
 it(`stands down the moment the user types something of their own`, async () => {
     const conversation = stoppedChat();
     const say = jest.spyOn(conversation.turn, `say`).mockResolvedValue(undefined);

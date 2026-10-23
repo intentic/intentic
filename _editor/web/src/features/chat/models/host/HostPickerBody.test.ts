@@ -109,7 +109,7 @@ const mount = (): HTMLElement => {
 
 // A control by the word on it: the rungs the meter offered, the thinking stops, and the commit bar's own verb.
 const button = (element: HTMLElement, label: string): HTMLButtonElement | undefined =>
-    [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((candidate) => candidate.textContent === label);
+    [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((candidate) => (candidate.getAttribute(`aria-label`) ?? candidate.textContent) === label);
 
 afterEach(() => {
     settleModelPick(undefined);
@@ -346,7 +346,7 @@ it(`offers no way to unset a run setting once the panel has shown one`, () => {
     const element = mount();
 
     // The two switches are chips and nothing else in the panel is pressable except the list and the bar.
-    expect([...element.querySelectorAll(`button[aria-pressed]`)].map((chip) => chip.textContent)).toEqual([`Extended thinking`]);
+    expect([...element.querySelectorAll(`button[aria-pressed]`)].map((chip) => chip.getAttribute(`aria-label`))).toEqual([`Extended thinking`]);
     expect([...element.querySelectorAll(`button`)].map((candidate) => candidate.getAttribute(`aria-label`))).not.toContain(
         `Take this model's own default effort`,
     );

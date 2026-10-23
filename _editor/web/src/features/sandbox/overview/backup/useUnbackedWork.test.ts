@@ -92,6 +92,19 @@ test(`reads the tree once no repository has a remote, and warns because files ar
     expect(asked).toEqual([`git.remoteRepos`, `workspace.tree`]);
 });
 
+test(`clears the warning when the workspace is published and the remote read is invalidated`, async () => {
+    daemon([]);
+    const { remotes, unbacked } = mounted(() => useUnbackedWork());
+    await waitFor(() => expect(unbacked.value).toBe(true));
+
+    const root = { ...REMOTE, repo: `root` };
+    remoteRepos.mockResolvedValue({ repos: [root] });
+    await queryClient.invalidateQueries({ queryKey: [`git.remoteRepos`] });
+
+    await waitFor(() => expect(remotes.value).toEqual([root]));
+    expect(unbacked.value).toBe(false);
+});
+
 // A brand-new hosted sandbox: the daemon's dotted state and the seeded starter site, one commit, no remote. Its owner,
 // on a phone, was told their work had nowhere to go before they had sent a message (2026-10-06).
 const SEED = {

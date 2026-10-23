@@ -55,6 +55,7 @@ const MODEL = `a-model`;
 // `live` is a turn running (or parked on a card, `plan`); `open` is whether Auto's question is still open on the chat
 // (ComposerSelection.autoOpen): off once its first message waits in the queue.
 interface Standing {
+    readonly thinking?: boolean;
     readonly auto?: boolean;
     readonly sent?: number;
     readonly open?: boolean;
@@ -64,7 +65,7 @@ interface Standing {
 }
 const conversationOf = (
     pair: { provider: AgentProvider; harness: AgentHarness },
-    { auto = false, sent = 0, open = true, live = false, plan = false, ran }: Standing = {},
+    { auto = false, sent = 0, open = true, live = false, plan = false, ran, thinking = false }: Standing = {},
 ): Conversation =>
     ({
         selection: {
@@ -73,7 +74,7 @@ const conversationOf = (
             provider: ref(pair.provider),
             harness: ref(pair.harness),
             model: ref(MODEL),
-            thinking: ref(false),
+            thinking: ref(thinking),
             fast: ref(false),
             effort: computed(() => ``),
             auto: ref(auto),
@@ -124,10 +125,10 @@ const hint = (element: HTMLElement): HTMLElement => element.querySelector<HTMLEl
 // `label → lit`, so a test says both which chips exist and which of them are on.
 const chips = (element: HTMLElement): Record<string, boolean> =>
     Object.fromEntries(
-        [...element.querySelectorAll(`button[aria-pressed]`)].map((chip) => [chip.textContent ?? ``, chip.getAttribute(`aria-pressed`) === `true`]),
+        [...element.querySelectorAll(`button[aria-pressed]`)].map((chip) => [chip.getAttribute(`aria-label`) ?? chip.textContent ?? ``, chip.getAttribute(`aria-pressed`) === `true`]),
     );
 const chip = (element: HTMLElement, label: string): HTMLElement =>
-    [...element.querySelectorAll<HTMLElement>(`button[aria-pressed]`)].find((candidate) => candidate.textContent === label)!;
+    [...element.querySelectorAll<HTMLElement>(`button[aria-pressed]`)].find((candidate) => (candidate.getAttribute(`aria-label`) ?? candidate.textContent) === label)!;
 
 afterEach(() => {
     app?.unmount();
@@ -205,6 +206,13 @@ it(`asks the thinking question with the shared chip`, () => {
     const { element, conversation } = mount(CEILING);
 
     expect(chips(element)).toEqual({ "Extended thinking": conversation.selection.thinking.value });
+    expect(chip(element, `Extended thinking`).textContent).toBe(`Extended thinkingOff`);
+});
+
+it(`names the thinking state visibly while keeping its accessible toggle name stable`, () => {
+    const { element } = mount(CEILING, { thinking: true });
+    expect(chip(element, `Extended thinking`).textContent).toBe(`Extended thinkingOn`);
+    expect(chips(element)).toEqual({ "Extended thinking": true });
 });
 
 // The chip is the whole control: pressing it writes the opposite of what it is showing, and nothing else.

@@ -18,10 +18,12 @@ import { createInlineRename } from "@intentic/ui/inline-rename";
 import { computed, onMounted, onUnmounted, provide, ref, useTemplateRef, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import ChatPanel from "../../chat/panel/ChatPanel.vue";
-import AgentLandFailure from "./AgentLandFailure.vue";
+import AgentLandFailure from "./landing/AgentLandFailure.vue";
 import { agentStatusMeta } from "../../../models/agent-status/agentStatus-meta";
 import { unregistered, writingNow } from "../../../models/agent-status/agentStatus-standing";
-import { agentWork, assignAgent, landRequestWork, requestLandAgent, startAgent } from "../../../models/fleet/agentActions";
+import { agentWork, assignAgent, startAgent } from "../../../models/fleet/agentActions";
+import { useLandRequest } from "./landing/useLandRequest";
+import { showParkedChat } from "../../../models/conversations/panel/chatPanelLayout";
 import { useOperation } from "../../../workbench/operations/operations";
 import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { identityHue } from "../../../lib/identityHue";
@@ -291,22 +293,11 @@ const statusShown = computed(() => status.value !== undefined && !(landOffered.v
 const words = useVocabulary();
 // Kept in the ledger under the card, shared with the card's own press: its refusal is said under this header (or as a
 // receipt to a reader who already left), where it used to be thrown at nobody.
-const landAsk = useOperation(() => landRequestWork(agentId.value, remoteBox.value));
+const { landAsk, requestLand } = useLandRequest(
+    () => ({ id: agentId.value, box: remoteBox.value, title: title.value }),
+    (box) => box === undefined ? refresh() : Promise.resolve(refreshAcross()),
+);
 const requestingLand = landAsk.busy;
-const requestLand = async (): Promise<void> => {
-    const id = agentId.value;
-    const box = remoteBox.value;
-    const name = title.value;
-    await landAsk.run({
-        what: t(`agents.agentDetail.requestingLand`, { name }),
-        done: () => t(`agents.agentDetail.landRequestSent`, { name }),
-        failed: t(`agents.agentCard.couldntSendLandRequest`),
-        task: async () => {
-            await requestLandAgent(id, box);
-            await (box === undefined ? refresh() : Promise.resolve(refreshAcross()));
-        },
-    });
-};
 
 // What a remote review can't offer, gated in one place: rename/archive/auto-land address the fleet store (this
 // daemon's roster only), and asking the agent needs a conversation. Absent rather than disabled, with the
@@ -592,7 +583,15 @@ const confirmHandOver = async (): Promise<void> => {
                 <Icon name="arrow-right" />{{ t(`agents.words.openIn`) }} {{ remoteName }}
             </Button>
         </div>
-        <AgentLandFailure v-if="fleetAgent !== undefined" :agent="fleetAgent" :can-ship="canShip" :busy="changes.actionBusy.value" @retry="changes.land('check')" />
+        <AgentLandFailure
+            v-if="fleetAgent !== undefined"
+            :agent="fleetAgent"
+            :can-ship="canShip"
+            :can-chat="localOnly && !inApp"
+            :busy="changes.actionBusy.value"
+            @retry="changes.land('check')"
+            @chat="open(fleetAgent); showParkedChat(); view = 'chat'"
+        />
         <p v-if="edit.error !== undefined" class="border-b border-line px-3 py-1 text-2xs text-danger">{{ edit.error }}</p>
         <!-- Here rather than inside the review: the presses that raise it are this header's and the session menu's, and
              the review is not on screen for either a phone reading the chat or a land pressed from the menu over it. -->

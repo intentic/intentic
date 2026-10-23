@@ -11,7 +11,7 @@ import { holdsWork, onlyStarter, starterStateOf } from "./madeWork";
 // repository in it pointing at a remote. Both halves matter — a fresh sandbox has no remote either, and telling somebody
 // to connect a repository before they have made anything is a nag about nothing.
 
-/* One lookup per repo, so this is polled on the slow clock a standing condition deserves, never on a change. */
+// Repo/ref events and publishing invalidate this read; polling also catches remote edits made outside the app.
 const REMOTES_POLL_MS = 5 * 60_000;
 
 export function useUnbackedWork() {

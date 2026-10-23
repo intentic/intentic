@@ -317,6 +317,8 @@
             "landsIfConflictsGone": "Landet, wenn die Konflikte weg sind"
         },
         "agentStatus": {
+            "landDetails": "Fehlerdetails",
+            "landWorkKept": "Deine Änderungen liegen weiterhin auf {branch}. Prüfe die Fehlerdetails oder öffne den Chat, bevor du sie erneut übernimmst.",
             "approvalNeeded": "Genehmigung nötig",
             "checksEvery": "Prüft alle",
             "conflict": "Konflikt",
@@ -3908,6 +3910,8 @@
             "measured": "gemessen {age}"
         },
         "pickerRunSettings": {
+            "on": "An",
+            "off": "Aus",
             "defaultEffort": "Standardaufwand",
             "extendedThinking": "Erweitertes Nachdenken",
             "fast": "schnell",
@@ -11214,11 +11218,14 @@
             "serviceSilent": "Der Push-Dienst hat nicht geantwortet. Prüfen Sie die Verbindung des Telefons und versuchen Sie es erneut."
         },
         "pushQuestionBody": {
+            "syncAndRetry": "Synchronisieren und erneut versuchen",
+            "syncHint": "Das Remote-Repository enthält Commits, die dieser Branch benötigt. Die Synchronisierung holt sie vor dem nächsten Push. Bei überlappenden Änderungen hält sie an, damit du diese auflösen kannst.",
+            "copyDetails": "Details kopieren",
             "showTerminal": "Terminal zeigen",
             "connectGithub": "GitHub verbinden",
             "connectGitlab": "GitLab verbinden",
-            "signInRefusedGithub": "GitHub hat die Anmeldung dieser Sandbox nicht akzeptiert. Verbinden Sie Ihr GitHub-Konto und versuchen Sie den Push dann erneut.",
-            "signInRefusedGitlab": "GitLab hat die Anmeldung dieser Sandbox nicht akzeptiert. Verbinden Sie Ihr GitLab-Konto und versuchen Sie den Push dann erneut.",
+            "signInRefusedGithub": "GitHub hat den Zugriff auf dieses Repository verweigert. Verbinde ein Konto mit Schreibzugriff und versuche den Push erneut.",
+            "signInRefusedGitlab": "GitLab hat den Zugriff auf dieses Repository verweigert. Verbinde ein Konto mit Schreibzugriff und versuche den Push erneut.",
             "fromWhen": "Von {when}.",
             "staleSince": "{when} Seitdem haben sich Dateien geändert, das Ergebnis kann also jetzt anders aussehen.",
             "unchangedSince": "{when} Seitdem hat sich nichts geändert."

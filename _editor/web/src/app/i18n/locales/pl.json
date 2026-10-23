@@ -317,6 +317,8 @@
             "landsIfConflictsGone": "Scala, jeśli konflikty zniknęły"
         },
         "agentStatus": {
+            "landDetails": "Szczegóły błędu",
+            "landWorkKept": "Twoje zmiany nadal są na gałęzi {branch}. Sprawdź szczegóły błędu lub otwórz czat przed ponownym scaleniem.",
             "approvalNeeded": "Potrzebna zgoda",
             "checksEvery": "Sprawdza co",
             "conflict": "Konflikt",
@@ -3908,6 +3910,8 @@
             "measured": "zmierzono {age}"
         },
         "pickerRunSettings": {
+            "on": "Wł.",
+            "off": "Wył.",
             "defaultEffort": "domyślny wysiłek",
             "extendedThinking": "Rozszerzone myślenie",
             "fast": "szybko",
@@ -10605,11 +10609,14 @@
             "reAllowInBrowsers": "Zezwól na nie ponownie w ustawieniach witryn swojej przeglądarki"
         },
         "pushQuestionBody": {
+            "syncAndRetry": "Synchronizuj i ponów",
+            "syncHint": "Zdalne repozytorium zawiera commity potrzebne tej gałęzi. Synchronizacja pobierze je przed ponownym wysłaniem. Nakładające się zmiany zatrzymają synchronizację do czasu ich rozwiązania.",
+            "copyDetails": "Kopiuj szczegóły",
             "showTerminal": "Pokaż terminal",
             "connectGithub": "Połącz GitHub",
             "connectGitlab": "Połącz GitLab",
-            "signInRefusedGithub": "GitHub nie przyjął logowania tej piaskownicy. Połącz swoje konto GitHub, a potem spróbuj wysłać jeszcze raz.",
-            "signInRefusedGitlab": "GitLab nie przyjął logowania tej piaskownicy. Połącz swoje konto GitLab, a potem spróbuj wysłać jeszcze raz.",
+            "signInRefusedGithub": "GitHub odmówił dostępu do tego repozytorium. Połącz konto z uprawnieniami do zapisu i ponów wysyłanie.",
+            "signInRefusedGitlab": "GitLab odmówił dostępu do tego repozytorium. Połącz konto z uprawnieniami do zapisu i ponów wysyłanie.",
             "fromWhen": "Zapamiętane {when}.",
             "staleSince": "{when} Od tego czasu pliki się zmieniły, więc teraz może się to potoczyć inaczej.",
             "unchangedSince": "{when} Od tego czasu nic się nie zmieniło."

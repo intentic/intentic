@@ -197,6 +197,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // Watcher never sees `.git` paths, so no workspaceChanged batch covers this; the daemon diffs its own repo
             // discovery.
             void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`panels.list`) });
+            void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`git.remoteRepos`) });
             // Extensions own their own caches; this only announces the new set (see workbench/workspace-events/repoEvents).
             emitReposChanged(event.repos);
             return;
@@ -207,6 +208,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // - open editor buffers, only if the worktree itself moved
             refreshChanges();
             void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`history.list`) });
+            void invalidatePushedQueries(queryClient, { queryKey: rpcPrefix(`git.remoteRepos`) });
             if (worktreeMovedRecently()) {
                 dropEditBuffers();
             }

@@ -5,7 +5,7 @@ import { computed, watch } from "vue";
 import { type SyncTarget, useChanges } from "../../../models/changes/useChanges";
 import { workspaceChangedSince, workspaceChangeMark } from "../../../models/workspace/changes/useWorkspaceLive";
 import { usePushRun } from "../../../models/workspace/push/usePushRun";
-import { credentialHostOf } from "../../../models/workspace/push/refusalSummary";
+import { credentialHostOf, pushNeedsPull } from "../../../models/workspace/push/refusalSummary";
 import { t } from "@intentic/ui/i18n";
 
 // The push flow, from click to answer, kept at module level (not in the panel) so it outlives the surface
@@ -210,6 +210,21 @@ const dismiss = (): void => {
 export function usePushFlow() {
     git ??= useChanges();
 
+    const reposNeedingPull = computed(() => new Set(refusedRuns.value.filter(pushNeedsPull).map((run) => run.repo)));
+    const canSyncAndRetry = computed(() => pending.value?.targets.some((target) => target.push && reposNeedingPull.value.has(target.repo)) === true);
+
+    // Keep the existing guarded pull: it fast-forwards or replays commits, and refuses overlapping work before pushing.
+    const syncAndRetry = (): void => {
+        const push = pending.value;
+        if (push === undefined || sending.value || !canSyncAndRetry.value) {
+            return;
+        }
+        const targets = push.targets.map((target) =>
+            target.push && reposNeedingPull.value.has(target.repo) ? { ...target, pull: true } : target,
+        );
+        void send({ ...push, targets });
+    };
+
     // The one door every Push, Sync and Publish arrives at, so every refusal is asked about the same way.
     const askSync = (verb: string, what: string, targets: readonly SyncTarget[]): void => {
         if (sending.value) {
@@ -250,6 +265,19 @@ export function usePushFlow() {
             const refused = refusedRuns.value.length > 0 ? refusedRuns.value : (standing.value?.runs ?? []);
             return refused.map(credentialHostOf).find((host) => host !== undefined);
         }),
+        failureDetails: computed(() => {
+            const asked = question.value;
+            if (asked === undefined) {
+                return ``;
+            }
+            return [
+                asked.title,
+                asked.detail,
+                ...refusedRuns.value.map((run) => `${run.repo}\n${run.command}\n${run.reason ?? ``}\n${run.output}`),
+            ].join(`\n\n`);
+        }),
+        canSyncAndRetry,
+        syncAndRetry,
         showTerminal: (): void => currentTerminal()?.show(),
         askSync,
         retry,

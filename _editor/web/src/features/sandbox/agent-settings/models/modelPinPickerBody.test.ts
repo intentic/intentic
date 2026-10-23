@@ -93,9 +93,9 @@ const segment = (host: HTMLElement, option: string): HTMLButtonElement => loops(
 
 /* The two switches, which are chips and not rows: `.composer-toggle` is the chip recipe. */
 const chips = (host: HTMLElement): string[] =>
-    [...host.querySelectorAll<HTMLElement>(`button.composer-toggle`)].map((chip) => chip.textContent?.trim() ?? ``);
+    [...host.querySelectorAll<HTMLElement>(`button.composer-toggle`)].map((chip) => chip.getAttribute(`aria-label`) ?? chip.textContent?.trim() ?? ``);
 const chip = (host: HTMLElement, label: string): HTMLButtonElement =>
-    [...host.querySelectorAll<HTMLButtonElement>(`button.composer-toggle`)].find((candidate) => candidate.textContent?.trim() === label)!;
+    [...host.querySelectorAll<HTMLButtonElement>(`button.composer-toggle`)].find((candidate) => (candidate.getAttribute(`aria-label`) ?? candidate.textContent?.trim()) === label)!;
 
 test("a list whose entries carry no run settings gets the list and no footer at all", async () => {
     const host = mount({ pin: { provider: `claude`, model: `claude-haiku-4-5` }, knobs: false });

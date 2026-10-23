@@ -104,11 +104,29 @@ const replayOnto = async (dir: string, branch: string, upstream: string, ahead: 
     }
 };
 
+// A first publish can be rejected because the remote already has this branch. Pull from the same destination push
+// would use, without assigning an upstream until the eventual publish succeeds.
+const pullTarget = async (dir: string, git: GitRunner): Promise<{ branch: string; upstream: string; remote: string } | undefined> => {
+    const branch = (await git(dir, ["branch", "--show-current"])).stdout.trim();
+    if (branch === "") {
+        return undefined;
+    }
+    // A failed upstream read must not silently redirect a tracked branch to origin.
+    const tracking = await upstreamOf(dir, branch, git);
+    const remote = tracking.remote ?? await configuredRemote(dir, git);
+    return remote === undefined ? undefined : { branch, remote, upstream: tracking.upstream ?? `${remote}/${branch}` };
+};
+
 // Levels a branch with its upstream, never with a merge commit: behind-only fast-forwards, diverged replays the
 // local-only commits onto upstream. Every refusal leaves branch, index and worktree exactly as they were.
 export const pullRemote = async (dir: string, author: Author, git: GitRunner = defaultGit): Promise<ActionResult> => {
-    const tracked = await trackedBranch(dir, git);
-    // Detached or untracked: git's own pull names what is missing.
+    let tracked: Awaited<ReturnType<typeof pullTarget>>;
+    try {
+        tracked = await pullTarget(dir, git);
+    } catch (error) {
+        return { ok: false, reason: gitFailureReason(error, "could not read the branch's upstream") };
+    }
+    // Detached or without a remote: git's own pull names what is missing.
     if (tracked === undefined) {
         return run(dir, ["pull", "--ff-only", "--quiet"], git);
     }
@@ -116,8 +134,19 @@ export const pullRemote = async (dir: string, author: Author, git: GitRunner = d
     if (!fetched.ok) {
         return fetched;
     }
-    // Re-read after the fetch: the counts that offered this pull predate it.
-    const { ahead, behind } = await upstreamOf(dir, tracked.branch, git);
+    // Count against the fetched destination even before this branch has an upstream. Refuse unrelated histories:
+    // replaying their entire history would silently combine two different projects.
+    let ahead: number;
+    let behind: number;
+    try {
+        await git(dir, ["merge-base", `refs/heads/${tracked.branch}`, tracked.upstream]);
+        const { stdout } = await git(dir, ["rev-list", "--left-right", "--count", `refs/heads/${tracked.branch}...${tracked.upstream}`]);
+        const [left, right] = stdout.trim().split(/\s+/);
+        ahead = Number(left);
+        behind = Number(right);
+    } catch (error) {
+        return { ok: false, reason: gitFailureReason(error, `could not compare this branch with ${tracked.upstream}; check that they share history`) };
+    }
     if (behind === 0) {
         return { ok: true };
     }

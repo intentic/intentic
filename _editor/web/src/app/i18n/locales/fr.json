@@ -317,6 +317,8 @@
             "landsIfConflictsGone": "Intègre si les conflits ont disparu"
         },
         "agentStatus": {
+            "landDetails": "Détails de l’erreur",
+            "landWorkKept": "Vos modifications sont toujours sur {branch}. Consultez les détails de l’erreur ou ouvrez le chat avant de réessayer l’intégration.",
             "approvalNeeded": "Approbation nécessaire",
             "checksEvery": "Vérifie toutes les",
             "conflict": "Conflit",
@@ -3908,6 +3910,8 @@
             "measured": "mesuré {age}"
         },
         "pickerRunSettings": {
+            "on": "Activé",
+            "off": "Désactivé",
             "defaultEffort": "effort par défaut",
             "extendedThinking": "Réflexion étendue",
             "fast": "rapide",
@@ -11214,11 +11218,14 @@
             "serviceSilent": "Le service push n'a pas répondu. Vérifiez la connexion du téléphone et réessayez."
         },
         "pushQuestionBody": {
+            "syncAndRetry": "Synchroniser et réessayer",
+            "syncHint": "Le dépôt distant contient des commits nécessaires à cette branche. La synchronisation les récupère avant de réessayer le push. Si des modifications se chevauchent, elle s’arrête pour vous permettre de les résoudre.",
+            "copyDetails": "Copier les détails",
             "showTerminal": "Afficher le terminal",
             "connectGithub": "Connecter GitHub",
             "connectGitlab": "Connecter GitLab",
-            "signInRefusedGithub": "GitHub n'a pas accepté la connexion de ce sandbox. Connectez votre compte GitHub, puis relancez le push.",
-            "signInRefusedGitlab": "GitLab n'a pas accepté la connexion de ce sandbox. Connectez votre compte GitLab, puis relancez le push.",
+            "signInRefusedGithub": "GitHub a refusé l’accès à ce dépôt. Connectez un compte disposant d’un accès en écriture, puis réessayez le push.",
+            "signInRefusedGitlab": "GitLab a refusé l’accès à ce dépôt. Connectez un compte disposant d’un accès en écriture, puis réessayez le push.",
             "fromWhen": "Datant de {when}.",
             "staleSince": "{when} Des fichiers ont changé depuis : ce n'est peut-être plus ce qui se passera.",
             "unchangedSince": "{when} Rien n'a changé depuis."

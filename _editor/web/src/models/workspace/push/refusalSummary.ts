@@ -46,7 +46,7 @@ export const refusalSummary = (run: PushRun): string => {
 // capability fixes, so the card can lead there rather than only to the terminal. Undefined for every other refusal,
 // and for a host no capability signs in to.
 const CREDENTIAL_REFUSAL =
-    /Authentication failed|could not read Username|terminal prompts disabled|Invalid username or (?:password|token)|returned error: 40[13]\b/i;
+    /Authentication failed|could not read Username|terminal prompts disabled|Invalid username or (?:password|token)|returned error: 40[13]\b|Permission denied \(publickey\)|Permission to .+ denied to |Write access to repository not granted|HTTP Basic: Access denied|You are not allowed to push code to this project/i;
 
 export const credentialHostOf = (run: PushRun): `github` | `gitlab` | undefined => {
     if (run.status !== `failed` || run.refusedBy === `hook`) {
@@ -61,3 +61,12 @@ export const credentialHostOf = (run: PushRun): `github` | `gitlab` | undefined 
     }
     return /gitlab\.com/i.test(said) ? `gitlab` : undefined;
 };
+
+// Only Git's rejected-ref verdict justifies pulling before retrying. A hook or branch-protection refusal needs its
+// own fix, even if its output happens to quote the same words.
+// allow(dependency-text): Git's rejected-ref reasons, emitted in English by the daemon.
+export const pushNeedsPull = (run: PushRun): boolean =>
+    run.status === `failed` &&
+    run.timedOut !== true &&
+    (run.refusedBy === `remote` || run.refusedBy === undefined) &&
+    /\[rejected\].*\((?:fetch first|non-fast-forward)\)/iu.test(`${run.reason ?? ``}\n${run.output}`);

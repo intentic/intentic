@@ -180,6 +180,65 @@ test("pullRemote fast-forwards a branch that is only behind, fetching first", as
     expect(await remoteState(clone)).toMatchObject({ ahead: 0, behind: 0 });
 });
 
+test("a rejected first publish can sync the same remote branch before retrying", async () => {
+    const { clone, origin } = await cloned();
+    await sh(clone, "branch", "--unset-upstream");
+    await commit(clone, "local.txt", "local");
+    const push = await upstreamPusher(origin);
+    await push("remote.txt", "remote");
+    expect((await pushBranch(clone, {})).ok).toBe(false);
+
+    expect(await pullRemote(clone, AUTHOR)).toEqual({ ok: true });
+    expect(await sh(clone, "log", "--format=%s", "-3")).toBe("local\nremote\none");
+    // Sync alone does not change tracking; the successful publish establishes it.
+    expect((await remoteState(clone)).upstream).toBeUndefined();
+    expect(await pushBranch(clone, {})).toEqual({ ok: true });
+    expect(await remoteState(clone)).toMatchObject({ upstream: "origin/main", ahead: 0, behind: 0 });
+});
+
+test("sync before a first publish preserves overlapping uncommitted work", async () => {
+    const { clone, origin } = await cloned();
+    await sh(clone, "branch", "--unset-upstream");
+    await commit(clone, "local.txt", "local");
+    const push = await upstreamPusher(origin);
+    await push("a.txt", "theirs");
+    await writeFile(join(clone, "a.txt"), "draft\n");
+    const before = await sh(clone, "rev-parse", "HEAD");
+
+    expect(await pullRemote(clone, AUTHOR)).toEqual({ ok: false, reason: "uncommitted changes to a.txt overlap origin/main; commit or discard them, then sync" });
+    expect(await sh(clone, "rev-parse", "HEAD")).toBe(before);
+    expect(await sh(clone, "diff", "--", "a.txt")).toContain("+draft");
+    expect((await remoteState(clone)).upstream).toBeUndefined();
+});
+
+test("sync does not guess a remote when the branch's upstream cannot be read", async () => {
+    const { clone } = await cloned();
+    const commands: string[] = [];
+    const git: GitRunner = async (dir, args, env) => {
+        commands.push(args[0]!);
+        if (args[0] === "for-each-ref") {
+            throw new Error("upstream read failed");
+        }
+        return defaultGit(dir, args, env);
+    };
+    expect(await pullRemote(clone, AUTHOR, git)).toEqual({ ok: false, reason: "upstream read failed" });
+    expect(commands).toEqual(["branch", "for-each-ref"]);
+});
+
+test("sync before a first publish refuses unrelated histories without moving the branch", async () => {
+    const { clone } = await cloned();
+    await sh(clone, "branch", "--unset-upstream");
+    await sh(clone, "checkout", "--orphan", "separate");
+    await commit(clone, "local.txt", "separate history");
+    await sh(clone, "branch", "-M", "main");
+    const before = await sh(clone, "rev-parse", "HEAD");
+
+    expect((await pullRemote(clone, AUTHOR)).ok).toBe(false);
+    expect(await sh(clone, "rev-parse", "HEAD")).toBe(before);
+    expect(await sh(clone, "log", "--format=%s")).toBe("separate history");
+    expect(await sh(clone, "status", "--porcelain")).toBe("");
+});
+
 test("pullRemote replays diverged local commits onto upstream, keeping uncommitted work and making no merge", async () => {
     const { clone, origin } = await cloned();
     const push = await upstreamPusher(origin);

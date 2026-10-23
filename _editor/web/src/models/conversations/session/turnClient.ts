@@ -30,7 +30,7 @@ import { noteTurnCompleted, track } from "../../../app/analytics";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
 import { type ChatAttachment, continuationFor } from "../transcript/transcript";
 import { refusalWords } from "../transcript/sandboxNotice";
-import type { Conversation } from "./conversation";
+import type { TurnHost } from "./turnHost";
 import { accepted, advance, IDLE, phaseEnding, type RunEvent, type RunPhase, type TurnEnding } from "./runPhase";
 
 // One conversation's runs, as this window drives them: a message is sent (opened, then taken at the daemon's ack),
@@ -56,39 +56,13 @@ const FOLLOW_MS = 400;
 // conversation go. It closes a moment after; the bound only keeps a stream that never does from swallowing the words.
 const ENDING_CLOSE_MS = 5_000;
 
-// What a run reads and writes of the conversation around it.
-type TurnHost = Pick<
-    Conversation,
-    | "conversationId"
-    | "transcript"
-    | "selection"
-    | "failures"
-    | "title"
-    | "isolated"
-    | "runner"
-    | "box"
-    | "registered"
-    | "standing"
-    | "pendingForkOf"
-    | "pendingFreshOf"
-    | "error"
-    | "pickUp"
-    | "session"
-    | "agentTerminal"
-    | "agentBrowser"
-    | "peek"
-    | "draft"
-    | "attachments"
-    | "queue"
-    | "sendLater"
-    | "autoLandDraft"
->;
-
 export class TurnClient {
     // Where this window's run stands; moved only by `advance`, and every other fact about the run is read off it.
     readonly phase = shallowRef<RunPhase>(IDLE);
     // A turn is live in this window: opened or attached, and not yet settled.
     readonly streaming = computed(() => this.phase.value.kind !== `idle`);
+    // A Continue press is acknowledged before resume/run answers and a stream becomes visible.
+    readonly continuing = ref(false);
     // Start of the in-flight turn (ms), for the card's elapsed readout; undefined while idle.
     readonly turnStartedAt = computed(() => (this.phase.value.kind === `idle` ? undefined : this.phase.value.startedAt));
     // Whether that start is the sandbox's own stamp (a run attached to) rather than this browser's (one it opened): an
@@ -668,10 +642,19 @@ export class TurnClient {
     // What "carry on" does: a held turn is re-run, and a turn the daemon holds nothing of (a Stop, a restart since) is
     // carried on by the daemon in its own session. Neither adds a word of the person's to the conversation.
     async continueTurn(options: ContinueOptions = {}): Promise<void> {
-        if (await this.resumeHeldTurn(options)) {
+        if (this.continuing.value) {
             return;
         }
-        await this.carryOn();
+        this.continuing.value = true;
+        try {
+            if (!(await this.resumeHeldTurn(options))) {
+                await this.carryOn();
+            }
+        } catch (error) {
+            this.host.error.value = messageOr(error, t(`chat.turnClient.sandboxNoAnswer`));
+        } finally {
+            this.continuing.value = false;
+        }
     }
 
     // Asks the daemon to carry the conversation on (agent.run `continues`): it re-runs a turn it holds after all, or goes

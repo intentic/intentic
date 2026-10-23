@@ -317,6 +317,8 @@
             "landsIfConflictsGone": "Integra si ya no hay conflictos"
         },
         "agentStatus": {
+            "landDetails": "Detalles del error",
+            "landWorkKept": "Tus cambios siguen en {branch}. Revisa los detalles del error o abre el chat antes de volver a integrarlos.",
             "approvalNeeded": "Hace falta aprobación",
             "checksEvery": "Revisa cada",
             "conflict": "Conflicto",
@@ -3908,6 +3910,8 @@
             "measured": "medido {age}"
         },
         "pickerRunSettings": {
+            "on": "Activado",
+            "off": "Desactivado",
             "defaultEffort": "esfuerzo predeterminado",
             "extendedThinking": "Razonamiento extendido",
             "fast": "rápido",
@@ -11214,11 +11218,14 @@
             "serviceSilent": "El servicio push no respondió. Comprueba la conexión del teléfono y vuelve a intentarlo."
         },
         "pushQuestionBody": {
+            "syncAndRetry": "Sincronizar y reintentar",
+            "syncHint": "El repositorio remoto contiene commits que necesita esta rama. La sincronización los trae antes de reintentar el push. Si hay cambios superpuestos, se detiene para que puedas resolverlos.",
+            "copyDetails": "Copiar detalles",
             "showTerminal": "Mostrar el terminal",
             "connectGithub": "Conectar GitHub",
             "connectGitlab": "Conectar GitLab",
-            "signInRefusedGithub": "GitHub no aceptó el inicio de sesión de este sandbox. Conecta tu cuenta de GitHub y vuelve a intentar el push.",
-            "signInRefusedGitlab": "GitLab no aceptó el inicio de sesión de este sandbox. Conecta tu cuenta de GitLab y vuelve a intentar el push.",
+            "signInRefusedGithub": "GitHub ha denegado el acceso a este repositorio. Conecta una cuenta con acceso de escritura y vuelve a intentar el push.",
+            "signInRefusedGitlab": "GitLab ha denegado el acceso a este repositorio. Conecta una cuenta con acceso de escritura y vuelve a intentar el push.",
             "fromWhen": "De {when}.",
             "staleSince": "{when} Los archivos han cambiado desde entonces, así que puede que esto ya no sea lo que ocurra.",
             "unchangedSince": "{when} No ha cambiado nada desde entonces."

@@ -1,6 +1,6 @@
 import type { CommandRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { PushRun } from "@intentic/sandbox-contract/schemas/git/git";
-import { credentialHostOf, outcomeSummary, refusalSummary } from "./refusalSummary";
+import { credentialHostOf, outcomeSummary, pushNeedsPull, refusalSummary } from "./refusalSummary";
 
 const check: CommandRun = { status: `failed`, command: `pnpm check`, exitCode: 1, output: `FAIL src/a.test.ts\n  ✗ adds` };
 const push: PushRun = {
@@ -51,4 +51,22 @@ test(`a push the remote refused for its credential names the host to connect, an
     expect(credentialHostOf(push)).toBeUndefined();
     expect(credentialHostOf({ ...refused, reason: `fatal: Could not read from remote repository.`, output: `` })).toBeUndefined();
     expect(credentialHostOf({ ...refused, reason: `fatal: Authentication failed for 'https://git.example.com/x.git/'`, output: `` })).toBeUndefined();
+});
+
+test(`access refusals lead to the account that needs write permission`, () => {
+    const refused = { ...push, refusedBy: `transport` as const, reason: undefined };
+    expect(credentialHostOf({ ...refused, output: `remote: Permission to acme/app.git denied to reader.\nfatal: unable to access 'https://github.com/acme/app.git/': The requested URL returned error: 403` })).toBe(`github`);
+    expect(credentialHostOf({ ...refused, output: `git@github.com: Permission denied (publickey).` })).toBe(`github`);
+    expect(credentialHostOf({ ...refused, output: `remote: HTTP Basic: Access denied\nfatal: Authentication failed for 'https://gitlab.com/acme/app.git/'` })).toBe(`gitlab`);
+    expect(credentialHostOf({ ...refused, output: `remote: Repository not found.\nfatal: repository 'https://github.com/acme/gone.git/' not found` })).toBeUndefined();
+});
+
+test(`only rejected refs needing remote commits offer a pull before retry`, () => {
+    const rejected = { ...push, refusedBy: `remote` as const, output: `` };
+    expect(pushNeedsPull({ ...rejected, reason: `! [rejected] main -> main (fetch first)` })).toBe(true);
+    expect(pushNeedsPull({ ...rejected, reason: `! [rejected] main -> main (non-fast-forward)` })).toBe(true);
+    expect(pushNeedsPull({ ...rejected, refusedBy: undefined, output: `! [rejected] main -> main (fetch first)` })).toBe(true);
+    expect(pushNeedsPull({ ...rejected, reason: `! [remote rejected] main -> main (protected branch hook declined)` })).toBe(false);
+    expect(pushNeedsPull({ ...rejected, refusedBy: `hook`, output: `! [rejected] main -> main (fetch first)` })).toBe(false);
+    expect(pushNeedsPull({ ...rejected, timedOut: true, output: `! [rejected] main -> main (fetch first)` })).toBe(false);
 });

@@ -339,13 +339,13 @@ export const createGitRoutes = (services: Services) => {
         // Repo set for the tree affordance and the graph's switcher; `root` is implicit, so this holds only the nested
         // repos (same set as the Changes panel and history scopes).
         repos: i.repos.handler(async () => ({ repos: await currentRepos(services.workspace.root) })),
-        // Excludes `root`: it's the sandbox's own shadow repo, not a publishable project. A repo whose remote can't be
-        // read is skipped, not reported as remote-less.
+        // The workspace itself can be published too. A repo whose remote can't be read is skipped.
         remoteRepos: i.remoteRepos.handler(async () => {
-            const ids = await currentRepos(services.workspace.root);
+            const ids = [`root`, ...(await currentRepos(services.workspace.root))];
             const entries = await Promise.all(
                 ids.map(async (repo) => {
-                    const found = await services.git.remoteProjectOf(join(services.workspace.root, repo)).catch(() => undefined);
+                    const dir = repo === `root` ? services.workspace.root : join(services.workspace.root, repo);
+                    const found = await services.git.remoteProjectOf(dir).catch(() => undefined);
                     return found === undefined ? undefined : { repo, host: found.host, project: found.project };
                 }),
             );

@@ -449,6 +449,60 @@ describe(`a run's lifecycle`, () => {
         expect(client.firstSight(`t2`)).toBe(true);
     });
 
+    it(`acknowledges Continue immediately and sends a held turn only once while resume is pending`, async () => {
+        const { client, host } = clientOf();
+        host.pickUp.value = { reason: `limit`, held: { ran: true } };
+        const answer = Promise.withResolvers<{ run: string }>();
+        resume.mockImplementationOnce(() => answer.promise);
+        attach.mockImplementation(async () => attached(`r-continue`, 4_000, `clean the sandbox`));
+
+        const first = client.continueTurn();
+        const second = client.continueTurn();
+        expect(client.continuing.value).toBe(true);
+        expect(client.streaming.value).toBe(false);
+        expect(resume).toHaveBeenCalledTimes(1);
+
+        answer.resolve({ run: `r-continue` });
+        await Promise.all([first, second]);
+        expect(client.continuing.value).toBe(false);
+        expect(resume).toHaveBeenCalledTimes(1);
+        expect(run).not.toHaveBeenCalled();
+    });
+
+    it(`deduplicates Continue while starting a turn the daemon no longer holds`, async () => {
+        const { client, host } = clientOf();
+        host.pickUp.value = { reason: `stopped` };
+        const answer = Promise.withResolvers<MessageReceipt>();
+        run.mockImplementationOnce(() => answer.promise);
+        attach.mockImplementation(async () => attached(`r-continue`, 4_000, `clean the sandbox`));
+
+        const first = client.continueTurn();
+        const second = client.continueTurn();
+        await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+        expect(client.continuing.value).toBe(true);
+        answer.resolve({ delivered: `started`, run: `r-continue` });
+        await Promise.all([first, second]);
+        expect(run).toHaveBeenCalledTimes(1);
+        expect(client.continuing.value).toBe(false);
+    });
+
+    it(`shows a continuation error and releases the press for a later retry`, async () => {
+        const { client, host } = clientOf();
+        host.pickUp.value = { reason: `limit`, held: { ran: true } };
+        const resuming = jest.spyOn(client, `resumeHeldTurn`).mockRejectedValueOnce(new Error(`Connection lost`));
+        await client.continueTurn();
+        expect(host.error.value).toBe(`Connection lost`);
+        expect(client.continuing.value).toBe(false);
+
+        resuming.mockRestore();
+        resume.mockImplementationOnce(async () => ({ run: `r-retry` }));
+        attach.mockImplementation(async () => attached(`r-retry`, 4_000, `clean the sandbox`));
+        await client.continueTurn();
+        expect(resume).toHaveBeenCalledTimes(1);
+        expect(client.continuing.value).toBe(false);
+        expect(host.error.value).toBeNull();
+    });
+
     // The composer's account follows the daemon's session (bindSession), so a plain Continue on it names none and keeps
     // the session. One that differs is a pick the daemon has not taken yet (refused while a turn ran), and the press
     // names it, as intent, like a send would.

@@ -56,6 +56,31 @@ test("git.files lists the repo's tracked files", async () => {
     expect(await client.git.files({ repo: "intent" })).toEqual({ files: ["deploy.config.ts", "package.json"] });
 });
 
+test("git.remoteRepos includes the published workspace and nested repos, skipping unreadable remotes", async () => {
+    const workspace = tempWorkspace([{ name: "app" }, { name: "broken" }]);
+    const client = clientFor(
+        createApp(
+            services({
+                workspace,
+                git: {
+                    remoteProjectOf: async (dir) => {
+                        if (dir === join(workspace.root, "broken")) {
+                            throw new Error("unreadable remote");
+                        }
+                        return { host: "github.com", project: dir === workspace.root ? "acme/workspace" : "acme/app" };
+                    },
+                },
+            }),
+        ),
+    );
+    expect(await client.git.remoteRepos()).toEqual({
+        repos: [
+            { repo: "root", host: "github.com", project: "acme/workspace" },
+            { repo: "app", host: "github.com", project: "acme/app" },
+        ],
+    });
+});
+
 test("git.readFile reads a contained file, NOT_FOUNDs a missing one, and BAD_REQUESTs a path escape", async () => {
     const workspace = tempWorkspace([{ name: "intent" }]);
     const client = clientFor(

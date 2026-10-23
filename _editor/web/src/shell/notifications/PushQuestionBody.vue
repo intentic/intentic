@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, Code, Icon, timeAgo } from "@intentic/ui";
+import { Button, Code, CopyButton, Icon, timeAgo } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
@@ -59,6 +59,7 @@ const memoryLine = computed<string | undefined>(() => {
                 {{ pushFlow.question.value.detail }}
             </p>
             <p v-if="connectHint" class="break-words text-2xs text-content">{{ connectHint }}</p>
+            <p v-if="pushFlow.canSyncAndRetry.value" class="break-words text-2xs text-content">{{ t(`shell.pushQuestionBody.syncHint`) }}</p>
             <!-- Only on a reprint: a card reporting a run that just ended dates itself by being here. -->
             <p v-if="memoryLine" class="break-words text-2xs text-subtle">{{ memoryLine }}</p>
         </div>
@@ -67,6 +68,7 @@ const memoryLine = computed<string | undefined>(() => {
         <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
             <!-- The way back to what actually happened, not an answer to the question. -->
             <div class="mr-auto flex items-center gap-3">
+                <CopyButton :text="pushFlow.failureDetails.value" :label="t(`shell.pushQuestionBody.copyDetails`)" />
                 <button
                     v-if="pushFlow.terminal.value !== undefined"
                     type="button"
@@ -80,11 +82,18 @@ const memoryLine = computed<string | undefined>(() => {
 
             <!-- The account whose sign-in refused the push, when connecting it is the fix. -->
             <Button v-if="connectLabel" size="small" :label="connectLabel" @click="connect" />
+            <Button
+                v-if="pushFlow.canSyncAndRetry.value"
+                size="small"
+                tier="accent"
+                :label="t(`shell.pushQuestionBody.syncAndRetry`)"
+                @click="pushFlow.syncAndRetry"
+            />
             <!-- The same push again, hook and all. -->
             <Button
                 size="small"
-                :tier="connectLabel ? `boring` : `accent`"
-                :tone="connectLabel ? undefined : `warning`"
+                :tier="connectLabel || pushFlow.canSyncAndRetry.value ? `boring` : `accent`"
+                :tone="connectLabel || pushFlow.canSyncAndRetry.value ? undefined : `warning`"
                 :label="t(`ui.action.tryAgain`)"
                 @click="pushFlow.retry"
             />

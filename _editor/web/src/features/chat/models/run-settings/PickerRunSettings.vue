@@ -78,17 +78,20 @@ const chipsShown = computed(() => props.settings && (thinkingOffered.value || fa
                 type="button"
                 class="composer-ghost composer-toggle h-7 gap-1.5 px-2.5 text-2xs font-medium max-md:h-10"
                 :class="{ 'composer-active': thinkingOn }"
+                :aria-label="t(`chat.pickerRunSettings.extendedThinking`)"
                 :aria-pressed="thinkingOn"
                 @click="emit(`update`, { thinking: !thinkingOn })"
             >
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full border border-current" :class="{ 'bg-current': thinkingOn }" aria-hidden="true"></span>
                 <span>{{ t(`chat.pickerRunSettings.extendedThinking`) }}</span>
+                <span aria-hidden="true" class="rounded bg-current/10 px-1.5 py-0.5 text-2xs">{{ thinkingOn ? t(`chat.pickerRunSettings.on`) : t(`chat.pickerRunSettings.off`) }}</span>
             </button>
             <button
                 v-if="fastOffered"
                 type="button"
                 class="composer-ghost composer-toggle h-7 gap-1.5 px-2.5 text-2xs font-medium max-md:h-10"
                 :class="{ 'composer-active': fastOn }"
+                :aria-label="t(`chat.pickerRunSettings.fastSpeed`)"
                 :aria-pressed="fastOn"
                 :aria-description="fastNotice"
                 v-tooltip.top="fastNotice"
@@ -96,6 +99,7 @@ const chipsShown = computed(() => props.settings && (thinkingOffered.value || fa
             >
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full border border-current" :class="{ 'bg-current': fastOn }" aria-hidden="true"></span>
                 <span>{{ t(`chat.pickerRunSettings.fastSpeed`) }}</span>
+                <span aria-hidden="true" class="rounded bg-current/10 px-1.5 py-0.5 text-2xs">{{ fastOn ? t(`chat.pickerRunSettings.on`) : t(`chat.pickerRunSettings.off`) }}</span>
                 <!-- Said only when the harness's answer differs from the ask; a notice under a working control trains people to ignore notices. -->
                 <Icon v-if="fastNotice !== undefined" name="exclamation-triangle" class="shrink-0 text-warning" aria-hidden="true" />
             </button>

@@ -64,7 +64,7 @@ it(`hands a new repository set to extensions as well as refreshing the panels`, 
     } finally {
         listening.dispose();
     }
-    expect(invalidated).toEqual([[`panels.list`]]);
+    expect(invalidated).toEqual([[`panels.list`], [`git.remoteRepos`]]);
     expect(heard).toEqual([[`root`, `web`, `cloned`]]);
 });
 

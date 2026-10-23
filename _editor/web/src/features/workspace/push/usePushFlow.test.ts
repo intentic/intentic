@@ -292,6 +292,44 @@ test(`a push the remote rejected asks with git's reason`, async () => {
     });
 });
 
+test(`sync and retry pulls only the rejected repo before pushing the original targets`, async () => {
+    const { flow, git } = await load();
+    const run = refusedBy(`remote`, { reason: `! [rejected] main -> main (fetch first)`, output: `remote has new commits` });
+    git.failures.value = new Map([[run.repo, { action: `Push failed`, detail: refusalSummary(run), run }]]);
+    const targets = [...PUSH, { repo: `other`, pull: false, push: true }];
+    flow.askSync(`Publish`, `2 branches`, targets);
+    await flush();
+
+    expect(flow.canSyncAndRetry.value).toBe(true);
+    expect(flow.failureDetails.value).toBe(`Publish failed\n\nwas rejected by the remote: ! [rejected] main -> main (fetch first).\n\nintentic\ngit push origin main\n! [rejected] main -> main (fetch first)\nremote has new commits`);
+    flow.syncAndRetry();
+    flow.syncAndRetry();
+    await flush();
+
+    expect(git.syncAll).toHaveBeenCalledTimes(2);
+    expect(git.syncAll).toHaveBeenLastCalledWith([
+        { repo: `intentic`, pull: true, push: true },
+        { repo: `other`, pull: false, push: true },
+    ]);
+    expect(targets).toEqual([...PUSH, { repo: `other`, pull: false, push: true }]);
+});
+
+test(`sync is not offered for hook refusals and becomes available again on reopening a remote refusal`, async () => {
+    const loaded = await load();
+    const { flow, git } = loaded;
+    await pushRefused(loaded);
+    expect(flow.canSyncAndRetry.value).toBe(false);
+    flow.syncAndRetry();
+    await flush();
+    expect(git.syncAll).toHaveBeenCalledTimes(1);
+
+    await pushRefused(loaded, refusedBy(`remote`, { reason: `! [rejected] main -> main (non-fast-forward)` }));
+    flow.dismiss();
+    expect(flow.canSyncAndRetry.value).toBe(false);
+    flow.reopen();
+    expect(flow.canSyncAndRetry.value).toBe(true);
+});
+
 // A refused send is filed and stands, but never reprinted in place of a press: pressing again means ask the hook and
 // the remote again.
 test(`a refused push stands after the card is closed, and the next press retries rather than reprints`, async () => {

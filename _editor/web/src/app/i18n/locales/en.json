@@ -317,6 +317,8 @@
             "landsIfConflictsGone": "Lands if the conflicts are gone"
         },
         "agentStatus": {
+            "landDetails": "Error details",
+            "landWorkKept": "Your changes are still on {branch}. Review the error details or open chat before landing again.",
             "approvalNeeded": "Approval needed",
             "checksEvery": "Checks every",
             "conflict": "Conflict",
@@ -3908,6 +3910,8 @@
             "measured": "measured {age}"
         },
         "pickerRunSettings": {
+            "on": "On",
+            "off": "Off",
             "defaultEffort": "default effort",
             "extendedThinking": "Extended thinking",
             "fast": "fast",
@@ -11214,11 +11218,14 @@
             "serviceSilent": "The push service did not answer. Check the phone's connection and try again."
         },
         "pushQuestionBody": {
+            "syncAndRetry": "Sync and retry",
+            "syncHint": "The remote has commits this branch needs. Sync brings them in before retrying the push; overlapping edits stop the sync for you to resolve.",
+            "copyDetails": "Copy details",
             "showTerminal": "Show terminal",
             "connectGithub": "Connect GitHub",
             "connectGitlab": "Connect GitLab",
-            "signInRefusedGithub": "GitHub didn't accept this sandbox's sign-in. Connect your GitHub account, then try the push again.",
-            "signInRefusedGitlab": "GitLab didn't accept this sandbox's sign-in. Connect your GitLab account, then try the push again.",
+            "signInRefusedGithub": "GitHub refused access to this repository. Connect an account with write access, then try the push again.",
+            "signInRefusedGitlab": "GitLab refused access to this repository. Connect an account with write access, then try the push again.",
             "fromWhen": "From {when}.",
             "staleSince": "{when} Files have changed since, so this may no longer be what happens.",
             "unchangedSince": "{when} Nothing has changed since."
