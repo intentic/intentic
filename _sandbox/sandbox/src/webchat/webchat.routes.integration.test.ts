@@ -200,6 +200,13 @@ test("the poll is gated by the same origin allowlist as everything else on the d
     expect((await collect(app, "missing", "visitor-1")).status).toBe(404);
 });
 
+test("the poll accepts the message schema's conversation boundary and rejects anything longer", async () => {
+    const { services } = await setup(webchat("wc-poll-id"));
+    const app = appFor(services, fakeWake([]));
+    expect((await collect(app, "wc-poll-id", "x".repeat(200))).status).toBe(200);
+    expect((await collect(app, "wc-poll-id", "x".repeat(201))).status).toBe(400);
+});
+
 test("the poll names the conversation it is for, rather than reading the automation's whole traffic", async () => {
     const { services } = await setup(webchat("wc-poll-scope"));
     const app = appFor(services, fakeWake([]));

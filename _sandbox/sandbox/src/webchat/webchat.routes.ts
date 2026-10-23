@@ -2,6 +2,7 @@ import { keyedLock } from "@intentic/base/async";
 import {
     WEBCHAT_DAILY_MAX_DEFAULT,
     type WebchatConfig,
+    WebchatConversationIdSchema,
     WebchatMessageSchema,
     type WebchatPending,
 } from "@intentic/sandbox-contract/schemas/automations";
@@ -155,10 +156,11 @@ export const createWebchatRoutes = (services: Services, installs?: InstallsStore
             if ("status" in resolved) {
                 return c.json({ error: resolved.error }, resolved.status);
             }
-            const conversationId = c.req.query("conversation");
-            if (conversationId === undefined || conversationId === "") {
+            const conversation = WebchatConversationIdSchema.safeParse(c.req.query("conversation"));
+            if (!conversation.success) {
                 return c.json({ error: "conversation required" }, 400);
             }
+            const conversationId = conversation.data;
             const now = Date.now();
             if (polls.limited(`${resolved.automation.id}:${conversationId}`, POLL_MAX, now)) {
                 return c.json({ error: "rate limited" }, 429);

@@ -296,9 +296,10 @@ export type WebchatPublicConfig = z.infer<typeof WebchatPublicConfigSchema>;
 export const PowChallengeSchema = z.object({ salt: z.string(), difficulty: z.number().int().positive() });
 export type PowChallenge = z.infer<typeof PowChallengeSchema>;
 // One visitor message; `conversationId` is the widget's own localStorage id, a thread key rather than a secret — the
-// origin allowlist, challenge and rate limit are the gate.
+// origin allowlist, challenge and rate limit are the gate. The polling route uses the same id schema.
+export const WebchatConversationIdSchema = z.string().min(1).max(200);
 export const WebchatMessageSchema = z.object({
-    conversationId: z.string().min(1).max(200),
+    conversationId: WebchatConversationIdSchema,
     content: z.string().min(1),
     // What the visitor typed as a name; never identity, tagged unverified for the model.
     displayName: z.string().max(200).optional(),
