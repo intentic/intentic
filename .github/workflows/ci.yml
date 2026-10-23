@@ -1523,6 +1523,9 @@ jobs:
       - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
       # Builds the web first (turbo.json `e2e:compat` depends on `@intentic/web#build`), so the tier serves this commit.
       - run: pnpm e2e:compat
+        env:
+          # Include container IDs and cleanup-helper selection when setup fails before Playwright records a trace.
+          DEBUG: testcontainers
       - uses: ./.github/actions/upload-artifact-retry
         if: failure()
         with:

@@ -23,6 +23,8 @@ flowchart LR
   (`desktop.ts`) is `auth.rs` in TypeScript: the state and verifier, the `intentic://` links read off Chrome
   DevTools, and the landing the app points its window at. `SIGNIN_E2E_REUSE_BUILD=1` serves the `dist` already there;
   `SIGNIN_E2E_DATABASE_URL` skips the container.
+  Testcontainers must keep cleanup helpers owned by other runtimes separate: the CI fleet shares its Docker
+  daemon with other jobs. Version 12.2.1 fixes reuse of a foreign Ryuk helper, whose owner could remove it during setup.
   - 2026-09-30: written after 1.318.0 shipped a router guard that took `handoff` off the desktop sign-in's landing.
     Each piece passed its own tests, and nothing ran the chain. It is Chromium-only and hermetic because it gates a
     deploy: a real Google account in CI would make the gate fail for reasons that are not ours (the smoke below is

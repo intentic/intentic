@@ -215,6 +215,8 @@ jobs:
       - uses: ./.github/actions/pnpm-setup
       - run: pnpm --filter @intentic/e2e exec playwright install --with-deps chromium
       - run: pnpm e2e:compat
+        env:
+          DEBUG: testcontainers
       - uses: ./.github/actions/upload-artifact-retry
         if: failure()
         with:

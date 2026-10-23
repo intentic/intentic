@@ -36,7 +36,7 @@ COPY --from=cli . /opt/intentic-cli
 # from scaffold to normalized layer root: the store and the starter's node_modules are hard links of each other, and
 # moving them into /layer inside the layer that made them keeps them so (a move across layers would copy, and ship
 # every file twice). The `.git` the scaffold leaves is dropped: the daemon inits the repo itself when it seeds it.
-# pnpm's metadata cache is a mount and /tmp a tmpfs, so neither reaches the layer; nor does pnpm-state.json (its
+# pnpm's metadata cache and /tmp are tmpfs mounts, so neither reaches the layer; nor does pnpm-state.json (its
 # update-check clock), which is outside what the layer takes. ONE metadata document is kept, apart: the `pnpm` package's
 # own. pnpm 12 resolves the project's pinned pnpm through it before it will run the copy already in the
 # package-manager store, so without it the seeded starter's first `pnpm` needs the registry (measured: offline, it
@@ -44,7 +44,9 @@ COPY --from=cli . /opt/intentic-cli
 # as its own small tree and the image copies it among the per-commit layers, never into the starter's. Its root/ is 700,
 # /root's own mode: a layer's directory entry replaces the one below it, and mkdir would have made it 755.
 ARG STARTER_TEMPLATE_REF=main
-RUN --mount=type=cache,target=/root/.cache/pnpm \
+# Resolve against fresh registry metadata on every build. A persistent cache can mix an old @volar/typescript
+# version list with a newly resolved @volar/kit that pins a version missing from that list (CI, 2026-10-23).
+RUN --mount=type=tmpfs,target=/root/.cache/pnpm \
     --mount=type=tmpfs,target=/tmp \
     node /opt/intentic-cli/dist/cli.js scaffold monorepo --dir /opt --name starter --ref "$STARTER_TEMPLATE_REF" \
     && node /opt/intentic-cli/dist/cli.js scaffold add-app --dir /opt/starter --apps landing --ref "$STARTER_TEMPLATE_REF" \
