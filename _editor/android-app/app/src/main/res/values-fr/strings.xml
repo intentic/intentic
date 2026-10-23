@@ -4,14 +4,34 @@
     <string name="auth_login_welcome_to_intentic">Bienvenue sur intentic</string>
     <string name="auth_login_workspace_coding_agents">Un espace de travail pour les agents de développement.</string>
     <string name="auth_words_continue_google">Continuer avec Google</string>
+    <string name="auth_login_or">ou</string>
+    <string name="auth_email_sign_in_address_label">Adresse e-mail</string>
+    <string name="auth_email_sign_in_address_placeholder">vous@exemple.com</string>
+    <string name="auth_email_sign_in_email_me_code">M\'envoyer un code de connexion par e-mail</string>
+    <string name="auth_email_sign_in_sent_to">Nous avons envoyé un code à 6 chiffres à %1$s.</string>
+    <string name="auth_email_sign_in_type_it_here_in_app">Saisissez-le ici. Le lien de l\'e-mail ouvre votre navigateur, pas cette application.</string>
+    <string name="auth_email_sign_in_code_label">Code de connexion</string>
     <string name="ui_action_sign_in">Se connecter</string>
+    <string name="auth_email_sign_in_use_different_address">Utiliser une autre adresse</string>
+    <string name="auth_email_sign_in_send_again">Renvoyer</string>
+    <string name="auth_email_sign_in_send_again_in">Renvoyer dans %1$s s</string>
     <string name="sandbox_sign_in_wall_continue_in_browser">Continuez dans votre navigateur</string>
+    <string name="auth_words_finish_in_browser">Terminez la connexion dans votre navigateur…</string>
+    <string name="auth_words_open_browser_again">La rouvrir</string>
     <string name="auth_desktop_auth_complete_signing_in">Connexion en cours…</string>
+    <string name="auth_email_code_invalid">Ce code n\'est pas celui que nous avons envoyé. Vérifiez le dernier e-mail d\'intentic, ou demandez un nouveau code.</string>
+    <string name="auth_email_code_expired">Ce code a expiré. Demandez-en un nouveau.</string>
+    <string name="auth_email_code_too_many_attempts">Trop d\'essais erronés pour ce code. Demandez-en un nouveau.</string>
+    <string name="auth_email_code_rate_limited">Trop de codes demandés d\'un coup. Attendez une minute, puis réessayez.</string>
+    <string name="shared_attention">Attention</string>
     <string name="shared_active">Actifs</string>
     <string name="shared_finished">Terminés</string>
+    <string name="agents_agent_status_untitled_agent">Agent sans titre</string>
     <string name="agents_agents_view_no_agents_working_start">Aucun agent au travail. Lancez-en un et déléguez.</string>
     <string name="sandbox_use_sandbox_liveness_no_sandbox_selected">Aucun sandbox n\'est sélectionné.</string>
     <string name="sandbox_sandbox_switcher_sandboxes">Sandboxes</string>
+    <string name="settings_settings_billing_machine_asleep">en veille</string>
+    <string name="shared_menu">Menu</string>
     <string name="shell_words_sign_out">Se déconnecter</string>
     <string name="sandbox_connection_notice_connecting_to">Connexion à « %1$s »…</string>
     <string name="desktop_desktop_reconnecting">Reconnexion…</string>
@@ -19,6 +39,8 @@
     <string name="shell_notification_sources_sign_in_again">Reconnectez-vous</string>
     <string name="sandbox_sign_in_wall_use_passkey">Utilisez votre passkey</string>
     <string name="sandbox_sign_in_wall_add_passkey_to_continue">Ajoutez une passkey pour continuer</string>
+    <string name="sandbox_sign_in_wall_passkey_sign_in_incomplete">La connexion par clé d\'accès n\'a pas abouti.</string>
+    <string name="sandbox_sign_in_wall_passkey_not_added">La clé d\'accès n\'a pas été ajoutée.</string>
     <string name="ui_action_back">Retour</string>
     <string name="chat_words_ask_anything">Demandez ce que vous voulez…</string>
     <string name="ui_action_send">Envoyer</string>
@@ -37,6 +59,7 @@
     <string name="views_vocabulary_accept">Accepter</string>
     <string name="auth_desktop_auth_open_in_browser">Ouvrir ceci dans votre navigateur</string>
     <string name="shared_workspace">Espace de travail</string>
+    <string name="shared_sandbox_hub">Sandbox</string>
     <string name="shared_settings">Paramètres</string>
     <string name="shared_capabilities">Capacités</string>
     <string name="sandbox_words_devices_section">Appareils</string>
@@ -45,4 +68,9 @@
     <string name="browsers_browsers_more">Plus</string>
     <string name="connect_local_model_lane_fact_downloaded">Téléchargé</string>
     <string name="ui_action_open">Ouvrir</string>
+    <plurals name="shell_desktop_signal_many_asks">
+        <item quantity="one">%1$s agent a besoin de vous</item>
+        <item quantity="many">%1$s agents ont besoin de vous</item>
+        <item quantity="other">%1$s agents ont besoin de vous</item>
+    </plurals>
 </resources>
