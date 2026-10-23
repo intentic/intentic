@@ -82,11 +82,12 @@ INTENTIC_VERSION="$FROM_VERSION" cargo test --manifest-path "$APP/src-tauri/Carg
 
 # The AppImage bundler's environment, the same as build-desktop.sh's (appimage-env.sh says why for each).
 appimage_env
+appimage_fetch_tools
 
 TARGET_DIR="${CARGO_TARGET_DIR:-$APP/src-tauri/target}"
 
 build_at() {
-    local version="$1" out="$2"
+    local version="$1" out="$2" attempt delay
     echo "==> building the AppImage at v${version}"
     # The app bundles the local-files sidecar and its editor page, just as the release build does. Stamp the
     # sidecar per pass so both versions carry their own binary rather than a stale runner's staged one.
@@ -94,9 +95,23 @@ build_at() {
     # INTENTIC_VERSION is what reaches RUST (build.rs); the --config override is what stamps the bundle and is
     # where the two staged inputs go in. Both have to say the same version or the app would compare a manifest
     # against a number its own binary does not carry.
-    INTENTIC_VERSION="$version" pnpm --filter @intentic/desktop-app exec tauri build \
-        --config "{\"version\":\"${version}\",\"build\":{\"beforeBuildCommand\":\"\"},\"plugins\":{\"updater\":{\"pubkey\":\"${PUBKEY}\",\"endpoints\":[\"${ENDPOINT}\"],\"dangerousInsecureTransportProtocol\":true}}}" \
-        --bundles appimage
+    # As in build-desktop.sh, retain linuxdeploy's diagnostics and retry its packaging step. A retry keeps the
+    # compiled version but discards the partial AppDir; a persistent failure still fails the drill.
+    for attempt in 1 2 3; do
+        if INTENTIC_VERSION="$version" pnpm --filter @intentic/desktop-app exec tauri build --verbose \
+            --config "{\"version\":\"${version}\",\"build\":{\"beforeBuildCommand\":\"\"},\"plugins\":{\"updater\":{\"pubkey\":\"${PUBKEY}\",\"endpoints\":[\"${ENDPOINT}\"],\"dangerousInsecureTransportProtocol\":true}}}" \
+            --bundles appimage; then
+            break
+        fi
+        if [ "$attempt" -eq 3 ]; then
+            echo "error: AppImage v${version} bundling failed after 3 attempts" >&2
+            return 1
+        fi
+        rm -rf "$TARGET_DIR/release/bundle/appimage"
+        delay=$((attempt * 5))
+        echo "==> AppImage v${version} bundling failed (attempt $attempt/3) — retrying in ${delay}s" >&2
+        sleep "$delay"
+    done
     cp "$TARGET_DIR"/release/bundle/appimage/*.AppImage "$out"
     chmod +x "$out"
 }
