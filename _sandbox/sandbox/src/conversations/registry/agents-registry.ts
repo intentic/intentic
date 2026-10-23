@@ -16,6 +16,7 @@ import { withGitCaller } from "@intentic/base/git";
 import { freshness } from "@intentic/base/held";
 import { oneLine } from "@intentic/base/one-line";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../engines/failure-sentences.js";
+import { isBareConversationTitle } from "../../seams/conversation-title.js";
 import { routingFor } from "./routing.js";
 import type { JournalledTurn, TurnJournalRows } from "../../store/journals/turn-journal.js";
 import { opt } from "../../opt.js";
@@ -87,9 +88,9 @@ const withHomeTitle = (entry: PersistedAgent): PersistedAgent => {
     return { ...entry, social: { ...entry.social, title: { text, source: "derived" } } };
 };
 
-// A provider's failure sentence or a tool-call stand-in; never written as a name except by an explicit rename, and a
-// stored one forfeits its rank so the next honest title replaces it.
-const cannotBeAName = (title: string): boolean => isFailureSentence(title) || isToolCallStandIn(title) || isSelfIdentityAnswer(title);
+// Broken replies and bare labels cannot name the work. Stored automatic ones forfeit their rank so a useful title
+// can replace them; a person's explicit rename is always kept.
+const cannotBeAName = (title: string): boolean => isBareConversationTitle(title) || isFailureSentence(title) || isToolCallStandIn(title) || isSelfIdentityAnswer(title);
 
 // Whether an automatic source may overwrite what is stored: it must be a name at all, and must strictly outrank the
 // stored one, whose rank is forfeit when it cannot be a name. A rename ("user") never asks; it always lands.
@@ -734,7 +735,7 @@ export const createFleet = (
             return false;
         }
         const held = entry.social.title;
-        if (source !== "user" && !outranksTitle(held, clean, source) && !addsAction(held, clean, source, action)) {
+        if (source !== "user" && (held?.source === "user" || cannotBeAName(clean) || (!outranksTitle(held, clean, source) && !addsAction(held, clean, source, action)))) {
             return false;
         }
         if (held?.text === clean && held.source === source && held.action === action) {

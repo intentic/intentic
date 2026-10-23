@@ -144,6 +144,11 @@ flowchart LR
   which keeps them downloadable once the checkout is removed. A land pressed with `includeDocuments` (the editor sends
   it in plain words) first stages each recorded document by force, so one git ignores, or one the land would set aside
   as scratch, goes with it; any other ignored file stays where it was.
+- Session titles describe the requested work and its specific problem or goal, rather than a bare project or filename
+  (`agent/models/title-namer.ts`). The visible title keeps its action; a separate category supplies the board's tint
+  and glyph. The naming pass rejects bare labels and oversized replies through the helper's fallback chain. On a
+  later turn it can repair an old bare automatic title from the opening request; useful model and plan titles keep
+  their rank, and a person's explicit rename is never changed automatically.
 - A helper job (a session title, a land's commit subject, the safety judge's verdict, the chat router's pick) is a
   sealed request on the same seam (`agent/run/sealed/sealed-request.ts`): the runtime's own arm plans it and its own loop
   runs it, with `policy.sealed` (`agent/providers/agent-request.ts`) withholding every tool, server, instruction file

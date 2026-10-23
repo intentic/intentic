@@ -1007,6 +1007,37 @@ describe("agents registry", () => {
         expect((await registry.setTitle("c1", "Fleet board broadcast", "model"))?.title).toBe("Fleet board broadcast");
     });
 
+    it.each(["Intentic", "boot.test.ts"])("refuses the bare automatic label %s, including when it only adds a category", async (text) => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn({ title: text, titleSource: "model" }), 1_000);
+        await registry.setTitle("c1", text, "model", "fix");
+        expect(registry.entry("c1")?.social.title).toEqual({ text, source: "model" });
+        await registry.setTitle("c1", "Fix flaky boot timing test", "model", "fix");
+        expect(registry.entry("c1")?.social.title).toEqual({ text: "Fix flaky boot timing test", source: "model", action: "fix" });
+        await registry.setTitle("c1", text, "plan");
+        expect(registry.get("c1")?.title).toBe("Fix flaky boot timing test");
+    });
+
+    it.each(["model", "plan"] as const)("a stored bare %s title can be repaired by the naming pass", async (source) => {
+        const entry = isolatedAgent([], { social: { title: { text: "Intentic", source, action: "audit" }, reactions: [] } });
+        const store = memoryStore([entry]);
+        const { agents: registry } = createFleet(store, standings(), presences());
+        await registry.init();
+        await registry.setTitle("c1", "Audit Intentic for critical vulnerabilities", "model", "audit");
+        expect(store.saved()[0]?.social.title).toEqual({ text: "Audit Intentic for critical vulnerabilities", source: "model", action: "audit" });
+    });
+
+    it.each(["Intentic", "boot.test.ts", ...FAILURE_SENTENCES])("an explicit rename to %s remains above every automatic source", async (text) => {
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await registry.setTitle("c1", text, "user");
+        await registry.setTitle("c1", "Audit Intentic for critical vulnerabilities", "model", "audit");
+        await registry.setTitle("c1", "A helpful plan heading", "plan");
+        expect(registry.entry("c1")?.social.title).toEqual({ text, source: "user" });
+    });
+
     it("never lets a plan rename what the user named, and still allows a second rename", async () => {
         const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();

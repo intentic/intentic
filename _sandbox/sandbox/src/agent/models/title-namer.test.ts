@@ -7,16 +7,20 @@ import { conversationAfter } from "../../conversations/registry/agents-store.tes
 import { privacySliceFake } from "../../privacy/privacy-slice.testing.js";
 import { assertAgentExecutionContext, type AgentExecutionContext, withAgentExecution } from "../../workload/agent-execution.js";
 import { rootExecutionService } from "../../workload/agent-execution.testing.js";
+import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "../../engines/role-answer.js";
 
 const ask = jest.fn<() => Promise<{ value: string }>>();
 // Whether a model is set for session titles; false means this pass must ask before spending anything.
 const modelSet = jest.fn<() => boolean>(() => true);
 const executions: AgentExecutionContext[] = [];
+const requests: RoleAsk<string>[] = [];
+const pages: Parameters<Services["transcripts"]["page"]>[] = [];
 jest.mock("./role-model.js", () => ({
-    askRoleModel: (_services: Services, execution: AgentExecutionContext) => {
+    askRoleModel: async (_services: Services, execution: AgentExecutionContext, _role: string, request: RoleAsk<string>) => {
         assertAgentExecutionContext(execution);
         executions.push(execution);
-        return ask();
+        requests.push(request);
+        return { value: readRoleAnswer(request.answer, (await ask()).value) };
     },
     roleModelIsSet: async () => modelSet(),
 }));
@@ -96,16 +100,24 @@ const STOLEN_TITLES = [
 ];
 
 // `turns` is how many turns the conversation finished before the one this pass runs at; 0 is its opening turn.
-const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"]["setTitle"]>, turns = 0, identity: Identity = {}): Services =>
+const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"]["setTitle"]>, turns = 0, identity: Identity = {}, opening?: string): Services =>
     unstubbed<Services>("services", {
         privacyShield: privacySliceFake().privacyShield,
         agentExecution: rootExecutionService(),
         agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(turns, { identity, social: { title, reactions: [] } }), setTitle }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", {
+            page: async (...args) => {
+                pages.push(args);
+                return { rows: opening === undefined ? [] : [{ role: "user", text: opening }], from: 0, more: false };
+            },
+        }),
     });
 
 beforeEach(() => {
     ask.mockReset();
     executions.length = 0;
+    requests.length = 0;
+    pages.length = 0;
     modelSet.mockReturnValue(true);
 });
 
@@ -198,4 +210,50 @@ test.each(STOLEN_TITLES)("a stored title reading %s counts as no name: the pass 
     ask.mockResolvedValue({ value: "Auth test flakiness · fix" });
     await nameAgentTitle(servicesWith({ text: stolen, source: "model" }, setTitle), "c1", "fix the auth tests");
     expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness", "model", "fix");
+});
+
+test.each(["Intentic", "boot.test.ts", "src/start.ts src/boot.test.ts"])("refuses a bare label %s inside the model answer contract", async (label) => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    ask.mockResolvedValue({ value: `${label} · fix` });
+    await expect(nameAgentTitle(servicesWith({ text: "Fix the auth tests", source: "derived" }, setTitle), "c1", "fix the auth tests"))
+        .rejects.toBeInstanceOf(UnusableAnswerError);
+    expect(setTitle).not.toHaveBeenCalled();
+});
+
+test.each(["· fix", "Claude Haiku · explain", `${"Specific ".repeat(10)}test · fix`])("refuses an unusable displayed title in %s", async (reply) => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    ask.mockResolvedValue({ value: reply });
+    await expect(nameAgentTitle(servicesWith({ text: "Fix the auth tests", source: "derived" }, setTitle), "c1", "fix the auth tests"))
+        .rejects.toBeInstanceOf(UnusableAnswerError);
+    expect(setTitle).not.toHaveBeenCalled();
+});
+
+test.each([
+    ["Fix flaky boot timing test", "fix"],
+    ["Audit Intentic for critical vulnerabilities", "audit"],
+    ["Explain boot.test.ts timing assumptions", "explain"],
+])("keeps the requested work visible in %s and stores its category separately", async (title, action) => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    ask.mockResolvedValue({ value: `${title} · ${action}` });
+    await nameAgentTitle(servicesWith({ text: "Opening request", source: "derived" }, setTitle), "c1", "the opening request");
+    expect(setTitle).toHaveBeenCalledWith("c1", title, "model", action);
+});
+
+test.each(["model", "plan"] as const)("repairs a bare %s title from the original request on a later turn", async (source) => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    const opening = "Perform an exploratory security check on Intentic. Find critical vulnerabilities.";
+    const services = servicesWith({ text: "Intentic", source, action: "audit" }, setTitle, 4, {}, opening);
+    ask.mockResolvedValue({ value: "Audit Intentic for critical vulnerabilities · audit" });
+    await nameAgentTitle(services, "c1", "Continue");
+    expect(pages).toEqual([[expect.objectContaining({ id: "c1" }), { before: 1 }]]);
+    expect(requests[0]?.prompt).toContain(`Opening user message:\n${opening}`);
+    expect(requests[0]?.prompt).not.toContain("\nContinue\n");
+    expect(setTitle).toHaveBeenCalledWith("c1", "Audit Intentic for critical vulnerabilities", "model", "audit");
+});
+
+test.each(["Intentic", "boot.test.ts", ...STOLEN_TITLES])("preserves an explicit user rename reading %s", async (title) => {
+    const setTitle = jest.fn<Services["agents"]["setTitle"]>();
+    await nameAgentTitle(servicesWith({ text: title, source: "user" }, setTitle, 2), "c1", "Continue");
+    expect(ask).not.toHaveBeenCalled();
+    expect(setTitle).not.toHaveBeenCalled();
 });

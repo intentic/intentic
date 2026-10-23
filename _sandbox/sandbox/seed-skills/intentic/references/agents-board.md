@@ -2,13 +2,17 @@
 
 ## Where a title comes from
 
-A conversation's title has a source, and a higher one replaces a lower one, never the reverse:
+A conversation's title has a source, and a higher one replaces a lower one. Automatic titles that contain only a
+project name, filename or other bare label can be replaced by a useful name regardless of their old rank:
 
 1. `derived`: the first message, cut to a line (openers like "can you please" and code blocks dropped, cut on a
    sentence or word boundary, at most 80 characters).
 2. `model`: the naming pass. When **Session titles** has a model (Sandbox ▸ Agent ▸ Jobs), it names the
-   conversation a moment into its first turn, in a few words. With no model on that job the pass does not run and
-   the title stays the cut of the first message. A spawned subagent is named by the parent's description of it.
+   conversation a moment into its first turn, describing the work and its specific problem or goal (for example,
+   "Fix flaky boot timing test"). The card's work category is stored separately; the visible title keeps its action.
+   With no model on that job the pass does not run and the title stays the cut of the first message. Bare automatic
+   labels are repaired on a later turn using the opening request. A spawned subagent keeps a useful name its parent
+   chose for it.
 3. `plan`: the agent's own plan heading.
 4. `user`: a rename by a person. It outranks everything, so nothing automatic renames it afterwards.
 
