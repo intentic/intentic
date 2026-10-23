@@ -316,7 +316,7 @@ const removeRow = async (target: SandboxSummary): Promise<void> => {
         >
             <!-- This computer has one mark, whichever folder the local window shows. -->
             <span class="flex size-full items-center justify-center overflow-hidden rounded-md [&_span]:text-inherit">
-                <Icon v-if="folder" name="desktop" class="size-2/3" aria-hidden="true" />
+                <Icon v-if="folder" name="desktop" class="icon-rail-glyph" aria-hidden="true" />
                 <SandboxLogo v-else :image="sandbox.active.value?.image ?? null" :name="sandbox.active.value?.name" />
             </span>
         </button>
