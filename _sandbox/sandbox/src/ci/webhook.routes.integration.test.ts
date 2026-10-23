@@ -21,7 +21,7 @@ import { fileCiStore } from "./ci-store.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 import { createCiHookReconciler } from "./hooks.js";
-import { createCiWebhookRoute } from "./webhook.routes.js";
+import { CI_WEBHOOK_PAYLOAD_MAX, createCiWebhookRoute } from "./webhook.routes.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
@@ -134,6 +134,36 @@ test("an unsigned or mis-signed delivery is refused", async () => {
     expect(response.status).toBe(401);
     // Nothing moved, so nothing is announced: a refused delivery must not make every open board re-read.
     expect(published).not.toContain("ci");
+});
+
+test("an oversized unsigned delivery is cut off at the byte limit without a Content-Length", async () => {
+    const { app } = await harness("wh-too-large");
+    let sent = 0;
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+            if (sent > CI_WEBHOOK_PAYLOAD_MAX) {
+                controller.close();
+                return;
+            }
+            const size = sent === 0 ? CI_WEBHOOK_PAYLOAD_MAX : 1;
+            sent += size;
+            controller.enqueue(new Uint8Array(size));
+        },
+        cancel() {
+            cancelled = true;
+        },
+    });
+    // SAFETY: a streamed request needs Node's duplex flag, absent from the DOM RequestInit type.
+    const response = await app.request("/ci/webhook/gitlab", {
+        method: "POST",
+        headers: { "x-gitlab-token": "wrong" },
+        body,
+        duplex: "half",
+    } as RequestInit);
+    expect(response.status).toBe(413);
+    expect(sent).toBe(CI_WEBHOOK_PAYLOAD_MAX + 1);
+    expect(cancelled).toBe(true);
 });
 
 // The delivery is the only moment the daemon knows a run ended; without the push an open board waits out its own poll.

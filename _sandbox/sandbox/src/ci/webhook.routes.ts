@@ -21,6 +21,7 @@ import {
 import { forgeOf } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
+import { readBoundedText } from "../http/bounded-body.js";
 
 // Public webhook receiver, gated by the per-sandbox secret (github HMACs the body, gitlab echoes it as a token); one
 // route for both vendors. An unmapped project's delivery is acknowledged and dropped, not an error. Verifies the sender
@@ -226,6 +227,10 @@ const gitlabDeliveryOf = (event: string | undefined, payload: Partial<GitlabJobH
     };
 };
 
+// Ample room for a workflow run or job delivery, while bounding the memory an unauthenticated caller can make the
+// daemon allocate before the HMAC or token check.
+export const CI_WEBHOOK_PAYLOAD_MAX = 1024 * 1024;
+
 export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetch) => {
     // One repository's runs are announced in the order their deliveries arrived, each after the last has finished:
     // whether a run broke or fixed its branch is read against the conclusion the run before it recorded.
@@ -235,7 +240,16 @@ export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetc
         if (host !== "github" && host !== "gitlab") {
             return c.json({ error: "unknown host" }, 404);
         }
-        const raw = await c.req.text();
+        // Count the bytes as they arrive: a public caller must not make the daemon hold an unbounded body before its
+        // signature or token is checked, and a chunked delivery has no Content-Length to check up front.
+        const body = await readBoundedText(c.req.raw, CI_WEBHOOK_PAYLOAD_MAX);
+        if (body.kind === "tooLarge") {
+            return c.json({ error: "payload too large" }, 413);
+        }
+        if (body.kind === "invalid") {
+            return c.json({ error: "invalid payload" }, 400);
+        }
+        const raw = body.value;
         const secret = await services.ciStore.secret();
         if (host === "github") {
             const expected = `sha256=${createHmac("sha256", secret).update(raw).digest("hex")}`;

@@ -384,7 +384,7 @@
     },
     {
       "type": "{ members: ({ agents?: \"off\" | \"chat\" | \"run\" | \"home\"; areas?: string[]; credentials?: { capabilities: string[]; secrets: string[] }; edit?: \"all\" | string[]; email: string; emailSignIn?: boolean; lands?: true; role: \"guest\" | \"viewer\" | \"collaborator\" | \"writer\" | \"maintainer\" })[] }",
-      "since": "unreleased"
+      "since": "v1.352.0"
     }
   ],
   "history:identity/owner.json": [
