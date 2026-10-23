@@ -40,6 +40,8 @@ export const infraLog = (logs: string): boolean => INFRA_LOG.some((sign) => sign
 
 export interface CiFailureEvidence {
     readonly failedJobs: readonly string[];
+    // The exact snapshot handed to a manual fix, so its later automatic handover sends only additional failures.
+    readonly failedJobIds: readonly number[];
     // What failed, read out of the failed jobs' logs (failure-digest.ts): every error once with the jobs that printed it,
     // then each failed step's last lines.
     readonly logs: string;
@@ -75,6 +77,7 @@ export const ciFailureEvidence = async (project: CiProject, runId: number, logge
     );
     return {
         failedJobs: failedSteps.map(({ job }) => job),
+        failedJobIds: failedSteps.map(({ id }) => id),
         logs: digestOf(
             failedSteps.map((failed, index) =>
                 excerptOf({
@@ -161,13 +164,19 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
     const chatDefault = request.fallback !== undefined && provider === request.fallback.agent ? request.fallback : undefined;
     const run = request.run ?? (await runOf(services, project, runId, fetchFn));
     const where = run !== undefined ? `on branch ${run.branch} (${run.url})` : `(run ${runId})`;
-    // What a CONTINUED attempt is told: the failure is still open, the evidence is already in the conversation.
+    // A continued attempt also receives this press's evidence: newer failures may never have reached its earlier turn.
     const nudge = [
         `The CI failure on "${project.repo}" ${where} is still open, and this conversation is the attempt at it. Your earlier turn ended without landing a fix.`,
-        `Carry on from where you left off; the failed job logs earlier in this conversation are still the evidence. You are in an isolated worktree: commit your fix and it goes through review.`,
+        `Carry on from where you left off, using the current failed job evidence below alongside the earlier conversation. Fix every cause it reports. You are in an isolated worktree: commit your fix and it goes through review.`,
+        ...(request.evidence.failedJobs.length > 0 ? [`Failed jobs: ${request.evidence.failedJobs.join(", ")}.`] : []),
+        ...(request.evidence.logs !== "" ? [`--- what failed ---\n${request.evidence.logs}`] : []),
     ].join("\n\n");
     return startFixAttempt(
-        daemonFixAttemptDeps(services, { pressed: request.pressed === true, picked: request.picked === true }),
+        {
+            ...daemonFixAttemptDeps(services, { pressed: request.pressed === true, picked: request.picked === true }),
+            // A kept turn predates this evidence snapshot. Resend the prepared prompt so every acknowledged job reaches it.
+            rerun: async () => undefined,
+        },
         {
             base: request.base ?? ciFixConversationId(project.repo, runId),
             prompt: promptOf(request, where),

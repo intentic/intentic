@@ -127,6 +127,34 @@ describe(`mainFailuresOf`, () => {
         expect(mainFailuresOf([failing({ runId: 99 })], [], [mine])[0]?.run).toBeUndefined();
     });
 
+    it.each([`queued`, `running`, `failed`] as const)(`offers a new fix for known failures after landing while the run is %s`, (status) => {
+        const fixer = agentCard(first, { status: `landed`, updatedAt: NOW - 5 * MINUTE });
+        const run = pipelineRun({ runId: 43, status, createdAt: NOW - 4 * MINUTE });
+        const [view] = mainFailuresOf([failing({ fixer: first })], [fixer], [run]);
+        expect(view?.state).toBe(`failed-again`);
+        expect(view === undefined ? false : offersFix(view)).toBe(true);
+        expect(view === undefined ? undefined : storyOf(view, [run])).toBe(status === `failed` ? `failed-again` : `collecting`);
+    });
+
+    it(`keeps the landed state for old failures, a healthy newer run, and an attempt still working`, () => {
+        const fixer = agentCard(first, { status: `landed`, updatedAt: NOW - 5 * MINUTE });
+        const old = pipelineRun({ runId: 43, createdAt: fixer.updatedAt });
+        const healthy = pipelineRun({ runId: 44, status: `running`, createdAt: NOW - 4 * MINUTE });
+        const [view] = mainFailuresOf([failing({ fixer: first })], [fixer], [healthy, old]);
+        expect(view?.state).toBe(`fixing`);
+        expect(view === undefined ? true : offersFix(view)).toBe(false);
+        expect(view === undefined ? undefined : storyOf(view, [healthy, old])).toBe(`proving`);
+        const [working] = mainFailuresOf([failing({ fixer: first })], [agentCard(first)], [healthy, old]);
+        expect(working?.state).toBe(`fixing`);
+        expect(working === undefined ? true : offersFix(working)).toBe(false);
+    });
+
+    it.each([`success`, `canceled`, `skipped`] as const)(`does not revive a failure whose named run is now %s`, (status) => {
+        const fixer = agentCard(first, { status: `landed`, updatedAt: NOW - 5 * MINUTE });
+        const run = pipelineRun({ runId: 43, status, createdAt: NOW - 4 * MINUTE });
+        expect(mainFailuresOf([failing({ fixer: first })], [fixer], [run])[0]?.state).toBe(`fixing`);
+    });
+
     it(`puts the longest-failing first, and is nothing from a daemon that keeps no failures`, () => {
         const views = mainFailuresOf([failing({ repo: `web`, since: NOW - MINUTE }), failing({ repo: `api`, since: NOW - 40 * MINUTE })], [], []);
         expect(views.map((view) => view.failure.repo)).toEqual([`api`, `web`]);
@@ -141,6 +169,11 @@ describe(`offersFix`, () => {
         expect([`waits`, `reported`, `unassigned`].map((state) => offersFix({ state: state as MainFailureState, run }))).toEqual([true, true, true]);
         expect(offersFix({ state: `fixing`, run })).toBe(false);
         expect(offersFix({ state: `waits`, run: undefined })).toBe(false);
+    });
+
+    it(`keeps the renewed failure's only fix control in the banner`, () => {
+        expect(offersFix({ state: `failed-again`, run })).toBe(true);
+        expect(leadsRows({ state: `failed-again`, run })).toBe(true);
     });
 });
 

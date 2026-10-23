@@ -6,6 +6,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/base/git";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import { fixAttemptId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { unstubbed } from "@intentic/testing";
@@ -435,7 +436,7 @@ test("an agent that finished without changing anything hands the failure over; o
     expect(said).toEqual([]);
 
     // A person's press gives it the streak back, with its turns.
-    await fixPressed(services, run(42, "failed"), FIXER);
+    await fixPressed(services, run(42, "failed"), [420], async () => ({ kind: "started", conversationId: FIXER, attempt: 1, continued: true }));
     expect(await failure()).toMatchObject({ turns: 0 });
     running.add(FIXER);
     await settle(FIXER, { status: "landed" });
@@ -445,6 +446,56 @@ test("an agent that finished without changing anything hands the failure over; o
     expect(said).toHaveLength(1);
     await settle(FIXER, { status: "idle" });
     expect((await failure())?.decisions.at(-1)?.kind).toBe("fix-up");
+});
+
+test("Fix now acknowledges its evidence and hands over only jobs that fail later, including after a restart", async () => {
+    const { services, project, fetchFn, agents, running, said, failure, failRun } = await harness();
+    await failRun(41);
+    const next = fixAttemptId(FIXER, 2);
+    await jobFailed(services, project, job(42, 420), fetchFn);
+    await fixPressed(services, run(42, "running"), [420], async () => {
+        agents.set(next, summary(next));
+        running.add(next);
+        return { kind: "started", conversationId: next, attempt: 2, continued: false };
+    });
+    expect((await failure())?.heard).toEqual(["41/410", "42/420"]);
+    await failRun(42);
+    expect(said).toEqual([]);
+
+    resetMainFixer();
+    await failRun(42, ["verify-core", "verify-platform"]);
+    expect(said).toHaveLength(1);
+    expect(said[0]?.turn.conversationId).toBe(next);
+    expect(said[0]?.turn.prompt).toContain('run 42 failed 1 job: "verify-platform"');
+    expect((await failure())?.heard).toEqual(["41/410", "42/420", "42/421"]);
+});
+
+test("a failure outside the manual snapshot remains parked, and completion waits for the press", async () => {
+    const { services, project, fetchFn, said, failure, failRun } = await harness();
+    await failRun(41);
+    await jobFailed(services, project, job(42, 420), fetchFn);
+    await jobFailed(services, project, job(42, 421, "verify-platform"), fetchFn);
+    let finishing: Promise<void> | undefined;
+    await fixPressed(services, run(42, "running"), [420], async () => {
+        finishing = failRun(42, ["verify-core", "verify-platform"]);
+        return { kind: "started", conversationId: FIXER, attempt: 1, continued: true };
+    });
+    await finishing;
+    expect(said).toHaveLength(1);
+    expect(said[0]?.turn.prompt).toContain('run 42 failed 1 job: "verify-platform"');
+    expect((await failure())?.heard).toEqual(["41/410", "42/420", "42/421"]);
+});
+
+test("a busy or refused manual start leaves the parked failures for automatic handover", async () => {
+    const { services, project, fetchFn, said, failure, failRun } = await harness();
+    await failRun(41);
+    await jobFailed(services, project, job(42, 420), fetchFn);
+    await fixPressed(services, run(42, "running"), [420], async () => ({ kind: "busy", conversationId: FIXER, reason: "Already working" }));
+    await expect(fixPressed(services, run(42, "running"), [420], async () => { throw new Error("Provider unavailable"); })).rejects.toThrow("Provider unavailable");
+    expect((await failure())?.heard).toEqual(["41/410"]);
+    await failRun(42);
+    expect(said).toHaveLength(1);
+    expect(said[0]?.turn.prompt).toContain('run 42 failed 1 job: "verify-core"');
 });
 
 test("an agent whose turn failed hands the failure over, and a turn the sandbox runs again by itself is not over yet", async () => {

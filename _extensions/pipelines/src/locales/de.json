@@ -46,9 +46,13 @@
             "unassigned": "Die Auto-Reparatur wartet, bis der Lauf fertig ist, damit ihr Agent alle Fehler auf einmal bekommt. Starten Sie jetzt einen, um nicht zu warten.",
             "waiting": "Der Auto-Reparatur-Agent pausiert, bis sein Kontingent zurück ist.",
             "waits": "{reason}: Der Auto-Reparatur-Agent hat das zurückgegeben. Fortsetzen gibt ihm weitere Runden.",
-            "working": "Der Auto-Reparatur-Agent ist dran. Jeder neue Fehler auf {branch} geht an denselben Agenten, bis ein Lauf grün ist."
+            "working": "Der Auto-Reparatur-Agent ist dran. Jeder neue Fehler auf {branch} geht an denselben Agenten, bis ein Lauf grün ist.",
+            "collecting": "Einige Jobs eines neueren Laufs sind fehlgeschlagen. Die automatische Fehlerbehebung sammelt die übrigen Ergebnisse. Wähle „Jetzt beheben“, um früher zu beginnen.",
+            "failedAgain": "Ein neuerer Lauf auf {branch} hat fehlgeschlagene Jobs. Wähle „Jetzt beheben“, um einen weiteren Versuch zu starten."
         },
-        "title": "{branch} schlägt fehl"
+        "title": "{branch} schlägt fehl",
+        "fixNow": "Jetzt beheben",
+        "newFailures": "Neue Fehler gefunden"
     },
     "pipelineDag": {
         "step": "Schritt {n}"

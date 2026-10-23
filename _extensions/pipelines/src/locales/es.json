@@ -46,9 +46,13 @@
             "unassigned": "El arreglo automático espera a que termine la ejecución, para que su agente reciba todos los fallos a la vez. Inicia uno ahora para no esperar.",
             "waiting": "El agente de arreglo automático está en pausa hasta que vuelva su cuota.",
             "waits": "{reason}: el agente de arreglo automático lo devolvió. Continuar le da más turnos.",
-            "working": "El agente de arreglo automático está en ello. Cada nuevo fallo en {branch} va al mismo agente hasta que pase una ejecución."
+            "working": "El agente de arreglo automático está en ello. Cada nuevo fallo en {branch} va al mismo agente hasta que pase una ejecución.",
+            "collecting": "Algunos trabajos de una ejecución más reciente han fallado. La corrección automática está recopilando los resultados restantes. Pulsa «Corregir ahora» para empezar antes.",
+            "failedAgain": "Una ejecución más reciente en {branch} tiene trabajos fallidos. Pulsa «Corregir ahora» para iniciar otro intento."
         },
-        "title": "{branch} está fallando"
+        "title": "{branch} está fallando",
+        "fixNow": "Corregir ahora",
+        "newFailures": "Se encontraron nuevos fallos"
     },
     "pipelineDag": {
         "step": "Paso {n}"

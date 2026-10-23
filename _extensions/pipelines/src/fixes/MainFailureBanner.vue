@@ -102,6 +102,8 @@ const STORY = {
     ready: () => t(`mainFailure.story.ready`),
     landed: () => t(`mainFailure.story.landed`, { branch: failure.value.branch }),
     proving: () => t(`mainFailure.story.proving`, { branch: failure.value.branch }),
+    collecting: () => t(`mainFailure.story.collecting`),
+    "failed-again": () => t(`mainFailure.story.failedAgain`, { branch: failure.value.branch }),
     pushed: () =>
         workflowNames.value.length === 0
             ? t(`mainFailure.story.pushedUnnamed`, { branch: failure.value.branch })
@@ -122,6 +124,9 @@ const story = computed(() => STORY[storyOf(props.view, props.covered, props.runs
 // handed back, and the way into the agent whenever there is one. Undefined before anybody is on it.
 const pill = computed<(ReturnType<typeof fixStanceLook> & { label: string; link: boolean }) | undefined>(() => {
     const view = props.view;
+    if (view.state === `failed-again`) {
+        return { ...fixStanceLook(`ended`), label: t(`mainFailure.newFailures`), link: fixerLink.value !== undefined };
+    }
     if (view.state === `fixing`) {
         const look = fixStanceLook(view.stance?.kind ?? `working`);
         return { label: view.stance?.label ?? t(`mainFailure.fixAgent`), ...look, link: fixerLink.value !== undefined };
@@ -140,6 +145,9 @@ const continues = computed(() => props.view.state === `waits` && fixerId.value !
 const press = computed<{ label: string; primary: boolean } | undefined>(() => {
     if (!offersFix(props.view)) {
         return undefined;
+    }
+    if (props.view.state === `failed-again`) {
+        return { label: t(`mainFailure.fixNow`), primary: true };
     }
     if (continues.value) {
         return { label: t(`mainFailure.continueFix`), primary: true };

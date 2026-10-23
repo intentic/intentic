@@ -12,6 +12,7 @@ import { fixStance } from "@intentic/sandbox-contract/state/fix-stance";
 import { deliverWake } from "../seams/wake-delivery.js";
 import type { Services } from "../composition.js";
 import { conversationProfile } from "../conversations/registry/agents-store.js";
+import type { FixAttemptOutcome } from "../conversations/fix/fix-attempts.js";
 import { opt } from "../opt.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { CiFailure } from "./ci-store.js";
@@ -19,7 +20,7 @@ import { FIX_LOG_BYTES, startCiFix, WHOLE_LOG } from "./ci-fix.js";
 import { digestOf, excerptOf, type JobExcerpt } from "./logs/failure-digest.js";
 import { ciLogsRoot, keepJobLog } from "./logs/job-logs.js";
 import { isMainLine } from "./main-line.js";
-import { type FailedJob, findingOf, fleetFailed, heardOf, withHeard, withJob, workflowOf } from "./main-streak.js";
+import { type FailedJob, findingOf, fixerOf, fleetFailed, heardOf, mainFailureOf, withFixPressed, withHeard, withJob, workflowOf } from "./main-streak.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
 
@@ -104,8 +105,6 @@ const orElse = async <T>(services: Pick<Services, "logger">, work: Promise<T>, f
     }
 };
 
-// The one conversation on a streak: the newest a fix-up decision named.
-export const fixerOf = (streak: CiFailure): string | undefined => streak.decisions.findLast((decision) => decision.kind === "fix-up")?.conversationId;
 // Whether the failure was handed to the owner since its fix agent was last given it.
 const waitsForOwner = (streak: CiFailure): boolean => streak.decisions.at(-1)?.kind === "spent";
 
@@ -241,7 +240,13 @@ const startFixer = async (
                 project,
                 runId,
                 base: ciFixConversationId(project.repo, streak.firstRunId),
-                evidence: { failedJobs: names, logs: digestOf(parked.map(({ excerpt }) => excerpt)), infra: false, infraSteps: [] },
+                evidence: {
+                    failedJobs: names,
+                    failedJobIds: parked.map(({ job }) => job.jobId),
+                    logs: digestOf(parked.map(({ excerpt }) => excerpt)),
+                    infra: false,
+                    infraSteps: [],
+                },
                 preface: openingPreface(project, branch, runId, parked, reason),
             },
             fetchFn,
@@ -682,47 +687,39 @@ export const streakFixerFor = async (services: Services, run: Pick<PipelineRun, 
     return streak === undefined ? undefined : ciFixConversationId(run.repo, streak.firstRunId);
 };
 
-/** Records the press that continued a streak's fix agent: it has its turns back, and failures reach it again. */
-export const fixPressed = async (services: Services, run: Pick<PipelineRun, "repo" | "branch">, conversationId: string): Promise<void> => {
-    await serially(keyOf(run.repo, run.branch), async () => {
+/** Starts a manual attempt under the handover's lock, then records exactly which failures reached it. A busy or refused
+ *  start consumes nothing; later jobs remain parked for the run's automatic handover. */
+export const fixPressed = (
+    services: Services,
+    run: Pick<PipelineRun, "repo" | "branch" | "runId">,
+    failedJobIds: readonly number[],
+    start: () => Promise<FixAttemptOutcome>,
+): Promise<FixAttemptOutcome> =>
+    serially(keyOf(run.repo, run.branch), async () => {
+        const outcome = await start();
+        if (outcome.kind === "busy") {
+            return outcome;
+        }
+        const press = { runId: run.runId, failedJobIds, conversationId: outcome.conversationId, at: Date.now() };
         await services.ciStore.failure(run.repo, run.branch, (current) =>
-            current === undefined
-                ? current
-                : {
-                      ...current,
-                      turns: 0,
-                      decisions: [
-                          ...current.decisions,
-                          { kind: "fix-up", conversationId, at: Date.now(), detail: "A person pressed Fix: the fix agent has its turns back." },
-                      ],
-                  },
+            current === undefined ? current : withFixPressed(current, press),
         );
+        const key = batchKeyOf(run.repo, run.runId);
+        const batch = batches.get(key);
+        for (const jobId of failedJobIds) {
+            batch?.jobs.delete(jobId);
+        }
+        if (batch !== undefined && batch.jobs.size === 0) {
+            clearTimeout(batch.timer);
+            batches.delete(key);
+        }
+        publishRuntimeChange("ci");
+        return outcome;
     });
-    publishRuntimeChange("ci");
-};
 
 /** Every main-line branch failing right now, as GET /ci/runs serves it. */
 export const mainFailures = async (services: Services): Promise<CiMainFailure[]> =>
-    Object.entries(await services.ciStore.failures()).map(([key, streak]) => {
-        const [repo = "", branch = ""] = key.split("\n");
-        const decision = streak.decisions.at(-1);
-        return {
-            repo,
-            branch,
-            since: streak.since,
-            runId: streak.runId,
-            jobs: streak.findings.map(({ text }) => text),
-            // Which workflow each job fails in, and its newest failed run: the banner names a scheduled one a push does
-            // not run, whose run the board may not list. Empty for a failure kept before workflows were told apart.
-            workflows: Object.entries(streak.workflows).map(([name, runId]) => ({
-                name,
-                runId,
-                jobs: streak.findings.filter((finding) => finding.source === name).map(({ text }) => text),
-            })),
-            ...opt("fixer", fixerOf(streak)),
-            ...opt("decision", decision),
-        };
-    });
+    Object.entries(await services.ciStore.failures()).map(mainFailureOf);
 
 /** At boot, each failure the CI store kept: its fix agent's turn may have ended while the daemon was down, and main may have
  *  failed again or passed meanwhile, which a missed webhook never said. */

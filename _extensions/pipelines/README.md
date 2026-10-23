@@ -27,7 +27,11 @@ flowchart LR
   fix stands and the reader's move, read off the agent's live stance (`storyOf`): working, waiting on you, ready to
   review, landed ("commit and push it: the next run on main shows whether it worked"), being measured by a run that
   started after it landed, pushed (a run on the branch passed since it landed, so what still fails is a workflow that
-  push did not run), or handed back with a two-word reason from the contract's `MainFailureHandBack`. Under the header
+  push did not run), new failures after landing ("New failures found", with "Fix now" even while the run is still going),
+  or handed back with a two-word reason from the contract's `MainFailureHandBack`. Auto-fix still collects a run's
+  failures until it finishes or reaches its wait cap; the manual press starts with the failures reported so far,
+  and only additional failed jobs follow automatically. A newer run with no failures reported keeps the measuring
+  state. Under the header
   sit the runs it is about (`coveredRuns`: the branch's failures nothing has passed since, the ones the daemon names
   failing whatever passed on a later commit, and its runs still going), indented and joined to the header's plate by a
   drawn lane, a trunk with an elbow into each run's status glyph, measured from where they sit so it survives a row

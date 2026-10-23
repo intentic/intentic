@@ -46,9 +46,13 @@
             "unassigned": "Auto-naprawa czeka, aż przebieg się skończy, żeby jej agent dostał wszystkie błędy naraz. Uruchom go teraz, żeby nie czekać.",
             "waiting": "Agent auto-naprawy czeka, aż wróci jego limit.",
             "waits": "{reason}: agent auto-naprawy oddał to Tobie. Kontynuuj da mu kolejne tury.",
-            "working": "Agent auto-naprawy się tym zajmuje. Każdy nowy błąd na {branch} trafia do tego samego agenta, aż przebieg przejdzie."
+            "working": "Agent auto-naprawy się tym zajmuje. Każdy nowy błąd na {branch} trafia do tego samego agenta, aż przebieg przejdzie.",
+            "collecting": "Część zadań w nowszym przebiegu nie powiodła się. Auto-naprawa zbiera pozostałe wyniki. Wybierz „Napraw teraz”, żeby zacząć wcześniej.",
+            "failedAgain": "Nowszy przebieg na {branch} ma nieudane zadania. Wybierz „Napraw teraz”, żeby rozpocząć kolejną próbę."
         },
-        "title": "{branch} nie przechodzi"
+        "title": "{branch} nie przechodzi",
+        "fixNow": "Napraw teraz",
+        "newFailures": "Wykryto nowe błędy"
     },
     "pipelineDag": {
         "step": "Krok {n}"

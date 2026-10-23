@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/base/git";
 import type { AgentTurn, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
+import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { setupsFromRoleLists } from "@intentic/sandbox-contract/models/model-setups";
@@ -62,9 +63,10 @@ const SPENT: CiFailure = {
 interface Setup {
     readonly ready?: readonly string[];
     readonly pinned?: readonly ModelPin[];
+    readonly previous?: AgentSummary["status"];
 }
 
-const harness = async ({ ready = ["claude"], pinned = [] }: Setup = {}) => {
+const harness = async ({ ready = ["claude"], pinned = [], previous }: Setup = {}) => {
     const root = mkdtempSync(join(tmpdir(), "ci-fix-"));
     const dir = join(root, "web");
     await mkdir(dir, { recursive: true });
@@ -104,7 +106,18 @@ const harness = async ({ ready = ["claude"], pinned = [] }: Setup = {}) => {
             Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, ready.includes(provider)])) as Awaited<ReturnType<Services["providerReadiness"]>>,
         // A pin's rung is asked whether it has been dying; none has.
         usage: unstubbed<Services["usage"]>("usage", { turns: async () => [] }),
-        agents: unstubbed<Services["agents"]>("agents", { list: () => [], listArchived: () => [], clearArchived: async () => {} }),
+        agents: unstubbed<Services["agents"]>("agents", {
+            list: (): AgentSummary[] => previous === undefined ? [] : [{
+                id: "ci-fix-web-40",
+                status: previous,
+                provider: "claude",
+                harness: "native",
+                attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+                updatedAt: 0,
+            }],
+            listArchived: () => [],
+            clearArchived: async () => {},
+        }),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
@@ -189,6 +202,27 @@ test("a pressed Fix on a run of a failing main continues the streak's one fix ag
     const failure = (await services.ciStore.failures())["web\nmain"];
     expect(failure?.turns).toBe(0);
     expect(failure?.decisions.at(-1)).toMatchObject({ kind: "fix-up", conversationId: "ci-fix-web-40" });
+});
+
+test("a pressed Fix on an unfinished run acknowledges exactly the failed jobs it handed to the agent", async () => {
+    const { routes, started, services } = await harness();
+    await services.ciStore.failure("web", "main", () => ({ ...SPENT, heard: ["40/6"] }));
+    services.ciRuns.replace(services.ciRuns.sweep()!.map((run) => ({ ...run, status: "running" })));
+    await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    expect(started[0]?.prompt).toContain("P1001");
+    expect((await services.ciStore.failures())["web\nmain"]?.heard).toEqual(["40/6", "41/7"]);
+});
+
+test.each(["landed", "stopped"] as const)("Fix now after a %s attempt delivers the current evidence on the incident's attempt", async (previous) => {
+    const { routes, started, services } = await harness({ previous });
+    await services.ciStore.failure("web", "main", () => ({ ...SPENT, heard: ["40/6"] }));
+    const outcome = await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
+    expect(outcome.conversationId).toBe(previous === "landed" ? "ci-fix-web-40-attempt2" : "ci-fix-web-40");
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    expect(started[0]?.prompt).toContain("Failed jobs: onboarding.");
+    expect(started[0]?.prompt).toContain("P1001");
+    expect((await services.ciStore.failures())["web\nmain"]?.heard).toEqual(["40/6", "41/7"]);
 });
 
 // The Pipelines rail reads each failing main-line branch off the runs list, under the name the contract gives it.

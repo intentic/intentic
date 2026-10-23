@@ -13,6 +13,8 @@ import { latestFixAttempt } from "@intentic/sandbox-contract/ids/conversation-id
 export type MainFailureState =
     // A fix agent has it: the daemon started one, and every failure on the branch goes to it until a run passes.
     | `fixing`
+    // A run after the last fix landed already has failures, even if the run is still measuring.
+    | `failed-again`
     // Its turns are spent, or it finished without changing anything: the failure is the owner's now.
     | `waits`
     // Repairs are switched off, so nobody was sent: the owner's from the start.
@@ -32,14 +34,24 @@ export interface MainFailureView {
     readonly run: PipelineRun | undefined;
 }
 
-// Only the two waits ask for the reader; anything else (a fix-up, or no decision yet) is somebody else's to act on.
-export const mainFailureState = (failure: CiMainFailure): MainFailureState => {
+// A hand-back outranks the agent's stance; otherwise known failures after landing reopen its fix control.
+export const mainFailureState = (failure: CiMainFailure, fixer?: AgentSummary, run?: PipelineRun): MainFailureState => {
     const kind = failure.decision?.kind;
     if (kind === `spent`) {
         return `waits`;
     }
     if (kind === `reported`) {
         return `reported`;
+    }
+    // `run` is the daemon's newest failing run, so its presence is evidence of failed jobs even before its final verdict.
+    if (
+        fixer !== undefined &&
+        fixStance(fixer).kind === `landed` &&
+        run !== undefined &&
+        run.createdAt > fixer.updatedAt &&
+        (run.status === `failed` || isPipelineInFlight(run.status))
+    ) {
+        return `failed-again`;
     }
     return failure.fixer !== undefined || kind === `fix-up` ? `fixing` : `unassigned`;
 };
@@ -54,12 +66,13 @@ export const mainFailuresOf = (
     (failures ?? [])
         .map((failure): MainFailureView => {
             const fixer = failure.fixer === undefined ? undefined : latestFixAttempt(failure.fixer, agents)?.agent;
+            const run = runs.find((candidate) => candidate.repo === failure.repo && candidate.branch === failure.branch && candidate.runId === failure.runId);
             return {
                 failure,
-                state: mainFailureState(failure),
+                state: mainFailureState(failure, fixer, run),
                 fixer,
                 stance: fixer === undefined ? undefined : fixStance(fixer),
-                run: runs.find((run) => run.repo === failure.repo && run.runId === failure.runId),
+                run,
             };
         })
         .toSorted((left, right) => left.failure.since - right.failure.since);
@@ -151,16 +164,23 @@ export type MainFailureStory =
     | `ready`
     | `landed`
     | `proving`
+    | `collecting`
     | `pushed`
     | `waiting`
     | `ended`
     | Exclude<MainFailureState, `fixing`>;
 
 export const storyOf = (
-    view: Pick<MainFailureView, "state" | "stance" | "fixer"> & { readonly failure: Pick<CiMainFailure, "repo" | "branch"> },
+    view: Pick<MainFailureView, "state" | "stance" | "fixer"> & {
+        readonly failure: Pick<CiMainFailure, "repo" | "branch">;
+        readonly run?: PipelineRun | undefined;
+    },
     covered: readonly PipelineRun[],
     runs: readonly PipelineRun[] = [],
 ): MainFailureStory => {
+    if (view.state === `failed-again` && view.run !== undefined && isPipelineInFlight(view.run.status)) {
+        return `collecting`;
+    }
     if (view.state !== `fixing`) {
         return view.state;
     }

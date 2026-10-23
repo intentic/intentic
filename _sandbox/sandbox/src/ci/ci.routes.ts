@@ -143,7 +143,7 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
             }
             // A run of a failing main-line branch is its streak's: the press continues the one fix agent on it.
             const streak = run === undefined ? undefined : await streakFixerFor(services, run);
-            const outcome = await startCiFix(
+            const start = () => startCiFix(
                 services,
                 {
                     project,
@@ -168,12 +168,10 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
             ).catch((error: unknown) => {
                 throw error instanceof AttemptRefused ? new ORPCError("CONFLICT", { message: error.message }) : error;
             });
+            const outcome = run !== undefined && streak !== undefined ? await fixPressed(services, run, evidence.failedJobIds, start) : await start();
             if (outcome.kind === "busy") {
                 // In words, not as a bug: the reader is sent to the attempt in play rather than handed a second one.
                 throw new ORPCError("CONFLICT", { message: outcome.reason });
-            }
-            if (run !== undefined && streak !== undefined) {
-                await fixPressed(services, run, outcome.conversationId);
             }
             return { conversationId: outcome.conversationId };
         }),

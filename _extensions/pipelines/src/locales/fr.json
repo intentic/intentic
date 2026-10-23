@@ -46,9 +46,13 @@
             "unassigned": "La correction auto attend la fin de l'exécution, pour que son agent reçoive tous les échecs d'un coup. Lancez-en un maintenant pour ne pas attendre.",
             "waiting": "L'agent de correction auto est en pause jusqu'au retour de son quota.",
             "waits": "{reason} : l'agent de correction auto l'a rendu. Continuer lui redonne des tours.",
-            "working": "L'agent de correction auto s'en occupe. Chaque nouvel échec sur {branch} va au même agent jusqu'à ce qu'une exécution réussisse."
+            "working": "L'agent de correction auto s'en occupe. Chaque nouvel échec sur {branch} va au même agent jusqu'à ce qu'une exécution réussisse.",
+            "collecting": "Certaines tâches d’une exécution plus récente ont échoué. La correction automatique rassemble les résultats restants. Cliquez sur « Corriger maintenant » pour commencer plus tôt.",
+            "failedAgain": "Une exécution plus récente sur {branch} comporte des tâches en échec. Cliquez sur « Corriger maintenant » pour lancer une nouvelle tentative."
         },
-        "title": "{branch} échoue"
+        "title": "{branch} échoue",
+        "fixNow": "Corriger maintenant",
+        "newFailures": "Nouveaux échecs détectés"
     },
     "pipelineDag": {
         "step": "Étape {n}"

@@ -46,9 +46,13 @@
             "unassigned": "Auto-fix waits for the run to finish, so its agent gets every failure at once. Start one now to skip the wait.",
             "waiting": "The auto-fix agent is paused until its allowance comes back.",
             "waits": "{reason}: the auto-fix agent handed this back. Continue gives it more turns.",
-            "working": "The auto-fix agent is on it. Every new failure on {branch} goes to the same agent until a run passes."
+            "working": "The auto-fix agent is on it. Every new failure on {branch} goes to the same agent until a run passes.",
+            "collecting": "Some jobs failed on a newer run. Auto-fix is collecting the remaining results. Fix now to start sooner.",
+            "failedAgain": "A newer run on {branch} has failed jobs. Fix now to start another attempt."
         },
-        "title": "{branch} is failing"
+        "title": "{branch} is failing",
+        "fixNow": "Fix now",
+        "newFailures": "New failures found"
     },
     "pipelineDag": {
         "step": "Step {n}"
