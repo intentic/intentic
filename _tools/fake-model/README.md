@@ -14,6 +14,8 @@ flowchart LR
 - Serves the OpenAI Responses (`/v1/responses`), Chat Completions (`/v1/chat/completions`) and Anthropic Messages (`/v1/messages`) surfaces plus a `/models` listing. Any other path gets a 404 that names the served surfaces. Chat bodies are recorded in Responses shape, so one set of readers works for both.
 - A `ScriptedStep` answers with text, a shell call, a function call or an HTTP failure; steps are consumed in order and the last one repeats. `respond` picks a step by request content instead, which survives retries.
 - Codex has two tool shapes: `shell` is the `exec_command` tool of `codex app-server`, `execScript` the JS `exec` tool of `codex exec`.
+- The instruction reader follows base-prompt replacements on resumed threads, including the later
+  `<model_instructions>` developer messages Codex 0.164 sends while keeping the original prompt in history.
 - Its consumer is the provider conformance tier (`e2e:providers`), which gates releases because it spends nothing and no vendor outage can fail it.
 
 ## Key files

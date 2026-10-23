@@ -2,6 +2,7 @@ import {
     baseInstructions,
     developerMessages,
     hasTool,
+    type JsonValue,
     type ResponsesRequest,
     systemInstructions,
     toolNames,
@@ -309,6 +310,25 @@ test("the instruction reader follows the last base-prompt replacement in a resum
     };
     expect(systemInstructions(request)).toBe("The third wording.\nWith another line.");
     expect(systemInstructions({ ...request, instructions: "The original top-level prompt." })).toBe("The third wording.\nWith another line.");
+});
+
+test("a resumed thread's latest base replacement supersedes its original developer message", () => {
+    const developer = (text: string): JsonValue => ({ type: "message", role: "developer", content: [{ type: "input_text", text }] });
+    const replacement = (text: string): JsonValue => developer(`<model_instructions>\nThe following instructions replace the previous base instructions:\n\n${text}\n</model_instructions>`);
+    const request: ResponsesRequest = {
+        model: "gpt-5.6-sol",
+        input: [developer("The first wording."), replacement("The second wording."), replacement("The third wording."), developer("Other instructions.")],
+    };
+    expect(systemInstructions(request)).toBe("The third wording.");
+    expect(systemInstructions({ ...request, input: [...request.input, replacement("")] })).toBe("");
+});
+
+test("a quoted replacement block does not replace the base prompt", () => {
+    const request: ResponsesRequest = {
+        instructions: "The base prompt.",
+        input: [{ type: "message", role: "developer", content: [{ type: "input_text", text: "Example:\n<model_instructions>\nThe following instructions replace the previous base instructions:\n\nQuoted.\n</model_instructions>" }] }],
+    };
+    expect(systemInstructions(request)).toBe("The base prompt.");
 });
 
 test("the tool reader also sees the namespaced additional_tools item that `codex exec` sends", () => {

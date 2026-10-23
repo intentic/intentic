@@ -169,12 +169,18 @@ test(`today's editor opens its main pages on the released sandbox with nothing f
     test.info().annotations.push({ type: `daemon`, description: `${daemon.version} at ${daemon.url}` });
     const person = newPerson(`compat`);
     const context = await browser.newContext({ locale: `en-US`, viewport: { width: 1280, height: 800 } });
-    const page = await signIn(context, person);
+    const signInPage = await signIn(context, person);
     await giveSandbox(person, daemon);
     await keepSandboxSession(context, person);
+    await signInPage.close();
 
-    const seen = watch(page, daemon);
+    const visits: Watch[] = [];
     for (const { path, drawn } of PAGES) {
+        // Each visit owns its traffic. A reload can strand an unloading page's keepalive log request without a
+        // completion event (run 39960347465); it must not keep the next page busy forever.
+        const page = await context.newPage();
+        const seen = watch(page, daemon);
+        visits.push(seen);
         await test.step(path, async () => {
             const before = seen.streams();
             // Named on every visit: signing in left the account a setup row of its own (the wizard's), which a bare
@@ -197,8 +203,9 @@ test(`today's editor opens its main pages on the released sandbox with nothing f
             await expect(page.locator(`[data-sandbox-gate]`)).toHaveCount(0);
             await drawn(page);
         });
+        await page.close();
     }
-    expect(seen.troubles, `what went wrong against ${daemon.version}`).toEqual([]);
-    expect(seen.calls(), `calls the pages made to the daemon`).toBeGreaterThan(PAGES.length * 4);
+    expect(visits.flatMap((seen) => seen.troubles), `what went wrong against ${daemon.version}`).toEqual([]);
+    expect(visits.reduce((total, seen) => total + seen.calls(), 0), `calls the pages made to the daemon`).toBeGreaterThan(PAGES.length * 4);
     await context.close();
 });
