@@ -81,10 +81,13 @@ const hide = (): void => {
                 @header-click="go(row.id)"
             >
                 <template #lead="{ iconClass }">
-                    <Icon
-                        :name="leadIcon(row.state)"
-                        :class="[iconClass, row.state === 'done' ? 'text-success' : row.state === 'current' ? 'text-accent' : 'text-subtle']"
-                    />
+                    <!-- Surface rows are flush: keep every marker inset from the selected row's left edge. -->
+                    <span class="flex shrink-0 items-center pl-2">
+                        <Icon
+                            :name="leadIcon(row.state)"
+                            :class="[iconClass, row.state === 'done' ? 'text-success' : row.state === 'current' ? 'text-accent' : 'text-subtle']"
+                        />
+                    </span>
                 </template>
                 <template v-if="row.state === 'current' && SKIPPABLE.has(row.id)" #control>
                     <Button size="small" tier="quiet" @click="tour.skip(row.id)">{{ skipWords(row.id) }}</Button>
