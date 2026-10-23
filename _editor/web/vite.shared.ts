@@ -146,7 +146,8 @@ const devSource = (): Plugin => ({
 // the whole module again, base64 and token by token: the app's English catalog came to 3.3-5 MB per reload, most of it a
 // map leading from a string back to the same text, which no debugger has any use for. Written here instead (`load`, as a
 // JS module, with an explicitly empty map, which is what tells the server to attach none), it is 0.6 MB: the file
-// minus its indentation. The module keeps the file's own id, so an edit invalidates and reloads exactly as before. A
+// minus its indentation. Explicitly watch the file: handling `load` skips Vite's filesystem loader, which would watch
+// imports outside the app root (the UI and extension catalogs). Without it, new components see cached, older words. A
 // query (`?raw`, `?url`, `?inline`) and anything under node_modules are left to Vite, and so is a file that does not
 // parse, so its error reads as it always has.
 const compactDevJson = (): Plugin => ({
@@ -165,6 +166,7 @@ const compactDevJson = (): Plugin => ({
             // allow(silent-catch): Vite reads the file itself and reports the parse error in its own words.
             return undefined;
         }
+        this.addWatchFile(file);
         return { code: `export default JSON.parse(${JSON.stringify(text)});`, moduleType: `js`, map: { mappings: `` } };
     },
 });
