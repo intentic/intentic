@@ -7879,6 +7879,34 @@
             "title": "Cette sandbox exécute une version plus ancienne",
             "update": "Mettre à jour la sandbox"
         },
+        "logoStyle": {
+            "menu": "Personnaliser le logo…",
+            "title": "Personnaliser le logo",
+            "preview": "Aperçu du logo",
+            "color": "Couleur",
+            "icon": "Icône",
+            "upload": "Importer une image…",
+            "icons": {
+                "box": "Boîte",
+                "robot": "Robot",
+                "code": "Code",
+                "terminal": "Terminal",
+                "globe": "Globe",
+                "flask": "Fiole",
+                "book": "Livre",
+                "folder": "Dossier",
+                "cloud": "Nuage",
+                "database": "Base de données",
+                "shield": "Bouclier",
+                "bolt": "Éclair",
+                "star": "Étoile",
+                "sparkles": "Étincelles",
+                "sun": "Soleil",
+                "moon": "Lune",
+                "palette": "Palette",
+                "gift": "Cadeau"
+            }
+        },
         "sandboxOverview": {
             "addLogo": "Ajouter un logo",
             "available": "→ {latest} disponible",

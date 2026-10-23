@@ -62,6 +62,7 @@ flowchart LR
   device remembers sandboxes of the account's own goes to `/recover` rather than onboarding; and a sandbox's own
   address opens it through `/open?url=`. [recovery/README.md](src/features/sandbox/recovery/README.md) has the rules.
 - **AI literacy notice.** When enabled in Sandbox ▸ Access ▸ People, every member, including guests, confirms the current notice before continuing. A new text opens it again. Maintainers can read the confirmation list. The default is off.
+- **Sandbox logo.** The owner presses the logo on Sandbox ▸ Overview to upload an image, stylize it with a preset icon and the Appearance color swatches, or remove it. The styling dialog previews the result and saves only on Save. Presets are ordinary SVG data-URL images, so the same logo appears in every sandbox list and rail; reopening the dialog restores its icon and color.
 - **Keyboard access.** The first Tab reveals “Skip to main content” in the workspace and local shells. It focuses the visible main surface, including a side panel filling the centre. Agent and workflow titles are native buttons beside their independent actions. The jump palette is a named dialog with an input combobox, named result groups and active-descendant navigation. The backend-free accessibility checks live in `_tools/e2e/accessibility/demo.spec.ts`.
 - **Results one press away.** The documents a turn made (Word, OpenDocument, RTF, PDF, decks, sheets, web pages) are
   chips under its answer, each with Download and Print beside it (`features/chat/transcript/deliverables/`). A press on

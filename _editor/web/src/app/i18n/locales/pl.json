@@ -7340,6 +7340,34 @@
             "title": "Ten sandbox działa na starszej wersji",
             "update": "Zaktualizuj sandbox"
         },
+        "logoStyle": {
+            "menu": "Stylizuj logo…",
+            "title": "Stylizuj logo",
+            "preview": "Podgląd logo",
+            "color": "Kolor",
+            "icon": "Ikona",
+            "upload": "Prześlij obraz…",
+            "icons": {
+                "box": "Pudełko",
+                "robot": "Robot",
+                "code": "Kod",
+                "terminal": "Terminal",
+                "globe": "Glob",
+                "flask": "Kolba",
+                "book": "Książka",
+                "folder": "Folder",
+                "cloud": "Chmura",
+                "database": "Baza danych",
+                "shield": "Tarcza",
+                "bolt": "Błyskawica",
+                "star": "Gwiazda",
+                "sparkles": "Iskry",
+                "sun": "Słońce",
+                "moon": "Księżyc",
+                "palette": "Paleta",
+                "gift": "Prezent"
+            }
+        },
         "sandboxOverview": {
             "addLogo": "Dodaj logo",
             "available": "→ dostępne {latest}",

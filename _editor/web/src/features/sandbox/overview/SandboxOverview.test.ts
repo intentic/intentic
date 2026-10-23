@@ -190,10 +190,16 @@ it(`gives a member the name as text, with nothing to press`, () => {
     expect(el.querySelector(`h2 span.truncate`)?.textContent).toBe(`radarsu-intentic`);
 });
 
-it(`goes straight to the file dialog when there is no logo yet`, () => {
+it(`offers upload and styling before a logo exists, with removal only after one is set`, async () => {
     const el = mount(sandboxRow());
     const opened = jest.spyOn(fileField(el), `click`);
-    logoTile(el).click();
+    const tile = logoTile(el);
+    tile.getBoundingClientRect = () => new DOMRect(40, 120, 48, 48);
+    tile.click();
+    await waitFor(() => expect(document.body.textContent).toContain(`Stylize logo…`));
+    expect(opened).not.toHaveBeenCalled();
+    const upload = [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Upload image…`))!;
+    upload.click();
     expect(opened).toHaveBeenCalledTimes(1);
     expect([...document.querySelectorAll(`button`)].some((button) => button.textContent?.includes(`Remove logo`))).toBe(false);
 });
@@ -236,8 +242,7 @@ it(`takes a logo back off with an explicit null`, async () => {
     // AnchoredOverlay closes itself if its anchor measures 0x0, which is everything in jsdom by default; this stub
     // gives it real dimensions.
     const tile = logoTile(el);
-    tile.getBoundingClientRect = () =>
-        ({ top: 120, left: 40, width: 48, height: 48, right: 88, bottom: 168, x: 40, y: 120, toJSON: () => ({}) }) as DOMRect;
+    tile.getBoundingClientRect = () => new DOMRect(40, 120, 48, 48);
     tile.click();
     const remove = await waitFor(() => {
         const button = removeRow();

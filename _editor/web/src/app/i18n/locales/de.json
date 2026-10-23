@@ -7879,6 +7879,34 @@
             "title": "Diese Sandbox läuft mit einer älteren Version",
             "update": "Sandbox aktualisieren"
         },
+        "logoStyle": {
+            "menu": "Logo gestalten…",
+            "title": "Logo gestalten",
+            "preview": "Logo-Vorschau",
+            "color": "Farbe",
+            "icon": "Symbol",
+            "upload": "Bild hochladen…",
+            "icons": {
+                "box": "Kiste",
+                "robot": "Roboter",
+                "code": "Code",
+                "terminal": "Terminal",
+                "globe": "Globus",
+                "flask": "Kolben",
+                "book": "Buch",
+                "folder": "Ordner",
+                "cloud": "Wolke",
+                "database": "Datenbank",
+                "shield": "Schild",
+                "bolt": "Blitz",
+                "star": "Stern",
+                "sparkles": "Funkeln",
+                "sun": "Sonne",
+                "moon": "Mond",
+                "palette": "Palette",
+                "gift": "Geschenk"
+            }
+        },
         "sandboxOverview": {
             "addLogo": "Ein Logo hinzufügen",
             "available": "→ {latest} verfügbar",

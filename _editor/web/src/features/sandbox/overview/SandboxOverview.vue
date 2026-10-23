@@ -13,6 +13,7 @@ import {
 } from "@intentic/ui";
 import type { ResourcesForm } from "@intentic/ui";
 import { messageOr } from "@intentic/ui/async";
+import type { SandboxSummary } from "@intentic/api-contract";
 import { computed, ref } from "vue";
 import { fileToSquareDataUrl } from "../../../lib/imageDataUrl";
 import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
@@ -31,6 +32,7 @@ import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
 import SandboxSleepRow from "./SandboxSleepRow.vue";
 import SandboxStorageCard from "./storage/SandboxStorageCard.vue";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
+import SandboxLogoStyleDialog from "./logo/SandboxLogoStyleDialog.vue";
 import { useT } from "@intentic/ui/i18n";
 
 // Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, and the
@@ -95,12 +97,12 @@ const saveResize = async (shape: ResourcesForm | undefined): Promise<void> => {
 const fileInput = ref<HTMLInputElement | null>(null);
 const logoError = ref<string | undefined>(undefined);
 
-// Menu opens only over a tile that already has a logo (two choices to offer); an empty tile skips straight to the
-// file dialog. Anchored rather than a Popover, so every menu in the app measures the same way.
+// The menu offers an upload or presets even before an image has been set.
 const logoTrigger = ref<HTMLButtonElement | null>(null);
 const logoMenuOpen = ref(false);
 const logoBusy = ref(false);
 const logo = computed(() => sandbox.active.value?.image ?? undefined);
+const stylingSandbox = ref<SandboxSummary>();
 
 // One line under the title, for the logo's own report and the sandbox's standing. The rename says nothing here:
 // it carries its own state inside its own box, so entering and leaving edit mode cannot move this card.
@@ -129,13 +131,8 @@ const writeName = async (name: string): Promise<void> => {
     await sandbox.update(id, { name });
 };
 
-// Offers replace/remove when there's a logo to act on; otherwise goes straight to the file dialog.
 const pressLogo = (): void => {
     logoError.value = undefined;
-    if (logo.value === undefined) {
-        fileInput.value?.click();
-        return;
-    }
     logoMenuOpen.value = !logoMenuOpen.value;
 };
 
@@ -177,7 +174,7 @@ const pickFile = async (event: Event): Promise<void> => {
     await writeLogo(square);
 };
 
-// Both menu rows close it themselves; nothing is left open to dismiss by hand afterward.
+// Each action dismisses the menu before opening its next control.
 const changeLogo = (): void => {
     logoMenuOpen.value = false;
     fileInput.value?.click();
@@ -186,6 +183,19 @@ const changeLogo = (): void => {
 const removeLogo = async (): Promise<void> => {
     logoMenuOpen.value = false;
     await writeLogo(null);
+};
+
+const stylizeLogo = (): void => {
+    logoMenuOpen.value = false;
+    stylingSandbox.value = sandbox.active.value;
+};
+
+// The dialog keeps the sandbox it opened for, even if the active sandbox changes during the edit.
+const saveStyledLogo = async (image: string): Promise<void> => {
+    const target = stylingSandbox.value;
+    if (target !== undefined) {
+        await sandbox.update(target.id, { image });
+    }
 };
 </script>
 
@@ -203,6 +213,8 @@ const removeLogo = async (): Promise<void> => {
                         ref="logoTrigger"
                         type="button"
                         :disabled="!isOwner || logoBusy"
+                        aria-haspopup="dialog"
+                        :aria-expanded="logoMenuOpen"
                         :aria-label="
                             isOwner ? (logo ? t(`sandbox.sandboxOverview.changeRemoveLogo`) : t(`sandbox.sandboxOverview.addLogo`)) : undefined
                         "
@@ -223,17 +235,24 @@ const removeLogo = async (): Promise<void> => {
                     </button>
                     <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="pickFile" />
 
-                    <!-- Only opened over a tile that already has a logo, so both menu rows always do something. -->
                     <AnchoredOverlay v-model="logoMenuOpen" :anchor="logoTrigger ?? undefined" side="bottom" cross="start">
                         <div class="flex w-44 flex-col gap-0.5">
                             <button
                                 type="button"
                                 class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
-                                @click="changeLogo"
+                                @click="stylizeLogo"
                             >
-                                <Icon name="image" class="shrink-0 text-sm text-muted" />{{ t(`sandbox.sandboxOverview.changeLogo`) }}
+                                <Icon name="palette" class="shrink-0 text-sm text-muted" />{{ t(`sandbox.logoStyle.menu`) }}
                             </button>
                             <button
+                                type="button"
+                                class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-content transition-colors hover:bg-content/5"
+                                @click="changeLogo"
+                            >
+                                <Icon name="image" class="shrink-0 text-sm text-muted" />{{ logo ? t(`sandbox.sandboxOverview.changeLogo`) : t(`sandbox.logoStyle.upload`) }}
+                            </button>
+                            <button
+                                v-if="logo"
                                 type="button"
                                 class="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-danger transition-colors"
                                 :class="toneHover(`danger`)"
@@ -243,6 +262,14 @@ const removeLogo = async (): Promise<void> => {
                             </button>
                         </div>
                     </AnchoredOverlay>
+
+                    <SandboxLogoStyleDialog
+                        v-if="stylingSandbox"
+                        :name="stylingSandbox.name"
+                        :image="stylingSandbox.image"
+                        :write="saveStyledLogo"
+                        @close="stylingSandbox = undefined"
+                    />
 
                     <div class="-ml-1 min-w-0 flex-1 @2xl:max-w-md">
                         <div class="flex flex-wrap items-center gap-2">

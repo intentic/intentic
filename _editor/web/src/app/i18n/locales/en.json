@@ -7879,6 +7879,34 @@
             "title": "This sandbox runs an older version",
             "update": "Update the sandbox"
         },
+        "logoStyle": {
+            "menu": "Stylize logo…",
+            "title": "Stylize logo",
+            "preview": "Logo preview",
+            "color": "Color",
+            "icon": "Icon",
+            "upload": "Upload image…",
+            "icons": {
+                "box": "Box",
+                "robot": "Robot",
+                "code": "Code",
+                "terminal": "Terminal",
+                "globe": "Globe",
+                "flask": "Flask",
+                "book": "Book",
+                "folder": "Folder",
+                "cloud": "Cloud",
+                "database": "Database",
+                "shield": "Shield",
+                "bolt": "Lightning",
+                "star": "Star",
+                "sparkles": "Sparkles",
+                "sun": "Sun",
+                "moon": "Moon",
+                "palette": "Palette",
+                "gift": "Gift"
+            }
+        },
         "sandboxOverview": {
             "addLogo": "Add a logo",
             "available": "→ {latest} available",
