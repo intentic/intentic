@@ -108,6 +108,26 @@ gtk = "=0.18.2"
 # sway's IPC for Intentic OS's shell (src/shell/), the copy `ic`'s screen service uses too.
 intentic-sway-ipc = { path = "../../../_sandbox/ic/sway-ipc" }
 
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+# Exercise the same patched crate that GTK uses without requiring a display or starting the desktop app.
+glib = "=0.18.5"
+
+# GTK3 requires glib 0.18. Pin the two-line backport in gtk-rs/gtk-rs-core#2009; that PR was closed
+# without a release. Keep its path dependencies on the same source to avoid duplicate native types.
+# Their Rust sources match the published crates previously locked here. Retire these patches when Tauri's
+# Linux stack supports a published fixed glib release.
+[patch.crates-io]
+glib = { git = "https://github.com/gtk-rs/gtk-rs-core", rev = "ea720152f28e293ef4362ee844ee5cc499f32d2a" }
+glib-macros = { git = "https://github.com/gtk-rs/gtk-rs-core", rev = "ea720152f28e293ef4362ee844ee5cc499f32d2a" }
+glib-sys = { git = "https://github.com/gtk-rs/gtk-rs-core", rev = "ea720152f28e293ef4362ee844ee5cc499f32d2a" }
+gobject-sys = { git = "https://github.com/gtk-rs/gtk-rs-core", rev = "ea720152f28e293ef4362ee844ee5cc499f32d2a" }
+gio-sys = { git = "https://github.com/gtk-rs/gtk-rs-core", rev = "ea720152f28e293ef4362ee844ee5cc499f32d2a" }
+
+# The immutable out-pointer bug is exposed by optimisation. Keep the regression test meaningful in CI's
+# ordinary `cargo test` as well as release builds without optimising the rest of the desktop app's tests.
+[profile.test.package.glib]
+opt-level = 3
+
 # Tuned for BUILD time, because that is the only axis this crate can lose on. `lto = true` (fat) with
 # codegen-units = 1 is the slowest release profile rustc offers, and it buys runtime speed this app cannot use:
 # it is a launcher that shells into the scripts it bundles (see the dependencies note above), so there is no hot

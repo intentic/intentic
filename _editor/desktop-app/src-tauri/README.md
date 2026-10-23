@@ -71,7 +71,18 @@ flowchart LR
 
 ## Commands
 
+The Linux GTK3 stack requires `glib 0.18`, whose last published release contains
+[RUSTSEC-2024-0429](https://rustsec.org/advisories/RUSTSEC-2024-0429.html). `Cargo.toml` pins the two-line
+backport submitted as [gtk-rs-core#2009](https://github.com/gtk-rs/gtk-rs-core/pull/2009) at commit
+`ea720152f28e293ef4362ee844ee5cc499f32d2a`. The PR was closed without a release; this is an explicit backport.
+Its supporting crates use the same source to preserve native-type compatibility; their Rust sources match
+the previously locked published crates. Remove the patches when
+Tauri's Linux stack supports a published fixed glib release. The iterator regression tests in
+`tests/glib_variant_str_iter.rs` run against optimised glib even with ordinary `cargo test`, since optimisation
+exposes the invalid out-pointer.
+
 ```sh
 pnpm --filter @intentic/desktop-app check:rust   # cargo fmt --check, clippy -D warnings, cargo test
 pnpm --filter @intentic/desktop-app test:rust
+pnpm --filter @intentic/desktop-app test:rust --locked --test glib_variant_str_iter
 ```

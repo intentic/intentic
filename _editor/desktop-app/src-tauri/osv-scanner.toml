@@ -63,21 +63,10 @@ id = "RUSTSEC-2024-0420"
 ignoreUntil = 2027-02-01
 reason = "gtk-sys: gtk-rs GTK3 bindings unmaintained; no fixed version exists, reached via tauri -> gtk 0.18."
 
-# --- glib, and the macro crate it drags in ---------------------------------------------------------------
-# RUSTSEC-2024-0429 is fixed in glib 0.20, which is the gtk4 line — unreachable while gtk 0.18 pins glib 0.18.
-# The unsoundness is in glib's Iterator impls, which this app does not call directly. proc-macro-error is
-# unmaintained and arrives only through glib-macros 0.18.5 and gtk3-macros: a BUILD-TIME proc macro, so it does
-# not ship in the binary at all. Both leave when the GTK3 stack above does.
-[[IgnoredVulns]]
-id = "RUSTSEC-2024-0429"
-ignoreUntil = 2027-02-01
-reason = "glib 0.18.5 unsoundness; fix is glib 0.20 (gtk4 line), unreachable while tauri pins gtk 0.18."
-
-[[IgnoredVulns]]
-id = "GHSA-wrw7-89jp-8q8g"
-ignoreUntil = 2027-02-01
-reason = "Same glib 0.18.5 unsoundness as RUSTSEC-2024-0429, under its GHSA identifier."
-
+# --- the macro crate glib drags in ----------------------------------------------------------------------
+# glib's RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g is fixed by the pinned backport (Cargo.toml, gtk-rs-core#2009).
+# proc-macro-error is unmaintained and arrives through glib-macros 0.18.5 and gtk3-macros: a BUILD-TIME proc
+# macro, so it does not ship in the binary. It leaves when the GTK3 stack above does.
 [[IgnoredVulns]]
 id = "RUSTSEC-2024-0370"
 ignoreUntil = 2027-02-01
