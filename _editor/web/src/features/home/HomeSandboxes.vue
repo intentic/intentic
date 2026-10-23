@@ -102,7 +102,9 @@ const choose = (id: string, input: `click` | `enter`): void => {
             >
                 <Icon name="plus" aria-hidden="true" />
             </component>
-            <Beacon v-if="!boxes.length" size="sm" class="absolute right-2 top-1" />
+            <span v-if="!boxes.length" class="pointer-events-none absolute right-2 top-1 flex">
+                <Beacon size="sm" />
+            </span>
         </span>
         <HomeNoSandbox v-if="!boxes.length" />
     </nav>
@@ -146,7 +148,9 @@ const choose = (id: string, input: `click` | `enter`): void => {
             >
                 <Icon name="plus" class="icon-rail-glyph" aria-hidden="true" />
             </component>
-            <Beacon v-if="!boxes.length" size="sm" class="absolute right-1 top-1" />
+            <span v-if="!boxes.length" class="pointer-events-none absolute right-1 top-1 flex">
+                <Beacon size="sm" />
+            </span>
         </span>
     </div>
     <CoachMark v-if="!boxes.length" v-model="hintOpen" :anchor="addAnchor ?? undefined" :side="phone ? `bottom` : `right`" :title="t(`home.addSandboxHint`)">
