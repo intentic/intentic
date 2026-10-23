@@ -542,6 +542,8 @@ Single clicks switch sandboxes; double clicks and Enter enter the full sandbox o
 view on both desktop and mobile. `features/home/` draws the surface;
 `models/home/` holds attention polling and the pure work ledger projection.
 The desktop status bar stays hidden in the master view, including personal settings opened from it.
+Home and personal settings need only a signed-in account: an unfinished, offline or incompatible sandbox never gates
+them or redirects them to setup, including a direct visit to `/settings`.
 Home also opens from the logo menu in This computer before any sandbox exists. Its rail offers a way back to This
 computer in the desktop app; without a sandbox, the composer is disabled and a beacon and hint point to the + tile.
 

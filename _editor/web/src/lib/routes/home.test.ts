@@ -1,4 +1,4 @@
-import { isHomePath, masterRailAfter } from "./home";
+import { isAccountPath, isHomePath, masterRailAfter } from "./home";
 
 // The master view's rail: worn on /home, kept on the person's own pages opened from there, and given back to the sandbox's
 // rail by any page of a sandbox.
@@ -17,3 +17,13 @@ test("settings opened from the master view keep its rail; a sandbox's page gives
     expect(masterRailAfter(true, `/workspace`)).toBe(false);
     expect(masterRailAfter(true, `/settingsx`)).toBe(false);
 });
+
+test.each([`/home`, `/home/box-1`, `/settings`, `/settings/appearance`, `/settings?plan=welcome`, `/settings/notifications#voice`])(
+    `%s belongs to the account without needing a sandbox`,
+    (path) => expect(isAccountPath(path)).toBe(true),
+);
+
+test.each([`/homework`, `/settingsx`, `/workspace`, `/agents`, `/sandbox`, `/sandbox/agent`])(
+    `%s is not an account page`,
+    (path) => expect(isAccountPath(path)).toBe(false),
+);

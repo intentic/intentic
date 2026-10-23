@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { FreshnessFrame } from "@intentic/ui";
-import { onUnmounted, watch } from "vue";
+import { computed, onUnmounted, watch } from "vue";
+import { useRoute } from "vue-router";
 import { announceWorkspaceShown } from "../../../app/environments/desktopShown";
 import { daemonTooOld } from "../../../client/sandbox/daemon/useDaemonVersion";
 import { useSandboxLiveness } from "../../../client/sandbox/freshness/queryFreshness";
+import { isAccountPath } from "../../../lib/routes/home";
 import SandboxConnecting from "./SandboxConnecting.vue";
 import SandboxTooOld from "./SandboxTooOld.vue";
 import SandboxUnauthorized from "./SandboxUnauthorized.vue";
@@ -15,6 +17,10 @@ import { useSandboxGateState } from "./workspaceShown";
 // it; the account-mismatch nudge and busy pill are conditions drawn in the notification lane instead.
 
 const { denied, gated, availability, shown: shownSandbox } = useSandboxGateState();
+// Both shells share this gate. Personal settings stay reachable while sandbox setup or recovery is unfinished.
+const route = useRoute();
+const accountPage = computed(() => isAccountPath(route.path));
+const shownWorkspace = computed(() => accountPage.value ? undefined : shownSandbox.value);
 // What stays mounted through a stall is the last answers it had: the frame says when they may be out of date.
 const { offline, lostAt } = useSandboxLiveness();
 
@@ -24,12 +30,12 @@ const { offline, lostAt } = useSandboxLiveness();
 const SHOWN_AFTER_MS = 250;
 let saying: ReturnType<typeof setTimeout> | undefined;
 watch(
-    shownSandbox,
+    shownWorkspace,
     (sandbox) => {
         clearTimeout(saying);
         if (sandbox !== undefined) {
             saying = setTimeout(() => {
-                if (shownSandbox.value === sandbox) {
+                if (shownWorkspace.value === sandbox) {
                     announceWorkspaceShown(sandbox);
                 }
             }, SHOWN_AFTER_MS);
@@ -41,7 +47,8 @@ onUnmounted(() => clearTimeout(saying));
 </script>
 
 <template>
-    <SandboxUnauthorized v-if="denied" />
+    <slot v-if="accountPage" />
+    <SandboxUnauthorized v-else-if="denied" />
     <!-- A daemon older than the oldest this app supports: one page that says so and offers the update, rather than every
          page failing on its own. Before warming, since its hello already named the version; established or not. -->
     <SandboxTooOld v-else-if="daemonTooOld" />

@@ -234,7 +234,7 @@ const routes: RouteRecordRaw[] = [
     // asks for it here.
     { path: `/floating/preview`, redirect: `/floating/browsers` },
     {
-        // Persistent workspace shell (rail + shared chat + area outlet). Home needs only an account; other pages need a sandbox;
+        // Persistent workspace shell (rail + shared chat + area outlet). Home and personal settings need only an account; other pages need a sandbox;
         // otherwise requireSetup redirects to /setup (in the desktop app, to This computer: thisComputerFirst.ts).
         path: `/`,
         beforeEnter: [requireAuth, async (to) => workspaceAside.settle(await requireSetup(to)), openNamedSandbox],

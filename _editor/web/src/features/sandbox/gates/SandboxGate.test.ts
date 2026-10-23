@@ -5,6 +5,7 @@ import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
 import { OLDEST_SUPPORTED_DAEMON } from "@intentic/sandbox-contract/state/daemon-floor";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 
 const stub = (name: string) => ({ default: defineComponent({ render: () => h(`div`, { "data-gate": name }) }) });
 jest.mock(`./SandboxTooOld.vue`, () => stub(`too-old`));
@@ -13,18 +14,24 @@ jest.mock(`./SandboxWarming.vue`, () => stub(`warming`));
 jest.mock(`./SandboxConnecting.vue`, () => stub(`connecting`));
 
 const connection = ref<{ failure?: { kind: string } }>({});
-jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true), connection }) }));
-jest.mock(`./established`, () => ({ useSandboxEstablished: () => computed(() => true) }));
+const reachable = ref(true);
+const established = ref(true);
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ reachable, connection }) }));
+jest.mock(`./established`, () => ({ useSandboxEstablished: () => computed(() => established.value) }));
 jest.mock(`../overview/useSandboxAvailability`, () => ({ useSandboxAvailability: () => computed(() => `ready`) }));
 
 const { setDaemonVersion } = await import("../../../client/sandbox/daemon/useDaemonVersion");
 const { default: SandboxGate } = await import("./SandboxGate.vue");
 
 let app: App | undefined;
-const mount = async (): Promise<HTMLElement> => {
+let router: ReturnType<typeof createRouter>;
+const mount = async (path = `/agents`): Promise<HTMLElement> => {
+    router = createRouter({ history: createMemoryHistory(), routes: [{ path: `/:path(.*)*`, component: defineComponent({ render: () => null }) }] });
+    await router.push(path);
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp({ render: () => h(SandboxGate, null, { default: () => h(`div`, { "data-page": `` }) }) });
+    app.use(router);
     app.mount(el);
     await nextTick();
     return el;
@@ -35,6 +42,9 @@ const shown = (el: HTMLElement): string | undefined =>
 beforeEach(() => {
     resetSandboxScope();
     connection.value = {};
+    reachable.value = true;
+    established.value = true;
+    setDaemonVersion(undefined);
 });
 
 afterEach(() => {
@@ -67,3 +77,33 @@ it(`keeps a refused account's page first`, async () => {
     const el = await mount();
     expect(shown(el)).toBe(`unauthorized`);
 });
+
+it(`opens settings from Home with unfinished setup, and still gates sandbox pages`, async () => {
+    reachable.value = false;
+    established.value = false;
+    const el = await mount(`/home`);
+    expect(shown(el)).toBe(`page`);
+    await router.push(`/settings`);
+    expect(shown(el)).toBe(`page`);
+    await router.push(`/settings/appearance`);
+    expect(shown(el)).toBe(`page`);
+    await router.push(`/agents`);
+    expect(shown(el)).toBe(`connecting`);
+});
+
+it.each([`/settings`, `/settings/appearance`, `/settings/billing`, `/settings/tokens`])(
+    `opens a direct visit to %s even when the sandbox is unavailable, too old or refuses access`,
+    async (path) => {
+        reachable.value = false;
+        established.value = false;
+        setDaemonVersion(`1.200.0:1`);
+        connection.value = { failure: { kind: `forbidden` } };
+        const el = await mount(path);
+        expect(shown(el)).toBe(`page`);
+        await router.push(`/sandbox`);
+        expect(shown(el)).toBe(`unauthorized`);
+        connection.value = {};
+        await nextTick();
+        expect(shown(el)).toBe(`too-old`);
+    },
+);

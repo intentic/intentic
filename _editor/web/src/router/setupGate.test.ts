@@ -21,9 +21,13 @@ const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">
 });
 
 describe(`checking setup before opening the workspace`, () => {
-    it.each([`/home`, `/home/missing`])(`opens %s without a sandbox and leaves creation to a press`, async (path) => {
+    it.each([`/home`, `/home/missing`, `/settings`, `/settings/appearance`, `/settings/billing`])(`opens %s without a sandbox and leaves creation to a press`, async (path) => {
         expect(await readSetupRedirect({ list: async () => [], refresh: async () => [] }, path)).toBeUndefined();
         expect(await readSetupRedirect({ list: async () => [], refresh: async () => [sandbox({ id: `pending` })] }, path)).toBeUndefined();
+    });
+
+    it.each([`/settingsx`, `/agents`, `/sandbox/agent`])(`still requires setup for %s`, async (path) => {
+        expect(await readSetupRedirect({ list: async () => [], refresh: async () => [] }, path)).toBe(`/setup`);
     });
 
     it.each([
