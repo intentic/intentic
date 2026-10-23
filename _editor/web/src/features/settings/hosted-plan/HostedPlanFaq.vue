@@ -35,7 +35,7 @@ const questions = computed(() => [
                     {{ item.q }}
                     <Icon name="chevron-down" class="shrink-0 text-sm text-subtle transition-transform group-open:rotate-180" />
                 </summary>
-                <p class="px-4 pb-3.5 text-xs leading-relaxed text-muted">{{ item.a }}</p>
+                <p class="px-4 py-3.5 text-xs leading-relaxed text-muted">{{ item.a }}</p>
             </details>
         </div>
     </section>
