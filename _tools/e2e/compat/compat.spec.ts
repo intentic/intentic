@@ -82,9 +82,22 @@ const watch = (page: Page, daemon: DaemonUnderTest): Watch => {
     let lastHeard = Date.now();
     let streams = 0;
     let calls = 0;
+    let loadingDocument = false;
     const ours = (request: Request): boolean => request.url().startsWith(daemon.url);
     const named = (request: Request): string => `${request.method()} ${new URL(request.url()).pathname}`;
+    page.on(`framenavigated`, (frame) => {
+        if (frame === page.mainFrame() && loadingDocument) {
+            // A keepalive report from the document we left can outlive navigation without Playwright reporting
+            // its completion. It is no longer work this page is waiting for; its eventual failures are still heard.
+            open.clear();
+            lastHeard = Date.now();
+            loadingDocument = false;
+        }
+    });
     page.on(`request`, (request) => {
+        if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+            loadingDocument = true;
+        }
         if (ours(request)) {
             open.add(request);
             calls += 1;
@@ -106,8 +119,10 @@ const watch = (page: Page, daemon: DaemonUnderTest): Watch => {
         }
     });
     const done = (request: Request): void => {
-        open.delete(request);
-        lastHeard = Date.now();
+        if (open.delete(request)) {
+            // Only a tracked daemon call affects its quiet window, never preview probes or a retired document.
+            lastHeard = Date.now();
+        }
     };
     page.on(`requestfinished`, done);
     page.on(`requestfailed`, (request) => {

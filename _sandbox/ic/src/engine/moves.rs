@@ -1500,10 +1500,10 @@ fn pipe(
         status.is_ok_and(|status| status.success())
     };
     if !ok(from_status) {
-        bail!("reading it failed: {}", last_words(&from_said));
+        bail!("reading it failed: {}", copy_diagnostic(&from_said));
     }
     if !ok(to_status) || copied.is_err() {
-        bail!("writing it failed: {}", last_words(&to_said));
+        bail!("writing it failed: {}", copy_diagnostic(&to_said));
     }
     Ok(())
 }
@@ -1650,6 +1650,16 @@ fn tail_of(stream: Option<impl Read + Send + 'static>) -> std::sync::mpsc::Recei
         let _ = send.send(String::new());
     }
     receive
+}
+
+/// `tail_of` already bounds this text. Tar ends fatal errors with a generic summary, so keep the diagnostic before it.
+fn copy_diagnostic(said: &str) -> &str {
+    let said = said.trim();
+    if said.is_empty() {
+        "docker said nothing"
+    } else {
+        said
+    }
 }
 
 fn last_words(said: &str) -> String {
@@ -2073,6 +2083,16 @@ fn cli_id(kind: Kind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_copy_reports_the_cause_before_tars_final_summary() {
+        let said = "\ntar: Unexpected EOF in archive\ntar: Error is not recoverable: exiting now\n";
+        assert_eq!(
+            copy_diagnostic(said),
+            "tar: Unexpected EOF in archive\ntar: Error is not recoverable: exiting now"
+        );
+        assert_eq!(copy_diagnostic(" \n"), "docker said nothing");
+    }
 
     #[test]
     fn the_key_file_is_read_off_the_binds_as_this_machine_names_it() {

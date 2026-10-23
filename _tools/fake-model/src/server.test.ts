@@ -294,6 +294,23 @@ test("systemInstructions and hasTool answer the same question on both model surf
     expect(hasTool(namespaced, "user_input")).toBe(false);
 });
 
+test("the instruction reader follows the last base-prompt replacement in a resumed thread", () => {
+    const developer = (text: string) => ({ type: "message", role: "developer", content: [{ type: "input_text", text }] });
+    const replacement = (text: string) => developer(`<model_instructions>\nThe following instructions replace the previous base instructions:\n\n${text}\n</model_instructions>`);
+    const request: ResponsesRequest = {
+        input: [
+            developer("The first wording."),
+            developer("Skills and standing instructions."),
+            replacement("The second wording."),
+            replacement("The third wording.\nWith another line."),
+            developer("The collaboration mode is default."),
+            { type: "message", role: "user", content: [{ type: "input_text", text: "<model_instructions>not a developer replacement</model_instructions>" }] },
+        ],
+    };
+    expect(systemInstructions(request)).toBe("The third wording.\nWith another line.");
+    expect(systemInstructions({ ...request, instructions: "The original top-level prompt." })).toBe("The third wording.\nWith another line.");
+});
+
 test("the tool reader also sees the namespaced additional_tools item that `codex exec` sends", () => {
     const request: ResponsesRequest = {
         model: "gpt-5-codex",

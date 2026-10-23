@@ -105,10 +105,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # This runner keeps its checkout. Adding eol=lf to .gitattributes does not rewrite an unchanged script
-      # already on disk with CRLF, so force this WSL input through the index's current checkout attributes.
+      # Enforce the bytes WSL reads: checkout-index still left CRLF on this persistent Windows runner
+      # (39960347465), despite the repository's eol=lf attribute.
       - name: Refresh the WSL worker script with LF line endings
-        run: git checkout-index --force -- _tools/scripts/ci/wsl-workers.sh
+        shell: pwsh
+        run: |
+          $workerScript = Join-Path $PWD '_tools/scripts/ci/wsl-workers.sh'
+          $workerText = [System.IO.File]::ReadAllText($workerScript).Replace("`r`n", "`n")
+          [System.IO.File]::WriteAllText($workerScript, $workerText, [System.Text.UTF8Encoding]::new($false))
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: ${{ (inputs.deep && !inputs.engine-only) || inputs.engine-move }}
         with:
@@ -247,6 +251,8 @@ jobs:
         if: ${{ inputs.engine || inputs.engine-only || inputs.engine-move }}
         env:
           DEEP: ${{ (inputs.deep && !inputs.engine-only) || inputs.engine-move }}
+          # Teardown removes the engine's temporary home, including its default logs. Keep these outside it.
+          INTENTIC_LOG_DIR: ${{ runner.temp }}/windows-engine-logs
 
       # Always, so a run that failed mid-tier hands the next one a clean machine rather than relying on the
       # reconcile above to notice — and because a deep run deliberately left the app installed.
@@ -270,3 +276,12 @@ jobs:
           wsl.exe -d $env:FLEET_DISTRO -u root --cd $PWD -- bash _tools/scripts/ci/wsl-workers.sh resume
         env:
           FLEET_DISTRO: ${{ vars.WSL_FLEET_DISTRO || 'archlinux' }}
+
+      - name: Keep the failed engine run's diagnostics
+        uses: ./.github/actions/upload-artifact-retry
+        if: ${{ failure() && (inputs.engine || inputs.engine-only || inputs.engine-move) }}
+        with:
+          name: windows-engine-logs
+          path: ${{ runner.temp }}/windows-engine-logs
+          if-no-files-found: ignore
+          retention-days: 7

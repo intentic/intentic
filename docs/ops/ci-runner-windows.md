@@ -34,3 +34,4 @@ flowchart LR
 1. `node _tools/desktop-smoke-windows/dist/main.js doctor` names what is wrong with the machine and prints the remedy; every job runs it before the tiers.
 2. `./setup-windows-runner.ps1 -Repair` (elevated, no token) turns a service or a runner started in a console window back into the logon task. It refuses while a job is running unless you pass `-Force`.
 3. A leftover install or sandbox container needs nothing: every run starts with `teardown` and ends with it.
+4. A failed engine tier uploads `windows-engine-logs` for seven days. Its logs are kept outside the temporary home that teardown removes, and transfer errors include tar's diagnostic before its final summary.

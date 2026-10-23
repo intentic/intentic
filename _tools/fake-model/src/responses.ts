@@ -110,11 +110,18 @@ export const baseInstructions = (request: ResponsesRequest): string => {
     return typeof value === "string" ? value : "";
 };
 
-// Base prompt location depends on the MODEL, not the entry point: `gpt-5-codex` sends top-level `instructions`;
-// `gpt-5.6-sol` sends the first developer message instead. This keeps an assertion valid across the catalog.
+// The base prompt is top-level `instructions` or the first developer message. Since Codex 0.164 a resumed
+// namespaced model keeps that first message and appends a replacement block instead; the last replacement wins.
 export const systemInstructions = (request: ResponsesRequest): string => {
+    const developers = developerMessages(request);
+    for (const message of developers.toReversed()) {
+        const replacement = /^<model_instructions>\nThe following instructions replace the previous base instructions:\n\n([\s\S]*)\n<\/model_instructions>$/u.exec(message);
+        if (replacement !== null) {
+            return replacement[1] ?? "";
+        }
+    }
     const top = baseInstructions(request);
-    return top !== "" ? top : (developerMessages(request)[0] ?? "");
+    return top !== "" ? top : (developers[0] ?? "");
 };
 
 /** Last message is the turn's prompt; the one before it is Codex's environment context. */
