@@ -31,11 +31,11 @@ describe(`a preset worked out from what is connected`, () => {
     });
 
     test(`takes a provider's own model over one it serves from another maker`, () => {
-        const google: ModelSource = { provider: `gemini`, ready: true, models: [`claude-opus-5-5-high`, `gemini-3-pro`, `gemini-3-flash`] };
+        const google: ModelSource = { provider: `gemini`, ready: true, models: [`claude-opus-4-6-thinking`, `gemini-3-pro`, `gemini-3-flash`] };
         expect(presetPins(`high`, [google])).toEqual([{ provider: `gemini`, model: `gemini-3-pro` }]);
         // With none of its own on the rung, the borrowed one still serves.
-        expect(presetPins(`high`, [{ ...google, models: [`claude-opus-5-5-high`, `gemini-3-flash`, `gemini-3-flash-lite`] }])).toEqual([
-            { provider: `gemini`, model: `claude-opus-5-5-high` },
+        expect(presetPins(`high`, [{ ...google, models: [`claude-opus-4-6-thinking`, `gemini-3-flash`, `gemini-3-flash-lite`] }])).toEqual([
+            { provider: `gemini`, model: `claude-opus-4-6-thinking` },
         ]);
     });
 

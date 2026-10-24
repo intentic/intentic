@@ -24,7 +24,7 @@ beforeEach(() => {
 // spends a different allowance than the one the user chose.
 
 const OFFERED: readonly GeminiModel[] = [
-    { id: "claude-opus-5-5-high", label: "Claude Opus 5.5 (High)", inputModalities: ["text", "image"] },
+    { id: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 (Thinking)", inputModalities: ["text", "image"] },
     { id: "gemini-3.1-pro-low", label: "Gemini 3.1 Pro (Low)", inputModalities: ["text", "image"] },
 ];
 
@@ -58,27 +58,27 @@ test("opens on the catalog default when the turn names no model, empty id includ
     for (const model of [undefined, ""]) {
         const plan = await planGeminiTurn(geminiServices(), turn({ model }), context, []);
 
-        expect(plan).toMatchObject({ ok: true, request: { spec: { model: "claude-opus-5-5-high" } } });
+        expect(plan).toMatchObject({ ok: true, request: { spec: { model: "claude-opus-4-6-thinking" } } });
     }
 });
 
 test("refuses a pin the channel has stopped offering instead of running on the catalog default", async () => {
     // Opus de-listed, as the channel does while it is out of capacity for it; the catalog's own grace window has run
     // out by the time a plan sees a list without it.
-    const plan = await planGeminiTurn(geminiServices([OFFERED[1]!]), turn({ model: "claude-opus-5-5-high" }), context, []);
+    const plan = await planGeminiTurn(geminiServices([OFFERED[1]!]), turn({ model: "claude-opus-4-6-thinking" }), context, []);
 
     expect(plan).toEqual({
         ok: false,
         code: "model-unavailable",
         message:
-            "Google is no longer offering claude-opus-5-5-high, and this chat is pinned to it. " +
+            "Google is no longer offering claude-opus-4-6-thinking, and this chat is pinned to it. " +
             "Pick another model for this chat, or send again if it comes back.",
     });
 });
 
 test("refuses a turn the translator has no Google model to serve, instead of sending it to fail as unknown", async () => {
     // A connected account the translator cannot use (not loaded, or switched off): the picker still shows the seed.
-    const plan = await planGeminiTurn(geminiServices(OFFERED, { live: undefined }), turn({ model: "claude-opus-5-5-high" }), context, []);
+    const plan = await planGeminiTurn(geminiServices(OFFERED, { live: undefined }), turn({ model: "claude-opus-4-6-thinking" }), context, []);
 
     expect(plan).toEqual({
         ok: false,
