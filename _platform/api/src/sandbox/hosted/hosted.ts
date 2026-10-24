@@ -910,6 +910,7 @@ interface AppEvidence {
     readonly owner: AppOwner;
     readonly oldestAt: Date | undefined;
     readonly machines: number;
+    readonly volumes: number;
     readonly stock: boolean;
 }
 
@@ -925,12 +926,13 @@ const appEvidence = async (config: Config, app: string): Promise<AppEvidence | u
             owner: appOwner(machines, instance),
             oldestAt: stamps.length === 0 ? undefined : new Date(Math.min(...stamps.map((at) => at.getTime()))),
             machines: machines.length,
+            volumes: volumes.length,
             stock:
                 machines.length > 0 &&
                 machines.every((machine) => machine.metadata[FLY_META_ROLE] === `warm` && machine.metadata[FLY_META_PLATFORM] === instance),
         };
     } catch (error) {
-        return isFlyGone(error) ? { owner: `mine`, oldestAt: undefined, machines: 0, stock: false } : undefined;
+        return isFlyGone(error) ? { owner: `mine`, oldestAt: undefined, machines: 0, volumes: 0, stock: false } : undefined;
     }
 };
 
@@ -975,7 +977,8 @@ export const appRecordsOf = async (prisma: PrismaClient, config: Config, apps: r
 // An app is collected only on positive evidence: the deletion record of its sandbox, or every machine in it being
 // unclaimed warm stock. (2026-10-05) An app with no machine used to be collected for its emptiness alone, which is
 // exactly what Fly losing a machine leaves of a sandbox nobody deleted. An app a HostedCleanup row names never gets
-// here: that row is a teardown somebody asked for, and the cleanup sweep runs it.
+// here: that row is a teardown somebody asked for, and the cleanup sweep runs it. (2026-10-24) A completely hollow
+// app (no machines and no volumes) holds neither compute nor disk and is safe to collect.
 export type OrphanSkip = "live" | "theirs" | "unknown" | "young" | "unreadable" | "forgotten";
 
 const orphanVerdict = (evidence: AppEvidence | undefined, tombstoned: boolean, now: number): OrphanSkip | undefined => {
@@ -990,6 +993,9 @@ const orphanVerdict = (evidence: AppEvidence | undefined, tombstoned: boolean, n
     }
     if (evidence.machines > 0 && evidence.owner !== `mine`) {
         return `unknown`;
+    }
+    if (evidence.machines === 0 && evidence.volumes === 0) {
+        return undefined;
     }
     return tombstoned || evidence.stock ? undefined : `forgotten`;
 };

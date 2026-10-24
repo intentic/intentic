@@ -1,8 +1,11 @@
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../config.js";
+import { fakeHostedAppLock } from "../../testing.js";
 import { reconcileHostedPool } from "./hosted-pool.js";
 import { hostedInstanceId } from "./hosted.js";
+
+jest.mock("./hosted-app-lock.js", () => ({ withHostedAppLock: fakeHostedAppLock }));
 
 // Pins the pool's promises: warm machines never boot the sandbox, stock converges on the target per region, a drifted
 // image is rebuilt, and switching the pool off empties it rather than stranding it behind the reaper.
@@ -56,19 +59,31 @@ const poolRow = (over?: Record<string, unknown>) => ({
 });
 
 // Counts exist for the refill's room-left check (hosted-capacity.ts); only read on a platform with a ceiling.
-const fakePrisma = (overrides?: Record<string, Record<string, ReturnType<typeof jest.fn>>>) =>
-    ({
+const fakePrisma = (overrides?: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => {
+    const fake = {
         hostedPoolMachine: {
             findMany: jest.fn().mockResolvedValue([]),
             count: jest.fn().mockResolvedValue(0),
             create: jest.fn().mockResolvedValue({}),
             update: jest.fn().mockResolvedValue({}),
             delete: jest.fn().mockResolvedValue({}),
+            deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
             ...overrides?.[`hostedPoolMachine`],
         },
         hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0), ...overrides?.[`hostedMachine`] },
         hostedBuild: { count: jest.fn().mockResolvedValue(0), ...overrides?.[`hostedBuild`] },
-    }) as never;
+        hostedCleanup: {
+            findUnique: jest.fn().mockResolvedValue({}),
+            create: jest.fn().mockResolvedValue({}),
+            deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+            ...overrides?.[`hostedCleanup`],
+        },
+        $transaction: jest.fn((work: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) =>
+            typeof work === `function` ? work(fake) : Promise.all(work),
+        ),
+    };
+    return fake as never;
+};
 
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
@@ -319,5 +334,45 @@ describe(`reconcileHostedPool`, () => {
         expect(del).not.toHaveBeenCalled();
         // Not counted as stock either, so its slot is rebuilt.
         expect(calls.filter((entry) => entry.method === `POST` && entry.url.includes(`/machines`))).toHaveLength(1);
+    });
+
+    it(`registers in-flight builds in hostedCleanup and clears them on commit`, async () => {
+        const cleanupCreate = jest.fn().mockResolvedValue({});
+        const cleanupDeleteMany = jest.fn().mockResolvedValue({ count: 1 });
+        stubFetch(builderRoutes);
+        const prisma = fakePrisma({
+            hostedCleanup: { create: cleanupCreate, deleteMany: cleanupDeleteMany },
+        });
+        await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
+        expect(cleanupCreate).toHaveBeenCalledTimes(1);
+        expect(cleanupCreate).toHaveBeenCalledWith({
+            data: { appName: expect.stringMatching(/^intentic-sbx-/) },
+        });
+        expect(cleanupDeleteMany).toHaveBeenCalledTimes(1);
+        expect(cleanupDeleteMany).toHaveBeenCalledWith({
+            where: { appName: expect.stringMatching(/^intentic-sbx-/) },
+        });
+    });
+
+    it(`cleans up via cleanupApp when a warm build fails mid-flight`, async () => {
+        const cleanupCreate = jest.fn().mockResolvedValue({});
+        const cleanupDeleteMany = jest.fn().mockResolvedValue({ count: 1 });
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/apps`), respond: () => json({ name: `app` }) },
+            { match: (method, url) => method === `POST` && url.includes(`/volumes`), respond: () => json({ error: `failed` }, 500) },
+            { match: (method, url) => method === `DELETE` && url.includes(`/apps/`), respond: () => json({}) },
+            { match: (method, url) => method === `GET` && url.includes(`/apps/`), respond: () => json({ error: `not found` }, 404) },
+        ]);
+        const prisma = fakePrisma({
+            hostedCleanup: {
+                create: cleanupCreate,
+                findUnique: jest.fn().mockResolvedValue({ appName: `app` }),
+                deleteMany: cleanupDeleteMany,
+            },
+        });
+        await reconcileHostedPool(prisma, config({ regionEu: `` }), logger);
+        expect(cleanupCreate).toHaveBeenCalledTimes(1);
+        expect(calls.some((entry) => entry.method === `DELETE` && entry.url.includes(`/apps/`))).toBe(true);
+        expect(cleanupDeleteMany).toHaveBeenCalledTimes(1);
     });
 });

@@ -112,13 +112,14 @@ flowchart LR
   `lastSeenAt` is the boot announce, which a nightly cron's alarm stamps every night.)
 - Destruction needs a record (2026-10-05; [platform.md](../../docs/architecture/platform.md#when-the-platform-forgets)).
   The daily orphan reaper (`reapHostedOrphans`) destroys an app no row names only when its sandbox's tunnel id is in
-  `SandboxTombstone`, or when every machine in it is unclaimed warm stock this platform stamped. Any other unknown app
-  is skipped as `forgotten` (beside `live`, `theirs`, `young`, `unknown`, `unreadable`), named in the hosted health log
-  and in the admin digest, and never destroyed: an app with no machine used to be collected for its emptiness, which is
-  what Fly losing a machine leaves. A pass destroys the oldest of what it may, up to a tenth of the fleet and at least
-  three, and defers the rest; it refuses outright only when that is more than a quarter of the fleet. The DNS sweep
-  follows the same rule for tunnel and challenge records (`deletedAmong`), at most 100 deletes a pass, and counts the
-  rest as `deferred` or `forgotten`.
+  `SandboxTombstone`, when every machine in it is unclaimed warm stock this platform stamped, or when the app is completely
+  hollow (0 machines and 0 volumes, holding neither compute nor disk; 2026-10-24). Any other unknown app is skipped as
+  `forgotten` (beside `live`, `theirs`, `young`, `unknown`, `unreadable`), named in the hosted health log and in the admin
+  digest, and never destroyed: an app with no machine used to be collected for its emptiness, which is what Fly losing a
+  machine leaves of an app that still holds its volume disk. A pass destroys the oldest of what it may, up to a tenth of
+  the fleet and at least three, and defers the rest; it refuses outright only when that is more than a quarter of the
+  fleet. The DNS sweep follows the same rule for tunnel and challenge records (`deletedAmong`), at most 100 deletes a
+  pass, and counts the rest as `deferred` or `forgotten`.
 - A provision or a restart's replacement first reads the app named for the sandbox's token (`heldAppOf`). An app the
   provider still holds is adopted (`adoptHostedApp`): a machine this platform stamped is re-configured onto the volume
   it mounts and started, or a machine is made on the newest volume, in its region and at its size, with no cleanup

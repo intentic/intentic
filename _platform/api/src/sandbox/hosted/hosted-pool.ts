@@ -8,6 +8,8 @@ import { encryptSecret } from "../../crypto.js";
 import { JOB_HOSTED_POOL, runExclusive } from "../../jobs-lock.js";
 import { mintConnectToken } from "../mint-sandbox.js";
 import { createApp, createMachine, createVolume, deleteApp, flyWarmRole, FlyError, getMachine, isFlyCapacity } from "./fly/fly.js";
+import { withHostedAppLock } from "./hosted-app-lock.js";
+import { cleanupApp } from "./hosted-cleanup.js";
 import { hostedCapacity, noteProviderAtCapacity, providerWords } from "./hosted-capacity.js";
 import { digestIn, resolveHostedImage } from "./build/hosted-image.js";
 import { hostedEnabled, hostedInstanceId } from "./hosted.js";
@@ -38,26 +40,32 @@ const buildPoolMachine = async (prisma: PrismaClient, config: Config, logger: Lo
     // Identity first, since the app is named after it; same derivation as a built-to-order app's.
     const token = mintConnectToken();
     const appName = `${config.hosted.appPrefix}-${sandboxIdFromToken(token) ?? ``}`;
-    await createApp(flyApiToken, flyOrg, appName);
-    try {
-        const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb, volumeOptions(config, { ...guest, volumeGb }));
-        // Stamped as warm from birth (so no other deployment reads it as litter) and named like an owned app; nothing
-        // routes to it.
-        const warm = {
-            ...flyMachineConfig({ name: appName, image, baseImage: image, guest, volumeId, env: PREWARM_ENV }),
-            metadata: flyWarmRole(hostedInstanceId(config)),
-        };
-        const { machineId } = await createMachine(flyApiToken, appName, { name: appName, region, config: warm });
-        await prisma.hostedPoolMachine.create({
-            data: { appName, machineId, volumeId, region, image, state: `building`, token: encryptSecret(config, token) },
-        });
-        logger.info({ app: appName, region }, `hosted pool: building a warm machine`);
-    } catch (error) {
-        await deleteApp(flyApiToken, appName).catch((cleanupError: unknown) =>
-            logger.warn({ err: cleanupError, app: appName }, `hosted pool: cleanup after failed build failed; orphaned for the reaper`),
-        );
-        throw error;
-    }
+    await withHostedAppLock(config, appName, true, async () => {
+        await prisma.hostedCleanup.create({ data: { appName } });
+        try {
+            await createApp(flyApiToken, flyOrg, appName);
+            const { volumeId } = await createVolume(flyApiToken, appName, region, volumeGb, volumeOptions(config, { ...guest, volumeGb }));
+            // Stamped as warm from birth (so no other deployment reads it as litter) and named like an owned app; nothing
+            // routes to it.
+            const warm = {
+                ...flyMachineConfig({ name: appName, image, baseImage: image, guest, volumeId, env: PREWARM_ENV }),
+                metadata: flyWarmRole(hostedInstanceId(config)),
+            };
+            const { machineId } = await createMachine(flyApiToken, appName, { name: appName, region, config: warm });
+            await prisma.$transaction([
+                prisma.hostedPoolMachine.create({
+                    data: { appName, machineId, volumeId, region, image, state: `building`, token: encryptSecret(config, token) },
+                }),
+                prisma.hostedCleanup.deleteMany({ where: { appName } }),
+            ]);
+            logger.info({ app: appName, region }, `hosted pool: building a warm machine`);
+        } catch (error) {
+            await cleanupApp(prisma, config, appName).catch((cleanupError: unknown) =>
+                logger.warn({ err: cleanupError, app: appName }, `hosted pool: cleanup after failed build failed; durable retry pending`),
+            );
+            throw error;
+        }
+    });
 };
 
 // Tears down row and app together, app first: a row with no app is harmless (read as gone next tick), while an app with

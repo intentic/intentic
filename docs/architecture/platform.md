@@ -75,11 +75,12 @@ between forgotten and deleted, so the platform keeps the difference explicit ([`
 - **Destroyed only on a record.** The daily reapers act on a deletion record and on nothing less
   ([`hosted.ts`](../../_platform/api/src/sandbox/hosted/hosted.ts) `reapHostedOrphans`,
   [`cloudflare.ts`](../../_platform/api/src/sandbox/cloudflare.ts) `reapOrphanDnsRecords`). A Fly app no row names is
-  destroyed only when its sandbox's tunnel id is tombstoned, or when every machine in it is warm stock this platform built
-  and nobody claimed; an app a `HostedCleanup` row names is the cleanup sweep's. Any other unknown app is `forgotten`:
-  left standing, and named in the hosted health log and the daily admin digest for an operator to decide. A DNS record
-  keyed to a sandbox goes the same way. Each pass destroys the oldest of what it may, up to a cap, and leaves the rest
-  for the next; a pass whose share of the fleet looks like a wrong database destroys nothing.
+  destroyed only when its sandbox's tunnel id is tombstoned, when every machine in it is warm stock this platform built
+  and nobody claimed, or when the app is completely hollow with no machines and no volumes (2026-10-24); an app a
+  `HostedCleanup` row names is the cleanup sweep's. Any other unknown app is `forgotten`: left standing, and named in
+  the hosted health log and the daily admin digest for an operator to decide. A DNS record keyed to a sandbox goes the
+  same way. Each pass destroys the oldest of what it may, up to a cap, and leaves the rest for the next; a pass whose
+  share of the fleet looks like a wrong database destroys nothing.
 - **A lost machine is not a lost disk.** When Fly loses a machine, the row goes (`forgetHostedMachine`) and the app and
   its volume stay. The sandbox's next provision or restart computes the same app name and adopts it: it re-configures a
   machine this platform stamped there, or makes one on the newest volume, and never touches an app holding a machine
@@ -95,6 +96,10 @@ looked like a wiped one.
 DNS record for its missing row, and a pass with more to do than its cap refused to do any of it. So a platform restored
 from an older backup would have destroyed the disks of every hosted sandbox made since, a machine Fly lost took its
 volume with it at the next daily pass, and a backlog after an outage never cleared.
+
+(2026-10-24) Hollow apps holding neither machines nor volumes (such as from warm pool builds interrupted before volume
+or machine creation) were re-admitted to orphan collection without needing a tombstone record, while empty apps that still
+hold a volume remain protected as forgotten.
 
 ## Hosted sandboxes
 

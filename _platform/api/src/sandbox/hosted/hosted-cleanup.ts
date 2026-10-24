@@ -30,7 +30,7 @@ export const lockHostedSandbox = async (tx: Prisma.TransactionClient, sandboxId:
     await tx.$queryRaw`SELECT id FROM sandbox WHERE id = ${sandboxId} FOR UPDATE`;
 };
 
-const cleanupApp = async (prisma: PrismaClient, config: Config, appName: string): Promise<void> => {
+export const cleanupApp = async (prisma: PrismaClient, config: Config, appName: string): Promise<void> => {
     // A committed handoff may outlive a lost transaction response.
     if ((await prisma.hostedCleanup.findUnique({ where: { appName } })) === null) {
         return;

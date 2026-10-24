@@ -1457,6 +1457,18 @@ describe(`reapHostedOrphans`, () => {
         expect(report.forgotten).toEqual([`intentic-sbx-hollow`]);
     });
 
+    // (2026-10-24) A completely hollow app (no machines and no volumes) holds no disk and no machine: it is safe to
+    // collect even without a deletion record, unlike an app that holds a volume.
+    it(`collects a completely hollow app holding no machine and no volume even with no deletion record`, async () => {
+        const noVolumes = { match: (method: string, url: string) => method === `GET` && url.endsWith(`/volumes`), respond: () => json([]) };
+        const calls = stubFetch([appList(`intentic-sbx-hollow-empty`), noMachines, noVolumes, deleteRoute]);
+        const report = await reapHostedOrphans(knownRows as never, config(), logger);
+        const deleted = deletedApps(calls);
+        expect(deleted).toHaveLength(1);
+        expect(deleted[0]).toContain(`intentic-sbx-hollow-empty`);
+        expect(report.forgotten).toEqual([]);
+    });
+
     // Fly lost the machine and the platform dropped its row (`forgetHostedMachine`): what is left is the sandbox's own
     // disk, and the sandbox row still names the app's tunnel id. Collecting it would delete a workspace nobody released.
     it(`never collects an empty app whose sandbox still exists: its volume is that sandbox's disk`, async () => {
