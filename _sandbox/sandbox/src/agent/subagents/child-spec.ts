@@ -7,6 +7,9 @@ import type { TurnInput } from "../../seams/turn-starter.js";
 import { opt } from "../../opt.js";
 import type { ChildParent, ChildRecord, ChildSpawnSpec, ChildTurnTally, PendingChildCard } from "./children.js";
 
+// OpenCode's runtime alias for Gemini in its server config.
+const OPENCODE_GEMINI_PROVIDER = "intentic-gemini";
+
 /** Another provider and model for a child's next turn, in the same worktree (sendToChild, a spawn's fallbacks). */
 export interface ChildRehome {
     readonly provider: AgentProvider;
@@ -74,11 +77,18 @@ export interface ChildRoute {
     readonly model: string;
 }
 
-export const childRouting = (spec: ChildSpawnSpec): ChildRoute => ({
-    provider: spec.provider,
-    harness: canonicalHarness(spec.provider, spec.harness),
-    model: spec.model,
-});
+// Maps runtime aliases (e.g. OpenCode's internal provider id for Gemini) to the canonical provider id.
+export const canonicalProvider = (provider: AgentProvider): AgentProvider =>
+    provider === OPENCODE_GEMINI_PROVIDER ? "gemini" : provider;
+
+export const childRouting = (spec: ChildSpawnSpec): ChildRoute => {
+    const provider = canonicalProvider(spec.provider);
+    return {
+        provider,
+        harness: canonicalHarness(provider, spec.harness),
+        model: spec.model,
+    };
+};
 
 // Every child turn's profile: its own worktree, so parallel children and the parent never edit the same files, and
 // nobody at a composer, which also floors the persona so it speaks for no outside account. No `runRole`: the parent's
@@ -109,7 +119,8 @@ type SpecDraft = { -readonly [K in keyof ChildSpawnSpec]: ChildSpawnSpec[K] };
 // effort or an account the agent named for its own model never rides along onto another.
 export const withRun = (spec: ChildSpawnSpec, run: ChildRun): ChildSpawnSpec => {
     const { harness: _harness, account: _account, effort: _effort, thinking: _thinking, fast: _fast, ...task } = spec;
-    const next: SpecDraft = { ...task, provider: run.provider, model: run.model };
+    const provider = canonicalProvider(run.provider);
+    const next: SpecDraft = { ...task, provider, model: run.model };
     if (run.harness !== undefined) {
         next.harness = run.harness;
     }
@@ -130,19 +141,21 @@ export const withRun = (spec: ChildSpawnSpec, run: ChildRun): ChildSpawnSpec => 
 
 // A run in words for the parent's tool result: provider and model as the ids the agent spawns with, since that is its
 // vocabulary, and each knob only when one was named.
-const runWords = (run: ChildRun): string =>
-    [
-        `${run.provider}/${run.model}`,
+const runWords = (run: ChildRun): string => {
+    const provider = canonicalProvider(run.provider);
+    return [
+        `${provider}/${run.model}`,
         run.effort !== undefined ? `${run.effort} effort` : undefined,
         run.thinking === false ? "no extended thinking" : undefined,
         run.fast === true ? "fast speed" : undefined,
-        run.harness !== undefined && canonicalHarness(run.provider, run.harness) !== "native"
-            ? `the ${loopLabel(run.provider, loopOf(run.provider, run.harness))} loop`
+        run.harness !== undefined && canonicalHarness(provider, run.harness) !== "native"
+            ? `the ${loopLabel(provider, loopOf(provider, run.harness))} loop`
             : undefined,
         run.account !== undefined ? `account ${run.account}` : undefined,
     ]
         .filter((part) => part !== undefined)
         .join(", ");
+};
 
 /** What the parent is told when the owner started its child on something else, so its own report names the right model. */
 export const repointedNote = (asked: ChildRun, run: ChildRun): string =>
@@ -174,7 +187,8 @@ export const childOpening = (spec: ChildSpawnSpec, sandboxLimit: LimitPolicy): P
 // dropped, since an effort or an account named for one model means nothing on another.
 export const rehomedSpec = (spec: ChildSpawnSpec, to: ChildRehome, fallbacks?: readonly ChildRehome[]): ChildSpawnSpec => {
     const { harness: _harness, account: _account, effort: _effort, thinking: _thinking, fast: _fast, fallbacks: _fallbacks, ...task } = spec;
-    const next: SpecDraft = { ...task, provider: to.provider, model: to.model };
+    const provider = canonicalProvider(to.provider);
+    const next: SpecDraft = { ...task, provider, model: to.model };
     if (to.harness !== undefined) {
         next.harness = to.harness;
     }
@@ -182,7 +196,7 @@ export const rehomedSpec = (spec: ChildSpawnSpec, to: ChildRehome, fallbacks?: r
         next.effort = to.effort;
     }
     if (fallbacks !== undefined && fallbacks.length > 0) {
-        next.fallbacks = fallbacks;
+        next.fallbacks = fallbacks.map((f) => ({ ...f, provider: canonicalProvider(f.provider) }));
     }
     return next;
 };

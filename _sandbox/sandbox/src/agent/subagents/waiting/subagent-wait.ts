@@ -9,6 +9,7 @@ import { harnessChoosable, loopsOf, PROVIDERS } from "@intentic/sandbox-contract
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { type ChildRehome, type ChildSpawnSpec, type ChildSupervisor, spawnedNote } from "../children.js";
+import { canonicalProvider } from "../child-spec.js";
 import type { ChildResultDoor } from "../child-records.js";
 import { ResultSchemaSchema, ResultValueSchema, resultValidator } from "../child-result.js";
 import { HALF_A_MOVE } from "../child-words.js";
@@ -111,7 +112,7 @@ const rehomeOf = (args: {
 }): ChildRehome | undefined =>
     args.provider === undefined || args.model === undefined
         ? undefined
-        : { provider: args.provider, model: args.model, ...opt("harness", args.harness), ...opt("effort", args.effort) };
+        : { provider: canonicalProvider(args.provider), model: args.model, ...opt("harness", args.harness), ...opt("effort", args.effort) };
 
 // Where a spawned child goes by itself when its provider refuses it outright or its allowance is far from reopening.
 const FALLBACKS_FIELD = z
@@ -215,13 +216,16 @@ const spawnAsked = (args: SpawnArgs): ChildSpawnSpec | { readonly refused: strin
     }
     return {
         prompt: args.prompt,
-        provider: args.provider,
+        provider: canonicalProvider(args.provider),
         model: args.model,
         ...opt("description", args.description),
         ...opt("harness", args.harness),
         ...opt("effort", args.effort),
         ...opt("on", args.on),
-        ...opt("fallbacks", args.fallbacks),
+        ...opt(
+            "fallbacks",
+            args.fallbacks?.map((fallback) => ({ ...fallback, provider: canonicalProvider(fallback.provider) })),
+        ),
         ...opt("result", schema?.data === undefined ? undefined : { schema: schema.data }),
         ...opt("freshOf", args.freshOf),
     };

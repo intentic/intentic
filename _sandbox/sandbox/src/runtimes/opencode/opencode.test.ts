@@ -23,7 +23,7 @@ import {
     type OpenCodeService,
     type SessionJudge,
 } from "./opencode.js";
-import { AGENT_CONFIG, type OpenCodeConfig, SERVER_PERMISSIONS } from "./opencode-config.js";
+import { AGENT_CONFIG, BUILTIN_SKILLS_ROOT, type OpenCodeConfig, SERVER_PERMISSIONS } from "./opencode-config.js";
 import type { McpRemoteConfig, OpenCodeMcpServer } from "./opencode-mcp.js";
 import type { ServeRequest, SpawnServer } from "./opencode-serve.js";
 import type { OpenCodeRouteEntry } from "./hosted/opencode-routes.js";
@@ -357,6 +357,18 @@ describe("boot", () => {
         const fake = runtime();
         await fake.service.client();
         expect(fake.at(0).request.port).toBe(0);
+    });
+
+    test("a workspace root configures skill discovery for the workspace and built-in roots", async () => {
+        const fake = runtime({ workspaceRoot: "/visible/worktree" });
+        await fake.service.client();
+        expect(fake.at(0).config.skills).toEqual(["/visible/worktree/.agents/skills", BUILTIN_SKILLS_ROOT]);
+    });
+
+    test("explicit skills override the workspace default", async () => {
+        const fake = runtime({ workspaceRoot: "/visible/worktree", skills: ["/custom/skills"] });
+        await fake.service.client();
+        expect(fake.at(0).config.skills).toEqual(["/custom/skills"]);
     });
 
     test("a Google catalog with models registers the Google provider with each model's published modalities", async () => {

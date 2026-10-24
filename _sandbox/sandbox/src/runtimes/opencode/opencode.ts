@@ -4,7 +4,8 @@ import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import { DAEMON_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { OPENCODE_GEMINI_PROVIDER } from "../gemini/gemini-models.js";
-import { geminiProviderConfig, OPENCODE_LOCKDOWN_ENV, type OpenCodeConfig, type OpenCodeGeminiConfig, serverConfig, variantOf, xaiProviderConfig } from "./opencode-config.js";
+import { BUILTIN_SKILLS_ROOT, geminiProviderConfig, OPENCODE_LOCKDOWN_ENV, type OpenCodeConfig, type OpenCodeGeminiConfig, serverConfig, variantOf, xaiProviderConfig } from "./opencode-config.js";
+import { loadedSkillsRoot } from "../../store/loaded-skills.js";
 import { createXaiCatalog, openCodeCredentials } from "./opencode-credentials.js";
 import { type OpenCodeEvents, type OpenCodeListener, openEventStream } from "./opencode-events.js";
 import type { OpenCodeMcpServer } from "./opencode-mcp.js";
@@ -235,31 +236,35 @@ interface Booted {
 
 // Options bag rather than more positionals, so a production option never has to land after the test's fetch-injection
 // seam.
+export interface OpenCodeServiceOptions {
+    readonly gemini?: OpenCodeGeminiConfig;
+    readonly fetchImpl?: typeof fetch;
+    readonly workspaceRoot?: string;
+    // The skill directories OpenCode discovers skills in; absent defaults to the workspace's loaded skills and the built-ins.
+    readonly skills?: readonly string[];
+    // Which port the server listens on; absent lets the kernel pick a free one, which the server then names.
+    readonly port?: number;
+    // What starts `opencode serve`; the real spawn unless a test stands in for it.
+    readonly spawnServer?: SpawnServer;
+    // What talks to a started server; OpenCode's own client unless a test stands in for it.
+    readonly makeClient?: (server: { readonly url: string; readonly headers: Readonly<Record<string, string>> }) => OpenCodeClient;
+    // Whether the served process still runs; the real process table unless a test stands in for it.
+    readonly alive?: (pid: number) => boolean;
+    // How long an idle server is kept before it is stopped; 0 keeps it for the service's life.
+    readonly idleStopMs?: number;
+    // The privacy shield's gateway base URL for a provider's requests, or undefined while the shield is off.
+    readonly route?: (provider: string, upstream: string) => Promise<string | undefined>;
+    // Every route OpenCode could host now (opencode-routes.ts), each written into the server's config at spawn;
+    // absent hosts none, as a test standing in for the daemon does.
+    readonly routes?: () => Promise<readonly OpenCodeRouteEntry[]>;
+    // Where the daemon's shell script and the socket it asks over live (shell/opencode-shell.ts); absent leaves OpenCode
+    // its own shell, as a test standing in for the server does.
+    readonly shellDir?: string;
+}
+
 export const createOpenCodeService = (
     xdgDataHome: string,
-    options: {
-        readonly gemini?: OpenCodeGeminiConfig;
-        readonly fetchImpl?: typeof fetch;
-        readonly workspaceRoot?: string;
-        // Which port the server listens on; absent lets the kernel pick a free one, which the server then names.
-        readonly port?: number;
-        // What starts `opencode serve`; the real spawn unless a test stands in for it.
-        readonly spawnServer?: SpawnServer;
-        // What talks to a started server; OpenCode's own client unless a test stands in for it.
-        readonly makeClient?: (server: { readonly url: string; readonly headers: Readonly<Record<string, string>> }) => OpenCodeClient;
-        // Whether the served process still runs; the real process table unless a test stands in for it.
-        readonly alive?: (pid: number) => boolean;
-        // How long an idle server is kept before it is stopped; 0 keeps it for the service's life.
-        readonly idleStopMs?: number;
-        // The privacy shield's gateway base URL for a provider's requests, or undefined while the shield is off.
-        readonly route?: (provider: string, upstream: string) => Promise<string | undefined>;
-        // Every route OpenCode could host now (opencode-routes.ts), each written into the server's config at spawn;
-        // absent hosts none, as a test standing in for the daemon does.
-        readonly routes?: () => Promise<readonly OpenCodeRouteEntry[]>;
-        // Where the daemon's shell script and the socket it asks over live (shell/opencode-shell.ts); absent leaves OpenCode
-        // its own shell, as a test standing in for the server does.
-        readonly shellDir?: string;
-    } = {},
+    options: OpenCodeServiceOptions = {},
 ): OpenCodeService => {
     const {
         gemini,
@@ -305,7 +310,8 @@ export const createOpenCodeService = (
         const geminiModels = known.gemini ?? (await readGeminiModels(gemini)) ?? [];
         const hosted = known.routes ?? (await readRoutes(routes)) ?? [];
         const { providers, shielded } = await providersFor({ route, gemini, geminiModels, storeOptOut, hosted });
-        const config = serverConfig(providers, await shell.path());
+        const skills = options.skills ?? (options.workspaceRoot === undefined ? undefined : [loadedSkillsRoot(options.workspaceRoot), BUILTIN_SKILLS_ROOT]);
+        const config = serverConfig(providers, await shell.path(), skills);
         const stored = await engineBinary("opencode");
         const server = await spawnServer({
             binary: stored ?? "opencode",

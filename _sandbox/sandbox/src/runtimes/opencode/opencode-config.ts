@@ -158,14 +158,18 @@ export const xaiProviderConfig = (models: readonly string[], gateway: string | u
 export const variantOf = (providers: ProviderConfigs, providerID: string, modelID: string, effort: string | undefined): string | undefined =>
     effort === undefined ? undefined : providers[providerID]?.models?.[modelID]?.variants?.find((variant) => variant.id === effort)?.id;
 
+// Where the sandbox bakes its built-in skills (capabilities, environment, fleet, intentic, links, panels, wallet).
+export const BUILTIN_SKILLS_ROOT = "/root/.claude/skills";
+
 // The whole inline config: no self-update, no sharing (OpenCode 2 has none yet, and this keeps it off when it does),
-// every permission answered by a rule, the daemon's two agents, both providers, and, where the daemon routes the shell
-// (shell/opencode-shell.ts), the script OpenCode runs every shell command through.
-export const serverConfig = (providers: ProviderConfigs, shell?: string): OpenCodeConfig => ({
+// every permission answered by a rule, the daemon's two agents, both providers, skill discovery roots (since project config
+// is disabled), and, where the daemon routes the shell (shell/opencode-shell.ts), the script OpenCode runs every shell command through.
+export const serverConfig = (providers: ProviderConfigs, shell?: string, skills?: readonly string[]): OpenCodeConfig => ({
     update: "disable",
     share: "disabled",
     permissions: [...SERVER_PERMISSIONS],
     agents: AGENT_CONFIG,
     providers,
     ...opt("shell", shell),
+    ...opt("skills", skills === undefined ? undefined : [...skills]),
 });
