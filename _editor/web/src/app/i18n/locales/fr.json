@@ -3787,9 +3787,7 @@
             "holdOnBranchNote": "Garder son travail terminé sur la branche.",
             "plain": {
                 "mode": "Ce qu'il fait seul",
-                "modeNote": "Quand il vous demande d'abord.",
-                "model": "Quelle IA répond",
-                "modelNote": "Changer le modèle d'IA utilisé."
+                "modeNote": "Quand il vous demande d'abord."
             }
         },
         "composerQuickPick": {

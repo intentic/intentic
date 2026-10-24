@@ -3787,9 +3787,7 @@
             "holdOnBranchNote": "Zatrzymaj gotową pracę na gałęzi.",
             "plain": {
                 "mode": "Ile robi sam",
-                "modeNote": "Kiedy najpierw Cię zapyta.",
-                "model": "Który model AI odpowiada",
-                "modelNote": "Zmień model AI, z którego korzysta."
+                "modeNote": "Kiedy najpierw Cię zapyta."
             }
         },
         "composerQuickPick": {

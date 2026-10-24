@@ -3787,9 +3787,7 @@
             "holdOnBranchNote": "Die fertige Arbeit auf dem Branch halten.",
             "plain": {
                 "mode": "Wie viel es selbst tut",
-                "modeNote": "Wann es dich zuerst fragt.",
-                "model": "Welche KI antwortet",
-                "modelNote": "Das KI-Modell wechseln."
+                "modeNote": "Wann es dich zuerst fragt."
             }
         },
         "composerQuickPick": {

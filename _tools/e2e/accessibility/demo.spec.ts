@@ -1,8 +1,77 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { PROFILES } from "@intentic/constants";
 import { auditPage, WCAG_22_AA } from "./audit.js";
 
 const looks = [`light`, `dark`, `sanctum`] as const;
+
+test.describe(`composer model controls`, () => {
+    for (const width of [1440, 375]) {
+        for (const profile of [`default`, `desk`] as const) {
+            test.describe(`${profile} profile at ${width}px`, () => {
+                test.beforeEach(async ({ page }) => {
+                    await page.setViewportSize({ width, height: 1000 });
+                    // The audience Desk seeds before Vue loads. bootProfile.test.ts covers the link and cookie handoff;
+                    // these cases verify that the resulting audience still has working controls on the real Home view.
+                    await page.addInitScript((audience) => {
+                        if (audience !== undefined) {
+                            localStorage.setItem(`ui-audience`, audience);
+                        }
+                    }, PROFILES[profile].audience);
+                });
+
+                test(`keeps the free trial model visible and opens its picker on a fresh home`, async ({ page }) => {
+                    await page.goto(`home?mode=fresh`);
+                    if (width < 768) {
+                        await page.getByRole(`button`, { name: /^acme-shop/ }).click();
+                    }
+                    const composer = page.locator(`.chat-pane form`);
+                    const model = composer.getByRole(`button`, { name: `Free trial`, exact: true });
+                    await expect(model).toBeVisible();
+                    await expect(model).toHaveText(`Free trial`);
+                    await expect(composer.getByRole(`group`, { name: `Reasoning effort`, exact: true })).toHaveCount(0);
+                    if (profile === `desk`) {
+                        await expect(composer.getByRole(`textbox`)).toHaveAttribute(`placeholder`, `Tell me what you need help with…`);
+                    }
+
+                    await model.click();
+                    await expect(page.getByRole(`combobox`, { name: `Model picker`, exact: true })).toBeVisible();
+                    await expect(page.getByRole(`listbox`, { name: `Models`, exact: true })).toBeVisible();
+                });
+
+                test(`lets a home change its model and supported effort`, async ({ page }) => {
+                    await page.goto(`home?mode=home`);
+                    if (width < 768) {
+                        await page.getByRole(`button`, { name: /^acme-shop/ }).click();
+                    }
+                    const composer = page.locator(`.chat-pane form`);
+                    const model = composer.getByRole(`button`, { name: /Claude Opus 5/ });
+                    const effort = composer.getByRole(`group`, { name: `Reasoning effort`, exact: true });
+                    await expect(model).toBeVisible();
+                    await expect(effort).toBeVisible();
+                    await expect(effort.getByRole(`button`, { name: `High`, exact: true })).toHaveAttribute(`aria-pressed`, `true`);
+                    await effort.getByRole(`button`, { name: `Low`, exact: true }).click();
+                    await expect(effort.getByRole(`button`, { name: `Low`, exact: true })).toHaveAttribute(`aria-pressed`, `true`);
+
+                    await model.click();
+                    await page.getByRole(`option`, { name: `Claude Sonnet 5`, exact: true }).click();
+                    await expect(composer.getByRole(`button`, { name: /Claude Sonnet 5/ })).toBeVisible();
+                    await expect(effort.getByRole(`button`, { name: `Low`, exact: true })).toHaveAttribute(`aria-pressed`, `true`);
+                });
+            });
+        }
+
+        test(`keeps guest model and effort controls absent at ${width}px`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 1000 });
+            await page.goto(`home?mode=home&as=guest`);
+            const composer = page.locator(`.chat-pane form`);
+            await expect(composer.getByRole(`textbox`)).toBeVisible();
+            await expect(composer.getByRole(`button`, { name: /^(Provider and model: |Model: |Free trial|Choose a model)/ })).toHaveCount(0);
+            await expect(composer.getByRole(`group`, { name: `Reasoning effort`, exact: true })).toHaveCount(0);
+        });
+    }
+});
+
 const screens = [
     `login`, `agents`, `chat`, `workspace`, `settings`, `settings/appearance`, `settings/organisation`, `sandbox`,
     `sandbox/access`, `sandbox/areas`, `sandbox/personas`, `sandbox/data-protection`, `sandbox/audit`,

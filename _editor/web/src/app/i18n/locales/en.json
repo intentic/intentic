@@ -3787,9 +3787,7 @@
             "holdOnBranchNote": "Hold its finished work on the branch.",
             "plain": {
                 "mode": "How much it does on its own",
-                "modeNote": "When it stops to ask you first.",
-                "model": "Which AI answers",
-                "modelNote": "Change the AI model it uses."
+                "modeNote": "When it stops to ask you first."
             }
         },
         "composerQuickPick": {

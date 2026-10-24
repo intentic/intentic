@@ -3787,9 +3787,7 @@
             "holdOnBranchNote": "Deja su trabajo terminado en la rama.",
             "plain": {
                 "mode": "Cuánto hace por su cuenta",
-                "modeNote": "Cuándo te pregunta antes.",
-                "model": "Qué IA responde",
-                "modelNote": "Cambia el modelo de IA que usa."
+                "modeNote": "Cuándo te pregunta antes."
             }
         },
         "composerQuickPick": {

@@ -56,9 +56,6 @@ const openersOf = (flags: Record<Exclude<ComposerControl, `land`>, Ref<boolean>>
         mode: () => {
             flags.mode.value = true;
         },
-        model: () => {
-            flags.model.value = true;
-        },
         placement: () => {
             flags.placement.value = true;
         },
@@ -148,7 +145,6 @@ export const useComposerControls = (host: ControlsHost) => {
         landOwn: landing.own.value,
         plain: host.plain.value,
         guest: host.guest.value,
-        modelLabel: modelReading.value.label,
     }));
     // Whether the send's caret may book this message for later: a booking is held by this sandbox's own daemon, for a
     // send nothing else claims (a workflow or a loop takes the message somewhere a booking cannot follow).
@@ -159,7 +155,7 @@ export const useComposerControls = (host: ControlsHost) => {
     const anchorOf = (control: ComposerControl, own: Readonly<Ref<HTMLElement | undefined>>) =>
         computed(() => (inRow.value[control] ? own.value : host.pills.more.value));
 
-    const OPENERS = openersOf({ mode: modeOpen, model: modelOpen, placement: placementOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent }, landing.toggle);
+    const OPENERS = openersOf({ mode: modeOpen, placement: placementOpen, persona: personaOpen, runThrough: runThrough.open, voice: voiceAgent }, landing.toggle);
 
     // Only one answer to "what does send do" can hold, and an armed edit wins as the most specific act; cleared visibly
     // rather than disabled, so the precedence is seen rather than discovered by pressing Send.

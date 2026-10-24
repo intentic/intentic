@@ -9,15 +9,13 @@ import { t } from "@intentic/ui/i18n";
 // aren't here since the row places them itself (effort draws nothing at all under Auto).
 
 // When the message goes is not one of them: it is the send's own caret (ChatPane), beside the press it changes.
-// `model` is the exception the plain words make: a developer's model rides the row as its own pill, and a reader who does
-// not write code finds it here instead, one press away and out of the way.
-export type ComposerControl = `mode` | `model` | `placement` | `persona` | `runThrough` | `voice` | `land`;
+export type ComposerControl = `mode` | `placement` | `persona` | `runThrough` | `voice` | `land`;
 
 /**
  * Order the controls read in, row and menu alike, so muscle memory doesn't depend on which half they're on. Whether the
  * work lands by itself comes last, beside the Send it follows.
  */
-export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `model`, `placement`, `persona`, `runThrough`, `voice`, `land`];
+export const CONTROL_ORDER: readonly ComposerControl[] = [`mode`, `placement`, `persona`, `runThrough`, `voice`, `land`];
 
 export interface ComposerControlSituation {
     /** The posture the next turn starts in, or the running turn's if the agent has moved itself. */
@@ -45,14 +43,12 @@ export interface ComposerControlSituation {
     /** Whether that answer is the chat's own rather than the sandbox's. */
     readonly landOwn: boolean;
     /**
-     * Plain words: a reader who does not write code is offered only what they can judge (how much it does before asking,
-     * and which model answers), worded without the developer's terms. Absent reads as the developer's menu.
+     * Plain words keep how much it does before asking in the overflow, worded without the developer's terms.
+     * Model and effort have their own controls in either audience. Absent reads as the developer's menu.
      */
     readonly plain?: boolean;
     /** A guest talks to the assistant it was handed, with its model and its posture: nothing here is theirs to change. */
     readonly guest?: boolean;
-    /** The model the next turn runs on, as the pill would name it; the plain menu's model row says it. */
-    readonly modelLabel?: string;
 }
 
 export interface ComposerMoreRow {
@@ -74,13 +70,12 @@ export type ControlFlags = Readonly<Record<ComposerControl, boolean>>;
 /** Whether the control exists for this chat at all. A control that isn't offered is in neither place. */
 const offeredIn = (situation: ComposerControlSituation) => {
     if (situation.guest === true) {
-        return { mode: false, model: false, placement: false, persona: false, runThrough: false, voice: false, land: false } satisfies ControlFlags;
+        return { mode: false, placement: false, persona: false, runThrough: false, voice: false, land: false } satisfies ControlFlags;
     }
-    // Plain words keep the two a non-coder can judge; the rest are a developer's tools and stay out of the menu.
+    // Plain words keep the mode; the rest are a developer's tools and stay out of the menu.
     const developer = situation.plain !== true;
     return {
         mode: true,
-        model: !developer,
         placement: developer && situation.placementOffered,
         persona: developer && situation.personaOffered,
         runThrough: developer,
@@ -93,8 +88,6 @@ const offeredIn = (situation: ComposerControlSituation) => {
 // running loop counts (its badge is also its stop), and so does a mode the agent moved itself into.
 const setIn = (situation: ComposerControlSituation): Record<ComposerControl, boolean> => ({
     mode: situation.mode !== situation.startingMode,
-    // Never a chip: the developer's pill is drawn by the row itself, and the plain menu keeps it whatever it is set to.
-    model: false,
     placement: situation.placed,
     persona: situation.persona !== undefined,
     runThrough: situation.runThrough !== `idle`,
@@ -108,7 +101,6 @@ export const ridesRow = (situation: ComposerControlSituation): Record<ComposerCo
     const set = setIn(situation);
     return {
         mode: offered.mode && set.mode,
-        model: false,
         placement: offered.placement && set.placement,
         persona: offered.persona && set.persona,
         runThrough: offered.runThrough && set.runThrough,
@@ -130,14 +122,6 @@ const rowFor = (control: ComposerControl, situation: ComposerControlSituation): 
                 description: situation.plain === true ? t(`chat.composerMore.plain.modeNote`) : t(`chat.composerMore.howMuchMayDo`),
             };
         }
-        case `model`:
-            return {
-                key: control,
-                icon: `sparkles`,
-                label: t(`chat.composerMore.plain.model`),
-                value: situation.modelLabel ?? ``,
-                description: t(`chat.composerMore.plain.modelNote`),
-            };
         // Always this sandbox: a chat placed elsewhere has left the menu for a chip that names where it went.
         case `placement`:
             return {

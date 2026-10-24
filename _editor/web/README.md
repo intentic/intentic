@@ -548,6 +548,8 @@ connected sandboxes with personal attention counts; on phones the list opens eac
 Single clicks switch sandboxes; double clicks and Enter enter the full sandbox on `/agents`, the default landing
 view on both desktop and mobile. `features/home/` draws the surface;
 `models/home/` holds attention polling and the pure work ledger projection.
+The shared composer offers model selection to non-guest members in either audience mode. Effort appears when the
+selected model and runtime support it, and stays hidden under Auto or on the free trial.
 The desktop status bar stays hidden in the master view, including personal settings opened from it.
 Home and personal settings need only a signed-in account: an unfinished, offline or incompatible sandbox never gates
 them or redirects them to setup, including a direct visit to `/settings`.

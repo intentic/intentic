@@ -63,7 +63,8 @@ flowchart LR
 - `accessibility/demo.playwright.config.ts` runs the real editor with fixture backends and no sign-in. Its WCAG 2.2
   A/AA axe checks require no violations at any severity across Light, Dark and Sanctum, plus English/Polish reflow at
   320px. Interaction cases cover keyboard bypass, native agent buttons, the command palette, modal focus, office
-  loading/error/empty/success states, organisation policy tabs and switches, 200% root text size and OS reduced-motion/forced-colour preferences.
+  loading/error/empty/success states, organisation policy tabs and switches, Home's model and effort controls for both
+  audiences and guests, 200% root text size and OS reduced-motion/forced-colour preferences.
   Off-switch track and handle contrast is measured separately because axe does not detect every non-text contrast failure. These
   checks do not establish screen-reader or legal conformance. `A11Y_DEMO_URL` reuses an explicitly chosen demo;
   without it the suite starts its own server on port 47237 and refuses to reuse another session's server.

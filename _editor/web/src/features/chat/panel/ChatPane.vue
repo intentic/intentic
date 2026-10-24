@@ -105,8 +105,8 @@ const blocked = computed(() => connection.value.failure !== undefined && isBlock
 const { mobile } = useDevice();
 // A viewer's composer is present but inert (the daemon floors every route at collaborator).
 const { canDrive, isGuest } = useRole();
-// Plain words in the composer: a reader who does not write code, and a guest, talk to an assistant, not to a coding tool
-// by name; neither is offered the model, the effort or the shaping controls a developer tunes.
+// Plain words name the assistant and simplify shaping controls. Model and effort remain available to non-guests
+// in either audience: the way somebody reads the app does not decide which model they can use.
 const { maker } = useAudience();
 const plainWords = computed(() => maker.value || isGuest.value);
 
@@ -651,11 +651,10 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                              dropping "Choose a model" leaves a bare glyph with nothing saying to press it. The free trial keeps
                                              its name too: its mark is a gift box no vendor owns, which alone read as a stray decoration rather
                                              than as the model, and the one press that leads off the trial. -->
-                                        <!-- Plain words leave the model out of the row (the overflow's "Which AI answers" reaches it), except while
-                                             nothing is picked, when the pill is the press that gets the chat going; a guest's model is the
-                                             assistant it was handed, so neither the pill nor the effort is theirs. -->
+                                        <!-- Model and effort belong in either audience's row. A guest's model is the assistant it was handed,
+                                             so neither control is theirs; ComposerEffort handles models and runtimes with no effort to pick. -->
                                         <ComposerModelPill
-                                            v-if="!plainWords || (!isGuest && modelReading.unset)"
+                                            v-if="!isGuest"
                                             ref="modelPill"
                                             :conversation="conversation"
                                             :class="{
@@ -675,7 +674,7 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                                         />
 
                                         <ComposerEffort
-                                            v-if="!plainWords"
+                                            v-if="!isGuest"
                                             :conversation="conversation"
                                             :class="{ 'composer-steered': pickedWorkflow !== undefined, 'composer-flash': flashed === 'effort' }"
                                             :disabled="pickedWorkflow !== undefined"
