@@ -13,7 +13,7 @@
 # and pnpm 12 fetches the template's own pnpm into the package-manager store. The FROM line and PNPM_VERSION are held to
 # the image's by packs.integration.test.ts and the tool-pins check. Debian trixie on both, so the few native binaries the
 # template's packages download match the image's glibc.
-FROM node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe AS build
+FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS build
 # git: the scaffold inits the repo it lays down (dropped below; the daemon inits its own). curl: pnpm's installer.
 # libatomic1: the template's own pnpm (11, which pnpm 12 fetches for it) is a binary that links it; the image has it
 # through g++, a slim base does not.

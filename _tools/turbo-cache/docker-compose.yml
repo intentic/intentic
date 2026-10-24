@@ -8,7 +8,7 @@
 services:
   turbo-cache:
     # The base ci-base and the sandbox image pin (_tools/ci-base/Dockerfile): Node 24 with zstd in zlib, nothing else.
-    image: node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe
+    image: node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea
     restart: unless-stopped
     command: ["node", "/srv/turbo-cache/server.mjs"]
     environment:

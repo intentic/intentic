@@ -18,14 +18,14 @@
 # test an older user's machine; it tests a machine the artifact was never built for.
 # ponytail: bump this digest together with _sandbox/sandbox/Dockerfile's FROM — they must stay identical — and
 # move _tools/desktop-smoke/Dockerfile's FROM to the same Debian release.
-FROM node:24.21.0-trixie-slim@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe
+FROM node:24.22.1-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea
 
 # What LINKS the GHCR package to this repository, and the reason is not cosmetic: an unlinked private package
 # is one the repository's own GITHUB_TOKEN cannot pull, so every job that runs in this image dies at
 # `Error response from daemon: denied` before its first step. That is exactly how the first Actions run failed.
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 
-# Everything the jobs actually need, and nothing else — the full `node:24.21.0` image would supply most of this
+# Everything the jobs actually need, and nothing else — the full `node:24.22.1` image would supply most of this
 # but costs ~1.2GB more for a pile of toolchains no job invokes.
 #   ca-certificates + curl  fetch the docker apt key below; curl also backs assorted script steps
 #   git                     turbo hashes inputs through `git ls-files`, and semantic-release drives git directly
