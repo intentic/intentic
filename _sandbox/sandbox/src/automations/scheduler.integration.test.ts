@@ -202,6 +202,9 @@ test("a started scheduler fires a moment due within a poll on the moment, not at
         await waitFor(() => expect(prompts).toEqual(["wake:standup"]), SETTLES);
         expect(Date.now()).toBe(at);
         await automationIdle("standup");
+        await advanceTimersByTimeAsync(1_100);
+        await scheduler.tick();
+        expect(prompts).toEqual(["wake:standup"]);
     } finally {
         scheduler.stop();
         jest.useRealTimers();
