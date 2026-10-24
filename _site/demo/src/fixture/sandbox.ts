@@ -371,7 +371,7 @@ const environmentContents = (): EnvironmentContents => ({
             tools: [
                 { name: `playwright`, version: `1.56.2` },
                 { name: `chromium`, version: `140.0.7339` },
-                { name: `node`, version: `24.21.0` },
+                { name: `node`, version: `24.22.1` },
                 { name: `xvfb-run` },
             ],
             extras: 34,
@@ -421,7 +421,7 @@ const environmentContents = (): EnvironmentContents => ({
             name: `Node.js`,
             origin: `base`,
             state: `active`,
-            tools: [{ name: `node`, version: `24.21.0` }],
+            tools: [{ name: `node`, version: `24.22.1` }],
             purpose: `The runtime everything JavaScript in here runs on.`,
         },
         {
