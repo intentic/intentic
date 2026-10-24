@@ -165,6 +165,7 @@ const GAP = 12;
 const EDGE = 8;
 
 const box = ref<HTMLElement>();
+const contentBox = ref<HTMLElement>();
 const anchorRect = shallowRef<AnchorRect>();
 const view = shallowRef<Size>();
 // A card that is not a picture is as tall as what it holds, which it says once drawn.
@@ -236,16 +237,22 @@ const measure = (): void => {
     view.value = { width: doc.innerWidth, height: doc.innerHeight };
 };
 let sizes: ResizeObserver | undefined;
+// The outer box can stay capped at the previous tile's height while its contents grow. Observe the body too:
+// it never shrinks to that cap, so a longer preview or a folder listing arriving still triggers a new measure.
 // Vue clears a template ref to null, not undefined, when its element goes.
-watch(box, (next, previous) => {
-    if (previous instanceof Element) {
-        sizes?.unobserve(previous);
+watch([box, contentBox], (next, previous) => {
+    for (const element of previous) {
+        if (element instanceof Element) {
+            sizes?.unobserve(element);
+        }
     }
-    if (next instanceof Element) {
-        sizes ??= new ResizeObserver(() => {
-            measured.value = box.value?.scrollHeight ?? 0;
-        });
-        sizes.observe(next);
+    for (const element of next) {
+        if (element instanceof Element) {
+            sizes ??= new ResizeObserver(() => {
+                measured.value = box.value?.scrollHeight ?? 0;
+            });
+            sizes.observe(element);
+        }
     }
 });
 // A fresh open parks off-screen until measured; a move between tiles glides from where the card already is.
@@ -325,6 +332,7 @@ onBeforeUnmount(() => {
                      come from the tree on hand and take the room they need. -->
                 <div
                     v-if="kind !== 'none' && !unreadable"
+                    ref="contentBox"
                     class="relative shrink-0 overflow-hidden border-t border-line bg-canvas"
                     :class="kind === 'text' ? 'h-64' : kind === 'document' ? 'h-72' : ''"
                     :style="mediaStyle"

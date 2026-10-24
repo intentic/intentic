@@ -96,6 +96,27 @@ for (const look of looks) {
             await test.info().attach(`switch-contrast`, { body: JSON.stringify(ratios), contentType: `application/json` });
             await clean(page);
         });
+        test(`workspace quick look grows when moving from a short folder to a text file`, async ({ page }) => {
+            await open(page, `workspace`);
+            const preview = page.getByRole(`tooltip`);
+            await page.locator(`[data-home-tile="drop"]`).hover();
+            await expect(preview).toContainText(`brand-kit.zip`);
+            const original = await preview.elementHandle();
+
+            // The first pass reads the file; the second uses its cached lines. The card must stay open across both.
+            for (let pass = 0; pass < 2; pass += 1) {
+                await page.locator(`[data-home-tile="README.md"]`).hover();
+                const lastLine = preview.locator(`.line`).filter({ hasText: `Start a sandbox on your own machine` });
+                await expect(lastLine).toBeVisible();
+                await expect.poll(() => lastLine.evaluate((line) =>
+                    line.closest(`[role="tooltip"]`)!.getBoundingClientRect().bottom - line.getBoundingClientRect().bottom,
+                )).toBeGreaterThanOrEqual(0);
+                expect(await preview.evaluate((element, first) => element === first, original)).toBe(true);
+
+                await page.locator(`[data-home-tile="drop"]`).hover();
+                await expect(preview).toContainText(`brand-kit.zip`);
+            }
+        });
     });
 }
 
